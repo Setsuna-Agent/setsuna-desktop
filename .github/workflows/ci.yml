@@ -1,9 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   verify:
@@ -26,4 +24,3 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm release:dry-run
-

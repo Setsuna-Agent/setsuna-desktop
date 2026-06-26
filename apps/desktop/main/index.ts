@@ -93,9 +93,9 @@ function registerDesktopIpc(terminal: DesktopTerminalStore): void {
   ipcMain.removeHandler('terminal:read');
   ipcMain.removeHandler('terminal:resize');
   ipcMain.removeHandler('terminal:close');
-  ipcMain.handle('desktop:select-directory', async () => {
+  ipcMain.handle('desktop:select-directory', async (_event, input) => {
     const options: OpenDialogOptions = {
-      title: '选择项目目录',
+      title: String(input?.title || '选择项目目录'),
       properties: ['openDirectory', 'createDirectory'],
     };
     const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);

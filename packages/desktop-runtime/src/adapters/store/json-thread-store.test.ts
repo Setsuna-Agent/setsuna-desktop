@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -60,5 +60,48 @@ describe('json thread store', () => {
     const truncated = await store.truncateMessagesAfter(thread.id, 'msg_user_1');
     expect(truncated.messages.map((message) => message.id)).toEqual(['msg_user_1']);
     expect(truncated.lastMessagePreview).toBe('edited');
+  });
+
+  it('hydrates legacy snapshots with message completion times from events', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
+    const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Legacy completion time' });
+
+    await store.appendEvent(thread.id, {
+      id: 'event_msg',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      payload: {
+        message: {
+          id: 'msg_assistant',
+          turnId: 'turn_1',
+          role: 'assistant',
+          content: '<think>plan</think>answer',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          status: 'complete',
+        },
+      },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_done',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt: '2026-06-26T00:00:04.000Z',
+      payload: { messageId: 'msg_assistant' },
+    });
+
+    const snapshotPath = path.join(dataDir, 'threads', `${thread.id}.json`);
+    const snapshot = JSON.parse(await readFile(snapshotPath, 'utf8'));
+    delete snapshot.messages[0].completedAt;
+    await writeFile(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+
+    const hydrated = await store.getThread(thread.id);
+
+    expect(hydrated?.messages[0]).toMatchObject({
+      completedAt: '2026-06-26T00:00:04.000Z',
+    });
   });
 });

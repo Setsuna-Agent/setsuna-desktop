@@ -1,16 +1,23 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Sender } from '@ant-design/x';
-import { Progress, Tooltip } from 'antd';
-import { ArrowUp, ImagePlus, Paperclip, Square, X } from 'lucide-react';
+import type { SlotConfigType } from '@ant-design/x/es/sender';
+import { Button, Dropdown } from 'antd';
+import { ArrowUp, Boxes, Check, Paperclip, Sparkles, Square, X } from 'lucide-react';
 import type { RuntimeConfigState, RuntimeMessageAttachment, RuntimeSkillSummary, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
-import { ChatApprovalPolicyMenu, ChatPermissionProfileMenu } from './ChatApprovalPolicyMenu.js';
-import { ProjectEntryCommandMenu, SelectedSkillChips } from './ChatCommandMenus.js';
+import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
+import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
-import { formatTokenCount, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { entryLabel, parseMentionCommand, parseSlashCommand, skillTokenText, stripSkillToken } from './chatCommandUtils.js';
+import type { ChatContextTokenUsage } from './chatContextUsage.js';
+import { entryLabel, parseMentionCommand, parseSlashCommand, skillTokenText } from './chatCommandUtils.js';
 
 type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
+type ActiveThinkingConfig = {
+  supported: boolean;
+  efforts: string[];
+  defaultEffort: string;
+};
+const EMPTY_SLOT_CONFIG: SlotConfigType[] = [];
 
 export function ChatComposer({
   activeTurnId,
@@ -27,7 +34,6 @@ export function ChatComposer({
   onCompactContext,
   onClearContext,
   onDraftChange,
-  onPermissionProfileChange,
   onSelectModel,
   onSearchProjectEntries,
   onSend,
@@ -49,7 +55,7 @@ export function ChatComposer({
   onPermissionProfileChange: (profile: RuntimeConfigState['permissionProfile']) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[] }) => void;
+  onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
@@ -62,15 +68,21 @@ export function ChatComposer({
   const [loading, setLoading] = useState(false);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);
   const [selectedSkills, setSelectedSkills] = useState<RuntimeSkillSummary[]>([]);
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [thinkingEffort, setThinkingEffort] = useState('');
+  const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const senderRef = useRef<ComponentRef<typeof Sender>>(null);
+  const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const mentionCommand = useMemo(() => parseMentionCommand(draft), [draft]);
   const slashCommand = useMemo(() => parseSlashCommand(draft), [draft]);
   const mentionQuery = mentionCommand?.query ?? '';
-  const commandOpen = Boolean(activeProject && focused && mentionCommand && dismissedCommandValue !== draft);
+  const commandOpen = Boolean(focused && mentionCommand && dismissedCommandValue !== draft);
   const skillCommandOpen = Boolean(focused && slashCommand && dismissedSlashValue !== draft && !commandOpen);
   const selectedSkillIds = useMemo(() => new Set(selectedSkills.map((skill) => skill.id)), [selectedSkills]);
   const skillQuery = slashCommand?.query.trim().toLowerCase() ?? '';
   const supportsImageInput = activeModelSupportsImages(config);
+  const thinkingConfig = useMemo(() => activeModelThinkingConfig(config), [config]);
   const attachmentOnlyReady = imageAttachments.length > 0 && !draft.trim();
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const slashEntries = useMemo(() => {
@@ -123,7 +135,7 @@ export function ChatComposer({
   }, [canClearContext, config, contextCompactPercent, contextCompacting, selectedSkillIds, skillQuery, skills]);
 
   useEffect(() => {
-    if (!commandOpen) {
+    if (!commandOpen || !activeProject) {
       setEntries([]);
       setLoadError('');
       setLoading(false);
@@ -161,27 +173,47 @@ export function ChatComposer({
     if (!supportsImageInput && imageAttachments.length) setImageAttachments([]);
   }, [imageAttachments.length, supportsImageInput]);
 
+  useEffect(() => {
+    if (!thinkingConfig.supported) {
+      setThinkingEnabled(false);
+      if (thinkingEffort) setThinkingEffort('');
+      return;
+    }
+    if (!thinkingEffort || !thinkingConfig.efforts.includes(thinkingEffort)) {
+      setThinkingEffort(thinkingConfig.defaultEffort);
+    }
+  }, [thinkingConfig.defaultEffort, thinkingConfig.efforts, thinkingConfig.supported, thinkingEffort]);
+
   const selectEntry = (entry?: WorkspaceEntrySearchItem) => {
     const command = parseMentionCommand(draft);
     if (!command || !entry) return;
-    const nextDraft = `${draft.slice(0, command.start)}@${entryLabel(entry)} ${draft.slice(command.end)}`;
+    senderRef.current?.insert?.(
+      [createWorkspaceMentionSlot(entry), createTextSlot(' ')],
+      'cursor',
+      draft.slice(command.start, command.end),
+      true,
+    );
     setDismissedCommandValue('');
-    onDraftChange(nextDraft);
+    setFocused(true);
   };
 
   const selectSkill = (skill?: RuntimeSkillSummary) => {
     const command = parseSlashCommand(draft);
     if (!command || !skill) return;
-    const tokenText = skillTokenText(skill);
-    const nextDraft = `${draft.slice(0, command.start)}${tokenText} ${draft.slice(command.end)}`;
+    senderRef.current?.insert?.(
+      [createSelectedSkillSlot(skill), createTextSlot(' ')],
+      'cursor',
+      draft.slice(command.start, command.end),
+      true,
+    );
     setDismissedSlashValue('');
     setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
-    onDraftChange(nextDraft);
   };
 
-  const handleChange = (value: string) => {
+  const handleChange = (value: string, _event?: unknown, slotConfig?: SlotConfigType[]) => {
     if (dismissedCommandValue && dismissedCommandValue !== value) setDismissedCommandValue('');
     if (dismissedSlashValue && dismissedSlashValue !== value) setDismissedSlashValue('');
+    syncSelectedSkillsFromSlots(slotConfig);
     onDraftChange(value);
   };
 
@@ -245,11 +277,6 @@ export function ChatComposer({
     return undefined;
   };
 
-  const removeSelectedSkill = (skill: RuntimeSkillSummary) => {
-    setSelectedSkills((current) => current.filter((item) => item.id !== skill.id));
-    onDraftChange(stripSkillToken(draft, skill));
-  };
-
   const selectSlashEntry = (item?: SlashCommandMenuItem) => {
     if (!item) return;
     if (item.kind === 'skill') {
@@ -259,6 +286,9 @@ export function ChatComposer({
     const command = parseSlashCommand(draft);
     const nextDraft = command ? `${draft.slice(0, command.start)}${draft.slice(command.end)}`.trimStart() : draft;
     setDismissedSlashValue('');
+    if (command) {
+      senderRef.current?.insert?.([createTextSlot('')], 'cursor', draft.slice(command.start, command.end), true);
+    }
     onDraftChange(nextDraft);
     if (item.kind === 'model') {
       setModelOpenSignal((value) => value + 1);
@@ -274,12 +304,25 @@ export function ChatComposer({
   };
 
   const submitDraft = (value?: string) => {
+    const thinking = thinkingConfig.supported && thinkingEnabled;
     onSend(value, {
       attachments: supportsImageInput ? imageAttachments : [],
       skillIds: selectedSkills.map((skill) => skill.id),
+      thinking,
+      ...(thinking && thinkingEffort ? { thinkingEffort } : {}),
     });
     setSelectedSkills([]);
     setImageAttachments([]);
+    senderRef.current?.clear?.();
+  };
+
+  const syncSelectedSkillsFromSlots = (slotConfig: SlotConfigType[] | undefined) => {
+    const selectedSlotKeys = new Set(
+      (slotConfig ?? [])
+        .map((slot) => slot.key)
+        .filter((key): key is string => typeof key === 'string' && key.startsWith(selectedSkillSlotPrefix)),
+    );
+    setSelectedSkills((current) => current.filter((skill) => selectedSlotKeys.has(selectedSkillSlotKey(skill.id))));
   };
 
   const addImageFiles = async (files: File[]) => {
@@ -295,14 +338,6 @@ export function ChatComposer({
 
   const removeImageAttachment = (id: string) => {
     setImageAttachments((current) => current.filter((item) => item.id !== id));
-  };
-
-  const insertProjectMentionCommand = () => {
-    if (!activeProject) return;
-    const trimmed = draft.trimEnd();
-    onDraftChange(`${trimmed}${trimmed ? ' ' : ''}@`);
-    setDismissedCommandValue('');
-    setFocused(true);
   };
 
   return (
@@ -323,6 +358,7 @@ export function ChatComposer({
         <ProjectEntryCommandMenu
           activeIndex={activeIndex}
           entries={entries}
+          hasProject={Boolean(activeProject)}
           loadError={loadError}
           loading={loading}
           onHover={setActiveIndex}
@@ -337,7 +373,6 @@ export function ChatComposer({
           onSelect={selectSlashEntry}
         />
       ) : null}
-      {selectedSkills.length ? <SelectedSkillChips skills={selectedSkills} onRemove={removeSelectedSkill} /> : null}
       {imageAttachments.length ? (
         <div className="chat-image-attachments" aria-label="图片附件">
           {imageAttachments.map((attachment) => (
@@ -352,7 +387,9 @@ export function ChatComposer({
         </div>
       ) : null}
       <Sender
+        ref={senderRef}
         value={draft}
+        slotConfig={initialSlotConfigRef.current}
         loading={Boolean(activeTurnId)}
         placeholder="输入消息（输入 / 唤起命令）"
         autoSize={{ minRows: 2, maxRows: 6 }}
@@ -369,40 +406,46 @@ export function ChatComposer({
         footer={(actions) => (
           <div className="chat-sender__footer">
             <div className="chat-sender__left-actions">
+              <ChatThinkingMenu
+                disabled={Boolean(activeTurnId)}
+                enabled={thinkingEnabled}
+                menuOpen={thinkingMenuOpen}
+                thinkingConfig={thinkingConfig}
+                value={thinkingEffort}
+                onEnabledChange={setThinkingEnabled}
+                onMenuOpenChange={setThinkingMenuOpen}
+                onValueChange={setThinkingEffort}
+              />
               <ChatApprovalPolicyMenu
                 disabled={Boolean(activeTurnId)}
                 policy={config?.approvalPolicy ?? 'on-request'}
                 onChange={onApprovalPolicyChange}
               />
-              <ChatPermissionProfileMenu
-                disabled={Boolean(activeTurnId)}
-                profile={config?.permissionProfile ?? 'workspace-write'}
-                onChange={onPermissionProfileChange}
-              />
-              <ContextUsageIndicator contextCompacting={contextCompacting} usage={contextUsage} />
             </div>
             <div className="chat-sender__right-actions">
-              <button
-                className="chat-sender-icon-button"
-                type="button"
-                aria-label="上传图片"
-                title={supportsImageInput ? '上传图片' : '当前模型未启用图片输入'}
-                disabled={Boolean(activeTurnId) || !supportsImageInput || imageAttachments.length >= maxImageAttachments}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <ImagePlus size={13} />
-              </button>
-              <button
-                className="chat-sender-icon-button"
-                type="button"
-                aria-label="添加项目文件"
-                disabled={!activeProject}
-                onClick={insertProjectMentionCommand}
-              >
-                <Paperclip size={13} />
-              </button>
-              <span className="chat-sender-divider" aria-hidden="true" />
-              <ChatModelPicker config={config} disabled={Boolean(activeTurnId)} openSignal={modelOpenSignal} onSelect={onSelectModel} />
+              {supportsImageInput ? (
+                <>
+                  <button
+                    className="chat-sender-icon-button"
+                    type="button"
+                    aria-label="上传图片"
+                    title="上传图片"
+                    disabled={Boolean(activeTurnId) || imageAttachments.length >= maxImageAttachments}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Paperclip size={13} />
+                  </button>
+                  <span className="chat-sender-divider" aria-hidden="true" />
+                </>
+              ) : null}
+              <ChatModelPicker
+                config={config}
+                contextCompacting={contextCompacting}
+                contextUsage={contextUsage}
+                disabled={Boolean(activeTurnId)}
+                openSignal={modelOpenSignal}
+                onSelect={onSelectModel}
+              />
               <span className="chat-sender-divider" aria-hidden="true" />
               {activeTurnId ? (
                 <button className="chat-sender-stop" type="button" aria-label="停止生成" onClick={onCancelActiveTurn}>
@@ -423,54 +466,147 @@ export function ChatComposer({
   );
 }
 
-function ContextUsageIndicator({
-  contextCompacting,
-  usage,
+function ChatThinkingMenu({
+  disabled,
+  enabled,
+  menuOpen,
+  thinkingConfig,
+  value,
+  onEnabledChange,
+  onMenuOpenChange,
+  onValueChange,
 }: {
-  contextCompacting: boolean;
-  usage: ChatContextTokenUsage;
+  disabled?: boolean;
+  enabled: boolean;
+  menuOpen: boolean;
+  thinkingConfig: ActiveThinkingConfig;
+  value: string;
+  onEnabledChange: (enabled: boolean) => void;
+  onMenuOpenChange: (open: boolean) => void;
+  onValueChange: (value: string) => void;
 }) {
-  if (usage.usedTokens <= 0) return null;
-  const percentValue = Math.min(100, Math.max(0, Number(usage.visiblePercent || usage.percent || 0)));
-  const percentLabel = percentValue > 0 ? `${percentValue.toFixed(percentValue > 0 && percentValue < 1 ? 1 : 0)}%` : '已用';
-  const scopeLabels = usage.triggerScopes.map(formatContextScope).filter(Boolean);
-  const tooltipLines = [
-    `当前上下文 ${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.totalTokens)} tokens（${percentLabel}）`,
-    usage.compactedMessageCount > 0 ? `已覆盖 ${usage.compactedMessageCount} 条历史消息` : '',
-    scopeLabels.length ? `触发 ${scopeLabels.join(' / ')}` : '',
-    usage.summaryRole ? `摘要角色 ${usage.summaryRole}` : '',
-  ].filter(Boolean);
+  const hasEfforts = thinkingConfig.efforts.length > 0;
+  const currentEffort = value && thinkingConfig.efforts.includes(value) ? value : thinkingConfig.defaultEffort;
+
+  if (!thinkingConfig.supported) return null;
+
+  const thinkingLabel = enabled ? (currentEffort ? formatThinkingEffort(currentEffort) : '思考') : '';
+  const selectedThinkingKey = enabled && currentEffort ? currentEffort : 'off';
+  const renderThinkingMenuItem = (label: string, active: boolean) => (
+    <span className="chat-thinking-menu__item">
+      <span className="chat-thinking-menu__icon" />
+      <span>{label}</span>
+      <span className="chat-thinking-menu__check">{active ? <Check size={13} /> : null}</span>
+    </span>
+  );
+  const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = [
+    {
+      key: 'off',
+      label: renderThinkingMenuItem('关闭', !enabled),
+    },
+    ...thinkingConfig.efforts.map((effort) => ({
+      key: effort,
+      label: renderThinkingMenuItem(formatThinkingEffort(effort), enabled && currentEffort === effort),
+    })),
+  ];
+  const thinkingSwitch = (
+    <Button
+      type="text"
+      size="small"
+      className="chat-thinking-switch"
+      disabled={disabled}
+      aria-pressed={enabled}
+      onClick={hasEfforts ? undefined : () => onEnabledChange(!enabled)}
+    >
+      <Sparkles className="chat-thinking-switch__icon" size={13} />
+      {thinkingLabel ? <span className="chat-thinking-switch__label">{thinkingLabel}</span> : null}
+    </Button>
+  );
+
+  if (!hasEfforts) return thinkingSwitch;
 
   return (
-    <Tooltip
-      title={(
-        <div className="chat-context-token-tooltip">
-          {tooltipLines.map((line) => <div key={line}>{line}</div>)}
-        </div>
-      )}
-      placement="top"
+    <Dropdown
+      rootClassName="chat-thinking-menu-root"
+      trigger={['click']}
+      placement="topLeft"
+      disabled={disabled}
+      open={menuOpen}
+      menu={{
+        items,
+        selectedKeys: [selectedThinkingKey],
+        onClick: ({ key }) => {
+          if (key === 'off') {
+            onEnabledChange(false);
+          } else {
+            onValueChange(key);
+            onEnabledChange(true);
+          }
+          onMenuOpenChange(false);
+        },
+      }}
+      onOpenChange={onMenuOpenChange}
     >
-      <button className="chat-context-token-chip" type="button" aria-label={`当前上下文用量 ${percentLabel}`}>
-        <Progress
-          className="chat-token-progress"
-          type="circle"
-          percent={percentValue}
-          size={14}
-          strokeWidth={18}
-          showInfo={false}
-          status={contextCompacting ? 'active' : 'normal'}
-        />
-        <span>{contextCompacting ? '压缩中' : percentLabel}</span>
-      </button>
-    </Tooltip>
+      {thinkingSwitch}
+    </Dropdown>
   );
 }
 
-function formatContextScope(scope: string): string {
-  if (scope === 'manual') return '手动';
-  if (scope === 'body_after_prefix') return '正文';
-  if (scope === 'total') return '总量';
-  return scope;
+function formatThinkingEffort(effort: string): string {
+  const value = effort.trim();
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : '思考';
+}
+
+function createWorkspaceMentionSlot(entry: WorkspaceEntrySearchItem): SlotConfigType {
+  const displayText = `@${entryDisplayName(entry)}`;
+  const resultText = `@${entryLabel(entry)}`;
+  return {
+    type: 'tag',
+    key: `workspace:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
+    props: {
+      label: (
+        <span className="chat-workspace-mention-slot" title={entry.path}>
+          {displayText}
+        </span>
+      ),
+      value: resultText,
+    },
+    formatResult: () => resultText,
+  };
+}
+
+function entryDisplayName(entry: WorkspaceEntrySearchItem): string {
+  const fallback = entry.path.split('/').filter(Boolean).pop() || entry.path;
+  const name = (entry.name || fallback).trim() || fallback;
+  return entry.kind === 'directory' ? `${name.replace(/\/$/, '')}/` : name;
+}
+
+const selectedSkillSlotPrefix = 'skill:';
+
+function selectedSkillSlotKey(skillId: string): string {
+  return `${selectedSkillSlotPrefix}${skillId}`;
+}
+
+function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigType {
+  const tokenText = skillTokenText(skill);
+  return {
+    type: 'tag',
+    key: selectedSkillSlotKey(skill.id),
+    props: {
+      label: (
+        <span className="chat-skill-slot" title={skill.description || skill.id}>
+          <Boxes size={13} />
+          <span className="chat-skill-slot__name">{tokenText}</span>
+        </span>
+      ),
+      value: tokenText,
+    },
+    formatResult: () => tokenText,
+  };
+}
+
+function createTextSlot(value: string): SlotConfigType {
+  return { type: 'text', value };
 }
 
 function activeModelName(config: RuntimeConfigState | null): string | null {
@@ -483,6 +619,33 @@ function activeModelSupportsImages(config: RuntimeConfigState | null): boolean {
   const provider = config?.providers.find((item) => item.id === config.activeProviderId) ?? config?.providers[0];
   const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
   return Boolean(model?.supportsImages);
+}
+
+function activeModelThinkingConfig(config: RuntimeConfigState | null): ActiveThinkingConfig {
+  const provider = config?.providers.find((item) => item.id === config.activeProviderId) ?? config?.providers[0];
+  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
+  const efforts = normalizeThinkingEfforts(model?.thinkingEfforts);
+  const defaultEffort = typeof model?.defaultThinkingEffort === 'string' && efforts.includes(model.defaultThinkingEffort.trim())
+    ? model.defaultThinkingEffort.trim()
+    : efforts[0] ?? '';
+  return {
+    supported: Boolean(model?.thinkingEnabled),
+    efforts,
+    defaultEffort,
+  };
+}
+
+function normalizeThinkingEfforts(value: unknown): string[] {
+  const rawValues = Array.isArray(value) ? value : [];
+  const seen = new Set<string>();
+  const efforts: string[] = [];
+  for (const rawValue of rawValues) {
+    const effort = typeof rawValue === 'string' ? rawValue.trim() : '';
+    if (!effort || seen.has(effort)) continue;
+    seen.add(effort);
+    efforts.push(effort);
+  }
+  return efforts;
 }
 
 const maxImageAttachments = 8;

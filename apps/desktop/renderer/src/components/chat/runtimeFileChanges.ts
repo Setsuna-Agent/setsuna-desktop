@@ -28,7 +28,17 @@ type FileMutationEntry = {
   run: RuntimeToolRun;
 };
 
-const fileMutationToolNames = new Set(['workspace_write_file']);
+const fileMutationToolNames = new Set([
+  'workspace_write_file',
+  'plan_file_changes',
+  'begin_file_change',
+  'apply_patch',
+  'write_file',
+  'append_file',
+  'delete_file',
+  'edit',
+  'edit_file',
+]);
 
 export function collapseFileMutationRunsInSegments(segments: RuntimeMessage[]): RuntimeMessage[] {
   const entriesByPath = new Map<string, FileMutationEntry[]>();

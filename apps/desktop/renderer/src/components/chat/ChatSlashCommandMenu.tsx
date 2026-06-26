@@ -1,5 +1,5 @@
 import { Progress } from 'antd';
-import { Boxes, CheckSquare, Cpu, Trash2 } from 'lucide-react';
+import { Boxes, CheckSquare, Trash2, Zap } from 'lucide-react';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 
 export type SlashCommandMenuItem =
@@ -79,7 +79,7 @@ export function ChatSlashCommandMenu({
 
 function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.kind === 'skill') return <Boxes className="chat-command-menu__item-icon" size={15} />;
-  if (item.kind === 'model') return <Cpu className="chat-command-menu__item-icon" size={15} />;
+  if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
   if (item.type === 'compact-context') {
     return (
       <Progress

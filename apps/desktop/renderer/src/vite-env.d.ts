@@ -71,7 +71,7 @@ declare global {
   interface Window {
     setsunaDesktop?: {
       desktop: {
-        selectDirectory(): Promise<string | null>;
+        selectDirectory(options?: { title?: string }): Promise<string | null>;
         getUserProfile(): Promise<DesktopUserProfile>;
       };
       desktopReview: {

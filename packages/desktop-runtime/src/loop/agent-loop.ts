@@ -1,8 +1,11 @@
 import type {
+  ModelRequest,
   RuntimeApprovalDecision,
+  RuntimeConfigState,
   RuntimeMessage,
   RuntimeThread,
   RuntimeToolCall,
+  RuntimeToolCallDelta,
   RuntimeUsage,
   SendTurnInput,
   SendTurnResponse,
@@ -42,6 +45,9 @@ export type AgentLoopOptions = {
 
 const MAX_TOOL_ROUNDS = 64;
 
+type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
+type RuntimeToolCallDeltaLike = Pick<RuntimeToolCallDelta, 'id' | 'name' | 'argumentsDelta'>;
+
 export class AgentLoop {
   private readonly activeTurns = new Map<string, AbortController>();
 
@@ -53,7 +59,7 @@ export class AgentLoop {
     return { accepted: true, turnId: run.turnId };
   }
 
-  async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[] } = {}): Promise<SendTurnResponse> {
+  async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}): Promise<SendTurnResponse> {
     const run = await this.createRegenerateRun(threadId, messageId, input);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
@@ -124,7 +130,17 @@ export class AgentLoop {
     const controller = new AbortController();
     const key = activeTurnKey(threadId, turnId);
     this.activeTurns.set(key, controller);
-    const done = this.runTurn(threadId, text, input.skillIds ?? [], attachments, thread, turnId, controller.signal).finally(() => {
+    const done = this.runTurn(
+      threadId,
+      text,
+      input.skillIds ?? [],
+      attachments,
+      thread,
+      turnId,
+      controller.signal,
+      {},
+      turnThinkingOptions(input),
+    ).finally(() => {
       if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
     });
     return { turnId, done };
@@ -133,7 +149,7 @@ export class AgentLoop {
   private async createRegenerateRun(
     threadId: string,
     messageId: string,
-    input: { content?: string; skillIds?: string[] },
+    input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string },
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const originalThread = await this.options.threadStore.getThread(threadId);
     if (!originalThread) throw new Error(`Thread not found: ${threadId}`);
@@ -160,10 +176,20 @@ export class AgentLoop {
     const controller = new AbortController();
     const key = activeTurnKey(threadId, turnId);
     this.activeTurns.set(key, controller);
-    const done = this.runTurn(threadId, text, input.skillIds ?? [], normalizeAttachments(userMessage.attachments), thread, turnId, controller.signal, {
-      userMessage,
-      publishUserMessage: false,
-    }).finally(() => {
+    const done = this.runTurn(
+      threadId,
+      text,
+      input.skillIds ?? [],
+      normalizeAttachments(userMessage.attachments),
+      thread,
+      turnId,
+      controller.signal,
+      {
+        userMessage,
+        publishUserMessage: false,
+      },
+      turnThinkingOptions(input),
+    ).finally(() => {
       if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
     });
     return { turnId, done };
@@ -178,6 +204,7 @@ export class AgentLoop {
     turnId: string,
     signal: AbortSignal,
     options: { userMessage?: RuntimeMessage; publishUserMessage?: boolean } = {},
+    thinkingOptions: TurnThinkingOptions = {},
   ): Promise<void> {
     const createdAt = this.options.clock.now().toISOString();
     let activeAssistantMessageId: string | null = null;
@@ -214,11 +241,6 @@ export class AgentLoop {
         threadId,
         turnId,
       });
-      const modelMessages: RuntimeMessage[] = [
-        ...(await this.memoryContextMessages(thread.projectId)),
-        ...(await this.skillContextMessages(skillIds)),
-        ...conversationMessages,
-      ];
       const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
       const toolContext = {
         threadId,
@@ -228,6 +250,13 @@ export class AgentLoop {
         signal,
       };
       const tools = await this.options.toolHost?.listTools(toolContext);
+      const modelMessages: RuntimeMessage[] = [
+        ...this.personalizationContextMessages(runtimeConfig),
+        ...(await this.memoryContextMessages(thread.projectId, runtimeConfig)),
+        ...(await this.toolSystemPromptMessages(toolContext)),
+        ...(await this.skillContextMessages(skillIds)),
+        ...conversationMessages,
+      ];
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         const assistantMessageId = this.options.ids.id('msg');
@@ -244,28 +273,51 @@ export class AgentLoop {
         await this.publishMessage(threadId, turnId, assistantMessage);
 
         let toolCalls: RuntimeToolCall[] = [];
+        const partialToolCalls = new Map<string, RuntimeToolCall>();
+        const announcedToolPreviews = new Map<string, string>();
         let roundText = '';
+        let reasoningOpen = false;
+        const appendRoundText = async (delta: string) => {
+          if (!delta) return;
+          roundText += delta;
+          await this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
+        };
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
           messages: modelMessages,
           tools,
           toolChoice: tools?.length ? 'auto' : undefined,
+          ...thinkingOptions,
           signal,
         })) {
           throwIfAborted(signal);
+          if (item.type === 'reasoning_delta') {
+            await appendRoundText(`${reasoningOpen ? '' : '<think>'}${item.text}`);
+            reasoningOpen = true;
+          }
           if (item.type === 'text_delta') {
-            roundText += item.text;
-            await this.appendAndPublish(threadId, {
-              id: this.options.ids.id('event'),
+            if (reasoningOpen) {
+              await appendRoundText('</think>');
+              reasoningOpen = false;
+            }
+            await appendRoundText(item.text);
+          }
+          if (item.type === 'tool_call_delta') {
+            await this.publishToolCallDeltaPreview({
+              announcedToolPreviews,
+              call: item.call,
+              partialToolCalls,
               threadId,
+              toolContext,
               turnId,
-              type: 'message.delta',
-              createdAt: this.options.clock.now().toISOString(),
-              payload: { messageId: assistantMessageId, text: item.text },
             });
           }
           if (item.type === 'tool_calls') toolCalls = item.toolCalls;
           if (item.type === 'usage') usage = item.usage;
+        }
+        if (reasoningOpen) {
+          await appendRoundText('</think>');
+          reasoningOpen = false;
         }
 
         if (toolCalls.length) {
@@ -303,25 +355,36 @@ export class AgentLoop {
         });
 
         let finalText = '';
+        let finalReasoningOpen = false;
+        const appendFinalText = async (delta: string) => {
+          if (!delta) return;
+          finalText += delta;
+          await this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
+        };
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
           messages: modelMessages,
           toolChoice: 'none',
+          ...thinkingOptions,
           signal,
         })) {
           throwIfAborted(signal);
+          if (item.type === 'reasoning_delta') {
+            await appendFinalText(`${finalReasoningOpen ? '' : '<think>'}${item.text}`);
+            finalReasoningOpen = true;
+          }
           if (item.type === 'text_delta') {
-            finalText += item.text;
-            await this.appendAndPublish(threadId, {
-              id: this.options.ids.id('event'),
-              threadId,
-              turnId,
-              type: 'message.delta',
-              createdAt: this.options.clock.now().toISOString(),
-              payload: { messageId: assistantMessageId, text: item.text },
-            });
+            if (finalReasoningOpen) {
+              await appendFinalText('</think>');
+              finalReasoningOpen = false;
+            }
+            await appendFinalText(item.text);
           }
           if (item.type === 'usage') usage = item.usage;
+        }
+        if (finalReasoningOpen) {
+          await appendFinalText('</think>');
+          finalReasoningOpen = false;
         }
 
         if (!finalText.trim()) {
@@ -384,6 +447,17 @@ export class AgentLoop {
       type: 'message.created',
       createdAt: message.createdAt,
       payload: { message },
+    });
+  }
+
+  private async publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void> {
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'message.delta',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { messageId, text },
     });
   }
 
@@ -561,7 +635,50 @@ export class AgentLoop {
     }));
   }
 
-  private async memoryContextMessages(projectId?: string) {
+  private async toolSystemPromptMessages(context: {
+    threadId: string;
+    projectId?: string;
+    turnId: string;
+    permissionProfile: NonNullable<RuntimeConfigState['permissionProfile']>;
+    signal: AbortSignal;
+  }) {
+    const prompt = await this.options.toolHost?.systemPrompt?.(context);
+    if (typeof prompt !== 'string' || !prompt.trim()) return [];
+    return [
+      {
+        id: 'desktop_local_tool_rules',
+        role: 'system' as const,
+        content: prompt.trim(),
+        createdAt: this.options.clock.now().toISOString(),
+        status: 'complete' as const,
+      },
+    ];
+  }
+
+  private personalizationContextMessages(config: RuntimeConfigState | null | undefined) {
+    if (!config) return [];
+    const globalPrompt = config.globalPrompt.trim();
+    const styleInstruction = config.setsunaStyle === 'daily'
+      ? 'Setsuna style: use a more everyday, conversational tone. Be warm, lightweight, and practical; do not over-index on code unless the user asks for development work.'
+      : 'Setsuna style: use a development-oriented tone. Prioritize concrete engineering judgment, repo evidence, implementation steps, and validation when code changes are involved.';
+    return [
+      {
+        id: 'desktop_personalization',
+        role: 'system' as const,
+        content: [
+          'Desktop personalization:',
+          'Apply these user preferences when they do not conflict with higher-priority instructions, desktop runtime rules, or the current user request.',
+          styleInstruction,
+          globalPrompt ? `User global prompt:\n${neutralizePersonalizationTags(globalPrompt)}` : '',
+        ].filter(Boolean).join('\n'),
+        createdAt: this.options.clock.now().toISOString(),
+        status: 'complete' as const,
+      },
+    ];
+  }
+
+  private async memoryContextMessages(projectId: string | undefined, config: RuntimeConfigState | null | undefined) {
+    if (config?.memoryEnabled === false) return [];
     const memories = await this.options.memoryStore?.listMemories(projectId ? { projectId, limit: 8 } : { scope: 'global', limit: 8 });
     if (!memories?.memories.length) return [];
     return [
@@ -597,7 +714,8 @@ export class AgentLoop {
           continue;
         }
         throwIfAborted(signal);
-        await this.publishToolStarted(threadId, turnId, toolCall, parsedArguments);
+        const startPreview = await this.options.toolHost.previewToolCall?.(toolCall.name, parsedArguments, { threadId, projectId, turnId, signal }).catch(() => null);
+        await this.publishToolStarted(threadId, turnId, toolCall, parsedArguments, startPreview?.resultPreview);
         const result = await this.options.toolHost.runTool(toolCall.name, parsedArguments, { threadId, projectId, turnId, signal });
         throwIfAborted(signal);
         content = result.content;
@@ -632,7 +750,7 @@ export class AgentLoop {
     return message;
   }
 
-  private async publishToolStarted(threadId: string, turnId: string, toolCall: RuntimeToolCall, parsedArguments: unknown): Promise<void> {
+  private async publishToolStarted(threadId: string, turnId: string, toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string): Promise<void> {
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -643,6 +761,60 @@ export class AgentLoop {
         toolCallId: toolCall.id,
         toolName: toolCall.name,
         argumentsPreview: previewArguments(parsedArguments),
+        resultPreview,
+      },
+    });
+  }
+
+  private async publishToolCallDeltaPreview({
+    announcedToolPreviews,
+    call,
+    partialToolCalls,
+    threadId,
+    toolContext,
+    turnId,
+  }: {
+    announcedToolPreviews: Map<string, string>;
+    call: RuntimeToolCallDeltaLike;
+    partialToolCalls: Map<string, RuntimeToolCall>;
+    threadId: string;
+    toolContext: {
+      threadId: string;
+      projectId?: string;
+      turnId: string;
+      permissionProfile: NonNullable<RuntimeConfigState['permissionProfile']>;
+      signal: AbortSignal;
+    };
+    turnId: string;
+  }): Promise<void> {
+    if (!this.options.toolHost) return;
+    const id = call.id || `tool_call_${partialToolCalls.size}`;
+    const current = partialToolCalls.get(id) ?? { id, name: '', arguments: '' };
+    const next = {
+      id,
+      name: call.name || current.name,
+      arguments: mergeToolArgumentDelta(current.arguments, call.argumentsDelta),
+    };
+    partialToolCalls.set(id, next);
+    if (!next.name) return;
+
+    const preview = await this.options.toolHost.previewPartialToolCall?.(next.name, next.arguments, toolContext).catch(() => null);
+    const argumentsPreview = preview?.argumentsPreview ?? previewPartialArguments(next.arguments);
+    const resultPreview = preview?.resultPreview;
+    const signature = JSON.stringify({ name: next.name, argumentsPreview, resultPreview });
+    if (announcedToolPreviews.get(id) === signature) return;
+    announcedToolPreviews.set(id, signature);
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'tool.started',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: {
+        toolCallId: id,
+        toolName: next.name,
+        argumentsPreview,
+        resultPreview,
       },
     });
   }
@@ -679,6 +851,7 @@ export class AgentLoop {
   ): Promise<RuntimeApprovalDecision | 'not-required'> {
     if (!this.options.approvalGate || !this.options.toolHost) return 'not-required';
     const approvalPolicy = (await this.options.configStore?.getConfig().catch(() => null))?.approvalPolicy ?? 'on-request';
+    if (approvalPolicy === 'full') return 'not-required';
     const requirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, { threadId, projectId, turnId, signal });
     if (!requirement && approvalPolicy !== 'strict') return 'not-required';
 
@@ -747,6 +920,14 @@ function parseToolArguments(value: string): unknown {
   }
 }
 
+function mergeToolArgumentDelta(current: string, delta: string): string {
+  if (!delta) return current;
+  if (!current) return delta;
+  if (delta.startsWith(current)) return delta;
+  if (current.endsWith(delta)) return current;
+  return `${current}${delta}`;
+}
+
 class TurnCancelledError extends Error {
   constructor() {
     super('Turn cancelled.');
@@ -797,9 +978,17 @@ function neutralizeMemoryTags(value: string): string {
   return value.replaceAll('</memory', '<\\/memory');
 }
 
+function neutralizePersonalizationTags(value: string): string {
+  return value.replaceAll('</memory', '<\\/memory').replaceAll('</skill', '<\\/skill');
+}
+
 function previewArguments(value: unknown): string {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   return (text ?? '').slice(0, 1200);
+}
+
+function previewPartialArguments(value: string): string {
+  return value.slice(0, 1200);
 }
 
 function previewToolContent(value: string): string {
@@ -904,4 +1093,15 @@ function normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attac
       return { id, name, type, size, url };
     })
     .filter((item): item is NonNullable<RuntimeMessage['attachments']>[number] => Boolean(item));
+}
+
+function turnThinkingOptions(input: { thinking?: boolean; thinkingEffort?: string }): TurnThinkingOptions {
+  const thinking = input.thinking === true;
+  const reasoningEffort = typeof input.thinkingEffort === 'string' && input.thinkingEffort.trim()
+    ? input.thinkingEffort.trim()
+    : undefined;
+  return {
+    thinking,
+    ...(thinking && reasoningEffort ? { reasoningEffort } : {}),
+  };
 }

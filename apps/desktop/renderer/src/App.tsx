@@ -1,9 +1,18 @@
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AppReadyLayout } from './components/app/AppReadyLayout.js';
 import { ShellFrame } from './components/app/ShellFrame.js';
 import { EmptyState, StatusBadge } from './components/primitives.js';
 import { useDesktopAppController } from './hooks/useDesktopAppController.js';
 
 export function App() {
+  return (
+    <AppErrorBoundary>
+      <AppContent />
+    </AppErrorBoundary>
+  );
+}
+
+function AppContent() {
   const controller = useDesktopAppController();
 
   if (controller.loadState === 'loading') {
@@ -19,4 +28,27 @@ export function App() {
   }
 
   return <AppReadyLayout controller={controller} />;
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[AppErrorBoundary]', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <ShellFrame status={<StatusBadge tone="danger">Renderer error</StatusBadge>}>
+          <EmptyState title="页面渲染异常" body={this.state.error.message} />
+        </ShellFrame>
+      );
+    }
+    return this.props.children;
+  }
 }

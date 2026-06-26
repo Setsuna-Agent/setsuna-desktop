@@ -8,6 +8,7 @@ import type {
   DesktopRuntimeClient,
   RuntimeApprovalList,
   RuntimeMemoryList,
+  RuntimeMemoryPreview,
   RuntimeMemoryQuery,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
@@ -202,11 +203,17 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       const suffix = params.size ? `?${params}` : '';
       return request<RuntimeMemoryList>({ path: `/v1/memories${suffix}` });
     },
+    previewMemories() {
+      return request<RuntimeMemoryPreview>({ path: '/v1/memories/preview' });
+    },
     createMemory(input: CreateRuntimeMemoryInput) {
       return request<RuntimeMemoryList>({ path: '/v1/memories', method: 'POST', body: input });
     },
     deleteMemory(memoryId: string) {
       return request<void>({ path: `/v1/memories/${encodeURIComponent(memoryId)}`, method: 'DELETE' });
+    },
+    clearMemories() {
+      return request<RuntimeMemoryList>({ path: '/v1/memories', method: 'DELETE' });
     },
     listMcpServers() {
       return request<RuntimeMcpServerList>({ path: '/v1/mcp/servers' });

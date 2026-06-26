@@ -7,6 +7,7 @@ import type {
   RuntimeConfigState,
   RuntimeEvent,
   RuntimeFetchModelsInput,
+  RuntimeMemoryPreview,
   RuntimeMemoryRecord,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
@@ -41,6 +42,8 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [activityEvents, setActivityEvents] = useState<RuntimeEvent[]>([]);
   const [usage, setUsage] = useState<RuntimeUsageResponse | null>(null);
   const [memories, setMemories] = useState<RuntimeMemoryRecord[]>([]);
+  const [memoryPreview, setMemoryPreview] = useState<RuntimeMemoryPreview | null>(null);
+  const [memoryPreviewLoading, setMemoryPreviewLoading] = useState(false);
   const [skills, setSkills] = useState<RuntimeSkillSummary[]>([]);
   const [mcpState, setMcpState] = useState<RuntimeMcpServerList | null>(null);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
@@ -109,6 +112,9 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
         terminalTurnIdsRef.current.add(event.turnId);
         setActiveTurnId((current) => (current === event.turnId ? null : current));
       }
+      if (event.type === 'runtime.error') {
+        setError(event.payload.message);
+      }
       if (event.type === 'turn.completed' && event.payload.usage) void client.getUsage().then(setUsage);
       if (event.type === 'approval.requested') {
         setApprovals((items) => [event.payload.approval, ...items.filter((item) => item.id !== event.payload.approval.id)]);
@@ -138,6 +144,40 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     terminalTurnIdsRef.current.clear();
     setActiveTurnId(null);
   }, [currentThread?.id]);
+
+  useEffect(() => {
+    if (!activeTurnId || !currentThread) return undefined;
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    const threadId = currentThread.id;
+    const turnId = activeTurnId;
+
+    const pollThread = async () => {
+      try {
+        const nextThread = await client.getThread(threadId);
+        if (cancelled) return;
+        setCurrentThread((thread) => (thread?.id === threadId ? nextThread : thread));
+        void client.listThreads().then((list) => {
+          if (!cancelled) setThreads(list.threads);
+        });
+        if (turnHasFinished(nextThread, turnId)) {
+          terminalTurnIdsRef.current.add(turnId);
+          setActiveTurnId((current) => (current === turnId ? null : current));
+          void client.getUsage().then(setUsage);
+          return;
+        }
+      } catch (unknownError) {
+        if (!cancelled) setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      }
+      if (!cancelled) timeoutId = window.setTimeout(pollThread, 1000);
+    };
+
+    timeoutId = window.setTimeout(pollThread, 250);
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [activeTurnId, client, currentThread?.id]);
 
   useEffect(() => {
     client
@@ -175,11 +215,16 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   );
 
   const saveRuntimePreferences = useCallback(
-    async (input: Pick<RuntimeConfigInput, 'memoryEnabled' | 'approvalPolicy' | 'permissionProfile'>) => {
+    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>) => {
       const next = await client.saveConfig(input);
       setConfig(next);
+      if (Object.hasOwn(input, 'storagePath')) {
+        const list = await client.listMemories({ projectId: activeProjectId ?? undefined, limit: 20 });
+        setMemories(list.memories);
+        setMemoryPreview(null);
+      }
     },
-    [client],
+    [activeProjectId, client],
   );
 
   const fetchProviderModels = useCallback(
@@ -310,14 +355,34 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     [activeProjectId, client],
   );
 
+  const previewMemories = useCallback(async () => {
+    setMemoryPreviewLoading(true);
+    try {
+      const preview = await client.previewMemories();
+      setMemoryPreview(preview);
+      return preview;
+    } finally {
+      setMemoryPreviewLoading(false);
+    }
+  }, [client]);
+
   const deleteMemory = useCallback(
-    async (memory: RuntimeMemoryRecord) => {
-      await client.deleteMemory(memory.id);
+    async (memoryId: string) => {
+      await client.deleteMemory(memoryId);
       const list = await client.listMemories({ projectId: activeProjectId ?? undefined, limit: 20 });
       setMemories(list.memories);
+      const preview = await client.previewMemories();
+      setMemoryPreview(preview);
     },
     [activeProjectId, client],
   );
+
+  const clearMemories = useCallback(async () => {
+    const list = await client.clearMemories();
+    setMemories(list.memories);
+    const preview = await client.previewMemories();
+    setMemoryPreview(preview);
+  }, [client]);
 
   const answerApproval = useCallback(
     async (approvalId: string, input: { decision: 'approve' | 'reject'; message?: string }) => {
@@ -348,6 +413,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     compactCurrentThreadContext,
     contextCompacting,
     clearCurrentThreadContext,
+    clearMemories,
     createSkill,
     currentThread,
     deleteMcpServer,
@@ -359,6 +425,9 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     loadState,
     mcpState,
     memories,
+    memoryPreview,
+    memoryPreviewLoading,
+    previewMemories,
     projects,
     refresh,
     reloadThreads,
@@ -381,3 +450,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 }
 
 export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
+
+function turnHasFinished(thread: RuntimeThread, turnId: string): boolean {
+  const turnMessages = thread.messages.filter((message) => message.turnId === turnId);
+  if (!turnMessages.length) return false;
+  if (turnMessages.some((message) => message.status === 'streaming')) return false;
+  return turnMessages.some((message) => message.role === 'assistant' && (message.status === 'complete' || message.status === 'error' || Boolean(message.error)));
+}

@@ -4,6 +4,44 @@ import type { RuntimeEvent } from './events.js';
 import type { RuntimeThread } from './threads.js';
 
 describe('applyRuntimeEventToThread context compaction', () => {
+  it('records assistant completion time from message.completed events', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [
+        {
+          id: 'msg_1',
+          role: 'assistant',
+          content: '<think>plan</think>answer',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          status: 'streaming',
+        },
+      ],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: { messageId: 'msg_1' },
+    };
+
+    const completed = applyRuntimeEventToThread(thread, event);
+
+    expect(completed.messages[0]).toMatchObject({
+      completedAt: '2026-06-26T00:00:03.000Z',
+      status: 'complete',
+    });
+  });
+
   it('tracks context compaction running and completed states', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',

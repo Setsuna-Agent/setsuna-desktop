@@ -52,7 +52,7 @@ const runtime: RuntimeApi = {
 };
 
 const desktop = {
-  selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('desktop:select-directory'),
+  selectDirectory: (options?: { title?: string }): Promise<string | null> => ipcRenderer.invoke('desktop:select-directory', options ?? {}),
   getUserProfile: (): Promise<DesktopUserProfile> => ipcRenderer.invoke('desktop:get-user-profile'),
 };
 

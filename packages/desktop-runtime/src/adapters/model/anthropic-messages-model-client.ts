@@ -17,6 +17,7 @@ import {
   withEndpoint,
   type FetchImpl,
 } from './provider-utils.js';
+import { anthropicThinkingBody } from './provider-thinking.js';
 
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
 
@@ -30,6 +31,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
     const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
     const system = systemText(request.messages);
+    const thinking = anthropicThinkingBody(this.provider, request);
     const response = await fetcher(withEndpoint(this.provider.baseUrl, '/v1/messages'), {
       method: 'POST',
       headers: {
@@ -46,6 +48,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
         ...(system ? { system } : {}),
         ...(request.tools?.length ? { tools: toAnthropicTools(request.tools) } : {}),
         ...(request.toolChoice && request.toolChoice !== 'none' ? { tool_choice: { type: 'auto' } } : {}),
+        ...(thinking ? { thinking } : {}),
       }),
     });
     await assertOkResponse(response, 'Anthropic Messages request failed');
@@ -68,6 +71,8 @@ export class AnthropicMessagesModelClient implements ModelClient {
       } else if (type === 'content_block_delta') {
         const delta = objectValue(payload.delta);
         const text = stringValue(delta.text);
+        const thinking = stringValue(delta.thinking);
+        if (thinking) yield { type: 'reasoning_delta' as const, text: thinking };
         if (text) yield { type: 'text_delta' as const, text };
         const toolCall = mergeAnthropicInputDelta(toolCalls, payload);
         if (toolCall) {

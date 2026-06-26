@@ -10,6 +10,7 @@ import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-stor
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 68000;
+const MAX_GLOBAL_PROMPT_CHARS = 8000;
 
 type StoredConfig = Omit<RuntimeConfigState, 'configPath' | 'dataPath' | 'providers'> & {
   providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
@@ -57,8 +58,11 @@ export class FileConfigStore implements ConfigStore {
 
     const stored: StoredConfig = {
       activeProviderId: input.activeProviderId ?? previous.activeProviderId ?? providers[0]?.id,
+      globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
+      storagePath: normalizeStoragePath(input.storagePath ?? previous.storagePath),
       memoryEnabled: input.memoryEnabled ?? previous.memoryEnabled ?? true,
-      approvalPolicy: input.approvalPolicy ?? previous.approvalPolicy ?? 'on-request',
+      setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
+      approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
       permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
       providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
     };
@@ -86,9 +90,12 @@ export class FileConfigStore implements ConfigStore {
     return {
       configPath: this.configPath,
       dataPath: this.dataDir,
+      storagePath: normalizeStoragePath(stored.storagePath),
       activeProviderId: stored.activeProviderId,
-      memoryEnabled: stored.memoryEnabled,
-      approvalPolicy: stored.approvalPolicy,
+      globalPrompt: normalizeGlobalPrompt(stored.globalPrompt),
+      memoryEnabled: stored.memoryEnabled ?? true,
+      setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
+      approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
       providers: stored.providers.map((provider) => {
         const apiKey = secrets.providerApiKeys[provider.id] ?? '';
@@ -105,7 +112,10 @@ export class FileConfigStore implements ConfigStore {
 function defaultConfig(): StoredConfig {
   return {
     activeProviderId: 'local-test',
+    globalPrompt: '',
+    storagePath: '',
     memoryEnabled: true,
+    setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',
     providers: [
@@ -204,6 +214,40 @@ function positiveInt(value: unknown, fallback: number): number {
 function normalizePermissionProfile(value: unknown): RuntimeConfigState['permissionProfile'] {
   if (value === 'read-only' || value === 'workspace-write' || value === 'danger-full-access') return value;
   return 'workspace-write';
+}
+
+function normalizeApprovalPolicy(value: unknown): RuntimeConfigState['approvalPolicy'] {
+  if (value === 'strict' || value === 'on-request' || value === 'full') return value;
+  if (value === 'suggest') return 'on-request';
+  return 'on-request';
+}
+
+function normalizeGlobalPrompt(value: unknown): string {
+  const chars = Array.from(typeof value === 'string' ? value.trim() : '');
+  return chars.length > MAX_GLOBAL_PROMPT_CHARS ? chars.slice(0, MAX_GLOBAL_PROMPT_CHARS).join('') : chars.join('');
+}
+
+function normalizeStoragePath(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeSetsunaStyle(value: unknown): RuntimeConfigState['setsunaStyle'] {
+  switch (String(value || '').trim().toLowerCase()) {
+    case 'daily':
+    case 'casual':
+    case 'everyday':
+    case '生活':
+    case '日常':
+      return 'daily';
+    case 'developer':
+    case 'development':
+    case 'dev':
+    case 'code':
+    case 'coding':
+    case '开发':
+    default:
+      return 'developer';
+  }
 }
 
 function maskApiKey(apiKey: string): string {

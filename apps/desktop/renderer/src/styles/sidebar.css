@@ -1,3 +1,10 @@
+.desktop-agent-sidebar {
+  --desktop-agent-row-start: 8px;
+  --desktop-agent-content-start: 16px;
+  --desktop-agent-text-start: 40px;
+  --desktop-agent-icon-size: 16px;
+}
+
 .desktop-agent-sidebar__top-actions {
   display: flex;
   flex: 0 0 auto;
@@ -23,23 +30,23 @@
   text-align: left;
 }
 
-.desktop-agent-command:hover,
-.desktop-agent-command.is-active {
-  color: var(--app-text);
+.desktop-agent-command:hover {
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
 .desktop-agent-command.is-active {
+  color: var(--app-text);
   background: var(--desktop-agent-sidebar-active-bg);
 }
 
 .desktop-agent-command__icon {
-  flex: 0 0 16px;
-  width: 16px;
+  flex: 0 0 var(--desktop-agent-icon-size);
+  width: var(--desktop-agent-icon-size);
   color: currentColor;
 }
 
 .desktop-agent-command__label {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,22 +96,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 28px;
-  padding: 0 8px 0 16px;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px 0 var(--desktop-agent-content-start);
   color: var(--app-sidebar-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 18px;
   position: relative;
 }
 
 .desktop-agent-sidebar__section-title-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
+  max-width: 100%;
   height: 24px;
-  padding: 0 4px;
+  padding: 0;
   border: 0;
   border-radius: var(--app-radius-sm);
   color: inherit;
@@ -116,8 +125,14 @@
 
 .desktop-agent-sidebar__section-title-button:hover,
 .desktop-agent-sidebar__section-title-button.is-active {
-  color: var(--app-text);
-  background: var(--desktop-agent-sidebar-hover-bg);
+  color: var(--app-sidebar-text);
+}
+
+.desktop-agent-sidebar__section-title-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desktop-agent-sidebar__section-title-button svg {
@@ -125,7 +140,11 @@
 }
 
 .desktop-agent-sidebar__section-toggle {
-  transition: transform 140ms ease;
+  flex: 0 0 12px;
+  width: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease, color 160ms ease;
 }
 
 .desktop-agent-sidebar__section-toggle.is-collapsed {
@@ -134,8 +153,15 @@
 
 .desktop-agent-sidebar__section-actions {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 2px;
+}
+
+.desktop-agent-sidebar__section-head:hover .desktop-agent-sidebar__section-toggle,
+.desktop-agent-sidebar__section-head:focus-within .desktop-agent-sidebar__section-toggle {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .agent-sidebar-icon-button {
@@ -392,42 +418,46 @@
 }
 
 .desktop-agent-session-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 3px;
   min-width: 0;
 }
 
 .desktop-agent-session {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   min-width: 0;
-  height: 30px;
+  height: 34px;
   margin-left: 0;
-  padding: 0 8px;
+  padding: 0 6px 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
-  color: var(--app-sidebar-text);
+  color: color-mix(in srgb, var(--app-sidebar-text-secondary) 88%, transparent);
   background: transparent;
-  font-size: 12px;
   text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, color 160ms ease;
 }
 
 .desktop-agent-session--project {
-  margin-left: 22px;
+  margin-left: 0;
 }
 
 .desktop-agent-session:hover,
+.desktop-agent-session:focus-visible,
 .desktop-agent-session.is-active {
   color: var(--desktop-agent-sidebar-active-text);
-  background: var(--desktop-agent-sidebar-hover-bg);
-}
-
-.desktop-agent-session.is-active {
   border-color: var(--desktop-agent-divider);
   background: var(--desktop-agent-sidebar-active-bg);
+  box-shadow: var(--desktop-agent-sidebar-active-shadow);
+}
+
+.desktop-agent-session:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--app-focus), var(--desktop-agent-sidebar-active-shadow);
 }
 
 .desktop-agent-session__title,
@@ -439,26 +469,35 @@
 }
 
 .desktop-agent-session__meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  position: relative;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 22px;
   overflow: visible;
   color: var(--app-sidebar-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .desktop-agent-session__meta > span {
-  min-width: 0;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  max-width: 44px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transform: translateY(-50%);
+  transition: opacity 160ms ease;
 }
 
 .desktop-agent-session__menu-button {
+  position: absolute;
+  top: 50%;
+  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
   width: 22px;
   height: 22px;
   border: 0;
@@ -466,11 +505,21 @@
   color: var(--app-text-subtle);
   background: transparent;
   opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.desktop-agent-session:hover .desktop-agent-session__meta > span:first-child,
+.desktop-agent-session:focus-within .desktop-agent-session__meta > span:first-child {
+  opacity: 0;
 }
 
 .desktop-agent-session:hover .desktop-agent-session__menu-button,
+.desktop-agent-session:focus-within .desktop-agent-session__menu-button,
 .desktop-agent-session__menu-button:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .desktop-agent-session__menu-button:hover {
@@ -493,16 +542,23 @@
 
 .desktop-agent-project {
   gap: 8px;
-  min-height: 34px;
+  height: 34px;
   padding: 0 7px 0 9px;
   color: color-mix(in srgb, var(--app-sidebar-text-secondary) 92%, transparent);
-  cursor: default;
+  cursor: pointer;
 }
 
 .desktop-agent-project:hover,
 .desktop-agent-project:focus-visible {
   border-color: var(--desktop-agent-divider);
+  color: var(--desktop-agent-sidebar-active-text);
   background: var(--desktop-agent-sidebar-active-bg);
+  box-shadow: var(--desktop-agent-sidebar-active-shadow);
+}
+
+.desktop-agent-project:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--app-focus), var(--desktop-agent-sidebar-active-shadow);
 }
 
 .desktop-agent-session.is-active::before {
@@ -520,7 +576,7 @@
   display: flex;
   flex: 1 1 auto;
   align-items: center;
-  gap: 1px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -534,22 +590,31 @@
 
 .desktop-agent-project__name,
 .desktop-agent-session__title {
-  font-size: 12px;
-  line-height: 17px;
+  color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.desktop-agent-session__title {
+  flex: 1 1 auto;
+  font-weight: 400;
+}
+
+.desktop-agent-session.is-active .desktop-agent-session__title {
   font-weight: 500;
 }
 
 .desktop-agent-project__name {
   flex: 1 1 auto;
-  color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
+  font-weight: 500;
 }
 
 .desktop-agent-sidebar__empty-session {
   display: flex;
   align-items: center;
   min-height: 28px;
-  margin-left: 22px;
-  padding: 0 8px;
+  margin-left: 0;
+  padding: 0 8px 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
   color: var(--app-sidebar-text-secondary);
   font-size: 12px;
   line-height: 1;
@@ -558,11 +623,12 @@
 .desktop-agent-project__actions {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   flex: 0 0 22px;
+  width: 22px;
   height: 22px;
   border-radius: var(--app-radius-sm);
-  color: var(--app-text-subtle);
+  color: var(--app-sidebar-text-secondary);
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease;
@@ -581,17 +647,18 @@
   justify-content: center;
   width: 22px;
   height: 22px;
+  min-width: 22px;
   border-radius: var(--app-radius-sm);
   color: inherit;
 }
 
-.desktop-agent-project__action:hover,
-.desktop-agent-project__actions:hover {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
+.desktop-agent-project__action:hover {
+  color: var(--app-sidebar-text);
+  background: var(--desktop-agent-sidebar-hover-bg);
 }
 
 .desktop-agent-project__icon {
-  flex: 0 0 16px;
+  flex: 0 0 var(--desktop-agent-icon-size);
+  width: var(--desktop-agent-icon-size);
   color: color-mix(in srgb, currentColor 78%, transparent);
 }

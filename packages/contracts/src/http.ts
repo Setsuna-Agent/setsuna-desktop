@@ -1,7 +1,7 @@
 import type { AnswerRuntimeApprovalInput, RuntimeApprovalList } from './approvals.js';
 import type { RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput } from './config.js';
 import type { RuntimeEvent } from './events.js';
-import type { CreateRuntimeMemoryInput, RuntimeMemoryList, RuntimeMemoryQuery } from './memory.js';
+import type { CreateRuntimeMemoryInput, RuntimeMemoryList, RuntimeMemoryPreview, RuntimeMemoryQuery } from './memory.js';
 import type { RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerPatch } from './mcp.js';
 import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillList, RuntimeSkillPatch } from './skills.js';
 import type {
@@ -77,8 +77,10 @@ export type DesktopRuntimeClient = {
   searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
   getUsage(query?: RuntimeUsageQuery): Promise<RuntimeUsageResponse>;
   listMemories(query?: RuntimeMemoryQuery): Promise<RuntimeMemoryList>;
+  previewMemories(): Promise<RuntimeMemoryPreview>;
   createMemory(input: CreateRuntimeMemoryInput): Promise<RuntimeMemoryList>;
   deleteMemory(memoryId: string): Promise<void>;
+  clearMemories(): Promise<RuntimeMemoryList>;
   listMcpServers(): Promise<RuntimeMcpServerList>;
   upsertMcpServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;
   updateMcpServer(key: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList>;

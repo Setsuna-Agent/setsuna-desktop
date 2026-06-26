@@ -5,9 +5,9 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   icon?: ReactNode;
 };
 
-export function Button({ className = '', variant = 'secondary', icon, children, ...props }: ButtonProps) {
+export function Button({ className = '', variant = 'secondary', icon, children, type = 'button', ...props }: ButtonProps) {
   return (
-    <button className={`sd-button sd-button--${variant} ${className}`} {...props}>
+    <button className={`sd-button sd-button--${variant} ${className}`} type={type} {...props}>
       {icon ? <span className="sd-button__icon">{icon}</span> : null}
       {children ? <span className="sd-button__label">{children}</span> : null}
     </button>
@@ -20,9 +20,9 @@ type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'secondary' | 'ghost' | 'danger';
 };
 
-export function IconButton({ label, children, className = '', variant = 'ghost', ...props }: IconButtonProps) {
+export function IconButton({ label, children, className = '', variant = 'ghost', type = 'button', ...props }: IconButtonProps) {
   return (
-    <button aria-label={label} title={label} className={`sd-icon-button sd-icon-button--${variant} ${className}`} {...props}>
+    <button aria-label={label} title={label} className={`sd-icon-button sd-icon-button--${variant} ${className}`} type={type} {...props}>
       {children}
     </button>
   );
@@ -71,4 +71,3 @@ export function EmptyState({ title, body }: { title: string; body?: string }) {
 export function StatusBadge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'success' | 'warning' | 'danger' }) {
   return <span className={`sd-status sd-status--${tone}`}>{children}</span>;
 }
-

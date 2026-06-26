@@ -52,7 +52,7 @@ export class JsonThreadStore implements ThreadStore {
   async getThread(threadId: string): Promise<RuntimeThread | null> {
     const snapshot = await readJsonFile<RuntimeThread | null>(this.snapshotPath(threadId), null);
     if (!snapshot) return null;
-    return snapshot;
+    return this.hydrateMessageCompletionTimes(threadId, snapshot);
   }
 
   async createThread(input: CreateThreadInput = {}): Promise<RuntimeThread> {
@@ -222,6 +222,25 @@ export class JsonThreadStore implements ThreadStore {
 
   private eventsPath(threadId: string): string {
     return path.join(this.threadsDir, `${threadId}.jsonl`);
+  }
+
+  private async hydrateMessageCompletionTimes(threadId: string, thread: RuntimeThread): Promise<RuntimeThread> {
+    if (thread.messages.every((message) => message.completedAt || message.status !== 'complete')) return thread;
+    const completedAtByMessageId = new Map<string, string>();
+    for (const event of await this.listEvents(threadId)) {
+      if (event.type === 'message.completed') {
+        completedAtByMessageId.set(event.payload.messageId, event.createdAt);
+      }
+    }
+    let changed = false;
+    const messages = thread.messages.map((message) => {
+      if (message.completedAt || message.status !== 'complete') return message;
+      const completedAt = completedAtByMessageId.get(message.id);
+      if (!completedAt) return message;
+      changed = true;
+      return { ...message, completedAt };
+    });
+    return changed ? { ...thread, messages } : thread;
   }
 }
 

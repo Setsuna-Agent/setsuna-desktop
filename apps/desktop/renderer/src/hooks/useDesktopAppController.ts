@@ -15,7 +15,6 @@ import type { MainView } from '../types/app.js';
 
 export function useDesktopAppController() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [memoryDraft, setMemoryDraft] = useState('');
   const [draft, setDraft] = useState('');
   const [activeView, setActiveView] = useState<MainView>('chat');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -56,9 +55,10 @@ export function useDesktopAppController() {
     workspaceWidth,
   } = useDesktopPanelResize(shellRef);
 
-  const activeProject = projects.find((project) => project.id === activeProjectId);
+  const effectiveProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
+  const effectiveProject = effectiveProjectId ? projects.find((project) => project.id === effectiveProjectId) : undefined;
 
-  const workspacePanels = useDesktopWorkspacePanels({ activeProject, activeView, setError });
+  const workspacePanels = useDesktopWorkspacePanels({ activeProject: effectiveProject, activeView, setError });
   const {
     bottomPanelVisible,
     closeWorkspaceMenus,
@@ -70,7 +70,7 @@ export function useDesktopAppController() {
   } = workspacePanels;
 
   const projectWorkspace = useProjectWorkspace({
-    activeProjectId,
+    activeProjectId: effectiveProjectId,
     client,
     onOpenFilePanel: openFilePanel,
     onResetPanels: resetPanelSlots,
@@ -135,7 +135,7 @@ export function useDesktopAppController() {
   const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? '新对话' : activeView === 'capabilities' ? '能力' : '设置';
 
   return {
-    activeProject,
+    activeProject: effectiveProject,
     activeProjectId,
     activeView,
     chatActions,
@@ -148,14 +148,12 @@ export function useDesktopAppController() {
     handleWorkspaceResizeStep,
     handleWorkspaceResizeStart,
     loadState,
-    memoryDraft,
     navigation,
     projectWorkspace,
     runtime,
     searchTriggerRef,
     setActiveView,
     setDraft,
-    setMemoryDraft,
     setSidebarCollapsed,
     shellClassName,
     shellRef,

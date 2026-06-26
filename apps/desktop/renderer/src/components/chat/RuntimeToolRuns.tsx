@@ -470,8 +470,8 @@ function toolRunGroupingKey(run: RuntimeToolRun): string {
 }
 
 function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
-  if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory') return 'inspection';
-  if (run.name === 'workspace_write_file') return 'fileMutation';
+  if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory' || run.name === 'read_file' || run.name === 'list_directory' || run.name === 'find_files' || run.name === 'read_diff' || run.name === 'git_status') return 'inspection';
+  if (isRuntimeFileMutationRun(run)) return 'fileMutation';
   if (run.name === 'workspace_search_text' || run.name.includes('search')) return 'search';
   if (run.name.includes('shell') || run.name === 'run_shell_command' || run.name === 'read_shell_process') return 'shell';
   return 'generic';
@@ -503,11 +503,11 @@ function inspectionGroupSummary(runs: RuntimeToolRun[]): { title: string; target
   const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
   const activeTarget = active ? toolRunTarget(active) : '';
   if (status === 'running' || status === 'pending_approval') {
-    return { title: active?.name === 'workspace_list_directory' ? '正在查看目录' : '正在读取文件', target: activeTarget };
+    return { title: active?.name === 'workspace_list_directory' || active?.name === 'list_directory' || active?.name === 'find_files' ? '正在查看目录' : '正在读取文件', target: activeTarget };
   }
   if (status === 'error') return { title: '查看文件/目录失败', target: activeTarget };
   if (targets.length > 1) return { title: `已查看 ${targets.length} 个文件/目录` };
-  return { title: active?.name === 'workspace_list_directory' ? '已查看目录' : '已读取文件', target: activeTarget };
+  return { title: active?.name === 'workspace_list_directory' || active?.name === 'list_directory' || active?.name === 'find_files' ? '已查看目录' : '已读取文件', target: activeTarget };
 }
 
 function shellGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
@@ -540,7 +540,7 @@ function inspectionTargets(runs: RuntimeToolRun[]): Array<{ path: string; kind: 
     if (!path || targets.has(path)) continue;
     targets.set(path, {
       path,
-      kind: run.name === 'workspace_list_directory' ? 'directory' : 'file',
+      kind: run.name === 'workspace_list_directory' || run.name === 'list_directory' || run.name === 'find_files' ? 'directory' : 'file',
     });
   }
   return [...targets.values()];
@@ -708,10 +708,10 @@ function toolRunSummary(run: RuntimeToolRun): { title: string; target?: string }
   const query = stringField(args.query);
   const command = stringField(args.command);
 
-  if (name === 'workspace_read_file') return { title: runningAware(run, '读取文件', '已读取文件'), target: path };
-  if (name === 'workspace_list_directory') return { title: runningAware(run, '查看目录', '已查看目录'), target: path || '.' };
-  if (name === 'workspace_search_text') return { title: runningAware(run, '搜索文本', '已搜索文本'), target: query };
-  if (name === 'workspace_write_file') return { title: fileMutationVerb(run), target: path };
+  if (name === 'workspace_read_file' || name === 'read_file') return { title: runningAware(run, '读取文件', '已读取文件'), target: path };
+  if (name === 'workspace_list_directory' || name === 'list_directory' || name === 'find_files') return { title: runningAware(run, '查看目录', '已查看目录'), target: path || query || '.' };
+  if (name === 'workspace_search_text' || name === 'search_text') return { title: runningAware(run, '搜索文本', '已搜索文本'), target: query };
+  if (isRuntimeFileMutationRun(run)) return { title: fileMutationVerb(run), target: path };
   if (name === 'run_shell_command') return { title: runningAware(run, '执行命令', '已执行命令'), target: command };
   if (name === 'read_shell_process') return { title: runningAware(run, '读取命令输出', '已读取命令输出'), target: stringField(args.process_id ?? args.processId) };
   if (name === 'remember_memory') return { title: runningAware(run, '保存记忆', '已保存记忆') };

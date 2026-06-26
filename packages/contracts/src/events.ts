@@ -55,7 +55,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'message.completed', { messageId: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls'] }>
   | RuntimeEventBase<'messages.deleted', { messageIds: string[] }>
   | RuntimeEventBase<'messages.truncated', { messageId: string; includeSelf?: boolean; removedMessageIds: string[] }>
-  | RuntimeEventBase<'tool.started', { toolCallId: string; toolName: string; argumentsPreview: string }>
+  | RuntimeEventBase<'tool.started', { toolCallId: string; toolName: string; argumentsPreview: string; resultPreview?: string }>
   | RuntimeEventBase<
       'tool.completed',
       { toolCallId: string; toolName: string; status: 'success' | 'error' | 'rejected'; content: string }

@@ -58,6 +58,42 @@ describe('agent loop tools', () => {
     ]);
   });
 
+  it('publishes streaming tool-call previews from tool argument deltas', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Tool delta loop', projectId: 'project_1' });
+    const modelClient = new ToolDeltaModelClient();
+    const toolHost = new PreviewingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'write a file' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const saved = await threadStore.getThread(thread.id);
+    const runningPreview = events.find((event) =>
+      event.type === 'tool.started'
+      && event.payload.toolName === 'write_file'
+      && event.payload.resultPreview?.includes('src/generated.txt')
+    );
+
+    expect(runningPreview).toBeTruthy();
+    expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).toContain('PC local tool prompt');
+    expect(saved?.messages.find((message) => message.role === 'assistant' && message.toolRuns?.length)?.toolRuns).toMatchObject([
+      {
+        id: 'call_delta',
+        name: 'write_file',
+        status: 'success',
+        resultPreview: expect.stringContaining('src/generated.txt'),
+      },
+    ]);
+  });
+
   it('uses the model client to compact context manually', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -156,6 +192,54 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[0].messages[0].content).toContain('local-only runtime answers');
   });
 
+  it('injects desktop personalization and honors disabled memories', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Personalization loop' });
+    await memoryStore.rememberMemory({ content: 'This memory should stay out.' });
+    const modelClient = new MemoryCapturingModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      configStore: new PersonalizationConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'how should you answer?' });
+
+    const contents = modelClient.requests[0].messages.map((message) => message.content).join('\n');
+    expect(contents).toContain('Desktop personalization:');
+    expect(contents).toContain('more everyday, conversational tone');
+    expect(contents).toContain('Prefer crisp context before the answer.');
+    expect(contents).not.toContain('<memory_context>');
+    expect(contents).not.toContain('This memory should stay out.');
+  });
+
+  it('passes per-turn thinking options and stores reasoning deltas', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Thinking loop' });
+    const modelClient = new ReasoningModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'think first', thinking: true, thinkingEffort: 'max' });
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(modelClient.requests[0]).toMatchObject({ thinking: true, reasoningEffort: 'max' });
+    expect(saved?.messages.find((message) => message.role === 'assistant')?.content).toBe('<think>plan</think>answer');
+  });
+
   it('rejects image attachments when the active model does not support image input', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -251,6 +335,33 @@ describe('agent loop tools', () => {
     expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
   });
 
+  it('skips tool approvals when approval policy is full', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Full approval loop' });
+    const modelClient = new ApprovalToolModelClient();
+    const toolHost = new ApprovalToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new FullApprovalConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run risky tool without confirmation' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const approvals = await approvalGate.listApprovals();
+
+    expect(approvals.approvals).toEqual([]);
+    expect(toolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
+  });
+
   it('cancels active turns without publishing runtime errors', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -340,6 +451,26 @@ class ToolCallingModelClient implements ModelClient {
   }
 }
 
+class ToolDeltaModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield { type: 'tool_call_delta', call: { id: 'call_delta', name: 'write_file', argumentsDelta: '{"file_path":"src/generated.txt",' } };
+      yield { type: 'tool_call_delta', call: { id: 'call_delta', name: 'write_file', argumentsDelta: '"content":"generated\\n"}' } };
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_delta', name: 'write_file', arguments: '{"file_path":"src/generated.txt","content":"generated\\n"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'done' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class ToolLoopLimitModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -400,6 +531,55 @@ class CapturingToolHost implements ToolHost {
   }
 }
 
+class PreviewingToolHost implements ToolHost {
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'write_file',
+        description: 'Write a file',
+        inputSchema: {
+          type: 'object',
+          properties: { file_path: { type: 'string' }, content: { type: 'string' } },
+          required: ['file_path', 'content'],
+        },
+      },
+    ];
+  }
+
+  systemPrompt() {
+    return 'PC local tool prompt';
+  }
+
+  async previewPartialToolCall(_name: string, rawArguments: string) {
+    if (!rawArguments.includes('src/generated.txt')) return null;
+    return filePreview();
+  }
+
+  async previewToolCall() {
+    return filePreview();
+  }
+
+  async runTool() {
+    return { content: 'wrote file', preview: filePreview().resultPreview };
+  }
+}
+
+function filePreview() {
+  return {
+    argumentsPreview: JSON.stringify({ file_path: 'src/generated.txt' }),
+    resultPreview: JSON.stringify({
+      diff: {
+        path: 'src/generated.txt',
+        action: 'create',
+        additions: 1,
+        deletions: 0,
+        truncated: false,
+        lines: [],
+      },
+    }),
+  };
+}
+
 class MemoryCapturingModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -416,6 +596,17 @@ class RegenerateModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     yield { type: 'text_delta', text: `answer ${this.requests.length}` };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ReasoningModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'reasoning_delta', text: 'plan' };
+    yield { type: 'text_delta', text: 'answer' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -523,15 +714,68 @@ class CapturingUsageStore implements UsageStore {
   }
 }
 
+class PersonalizationConfigStore implements ConfigStore {
+  async getConfig() {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [],
+      globalPrompt: 'Prefer crisp context before the answer.',
+      memoryEnabled: false,
+      setsunaStyle: 'daily' as const,
+      approvalPolicy: 'on-request' as const,
+      permissionProfile: 'workspace-write' as const,
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
 class StrictApprovalConfigStore implements ConfigStore {
   async getConfig() {
     return {
       configPath: '/tmp/config.json',
       dataPath: '/tmp',
+      storagePath: '/tmp/memories',
       activeProviderId: 'test',
       providers: [],
+      globalPrompt: '',
       memoryEnabled: true,
+      setsunaStyle: 'developer' as const,
       approvalPolicy: 'strict' as const,
+      permissionProfile: 'workspace-write' as const,
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
+class FullApprovalConfigStore implements ConfigStore {
+  async getConfig() {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [],
+      globalPrompt: '',
+      memoryEnabled: true,
+      setsunaStyle: 'developer' as const,
+      approvalPolicy: 'full' as const,
       permissionProfile: 'workspace-write' as const,
     };
   }
@@ -552,9 +796,12 @@ class ImageCapabilityConfigStore implements ConfigStore {
     return {
       configPath: '/tmp/config.json',
       dataPath: '/tmp',
+      storagePath: '/tmp/memories',
       activeProviderId: 'vision-provider',
       providers: [],
+      globalPrompt: '',
       memoryEnabled: true,
+      setsunaStyle: 'developer' as const,
       approvalPolicy: 'on-request' as const,
       permissionProfile: 'workspace-write' as const,
     };

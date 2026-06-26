@@ -8,6 +8,7 @@ export type RuntimeMessage = {
   role: RuntimeMessageRole;
   content: string;
   createdAt: string;
+  completedAt?: string;
   status?: 'streaming' | 'complete' | 'error';
   error?: string;
   attachments?: RuntimeMessageAttachment[];
@@ -116,6 +117,8 @@ export type SendTurnInput = {
   input: string;
   attachments?: RuntimeMessageAttachment[];
   skillIds?: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
 };
 
 export type SendTurnResponse = {
@@ -134,4 +137,6 @@ export type MessageDeleteInput = {
 export type RegenerateMessageInput = {
   content?: string;
   skillIds?: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
 };

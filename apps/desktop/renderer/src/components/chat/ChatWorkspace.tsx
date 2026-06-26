@@ -1,12 +1,13 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
-import { Bubble, CodeHighlighter } from '@ant-design/x';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { Bubble, CodeHighlighter, Think } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
-import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
 import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { FileChangesSummaryCard, RuntimeToolRuns } from './RuntimeToolRuns.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
 import { assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, type ChatDisplayItem } from './chatMessageDisplay.js';
+import { hasRenderableThinkingContent, hasThinkingSegments, splitThinkingContent, visibleMarkdownContent } from './chatThinkingContent.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import '@ant-design/x-markdown/themes/light.css';
 import '@ant-design/x-markdown/themes/dark.css';
@@ -718,21 +719,46 @@ function AssistantRunContent({
   onOpenFileReview?: () => void;
 }) {
   const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
-  const hasRenderableContent = displaySegments.some((segment) => segment.content.trim() || segment.toolRuns?.length || segment.error);
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
+  const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
   const hasPendingApproval = displaySegments.some((segment) => segment.toolRuns?.some(isPendingApprovalToolRun));
-  const showContinuationLoading = active && status !== 'error' && !hasStreamingSegment && !hasPendingApproval;
+  const activeWork = active || hasStreamingSegment || toolRuns.some(isActiveWorkToolRun);
+  const hasWorkEvidence = displaySegments.some((segment) => hasThinkingSegments(segment.content) || segment.toolRuns?.length);
+  const [workPanelSeen, setWorkPanelSeen] = useState(activeWork);
+  const showWorkPanel = workPanelSeen || activeWork || hasWorkEvidence;
+  const hasAnswerContent = displaySegments.some((segment) => visibleMarkdownContent(segment.content).trim() || segment.error);
+  const hasRenderableContent = hasAnswerContent || showWorkPanel;
+  const showContinuationLoading = active && status !== 'error' && !hasStreamingSegment && !hasPendingApproval && !showWorkPanel;
   const fileChangeSummary = useMemo(() => {
     if (active) return null;
-    return fileChangeSummaryFromRuns(displaySegments.flatMap((segment) => segment.toolRuns ?? []));
-  }, [active, displaySegments]);
-  if (!hasRenderableContent && (status === 'streaming' || active)) {
+    return fileChangeSummaryFromRuns(toolRuns);
+  }, [active, toolRuns]);
+  const workThinkingNodes = useMemo(() => streamingThinkingNodes(displaySegments), [displaySegments]);
+  const workTiming = useMemo(() => inferWorkTiming(displaySegments), [displaySegments]);
+  const hasWorkDetails = workThinkingNodes.length > 0 || toolRuns.length > 0;
+
+  useEffect(() => {
+    if (activeWork || hasWorkEvidence) setWorkPanelSeen(true);
+  }, [activeWork, hasWorkEvidence]);
+
+  if (!hasRenderableContent && (hasStreamingSegment || active)) {
     return <AssistantLoadingIndicator label={active ? '正在处理' : '思考中'} />;
   }
-  const contentNodes = assistantRunContentNodes(displaySegments, onAnswerApproval);
+  const contentNodes = assistantRunContentNodes(displaySegments);
   return (
     <div className="chat-assistant-run">
+      {showWorkPanel ? (
+        <WorkHistoryPanel
+          active={activeWork}
+          completedAtMs={workTiming.completedAtMs}
+          hasDetails={hasWorkDetails}
+          startedAtMs={workTiming.startedAtMs}
+        >
+          {workThinkingNodes}
+          {toolRuns.length ? <RuntimeToolRuns runs={toolRuns} onAnswerApproval={onAnswerApproval} /> : null}
+        </WorkHistoryPanel>
+      ) : null}
       {contentNodes}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
@@ -746,26 +772,11 @@ function AssistantRunContent({
 
 function assistantRunContentNodes(
   segments: RuntimeMessage[],
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void,
 ) {
   const nodes: JSX.Element[] = [];
-  let pendingToolRuns: NonNullable<RuntimeMessage['toolRuns']> = [];
-  let pendingToolKeyParts: string[] = [];
-
-  const flushToolRuns = () => {
-    if (!pendingToolRuns.length) return;
-    nodes.push(
-      <div className="chat-assistant-run__segment" key={`tools-${pendingToolKeyParts.join('-')}`}>
-        <RuntimeToolRuns runs={pendingToolRuns} onAnswerApproval={onAnswerApproval} />
-      </div>,
-    );
-    pendingToolRuns = [];
-    pendingToolKeyParts = [];
-  };
 
   for (const segment of segments) {
-    if (segment.content.trim()) {
-      flushToolRuns();
+    if (visibleMarkdownContent(segment.content).trim()) {
       nodes.push(
         <div className="chat-assistant-run__segment" key={`${segment.id}-content`}>
           <MarkdownContent content={segment.content} streaming={segment.status === 'streaming'} />
@@ -773,13 +784,7 @@ function assistantRunContentNodes(
       );
     }
 
-    if (segment.toolRuns?.length) {
-      pendingToolRuns.push(...segment.toolRuns);
-      pendingToolKeyParts.push(segment.id);
-    }
-
     if (isEmptyStreamingAssistantSegment(segment)) {
-      flushToolRuns();
       nodes.push(
         <div className="chat-assistant-run__segment" key={`${segment.id}-loading`}>
           <AssistantLoadingIndicator label="正在处理" />
@@ -788,7 +793,6 @@ function assistantRunContentNodes(
     }
 
     if (segment.error) {
-      flushToolRuns();
       nodes.push(
         <div className="chat-assistant-run__segment" key={`${segment.id}-error`}>
           <div className="chat-message-error">{segment.error}</div>
@@ -797,16 +801,165 @@ function assistantRunContentNodes(
     }
   }
 
-  flushToolRuns();
   return nodes;
 }
 
 function isEmptyStreamingAssistantSegment(segment: RuntimeMessage): boolean {
-  return segment.status === 'streaming' && !segment.content.trim() && !segment.toolRuns?.length && !segment.error;
+  return segment.status === 'streaming' && !hasRenderableThinkingContent(segment.content, true) && !segment.toolRuns?.length && !segment.error;
 }
 
 function isPendingApprovalToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
   return run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected';
+}
+
+function isActiveWorkToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
+  return run.status === 'running' || isPendingApprovalToolRun(run);
+}
+
+function inferWorkTiming(segments: RuntimeMessage[]): { startedAtMs: number | null; completedAtMs: number | null } {
+  const startedAtMs: number[] = [];
+  const completedAtMs: number[] = [];
+  let hasWorkEvidence = false;
+
+  for (const segment of segments) {
+    const segmentStartedAtMs = parseDateMs(segment.createdAt);
+    const segmentCompletedAtMs = parseDateMs(segment.completedAt);
+    const hasThinking = hasThinkingSegments(segment.content);
+    if (hasThinking) {
+      hasWorkEvidence = true;
+      if (segmentStartedAtMs !== null) startedAtMs.push(segmentStartedAtMs);
+      if (segmentCompletedAtMs !== null) completedAtMs.push(segmentCompletedAtMs);
+    }
+
+    for (const run of segment.toolRuns ?? []) {
+      hasWorkEvidence = true;
+      const runStartedAtMs = parseDateMs(run.startedAt) ?? segmentStartedAtMs;
+      const runCompletedAtMs = parseDateMs(run.completedAt);
+      if (runStartedAtMs !== null) startedAtMs.push(runStartedAtMs);
+      if (runCompletedAtMs !== null) completedAtMs.push(runCompletedAtMs);
+    }
+  }
+
+  if (!startedAtMs.length && hasWorkEvidence) {
+    for (const segment of segments) {
+      const segmentStartedAtMs = parseDateMs(segment.createdAt);
+      if (segmentStartedAtMs !== null) {
+        startedAtMs.push(segmentStartedAtMs);
+        break;
+      }
+    }
+  }
+
+  return {
+    startedAtMs: startedAtMs.length ? Math.min(...startedAtMs) : null,
+    completedAtMs: completedAtMs.length ? Math.max(...completedAtMs) : null,
+  };
+}
+
+function parseDateMs(value?: string | null): number | null {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+function streamingThinkingNodes(segments: RuntimeMessage[]): JSX.Element[] {
+  const nodes: JSX.Element[] = [];
+  for (const segment of segments) {
+    splitThinkingContent(segment.content).forEach((thinkingSegment, index) => {
+      if (thinkingSegment.type !== 'think' || thinkingSegment.closed || segment.status !== 'streaming' || !thinkingSegment.content.trim()) return;
+      nodes.push(
+        <Think
+          key={`${segment.id}-think-${index}`}
+          className="chat-think"
+          title="思考中"
+          loading
+          blink
+          defaultExpanded
+        >
+          <MarkdownContent content={thinkingSegment.content} streaming />
+        </Think>,
+      );
+    });
+  }
+  return nodes;
+}
+
+function WorkHistoryPanel({
+  active,
+  children,
+  completedAtMs,
+  hasDetails,
+  startedAtMs,
+}: {
+  active: boolean;
+  children?: ReactNode;
+  completedAtMs?: number | null;
+  hasDetails: boolean;
+  startedAtMs?: number | null;
+}) {
+  const [expanded, setExpanded] = useState(active && hasDetails);
+  const wasActiveRef = useRef(active);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
+
+  useEffect(() => {
+    setExpanded(active && hasDetails);
+  }, [active, hasDetails]);
+
+  useEffect(() => {
+    if (completedAtMs !== null && completedAtMs !== undefined) {
+      setCapturedCompletedAtMs(completedAtMs);
+      wasActiveRef.current = active;
+      return;
+    }
+    if (active) {
+      wasActiveRef.current = true;
+      setCapturedCompletedAtMs(null);
+      return;
+    }
+    if (wasActiveRef.current) {
+      setCapturedCompletedAtMs((value) => value ?? Date.now());
+    }
+    wasActiveRef.current = active;
+  }, [active, completedAtMs]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const tick = () => setNowMs(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+
+  const title = active ? '工作中' : '工作用时';
+  const durationEndMs = active ? nowMs : (capturedCompletedAtMs ?? completedAtMs ?? null);
+  const durationLabel = formatDurationMs(
+    startedAtMs !== null && startedAtMs !== undefined && durationEndMs !== null
+      ? Math.max(0, durationEndMs - startedAtMs)
+      : null,
+  );
+  return (
+    <div className={`chat-work-history ${expanded ? 'is-expanded' : ''}`}>
+      <button
+        className="chat-work-history__summary"
+        type="button"
+        aria-expanded={expanded}
+        disabled={!hasDetails}
+        onClick={() => {
+          if (hasDetails) setExpanded((value) => !value);
+        }}
+      >
+        <span className="chat-work-history__title">{title}</span>
+        {durationLabel ? <span className="chat-work-history__duration">{durationLabel}</span> : null}
+        {hasDetails ? (
+          <span className="chat-work-history__chevron" aria-hidden="true">
+            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </span>
+        ) : null}
+      </button>
+      {expanded && hasDetails ? <div className="chat-work-history__body">{children}</div> : null}
+    </div>
+  );
 }
 
 function AssistantLoadingIndicator({ label }: { label: string }) {
@@ -907,19 +1060,33 @@ function MessageFooter({
 }
 
 function MarkdownContent({ content, streaming }: { content: string; streaming: boolean }) {
-  return (
+  const segments = useMemo(() => splitThinkingContent(content), [content]);
+  const renderMarkdown = (value: string, key: string, activeStreaming: boolean, className = '') => (
     <XMarkdown
-      className="chat-markdown x-markdown-light"
-      content={content}
+      key={key}
+      className={['chat-markdown', 'x-markdown-light', className].filter(Boolean).join(' ')}
+      content={value}
       components={{ code: MarkdownCode }}
       openLinksInNewTab
       style={markdownStyle}
       streaming={{
-        hasNextChunk: streaming,
-        enableAnimation: streaming,
-        tail: streaming ? { content: '|' } : false,
+        hasNextChunk: activeStreaming,
+        enableAnimation: activeStreaming,
+        tail: activeStreaming ? { content: '|' } : false,
       }}
     />
+  );
+
+  return (
+    <>
+      {segments.map((segment, index) => {
+        const activeStreaming = streaming && index === segments.length - 1 && (segment.type === 'markdown' || !segment.closed);
+        if (segment.type === 'think') {
+          return null;
+        }
+        return renderMarkdown(segment.content, `markdown-${index}`, activeStreaming);
+      })}
+    </>
   );
 }
 
@@ -984,6 +1151,19 @@ function normalizeCodeLanguage(language: string) {
 
 function formatTime(value: string): string {
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDurationMs(value: number | null): string {
+  if (value === null || value < 0) return '';
+  const roundedSeconds = Math.round(value / 1000);
+  const totalSeconds = value > 0 && roundedSeconds === 0 ? 1 : Math.max(0, roundedSeconds);
+  if (totalSeconds < 60) return `${totalSeconds}秒`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds ? `${minutes}分${seconds}秒` : `${minutes}分`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes ? `${hours}小时${restMinutes}分` : `${hours}小时`;
 }
 
 async function copyText(value: string) {

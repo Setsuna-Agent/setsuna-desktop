@@ -168,9 +168,20 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         return;
       }
 
+      if (request.method === 'GET' && url.pathname === '/v1/memories/preview') {
+        sendJson(response, 200, await runtime.memoryStore.previewMemories());
+        return;
+      }
+
       if (request.method === 'POST' && url.pathname === '/v1/memories') {
         const memory = await runtime.memoryStore.rememberMemory(await readBody<CreateRuntimeMemoryInput>(request));
         sendJson(response, 201, { memories: [memory] });
+        return;
+      }
+
+      if (request.method === 'DELETE' && url.pathname === '/v1/memories') {
+        await runtime.memoryStore.clearMemories();
+        sendJson(response, 200, { memories: [] });
         return;
       }
 
@@ -330,6 +341,8 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           await runtime.agentLoop.regenerateFromMessage(threadId, decodeURIComponent(regenerateMatch[2]), {
             content: typeof input.content === 'string' ? input.content : undefined,
             skillIds: Array.isArray(input.skillIds) ? input.skillIds.filter((item): item is string => typeof item === 'string') : [],
+            thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
+            thinkingEffort: stringInput((input as { thinking_effort?: unknown }).thinking_effort ?? input.thinkingEffort),
           }),
         );
         return;
@@ -355,13 +368,19 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
       const turnMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/turns$/);
       if (turnMatch && request.method === 'POST') {
         const threadId = decodeURIComponent(turnMatch[1]);
-        const input = await readBody<{ attachments?: unknown; input?: unknown; skillIds?: unknown }>(request);
+        const input = await readBody<{ attachments?: unknown; input?: unknown; skillIds?: unknown; thinking?: unknown; thinkingEffort?: unknown; thinking_effort?: unknown }>(request);
         const text = typeof input.input === 'string' ? input.input : '';
         const skillIds = Array.isArray(input.skillIds) ? input.skillIds.filter((item): item is string => typeof item === 'string') : [];
         const attachments: SendTurnInput['attachments'] = Array.isArray(input.attachments)
           ? input.attachments.filter(isRuntimeMessageAttachment)
           : [];
-        sendJson(response, 202, await runtime.agentLoop.startTurn(threadId, { attachments, input: text, skillIds } satisfies SendTurnInput));
+        sendJson(response, 202, await runtime.agentLoop.startTurn(threadId, {
+          attachments,
+          input: text,
+          skillIds,
+          thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
+          thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
+        } satisfies SendTurnInput));
         return;
       }
 
@@ -497,4 +516,8 @@ function isRuntimeMessageAttachment(value: unknown): value is NonNullable<SendTu
     Number.isFinite(record.size) &&
     typeof record.url === 'string'
   );
+}
+
+function stringInput(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

@@ -572,11 +572,95 @@
   overflow-wrap: anywhere;
 }
 
+.chat-think {
+  color: var(--app-text-secondary);
+}
+
+.chat-think .ant-think-status-wrapper {
+  color: var(--app-text-secondary);
+}
+
+.chat-think .ant-think-content {
+  font-size: 13px;
+  line-height: 1.72;
+}
+
+.chat-think-markdown {
+  color: var(--app-text-secondary);
+}
+
 .chat-assistant-run {
   display: grid;
   gap: 10px;
   width: 100%;
   min-width: 0;
+}
+
+.chat-work-history {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.chat-work-history__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0 0 5px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 48%, transparent);
+  color: color-mix(in srgb, var(--app-text) 52%, transparent);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-work-history__summary:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--app-text) 68%, transparent);
+}
+
+.chat-work-history__summary:disabled {
+  cursor: default;
+}
+
+.chat-work-history.is-expanded .chat-work-history__summary {
+  color: color-mix(in srgb, var(--app-text) 68%, transparent);
+}
+
+.chat-work-history__title,
+.chat-work-history__duration {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: currentColor;
+  font-weight: 400;
+}
+
+.chat-work-history__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 20px;
+  color: currentColor;
+}
+
+.chat-work-history__body {
+  display: grid;
+  gap: 8px;
+  width: min(760px, calc(100% - 28px));
+  min-width: 0;
+  margin-top: 4px;
+  margin-left: 18px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
 }
 
 .chat-assistant-run__segment {

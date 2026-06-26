@@ -348,6 +348,43 @@ describe('runtime server', () => {
     await expect(runtimeFetch('/v1/memories')).resolves.toMatchObject({ memories: [] });
   });
 
+  it('clears all local memories', async () => {
+    await runtimeFetch('/v1/memories', {
+      method: 'POST',
+      body: JSON.stringify({ content: 'Use local memory only.', scope: 'global' }),
+    });
+    await runtimeFetch('/v1/memories', {
+      method: 'POST',
+      body: JSON.stringify({ content: 'Project rule.', scope: 'global' }),
+    });
+
+    await expect(runtimeFetch('/v1/memories', { method: 'DELETE' })).resolves.toMatchObject({ memories: [] });
+    await expect(runtimeFetch('/v1/memories')).resolves.toMatchObject({ memories: [] });
+  });
+
+  it('previews local memories from the configured storage path', async () => {
+    const storagePath = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-memory-preview-test-'));
+    const config = await runtimeFetch('/v1/config', {
+      method: 'PUT',
+      body: JSON.stringify({ storagePath }),
+    });
+    const created = await runtimeFetch('/v1/memories', {
+      method: 'POST',
+      body: JSON.stringify({ content: 'Preview this configured memory.', scope: 'global' }),
+    });
+    const preview = await runtimeFetch('/v1/memories/preview');
+
+    expect(config.storagePath).toBe(storagePath);
+    expect(preview.storagePath).toBe(path.resolve(storagePath));
+    expect(preview).toMatchObject({
+      total: 1,
+      items: [{ id: created.memories[0].id, preview: 'Preview this configured memory.' }],
+    });
+
+    await runtimeFetch(`/v1/memories/${encodeURIComponent(created.memories[0].id)}`, { method: 'DELETE' });
+    await expect(runtimeFetch('/v1/memories/preview')).resolves.toMatchObject({ total: 0, items: [] });
+  });
+
   it('stores local MCP server config through the runtime API', async () => {
     const created = await runtimeFetch('/v1/mcp/servers', {
       method: 'POST',

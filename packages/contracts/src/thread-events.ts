@@ -95,6 +95,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = next.messages.find((item) => item.id === event.payload.messageId);
     if (message) {
       message.status = 'complete';
+      message.completedAt = event.createdAt;
       if (event.payload.toolCalls?.length) message.toolCalls = event.payload.toolCalls.map((toolCall) => ({ ...toolCall }));
       updatePreviewFromMessage(next, message);
     }
@@ -159,6 +160,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         name: event.payload.toolName,
         status: 'running',
         argumentsPreview: event.payload.argumentsPreview,
+        resultPreview: event.payload.resultPreview,
         startedAt: event.createdAt,
       });
     }
@@ -183,6 +185,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
       message.status = 'error';
+      message.completedAt = event.createdAt;
       message.error = event.payload.message;
     } else if (next.contextCompaction?.status === 'running') {
       next.contextCompaction = undefined;
@@ -194,6 +197,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
       message.status = 'complete';
+      message.completedAt = event.createdAt;
       if (!message.content.trim()) message.error = event.payload.reason || 'Turn cancelled.';
     }
     return next;

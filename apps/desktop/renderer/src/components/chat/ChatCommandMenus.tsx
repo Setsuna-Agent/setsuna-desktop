@@ -5,6 +5,7 @@ import { skillTokenText } from './chatCommandUtils.js';
 export function ProjectEntryCommandMenu({
   activeIndex,
   entries,
+  hasProject,
   loadError,
   loading,
   onHover,
@@ -12,6 +13,7 @@ export function ProjectEntryCommandMenu({
 }: {
   activeIndex: number;
   entries: WorkspaceEntrySearchItem[];
+  hasProject: boolean;
   loadError: string;
   loading: boolean;
   onHover: (index: number) => void;
@@ -20,7 +22,9 @@ export function ProjectEntryCommandMenu({
   return (
     <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label="项目文件">
       <div className="chat-command-menu__title">项目文件</div>
-      {loading && !entries.length ? (
+      {!hasProject ? (
+        <div className="chat-command-menu__state">请先选择项目目录</div>
+      ) : loading && !entries.length ? (
         <div className="chat-command-menu__state">
           <LoaderCircle className="chat-command-menu__state-icon is-spinning" size={14} />
           <span>正在搜索项目文件</span>

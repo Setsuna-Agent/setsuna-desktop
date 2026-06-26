@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
-import { Check, ChevronDown, LockKeyhole, ShieldAlert, ShieldCheck, UnlockKeyhole } from 'lucide-react';
+import { useRef, useState, type ComponentProps } from 'react';
+import { Button, Dropdown } from 'antd';
+import { Check, ChevronDown, LockKeyhole, ShieldCheck, UnlockKeyhole, type LucideIcon } from 'lucide-react';
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { useOutsideClose } from './chatComposerControlUtils.js';
 
@@ -8,10 +9,16 @@ type PermissionProfile = RuntimeConfigState['permissionProfile'];
 
 const approvalPolicyItems: Array<{
   description: string;
-  icon: typeof ShieldCheck;
+  icon: LucideIcon;
   label: string;
   value: ApprovalPolicy;
 }> = [
+  {
+    value: 'strict',
+    label: '严格授权',
+    description: '工具执行前总是确认',
+    icon: LockKeyhole,
+  },
   {
     value: 'on-request',
     label: '智能授权',
@@ -19,16 +26,10 @@ const approvalPolicyItems: Array<{
     icon: ShieldCheck,
   },
   {
-    value: 'suggest',
-    label: '建议确认',
-    description: '按工具风险建议处理',
-    icon: ShieldAlert,
-  },
-  {
-    value: 'strict',
-    label: '严格授权',
-    description: '工具执行前总是确认',
-    icon: LockKeyhole,
+    value: 'full',
+    label: '完全授权',
+    description: '工具执行不再弹出确认',
+    icon: UnlockKeyhole,
   },
 ];
 
@@ -67,53 +68,46 @@ export function ChatApprovalPolicyMenu({
   policy: ApprovalPolicy;
   onChange: (policy: ApprovalPolicy) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLSpanElement>(null);
   const activeItem = approvalPolicyItems.find((item) => item.value === policy) ?? approvalPolicyItems[0];
   const ActiveIcon = activeItem.icon;
-
-  useOutsideClose(rootRef, open, () => setOpen(false));
+  const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = approvalPolicyItems.map((item) => {
+    const Icon = item.icon;
+    const selected = item.value === policy;
+    return {
+      key: item.value,
+      label: (
+        <span className="chat-authorization-menu__item">
+          <Icon className="chat-authorization-menu__icon" size={13} />
+          <span>{item.label}</span>
+          <span className="chat-authorization-menu__check">{selected ? <Check size={13} /> : null}</span>
+        </span>
+      ),
+    };
+  });
 
   return (
-    <span ref={rootRef} className="chat-footer-menu-root chat-approval-menu">
-      <button
-        className={`chat-sender-chip chat-approval-menu__trigger ${open ? 'is-active' : ''}`}
-        type="button"
-        aria-expanded={open}
+    <Dropdown
+      rootClassName="chat-authorization-menu-root"
+      trigger={['click']}
+      placement="topLeft"
+      disabled={disabled}
+      menu={{
+        items,
+        selectedKeys: [policy],
+        onClick: ({ key }) => onChange(key as ApprovalPolicy),
+      }}
+    >
+      <Button
+        type="text"
+        size="small"
+        className="chat-authorization-switch chat-approval-menu__trigger"
         disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
       >
-        <ActiveIcon size={13} />
-        <span>{activeItem.label}</span>
-        <ChevronDown size={12} />
-      </button>
-      {open ? (
-        <div className="chat-footer-menu chat-approval-menu__panel">
-          {approvalPolicyItems.map((item) => {
-            const Icon = item.icon;
-            const selected = item.value === policy;
-            return (
-              <button
-                key={item.value}
-                className={`chat-footer-menu__item chat-approval-menu__item ${selected ? 'is-selected' : ''}`}
-                type="button"
-                onClick={() => {
-                  onChange(item.value);
-                  setOpen(false);
-                }}
-              >
-                <Icon className="chat-footer-menu__item-icon" size={15} />
-                <span className="chat-footer-menu__item-main">
-                  <span>{item.label}</span>
-                  <em>{item.description}</em>
-                </span>
-                <span className="chat-footer-menu__check">{selected ? <Check size={14} /> : null}</span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </span>
+        <ActiveIcon className="chat-authorization-switch__icon" size={13} />
+        <span className="chat-authorization-switch__label">{activeItem.label}</span>
+        <ChevronDown className="chat-authorization-switch__arrow" size={12} />
+      </Button>
+    </Dropdown>
   );
 }
 

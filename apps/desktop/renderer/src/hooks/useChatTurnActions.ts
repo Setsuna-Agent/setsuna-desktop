@@ -32,7 +32,7 @@ export function useChatTurnActions({
   terminalTurnIdsRef: MutableRefObject<Set<string>>;
 }) {
   const sendInput = useCallback(
-    async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[] } = {}) => {
+    async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
       if (activeTurnId) return;
       const input = (value ?? draft).trim();
       const attachments = options.attachments ?? [];
@@ -48,7 +48,13 @@ export function useChatTurnActions({
           await reloadThreads();
         }
         setDraft('');
-        const response = await client.sendTurn(thread.id, { attachments, input, skillIds: options.skillIds });
+        const response = await client.sendTurn(thread.id, {
+          attachments,
+          input,
+          skillIds: options.skillIds,
+          thinking: options.thinking === true,
+          ...(options.thinking === true && options.thinkingEffort ? { thinkingEffort: options.thinkingEffort } : {}),
+        });
         if (!terminalTurnIdsRef.current.has(response.turnId)) setActiveTurnId(response.turnId);
       } catch (unknownError) {
         setDraft((current) => current || input);

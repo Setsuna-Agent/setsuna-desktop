@@ -23,13 +23,18 @@ export type ProviderModelConfig = {
   supportsImages?: boolean;
 };
 
+export type RuntimeSetsunaStyle = 'developer' | 'daily';
+
 export type RuntimeConfigState = {
   configPath: string;
   dataPath: string;
+  storagePath: string;
   activeProviderId?: string;
   providers: ProviderConfigState[];
+  globalPrompt: string;
   memoryEnabled: boolean;
-  approvalPolicy: 'suggest' | 'on-request' | 'strict';
+  setsunaStyle: RuntimeSetsunaStyle;
+  approvalPolicy: 'strict' | 'on-request' | 'full';
   permissionProfile: RuntimePermissionProfile;
 };
 
@@ -69,7 +74,10 @@ export type ProviderConfigInput = {
 
 export type RuntimeConfigInput = {
   activeProviderId?: string;
+  globalPrompt?: string;
+  storagePath?: string;
   memoryEnabled?: boolean;
+  setsunaStyle?: RuntimeSetsunaStyle | string;
   approvalPolicy?: RuntimeConfigState['approvalPolicy'];
   permissionProfile?: RuntimePermissionProfile;
   providers?: ProviderConfigInput[];

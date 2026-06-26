@@ -17,6 +17,7 @@ import {
   withEndpoint,
   type FetchImpl,
 } from './provider-utils.js';
+import { openAiResponsesReasoningBody } from './provider-thinking.js';
 
 export class OpenAiResponsesModelClient implements ModelClient {
   constructor(
@@ -44,6 +45,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiResponsesTools(request.tools) } : {}),
         ...(request.toolChoice ? { tool_choice: request.toolChoice } : {}),
+        ...openAiResponsesReasoningBody(this.provider, request),
       }),
     });
     await assertOkResponse(response, 'OpenAI Responses request failed');

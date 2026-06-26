@@ -7,6 +7,7 @@ import { OpenAiChatModelClient } from './openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from './openai-responses-model-client.js';
 import { TestModelClient } from './test-model-client.js';
 import type { FetchImpl } from './provider-utils.js';
+import { thinkingRequestDefaults } from './provider-thinking.js';
 
 export class ConfiguredModelClient implements ModelClient {
   constructor(
@@ -27,7 +28,7 @@ export class ConfiguredModelClient implements ModelClient {
       ...request,
       model: provider.activeModel?.code || request.model,
       maxOutputTokens: request.maxOutputTokens ?? provider.activeModel?.maxOutputTokens,
-      reasoningEffort: request.reasoningEffort ?? activeModelReasoningEffort(provider),
+      ...thinkingRequestDefaults(provider, request),
     });
   }
 }
@@ -43,13 +44,4 @@ function providerModelClient(provider: RuntimeProviderConfig, fetchImpl: FetchIm
   if (provider.provider === 'anthropic') return new AnthropicMessagesModelClient(provider, fetchImpl);
   if (process.env.SETSUNA_USE_LEGACY_OPENAI_COMPATIBLE_ADAPTER === '1') return new OpenAiChatModelClient(provider, fetchImpl);
   return new AiSdkOpenAiCompatibleModelClient(provider, fetchImpl);
-}
-
-function activeModelReasoningEffort(provider: RuntimeProviderConfig): ModelRequest['reasoningEffort'] {
-  const model = provider.activeModel;
-  if (!model?.thinkingEnabled) return undefined;
-  const defaultEffort = model.defaultThinkingEffort;
-  if (defaultEffort === 'low' || defaultEffort === 'medium' || defaultEffort === 'high') return defaultEffort;
-  const firstEffort = model.thinkingEfforts.find((effort): effort is NonNullable<ModelRequest['reasoningEffort']> => effort === 'low' || effort === 'medium' || effort === 'high');
-  return firstEffort;
 }

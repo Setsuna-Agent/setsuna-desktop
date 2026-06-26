@@ -21,14 +21,12 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     handleTerminalResizeStart,
     handleWorkspaceResizeStep,
     handleWorkspaceResizeStart,
-    memoryDraft,
     navigation,
     projectWorkspace,
     runtime,
     searchTriggerRef,
     setActiveView,
     setDraft,
-    setMemoryDraft,
     setSidebarCollapsed,
     shellClassName,
     shellRef,
@@ -113,12 +111,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         activeView={activeView}
         chatActions={chatActions}
         draft={draft}
-        memoryDraft={memoryDraft}
         projectWorkspace={projectWorkspace}
         runtime={runtime}
         setActiveView={setActiveView}
         setDraft={setDraft}
-        setMemoryDraft={setMemoryDraft}
         workspacePanels={workspacePanels}
         onTerminalResizeStart={handleTerminalResizeStart}
         onTerminalResizeStep={handleTerminalResizeStep}

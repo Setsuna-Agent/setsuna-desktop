@@ -14,12 +14,10 @@ export function AppRouteContent({
   activeView,
   chatActions,
   draft,
-  memoryDraft,
   projectWorkspace,
   runtime,
   setActiveView,
   setDraft,
-  setMemoryDraft,
   workspacePanels,
   onTerminalResizeStep,
   onTerminalResizeStart,
@@ -36,12 +34,10 @@ export function AppRouteContent({
   activeView: MainView;
   chatActions: ChatTurnActions;
   draft: string;
-  memoryDraft: string;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
-  setMemoryDraft: Dispatch<SetStateAction<string>>;
   workspacePanels: DesktopWorkspacePanelsState;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -75,18 +71,15 @@ export function AppRouteContent({
       <SettingsPage
         config={runtime.config}
         usage={runtime.usage}
-        memories={runtime.memories}
-        memoryDraft={memoryDraft}
-        activeProject={activeProject}
+        memoryPreview={runtime.memoryPreview}
+        memoryPreviewLoading={runtime.memoryPreviewLoading}
         onBack={() => setActiveView('chat')}
         onFetchProviderModels={runtime.fetchProviderModels}
         onSaveProviders={runtime.saveProviders}
         onSaveRuntimePreferences={runtime.saveRuntimePreferences}
-        onMemoryDraftChange={setMemoryDraft}
-        onSaveMemory={() => {
-          void runtime.saveMemory(memoryDraft, runtime.currentThread?.id).then(() => setMemoryDraft(''));
-        }}
-        onDeleteMemory={(memory) => void runtime.deleteMemory(memory)}
+        onPreviewMemories={runtime.previewMemories}
+        onDeleteMemory={runtime.deleteMemory}
+        onResetMemories={runtime.clearMemories}
       />
     );
   }

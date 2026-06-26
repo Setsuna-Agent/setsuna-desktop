@@ -86,7 +86,7 @@ export function AgentSidebar({
   onRenameThread: (thread: RuntimeThreadSummary) => void;
 }) {
   return (
-    <aside className="app-sidebar">
+    <aside className="app-sidebar desktop-agent-sidebar">
       <div className="desktop-agent-sidebar__top-actions">
         <button className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>
           <Plus className="desktop-agent-command__icon" size={15} />

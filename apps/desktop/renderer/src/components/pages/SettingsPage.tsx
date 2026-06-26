@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowLeft, Brain, Cpu, Database, HardDrive, Image as ImageIcon, KeyRound, Moon, Plus, RefreshCw, Save, SlidersHorizontal, Sun, Trash2, Type } from 'lucide-react';
+import { Popconfirm } from 'antd';
+import { ArrowLeft, Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, KeyRound, Moon, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, Sun, Trash2, Type } from 'lucide-react';
 import type {
   ProviderConfigState,
   ProviderModelConfig,
@@ -8,9 +9,9 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeFetchModelsInput,
-  RuntimeMemoryRecord,
+  RuntimeMemoryPreview,
+  RuntimeMemoryPreviewItem,
   RuntimeUsageResponse,
-  WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
@@ -22,48 +23,54 @@ import {
 } from '../../hooks/useAppearancePreferences.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 
-type SettingsSectionId = 'general' | 'localLlm' | 'runtime' | 'memory';
+type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'runtime';
+type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>;
 
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
   { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
+  { id: 'personalization', label: '个性化', icon: <Pencil size={14} /> },
   { id: 'localLlm', label: '本地模型', icon: <HardDrive size={14} /> },
   { id: 'runtime', label: '运行时', icon: <Cpu size={14} /> },
-  { id: 'memory', label: '记忆', icon: <Database size={14} /> },
 ];
 
 const settingsSectionLabels: Record<SettingsSectionId, string> = {
   general: '通用',
+  personalization: '个性化',
   localLlm: '本地模型',
   runtime: '运行时',
-  memory: '记忆',
 };
+
+const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
+const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
+const setsunaStyleOptions: Array<{ value: RuntimeConfigState['setsunaStyle']; label: string; icon: ReactNode }> = [
+  { value: 'developer', label: '开发', icon: <Cpu size={14} /> },
+  { value: 'daily', label: '日常', icon: <Sun size={14} /> },
+];
 
 export function SettingsPage({
   config,
   usage,
-  memories,
-  memoryDraft,
-  activeProject,
+  memoryPreview,
+  memoryPreviewLoading,
   onBack,
   onFetchProviderModels,
   onSaveProviders,
   onSaveRuntimePreferences,
-  onMemoryDraftChange,
-  onSaveMemory,
+  onPreviewMemories,
   onDeleteMemory,
+  onResetMemories,
 }: {
   config: RuntimeConfigState | null;
   usage: RuntimeUsageResponse | null;
-  memories: RuntimeMemoryRecord[];
-  memoryDraft: string;
-  activeProject?: WorkspaceProject;
+  memoryPreview: RuntimeMemoryPreview | null;
+  memoryPreviewLoading: boolean;
   onBack: () => void;
   onFetchProviderModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
   onSaveProviders: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
-  onSaveRuntimePreferences: (input: Pick<RuntimeConfigInput, 'memoryEnabled' | 'approvalPolicy' | 'permissionProfile'>) => Promise<void>;
-  onMemoryDraftChange: (value: string) => void;
-  onSaveMemory: () => void;
-  onDeleteMemory: (memory: RuntimeMemoryRecord) => void;
+  onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
+  onPreviewMemories: () => Promise<RuntimeMemoryPreview>;
+  onDeleteMemory: (memoryId: string) => Promise<void>;
+  onResetMemories: () => Promise<void>;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
   const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId) ?? config?.providers[0];
@@ -77,17 +84,22 @@ export function SettingsPage({
       ) : (
         <EmptyState title="Config unavailable" />
       )
-    ) : activeSection === 'runtime' ? (
-      config ? <RuntimePolicySettings config={config} onSave={onSaveRuntimePreferences} /> : <EmptyState title="Config unavailable" />
+    ) : activeSection === 'personalization' ? (
+      config ? (
+        <PersonalizationSettings
+          config={config}
+          memoryPreview={memoryPreview}
+          memoryPreviewLoading={memoryPreviewLoading}
+          onSavePreferences={onSaveRuntimePreferences}
+          onPreview={onPreviewMemories}
+          onDelete={onDeleteMemory}
+          onReset={onResetMemories}
+        />
+      ) : (
+        <EmptyState title="Config unavailable" />
+      )
     ) : (
-      <MemoryPanel
-        memories={memories}
-        draft={memoryDraft}
-        activeProject={activeProject}
-        onDraftChange={onMemoryDraftChange}
-        onSave={onSaveMemory}
-        onDelete={onDeleteMemory}
-      />
+      config ? <RuntimePolicySettings config={config} onSave={onSaveRuntimePreferences} /> : <EmptyState title="Config unavailable" />
     );
 
   return (
@@ -114,7 +126,7 @@ export function SettingsPage({
           </div>
         </nav>
         <section className="chat-user-settings__content">
-          <header className="chat-user-settings__page-heading">
+          <header className={`chat-user-settings__page-heading ${activeSection === 'localLlm' ? 'chat-user-settings__page-heading--wide' : ''}`}>
             <h1>{settingsSectionLabels[activeSection]}</h1>
             <span>{activeSection === 'localLlm' ? activeProviderName : config?.dataPath ?? 'Local runtime'}</span>
           </header>
@@ -236,27 +248,13 @@ function RuntimePolicySettings({
   onSave,
 }: {
   config: RuntimeConfigState;
-  onSave: (input: Pick<RuntimeConfigInput, 'memoryEnabled' | 'approvalPolicy' | 'permissionProfile'>) => Promise<void>;
+  onSave: (input: RuntimePreferenceInput) => Promise<void>;
 }) {
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__runtime-section">
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">策略</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
-          <div className="chat-user-settings__row">
-            <span className="chat-user-settings__row-label">
-              <KeyRound size={14} />
-              <span>启用记忆</span>
-            </span>
-            <label className="sd-check">
-              <input
-                type="checkbox"
-                checked={config.memoryEnabled}
-                onChange={(event) => void onSave({ memoryEnabled: event.currentTarget.checked })}
-              />
-              <span>开启</span>
-            </label>
-          </div>
           <label className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <SlidersHorizontal size={14} />
@@ -267,9 +265,9 @@ function RuntimePolicySettings({
               value={config.approvalPolicy}
               onChange={(event) => void onSave({ approvalPolicy: event.currentTarget.value as RuntimeConfigState['approvalPolicy'] })}
             >
-              <option value="suggest">建议确认</option>
-              <option value="on-request">按需确认</option>
-              <option value="strict">严格确认</option>
+              <option value="strict">严格授权</option>
+              <option value="on-request">智能授权</option>
+              <option value="full">完全授权</option>
             </SelectField>
           </label>
           <label className="chat-user-settings__row">
@@ -313,58 +311,327 @@ function RuntimePolicySettings({
   );
 }
 
-function MemoryPanel({
-  memories,
-  draft,
-  activeProject,
-  onDraftChange,
-  onSave,
+function PersonalizationSettings({
+  config,
+  memoryPreview,
+  memoryPreviewLoading,
+  onSavePreferences,
+  onPreview,
   onDelete,
+  onReset,
 }: {
-  memories: RuntimeMemoryRecord[];
-  draft: string;
-  activeProject?: WorkspaceProject;
-  onDraftChange: (value: string) => void;
-  onSave: () => void;
-  onDelete: (memory: RuntimeMemoryRecord) => void;
+  config: RuntimeConfigState;
+  memoryPreview: RuntimeMemoryPreview | null;
+  memoryPreviewLoading: boolean;
+  onSavePreferences: (input: RuntimePreferenceInput) => Promise<void>;
+  onPreview: () => Promise<RuntimeMemoryPreview>;
+  onDelete: (memoryId: string) => Promise<void>;
+  onReset: () => Promise<void>;
 }) {
-  return (
-    <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__memory-section">
-      <div className="chat-user-settings__memory-heading">
-        <div className="chat-user-settings__group-title">{activeProject ? `${activeProject.name} 记忆` : '全局记忆'}</div>
-        <p>记忆只保存在本机，可按当前项目或全局范围被本地 runtime 召回。</p>
-      </div>
-      <div className="chat-user-settings__group chat-user-settings__memory-card">
-        <div className="memory-compose">
-          <TextArea
-            value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            placeholder={activeProject ? `记住到 ${activeProject.name}...` : '记住到全局...'}
-          />
-          <Button variant="primary" disabled={!draft.trim()} onClick={onSave}>
-            保存
-          </Button>
+  const [personalizationView, setPersonalizationView] = useState<'overview' | 'memoryPreview'>('overview');
+  const [globalPromptDraft, setGlobalPromptDraft] = useState(config.globalPrompt);
+  const [selectingStorage, setSelectingStorage] = useState(false);
+  const [memoryDeletingId, setMemoryDeletingId] = useState<string | null>(null);
+  const [memoryResetting, setMemoryResetting] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const globalPromptLength = Array.from(globalPromptDraft).length;
+  const storagePath = config.storagePath || config.dataPath;
+
+  useEffect(() => {
+    setGlobalPromptDraft(config.globalPrompt);
+  }, [config.globalPrompt]);
+
+  useEffect(() => {
+    if (globalPromptDraft === config.globalPrompt) return undefined;
+    const timer = window.setTimeout(() => {
+      void onSavePreferences({ globalPrompt: globalPromptDraft });
+    }, PERSONALIZATION_PROMPT_SAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [config.globalPrompt, globalPromptDraft, onSavePreferences]);
+
+  const selectMemoryStoragePath = async () => {
+    const api = window.setsunaDesktop?.desktop;
+    if (!api?.selectDirectory) {
+      setMemoryError('当前环境不支持选择目录。');
+      return;
+    }
+    setSelectingStorage(true);
+    setMemoryError(null);
+    try {
+      const selectedPath = await api.selectDirectory({ title: '选择记忆存储目录' });
+      if (selectedPath) await onSavePreferences({ storagePath: selectedPath });
+    } catch (unknownError) {
+      setMemoryError(errorMessage(unknownError, '选择存储位置失败'));
+    } finally {
+      setSelectingStorage(false);
+    }
+  };
+
+  const loadMemoryPreview = async () => {
+    setMemoryError(null);
+    try {
+      return await onPreview();
+    } catch (unknownError) {
+      setMemoryError(errorMessage(unknownError, '记忆预览加载失败'));
+      return null;
+    }
+  };
+
+  const openMemoryPreview = async () => {
+    setPersonalizationView('memoryPreview');
+    await loadMemoryPreview();
+  };
+
+  const deleteMemoryItem = async (item: RuntimeMemoryPreviewItem) => {
+    setMemoryDeletingId(item.id);
+    setMemoryError(null);
+    try {
+      await onDelete(item.id);
+    } catch (unknownError) {
+      setMemoryError(errorMessage(unknownError, '删除记忆失败'));
+    } finally {
+      setMemoryDeletingId(null);
+    }
+  };
+
+  const resetMemoryItems = async () => {
+    setMemoryResetting(true);
+    setMemoryError(null);
+    try {
+      await onReset();
+    } catch (unknownError) {
+      setMemoryError(errorMessage(unknownError, '重置记忆失败'));
+    } finally {
+      setMemoryResetting(false);
+    }
+  };
+
+  if (personalizationView === 'memoryPreview') {
+    const items = memoryPreview?.items ?? [];
+    const previewStoragePath = memoryPreview?.storagePath || storagePath;
+
+    return (
+      <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__memory-preview-section">
+        <div className="chat-user-settings__memory-preview-head">
+          <button className="chat-user-settings__back" type="button" onClick={() => setPersonalizationView('overview')}>
+            <ArrowLeft size={14} />
+            <span>记忆预览</span>
+          </button>
+          <div className="chat-user-settings__memory-preview-actions">
+            <Button
+              className="chat-user-settings__tiny-action"
+              icon={<RefreshCw size={14} />}
+              disabled={memoryPreviewLoading || memoryResetting || Boolean(memoryDeletingId)}
+              onClick={() => void loadMemoryPreview()}
+            >
+              {memoryPreviewLoading ? '刷新中' : '刷新'}
+            </Button>
+          </div>
         </div>
-        <div className="memory-list">
-          {memories.length ? (
-            memories.map((memory) => (
-              <div className="memory-row" key={memory.id}>
-                <div className="memory-row__content">
-                  <span>{memory.scope === 'project' ? '项目' : '全局'}</span>
-                  <p>{memory.content}</p>
+        <div className="chat-user-settings__memory-preview-summary">
+          <div>
+            <strong>{memoryPreview?.total ?? 0} 条记忆</strong>
+            <span>包含主动沉淀和后台沉淀的长期偏好、规则、事实或流程</span>
+          </div>
+          <code title={previewStoragePath}>{previewStoragePath}</code>
+        </div>
+        {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
+        <div className="chat-user-settings__memory-list" aria-busy={memoryPreviewLoading}>
+          {items.length ? (
+            items.map((item) => {
+              const meta = [
+                item.origin === 'active' ? '主动沉淀' : '后台沉淀',
+                item.scope === 'global' ? '全局' : '项目范围',
+                item.source,
+                formatMemoryDate(item.updatedAt),
+                `${Number(item.chars || 0).toLocaleString()} 字符`,
+              ].filter(Boolean);
+
+              return (
+                <div className="chat-user-settings__memory-item" key={item.id}>
+                  <div className="chat-user-settings__memory-item-head">
+                    <FileText size={14} />
+                    <span title={item.workspaceRoot || item.title}>{item.title}</span>
+                    <IconButton
+                      label="删除记忆"
+                      variant="danger"
+                      disabled={memoryResetting || memoryPreviewLoading || memoryDeletingId === item.id}
+                      onClick={() => void deleteMemoryItem(item)}
+                    >
+                      <Trash2 size={14} />
+                    </IconButton>
+                  </div>
+                  <div className="chat-user-settings__memory-item-meta">
+                    {meta.map((value, index) => (
+                      <span key={`${value}-${index}`}>{value}</span>
+                    ))}
+                  </div>
+                  {item.tags?.length ? (
+                    <div className="chat-user-settings__memory-tags">
+                      {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                    </div>
+                  ) : null}
+                  <pre className="chat-user-settings__memory-snippet">{item.preview}</pre>
                 </div>
-                <IconButton label="Delete memory" variant="danger" onClick={() => onDelete(memory)}>
-                  <Trash2 size={14} />
-                </IconButton>
-              </div>
-            ))
+              );
+            })
           ) : (
-            <EmptyState title="暂无本地记忆" body="保存的记忆只保留在这台设备上，可被本地运行时召回。" />
+            <EmptyState title={memoryPreviewLoading ? '正在加载记忆' : '暂无沉淀下来的记忆'} />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__personalization-section">
+      <div className="chat-user-settings__section-block">
+        <div className="chat-user-settings__group-title">风格</div>
+        <div className="chat-user-settings__group chat-user-settings__personalization-card">
+          <div className="chat-user-settings__row chat-user-settings__style-row">
+            <span className="chat-user-settings__row-label">
+              <Pencil size={14} />
+              <span>Setsuna 风格</span>
+            </span>
+            <div className="chat-user-settings__style-control" role="radiogroup" aria-label="Setsuna 风格">
+              <div className="chat-user-settings__persona-options">
+                {setsunaStyleOptions.map((option) => {
+                  const selected = config.setsunaStyle === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      className={`chat-user-settings__persona-option ${selected ? 'is-active' : ''}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => void onSavePreferences({ setsunaStyle: option.value })}
+                    >
+                      {option.icon}
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="chat-user-settings__section-block">
+        <div className="chat-user-settings__group chat-user-settings__personalization-card chat-user-settings__personalization-card--prompt">
+          <div className="chat-user-settings__prompt-stack">
+            <div className="chat-user-settings__prompt-heading">
+              <div className="chat-user-settings__prompt-title">
+                <span>全局 prompt</span>
+              </div>
+              <p>会作为桌面端对话的长期偏好放入上下文，适合写固定口吻、工作习惯和长期约束。</p>
+            </div>
+            <div className="chat-user-settings__prompt-control">
+              <div className="chat-user-settings__prompt-input-shell">
+                <TextArea
+                  className="chat-user-settings__prompt-input"
+                  value={globalPromptDraft}
+                  maxLength={PERSONALIZATION_PROMPT_MAX_LENGTH}
+                  placeholder="写给 Setsuna 的长期偏好，会放入桌面端对话上下文。"
+                  onBlur={() => {
+                    if (globalPromptDraft === config.globalPrompt) return;
+                    void onSavePreferences({ globalPrompt: globalPromptDraft });
+                  }}
+                  onChange={(event) => setGlobalPromptDraft(event.target.value)}
+                />
+                <span className="chat-user-settings__prompt-count">{globalPromptLength} / {PERSONALIZATION_PROMPT_MAX_LENGTH}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="chat-user-settings__section-block chat-user-settings__memory-settings-block">
+        <div className="chat-user-settings__memory-heading">
+          <div className="chat-user-settings__group-title">记忆</div>
+          <p>
+            记忆用于保存你希望长期生效的偏好、项目规则、固定流程和事实信息。开启后，后续对话会按当前项目或全局范围自动召回相关记忆，帮助模型延续你的工作习惯；你可以在预览中查看、删除单条记忆，或在这里重置全部记忆。
+          </p>
+        </div>
+        {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
+        <div className="chat-user-settings__group chat-user-settings__personalization-card">
+          <div className="chat-user-settings__row chat-user-settings__local-enable-row">
+            <span className="chat-user-settings__row-label">
+              <Database size={14} />
+              <span>启用记忆</span>
+            </span>
+            <label className="sd-check">
+              <input
+                type="checkbox"
+                checked={config.memoryEnabled}
+                onChange={(event) => void onSavePreferences({ memoryEnabled: event.currentTarget.checked })}
+              />
+              <span>开启</span>
+            </label>
+          </div>
+          <div className="chat-user-settings__row chat-user-settings__local-field">
+            <span className="chat-user-settings__row-label">
+              <FolderOpen size={14} />
+              <span>存储位置</span>
+            </span>
+            <div className="chat-user-settings__local-storage-control">
+              <TextField className="settings-local-control" value={storagePath} readOnly />
+              <Button icon={<FolderOpen size={14} />} disabled={selectingStorage} onClick={() => void selectMemoryStoragePath()}>
+                {selectingStorage ? '选择中' : '选择'}
+              </Button>
+            </div>
+          </div>
+          <div className="chat-user-settings__row chat-user-settings__local-action-row">
+            <span className="chat-user-settings__row-label">
+              <Eye size={14} />
+              <span>记忆预览</span>
+            </span>
+            <Button className="chat-user-settings__preview-open" icon={<ChevronRight size={14} />} onClick={() => void openMemoryPreview()}>
+              查看
+            </Button>
+          </div>
+          <div className="chat-user-settings__row chat-user-settings__local-action-row chat-user-settings__memory-reset-row">
+            <span className="chat-user-settings__row-label">
+              <RefreshCw size={14} />
+              <span>重置记忆</span>
+            </span>
+            <Popconfirm
+              title="重置全部记忆？"
+              description="这会清空所有已保存记忆，无法撤销。"
+              okText="重置"
+              cancelText="取消"
+              okButtonProps={{ danger: true, loading: memoryResetting }}
+              onConfirm={() => void resetMemoryItems()}
+            >
+              <Button
+                variant="danger"
+                icon={<RefreshCw size={14} />}
+                disabled={memoryPreviewLoading || Boolean(memoryDeletingId) || memoryResetting}
+              >
+                {memoryResetting ? '重置中' : '重置'}
+              </Button>
+            </Popconfirm>
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function formatMemoryDate(value?: string): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function UsageSummary({ usage }: { usage: RuntimeUsageResponse | null }) {
@@ -424,17 +691,26 @@ function ProviderSettings({
   onSave: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
 }) {
   const [providers, setProviders] = useState<ProviderConfigState[]>(() => normalizeSettingsProviders(config.providers));
+  const [selectedProviderId, setSelectedProviderId] = useState(() => selectedProviderIdFromConfig(config));
   const [apiKeysByProviderId, setApiKeysByProviderId] = useState<Record<string, string>>({});
   const [fetchStateByProviderId, setFetchStateByProviderId] = useState<Record<string, ModelFetchState>>({});
   const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>(() => idleSaveState());
 
   useEffect(() => {
-    setProviders(normalizeSettingsProviders(config.providers));
+    const nextProviders = normalizeSettingsProviders(config.providers);
+    setProviders(nextProviders);
+    setSelectedProviderId((current) => (
+      nextProviders.some((provider) => provider.id === current)
+        ? current
+        : nextProviders.find((provider) => provider.id === config.activeProviderId)?.id ?? nextProviders[0]?.id ?? ''
+    ));
     setApiKeysByProviderId({});
     setFetchStateByProviderId({});
   }, [config.activeProviderId, config.providers]);
 
   const updateProvider = (providerId: string, updater: (provider: ProviderConfigState) => ProviderConfigState) => {
+    setSaveState(idleSaveState());
     setProviders((current) => current.map((provider) => (provider.id === providerId ? updater(provider) : provider)));
   };
 
@@ -446,17 +722,29 @@ function ProviderSettings({
   };
 
   const setProviderApiKey = (providerId: string, value: string) => {
+    setSaveState(idleSaveState());
     setApiKeysByProviderId((current) => ({ ...current, [providerId]: value }));
   };
 
   const addProvider = () => {
-    setProviders((current) => [...current, defaultProviderConfig()]);
+    const nextProvider = defaultProviderConfig();
+    setSaveState(idleSaveState());
+    setProviders((current) => [...current, nextProvider]);
+    setSelectedProviderId(nextProvider.id);
   };
 
   const removeProvider = (providerId: string) => {
+    setSaveState(idleSaveState());
     setProviders((current) => {
+      const removedIndex = Math.max(0, current.findIndex((provider) => provider.id === providerId));
       const next = current.filter((provider) => provider.id !== providerId);
-      return next.length ? next : [defaultProviderConfig()];
+      const normalizedNext = next.length ? next : [defaultProviderConfig()];
+      setSelectedProviderId((selected) => (
+        selected === providerId
+          ? normalizedNext[Math.min(removedIndex, normalizedNext.length - 1)]?.id ?? normalizedNext[0]?.id ?? ''
+          : selected
+      ));
+      return normalizedNext;
     });
     setApiKeysByProviderId((current) => {
       const next = { ...current };
@@ -520,134 +808,214 @@ function ProviderSettings({
   };
 
   const save = () => {
+    if (saving) return;
     setSaving(true);
-    void onSave(providers.map(prepareProviderForSave), apiKeysByProviderId).finally(() => setSaving(false));
+    setSaveState({ status: 'saving', message: '保存中...' });
+    void onSave(providers.map(prepareProviderForSave), apiKeysByProviderId)
+      .then(() => setSaveState({ status: 'saved', message: '已保存' }))
+      .catch((error) => setSaveState({ status: 'error', message: error instanceof Error ? error.message : String(error) }))
+      .finally(() => setSaving(false));
   };
 
   const enabledProviderCount = providers.filter((provider) => provider.enabled).length;
+  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0];
+  const selectedProviderIndex = selectedProvider ? providers.findIndex((provider) => provider.id === selectedProvider.id) : -1;
+  const selectedFetchState = selectedProvider ? fetchStateByProviderId[selectedProvider.id] ?? emptyModelFetchState() : emptyModelFetchState();
+  const saveStatusMessage = saveState.message || '密钥不会出现在渲染进程响应中。';
 
   return (
     <div className="chat-user-settings__local-provider-stack">
-      <div className="chat-user-settings__local-provider-toolbar">
-        <span>{`${providers.length} 厂商 · ${enabledProviderCount} 启用`}</span>
-        <Button icon={<Plus size={14} />} onClick={addProvider}>添加厂商</Button>
-      </div>
-      <div className="chat-user-settings__local-provider-list">
-        {providers.map((provider, providerIndex) => {
-          const fetchState = fetchStateByProviderId[provider.id] ?? emptyModelFetchState();
-          return (
-            <div className="chat-user-settings__local-provider-card" key={provider.id}>
-              <div className="chat-user-settings__local-provider-head">
-                <div className="chat-user-settings__local-provider-title">
-                  <HardDrive size={14} />
-                  <span>{provider.name || `厂商 ${providerIndex + 1}`}</span>
-                </div>
-                <div className="chat-user-settings__local-provider-actions">
-                  <label className="sd-check">
-                    <input
-                      type="checkbox"
-                      checked={provider.enabled}
-                      onChange={(event) => updateProvider(provider.id, (item) => ({ ...item, enabled: event.currentTarget.checked }))}
-                    />
-                    <span>启用</span>
-                  </label>
-                  <span className="chat-user-settings__provider-meta">{provider.models.length} models</span>
-                  {providers.length > 1 ? (
-                    <IconButton label="删除厂商" variant="danger" onClick={() => removeProvider(provider.id)}>
-                      <Trash2 size={14} />
-                    </IconButton>
-                  ) : null}
-                </div>
+      <div className="chat-user-settings__local-provider-layout">
+        <aside className="chat-user-settings__local-provider-rail">
+          <div className="chat-user-settings__local-provider-rail-head">
+            <div>
+              <span>厂商</span>
+              <strong>{`${enabledProviderCount} / ${providers.length} 启用`}</strong>
+            </div>
+            <IconButton label="添加厂商" onClick={addProvider}>
+              <Plus size={14} />
+            </IconButton>
+          </div>
+          <div className="chat-user-settings__local-provider-list" role="listbox" aria-label="本地模型厂商">
+            {providers.map((provider, providerIndex) => {
+              const activeModel = provider.models.find((model) => model.enabled) ?? provider.models[0];
+              const selected = provider.id === selectedProvider?.id;
+              return (
+                <button
+                  className={`chat-user-settings__local-provider-item ${selected ? 'is-active' : ''}`}
+                  key={provider.id}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => setSelectedProviderId(provider.id)}
+                >
+                  <span className="chat-user-settings__local-provider-item-icon">
+                    <HardDrive size={13} />
+                  </span>
+                  <span className="chat-user-settings__local-provider-item-body">
+                    <span className="chat-user-settings__local-provider-item-name">{provider.name || `厂商 ${providerIndex + 1}`}</span>
+                    <span className="chat-user-settings__local-provider-item-meta">
+                      {`${provider.enabled ? '启用' : '停用'} · ${provider.models.length} 模型${activeModel?.name ? ` · ${activeModel.name}` : ''}`}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+        {selectedProvider ? (
+          <div className="chat-user-settings__local-provider-card">
+            <div className="chat-user-settings__local-provider-head">
+              <div className="chat-user-settings__local-provider-title">
+                <HardDrive size={14} />
+                <span>{selectedProvider.name || `厂商 ${selectedProviderIndex + 1}`}</span>
               </div>
-              <div className="chat-user-settings__group chat-user-settings__local-provider-form">
-                <div className="chat-user-settings__row">
-                  <span className="chat-user-settings__row-label">协议</span>
-                  <code className="settings-local-protocol">OpenAI-compatible · AI SDK</code>
-                </div>
-                <label className="chat-user-settings__row">
-                  <span className="chat-user-settings__row-label">供应商名称</span>
-                  <TextField className="settings-local-control" value={provider.name} onChange={(event) => updateProvider(provider.id, (item) => ({ ...item, name: event.target.value }))} />
-                </label>
-                <label className="chat-user-settings__row">
-                  <span className="chat-user-settings__row-label">服务地址</span>
-                  <TextField
-                    className="settings-local-control"
-                    value={provider.baseUrl}
-                    placeholder="http://127.0.0.1:11434/v1"
+              <div className="chat-user-settings__local-provider-actions">
+                <label className="sd-check">
+                  <input
+                    type="checkbox"
+                    checked={selectedProvider.enabled}
                     onChange={(event) => {
-                      setFetchStateByProviderId((current) => ({ ...current, [provider.id]: emptyModelFetchState() }));
-                      updateProvider(provider.id, (item) => ({ ...item, baseUrl: event.target.value }));
+                      const enabled = event.currentTarget.checked;
+                      updateProvider(selectedProvider.id, (item) => ({ ...item, enabled }));
                     }}
                   />
+                  <span>启用</span>
                 </label>
-                <label className="chat-user-settings__row">
-                  <span className="chat-user-settings__row-label">API Key {provider.apiKeySet ? <em>{provider.apiKeyPreview}</em> : null}</span>
-                  <TextField
-                    className="settings-local-control"
-                    type="password"
-                    value={apiKeysByProviderId[provider.id] ?? ''}
-                    onChange={(event) => setProviderApiKey(provider.id, event.target.value)}
-                    placeholder={provider.apiKeySet ? '留空则保留当前密钥' : '本地服务可留空'}
-                  />
-                </label>
+                <span className="chat-user-settings__provider-meta">{selectedProvider.models.length} models</span>
+                {providers.length > 1 ? (
+                  <IconButton label="删除厂商" variant="danger" onClick={() => removeProvider(selectedProvider.id)}>
+                    <Trash2 size={14} />
+                  </IconButton>
+                ) : null}
               </div>
-              <div className="settings-model-list">
-                <div className="settings-model-list__head">
-                  <span>模型</span>
-                  <div className="settings-model-list__actions">
-                    <Button icon={<RefreshCw size={14} />} disabled={fetchState.fetching} onClick={() => fetchModels(provider)}>
-                      {fetchState.fetching ? '获取中' : '自动获取'}
-                    </Button>
-                    <Button icon={<Plus size={14} />} onClick={() => addModel(provider.id)}>添加模型</Button>
-                  </div>
+            </div>
+            <div className="chat-user-settings__local-provider-body">
+              <section className="settings-form-section">
+                <div className="settings-form-section__head">
+                  <span>连接</span>
+                  <code>OpenAI-compatible · AI SDK</code>
                 </div>
-                <div className="settings-model-grid settings-model-grid--head">
-                  <span>默认</span>
-                  <span>显示名称</span>
-                  <span>模型 ID</span>
-                  <span>输出</span>
-                  <span>能力</span>
-                  <span>思考等级</span>
-                  <span />
+                <div className="chat-user-settings__group chat-user-settings__local-provider-form">
+              <label className="chat-user-settings__row">
+                <span className="chat-user-settings__row-label">供应商名称</span>
+                <TextField
+                  className="settings-local-control"
+                  value={selectedProvider.name}
+                  onChange={(event) => {
+                    const name = event.target.value;
+                    updateProvider(selectedProvider.id, (item) => ({ ...item, name }));
+                  }}
+                />
+              </label>
+              <label className="chat-user-settings__row">
+                <span className="chat-user-settings__row-label">服务地址</span>
+                <TextField
+                  className="settings-local-control"
+                  value={selectedProvider.baseUrl}
+                  placeholder="http://127.0.0.1:11434/v1"
+                  onChange={(event) => {
+                    const baseUrl = event.target.value;
+                    setFetchStateByProviderId((current) => ({ ...current, [selectedProvider.id]: emptyModelFetchState() }));
+                    updateProvider(selectedProvider.id, (item) => ({ ...item, baseUrl }));
+                  }}
+                />
+              </label>
+              <label className="chat-user-settings__row">
+                <span className="chat-user-settings__row-label">API Key {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
+                <TextField
+                  className="settings-local-control"
+                  type="password"
+                  value={apiKeysByProviderId[selectedProvider.id] ?? ''}
+                  onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)}
+                  placeholder={selectedProvider.apiKeySet ? '留空则保留当前密钥' : '本地服务可留空'}
+                />
+              </label>
                 </div>
-                {provider.models.map((model) => (
-                  <div className="settings-model-grid settings-model-row" key={model.id}>
-                    <label className="settings-model-default">
-                      <input
-                        type="radio"
-                        name={`default-model-${provider.id}`}
-                        checked={model.enabled}
-                        onChange={() => selectDefaultModel(provider.id, model.id)}
-                      />
-                    </label>
+              </section>
+              <section className="settings-form-section">
+                <div className="settings-model-list">
+              <div className="settings-model-list__head">
+                <span>模型</span>
+                <div className="settings-model-list__actions">
+                  <Button icon={<RefreshCw size={14} />} disabled={selectedFetchState.fetching} onClick={() => fetchModels(selectedProvider)}>
+                    {selectedFetchState.fetching ? '获取中' : '自动获取'}
+                  </Button>
+                  <Button icon={<Plus size={14} />} onClick={() => addModel(selectedProvider.id)}>添加模型</Button>
+                </div>
+              </div>
+              <div className="settings-model-grid settings-model-grid--head">
+                <span>默认</span>
+                <span>显示名称</span>
+                <span>模型 ID</span>
+                <span>输出</span>
+                <span>能力</span>
+                <span>思考等级</span>
+                <span />
+              </div>
+              {selectedProvider.models.map((model) => {
+                const thinkingEfforts = normalizeThinkingEfforts(model.thinkingEfforts);
+                const defaultThinkingEffort = normalizedDefaultThinkingEffort({ ...model, thinkingEfforts });
+                const thinkingPresetOptions = mergeThinkingPresetOptions(normalizeThinkingEfforts([...thinkingEfforts, defaultThinkingEffort]));
+                return (
+                <div className="settings-model-grid settings-model-row" key={model.id}>
+                  <label className="settings-model-default">
+                    <span>默认</span>
+                    <input
+                      type="radio"
+                      name={`default-model-${selectedProvider.id}`}
+                      checked={model.enabled}
+                      onChange={() => selectDefaultModel(selectedProvider.id, model.id)}
+                    />
+                  </label>
+                  <label className="settings-model-field settings-model-field--name">
+                    <span>显示名称</span>
                     <TextField
                       className="settings-local-control"
                       value={model.name}
                       placeholder="显示名称"
-                      onChange={(event) => updateModel(provider.id, model.id, (item) => ({ ...item, name: event.target.value }))}
+                      onChange={(event) => {
+                        const name = event.target.value;
+                        updateModel(selectedProvider.id, model.id, (item) => ({ ...item, name }));
+                      }}
                     />
+                  </label>
+                  <label className="settings-model-field settings-model-field--code">
+                    <span>模型 ID</span>
                     <TextField
                       className="settings-local-control"
                       value={model.code}
                       placeholder="llama3.1"
-                      onChange={(event) => updateModel(provider.id, model.id, (item) => updateModelCode(item, event.target.value))}
+                      onChange={(event) => {
+                        const code = event.target.value;
+                        updateModel(selectedProvider.id, model.id, (item) => updateModelCode(item, code));
+                      }}
                     />
+                  </label>
+                  <label className="settings-model-field settings-model-field--output">
+                    <span>输出</span>
                     <TextField
                       className="settings-local-control"
                       type="number"
                       min={1}
                       value={model.maxOutputTokens}
-                      onChange={(event) => updateModel(provider.id, model.id, (item) => ({
-                        ...item,
-                        maxOutputTokens: positiveInt(Number(event.target.value), DEFAULT_MODEL_MAX_OUTPUT_TOKENS),
-                      }))}
+                      onChange={(event) => {
+                        const maxOutputTokens = positiveInt(Number(event.target.value), DEFAULT_MODEL_MAX_OUTPUT_TOKENS);
+                        updateModel(selectedProvider.id, model.id, (item) => ({ ...item, maxOutputTokens }));
+                      }}
                     />
-                    <div className="settings-model-capabilities">
+                  </label>
+                  <div className="settings-model-group settings-model-capabilities">
+                    <span>能力</span>
+                    <div className="settings-model-inline-checks">
                       <label className="sd-check settings-model-check">
                         <input
                           type="checkbox"
                           checked={model.thinkingEnabled}
-                          onChange={(event) => updateModel(provider.id, model.id, (item) => setThinkingEnabled(item, event.currentTarget.checked))}
+                          onChange={(event) => {
+                            const thinkingEnabled = event.currentTarget.checked;
+                            updateModel(selectedProvider.id, model.id, (item) => setThinkingEnabled(item, thinkingEnabled));
+                          }}
                         />
                         <Brain size={13} />
                         <span>思考</span>
@@ -656,59 +1024,71 @@ function ProviderSettings({
                         <input
                           type="checkbox"
                           checked={Boolean(model.supportsImages)}
-                          onChange={(event) => updateModel(provider.id, model.id, (item) => ({ ...item, supportsImages: event.currentTarget.checked }))}
+                          onChange={(event) => {
+                            const supportsImages = event.currentTarget.checked;
+                            updateModel(selectedProvider.id, model.id, (item) => ({ ...item, supportsImages }));
+                          }}
                         />
                         <ImageIcon size={13} />
                         <span>图片</span>
                       </label>
                     </div>
-                    <div className="settings-thinking-levels">
-                      <div className="settings-thinking-levels__chips">
-                        {REASONING_EFFORTS.map((effort) => (
-                          <label className="settings-thinking-chip" key={effort}>
-                            <input
-                              type="checkbox"
-                              checked={model.thinkingEfforts.includes(effort)}
-                              disabled={!model.thinkingEnabled}
-                              onChange={() => updateModel(provider.id, model.id, (item) => toggleThinkingEffort(item, effort))}
-                            />
-                            <span>{effort}</span>
-                          </label>
+                  </div>
+                  <div className="settings-model-group settings-thinking-levels">
+                    <span>思考等级</span>
+                    <div className="settings-thinking-levels__content">
+                      <TextField
+                        aria-label="思考等级"
+                        className="settings-thinking-default"
+                        disabled={!model.thinkingEnabled}
+                        placeholder="自定义，例如 xhigh / max"
+                        value={model.thinkingEnabled ? defaultThinkingEffort ?? '' : ''}
+                        onChange={(event) => {
+                          const effort = event.target.value;
+                          updateModel(selectedProvider.id, model.id, (item) => setDefaultThinkingEffort(item, effort));
+                        }}
+                      />
+                      <div className="settings-thinking-presets" aria-label="常用思考等级">
+                        {thinkingPresetOptions.map((effort) => (
+                          <button
+                            key={effort}
+                            className={`settings-thinking-preset ${defaultThinkingEffort === effort ? 'is-active' : ''}`}
+                            type="button"
+                            disabled={!model.thinkingEnabled}
+                            onClick={() => updateModel(selectedProvider.id, model.id, (item) => setDefaultThinkingEffort(item, effort))}
+                          >
+                            {effort}
+                          </button>
                         ))}
                       </div>
-                      {model.thinkingEnabled && model.thinkingEfforts.length ? (
-                        <SelectField
-                          aria-label="默认思考等级"
-                          className="settings-thinking-default"
-                          value={normalizedDefaultThinkingEffort(model) ?? model.thinkingEfforts[0]}
-                          onChange={(event) => updateModel(provider.id, model.id, (item) => ({ ...item, defaultThinkingEffort: event.currentTarget.value }))}
-                        >
-                          {model.thinkingEfforts.map((effort) => (
-                            <option key={effort} value={effort}>{effort}</option>
-                          ))}
-                        </SelectField>
-                      ) : null}
                     </div>
-                    <IconButton label="删除模型" variant="danger" disabled={provider.models.length <= 1} onClick={() => removeModel(provider.id, model.id)}>
-                      <Trash2 size={14} />
-                    </IconButton>
                   </div>
-                ))}
-                {fetchState.error ? <div className="settings-model-fetch-state settings-model-fetch-state--error">{fetchState.error}</div> : null}
-                {!fetchState.error && fetchState.models.length ? <div className="settings-model-fetch-state">{`已获取 ${fetchState.models.length} 个模型，保存后生效。`}</div> : null}
-              </div>
+                  <IconButton label="删除模型" className="settings-model-delete" variant="danger" disabled={selectedProvider.models.length <= 1} onClick={() => removeModel(selectedProvider.id, model.id)}>
+                    <Trash2 size={14} />
+                  </IconButton>
+                </div>
+                );
+              })}
+              {selectedFetchState.error ? <div className="settings-model-fetch-state settings-model-fetch-state--error">{selectedFetchState.error}</div> : null}
+              {!selectedFetchState.error && selectedFetchState.models.length ? <div className="settings-model-fetch-state">{`已获取 ${selectedFetchState.models.length} 个模型，保存后生效。`}</div> : null}
+                </div>
+              </section>
             </div>
-          );
-        })}
-      </div>
-      <div className="settings-form__footer">
-        <span>
-          <KeyRound size={14} />
-          密钥不会出现在渲染进程响应中。
-        </span>
-        <Button variant="primary" icon={<Save size={15} />} disabled={saving} onClick={save}>
-          保存
-        </Button>
+            <div className="settings-form__footer">
+              <span className={`settings-save-status settings-save-status--${saveState.status}`} aria-live="polite">
+                <KeyRound size={14} />
+                {saveStatusMessage}
+              </span>
+              <Button variant="primary" icon={<Save size={15} />} disabled={saving} onClick={save}>
+                {saving ? '保存中' : '保存'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="chat-user-settings__local-provider-card">
+            <EmptyState title="暂无厂商" />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -716,17 +1096,28 @@ function ProviderSettings({
 
 const LOCAL_PROVIDER_KIND: ProviderConfigState['provider'] = 'openai-compatible';
 const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 68000;
-const REASONING_EFFORTS = ['low', 'medium', 'high'] as const;
-
-type ReasoningEffort = typeof REASONING_EFFORTS[number];
+const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 type ModelFetchState = {
   models: RuntimeAvailableModel[];
   error: string;
   fetching: boolean;
 };
 
+type SaveState = {
+  status: 'idle' | 'saving' | 'saved' | 'error';
+  message: string;
+};
+
 function emptyModelFetchState(): ModelFetchState {
   return { models: [], error: '', fetching: false };
+}
+
+function idleSaveState(): SaveState {
+  return { status: 'idle', message: '' };
+}
+
+function selectedProviderIdFromConfig(config: RuntimeConfigState): string {
+  return config.providers.find((provider) => provider.id === config.activeProviderId)?.id ?? config.providers[0]?.id ?? '';
 }
 
 function normalizeSettingsProviders(providers: ProviderConfigState[]): ProviderConfigState[] {
@@ -757,7 +1148,7 @@ function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = fa
     maxOutputTokens: positiveInt(model.maxOutputTokens, DEFAULT_MODEL_MAX_OUTPUT_TOKENS),
     thinkingEnabled: Boolean(model.thinkingEnabled),
     thinkingEfforts,
-    defaultThinkingEffort: normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }),
+    defaultThinkingEffort: model.thinkingEnabled ? normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }) : undefined,
     supportsImages: Boolean(model.supportsImages),
   };
 }
@@ -811,15 +1202,22 @@ function mergeFetchedModels(previousModels: ProviderModelConfig[], fetchedModels
   const merged = fetchedModels.map((model) => {
     const previous = previousByCode.get(model.id) ?? previousByName.get(model.name);
     const code = model.id.trim();
+    const thinkingEfforts = normalizeThinkingEfforts([
+      ...(previous?.thinkingEfforts ?? []),
+      ...(model.thinkingEfforts ?? []),
+      previous?.defaultThinkingEffort,
+      model.defaultThinkingEffort,
+    ]);
+    const defaultThinkingEffort = nonEmptyString(previous?.defaultThinkingEffort) ?? nonEmptyString(model.defaultThinkingEffort);
     return normalizeProviderModel({
       ...defaultProviderModel(code, code === activeCode),
       id: previous?.id || modelIdFromCode(code),
       name: model.name?.trim() || code,
-      maxOutputTokens: model.maxOutputTokens ?? previous?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
-      thinkingEnabled: model.thinkingEnabled ?? previous?.thinkingEnabled ?? false,
-      thinkingEfforts: model.thinkingEfforts ?? previous?.thinkingEfforts ?? [],
-      defaultThinkingEffort: model.defaultThinkingEffort ?? previous?.defaultThinkingEffort,
-      supportsImages: model.supportsImages ?? previous?.supportsImages ?? false,
+      maxOutputTokens: previous?.maxOutputTokens ?? model.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+      thinkingEnabled: Boolean(previous?.thinkingEnabled || model.thinkingEnabled || thinkingEfforts.length || defaultThinkingEffort),
+      thinkingEfforts,
+      defaultThinkingEffort,
+      supportsImages: Boolean(previous?.supportsImages || model.supportsImages),
     }, code === activeCode);
   });
   return normalizeProviderModels(merged);
@@ -835,50 +1233,58 @@ function updateModelCode(model: ProviderModelConfig, code: string): ProviderMode
 }
 
 function setThinkingEnabled(model: ProviderModelConfig, thinkingEnabled: boolean): ProviderModelConfig {
-  const thinkingEfforts = thinkingEnabled && !model.thinkingEfforts.length ? ['medium'] : model.thinkingEfforts;
+  const thinkingEfforts = normalizeThinkingEfforts(model.thinkingEfforts);
   return {
     ...model,
     thinkingEnabled,
     thinkingEfforts,
-    defaultThinkingEffort: thinkingEnabled ? normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }) : undefined,
-  };
-}
-
-function toggleThinkingEffort(model: ProviderModelConfig, effort: ReasoningEffort): ProviderModelConfig {
-  const next = new Set(normalizeThinkingEfforts(model.thinkingEfforts));
-  if (next.has(effort)) {
-    next.delete(effort);
-  } else {
-    next.add(effort);
-  }
-  const thinkingEfforts = REASONING_EFFORTS.filter((item) => next.has(item));
-  return {
-    ...model,
-    thinkingEfforts,
-    thinkingEnabled: model.thinkingEnabled && thinkingEfforts.length > 0,
     defaultThinkingEffort: normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }),
   };
 }
 
-function normalizedDefaultThinkingEffort(model: ProviderModelConfig): ReasoningEffort | undefined {
+function setDefaultThinkingEffort(model: ProviderModelConfig, effort: string): ProviderModelConfig {
+  const defaultThinkingEffort = nonEmptyString(effort);
+  const thinkingEfforts = defaultThinkingEffort ? [defaultThinkingEffort] : [];
+  return {
+    ...model,
+    thinkingEfforts,
+    thinkingEnabled: model.thinkingEnabled,
+    defaultThinkingEffort,
+  };
+}
+
+function normalizedDefaultThinkingEffort(model: ProviderModelConfig): string | undefined {
   if (!model.thinkingEnabled) return undefined;
   return normalizeDefaultThinkingEffort(model);
 }
 
-function normalizeDefaultThinkingEffort(model: Pick<ProviderModelConfig, 'defaultThinkingEffort' | 'thinkingEfforts'>): ReasoningEffort | undefined {
-  const efforts = normalizeThinkingEfforts(model.thinkingEfforts);
-  const defaultEffort = model.defaultThinkingEffort;
-  if (isReasoningEffort(defaultEffort) && efforts.includes(defaultEffort)) return defaultEffort;
-  return efforts[0];
+function normalizeDefaultThinkingEffort(model: Pick<ProviderModelConfig, 'defaultThinkingEffort' | 'thinkingEfforts'>): string | undefined {
+  return nonEmptyString(model.defaultThinkingEffort);
 }
 
-function normalizeThinkingEfforts(value: string[] | undefined): ReasoningEffort[] {
-  const seen = new Set(value?.filter(isReasoningEffort) ?? []);
-  return REASONING_EFFORTS.filter((effort) => seen.has(effort));
+function normalizeThinkingEfforts(value: unknown): string[] {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/[,，\s]+/)
+      : [];
+  const seen = new Set<string>();
+  const efforts: string[] = [];
+  for (const rawValue of rawValues) {
+    const effort = nonEmptyString(rawValue);
+    if (!effort || seen.has(effort)) continue;
+    seen.add(effort);
+    efforts.push(effort);
+  }
+  return efforts;
 }
 
-function isReasoningEffort(value: unknown): value is ReasoningEffort {
-  return value === 'low' || value === 'medium' || value === 'high';
+function mergeThinkingPresetOptions(efforts: string[]): string[] {
+  return normalizeThinkingEfforts([...REASONING_EFFORTS, ...efforts]);
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function positiveInt(value: unknown, fallback: number): number {

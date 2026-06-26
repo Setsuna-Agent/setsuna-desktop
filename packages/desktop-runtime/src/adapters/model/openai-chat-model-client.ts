@@ -16,6 +16,7 @@ import {
   withEndpoint,
   type FetchImpl,
 } from './provider-utils.js';
+import { openAiCompatibleThinkingBody } from './provider-thinking.js';
 
 export class OpenAiChatModelClient implements ModelClient {
   constructor(
@@ -41,6 +42,7 @@ export class OpenAiChatModelClient implements ModelClient {
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiChatTools(request.tools) } : {}),
         ...(request.toolChoice ? { tool_choice: request.toolChoice } : {}),
+        ...openAiCompatibleThinkingBody(this.provider, request),
       }),
     });
     await assertOkResponse(response, 'OpenAI compatible request failed');

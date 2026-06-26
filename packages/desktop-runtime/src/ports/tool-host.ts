@@ -14,6 +14,11 @@ export type ToolExecutionResult = {
   data?: unknown;
 };
 
+export type ToolExecutionPreview = {
+  argumentsPreview?: string;
+  resultPreview?: string;
+};
+
 export type ToolApprovalRequirement = {
   reason: string;
   argumentsPreview?: string;
@@ -21,6 +26,9 @@ export type ToolApprovalRequirement = {
 
 export type ToolHost = {
   listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]>;
+  systemPrompt?(context: ToolExecutionContext): Promise<string | null> | string | null;
   approvalForTool?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolApprovalRequirement | null>;
+  previewToolCall?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null>;
+  previewPartialToolCall?(name: string, rawArguments: string, context: ToolExecutionContext): Promise<ToolExecutionPreview | null>;
   runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult>;
 };

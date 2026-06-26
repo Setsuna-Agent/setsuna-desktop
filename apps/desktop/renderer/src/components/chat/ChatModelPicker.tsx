@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, Tooltip } from 'antd';
-import { Brain, Check, Image as ImageIcon, Zap } from 'lucide-react';
+import { Button, Input, Progress, Tooltip } from 'antd';
+import { Check, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
 import type { ProviderConfigState, ProviderModelConfig, RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { useOutsideClose } from './chatComposerControlUtils.js';
+import { formatTokenCount, type ChatContextTokenUsage } from './chatContextUsage.js';
 
 type ModelOption = {
   key: string;
@@ -17,11 +18,15 @@ const modelPickerCollator = new Intl.Collator('zh-CN', {
 
 export function ChatModelPicker({
   config,
+  contextCompacting = false,
+  contextUsage,
   disabled,
   openSignal,
   onSelect,
 }: {
   config: RuntimeConfigState | null;
+  contextCompacting?: boolean;
+  contextUsage?: ChatContextTokenUsage;
   disabled?: boolean;
   openSignal?: number;
   onSelect: (providerId: string, modelId: string) => void;
@@ -39,7 +44,8 @@ export function ChatModelPicker({
     () => (normalizedQuery ? options.filter((option) => modelSearchText(option).includes(normalizedQuery)) : options),
     [normalizedQuery, options],
   );
-  const modelSelectorTitle = activeModel ? '切换模型' : '选择模型';
+  const modelUsage = modelContextUsage(contextUsage);
+  const modelSelectorTitle = activeModel ? modelUsage.tooltipLabel ? `切换模型 · ${modelUsage.tooltipLabel}` : '切换模型' : '选择模型';
 
   const closePicker = useCallback(() => {
     setOpen(false);
@@ -130,7 +136,7 @@ export function ChatModelPicker({
                   >
                     <span className="chat-command-menu__item-title chat-model-command-menu__item-title">{option.model.name}</span>
                     <span className="chat-model-command-menu__capabilities">
-                      {option.model.thinkingEnabled ? <Brain size={12} /> : null}
+                      {option.model.thinkingEnabled ? <Sparkles size={12} /> : null}
                       {option.model.supportsImages ? <ImageIcon size={12} /> : null}
                     </span>
                     <span className="chat-command-menu__item-scope chat-model-command-menu__provider">{option.provider.name || '未命名厂商'}</span>
@@ -157,8 +163,20 @@ export function ChatModelPicker({
           disabled={disabled || !config}
           onClick={() => setOpen((value) => !value)}
         >
-          <Zap className="chat-model-selector__mark" size={13} />
+          <Zap className="chat-model-selector__mark" fill="currentColor" size={13} strokeWidth={0} />
           <span className="chat-model-selector__name">{activeModel?.name ?? '未选择模型'}</span>
+          {modelUsage.visible ? (
+            <Progress
+              aria-label={`当前上下文用量 ${modelUsage.percentLabel}`}
+              className="chat-token-progress chat-model-selector__progress"
+              percent={modelUsage.percentValue}
+              showInfo={false}
+              size={14}
+              status={contextCompacting ? 'active' : 'normal'}
+              strokeWidth={18}
+              type="circle"
+            />
+          ) : null}
         </Button>
       </Tooltip>
     </span>
@@ -197,4 +215,30 @@ function modelProviderSortKey(option: ModelOption): string {
 
 function modelNameSortKey(option: ModelOption): string {
   return (option.model.name || option.model.code || '').toLowerCase();
+}
+
+function modelContextUsage(usage?: ChatContextTokenUsage): {
+  percentLabel: string;
+  percentValue: number;
+  tooltipLabel: string;
+  visible: boolean;
+} {
+  const usedTokens = Math.round(Number(usage?.usedTokens || 0));
+  if (usedTokens <= 0) {
+    return { percentLabel: '', percentValue: 0, tooltipLabel: '', visible: false };
+  }
+
+  const totalTokens = Math.round(Number(usage?.totalTokens || 0));
+  const rawPercent = Number(usage?.visiblePercent || usage?.percent || 0);
+  const percentValue = Math.min(100, Math.max(0, rawPercent > 0 && rawPercent < 0.1 ? 0.1 : rawPercent));
+  const percentLabel = percentValue > 0 ? `${percentValue.toFixed(percentValue > 0 && percentValue < 1 ? 1 : 0)}%` : '已用';
+  const tokenLabel = totalTokens > 0
+    ? `${formatTokenCount(usedTokens)}/${formatTokenCount(totalTokens)}`
+    : `${formatTokenCount(usedTokens)} tokens`;
+  return {
+    percentLabel,
+    percentValue,
+    tooltipLabel: `${percentLabel} · ${tokenLabel}`,
+    visible: true,
+  };
 }

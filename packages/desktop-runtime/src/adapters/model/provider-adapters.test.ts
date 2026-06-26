@@ -436,6 +436,59 @@ describe('provider model adapters', () => {
     expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Configured' });
   });
 
+  it('uses configured default thinking effort only when the turn enables thinking', async () => {
+    const captured: CapturedRequest = {};
+    const thinkingModel = {
+      ...model,
+      thinkingEnabled: true,
+      thinkingEfforts: ['low', 'medium'],
+      defaultThinkingEffort: 'medium',
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => provider('openai-compatible', 'https://llm.example/v1', thinkingModel),
+      },
+      fakeFetch('data: {"choices":[{"delta":{"content":"Configured"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client);
+    expect(expectBody(captured).reasoning_effort).toBeUndefined();
+
+    await collect(client, { thinking: true });
+    expect(expectBody(captured).reasoning_effort).toBe('medium');
+  });
+
+  it('does not invent a thinking effort when none is configured', async () => {
+    const captured: CapturedRequest = {};
+    const thinkingModel = {
+      ...model,
+      thinkingEnabled: true,
+      thinkingEfforts: [],
+      defaultThinkingEffort: undefined,
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => provider('openai-compatible', 'https://llm.example/v1', thinkingModel),
+      },
+      fakeFetch('data: {"choices":[{"delta":{"content":"Configured"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client, { thinking: true });
+    expect(expectBody(captured).reasoning_effort).toBeUndefined();
+  });
+
   it('normalizes AI SDK OpenAI compatible tool calls', async () => {
     const captured: CapturedRequest = {};
     const firstChunk = {
@@ -502,6 +555,68 @@ describe('provider model adapters', () => {
       toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
     });
   });
+
+  it('passes custom reasoning effort through AI SDK OpenAI compatible requests', async () => {
+    const captured: CapturedRequest = {};
+    const thinkingModel = {
+      ...model,
+      thinkingEnabled: true,
+      thinkingEfforts: ['max'],
+      defaultThinkingEffort: 'max',
+    };
+    const client = new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://llm.example/v1', thinkingModel),
+      fakeFetch('data: {"choices":[{"delta":{"content":"Reasoned"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client, { thinking: true, reasoningEffort: 'max' });
+
+    expect(expectBody(captured).reasoning_effort).toBe('max');
+  });
+
+  it('passes Qwen thinking params through AI SDK OpenAI compatible requests', async () => {
+    const captured: CapturedRequest = {};
+    const qwenModel = {
+      ...model,
+      code: 'qwen3-coder',
+      thinkingEnabled: true,
+      thinkingEfforts: ['low', 'max'],
+      defaultThinkingEffort: 'low',
+    };
+    const client = new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://dashscope.aliyuncs.com/compatible-mode/v1', qwenModel),
+      fakeFetch('data: {"choices":[{"delta":{"content":"Reasoned"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client, { thinking: true, reasoningEffort: 'max' });
+
+    expect(expectBody(captured)).toMatchObject({
+      enable_thinking: true,
+      reasoning_effort: 'max',
+    });
+  });
+
+  it('can enable Qwen thinking without configured efforts', async () => {
+    const captured: CapturedRequest = {};
+    const qwenModel = {
+      ...model,
+      code: 'qwen3-coder',
+      thinkingEnabled: true,
+      thinkingEfforts: [],
+      defaultThinkingEffort: undefined,
+    };
+    const client = new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://dashscope.aliyuncs.com/compatible-mode/v1', qwenModel),
+      fakeFetch('data: {"choices":[{"delta":{"content":"Reasoned"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client, { thinking: true });
+
+    expect(expectBody(captured)).toMatchObject({
+      enable_thinking: true,
+    });
+    expect(expectBody(captured).reasoning_effort).toBeUndefined();
+  });
 });
 
 type CapturedRequest = {
@@ -520,7 +635,7 @@ function expectBody(captured: CapturedRequest): Record<string, unknown> {
   return captured.body ?? {};
 }
 
-function provider(kind: RuntimeProviderConfig['provider'], baseUrl: string): RuntimeProviderConfig {
+function provider(kind: RuntimeProviderConfig['provider'], baseUrl: string, activeModel: RuntimeProviderConfig['activeModel'] = model): RuntimeProviderConfig {
   return {
     id: 'provider-1',
     name: 'Provider 1',
@@ -528,8 +643,8 @@ function provider(kind: RuntimeProviderConfig['provider'], baseUrl: string): Run
     baseUrl,
     enabled: true,
     apiKey: 'secret',
-    models: [model],
-    activeModel: model,
+    models: activeModel ? [activeModel] : [],
+    activeModel,
   };
 }
 

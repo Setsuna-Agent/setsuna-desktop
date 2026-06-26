@@ -30,7 +30,8 @@ export type ModelRequest = {
   toolChoice?: RuntimeToolChoice;
   maxOutputTokens?: number;
   temperature?: number;
-  reasoningEffort?: 'low' | 'medium' | 'high';
+  thinking?: boolean;
+  reasoningEffort?: string;
   signal?: AbortSignal;
 };
 

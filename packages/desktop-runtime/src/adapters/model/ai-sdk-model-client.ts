@@ -21,12 +21,15 @@ import {
   stringValue,
   type FetchImpl,
 } from './provider-utils.js';
+import { openAiCompatibleAiSdkProviderOptions } from './provider-thinking.js';
 
 type PendingToolCall = {
   id: string;
   name: string;
   arguments: string;
 };
+
+type ProviderOptionJson = string | number | boolean | null | ProviderOptionJson[] | { [key: string]: ProviderOptionJson };
 
 export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
   constructor(
@@ -37,13 +40,15 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     const activeModel = this.provider.activeModel;
     const modelId = activeModel?.code || request.model;
+    const providerName = this.provider.name || this.provider.id;
     const provider = createOpenAICompatible({
-      name: this.provider.name || this.provider.id,
+      name: providerName,
       baseURL: normalizeOpenAiCompatibleBaseUrl(this.provider.baseUrl),
       ...(this.provider.apiKey ? { apiKey: this.provider.apiKey } : {}),
       fetch: (input, init) => requireFetch(this.fetchImpl)(input instanceof URL ? input : String(input), init),
       includeUsage: true,
     });
+    const thinkingProviderOptions = toThinkingProviderOptions(providerName, openAiCompatibleAiSdkProviderOptions(this.provider, request));
     const result = streamText({
       model: provider.chatModel(modelId),
       instructions: toAiSdkInstructions(request.messages),
@@ -52,7 +57,7 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
       toolChoice: toAiSdkToolChoice(request.toolChoice),
       maxOutputTokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
-      ...(request.reasoningEffort ? { reasoning: request.reasoningEffort } : {}),
+      ...(thinkingProviderOptions ? { providerOptions: thinkingProviderOptions } : {}),
       abortSignal: request.signal,
       maxRetries: 0,
     });
@@ -117,6 +122,29 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
 
 function normalizeOpenAiCompatibleBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, '').replace(/\/chat\/completions$/i, '');
+}
+
+function toThinkingProviderOptions(providerName: string, thinkingOptions: Record<string, unknown>): Record<string, Record<string, ProviderOptionJson>> | undefined {
+  const providerOptionsName = providerName.split('.')[0]?.trim();
+  if (!providerOptionsName || !Object.keys(thinkingOptions).length) return undefined;
+  const jsonOptions = toProviderOptionRecord(thinkingOptions);
+  if (!Object.keys(jsonOptions).length) return undefined;
+  return { [providerOptionsName]: jsonOptions };
+}
+
+function toProviderOptionRecord(value: Record<string, unknown>): Record<string, ProviderOptionJson> {
+  const entries = Object.entries(value)
+    .map(([key, item]) => [key, toProviderOptionJson(item)] as const)
+    .filter((entry): entry is readonly [string, ProviderOptionJson] => entry[1] !== undefined);
+  return Object.fromEntries(entries);
+}
+
+function toProviderOptionJson(value: unknown): ProviderOptionJson | undefined {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (Array.isArray(value)) return value.map(toProviderOptionJson).filter((item): item is ProviderOptionJson => item !== undefined);
+  if (value && typeof value === 'object') return toProviderOptionRecord(value as Record<string, unknown>);
+  return undefined;
 }
 
 function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {

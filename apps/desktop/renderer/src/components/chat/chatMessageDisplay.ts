@@ -1,4 +1,5 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import { visibleMarkdownContent } from './chatThinkingContent.js';
 
 export type ChatDisplayItem =
   | { type: 'user'; id: string; message: RuntimeMessage }
@@ -9,7 +10,6 @@ export function createChatDisplayItems(messages: RuntimeMessage[]): ChatDisplayI
   const items: ChatDisplayItem[] = [];
   let assistantRun: RuntimeMessage[] = [];
   let assistantRunMessageIds: string[] = [];
-  const manualContextItems: ChatDisplayItem[] = [];
 
   const flushAssistantRun = () => {
     if (!assistantRun.length) return;
@@ -31,12 +31,7 @@ export function createChatDisplayItems(messages: RuntimeMessage[]): ChatDisplayI
     if (message.role === 'system') {
       if (message.contextCompaction) {
         flushAssistantRun();
-        const item = { type: 'context' as const, id: message.id, message };
-        if (message.contextCompaction.triggerScopes?.includes('manual')) {
-          manualContextItems.push(item);
-        } else {
-          items.push(item);
-        }
+        items.push({ type: 'context' as const, id: message.id, message });
       }
       continue;
     }
@@ -50,7 +45,6 @@ export function createChatDisplayItems(messages: RuntimeMessage[]): ChatDisplayI
   }
 
   flushAssistantRun();
-  items.push(...manualContextItems);
   return items;
 }
 
@@ -67,7 +61,7 @@ export function assistantRunIsActive(item: Extract<ChatDisplayItem, { type: 'ass
 export function assistantRunCopyText(item: Extract<ChatDisplayItem, { type: 'assistant' }>): string {
   return item.segments
     .flatMap((segment) => [
-      segment.content.trim(),
+      visibleMarkdownContent(segment.content).trim(),
       ...(segment.toolRuns ?? []).map((run) => `${toolRunStatusLabel(run.status)} ${run.name}`.trim()),
       segment.error?.trim() ?? '',
     ])

@@ -29,3 +29,25 @@ export type CreateRuntimeMemoryInput = {
 export type RuntimeMemoryList = {
   memories: RuntimeMemoryRecord[];
 };
+
+export type RuntimeMemoryPreviewItem = {
+  id: string;
+  title: string;
+  scope: RuntimeMemoryScope;
+  origin: 'active' | 'passive';
+  source?: string;
+  projectId?: string;
+  workspaceRoot?: string;
+  storageRoot?: string;
+  createdAt?: string;
+  updatedAt: string;
+  chars: number;
+  preview: string;
+  tags?: string[];
+};
+
+export type RuntimeMemoryPreview = {
+  storagePath: string;
+  total: number;
+  items: RuntimeMemoryPreviewItem[];
+};
