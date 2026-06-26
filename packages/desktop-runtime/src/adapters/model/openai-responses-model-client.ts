@@ -44,7 +44,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
         ...(instructions ? { instructions } : {}),
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiResponsesTools(request.tools) } : {}),
-        ...(request.toolChoice ? { tool_choice: request.toolChoice } : {}),
+        ...(request.toolChoice ? { tool_choice: toOpenAiResponsesToolChoice(request.toolChoice) } : {}),
         ...openAiResponsesReasoningBody(this.provider, request),
       }),
     });
@@ -102,6 +102,11 @@ export class OpenAiResponsesModelClient implements ModelClient {
     if (usage) yield { type: 'usage' as const, usage: { ...usage, provider: this.provider.provider, model: activeModel?.code } };
     yield doneEvent(finishReason);
   }
+}
+
+function toOpenAiResponsesToolChoice(toolChoice: ModelRequest['toolChoice']) {
+  if (!toolChoice || toolChoice === 'auto' || toolChoice === 'none') return toolChoice;
+  return { type: 'function', name: toolChoice.name };
 }
 
 function mergeResponsesOutputItem(toolCalls: Map<string, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {

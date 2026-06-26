@@ -58,6 +58,60 @@ describe('agent loop tools', () => {
     ]);
   });
 
+  it('runs consecutive read-only local tool calls in parallel', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Parallel tools', projectId: 'project_1' });
+    const modelClient = new ParallelReadModelClient();
+    const toolHost = new ParallelReadToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    const turn = loop.sendTurn(thread.id, { input: 'inspect both' });
+    let waitError: unknown;
+    try {
+      await waitForToolStarts(toolHost, 2);
+    } catch (error) {
+      waitError = error;
+    } finally {
+      toolHost.releaseAll();
+    }
+    await turn;
+    if (waitError) throw waitError;
+
+    const saved = await threadStore.getThread(thread.id);
+    expect(toolHost.started).toEqual(['read_file', 'search_text']);
+    expect(toolHost.contexts.every((context) => context.permissionProfile === 'workspace-write')).toBe(true);
+    expect(modelClient.requests).toHaveLength(2);
+    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['read_file', 'search_text']);
+    expect(saved?.messages.at(-1)?.content).toContain('parallel results received');
+  });
+
+  it('honors a tool host forced tool choice for the next model request', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Forced tool choice', projectId: 'project_1' });
+    const modelClient = new ForcedToolChoiceModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new ForcedToolChoiceHost(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'continue file change' });
+
+    expect(modelClient.requests[0].toolChoice).toEqual({ type: 'tool', name: 'begin_file_change' });
+  });
+
   it('publishes streaming tool-call previews from tool argument deltas', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -163,7 +217,12 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'turn.completed')).toBe(true);
     expect(modelClient.requests.at(-1)?.toolChoice).toBe('none');
     expect(modelClient.requests.length).toBeGreaterThan(4);
-    expect(toolHost.calls).toHaveLength(modelClient.requests.length - 1);
+    expect(toolHost.calls).toHaveLength(8);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.status === 'error'
+      && event.payload.content.includes('本次请求已读取 8 个文件')
+    )).toBe(true);
     expect(saved?.messages.at(-1)?.content).toBe('Final answer after the available tool results.');
     expect(saved?.messages.at(-1)?.status).toBe('complete');
   });
@@ -451,6 +510,37 @@ class ToolCallingModelClient implements ModelClient {
   }
 }
 
+class ParallelReadModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [
+          { id: 'call_read', name: 'read_file', arguments: '{"file_path":"README.md"}' },
+          { id: 'call_search', name: 'search_text', arguments: '{"query":"needle"}' },
+        ],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'parallel results received' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ForcedToolChoiceModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'text_delta', text: 'forced choice observed' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class ToolDeltaModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -528,6 +618,77 @@ class CapturingToolHost implements ToolHost {
   async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     this.calls.push({ name, input, projectId: context.projectId });
     return { content: 'file contents from tool' };
+  }
+}
+
+class ParallelReadToolHost implements ToolHost {
+  readonly started: string[] = [];
+  readonly contexts: ToolExecutionContext[] = [];
+  private readonly blocker: Promise<void>;
+  private releaseBlocker: () => void = () => undefined;
+
+  constructor() {
+    this.blocker = new Promise<void>((resolve) => {
+      this.releaseBlocker = resolve;
+    });
+  }
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'read_file',
+        description: 'Read a file',
+        inputSchema: {
+          type: 'object',
+          properties: { file_path: { type: 'string' } },
+          required: ['file_path'],
+        },
+      },
+      {
+        name: 'search_text',
+        description: 'Search text',
+        inputSchema: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      },
+    ];
+  }
+
+  async runTool(name: string, _input: unknown, context: ToolExecutionContext) {
+    this.started.push(name);
+    this.contexts.push(context);
+    await this.blocker;
+    return { content: `${name} result` };
+  }
+
+  releaseAll(): void {
+    this.releaseBlocker();
+  }
+}
+
+class ForcedToolChoiceHost implements ToolHost {
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'begin_file_change',
+        description: 'Begin a file change',
+        inputSchema: {
+          type: 'object',
+          properties: { file_path: { type: 'string' } },
+          required: ['file_path'],
+        },
+      },
+    ];
+  }
+
+  toolChoice() {
+    return { type: 'tool' as const, name: 'begin_file_change' };
+  }
+
+  async runTool() {
+    return { content: 'unused' };
   }
 }
 
@@ -858,6 +1019,14 @@ async function waitForModelRequest(modelClient: CancellableModelClient) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('Timed out waiting for model request');
+}
+
+async function waitForToolStarts(toolHost: ParallelReadToolHost, count: number) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (toolHost.started.length >= count) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for ${count} parallel tool starts; saw ${toolHost.started.length}.`);
 }
 
 async function waitForTurnCancelled(threadStore: JsonThreadStore, threadId: string) {

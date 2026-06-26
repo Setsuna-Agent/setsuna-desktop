@@ -34,12 +34,18 @@ describe('pc local tool host', () => {
       files: [{ file_path: 'src/generated.txt', action: 'create' }],
     }, context);
     expect(plan.content).toContain('src/generated.txt');
+    await expect(host.toolChoice?.(context, { tools, messages: [] }))
+      .resolves.toEqual({ type: 'tool', name: 'begin_file_change' });
 
     await expect(host.runTool('begin_file_change', { file_path: 'src/other.txt', action: 'create' }, context))
       .rejects.toThrow('next queued file');
 
     await host.runTool('begin_file_change', { file_path: 'src/generated.txt', action: 'create' }, context);
+    await expect(host.toolChoice?.(context, { tools, messages: [] }))
+      .resolves.toEqual({ type: 'tool', name: 'write_file' });
     const written = await host.runTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context);
+    await expect(host.toolChoice?.(context, { tools, messages: [] }))
+      .resolves.toBeNull();
 
     expect(JSON.parse(written.preview ?? '{}')).toMatchObject({
       diff: {

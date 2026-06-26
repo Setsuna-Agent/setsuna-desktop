@@ -6,6 +6,7 @@ import type {
   RuntimeThread,
   RuntimeToolCall,
   RuntimeToolCallDelta,
+  RuntimeToolDefinition,
   RuntimeUsage,
   SendTurnInput,
   SendTurnResponse,
@@ -19,7 +20,7 @@ import type { MemoryStore } from '../ports/memory-store.js';
 import type { ModelClient } from '../ports/model-client.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
-import type { ToolHost } from '../ports/tool-host.js';
+import type { ToolExecutionContext, ToolHost } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import {
   CONTEXT_COMPACTION_MAX_TOKENS_K,
@@ -44,9 +45,34 @@ export type AgentLoopOptions = {
 };
 
 const MAX_TOOL_ROUNDS = 64;
+const MAX_READ_FILE_CALLS_PER_RUN = 8;
+const MAX_INSPECTION_CALLS_PER_RUN = 16;
+const MAX_FILE_MUTATION_CALLS_PER_RUN = 40;
+const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
+const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
+const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'workspace_write_file']);
+const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 type RuntimeToolCallDeltaLike = Pick<RuntimeToolCallDelta, 'id' | 'name' | 'argumentsDelta'>;
+type ToolBudget = {
+  readFileCallCount: number;
+  inspectionCallCount: number;
+  fileMutationCallCount: number;
+};
+type ToolBudgetBlock = {
+  content: string;
+  display: string;
+};
+type RuntimeToolExecutionContext = ToolExecutionContext & {
+  turnId: string;
+  permissionProfile: NonNullable<RuntimeConfigState['permissionProfile']>;
+  signal: AbortSignal;
+};
+type ToolCallExecution = {
+  message: RuntimeMessage;
+  processed: boolean;
+};
 
 export class AgentLoop {
   private readonly activeTurns = new Map<string, AbortController>();
@@ -250,6 +276,11 @@ export class AgentLoop {
         signal,
       };
       const tools = await this.options.toolHost?.listTools(toolContext);
+      const toolBudget: ToolBudget = {
+        readFileCallCount: 0,
+        inspectionCallCount: 0,
+        fileMutationCallCount: 0,
+      };
       const modelMessages: RuntimeMessage[] = [
         ...this.personalizationContextMessages(runtimeConfig),
         ...(await this.memoryContextMessages(thread.projectId, runtimeConfig)),
@@ -271,6 +302,7 @@ export class AgentLoop {
           status: 'streaming',
         };
         await this.publishMessage(threadId, turnId, assistantMessage);
+        const toolChoice = await this.toolChoiceForRequest(toolContext, tools, modelMessages);
 
         let toolCalls: RuntimeToolCall[] = [];
         const partialToolCalls = new Map<string, RuntimeToolCall>();
@@ -286,7 +318,7 @@ export class AgentLoop {
           model: 'local-runtime-smoke',
           messages: modelMessages,
           tools,
-          toolChoice: tools?.length ? 'auto' : undefined,
+          toolChoice,
           ...thinkingOptions,
           signal,
         })) {
@@ -330,7 +362,7 @@ export class AgentLoop {
             toolCalls,
             status: 'complete',
           });
-          const toolMessages = await this.runToolCalls(threadId, thread.projectId, turnId, toolCalls, signal);
+          const toolMessages = await this.runToolCalls(toolCalls, toolContext, toolBudget, runtimeConfig?.approvalPolicy ?? 'on-request');
           modelMessages.push(...toolMessages);
           continue;
         }
@@ -635,13 +667,7 @@ export class AgentLoop {
     }));
   }
 
-  private async toolSystemPromptMessages(context: {
-    threadId: string;
-    projectId?: string;
-    turnId: string;
-    permissionProfile: NonNullable<RuntimeConfigState['permissionProfile']>;
-    signal: AbortSignal;
-  }) {
+  private async toolSystemPromptMessages(context: RuntimeToolExecutionContext) {
     const prompt = await this.options.toolHost?.systemPrompt?.(context);
     if (typeof prompt !== 'string' || !prompt.trim()) return [];
     return [
@@ -653,6 +679,17 @@ export class AgentLoop {
         status: 'complete' as const,
       },
     ];
+  }
+
+  private async toolChoiceForRequest(context: RuntimeToolExecutionContext, tools: RuntimeToolDefinition[] | undefined, messages: RuntimeMessage[]): Promise<ModelRequest['toolChoice']> {
+    if (!tools?.length) return undefined;
+    let forcedChoice: ModelRequest['toolChoice'] | null = null;
+    try {
+      forcedChoice = await this.options.toolHost?.toolChoice?.(context, { tools, messages }) ?? null;
+    } catch {
+      forcedChoice = null;
+    }
+    return forcedChoice ?? 'auto';
   }
 
   private personalizationContextMessages(config: RuntimeConfigState | null | undefined) {
@@ -693,41 +730,121 @@ export class AgentLoop {
   }
 
   private async runToolCalls(
-    threadId: string,
-    projectId: string | undefined,
-    turnId: string,
     toolCalls: RuntimeToolCall[],
-    signal: AbortSignal,
+    context: RuntimeToolExecutionContext,
+    toolBudget: ToolBudget,
+    approvalPolicy: RuntimeConfigState['approvalPolicy'],
   ): Promise<RuntimeMessage[]> {
     if (!this.options.toolHost) return [];
     const messages: RuntimeMessage[] = [];
-    for (const toolCall of toolCalls) {
-      let content = '';
-      try {
-        throwIfAborted(signal);
-        const parsedArguments = parseToolArguments(toolCall.arguments);
-        const approval = await this.approveToolCall(threadId, projectId, turnId, toolCall, parsedArguments, signal);
-        if (approval === 'reject') {
-          content = `Tool ${toolCall.name} was rejected by the user.`;
-          await this.publishToolCompleted(threadId, turnId, toolCall, 'rejected', content);
-          messages.push(await this.publishToolMessage(threadId, turnId, toolCall, content));
-          continue;
+    for (let index = 0; index < toolCalls.length;) {
+      const parallelBatch = await this.collectParallelToolBatch(toolCalls, index, context, toolBudget, approvalPolicy);
+      if (parallelBatch.length > 1) {
+        const executions = await Promise.all(parallelBatch.map((toolCall) =>
+          this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, { checkBudget: false, skipApproval: true })
+        ));
+        for (let batchIndex = 0; batchIndex < parallelBatch.length; batchIndex += 1) {
+          if (executions[batchIndex].processed) markToolBudgetProcessed(toolBudget, parallelBatch[batchIndex]);
+          messages.push(executions[batchIndex].message);
         }
-        throwIfAborted(signal);
-        const startPreview = await this.options.toolHost.previewToolCall?.(toolCall.name, parsedArguments, { threadId, projectId, turnId, signal }).catch(() => null);
-        await this.publishToolStarted(threadId, turnId, toolCall, parsedArguments, startPreview?.resultPreview);
-        const result = await this.options.toolHost.runTool(toolCall.name, parsedArguments, { threadId, projectId, turnId, signal });
-        throwIfAborted(signal);
-        content = result.content;
-        await this.publishToolCompleted(threadId, turnId, toolCall, 'success', result.preview ?? content);
-      } catch (error) {
-        if (isAbortError(error)) throw error;
-        content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
-        await this.publishToolCompleted(threadId, turnId, toolCall, 'error', content);
+        index += parallelBatch.length;
+        continue;
       }
-      messages.push(await this.publishToolMessage(threadId, turnId, toolCall, content));
+
+      const toolCall = toolCalls[index];
+      const execution = await this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy);
+      if (execution.processed) markToolBudgetProcessed(toolBudget, toolCall);
+      messages.push(execution.message);
+      index += 1;
     }
     return messages;
+  }
+
+  private async collectParallelToolBatch(
+    toolCalls: RuntimeToolCall[],
+    startIndex: number,
+    context: RuntimeToolExecutionContext,
+    toolBudget: ToolBudget,
+    approvalPolicy: RuntimeConfigState['approvalPolicy'],
+  ): Promise<RuntimeToolCall[]> {
+    const simulatedBudget = { ...toolBudget };
+    const readFileKeys = new Set<string>();
+    const batch: RuntimeToolCall[] = [];
+    for (let index = startIndex; index < toolCalls.length; index += 1) {
+      const toolCall = toolCalls[index];
+      const parsedArguments = parseToolArguments(toolCall.arguments);
+      if (!(await this.canRunToolCallInParallel(toolCall, parsedArguments, context, approvalPolicy))) break;
+      const readFileKey = parallelReadFileKey(toolCall, parsedArguments);
+      if (readFileKey && readFileKeys.has(readFileKey)) break;
+      if (toolBudgetBlockForCall(toolCall, simulatedBudget)) break;
+      reserveToolBudgetForCall(simulatedBudget, toolCall);
+      if (readFileKey) readFileKeys.add(readFileKey);
+      batch.push(toolCall);
+    }
+    return batch;
+  }
+
+  private async canRunToolCallInParallel(
+    toolCall: RuntimeToolCall,
+    parsedArguments: unknown,
+    context: RuntimeToolExecutionContext,
+    approvalPolicy: RuntimeConfigState['approvalPolicy'],
+  ): Promise<boolean> {
+    if (!LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES.has(toolCall.name)) return false;
+    if (!isPlainRecord(parsedArguments)) return false;
+    if (this.options.approvalGate && approvalPolicy === 'strict') return false;
+    const approval = await this.options.toolHost?.approvalForTool?.(toolCall.name, parsedArguments, context).catch(() => ({ reason: 'Approval check failed.' }));
+    return !approval;
+  }
+
+  private async runSingleToolCall(
+    toolCall: RuntimeToolCall,
+    context: RuntimeToolExecutionContext,
+    toolBudget: ToolBudget,
+    approvalPolicy: RuntimeConfigState['approvalPolicy'],
+    options: { checkBudget?: boolean; skipApproval?: boolean } = {},
+  ): Promise<ToolCallExecution> {
+    let content = '';
+    let processed = false;
+    try {
+      throwIfAborted(context.signal);
+      const parsedArguments = parseToolArguments(toolCall.arguments);
+      const budgetBlock = options.checkBudget === false ? null : toolBudgetBlockForCall(toolCall, toolBudget);
+      if (budgetBlock) {
+        content = budgetBlock.content;
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'error', budgetBlock.display);
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
+          processed,
+        };
+      }
+      const approval = options.skipApproval ? 'not-required' : await this.approveToolCall(toolCall, parsedArguments, context, approvalPolicy);
+      if (approval === 'reject') {
+        content = `Tool ${toolCall.name} was rejected by the user.`;
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'rejected', content);
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
+          processed,
+        };
+      }
+      throwIfAborted(context.signal);
+      const startPreview = await this.options.toolHost?.previewToolCall?.(toolCall.name, parsedArguments, context).catch(() => null);
+      await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, startPreview?.resultPreview);
+      const result = await this.options.toolHost!.runTool(toolCall.name, parsedArguments, context);
+      processed = true;
+      throwIfAborted(context.signal);
+      content = result.content;
+      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'success', result.preview ?? content);
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      processed = true;
+      content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
+      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'error', content);
+    }
+    return {
+      message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
+      processed,
+    };
   }
 
   private async publishToolMessage(
@@ -778,13 +895,7 @@ export class AgentLoop {
     call: RuntimeToolCallDeltaLike;
     partialToolCalls: Map<string, RuntimeToolCall>;
     threadId: string;
-    toolContext: {
-      threadId: string;
-      projectId?: string;
-      turnId: string;
-      permissionProfile: NonNullable<RuntimeConfigState['permissionProfile']>;
-      signal: AbortSignal;
-    };
+    toolContext: RuntimeToolExecutionContext;
     turnId: string;
   }): Promise<void> {
     if (!this.options.toolHost) return;
@@ -842,48 +953,45 @@ export class AgentLoop {
   }
 
   private async approveToolCall(
-    threadId: string,
-    projectId: string | undefined,
-    turnId: string,
     toolCall: RuntimeToolCall,
     parsedArguments: unknown,
-    signal: AbortSignal,
+    context: RuntimeToolExecutionContext,
+    approvalPolicy: RuntimeConfigState['approvalPolicy'],
   ): Promise<RuntimeApprovalDecision | 'not-required'> {
     if (!this.options.approvalGate || !this.options.toolHost) return 'not-required';
-    const approvalPolicy = (await this.options.configStore?.getConfig().catch(() => null))?.approvalPolicy ?? 'on-request';
     if (approvalPolicy === 'full') return 'not-required';
-    const requirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, { threadId, projectId, turnId, signal });
+    const requirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, context);
     if (!requirement && approvalPolicy !== 'strict') return 'not-required';
 
     const approval = await this.options.approvalGate.createApproval({
-      threadId,
-      turnId,
+      threadId: context.threadId,
+      turnId: context.turnId,
       toolCallId: toolCall.id,
       toolName: toolCall.name,
       reason: requirement?.reason ?? `Strict approval policy requires confirmation before running ${toolCall.name}.`,
       argumentsPreview: requirement?.argumentsPreview ?? previewArguments(parsedArguments),
     });
-    await this.appendAndPublish(threadId, {
+    await this.appendAndPublish(context.threadId, {
       id: this.options.ids.id('event'),
-      threadId,
-      turnId,
+      threadId: context.threadId,
+      turnId: context.turnId,
       type: 'approval.requested',
       createdAt: approval.createdAt,
       payload: { approval },
     });
     let answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>;
     try {
-      answer = await abortable(this.options.approvalGate.waitForDecision(approval.id), signal);
+      answer = await abortable(this.options.approvalGate.waitForDecision(approval.id), context.signal);
     } catch (error) {
       if (isAbortError(error)) {
         const resolved = await this.options.approvalGate.answerApproval(approval.id, {
           decision: 'reject',
           message: 'Turn cancelled.',
         });
-        await this.appendAndPublish(threadId, {
+        await this.appendAndPublish(context.threadId, {
           id: this.options.ids.id('event'),
-          threadId,
-          turnId,
+          threadId: context.threadId,
+          turnId: context.turnId,
           type: 'approval.resolved',
           createdAt: resolved.resolvedAt ?? this.options.clock.now().toISOString(),
           payload: {
@@ -895,10 +1003,10 @@ export class AgentLoop {
       }
       throw error;
     }
-    await this.appendAndPublish(threadId, {
+    await this.appendAndPublish(context.threadId, {
       id: this.options.ids.id('event'),
-      threadId,
-      turnId,
+      threadId: context.threadId,
+      turnId: context.turnId,
       type: 'approval.resolved',
       createdAt: this.options.clock.now().toISOString(),
       payload: {
@@ -926,6 +1034,67 @@ function mergeToolArgumentDelta(current: string, delta: string): string {
   if (delta.startsWith(current)) return delta;
   if (current.endsWith(delta)) return current;
   return `${current}${delta}`;
+}
+
+function toolBudgetBlockForCall(toolCall: RuntimeToolCall, budget: ToolBudget): ToolBudgetBlock | null {
+  const name = toolCall.name;
+  if (READ_FILE_TOOL_NAMES.has(name) && budget.readFileCallCount >= MAX_READ_FILE_CALLS_PER_RUN) {
+    return {
+      display: `本次请求已读取 ${MAX_READ_FILE_CALLS_PER_RUN} 个文件，剩余本地操作已暂缓。`,
+      content: [
+        'Skipped by desktop runtime: The read_file budget for this user request is exhausted.',
+        `Already executed this turn: ${budget.readFileCallCount}/${MAX_READ_FILE_CALLS_PER_RUN}.`,
+        `Skipped call: ${name}.`,
+      ].join('\n'),
+    };
+  }
+  if (INSPECTION_TOOL_NAMES.has(name) && budget.inspectionCallCount >= MAX_INSPECTION_CALLS_PER_RUN) {
+    return {
+      display: `本次请求已查看 ${MAX_INSPECTION_CALLS_PER_RUN} 个文件/目录，剩余本地操作已暂缓。`,
+      content: [
+        'Skipped by desktop runtime: The inspection budget for this user request is exhausted.',
+        `Already executed this turn: ${budget.inspectionCallCount}/${MAX_INSPECTION_CALLS_PER_RUN}.`,
+        `Skipped call: ${name}.`,
+      ].join('\n'),
+    };
+  }
+  if (FILE_MUTATION_TOOL_NAMES.has(name) && budget.fileMutationCallCount >= MAX_FILE_MUTATION_CALLS_PER_RUN) {
+    return {
+      display: `本次请求已执行 ${MAX_FILE_MUTATION_CALLS_PER_RUN} 个文件变更，剩余本地操作已暂缓。`,
+      content: [
+        'Skipped by desktop runtime: The file mutation budget for this user request is exhausted.',
+        `Already executed this turn: ${budget.fileMutationCallCount}/${MAX_FILE_MUTATION_CALLS_PER_RUN}.`,
+        `Skipped call: ${name}.`,
+      ].join('\n'),
+    };
+  }
+  return null;
+}
+
+function markToolBudgetProcessed(budget: ToolBudget, toolCall: RuntimeToolCall): void {
+  reserveToolBudgetForCall(budget, toolCall);
+}
+
+function reserveToolBudgetForCall(budget: ToolBudget, toolCall: RuntimeToolCall): void {
+  const name = toolCall.name;
+  if (READ_FILE_TOOL_NAMES.has(name)) budget.readFileCallCount += 1;
+  if (INSPECTION_TOOL_NAMES.has(name)) budget.inspectionCallCount += 1;
+  if (FILE_MUTATION_TOOL_NAMES.has(name)) budget.fileMutationCallCount += 1;
+}
+
+function parallelReadFileKey(toolCall: RuntimeToolCall, parsedArguments: unknown): string {
+  if (!READ_FILE_TOOL_NAMES.has(toolCall.name) || !isPlainRecord(parsedArguments)) return '';
+  return [
+    String(parsedArguments.file_path ?? parsedArguments.path ?? '').trim(),
+    String(parsedArguments.offset ?? ''),
+    String(parsedArguments.limit ?? ''),
+    String(parsedArguments.start_line ?? ''),
+    String(parsedArguments.end_line ?? ''),
+  ].join('\0');
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 class TurnCancelledError extends Error {

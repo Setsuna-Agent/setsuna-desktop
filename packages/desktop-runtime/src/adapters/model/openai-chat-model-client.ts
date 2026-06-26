@@ -41,7 +41,7 @@ export class OpenAiChatModelClient implements ModelClient {
         max_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiChatTools(request.tools) } : {}),
-        ...(request.toolChoice ? { tool_choice: request.toolChoice } : {}),
+        ...(request.toolChoice ? { tool_choice: toOpenAiChatToolChoice(request.toolChoice) } : {}),
         ...openAiCompatibleThinkingBody(this.provider, request),
       }),
     });
@@ -95,6 +95,11 @@ function toOpenAiChatTools(tools: RuntimeToolDefinition[]) {
       parameters: tool.inputSchema,
     },
   }));
+}
+
+function toOpenAiChatToolChoice(toolChoice: ModelRequest['toolChoice']) {
+  if (!toolChoice || toolChoice === 'auto' || toolChoice === 'none') return toolChoice;
+  return { type: 'function', function: { name: toolChoice.name } };
 }
 
 function mergeToolCallDelta(toolCallsByIndex: Map<number, RuntimeToolCall>, value: unknown) {

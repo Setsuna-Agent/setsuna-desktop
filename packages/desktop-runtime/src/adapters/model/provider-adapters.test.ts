@@ -392,6 +392,56 @@ describe('provider model adapters', () => {
     });
   });
 
+  it('serializes forced tool choices for raw provider adapters', async () => {
+    const tools = [
+      {
+        name: 'workspace_read_file',
+        description: 'Read a file',
+        inputSchema: { type: 'object', properties: { path: { type: 'string' } } },
+      },
+    ];
+    const toolChoice = { type: 'tool' as const, name: 'workspace_read_file' };
+
+    const chatCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', chatCaptured),
+      ),
+      { tools, toolChoice },
+    );
+    expect(expectBody(chatCaptured).tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'workspace_read_file' },
+    });
+
+    const responsesCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', responsesCaptured),
+      ),
+      { tools, toolChoice },
+    );
+    expect(expectBody(responsesCaptured).tool_choice).toEqual({
+      type: 'function',
+      name: 'workspace_read_file',
+    });
+
+    const anthropicCaptured: CapturedRequest = {};
+    await collect(
+      new AnthropicMessagesModelClient(
+        provider('anthropic', 'https://api.anthropic.test'),
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', anthropicCaptured),
+      ),
+      { tools, toolChoice },
+    );
+    expect(expectBody(anthropicCaptured).tool_choice).toEqual({
+      type: 'tool',
+      name: 'workspace_read_file',
+    });
+  });
+
   it('uses OpenAI compatible providers without an API key', async () => {
     const captured: CapturedRequest = {};
     const client = new ConfiguredModelClient(

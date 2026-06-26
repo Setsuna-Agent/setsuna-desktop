@@ -3862,7 +3862,7 @@ function parseShellWords(command) {
   return words;
 }
 
-function usesShellApplyPatch(text) {
+function _usesShellApplyPatch(text) {
   return /(?:^|[;&|]\s*)apply_patch\b/.test(text)
     || /\bapply_patch\s*<</.test(text)
     || /<<[A-Z0-9_'-]*\s*\n?[^|&;]*apply_patch\b/.test(text);

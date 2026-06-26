@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import * as pcTools from './pc-local-tools.js';
@@ -46,6 +46,14 @@ export class PcLocalToolHost implements ToolHost {
 
   systemPrompt(): string {
     return pcTools.LOCAL_TOOL_SYSTEM_PROMPT;
+  }
+
+  async toolChoice(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> {
+    const availableToolNames = new Set(request.tools.map((tool) => tool.name));
+    const projectState = await this.projectStateFor(context);
+    const forcedToolName = this.forcedToolName(projectState);
+    if (!forcedToolName || !availableToolNames.has(forcedToolName)) return null;
+    return { type: 'tool', name: forcedToolName };
   }
 
   async approvalForTool(name: string, input: unknown, context: ToolExecutionContext) {
@@ -154,6 +162,17 @@ export class PcLocalToolHost implements ToolHost {
 
   private normalizeToolName(name: string): string {
     return TOOL_ALIASES[name]?.name ?? name;
+  }
+
+  private forcedToolName(projectState: ProjectToolState): string {
+    const active = projectState.activeFileChange;
+    if (active) {
+      if (active.action === 'create') return 'write_file';
+      if (active.action === 'append') return 'append_file';
+      if (active.action === 'delete') return 'delete_file';
+      return pcTools.hasRememberedReadForFile({ file_path: active.file_path }, projectState.toolState) ? '' : 'read_file';
+    }
+    return projectState.fileChangePlanQueue.length ? FILE_CHANGE_BEGIN_TOOL_NAME : '';
   }
 
   private validateFileChangeSequence(projectState: ProjectToolState, name: string, args: Record<string, unknown>, preview: unknown): void {

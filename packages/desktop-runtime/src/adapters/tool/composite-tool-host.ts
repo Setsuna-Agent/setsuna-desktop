@@ -1,4 +1,4 @@
-import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 
 export class CompositeToolHost implements ToolHost {
@@ -15,6 +15,14 @@ export class CompositeToolHost implements ToolHost {
       return typeof prompt === 'string' && prompt.trim() ? prompt.trim() : '';
     }));
     return prompts.filter(Boolean).join('\n\n') || null;
+  }
+
+  async toolChoice(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> {
+    for (const host of this.hosts) {
+      const choice = await host.toolChoice?.(context, request);
+      if (choice) return choice;
+    }
+    return null;
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {

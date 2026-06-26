@@ -24,6 +24,7 @@ type ThreadIndex = {
 export class JsonThreadStore implements ThreadStore {
   private readonly threadsDir: string;
   private readonly indexPath: string;
+  private readonly threadWriteQueues = new Map<string, Promise<void>>();
 
   constructor(
     dataDir: string,
@@ -174,6 +175,10 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   async appendEvent(threadId: string, eventWithoutSeq: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent> {
+    return this.enqueueThreadWrite(threadId, () => this.appendEventUnlocked(threadId, eventWithoutSeq));
+  }
+
+  private async appendEventUnlocked(threadId: string, eventWithoutSeq: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent> {
     const thread = await this.requireThread(threadId);
     const event = {
       ...eventWithoutSeq,
@@ -185,6 +190,20 @@ export class JsonThreadStore implements ThreadStore {
     await writeJsonFile(this.snapshotPath(threadId), nextThread);
     await this.writeIndexWithThread(nextThread);
     return event;
+  }
+
+  private async enqueueThreadWrite<T>(threadId: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.threadWriteQueues.get(threadId) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(task);
+    const queue = run.then(() => undefined, () => undefined);
+    this.threadWriteQueues.set(threadId, queue);
+    try {
+      return await run;
+    } finally {
+      if (this.threadWriteQueues.get(threadId) === queue) {
+        this.threadWriteQueues.delete(threadId);
+      }
+    }
   }
 
   async listEvents(threadId: string, sinceSeq = 0): Promise<RuntimeEvent[]> {

@@ -47,7 +47,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
         stream: true,
         ...(system ? { system } : {}),
         ...(request.tools?.length ? { tools: toAnthropicTools(request.tools) } : {}),
-        ...(request.toolChoice && request.toolChoice !== 'none' ? { tool_choice: { type: 'auto' } } : {}),
+        ...(request.toolChoice && request.toolChoice !== 'none' ? { tool_choice: toAnthropicToolChoice(request.toolChoice) } : {}),
         ...(thinking ? { thinking } : {}),
       }),
     });
@@ -106,6 +106,11 @@ export class AnthropicMessagesModelClient implements ModelClient {
     if (usage) yield { type: 'usage' as const, usage: { ...usage, provider: this.provider.provider, model: activeModel?.code } };
     yield doneEvent(finishReason);
   }
+}
+
+function toAnthropicToolChoice(toolChoice: Exclude<ModelRequest['toolChoice'], undefined | 'none'>) {
+  if (toolChoice === 'auto') return { type: 'auto' };
+  return { type: 'tool', name: toolChoice.name };
 }
 
 function mergeAnthropicBlockStart(toolCalls: Map<number, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {
