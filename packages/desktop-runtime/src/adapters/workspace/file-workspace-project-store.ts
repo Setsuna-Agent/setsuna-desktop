@@ -1,0 +1,368 @@
+import { randomUUID } from 'node:crypto';
+import { mkdir, readdir, readFile, realpath, stat, writeFile as writeFileFs } from 'node:fs/promises';
+import path from 'node:path';
+import type {
+  AddWorkspaceProjectInput,
+  WorkspaceEntry,
+  WorkspaceEntrySearchResponse,
+  WorkspaceEntryList,
+  WorkspaceFileRead,
+  WorkspaceFileWrite,
+  WorkspaceProject,
+  WorkspaceProjectList,
+  WorkspaceSearchResponse,
+  WorkspaceSearchResult,
+  WorkspaceStatus,
+} from '@setsuna-desktop/contracts';
+import type { Clock } from '../../ports/clock.js';
+import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import { readJsonFile, writeJsonFile } from '../store/json-file.js';
+
+const MAX_LIST_ENTRIES = 200;
+const MAX_READ_BYTES = 256 * 1024;
+const MAX_ENTRY_SEARCH_RESULTS = 80;
+const MAX_ENTRY_SEARCH_SCAN = 12000;
+const MAX_SEARCH_RESULTS = 100;
+const MAX_SEARCH_FILE_BYTES = 1024 * 1024;
+const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', 'target', 'release-artifacts']);
+
+type ProjectIndex = {
+  version: 1;
+  projects: WorkspaceProject[];
+};
+
+export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
+  private readonly indexPath: string;
+
+  constructor(
+    dataDir: string,
+    private readonly clock: Clock,
+  ) {
+    this.indexPath = path.join(dataDir, 'projects.json');
+  }
+
+  async listProjects(): Promise<WorkspaceProjectList> {
+    const index = await this.readIndex();
+    return { projects: index.projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
+  }
+
+  async addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject> {
+    const projectPath = await normalizeProjectPath(input.path);
+    const projectStat = await stat(projectPath);
+    if (!projectStat.isDirectory()) throw new Error('Project path must be a directory.');
+    const now = this.clock.now().toISOString();
+    const index = await this.readIndex();
+    const existing = index.projects.find((project) => project.path === projectPath);
+    const project: WorkspaceProject = {
+      id: existing?.id ?? `project_${randomUUID().replaceAll('-', '').slice(0, 20)}`,
+      name: input.name?.trim() || existing?.name || path.basename(projectPath) || projectPath,
+      path: projectPath,
+      gitRoot: await findGitRoot(projectPath),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    await this.writeIndex({
+      version: 1,
+      projects: [project, ...index.projects.filter((item) => item.id !== project.id && item.path !== project.path)],
+    });
+    return project;
+  }
+
+  async removeProject(projectId: string): Promise<void> {
+    const index = await this.readIndex();
+    await this.writeIndex({
+      version: 1,
+      projects: index.projects.filter((project) => project.id !== projectId),
+    });
+  }
+
+  async getStatus(projectId?: string): Promise<WorkspaceStatus> {
+    const project = await this.findProject(projectId);
+    if (!project) return { exists: false, readable: false };
+    try {
+      const projectStat = await stat(project.path);
+      const fileCount = projectStat.isDirectory() ? await countEntries(project.path) : 0;
+      return {
+        project,
+        exists: true,
+        readable: projectStat.isDirectory(),
+        fileCount,
+        gitRoot: await findGitRoot(project.path),
+      };
+    } catch {
+      return { project, exists: false, readable: false };
+    }
+  }
+
+  async listEntries(projectId: string, relativePath = '.'): Promise<WorkspaceEntryList> {
+    const project = await this.requireProject(projectId);
+    const target = await safeResolve(project.path, relativePath);
+    const targetStat = await stat(target);
+    if (!targetStat.isDirectory()) throw new Error('Path is not a directory.');
+    const entries = await readdir(target, { withFileTypes: true });
+    const visible = entries
+      .filter((entry) => !IGNORED_DIRS.has(entry.name))
+      .slice(0, MAX_LIST_ENTRIES);
+    const mapped = await Promise.all(
+      visible.map(async (entry): Promise<WorkspaceEntry> => {
+        const absolutePath = path.join(target, entry.name);
+        const entryStat = await stat(absolutePath);
+        const relative = toProjectRelative(project.path, absolutePath);
+        return {
+          name: entry.name,
+          path: relative,
+          type: entry.isDirectory() ? 'directory' : 'file',
+          size: entry.isFile() ? entryStat.size : undefined,
+          modifiedAt: entryStat.mtime.toISOString(),
+        };
+      }),
+    );
+    return {
+      basePath: normalizeRelativePath(relativePath),
+      entries: mapped.sort((a, b) => `${a.type === 'file' ? 1 : 0}:${a.name}`.localeCompare(`${b.type === 'file' ? 1 : 0}:${b.name}`)),
+    };
+  }
+
+  async searchEntries(projectId: string, query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> {
+    const project = await this.requireProject(projectId);
+    const search = normalizeEntrySearchText(query);
+    const parentScoped = parent !== undefined && parent !== null;
+    const startDirectory = parentScoped ? await safeResolve(project.path, parent || '.') : project.path;
+    const startStat = await stat(startDirectory);
+    if (!startStat.isDirectory()) throw new Error('Path is not a directory.');
+
+    const entries: WorkspaceEntrySearchResponse['entries'] = [];
+    const stack = [startDirectory];
+    let stackIndex = 0;
+    let scanned = 0;
+
+    while (stackIndex < stack.length && scanned < MAX_ENTRY_SEARCH_SCAN && entries.length < MAX_ENTRY_SEARCH_RESULTS) {
+      const current = stack[stackIndex];
+      stackIndex += 1;
+      const directoryEntries = await sortedDirectoryEntries(current);
+
+      for (const entry of directoryEntries) {
+        if (scanned >= MAX_ENTRY_SEARCH_SCAN || entries.length >= MAX_ENTRY_SEARCH_RESULTS) break;
+        if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
+
+        const absolutePath = path.join(current, entry.name);
+        const relativePath = toProjectRelative(project.path, absolutePath).replace(/\\/g, '/');
+        scanned += 1;
+
+        if (entry.isDirectory()) {
+          if (!parentScoped) stack.push(absolutePath);
+        } else if (!entry.isFile()) {
+          continue;
+        }
+
+        const haystack = `${relativePath} ${entry.name}`.toLowerCase();
+        if (search && !haystack.includes(search)) continue;
+
+        entries.push({
+          kind: entry.isDirectory() ? 'directory' : 'file',
+          name: entry.name,
+          parent: parentForRelativePath(relativePath),
+          path: relativePath,
+        });
+      }
+    }
+
+    return {
+      entries,
+      query: search,
+      scanned,
+      truncated: scanned >= MAX_ENTRY_SEARCH_SCAN,
+      workspaceRoot: project.path,
+    };
+  }
+
+  async readFile(projectId: string, relativePath: string): Promise<WorkspaceFileRead> {
+    const project = await this.requireProject(projectId);
+    const target = await safeResolve(project.path, relativePath);
+    const targetStat = await stat(target);
+    if (!targetStat.isFile()) throw new Error('Path is not a file.');
+    const buffer = await readFile(target);
+    const truncated = buffer.byteLength > MAX_READ_BYTES;
+    return {
+      projectId,
+      path: toProjectRelative(project.path, target),
+      content: buffer.subarray(0, MAX_READ_BYTES).toString('utf8'),
+      size: buffer.byteLength,
+      modifiedAt: targetStat.mtime.toISOString(),
+      truncated,
+    };
+  }
+
+  async writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite> {
+    const project = await this.requireProject(projectId);
+    const target = await safeResolveForWrite(project.path, relativePath);
+    const existed = await stat(target).then((value) => value.isFile()).catch(() => false);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFileFs(target, content, 'utf8');
+    const targetStat = await stat(target);
+    return {
+      projectId,
+      path: toProjectRelative(project.path, target),
+      size: targetStat.size,
+      modifiedAt: targetStat.mtime.toISOString(),
+      created: !existed,
+    };
+  }
+
+  async search(projectId: string, query: string): Promise<WorkspaceSearchResponse> {
+    const project = await this.requireProject(projectId);
+    const needle = query.trim();
+    if (!needle) return { query, results: [], truncated: false };
+    const results: WorkspaceSearchResult[] = [];
+    let truncated = false;
+    await walk(project.path, async (filePath) => {
+      if (results.length >= MAX_SEARCH_RESULTS) {
+        truncated = true;
+        return false;
+      }
+      const fileStat = await stat(filePath);
+      if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) return true;
+      const text = await readFile(filePath, 'utf8').catch(() => '');
+      if (!text) return true;
+      const lines = text.split(/\r?\n/);
+      for (let index = 0; index < lines.length; index += 1) {
+        if (lines[index].toLowerCase().includes(needle.toLowerCase())) {
+          results.push({
+            path: toProjectRelative(project.path, filePath),
+            line: index + 1,
+            preview: lines[index].trim().slice(0, 240),
+          });
+          if (results.length >= MAX_SEARCH_RESULTS) {
+            truncated = true;
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+    return { query, results, truncated };
+  }
+
+  private async findProject(projectId?: string): Promise<WorkspaceProject | undefined> {
+    const index = await this.readIndex();
+    return projectId ? index.projects.find((project) => project.id === projectId) : index.projects[0];
+  }
+
+  private async requireProject(projectId: string): Promise<WorkspaceProject> {
+    const project = await this.findProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return project;
+  }
+
+  private async readIndex(): Promise<ProjectIndex> {
+    return readJsonFile<ProjectIndex>(this.indexPath, { version: 1, projects: [] });
+  }
+
+  private async writeIndex(index: ProjectIndex): Promise<void> {
+    await writeJsonFile(this.indexPath, index);
+  }
+}
+
+async function normalizeProjectPath(inputPath: string): Promise<string> {
+  const trimmed = inputPath.trim();
+  if (!trimmed) throw new Error('Project path is required.');
+  const expanded = trimmed.startsWith('~/') ? path.join(process.env.HOME ?? '', trimmed.slice(2)) : trimmed;
+  return realpath(path.resolve(expanded));
+}
+
+async function safeResolve(projectRoot: string, relativePath: string): Promise<string> {
+  const target = await realpath(path.resolve(projectRoot, normalizeRelativePath(relativePath)));
+  const relative = path.relative(projectRoot, target);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Path escapes the project workspace.');
+  }
+  return target;
+}
+
+async function safeResolveForWrite(projectRoot: string, relativePath: string): Promise<string> {
+  const normalized = normalizeRelativePath(relativePath);
+  const target = path.resolve(projectRoot, normalized);
+  const parent = await realExistingParent(path.dirname(target));
+  const relativeParent = path.relative(projectRoot, parent);
+  if (relativeParent.startsWith('..') || path.isAbsolute(relativeParent)) {
+    throw new Error('Path escapes the project workspace.');
+  }
+  const relativeTarget = path.relative(projectRoot, target);
+  if (relativeTarget.startsWith('..') || path.isAbsolute(relativeTarget)) {
+    throw new Error('Path escapes the project workspace.');
+  }
+  return target;
+}
+
+async function realExistingParent(startPath: string): Promise<string> {
+  let current = startPath;
+  for (;;) {
+    try {
+      return await realpath(current);
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) throw new Error('No writable parent directory exists.');
+      current = parent;
+    }
+  }
+}
+
+function normalizeRelativePath(relativePath: string): string {
+  const normalized = relativePath.trim() || '.';
+  return normalized.replace(/^\/+/, '') || '.';
+}
+
+function toProjectRelative(projectRoot: string, absolutePath: string): string {
+  return path.relative(projectRoot, absolutePath) || '.';
+}
+
+async function sortedDirectoryEntries(directory: string) {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  return entries.sort((left, right) => Number(right.isDirectory()) - Number(left.isDirectory()) || left.name.localeCompare(right.name));
+}
+
+function normalizeEntrySearchText(value: string): string {
+  return value.trim().replace(/\\/g, '/').toLowerCase();
+}
+
+function parentForRelativePath(relativePath: string): string {
+  const index = relativePath.lastIndexOf('/');
+  return index >= 0 ? relativePath.slice(0, index) : '';
+}
+
+async function findGitRoot(startPath: string): Promise<string | undefined> {
+  let current = startPath;
+  for (;;) {
+    try {
+      const gitStat = await stat(path.join(current, '.git'));
+      if (gitStat.isDirectory() || gitStat.isFile()) return current;
+    } catch {
+      // Keep walking upward until the filesystem root.
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+async function countEntries(root: string): Promise<number> {
+  let count = 0;
+  await walk(root, async () => {
+    count += 1;
+    return count < 10000;
+  });
+  return count;
+}
+
+async function walk(root: string, onFile: (filePath: string) => Promise<boolean>): Promise<void> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (IGNORED_DIRS.has(entry.name)) continue;
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      await walk(absolutePath, onFile);
+    } else if (!(await onFile(absolutePath))) {
+      return;
+    }
+  }
+}

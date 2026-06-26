@@ -1,0 +1,179 @@
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import { useChatTurnActions } from './useChatTurnActions.js';
+import { useDesktopNavigation } from './useDesktopNavigation.js';
+import { useDesktopPanelResize } from './useDesktopPanelResize.js';
+import { useDesktopWorkspacePanels } from './useDesktopWorkspacePanels.js';
+import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
+import { useProjectWorkspace } from './useProjectWorkspace.js';
+import { useRuntimeClientState } from './useRuntimeClientState.js';
+import { useThreadGroups } from './useThreadGroups.js';
+import type { MainView } from '../types/app.js';
+
+export function useDesktopAppController() {
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [memoryDraft, setMemoryDraft] = useState('');
+  const [draft, setDraft] = useState('');
+  const [activeView, setActiveView] = useState<MainView>('chat');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
+  const {
+    activeTurnId,
+    client,
+    currentThread,
+    loadState,
+    projects,
+    reloadThreads,
+    setActiveTurnId,
+    setCurrentThread,
+    setError,
+    setProjects,
+    terminalTurnIdsRef,
+    threads,
+  } = runtime;
+
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const {
+    handleSidebarResizeStep,
+    handleSidebarResizeStart,
+    handleTerminalResizeStep,
+    handleTerminalResizeStart,
+    handleWorkspaceResizeStep,
+    handleWorkspaceResizeStart,
+    sidebarMaxWidth,
+    sidebarMinWidth,
+    sidebarWidth,
+    terminalMaxHeight,
+    terminalHeight,
+    terminalMinHeight,
+    workspaceMaxWidth,
+    workspaceMinWidth,
+    workspaceWidth,
+  } = useDesktopPanelResize(shellRef);
+
+  const activeProject = projects.find((project) => project.id === activeProjectId);
+
+  const workspacePanels = useDesktopWorkspacePanels({ activeProject, activeView, setError });
+  const {
+    bottomPanelVisible,
+    closeWorkspaceMenus,
+    openFilePanel,
+    panelLauncherMenuOpen,
+    resetPanelSlots,
+    sidePanelVisible,
+    workspaceAppMenuOpen,
+  } = workspacePanels;
+
+  const projectWorkspace = useProjectWorkspace({
+    activeProjectId,
+    client,
+    onOpenFilePanel: openFilePanel,
+    onResetPanels: resetPanelSlots,
+  });
+  const { resetWorkspacePanels } = projectWorkspace;
+  const { globalThreads, threadsByProjectId } = useThreadGroups(threads);
+
+  const navigation = useDesktopNavigation({
+    activeProjectId,
+    client,
+    currentThread,
+    globalThreads,
+    reloadThreads,
+    resetWorkspacePanels,
+    setActiveProjectId,
+    setActiveView,
+    setCurrentThread,
+    setError,
+    setProjects,
+    threadsByProjectId,
+  });
+
+  useGlobalEscapeMenus({
+    closeNavigationMenus: navigation.closeNavigationMenus,
+    closeWorkspaceMenus,
+    panelLauncherMenuOpen,
+    projectActionMenuId: navigation.projectActionMenuId,
+    threadActionMenuId: navigation.threadActionMenuId,
+    workspaceAppMenuOpen,
+  });
+
+  const chatActions = useChatTurnActions({
+    activeProjectId,
+    activeTurnId,
+    client,
+    currentThread,
+    draft,
+    expandProject: navigation.expandProject,
+    reloadThreads,
+    setActiveTurnId,
+    setActiveView,
+    setCurrentThread,
+    setDraft,
+    setError,
+    terminalTurnIdsRef,
+  });
+
+  const shellStyle = {
+    '--app-sidebar-width': activeView === 'settings' || sidebarCollapsed ? '0px' : `${sidebarWidth}px`,
+    '--app-topbar-sidebar-width': activeView === 'settings' || sidebarCollapsed ? '116px' : `${sidebarWidth}px`,
+    '--desktop-agent-workspace-width': sidePanelVisible ? `${workspaceWidth}px` : '0px',
+    '--app-bottom-panel-height': bottomPanelVisible ? `${terminalHeight}px` : '0px',
+  } as CSSProperties;
+
+  const shellClassName = [
+    activeView === 'settings' ? 'desktop-agent-page--settings-open' : '',
+    activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
+    sidebarCollapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
+    bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
+  ].filter(Boolean).join(' ');
+
+  const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? '新对话' : activeView === 'capabilities' ? '能力' : '设置';
+
+  return {
+    activeProject,
+    activeProjectId,
+    activeView,
+    chatActions,
+    draft,
+    globalThreads,
+    handleSidebarResizeStep,
+    handleSidebarResizeStart,
+    handleTerminalResizeStep,
+    handleTerminalResizeStart,
+    handleWorkspaceResizeStep,
+    handleWorkspaceResizeStart,
+    loadState,
+    memoryDraft,
+    navigation,
+    projectWorkspace,
+    runtime,
+    searchTriggerRef,
+    setActiveView,
+    setDraft,
+    setMemoryDraft,
+    setSidebarCollapsed,
+    shellClassName,
+    shellRef,
+    shellStyle,
+    sidebarCollapsed,
+    sidebarMaxWidth,
+    sidebarMinWidth,
+    sidebarWidth,
+    terminalMaxHeight,
+    terminalHeight,
+    terminalMinHeight,
+    threadsByProjectId,
+    toolbarTitle,
+    workspaceMaxWidth,
+    workspaceMinWidth,
+    workspacePanels,
+    workspaceWidth,
+  };
+}
+
+export type DesktopAppController = ReturnType<typeof useDesktopAppController>;

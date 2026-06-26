@@ -1,0 +1,92 @@
+{
+  "name": "setsuna-desktop",
+  "version": "0.1.0",
+  "description": "Local-first desktop runtime and workbench for Setsuna Agent workflows.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/electron/main/index.js",
+  "private": false,
+  "scripts": {
+    "dev": "concurrently -k -n renderer,electron \"pnpm dev:renderer\" \"wait-on tcp:5174 && pnpm dev:electron\"",
+    "dev:renderer": "vite --host 127.0.0.1 --port 5174",
+    "dev:electron": "tsx scripts/start-electron-dev.ts",
+    "build": "pnpm clean && pnpm build:contracts && pnpm build:runtime && pnpm build:electron && pnpm build:renderer",
+    "build:contracts": "tsc -b packages/contracts",
+    "build:runtime": "tsc -b packages/desktop-runtime",
+    "build:electron": "tsx scripts/build-electron.ts",
+    "build:renderer": "vite build",
+    "clean": "rimraf dist packages/*/dist *.tsbuildinfo packages/*/*.tsbuildinfo",
+    "lint": "eslint . --max-warnings=0",
+    "package": "pnpm build && electron-builder --dir",
+    "postinstall": "node scripts/prepare-node-pty.mjs",
+    "release:dry-run": "pnpm build && node scripts/release-dry-run.mjs",
+    "start": "electron .",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@ant-design/x": "^2.5.0",
+    "@ant-design/x-markdown": "^2.5.0",
+    "@fontsource/geist-mono": "^5.2.8",
+    "@fontsource/geist-sans": "^5.2.5",
+    "@iconify-json/vscode-icons": "^1.2.61",
+    "@iconify/react": "^6.0.2",
+    "@setsuna-desktop/contracts": "workspace:*",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "antd": "^6.3.6",
+    "highlight.js": "10.7.3",
+    "lucide-react": "^0.468.0",
+    "node-pty": "^1.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vscode-icons-js": "^11.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2",
+    "eslint": "^9.17.0",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.1"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=7"
+  },
+  "build": {
+    "appId": "dev.setsuna.desktop",
+    "productName": "Setsuna Desktop",
+    "directories": {
+      "output": "release-artifacts"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "packages/contracts/package.json",
+      "packages/desktop-runtime/package.json",
+      "skills/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/node-pty/prebuilds/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null
+    }
+  }
+}

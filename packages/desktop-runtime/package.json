@@ -1,0 +1,21 @@
+{
+  "name": "@setsuna-desktop/runtime",
+  "version": "0.1.0",
+  "description": "Local runtime service for Setsuna Desktop.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "setsuna-desktop-runtime": "dist/cli.js"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.0",
+    "@setsuna-desktop/contracts": "workspace:*",
+    "ai": "^7.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false"
+  }
+}

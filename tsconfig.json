@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/contracts" },
+    { "path": "./packages/desktop-runtime" },
+    { "path": "./tsconfig.electron.json" },
+    { "path": "./tsconfig.renderer.json" }
+  ]
+}
+

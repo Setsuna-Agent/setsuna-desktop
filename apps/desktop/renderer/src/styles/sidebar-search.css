@@ -1,0 +1,181 @@
+.desktop-agent-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: color-mix(in srgb, var(--app-text) 14%, transparent);
+}
+
+.desktop-agent-search-popover {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, calc(100vw - 48px));
+  height: min(520px, calc(100vh - 64px));
+  max-height: 100%;
+  padding: 12px 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 64%, transparent);
+  border-radius: var(--app-radius-lg);
+  background: color-mix(in srgb, var(--app-surface) 96%, transparent);
+  box-shadow: 0 24px 64px color-mix(in srgb, #000000 18%, transparent);
+}
+
+.desktop-agent-search-popover__input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--app-radius-md);
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.desktop-agent-search-popover__input:focus-within,
+.desktop-agent-search-popover__input:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+}
+
+.desktop-agent-search-popover__input input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--app-text);
+  background: transparent;
+  font: inherit;
+}
+
+.desktop-agent-search-popover__input input::placeholder {
+  color: var(--app-text-muted);
+}
+
+.desktop-agent-search-popover__heading {
+  display: flex;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 30px;
+  padding: 0 2px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.desktop-agent-search-popover__loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--app-text-muted);
+}
+
+.desktop-agent-search-popover__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
+}
+
+.desktop-agent-search-popover__list::-webkit-scrollbar {
+  width: var(--chat-scrollbar-width);
+  height: var(--chat-scrollbar-width);
+}
+
+.desktop-agent-search-popover__list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--chat-scrollbar-thumb);
+  background-clip: content-box;
+}
+
+.desktop-agent-search-popover__empty {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 12px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+}
+
+.desktop-agent-search-result {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(54px, max-content);
+  align-items: center;
+  column-gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  color: var(--app-text);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.desktop-agent-search-result:hover,
+.desktop-agent-search-result.is-active {
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.desktop-agent-search-result:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--app-focus);
+}
+
+.desktop-agent-search-result__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--app-text-muted);
+}
+
+.desktop-agent-search-result__main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.desktop-agent-search-result__title,
+.desktop-agent-search-result__match,
+.desktop-agent-search-result__source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-agent-search-result__title {
+  color: currentColor;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.desktop-agent-search-result__match {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.desktop-agent-search-result__source {
+  justify-self: end;
+  max-width: 160px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}

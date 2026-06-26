@@ -1,0 +1,76 @@
+import type { ModelProviderKind } from './provider.js';
+
+export type ProviderConfigState = {
+  id: string;
+  name: string;
+  provider: ModelProviderKind;
+  baseUrl: string;
+  enabled: boolean;
+  apiKeySet: boolean;
+  apiKeyPreview: string;
+  models: ProviderModelConfig[];
+};
+
+export type ProviderModelConfig = {
+  id: string;
+  name: string;
+  code: string;
+  enabled: boolean;
+  maxOutputTokens: number;
+  thinkingEnabled: boolean;
+  thinkingEfforts: string[];
+  defaultThinkingEffort?: string;
+  supportsImages?: boolean;
+};
+
+export type RuntimeConfigState = {
+  configPath: string;
+  dataPath: string;
+  activeProviderId?: string;
+  providers: ProviderConfigState[];
+  memoryEnabled: boolean;
+  approvalPolicy: 'suggest' | 'on-request' | 'strict';
+  permissionProfile: RuntimePermissionProfile;
+};
+
+export type RuntimePermissionProfile = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+export type RuntimeAvailableModel = {
+  id: string;
+  name: string;
+  maxOutputTokens?: number;
+  thinkingEnabled?: boolean;
+  thinkingEfforts?: string[];
+  defaultThinkingEffort?: string;
+  supportsImages?: boolean;
+};
+
+export type RuntimeFetchModelsInput = {
+  providerId?: string;
+  provider?: ModelProviderKind;
+  baseUrl?: string;
+  apiKey?: string;
+};
+
+export type RuntimeAvailableModelsResponse = {
+  models: RuntimeAvailableModel[];
+};
+
+export type ProviderConfigInput = {
+  id?: string;
+  name?: string;
+  provider?: ModelProviderKind;
+  baseUrl?: string;
+  enabled?: boolean;
+  apiKey?: string;
+  clearApiKey?: boolean;
+  models?: ProviderModelConfig[];
+};
+
+export type RuntimeConfigInput = {
+  activeProviderId?: string;
+  memoryEnabled?: boolean;
+  approvalPolicy?: RuntimeConfigState['approvalPolicy'];
+  permissionProfile?: RuntimePermissionProfile;
+  providers?: ProviderConfigInput[];
+};

@@ -1,0 +1,469 @@
+.bottom-panel {
+  display: grid;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  position: relative;
+  grid-template-rows: 40px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  border-top: 1px solid var(--desktop-agent-panel-border);
+  background: var(--app-surface);
+}
+
+.bottom-panel__resize-handle {
+  top: -5px;
+  left: 0;
+  width: 100%;
+  height: 10px;
+  cursor: row-resize;
+}
+
+.bottom-panel__resize-handle::after {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: transparent;
+  content: "";
+}
+
+.bottom-panel__resize-handle:hover::after,
+body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
+  background: var(--app-primary);
+}
+
+.bottom-panel .chat-file-review-panel__header {
+  min-width: 0;
+  min-height: 0;
+  padding: 7px 10px 5px;
+  border-bottom: 0;
+  background: var(--app-surface-subtle);
+}
+
+.bottom-panel .chat-file-review-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  height: 28px;
+}
+
+.bottom-panel .chat-file-review-panel__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+}
+
+.bottom-panel .chat-file-review-panel__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.bottom-panel .chat-file-review-panel__title {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 72px;
+  max-width: 150px;
+  height: 28px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.bottom-panel .chat-file-review-panel__title:hover,
+.bottom-panel .chat-file-review-panel__title--active {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.bottom-panel .chat-file-review-panel__tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 9px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  line-height: inherit;
+}
+
+.bottom-panel .chat-file-review-panel__title--closable .chat-file-review-panel__tab-button {
+  padding-right: 24px;
+}
+
+.bottom-panel .chat-file-review-panel__tab-button svg,
+.bottom-panel .chat-file-review-panel__tab-button .iconify {
+  flex: 0 0 auto;
+}
+
+.bottom-panel .chat-file-review-panel__tab-label {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-panel .chat-file-review-panel__tab-close {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  color: transparent;
+  background: #9ca3af;
+  font-size: 0;
+  line-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.bottom-panel .chat-file-review-panel__title:hover .chat-file-review-panel__tab-close,
+.bottom-panel .chat-file-review-panel__title:focus-within .chat-file-review-panel__tab-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bottom-panel .chat-file-review-panel__tab-close:hover {
+  background: #8f969f;
+}
+
+.bottom-panel .chat-file-review-panel__tab-close-glyph,
+.bottom-panel .chat-file-review-panel__tab-close-glyph::before,
+.bottom-panel .chat-file-review-panel__tab-close-glyph::after {
+  position: absolute;
+  display: block;
+}
+
+.bottom-panel .chat-file-review-panel__tab-close-glyph {
+  inset: 0;
+}
+
+.bottom-panel .chat-file-review-panel__tab-close-glyph::before,
+.bottom-panel .chat-file-review-panel__tab-close-glyph::after {
+  top: 6.2px;
+  left: 3.8px;
+  width: 6.4px;
+  height: 1.2px;
+  border-radius: 999px;
+  background: #ffffff;
+  content: "";
+  transform-origin: center;
+}
+
+.bottom-panel .chat-file-review-panel__tab-close-glyph::before {
+  transform: rotate(45deg);
+}
+
+.bottom-panel .chat-file-review-panel__tab-close-glyph::after {
+  transform: rotate(-45deg);
+}
+
+.bottom-panel .chat-file-review-panel__heading-actions {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.bottom-panel .chat-file-review-panel__heading-action,
+.bottom-panel .chat-file-review-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.bottom-panel .chat-file-review-panel__heading-action:hover,
+.bottom-panel .chat-file-review-panel__close:hover {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.bottom-panel .desktop-panel-launcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.desktop-panel-launcher-menu--native {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  min-width: 156px;
+  padding: 6px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  box-shadow: 0 14px 42px color-mix(in srgb, #000000 12%, transparent);
+}
+
+.desktop-panel-launcher-menu--native button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.desktop-panel-launcher-menu--native button:hover {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+:root[data-theme='dark'] .bottom-panel .chat-file-review-panel__tab-close {
+  background: #737373;
+}
+
+:root[data-theme='dark'] .bottom-panel .chat-file-review-panel__tab-close:hover {
+  background: #8f8f8f;
+}
+
+.bottom-panel__body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.bottom-panel__body--terminal {
+  overflow: hidden;
+  background: var(--app-bg);
+}
+
+.bottom-panel__body--review {
+  overflow: hidden;
+  background: var(--app-bg);
+}
+
+.bottom-panel__body--review .desktop-review-panel {
+  height: 100%;
+  border-right: 0;
+}
+
+.desktop-terminal-xterm {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 0 14px 10px;
+  overflow: hidden;
+  background: var(--app-bg);
+}
+
+.desktop-terminal-xterm__frame {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-terminal-xterm .xterm {
+  height: 100%;
+}
+
+.desktop-terminal-xterm .xterm-viewport,
+.desktop-terminal-xterm .xterm-screen {
+  background: transparent !important;
+}
+
+.desktop-terminal-xterm .xterm-viewport {
+  overscroll-behavior: contain;
+  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.desktop-terminal-xterm .xterm-viewport::-webkit-scrollbar {
+  width: var(--chat-scrollbar-width);
+  height: var(--chat-scrollbar-width);
+}
+
+.desktop-terminal-xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.desktop-terminal-xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--chat-scrollbar-thumb);
+  background-clip: content-box;
+}
+
+.desktop-terminal-xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-muted) 38%, transparent);
+  background-clip: content-box;
+}
+
+.desktop-terminal-xterm .xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element {
+  background: transparent !important;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar {
+  background: transparent !important;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: var(--chat-scrollbar-width) !important;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar.horizontal {
+  height: var(--chat-scrollbar-width) !important;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  left: 2px !important;
+  width: calc(var(--chat-scrollbar-width) - 4px) !important;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar.horizontal > .slider {
+  top: 2px !important;
+  height: calc(var(--chat-scrollbar-width) - 4px) !important;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  border-radius: 999px !important;
+  background: var(--chat-scrollbar-thumb) !important;
+}
+
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+.desktop-terminal-xterm .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
+  background: color-mix(in srgb, var(--app-muted) 38%, transparent) !important;
+}
+
+.tool-event {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.tool-event__header,
+.activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tool-event__header span,
+.activity-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-event__header time,
+.activity-row time {
+  flex: 0 0 auto;
+  color: var(--app-text-subtle);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.tool-event pre {
+  max-height: 96px;
+  margin: 0;
+  padding: 7px 8px;
+  overflow: auto;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-subtle);
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  line-height: 15px;
+  white-space: pre-wrap;
+}
+
+.tool-event--running .tool-event__header span {
+  color: var(--app-warning);
+}
+
+.tool-event--success .tool-event__header span {
+  color: var(--app-success);
+}
+
+.tool-event--error .tool-event__header span,
+.tool-event--rejected .tool-event__header span {
+  color: var(--app-danger);
+}
+
+.activity-row {
+  min-height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.activity-row:hover {
+  background: var(--app-hover);
+}
+
+.terminal-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px 10px;
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 12px;
+  line-height: 16px;
+}
