@@ -50,7 +50,12 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const initializedSelectionRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const currentThreadLastSeqRef = useRef(0);
+  const threadListRefreshTimerRef = useRef<number | null>(null);
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
+  const currentThreadId = currentThread?.id ?? null;
+  const effectiveActiveTurnId = activeTurnId ?? inferActiveTurnIdFromThread(currentThread, terminalTurnIdsRef.current);
+  currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -95,15 +100,36 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     });
   }, [refresh]);
 
+  const refreshThreadsSoon = useCallback(() => {
+    if (threadListRefreshTimerRef.current !== null) return;
+    threadListRefreshTimerRef.current = window.setTimeout(() => {
+      threadListRefreshTimerRef.current = null;
+      void client
+        .listThreads()
+        .then((list) => setThreads(list.threads))
+        .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
+    }, 120);
+  }, [client]);
+
+  useEffect(() => () => {
+    if (threadListRefreshTimerRef.current !== null) {
+      window.clearTimeout(threadListRefreshTimerRef.current);
+      threadListRefreshTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     unsubscribeRef.current?.();
-    if (!currentThread) return undefined;
-    unsubscribeRef.current = client.subscribeEvents(currentThread.id, currentThread.lastSeq, (event) => {
-      setCurrentThread((thread) => (thread && thread.id === event.threadId ? applyRuntimeEvent(thread, event) : thread));
+    if (!currentThreadId) return undefined;
+    unsubscribeRef.current = client.subscribeEvents(currentThreadId, currentThreadLastSeqRef.current, (event) => {
+      setCurrentThread((thread) => {
+        if (!thread || thread.id !== event.threadId || event.seq <= thread.lastSeq) return thread;
+        return applyRuntimeEvent(thread, event);
+      });
       if (isActivityEvent(event)) {
         setActivityEvents((items) => [event, ...items.filter((item) => item.id !== event.id)].slice(0, 80));
       }
-      void client.listThreads().then((list) => setThreads(list.threads));
+      refreshThreadsSoon();
       if (event.type === 'turn.started' && event.turnId) {
         terminalTurnIdsRef.current.delete(event.turnId);
         setActiveTurnId(event.turnId);
@@ -137,7 +163,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [client, currentThread]);
+  }, [client, currentThreadId, refreshThreadsSoon]);
 
   useEffect(() => {
     setActivityEvents([]);
@@ -146,20 +172,18 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [currentThread?.id]);
 
   useEffect(() => {
-    if (!activeTurnId || !currentThread) return undefined;
+    if (!effectiveActiveTurnId || !currentThreadId) return undefined;
     let cancelled = false;
     let timeoutId: number | undefined;
-    const threadId = currentThread.id;
-    const turnId = activeTurnId;
+    const threadId = currentThreadId;
+    const turnId = effectiveActiveTurnId;
 
     const pollThread = async () => {
       try {
         const nextThread = await client.getThread(threadId);
         if (cancelled) return;
-        setCurrentThread((thread) => (thread?.id === threadId ? nextThread : thread));
-        void client.listThreads().then((list) => {
-          if (!cancelled) setThreads(list.threads);
-        });
+        setCurrentThread((thread) => (thread?.id === threadId && nextThread.lastSeq >= thread.lastSeq ? nextThread : thread));
+        refreshThreadsSoon();
         if (turnHasFinished(nextThread, turnId)) {
           terminalTurnIdsRef.current.add(turnId);
           setActiveTurnId((current) => (current === turnId ? null : current));
@@ -177,7 +201,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       cancelled = true;
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
-  }, [activeTurnId, client, currentThread?.id]);
+  }, [effectiveActiveTurnId, client, currentThreadId, refreshThreadsSoon]);
 
   useEffect(() => {
     client
@@ -404,7 +428,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   );
 
   return {
-    activeTurnId,
+    activeTurnId: effectiveActiveTurnId,
     activityEvents,
     answerApproval,
     approvals,
@@ -456,4 +480,19 @@ function turnHasFinished(thread: RuntimeThread, turnId: string): boolean {
   if (!turnMessages.length) return false;
   if (turnMessages.some((message) => message.status === 'streaming')) return false;
   return turnMessages.some((message) => message.role === 'assistant' && (message.status === 'complete' || message.status === 'error' || Boolean(message.error)));
+}
+
+export function inferActiveTurnIdFromThread(thread: RuntimeThread | null, terminalTurnIds: ReadonlySet<string>): string | null {
+  if (!thread) return null;
+  for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
+    const message = thread.messages[index];
+    if (!message?.turnId || terminalTurnIds.has(message.turnId)) continue;
+    if (message.status === 'streaming') return message.turnId;
+    if (message.toolRuns?.some(isActiveToolRun)) return message.turnId;
+  }
+  return null;
+}
+
+function isActiveToolRun(run: NonNullable<RuntimeThread['messages'][number]['toolRuns']>[number]): boolean {
+  return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected');
 }

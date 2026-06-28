@@ -51,7 +51,7 @@ export function createRuntimeContextCompactionCandidate({
   const maxTokens = CONTEXT_COMPACTION_MAX_TOKENS;
   if (!force && originalTokens <= maxTokens) return null;
 
-  const eligibleMessages = messages.filter((message) => message.role !== 'system' || message.contextCompaction);
+  const eligibleMessages = messages.filter((message) => message.visibility !== 'transcript' && (message.role !== 'system' || message.contextCompaction));
   if (eligibleMessages.length <= 1) return null;
 
   const keepCount = Math.min(Math.max(1, keepRecentMessages), Math.max(1, eligibleMessages.length - 1));
@@ -76,11 +76,13 @@ export function materializeRuntimeContextCompaction({
   createdAt,
   id,
   summary,
+  turnId,
 }: {
   candidate: RuntimeContextCompactionCandidate;
   createdAt: string;
   id: string;
   summary: string;
+  turnId?: string;
 }): RuntimeContextCompactionResult {
   const normalizedSummary = summary.trim();
   const summaryTokens = estimateStringTokens(normalizedSummary);
@@ -108,6 +110,7 @@ export function materializeRuntimeContextCompaction({
 
   const summaryMessage: RuntimeMessage = {
     id,
+    ...(turnId ? { turnId } : {}),
     role: 'system',
     content: `<context_compaction_summary max_context_tokens_k="${CONTEXT_COMPACTION_MAX_TOKENS_K}" compacted_messages="${candidate.olderMessages.length}">\n${normalizedSummary}\n</context_compaction_summary>`,
     createdAt,
@@ -136,6 +139,7 @@ export function estimateRuntimeMessageTokens(messages: RuntimeMessage[]): number
 }
 
 function estimateMessageTokens(message: RuntimeMessage): number {
+  if (message.visibility === 'transcript') return 0;
   const attachmentTokens = (message.attachments ?? []).reduce((total, attachment) => {
     if (!attachment.url.startsWith('data:')) return total + estimateStringTokens(`${attachment.name} ${attachment.type}`);
     return total + estimateStringTokens(attachment.url);
@@ -148,6 +152,7 @@ function estimateStringTokens(value: string): number {
 }
 
 function messageHasContextValue(message: RuntimeMessage): boolean {
+  if (message.visibility === 'transcript') return false;
   return Boolean(message.content.trim() || message.attachments?.length || message.contextCompaction);
 }
 
@@ -156,6 +161,7 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),
   };

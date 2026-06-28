@@ -52,8 +52,16 @@ const runtime: RuntimeApi = {
 };
 
 const desktop = {
+  platform: process.platform,
   selectDirectory: (options?: { title?: string }): Promise<string | null> => ipcRenderer.invoke('desktop:select-directory', options ?? {}),
   getUserProfile: (): Promise<DesktopUserProfile> => ipcRenderer.invoke('desktop:get-user-profile'),
+};
+
+const windowControls = {
+  minimize: (): Promise<boolean> => ipcRenderer.invoke('window-control:minimize'),
+  toggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window-control:toggle-maximize'),
+  close: (): Promise<boolean> => ipcRenderer.invoke('window-control:close'),
+  isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window-control:is-maximized'),
 };
 
 const links = {
@@ -93,4 +101,4 @@ const terminal = {
   },
 };
 
-contextBridge.exposeInMainWorld('setsunaDesktop', { desktop, desktopReview, links, runtime, terminal, workspaceApps });
+contextBridge.exposeInMainWorld('setsunaDesktop', { desktop, desktopReview, links, runtime, terminal, windowControls, workspaceApps });

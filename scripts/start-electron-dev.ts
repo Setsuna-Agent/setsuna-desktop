@@ -5,8 +5,20 @@ import { buildElectron } from './build-electron.js';
 
 const rootDir = resolve(import.meta.dirname, '..');
 
-execFileSync('pnpm', ['build:contracts'], { cwd: rootDir, stdio: 'inherit' });
-execFileSync('pnpm', ['build:runtime'], { cwd: rootDir, stdio: 'inherit' });
+function runPnpm(args: string[]): void {
+  const npmExecPath = process.env.npm_execpath;
+
+  // Reuse the package manager entrypoint from the parent pnpm script when available.
+  if (npmExecPath) {
+    execFileSync(process.execPath, [npmExecPath, ...args], { cwd: rootDir, stdio: 'inherit' });
+    return;
+  }
+
+  execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', args, { cwd: rootDir, stdio: 'inherit' });
+}
+
+runPnpm(['build:contracts']);
+runPnpm(['build:runtime']);
 await buildElectron();
 
 const child = spawn(String(electronPath), ['.'], {

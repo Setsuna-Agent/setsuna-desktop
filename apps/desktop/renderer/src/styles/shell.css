@@ -10,6 +10,8 @@
 
 .app-topbar {
   display: grid;
+  position: relative;
+  z-index: 40;
   grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(420px, 1fr) var(--desktop-agent-workspace-width);
   min-width: 0;
   height: var(--app-topbar-height);
@@ -19,8 +21,11 @@
 }
 
 .app-topbar__brand,
+.app-topbar__nav,
+.app-topbar__drag,
 .app-topbar__right,
-.app-topbar__workspace {
+.app-topbar__workspace,
+.app-window-controls {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -36,9 +41,97 @@
   overflow: hidden;
 }
 
+.app-topbar__nav {
+  flex: 0 0 auto;
+}
+
+.app-topbar__drag {
+  align-self: stretch;
+  min-height: 0;
+}
+
+.app-topbar__menu,
+.app-topbar__status,
+.app-workbench__main-actions,
+.app-workbench__main-title,
+.app-workbench__workspace-toolbar,
+.app-window-controls {
+  display: none;
+}
+
+.app-topbar__menu {
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 100%;
+  color: var(--app-titlebar-text);
+}
+
+.app-topbar__menu-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+}
+
+.app-topbar__menu-item {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: inherit;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.app-topbar__menu-popover {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  z-index: 80;
+  display: grid;
+  min-width: 166px;
+  padding: 5px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  box-shadow: 0 14px 42px color-mix(in srgb, #000000 12%, transparent);
+}
+
+.app-topbar__menu-popover button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.app-topbar__menu-popover button:hover:not(:disabled) {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.app-topbar__menu-popover button:disabled {
+  color: var(--app-text-subtle);
+}
+
 .app-topbar button,
 .app-topbar input,
-.app-topbar select {
+.app-topbar select,
+.app-topbar__menu,
+.app-window-controls,
+.app-workbench__main-actions,
+.app-workbench__workspace-toolbar {
   -webkit-app-region: no-drag;
 }
 
@@ -83,6 +176,185 @@
   display: none;
 }
 
+:root[data-desktop-platform='win32'],
+:root[data-desktop-platform='linux'] {
+  --app-topbar-height: 34px;
+}
+
+:root[data-desktop-platform='win32'] .app-topbar,
+:root[data-desktop-platform='linux'] .app-topbar {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
+  padding-right: 0;
+  background: var(--app-titlebar-bg);
+  border-bottom-color: color-mix(in srgb, var(--app-border) 70%, transparent);
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__brand,
+:root[data-desktop-platform='linux'] .app-topbar__brand {
+  gap: 10px;
+  padding: 0 8px 0 4px;
+  color: var(--app-titlebar-text);
+  background: var(--app-titlebar-bg);
+  overflow: visible;
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__right,
+:root[data-desktop-platform='linux'] .app-topbar__right {
+  border-radius: 0;
+  background: var(--app-titlebar-bg);
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__drag,
+:root[data-desktop-platform='linux'] .app-topbar__drag {
+  background: var(--app-titlebar-bg);
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__nav,
+:root[data-desktop-platform='linux'] .app-topbar__nav {
+  gap: 2px;
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__menu,
+:root[data-desktop-platform='linux'] .app-topbar__menu,
+:root[data-desktop-platform='win32'] .app-topbar__status,
+:root[data-desktop-platform='linux'] .app-topbar__status {
+  display: inline-flex;
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__menu-item:hover,
+:root[data-desktop-platform='linux'] .app-topbar__menu-item:hover,
+:root[data-desktop-platform='win32'] .app-topbar__menu-item.is-open,
+:root[data-desktop-platform='linux'] .app-topbar__menu-item.is-open {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button,
+:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button {
+  width: 24px;
+  height: 24px;
+  border-color: transparent;
+  color: var(--app-titlebar-text);
+  background: transparent;
+}
+
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:hover:not(:disabled),
+:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button:hover:not(:disabled),
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button.is-active,
+:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button.is-active {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+}
+
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:disabled,
+:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button:disabled {
+  color: color-mix(in srgb, var(--app-titlebar-text) 45%, transparent);
+  background: transparent;
+}
+
+:root[data-desktop-platform='win32'] .app-window-controls,
+:root[data-desktop-platform='linux'] .app-window-controls {
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  align-self: stretch;
+  gap: 0;
+  height: 100%;
+  background: var(--app-titlebar-bg);
+}
+
+:root[data-desktop-platform='win32'] .app-window-controls button,
+:root[data-desktop-platform='linux'] .app-window-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--app-titlebar-text);
+  background: transparent;
+}
+
+:root[data-desktop-platform='win32'] .app-window-controls button:hover,
+:root[data-desktop-platform='linux'] .app-window-controls button:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 8%, transparent);
+}
+
+:root[data-desktop-platform='win32'] .app-window-controls__close:hover,
+:root[data-desktop-platform='linux'] .app-window-controls__close:hover {
+  color: #ffffff;
+  background: #e81123;
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-actions,
+:root[data-desktop-platform='linux'] .app-workbench__main-actions {
+  display: inline-flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  align-self: start;
+  justify-self: end;
+  gap: 4px;
+  min-width: 0;
+  height: var(--app-topbar-height);
+  padding: 5px 10px 0 0;
+  z-index: 20;
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button,
+:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button {
+  width: 24px;
+  height: 24px;
+  border-color: transparent;
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button:hover,
+:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button:hover,
+:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button.is-active,
+:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button.is-active {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-title,
+:root[data-desktop-platform='linux'] .app-workbench__main-title {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  align-self: start;
+  min-width: 0;
+  height: var(--app-topbar-height);
+  padding: 0 10px;
+  color: var(--app-text);
+  background: var(--desktop-agent-main-bg);
+  pointer-events: none;
+  z-index: 15;
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
+:root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1;
+  align-self: start;
+  min-width: 0;
+  height: var(--desktop-workspace-toolbar-height);
+  border-left: 1px solid var(--desktop-agent-subtle-divider);
+  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  background: var(--desktop-agent-main-bg);
+  z-index: 14;
+}
+
+:root[data-desktop-platform='win32'] .desktop-workspace-panel,
+:root[data-desktop-platform='linux'] .desktop-workspace-panel {
+  padding-top: var(--desktop-workspace-toolbar-height);
+}
+
 .app-view-tabs {
   display: inline-flex;
   align-items: center;
@@ -120,6 +392,7 @@
 
 .app-workbench {
   display: grid;
+  position: relative;
   grid-template-columns: var(--app-sidebar-width) minmax(420px, 1fr) var(--desktop-agent-workspace-width);
   grid-template-rows: minmax(0, 1fr) var(--app-bottom-panel-height);
   min-width: 0;
@@ -237,4 +510,9 @@ body.desktop-terminal-resizing {
   .app-sidebar {
     display: none;
   }
+}
+
+:root[data-desktop-platform='win32'] .app-topbar,
+:root[data-desktop-platform='linux'] .app-topbar {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
 }

@@ -115,4 +115,6 @@ export function fileName(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
 }
 
-export type ToolRuntimeEvent = Extract<RuntimeEvent, { type: 'tool.started' }> | Extract<RuntimeEvent, { type: 'tool.completed' }>;
+export type ToolRuntimeEvent =
+  | Extract<RuntimeEvent, { type: 'tool.started' }>
+  | Extract<RuntimeEvent, { type: 'tool.completed' }>;

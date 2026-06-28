@@ -4,8 +4,16 @@ export type ToolExecutionContext = {
   threadId: string;
   projectId?: string;
   turnId?: string;
+  toolCallId?: string;
   permissionProfile?: RuntimePermissionProfile;
   signal?: AbortSignal;
+  onToolOutputDelta?(delta: ToolOutputDelta): void;
+};
+
+export type ToolOutputDelta = {
+  delta: string;
+  stream?: 'stdout' | 'stderr';
+  processId?: string;
 };
 
 export type ToolExecutionResult = {

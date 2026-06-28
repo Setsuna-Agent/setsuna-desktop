@@ -29,7 +29,7 @@ type ToolRunGroup =
   | { type: 'single'; run: RuntimeToolRun }
   | { type: 'group'; id: string; kind: ToolRunGroupKind; runs: RuntimeToolRun[] };
 
-type ToolRunGroupKind = 'inspection' | 'search' | 'shell' | 'fileMutation' | 'generic';
+export type ToolRunGroupKind = 'inspection' | 'search' | 'shell' | 'fileMutation' | 'generic';
 
 export function RuntimeToolRuns({
   runs,
@@ -68,7 +68,7 @@ function ToolRunPanel({
   const pendingApproval = isPendingApprovalRun(run);
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
   const summary = toolRunSummary(run);
-  const open = pendingApproval || (!isShellRun(run) && (run.status === 'error' || run.status === 'rejected'));
+  const open = toolRunPanelDefaultOpen(run);
   return (
     <details className={`chat-tool-run chat-tool-run--${toolRunGroupKind(run)} chat-tool-run--${run.status}`} open={open}>
       <summary className="chat-tool-run__summary">
@@ -96,7 +96,7 @@ function ToolRunGroupPanel({
   const status = toolRunGroupStatus(group.runs);
   const summary = toolRunGroupSummary(group);
   const hasPendingApproval = group.runs.some(isPendingApprovalRun);
-  const open = hasPendingApproval || (group.kind !== 'shell' && (status === 'running' || status === 'error' || status === 'rejected'));
+  const open = toolRunGroupDefaultOpen(group.kind, status, hasPendingApproval);
   const showRunTitles = group.kind !== 'shell';
   const shellGroup = group.kind === 'shell';
   return (
@@ -461,6 +461,16 @@ function isPendingApprovalRun(run: RuntimeToolRun): boolean {
 
 function isFlatInspectionRun(run: RuntimeToolRun): boolean {
   return toolRunGroupKind(run) === 'inspection' && run.status !== 'pending_approval';
+}
+
+export function toolRunPanelDefaultOpen(run: RuntimeToolRun): boolean {
+  if (isPendingApprovalRun(run)) return true;
+  if (isShellRun(run)) return run.status === 'running' || run.status === 'error' || run.status === 'rejected';
+  return run.status === 'error' || run.status === 'rejected';
+}
+
+export function toolRunGroupDefaultOpen(kind: ToolRunGroupKind, status: RuntimeToolRun['status'], hasPendingApproval: boolean): boolean {
+  return hasPendingApproval || status === 'running' || status === 'error' || status === 'rejected';
 }
 
 function toolRunGroupingKey(run: RuntimeToolRun): string {

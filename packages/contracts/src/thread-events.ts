@@ -1,6 +1,8 @@
 import type { RuntimeEvent } from './events.js';
 import type { RuntimeMessage, RuntimeThread, RuntimeToolRun, RuntimeToolRunStatus } from './threads.js';
 
+const TOOL_OUTPUT_PREVIEW_MAX_LENGTH = 12000;
+
 export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeEvent): RuntimeThread {
   const next: RuntimeThread = {
     ...thread,
@@ -18,6 +20,21 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'thread.updated') {
     next.title = event.payload.title ?? next.title;
     next.archived = event.payload.archived ?? next.archived;
+    return next;
+  }
+
+  if (event.type === 'thread.metadata_updated') {
+    next.gitInfo = event.payload.gitInfo ? { ...event.payload.gitInfo } : null;
+    return next;
+  }
+
+  if (event.type === 'thread.goal_updated') {
+    next.goal = { ...event.payload.goal };
+    return next;
+  }
+
+  if (event.type === 'thread.goal_cleared') {
+    if (event.payload.cleared) delete next.goal;
     return next;
   }
 
@@ -60,9 +77,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'message.created') {
     next.messages.push(cloneMessage(event.payload.message));
-    next.messageCount = next.messages.length;
-    updatePreviewFromMessage(next, event.payload.message);
-    if (next.title === 'New thread' && event.payload.message.role === 'user') {
+    refreshThreadSummary(next);
+    if (isTranscriptVisibleMessage(event.payload.message) && next.title === 'New thread' && event.payload.message.role === 'user') {
       next.title = preview(event.payload.message.content || attachmentPreview(event.payload.message)) || next.title;
     }
     return next;
@@ -73,7 +89,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     if (message) {
       message.content += event.payload.text;
       message.status = 'streaming';
-      updatePreviewFromMessage(next, message);
+      if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
     }
     return next;
   }
@@ -97,7 +113,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       message.status = 'complete';
       message.completedAt = event.createdAt;
       if (event.payload.toolCalls?.length) message.toolCalls = event.payload.toolCalls.map((toolCall) => ({ ...toolCall }));
-      updatePreviewFromMessage(next, message);
+      if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
     }
     return next;
   }
@@ -158,10 +174,25 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       upsertToolRun(message, {
         id: event.payload.toolCallId,
         name: event.payload.toolName,
+        source: event.payload.source,
         status: 'running',
         argumentsPreview: event.payload.argumentsPreview,
         resultPreview: event.payload.resultPreview,
         startedAt: event.createdAt,
+      });
+    }
+    return next;
+  }
+
+  if (event.type === 'tool.output_delta') {
+    const message = assistantMessageForTurn(next.messages, event.turnId);
+    if (message) {
+      appendToolRunOutputDelta(message, {
+        id: event.payload.toolCallId,
+        name: event.payload.toolName,
+        source: event.payload.source,
+        delta: event.payload.delta,
+        createdAt: event.createdAt,
       });
     }
     return next;
@@ -173,8 +204,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       upsertToolRun(message, {
         id: event.payload.toolCallId,
         name: event.payload.toolName,
+        source: event.payload.source,
         status: event.payload.status,
+        argumentsPreview: event.payload.argumentsPreview,
         resultPreview: event.payload.content,
+        data: event.payload.data,
+        durationMs: event.payload.durationMs,
         completedAt: event.createdAt,
       });
     }
@@ -194,11 +229,15 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.cancelled') {
-    const message = assistantMessageForTurn(next.messages, event.turnId);
-    if (message) {
-      message.status = 'complete';
-      message.completedAt = event.createdAt;
-      if (!message.content.trim()) message.error = event.payload.reason || 'Turn cancelled.';
+    const reason = event.payload.reason || 'Turn cancelled.';
+    for (const message of next.messages) {
+      if (event.turnId && message.turnId !== event.turnId) continue;
+      if (message.status === 'streaming' || (message.role === 'assistant' && hasActiveToolRun(message))) {
+        message.status = 'complete';
+        message.completedAt = event.createdAt;
+        if (message.role === 'assistant' && !message.content.trim()) message.error = reason;
+      }
+      completeActiveToolRuns(message, event.createdAt, reason);
     }
     return next;
   }
@@ -211,6 +250,7 @@ function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),
   };
@@ -252,12 +292,67 @@ function upsertToolRun(message: RuntimeMessage, input: RuntimeToolRun): void {
   message.toolRuns = runs;
 }
 
+function appendToolRunOutputDelta(
+  message: RuntimeMessage,
+  input: Pick<RuntimeToolRun, 'id' | 'name' | 'source'> & { createdAt: string; delta: string },
+): void {
+  if (!input.delta) return;
+  const runs = message.toolRuns ? [...message.toolRuns] : [];
+  const index = runs.findIndex((item) => item.id === input.id);
+  const current = index >= 0 ? runs[index] : undefined;
+  const next: RuntimeToolRun = {
+    id: input.id,
+    name: input.name,
+    source: input.source,
+    status: 'running',
+    argumentsPreview: current?.argumentsPreview,
+    resultPreview: appendPreviewDelta(current?.resultPreview ?? '', input.delta),
+    startedAt: current?.startedAt ?? input.createdAt,
+  };
+  if (current) {
+    runs[index] = mergeToolRun(current, next);
+  } else {
+    runs.push(next);
+  }
+  message.toolRuns = runs;
+}
+
+function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, reason: string): void {
+  if (!message.toolRuns?.length) return;
+  let changed = false;
+  const runs = message.toolRuns.map((run) => {
+    if (!isActiveToolRun(run)) return run;
+    changed = true;
+    const rejectApproval = run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected';
+    return {
+      ...run,
+      status: 'rejected' as RuntimeToolRunStatus,
+      resultPreview: run.resultPreview || reason,
+      completedAt,
+      approvalStatus: rejectApproval ? 'rejected' : run.approvalStatus,
+      approvalMessage: rejectApproval ? reason : run.approvalMessage,
+    };
+  });
+  if (changed) message.toolRuns = runs;
+}
+
+function hasActiveToolRun(message: RuntimeMessage): boolean {
+  return Boolean(message.toolRuns?.some(isActiveToolRun));
+}
+
+function isActiveToolRun(run: RuntimeToolRun): boolean {
+  return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected');
+}
+
 function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): RuntimeToolRun {
   return {
     ...current,
     ...next,
     argumentsPreview: next.argumentsPreview ?? current.argumentsPreview,
     resultPreview: next.resultPreview ?? current.resultPreview,
+    data: next.data ?? current.data,
+    durationMs: next.durationMs ?? current.durationMs,
+    source: next.source ?? current.source,
     startedAt: next.startedAt ?? current.startedAt,
     completedAt: next.completedAt ?? current.completedAt,
     approvalId: next.approvalId ?? current.approvalId,
@@ -268,16 +363,27 @@ function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): RuntimeToo
   };
 }
 
+function appendPreviewDelta(current: string, delta: string): string {
+  const next = current + delta;
+  if (next.length <= TOOL_OUTPUT_PREVIEW_MAX_LENGTH) return next;
+  return next.slice(next.length - TOOL_OUTPUT_PREVIEW_MAX_LENGTH);
+}
+
 function updatePreviewFromMessage(thread: RuntimeThread, message: RuntimeMessage): void {
-  if (message.role === 'tool' || message.role === 'system') return;
+  if (!isTranscriptVisibleMessage(message) || message.role === 'tool' || message.role === 'system') return;
   const text = preview(message.content || attachmentPreview(message));
   if (text) thread.lastMessagePreview = text;
 }
 
 function refreshThreadSummary(thread: RuntimeThread): void {
-  thread.messageCount = thread.messages.length;
-  const lastVisibleMessage = [...thread.messages].reverse().find((message) => message.role !== 'tool' && message.role !== 'system' && (message.content.trim() || message.attachments?.length));
+  const visibleMessages = thread.messages.filter(isTranscriptVisibleMessage);
+  thread.messageCount = visibleMessages.length;
+  const lastVisibleMessage = [...visibleMessages].reverse().find((message) => message.role !== 'tool' && message.role !== 'system' && (message.content.trim() || message.attachments?.length));
   thread.lastMessagePreview = lastVisibleMessage ? preview(lastVisibleMessage.content || attachmentPreview(lastVisibleMessage)) : '';
+}
+
+function isTranscriptVisibleMessage(message: RuntimeMessage): boolean {
+  return message.visibility !== 'model';
 }
 
 function preview(value: string): string {

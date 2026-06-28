@@ -25,6 +25,35 @@ describe('json thread store', () => {
     expect(anyProject).toMatchObject([{ id: project.id, projectId: 'project_1' }]);
   });
 
+  it('deletes thread snapshots, event logs, and index entries', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
+    const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Delete me' });
+    await store.appendEvent(thread.id, {
+      id: 'event_msg',
+      threadId: thread.id,
+      type: 'message.created',
+      createdAt: systemClock.now().toISOString(),
+      payload: {
+        message: {
+          id: 'msg_1',
+          role: 'user',
+          content: 'hello',
+          createdAt: systemClock.now().toISOString(),
+          status: 'complete',
+        },
+      },
+    });
+
+    await store.deleteThread(thread.id);
+
+    expect(await store.getThread(thread.id)).toBeNull();
+    expect((await store.listThreads({ includeArchived: true })).map((item) => item.id)).not.toContain(thread.id);
+    expect(await store.listEvents(thread.id)).toEqual([]);
+    await expect(readFile(path.join(dataDir, 'threads', `${thread.id}.json`), 'utf8')).rejects.toThrow();
+    await expect(readFile(path.join(dataDir, 'threads', `${thread.id}.jsonl`), 'utf8')).rejects.toThrow();
+  });
+
   it('updates, deletes, and truncates messages through events', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
     const thread = await store.createThread({ title: 'Message edits' });
@@ -102,6 +131,104 @@ describe('json thread store', () => {
 
     expect(hydrated?.messages[0]).toMatchObject({
       completedAt: '2026-06-26T00:00:04.000Z',
+    });
+  });
+
+  it('persists streamed tool output in thread snapshots', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Tool output replay' });
+
+    await store.appendEvent(thread.id, {
+      id: 'event_msg',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      payload: {
+        message: {
+          id: 'msg_assistant',
+          turnId: 'turn_1',
+          role: 'assistant',
+          content: '',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          status: 'streaming',
+        },
+      },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_tool_started',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'tool.started',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'run_shell_command',
+        argumentsPreview: '{"command":"pnpm test"}',
+        source: 'agent',
+      },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_tool_delta_1',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'tool.output_delta',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'run_shell_command',
+        delta: 'stdout: first\n',
+        stream: 'stdout',
+        source: 'agent',
+      },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_tool_delta_2',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'tool.output_delta',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'run_shell_command',
+        delta: 'stderr: second\n',
+        stream: 'stderr',
+        source: 'agent',
+      },
+    });
+
+    const running = await store.getThread(thread.id);
+    expect(running?.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      name: 'run_shell_command',
+      source: 'agent',
+      status: 'running',
+      argumentsPreview: '{"command":"pnpm test"}',
+      resultPreview: 'stdout: first\nstderr: second\n',
+    });
+
+    await store.appendEvent(thread.id, {
+      id: 'event_tool_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'tool.completed',
+      createdAt: '2026-06-26T00:00:04.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'run_shell_command',
+        status: 'success',
+        content: '$ pnpm test\nstdout: done\nexit: 0',
+        durationMs: 100,
+        source: 'agent',
+      },
+    });
+
+    const completed = await store.getThread(thread.id);
+    expect(completed?.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      status: 'success',
+      resultPreview: '$ pnpm test\nstdout: done\nexit: 0',
+      durationMs: 100,
     });
   });
 });

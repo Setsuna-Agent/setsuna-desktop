@@ -5,9 +5,10 @@ import { ArrowDown, ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'luci
 import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { FileChangesSummaryCard, RuntimeToolRuns } from './RuntimeToolRuns.js';
+import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, type ChatDisplayItem } from './chatMessageDisplay.js';
-import { hasRenderableThinkingContent, hasThinkingSegments, splitThinkingContent, visibleMarkdownContent } from './chatThinkingContent.js';
+import { assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
+import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import '@ant-design/x-markdown/themes/light.css';
 import '@ant-design/x-markdown/themes/dark.css';
@@ -76,13 +77,12 @@ export function ChatWorkspace({
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
-  const scrollSignal = useMemo(() => {
-    const lastMessage = messages[messages.length - 1];
-    const toolRunSignal = messages
-      .map((message) => `${message.id}:${message.toolRuns?.map((run) => `${run.id}:${run.status}:${run.resultPreview?.length ?? 0}`).join(',') ?? ''}`)
-      .join('|');
-    return `${currentThread?.id ?? 'new'}:${messages.length}:${lastMessage?.id ?? ''}:${lastMessage?.status ?? ''}:${lastMessage?.content?.length ?? 0}:${toolRunSignal}`;
-  }, [currentThread?.id, messages]);
+  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode }), [activeTurnId, deleteMode, displayItems]);
+  const renderedDisplayItems = renderWindow.items;
+  const scrollSignal = useMemo(
+    () => createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id }),
+    [activeTurnId, contextCompactionRunning, currentThread?.id, renderWindow],
+  );
 
   const scrollDistanceToBottom = useCallback((node: HTMLDivElement) => Math.max(0, node.scrollHeight - node.scrollTop - node.clientHeight), []);
   const syncScrollBottomState = useCallback(() => {
@@ -138,7 +138,7 @@ export function ChatWorkspace({
   const selectableDeleteItems = useMemo(
     () =>
       displayItems
-        .filter((item) => item.type !== 'context')
+        .filter((item) => item.type !== 'context' && item.type !== 'review')
         .map((item) => ({
           id: item.id,
           messageIds: item.type === 'assistant' ? item.messageIds : [item.message.id],
@@ -309,7 +309,8 @@ export function ChatWorkspace({
                 </div>
               ) : (
                 <div className="chat-bubble-list">
-                  {displayItems.map((item) => (
+                  {renderWindow.hiddenItemCount ? <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} /> : null}
+                  {renderedDisplayItems.map((item) => (
                     <MessageItem
                       key={item.id}
                       activeTurnId={activeTurnId}
@@ -416,6 +417,9 @@ function MessageItem({
   }
   if (item.type === 'context') {
     return <ContextCompactionDivider message={item.message} />;
+  }
+  if (item.type === 'review') {
+    return <ReviewModeMarker message={item.message} />;
   }
   const { message } = item;
   const streaming = message.status === 'streaming';
@@ -654,6 +658,31 @@ function ContextCompactionDivider({
   );
 }
 
+function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
+  const notice = message.reviewMode;
+  if (!notice) return null;
+  const label = notice.kind === 'entered' ? `开始代码审查：${notice.review}` : '代码审查完成';
+  return (
+    <div className="chat-review-mode-marker" aria-label={label}>
+      <span className="chat-review-mode-marker__line" />
+      <span className="chat-review-mode-marker__text">{label}</span>
+    </div>
+  );
+}
+
+function TranscriptWindowDivider({ hiddenMessageCount }: { hiddenMessageCount: number }) {
+  const count = Math.max(0, hiddenMessageCount);
+  return (
+    <div className="chat-context-compact-divider chat-transcript-window-divider" aria-label="较早记录已折叠">
+      <span className="chat-context-compact-divider__line" />
+      <span className="chat-context-compact-divider__text">
+        {count > 0 ? `已折叠较早的 ${count} 条消息` : '已折叠较早的消息'}
+      </span>
+      <span className="chat-context-compact-divider__line" />
+    </div>
+  );
+}
+
 function DeleteSelectionBar({
   allChecked,
   disabled,
@@ -721,45 +750,22 @@ function AssistantRunContent({
   const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
+  const timelineBlocks = useMemo(() => createAssistantRunTimeline(displaySegments), [displaySegments]);
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
   const hasPendingApproval = displaySegments.some((segment) => segment.toolRuns?.some(isPendingApprovalToolRun));
-  const activeWork = active || hasStreamingSegment || toolRuns.some(isActiveWorkToolRun);
-  const hasWorkEvidence = displaySegments.some((segment) => hasThinkingSegments(segment.content) || segment.toolRuns?.length);
-  const [workPanelSeen, setWorkPanelSeen] = useState(activeWork);
-  const showWorkPanel = workPanelSeen || activeWork || hasWorkEvidence;
-  const hasAnswerContent = displaySegments.some((segment) => visibleMarkdownContent(segment.content).trim() || segment.error);
-  const hasRenderableContent = hasAnswerContent || showWorkPanel;
-  const showContinuationLoading = active && status !== 'error' && !hasStreamingSegment && !hasPendingApproval && !showWorkPanel;
+  const hasRenderableContent = timelineBlocks.length > 0;
+  const hasActiveWorkBlock = timelineBlocks.some((block) => block.type === 'work' && block.active);
+  const showContinuationLoading = active && status !== 'error' && !hasStreamingSegment && !hasPendingApproval && !hasActiveWorkBlock;
   const fileChangeSummary = useMemo(() => {
     if (active) return null;
     return fileChangeSummaryFromRuns(toolRuns);
   }, [active, toolRuns]);
-  const workThinkingNodes = useMemo(() => streamingThinkingNodes(displaySegments), [displaySegments]);
-  const workTiming = useMemo(() => inferWorkTiming(displaySegments), [displaySegments]);
-  const hasWorkDetails = workThinkingNodes.length > 0 || toolRuns.length > 0;
-
-  useEffect(() => {
-    if (activeWork || hasWorkEvidence) setWorkPanelSeen(true);
-  }, [activeWork, hasWorkEvidence]);
-
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
     return <AssistantLoadingIndicator label={active ? '正在处理' : '思考中'} />;
   }
-  const contentNodes = assistantRunContentNodes(displaySegments);
   return (
     <div className="chat-assistant-run">
-      {showWorkPanel ? (
-        <WorkHistoryPanel
-          active={activeWork}
-          completedAtMs={workTiming.completedAtMs}
-          hasDetails={hasWorkDetails}
-          startedAtMs={workTiming.startedAtMs}
-        >
-          {workThinkingNodes}
-          {toolRuns.length ? <RuntimeToolRuns runs={toolRuns} onAnswerApproval={onAnswerApproval} /> : null}
-        </WorkHistoryPanel>
-      ) : null}
-      {contentNodes}
+      {timelineBlocks.map((block) => assistantTimelineNode(block, onAnswerApproval))}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
           <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
@@ -770,50 +776,52 @@ function AssistantRunContent({
   );
 }
 
-function assistantRunContentNodes(
-  segments: RuntimeMessage[],
-) {
-  const nodes: JSX.Element[] = [];
-
-  for (const segment of segments) {
-    if (visibleMarkdownContent(segment.content).trim()) {
-      nodes.push(
-        <div className="chat-assistant-run__segment" key={`${segment.id}-content`}>
-          <MarkdownContent content={segment.content} streaming={segment.status === 'streaming'} />
-        </div>,
-      );
-    }
-
-    if (isEmptyStreamingAssistantSegment(segment)) {
-      nodes.push(
-        <div className="chat-assistant-run__segment" key={`${segment.id}-loading`}>
-          <AssistantLoadingIndicator label="正在处理" />
-        </div>,
-      );
-    }
-
-    if (segment.error) {
-      nodes.push(
-        <div className="chat-assistant-run__segment" key={`${segment.id}-error`}>
-          <div className="chat-message-error">{segment.error}</div>
-        </div>,
-      );
-    }
+function assistantTimelineNode(
+  block: AssistantRunTimelineBlock,
+  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void,
+): JSX.Element {
+  if (block.type === 'content') {
+    return (
+      <div className="chat-assistant-run__segment" key={block.id}>
+        <MarkdownContent content={block.content} streaming={block.segment.status === 'streaming'} />
+      </div>
+    );
+  }
+  if (block.type === 'loading') {
+    return (
+      <div className="chat-assistant-run__segment" key={block.id}>
+        <AssistantLoadingIndicator label="正在处理" />
+      </div>
+    );
+  }
+  if (block.type === 'error') {
+    return (
+      <div className="chat-assistant-run__segment" key={block.id}>
+        <div className="chat-message-error">{block.segment.error}</div>
+      </div>
+    );
   }
 
-  return nodes;
+  const workThinkingNodes = block.thinkingSegments.length
+    ? block.thinkingSegments.map((segment) => streamingThinkingNode(segment.id, segment.content))
+    : streamingThinkingNodes(block.segments);
+  const workTiming = inferWorkTiming(block.segments);
+  const hasWorkDetails = workThinkingNodes.length > 0 || block.toolRuns.length > 0;
+  return (
+    <WorkHistoryPanel
+      key={block.id}
+      active={block.active}
+      completedAtMs={workTiming.completedAtMs}
+      hasDetails={hasWorkDetails}
+      startedAtMs={workTiming.startedAtMs}
+    >
+      {workThinkingNodes}
+      {block.toolRuns.length ? <RuntimeToolRuns runs={block.toolRuns} onAnswerApproval={onAnswerApproval} /> : null}
+    </WorkHistoryPanel>
+  );
 }
-
-function isEmptyStreamingAssistantSegment(segment: RuntimeMessage): boolean {
-  return segment.status === 'streaming' && !hasRenderableThinkingContent(segment.content, true) && !segment.toolRuns?.length && !segment.error;
-}
-
 function isPendingApprovalToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
   return run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected';
-}
-
-function isActiveWorkToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
-  return run.status === 'running' || isPendingApprovalToolRun(run);
 }
 
 function inferWorkTiming(segments: RuntimeMessage[]): { startedAtMs: number | null; completedAtMs: number | null } {
@@ -882,6 +890,21 @@ function streamingThinkingNodes(segments: RuntimeMessage[]): JSX.Element[] {
     });
   }
   return nodes;
+}
+
+function streamingThinkingNode(key: string, content: string): JSX.Element {
+  return (
+    <Think
+      key={key}
+      className="chat-think"
+      title="思考中"
+      loading
+      blink
+      defaultExpanded
+    >
+      <MarkdownContent content={content} streaming />
+    </Think>
+  );
 }
 
 function WorkHistoryPanel({

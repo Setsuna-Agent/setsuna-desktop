@@ -313,7 +313,7 @@ function normalizeRelativePath(relativePath: string): string {
 }
 
 function toProjectRelative(projectRoot: string, absolutePath: string): string {
-  return path.relative(projectRoot, absolutePath) || '.';
+  return (path.relative(projectRoot, absolutePath) || '.').replace(/\\/g, '/');
 }
 
 async function sortedDirectoryEntries(directory: string) {

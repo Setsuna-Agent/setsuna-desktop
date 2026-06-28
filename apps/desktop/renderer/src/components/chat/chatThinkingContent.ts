@@ -45,6 +45,10 @@ export function hasThinkingSegments(content: string): boolean {
   return splitThinkingContent(content).some((segment) => segment.type === 'think' && Boolean(segment.content.trim()));
 }
 
+export function hasOpenThinkingSegments(content: string, streaming: boolean): boolean {
+  return streaming && splitThinkingContent(content).some((segment) => segment.type === 'think' && !segment.closed && Boolean(segment.content.trim()));
+}
+
 export function hasRenderableThinkingContent(content: string, streaming: boolean): boolean {
   return splitThinkingContent(content).some((segment) => {
     if (segment.type === 'markdown') return Boolean(segment.content.trim());

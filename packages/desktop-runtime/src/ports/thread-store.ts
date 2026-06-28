@@ -13,6 +13,7 @@ export type ThreadStore = {
   listThreads(query?: ThreadQuery): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
+  deleteThread(threadId: string): Promise<void>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
   updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread>;
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;

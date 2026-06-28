@@ -32,6 +32,10 @@
   --app-radius-md: 8px;
   --app-radius-lg: 10px;
   --app-topbar-height: 42px;
+  --desktop-workspace-toolbar-height: 42px;
+  --app-titlebar-bg: var(--app-sidebar-bg);
+  --app-titlebar-text: var(--app-sidebar-text-secondary);
+  --app-titlebar-control-width: 140px;
   --app-sidebar-width: 240px;
   --app-inspector-width: 336px;
   --desktop-agent-workspace-width: clamp(520px, 37vw, 760px);
@@ -98,6 +102,8 @@
   --app-danger-bg: rgba(248, 113, 113, 0.11);
   --app-success: #62c779;
   --app-warning: #facc15;
+  --app-titlebar-bg: var(--app-sidebar-bg);
+  --app-titlebar-text: var(--app-sidebar-text-secondary);
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-window-bg: var(--app-window-bg);
   --desktop-agent-main-bg: var(--app-bg);
@@ -156,6 +162,8 @@
     --app-danger-bg: rgba(248, 113, 113, 0.11);
     --app-success: #62c779;
     --app-warning: #facc15;
+    --app-titlebar-bg: var(--app-sidebar-bg);
+    --app-titlebar-text: var(--app-sidebar-text-secondary);
     --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
     --desktop-agent-window-bg: var(--app-window-bg);
     --desktop-agent-main-bg: var(--app-bg);

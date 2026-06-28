@@ -77,6 +77,7 @@ export function arrayValue(value: unknown): unknown[] {
 export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<string, unknown>> {
   const output: Array<Record<string, unknown>> = [];
   for (const message of messages) {
+    if (message.visibility === 'transcript') continue;
     if (message.role === 'system' || message.role === 'user' || message.role === 'assistant') {
       output.push({
         role: message.role,
@@ -110,7 +111,7 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
 
 export function systemText(messages: RuntimeMessage[]): string {
   return messages
-    .filter((message) => message.role === 'system' && message.content.trim())
+    .filter((message) => message.visibility !== 'transcript' && message.role === 'system' && message.content.trim())
     .map((message) => message.content.trim())
     .join('\n\n');
 }
@@ -118,6 +119,7 @@ export function systemText(messages: RuntimeMessage[]): string {
 export function nonSystemChatMessages(messages: RuntimeMessage[]): Array<{ role: 'user' | 'assistant'; content: string }> {
   const output: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   for (const message of messages) {
+    if (message.visibility === 'transcript') continue;
     if (message.role === 'user' || message.role === 'assistant') {
       output.push({ role: message.role, content: message.content });
     }
@@ -128,6 +130,7 @@ export function nonSystemChatMessages(messages: RuntimeMessage[]): Array<{ role:
 export function toOpenAiResponsesInput(messages: RuntimeMessage[]): unknown[] {
   const output: unknown[] = [];
   for (const message of messages) {
+    if (message.visibility === 'transcript') continue;
     if (message.role === 'user') {
       output.push({ role: 'user', content: openAiResponsesContentParts(message) });
     } else if (message.role === 'assistant') {
@@ -163,6 +166,7 @@ export function toOpenAiResponsesTools(tools: RuntimeToolDefinition[] = []): unk
 export function toAnthropicMessages(messages: RuntimeMessage[]): Array<Record<string, unknown>> {
   const output: Array<Record<string, unknown>> = [];
   for (const message of messages) {
+    if (message.visibility === 'transcript') continue;
     if (message.role === 'user') {
       output.push({ role: 'user', content: anthropicUserContentParts(message) });
     } else if (message.role === 'assistant') {

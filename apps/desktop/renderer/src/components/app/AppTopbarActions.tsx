@@ -7,16 +7,14 @@ export function AppTopbarActions({
   activeView,
   bottomTerminalPanelOpen,
   sidePanelVisible,
-  reviewPanelOpen,
-  onOpenReviewPanel,
+  onToggleSidePanel,
   onToggleBottomTerminal,
 }: {
   hasProject: boolean;
   activeView: MainView;
   bottomTerminalPanelOpen: boolean;
   sidePanelVisible: boolean;
-  reviewPanelOpen: boolean;
-  onOpenReviewPanel: () => void;
+  onToggleSidePanel: () => void;
   onToggleBottomTerminal: () => void;
 }) {
   return (
@@ -31,7 +29,7 @@ export function AppTopbarActions({
         </IconButton>
       ) : null}
       {activeView === 'chat' && hasProject && !sidePanelVisible ? (
-        <IconButton label={reviewPanelOpen ? '收起审查面板' : '展开审查面板'} className={reviewPanelOpen ? 'is-active' : ''} onClick={onOpenReviewPanel}>
+        <IconButton label="打开右侧栏" onClick={onToggleSidePanel}>
           <PanelRight size={16} />
         </IconButton>
       ) : null}

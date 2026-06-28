@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
+const usesCustomFrame = process.platform !== 'darwin';
 
 async function createWindow(): Promise<void> {
   runtimeHost = new RuntimeHost({
@@ -27,8 +28,10 @@ async function createWindow(): Promise<void> {
     minWidth: 960,
     minHeight: 640,
     title: 'Setsuna Desktop',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    frame: !usesCustomFrame,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
     trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 14 } : undefined,
+    autoHideMenuBar: usesCustomFrame,
     backgroundColor: '#ffffff',
     show: false,
     webPreferences: {
@@ -38,6 +41,7 @@ async function createWindow(): Promise<void> {
       sandbox: false,
     },
   });
+  if (usesCustomFrame) mainWindow.setMenu(null);
   terminalStore = new DesktopTerminalStore((payload) => {
     mainWindow?.webContents.send('terminal:event', payload);
   });
@@ -82,6 +86,10 @@ function registerDesktopIpc(terminal: DesktopTerminalStore): void {
   ipcMain.removeHandler('desktop:select-directory');
   ipcMain.removeHandler('desktop:get-user-profile');
   ipcMain.removeHandler('desktop:open-external');
+  ipcMain.removeHandler('window-control:minimize');
+  ipcMain.removeHandler('window-control:toggle-maximize');
+  ipcMain.removeHandler('window-control:close');
+  ipcMain.removeHandler('window-control:is-maximized');
   ipcMain.removeHandler('desktop-review:get-state');
   ipcMain.removeHandler('desktop-review:discard-unstaged');
   ipcMain.removeHandler('desktop-review:stage-files');
@@ -107,6 +115,25 @@ function registerDesktopIpc(terminal: DesktopTerminalStore): void {
     await shell.openExternal(String(url ?? ''));
     return true;
   });
+  ipcMain.handle('window-control:minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+    return true;
+  });
+  ipcMain.handle('window-control:toggle-maximize', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return false;
+    if (window.isMaximized()) {
+      window.unmaximize();
+    } else {
+      window.maximize();
+    }
+    return window.isMaximized();
+  });
+  ipcMain.handle('window-control:close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+    return true;
+  });
+  ipcMain.handle('window-control:is-maximized', (event) => Boolean(BrowserWindow.fromWebContents(event.sender)?.isMaximized()));
   ipcMain.handle('desktop-review:get-state', async (_event, input) => getDesktopReviewState(String(input?.workspaceRoot ?? '')));
   ipcMain.handle('desktop-review:discard-unstaged', async (_event, input) =>
     discardUnstagedReviewFiles(String(input?.workspaceRoot ?? ''), normalizeFilePathList(input?.filePaths)),

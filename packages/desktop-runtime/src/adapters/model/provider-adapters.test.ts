@@ -257,6 +257,13 @@ describe('provider model adapters', () => {
           toolCallId: 'old_call',
           toolName: 'workspace_search_text',
         },
+        {
+          id: 'injected-hidden',
+          role: 'user',
+          content: 'Injected hidden boundary',
+          createdAt: '2026-06-25T00:00:04.000Z',
+          visibility: 'model',
+        },
       ],
       tools: [
         {
@@ -278,6 +285,7 @@ describe('provider model adapters', () => {
     ]);
     expect(body.input).toContainEqual({ type: 'function_call', call_id: 'old_call', name: 'workspace_search_text', arguments: '{"query":"old"}' });
     expect(body.input).toContainEqual({ type: 'function_call_output', call_id: 'old_call', output: 'old result' });
+    expect(body.input).toContainEqual({ role: 'user', content: 'Injected hidden boundary' });
     expect(events.find((event) => event.type === 'tool_calls')).toEqual({
       type: 'tool_calls',
       toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],

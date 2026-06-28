@@ -83,8 +83,24 @@ export class WorkspaceToolHost implements ToolHost {
     ];
   }
 
-  async approvalForTool(_name: string, _input: unknown, _context: ToolExecutionContext): Promise<{ reason: string; argumentsPreview?: string } | null> {
-    return null;
+  async approvalForTool(name: string, input: unknown, context: ToolExecutionContext): Promise<{ reason: string; argumentsPreview?: string } | null> {
+    if (name !== 'workspace_write_file') return null;
+    const args = objectInput(input);
+    const project = await this.projectFor(this.resolveProjectId(args.projectId, context));
+    const filePath = requiredStringArg(args.path, 'path');
+    const content = requiredContentArg(args.content);
+    const previous = await this.projects.readFile(project.id, filePath).catch(() => null);
+    const diff = fileChangePreview({
+      created: !previous,
+      nextContent: content,
+      path: filePath,
+      previousContent: previous?.content ?? null,
+      previousTruncated: Boolean(previous?.truncated),
+    });
+    return {
+      reason: `Review file change before applying workspace_write_file to ${diff.path}.`,
+      argumentsPreview: JSON.stringify({ diff }),
+    };
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
@@ -121,7 +137,7 @@ export class WorkspaceToolHost implements ToolHost {
 
     if (name === 'workspace_write_file') {
       if (context.permissionProfile === 'read-only') {
-        throw new Error('当前权限配置为 read-only，不能修改工作区文件。');
+        throw new Error('The current permission profile is read-only, so workspace files cannot be modified.');
       }
       const filePath = requiredStringArg(args.path, 'path');
       const content = requiredContentArg(args.content);
@@ -130,12 +146,12 @@ export class WorkspaceToolHost implements ToolHost {
       const diff = fileChangePreview({
         created: result.created,
         nextContent: content,
-        path: result.path,
+        path: normalizeDisplayPath(result.path),
         previousContent: previous?.content ?? null,
         previousTruncated: Boolean(previous?.truncated),
       });
       return {
-        content: `${result.created ? 'Created' : 'Updated'} ${result.path} (${result.size} bytes).`,
+        content: `${result.created ? 'Created' : 'Updated'} ${diff.path} (${result.size} bytes).`,
         preview: JSON.stringify({ diff }),
         data: { ...result, diff },
       };
@@ -255,4 +271,8 @@ function splitFileLines(value: string): string[] {
   const lines = value.replace(/\r\n/g, '\n').split('\n');
   if (lines[lines.length - 1] === '') lines.pop();
   return lines;
+}
+
+function normalizeDisplayPath(value: string): string {
+  return value.replace(/\\/g, '/');
 }

@@ -132,4 +132,51 @@ describe('runtime file changes', () => {
       deletions: 0,
     });
   });
+
+  it('does not merge adjacent assistant file change groups from different turns', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'assistant_1',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+        toolRuns: [
+          {
+            id: 'call_old',
+            name: 'workspace_write_file',
+            status: 'success',
+            resultPreview: JSON.stringify({
+              diff: { path: 'merge_sort.py', action: 'Created', additions: 12, deletions: 0, truncated: false, lines: [] },
+            }),
+          },
+        ],
+      },
+      {
+        id: 'assistant_2',
+        role: 'assistant',
+        turnId: 'turn_2',
+        content: '',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+        toolRuns: [
+          {
+            id: 'call_new',
+            name: 'workspace_write_file',
+            status: 'success',
+            resultPreview: JSON.stringify({
+              diff: { path: 'merge_sort.py', action: 'Modified', additions: 1, deletions: 1, truncated: false, lines: [] },
+            }),
+          },
+        ],
+      },
+    ];
+
+    expect(latestFileChangeSummaryFromMessages(messages)).toMatchObject({
+      files: [{ path: 'merge_sort.py', action: 'Modified', additions: 1, deletions: 1 }],
+      additions: 1,
+      deletions: 1,
+    });
+  });
 });

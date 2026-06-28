@@ -4,15 +4,18 @@ export type RuntimeMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export type RuntimeMessage = {
   id: string;
+  clientId?: string;
   turnId?: string;
   role: RuntimeMessageRole;
   content: string;
   createdAt: string;
   completedAt?: string;
   status?: 'streaming' | 'complete' | 'error';
+  visibility?: 'transcript' | 'model';
   error?: string;
   attachments?: RuntimeMessageAttachment[];
   contextCompaction?: RuntimeContextCompactionNotice;
+  reviewMode?: RuntimeReviewModeNotice;
   toolCallId?: string;
   toolName?: string;
   toolCalls?: RuntimeToolCall[];
@@ -47,6 +50,11 @@ export type RuntimeContextCompactionNotice = {
   triggerScopes?: string[];
 };
 
+export type RuntimeReviewModeNotice = {
+  kind: 'entered' | 'exited';
+  review: string;
+};
+
 export type RuntimeThreadContextCompactionState = {
   status: 'running' | 'completed';
   completedAt?: string;
@@ -59,14 +67,36 @@ export type RuntimeThreadContextCompactionState = {
   usedTokens?: number;
 };
 
+export type RuntimeThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete';
+
+export type RuntimeThreadGoal = {
+  threadId: string;
+  objective: string;
+  status: RuntimeThreadGoalStatus;
+  tokenBudget: number | null;
+  tokensUsed: number;
+  timeUsedSeconds: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type RuntimeGitInfo = {
+  sha: string | null;
+  branch: string | null;
+  originUrl: string | null;
+};
+
 export type RuntimeToolRunStatus = 'pending_approval' | 'running' | 'success' | 'error' | 'rejected';
 
 export type RuntimeToolRun = {
   id: string;
   name: string;
+  source?: 'agent' | 'userShell';
   status: RuntimeToolRunStatus;
   argumentsPreview?: string;
   resultPreview?: string;
+  data?: unknown;
+  durationMs?: number;
   startedAt?: string;
   completedAt?: string;
   approvalId?: string;
@@ -77,11 +107,14 @@ export type RuntimeToolRun = {
 
 export type RuntimeThreadSummary = {
   id: string;
+  forkedFromId?: string;
   projectId?: string;
   title: string;
   createdAt: string;
   updatedAt: string;
   archived: boolean;
+  gitInfo?: RuntimeGitInfo | null;
+  goal?: RuntimeThreadGoal;
   messageCount: number;
   lastMessagePreview: string;
 };
@@ -106,6 +139,7 @@ export type ThreadList = {
 export type CreateThreadInput = {
   title?: string;
   projectId?: string;
+  forkedFromId?: string;
 };
 
 export type ThreadPatch = {
@@ -115,6 +149,7 @@ export type ThreadPatch = {
 
 export type SendTurnInput = {
   input: string;
+  clientId?: string;
   attachments?: RuntimeMessageAttachment[];
   skillIds?: string[];
   thinking?: boolean;

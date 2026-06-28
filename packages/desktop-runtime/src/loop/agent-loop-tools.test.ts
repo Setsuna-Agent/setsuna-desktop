@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelRequest, ModelStreamEvent, RuntimeToolDefinition, RuntimeUsageRecord } from '@setsuna-desktop/contracts';
+import type { ModelRequest, ModelStreamEvent, RuntimeEvent, RuntimeToolDefinition, RuntimeUsageRecord } from '@setsuna-desktop/contracts';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
@@ -40,9 +40,13 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('file contents'))).toBe(true);
     expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'workspace_read_file')).toBe(true);
     expect(events.some((event) => event.type === 'tool.completed' && event.payload.status === 'success')).toBe(true);
+    const completed = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
+      event.type === 'tool.completed' && event.payload.toolName === 'workspace_read_file');
+    expect(completed?.payload.argumentsPreview).toContain('README.md');
+    expect(completed?.payload.durationMs).toEqual(expect.any(Number));
     expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
     expect(saved?.messages.find((message) => message.role === 'assistant' && message.toolCalls?.length)?.toolRuns).toMatchObject([
-      { id: 'call_1', name: 'workspace_read_file', status: 'success' },
+      { id: 'call_1', name: 'workspace_read_file', status: 'success', argumentsPreview: expect.stringContaining('README.md'), durationMs: expect.any(Number) },
     ]);
     expect(saved?.messages.find((message) => message.role === 'tool')?.content).toContain('file contents');
     expect(saved?.messages.at(-1)?.content).toContain('I read the file.');
@@ -56,6 +60,38 @@ describe('agent loop tools', () => {
         totalTokens: 8,
       },
     ]);
+  });
+
+  it('publishes tool output deltas before completing command tools', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Output delta loop' });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new ShellOutputDeltaModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new OutputDeltaToolHost(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run command' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const deltaIndex = events.findIndex((event) => event.type === 'tool.output_delta');
+    const completedIndex = events.findIndex((event) => event.type === 'tool.completed' && event.payload.toolName === 'run_shell_command');
+
+    expect(deltaIndex).toBeGreaterThanOrEqual(0);
+    expect(completedIndex).toBeGreaterThan(deltaIndex);
+    expect(events[deltaIndex]).toMatchObject({
+      type: 'tool.output_delta',
+      payload: {
+        toolCallId: 'call_shell',
+        toolName: 'run_shell_command',
+        stream: 'stdout',
+        processId: 'shell_test',
+        delta: 'streamed output\n',
+      },
+    });
   });
 
   it('runs consecutive read-only local tool calls in parallel', async () => {
@@ -180,6 +216,8 @@ describe('agent loop tools', () => {
 
     const compacted = await loop.compactThreadContext(thread.id);
     const events = await threadStore.listEvents(thread.id, 0);
+    const compactingEvent = events.find((event) => event.type === 'thread.context_compacting');
+    const compactedEvent = events.find((event) => event.type === 'thread.context_compacted');
 
     expect(modelClient.requests).toHaveLength(1);
     expect(modelClient.requests[0]).toMatchObject({
@@ -188,10 +226,59 @@ describe('agent loop tools', () => {
       temperature: 0,
       toolChoice: 'none',
     });
-    expect(events.some((event) => event.type === 'thread.context_compacting')).toBe(true);
-    expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(true);
+    expect(compactingEvent?.turnId).toBeTruthy();
+    expect(compactedEvent?.turnId).toBe(compactingEvent?.turnId);
     expect(compacted.messages[0].contextCompaction?.triggerScopes).toEqual(['manual']);
+    expect(compacted.messages[0].turnId).toBe(compactedEvent?.turnId);
     expect(compacted.messages[0].content).toContain('模型整理后的上下文摘要');
+  });
+
+  it('automatically compacts oversized context before the next model request', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Automatic context compaction' });
+    const oversizedHistory = 'older context '.repeat(90_000);
+    for (let index = 0; index < 9; index += 1) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'message.created',
+        createdAt: `2026-06-26T00:00:${String(index).padStart(2, '0')}.000Z`,
+        payload: {
+          message: {
+            id: `msg_${index}`,
+            role: index % 2 ? 'assistant' : 'user',
+            content: index === 0 ? oversizedHistory : `recent message ${index}`,
+            createdAt: `2026-06-26T00:00:${String(index).padStart(2, '0')}.000Z`,
+            status: 'complete',
+          },
+        },
+      });
+    }
+    const modelClient = new AutoCompactionModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'continue after history' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const compactedEvent = events.find((event) => event.type === 'thread.context_compacted' && event.turnId);
+    const mainRequest = modelClient.requests.find((request) => request.model === 'local-runtime-smoke');
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
+    expect(events.some((event) => event.type === 'thread.context_compacting' && event.turnId)).toBe(true);
+    expect(compactedEvent?.turnId).toBeTruthy();
+    expect(saved?.messages[0].turnId).toBe(compactedEvent?.turnId);
+    expect(saved?.messages[0].contextCompaction?.triggerScopes).toEqual(['total']);
+    expect(saved?.messages[0].content).toContain('<context_compaction_summary');
+    expect(saved?.messages.some((message) => message.content === 'continue after history')).toBe(true);
+    expect(mainRequest?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
+    expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(oversizedHistory.slice(0, 200));
   });
 
   it('forces a final no-tool response when the tool loop reaches its round limit', async () => {
@@ -359,6 +446,11 @@ describe('agent loop tools', () => {
     expect(toolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
     expect(modelClient.requests).toHaveLength(2);
     expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('approved result'))).toBe(true);
+    const startedIndex = events.findIndex((event) => event.type === 'tool.started' && event.payload.toolName === 'dangerous_tool');
+    const approvalIndex = events.findIndex((event) => event.type === 'approval.requested');
+    expect(startedIndex).toBeGreaterThanOrEqual(0);
+    expect(approvalIndex).toBeGreaterThanOrEqual(0);
+    expect(startedIndex).toBeLessThan(approvalIndex);
     expect(events.some((event) => event.type === 'approval.requested')).toBe(true);
     expect(events.some((event) => event.type === 'tool.completed' && event.payload.status === 'success')).toBe(true);
   });
@@ -510,6 +602,24 @@ class ToolCallingModelClient implements ModelClient {
   }
 }
 
+class ShellOutputDeltaModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_shell', name: 'run_shell_command', arguments: '{"command":"echo streamed","risk_level":"low"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'saw output' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class ParallelReadModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -598,6 +708,30 @@ class ContextCompactionModelClient implements ModelClient {
   }
 }
 
+class AutoCompactionModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'context-compaction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          summary: 'Automatic summary for oversized history.',
+          important_constraints: ['Keep the current task.'],
+          open_items: ['Continue the turn.'],
+          already_said: 'Older history was summarized.',
+          tool_context: 'No active tool context.',
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Final answer after automatic compaction.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class CapturingToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown; projectId?: string }> = [];
 
@@ -618,6 +752,34 @@ class CapturingToolHost implements ToolHost {
   async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     this.calls.push({ name, input, projectId: context.projectId });
     return { content: 'file contents from tool' };
+  }
+}
+
+class OutputDeltaToolHost implements ToolHost {
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'run_shell_command',
+        description: 'Run a command',
+        inputSchema: {
+          type: 'object',
+          properties: { command: { type: 'string' }, risk_level: { type: 'string' } },
+          required: ['command', 'risk_level'],
+        },
+      },
+    ];
+  }
+
+  async runTool(_name: string, _input: unknown, context: ToolExecutionContext) {
+    context.onToolOutputDelta?.({
+      delta: 'streamed output\n',
+      stream: 'stdout',
+      processId: 'shell_test',
+    });
+    return {
+      content: 'command completed',
+      data: { process_id: 'shell_test', command: 'echo streamed', exit_code: 0 },
+    };
   }
 }
 

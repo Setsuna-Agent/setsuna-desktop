@@ -58,8 +58,15 @@ export class PcLocalToolHost implements ToolHost {
 
   async approvalForTool(name: string, input: unknown, context: ToolExecutionContext) {
     const normalized = this.normalizeToolCall(name, input);
-    if (FILE_MUTATION_TOOLS.has(normalized.name)) return null;
     const projectState = await this.projectStateFor(context);
+    if (ACTUAL_FILE_MUTATION_TOOLS.has(normalized.name)) {
+      const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
+      return {
+        reason: fileMutationApprovalReason(normalized.name, normalized.args, preview),
+        argumentsPreview: preview ? previewPayload(preview) : previewArguments(normalized.args),
+      };
+    }
+    if (FILE_MUTATION_TOOLS.has(normalized.name)) return null;
     if (normalized.name === 'run_shell_command') {
       const risk = pcTools.shellCommandRisk(
         stringArg(normalized.args.command),
@@ -115,6 +122,15 @@ export class PcLocalToolHost implements ToolHost {
 
     const result = await pcTools.executeLocalTool(normalized.name, normalized.args, projectState.toolState, {
       signal: context.signal,
+      onProgress: context.onToolOutputDelta
+        ? (progress: Record<string, unknown>) => {
+            const processId = stringArg(progress.process_id);
+            const stdoutDelta = stringArg(progress.stdout_delta);
+            const stderrDelta = stringArg(progress.stderr_delta);
+            if (stdoutDelta) context.onToolOutputDelta?.({ delta: stdoutDelta, stream: 'stdout', processId });
+            if (stderrDelta) context.onToolOutputDelta?.({ delta: stderrDelta, stream: 'stderr', processId });
+          }
+        : undefined,
     }) as Record<string, unknown>;
     if (!result?.ok) {
       throw new Error(stringArg(result?.display || result?.content || `Local tool failed: ${normalized.name}`));
@@ -291,6 +307,21 @@ function previewPayload(value: unknown): string {
 
 function isDiffLike(value: Record<string, unknown>): boolean {
   return typeof value.path === 'string' && (typeof value.additions === 'number' || typeof value.deletions === 'number' || Array.isArray(value.diffs));
+}
+
+function fileMutationApprovalReason(name: string, args: Record<string, unknown>, preview: unknown): string {
+  const paths = previewFilePaths(preview);
+  const target = paths.length
+    ? paths.length === 1 ? paths[0] : `${paths.length} files`
+    : shortSingleLine(args.file_path ?? args.path ?? args.target_path ?? args.file ?? name);
+  return `Review file change before applying ${name}${target ? ` to ${target}` : ''}.`;
+}
+
+function previewFilePaths(value: unknown): string[] {
+  const record = recordInput(value);
+  const diff = recordInput(record.diff ?? record);
+  const diffs = Array.isArray(diff.diffs) ? diff.diffs : [diff];
+  return [...new Set(diffs.map((item) => recordInput(item).path).filter((item): item is string => typeof item === 'string' && Boolean(item.trim())))];
 }
 
 function previewArguments(value: unknown): string {

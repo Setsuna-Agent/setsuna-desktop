@@ -20,7 +20,7 @@ import type { MemoryStore } from '../ports/memory-store.js';
 import type { ModelClient } from '../ports/model-client.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
-import type { ToolExecutionContext, ToolHost } from '../ports/tool-host.js';
+import type { ToolExecutionContext, ToolHost, ToolOutputDelta } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import {
   CONTEXT_COMPACTION_MAX_TOKENS_K,
@@ -73,9 +73,27 @@ type ToolCallExecution = {
   message: RuntimeMessage;
   processed: boolean;
 };
+type ActiveTurnKind = 'conversation' | 'review';
+type ActiveTurnState = {
+  turnId: string;
+  controller: AbortController;
+  kind: ActiveTurnKind;
+};
+type ReviewTurnInput = {
+  displayText: string;
+  prompt: string;
+};
+type RunTurnOptions = {
+  clientId?: string;
+  modelInput?: string;
+  publishUserMessage?: boolean;
+  review?: { displayText: string };
+  userMessage?: RuntimeMessage;
+};
 
 export class AgentLoop {
   private readonly activeTurns = new Map<string, AbortController>();
+  private readonly activeTurnByThread = new Map<string, ActiveTurnState>();
 
   constructor(private readonly options: AgentLoopOptions) {}
 
@@ -96,6 +114,12 @@ export class AgentLoop {
     await run.done;
   }
 
+  async startReview(threadId: string, input: ReviewTurnInput): Promise<SendTurnResponse> {
+    const run = await this.createReviewRun(threadId, input);
+    void run.done.catch(() => undefined);
+    return { accepted: true, turnId: run.turnId };
+  }
+
   async cancelTurn(threadId: string, turnId: string): Promise<boolean> {
     const controller = this.activeTurns.get(activeTurnKey(threadId, turnId));
     if (!controller || controller.signal.aborted) return false;
@@ -103,12 +127,50 @@ export class AgentLoop {
     return true;
   }
 
+  activeTurnId(threadId: string): string | null {
+    const active = this.activeTurnByThread.get(threadId);
+    if (!active || active.controller.signal.aborted) return null;
+    return active.turnId;
+  }
+
+  async steerTurn(
+    threadId: string,
+    input: SendTurnInput & { expectedTurnId: string },
+  ): Promise<SendTurnResponse> {
+    const text = input.input.trim();
+    const attachments = normalizeAttachments(input.attachments);
+    if (!text && !attachments.length) throw new Error('input must not be empty');
+    await this.assertImageAttachmentsSupported(attachments);
+
+    const active = this.activeTurnByThread.get(threadId);
+    if (!active || active.controller.signal.aborted) throw new Error('no active turn to steer');
+    if (active.kind !== 'conversation') throw new Error('cannot steer a review turn');
+    if (active.turnId !== input.expectedTurnId) {
+      throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active.turnId}\``);
+    }
+
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+    await this.publishMessage(threadId, active.turnId, {
+      id: this.options.ids.id('msg'),
+      clientId: input.clientId,
+      turnId: active.turnId,
+      role: 'user',
+      content: text,
+      attachments,
+      createdAt: this.options.clock.now().toISOString(),
+      status: 'complete',
+    });
+    return { accepted: true, turnId: active.turnId };
+  }
+
   async compactThreadContext(threadId: string, force = true): Promise<RuntimeThread> {
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
     const candidate = createRuntimeContextCompactionCandidate({ force, messages: thread.messages });
     if (!candidate) return thread;
-    await this.publishContextCompacting(threadId, undefined, force, thread.messages);
+    const turnId = this.options.ids.id('turn');
+    await this.publishContextCompacting(threadId, turnId, force, thread.messages);
     try {
       const summary = await this.generateContextCompactionSummary(candidate);
       const result = materializeRuntimeContextCompaction({
@@ -116,10 +178,12 @@ export class AgentLoop {
         createdAt: this.options.clock.now().toISOString(),
         id: this.options.ids.id('msg'),
         summary: summary.text,
+        turnId,
       });
       await this.appendAndPublish(threadId, {
         id: this.options.ids.id('event'),
         threadId,
+        turnId,
         type: 'thread.context_compacted',
         createdAt: this.options.clock.now().toISOString(),
         payload: result,
@@ -129,6 +193,7 @@ export class AgentLoop {
       await this.appendAndPublish(threadId, {
         id: this.options.ids.id('event'),
         threadId,
+        turnId,
         type: 'runtime.error',
         createdAt: this.options.clock.now().toISOString(),
         payload: {
@@ -156,6 +221,7 @@ export class AgentLoop {
     const controller = new AbortController();
     const key = activeTurnKey(threadId, turnId);
     this.activeTurns.set(key, controller);
+    this.activeTurnByThread.set(threadId, { turnId, controller, kind: 'conversation' });
     const done = this.runTurn(
       threadId,
       text,
@@ -164,10 +230,56 @@ export class AgentLoop {
       thread,
       turnId,
       controller.signal,
-      {},
+      { clientId: input.clientId },
       turnThinkingOptions(input),
     ).finally(() => {
       if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
+      if (this.activeTurnByThread.get(threadId)?.controller === controller) this.activeTurnByThread.delete(threadId);
+    });
+    return { turnId, done };
+  }
+
+  private async createReviewRun(
+    threadId: string,
+    input: ReviewTurnInput,
+  ): Promise<{ turnId: string; done: Promise<void> }> {
+    const displayText = input.displayText.trim();
+    const prompt = input.prompt.trim();
+    if (!displayText) throw new Error('review display text is required');
+    if (!prompt) throw new Error('review prompt is required');
+
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+
+    const turnId = this.options.ids.id('turn');
+    const controller = new AbortController();
+    const key = activeTurnKey(threadId, turnId);
+    this.activeTurns.set(key, controller);
+    this.activeTurnByThread.set(threadId, { turnId, controller, kind: 'review' });
+    const done = this.runTurn(
+      threadId,
+      displayText,
+      [],
+      [],
+      thread,
+      turnId,
+      controller.signal,
+      {
+        modelInput: prompt,
+        review: { displayText },
+        userMessage: {
+          id: turnId,
+          turnId,
+          role: 'user',
+          content: displayText,
+          createdAt: this.options.clock.now().toISOString(),
+          status: 'complete',
+        },
+      },
+      {},
+    ).finally(() => {
+      if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
+      if (this.activeTurnByThread.get(threadId)?.controller === controller) this.activeTurnByThread.delete(threadId);
     });
     return { turnId, done };
   }
@@ -202,6 +314,7 @@ export class AgentLoop {
     const controller = new AbortController();
     const key = activeTurnKey(threadId, turnId);
     this.activeTurns.set(key, controller);
+    this.activeTurnByThread.set(threadId, { turnId, controller, kind: 'conversation' });
     const done = this.runTurn(
       threadId,
       text,
@@ -217,6 +330,7 @@ export class AgentLoop {
       turnThinkingOptions(input),
     ).finally(() => {
       if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
+      if (this.activeTurnByThread.get(threadId)?.controller === controller) this.activeTurnByThread.delete(threadId);
     });
     return { turnId, done };
   }
@@ -229,7 +343,7 @@ export class AgentLoop {
     thread: RuntimeThread,
     turnId: string,
     signal: AbortSignal,
-    options: { userMessage?: RuntimeMessage; publishUserMessage?: boolean } = {},
+    options: RunTurnOptions = {},
     thinkingOptions: TurnThinkingOptions = {},
   ): Promise<void> {
     const createdAt = this.options.clock.now().toISOString();
@@ -238,6 +352,7 @@ export class AgentLoop {
     const userMessage: RuntimeMessage =
       options.userMessage ?? {
         id: this.options.ids.id('msg'),
+        clientId: options.clientId,
         turnId,
         role: 'user',
         content: text,
@@ -245,6 +360,9 @@ export class AgentLoop {
         createdAt,
         status: 'complete',
       };
+    const modelUserMessage: RuntimeMessage = options.modelInput
+      ? { ...userMessage, content: options.modelInput }
+      : userMessage;
 
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
@@ -255,6 +373,7 @@ export class AgentLoop {
       payload: { input: text },
     });
     if (publishUserMessage) await this.publishMessage(threadId, turnId, userMessage);
+    if (options.review) await this.publishReviewModeMessage(threadId, turnId, 'entered', options.review.displayText);
 
     let usage: RuntimeUsage | undefined;
     let turnCompleted = false;
@@ -267,6 +386,9 @@ export class AgentLoop {
         threadId,
         turnId,
       });
+      const modelConversationMessages = options.modelInput && publishUserMessage
+        ? conversationMessages.map((message) => (message.id === userMessage.id ? modelUserMessage : message))
+        : conversationMessages;
       const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
       const toolContext = {
         threadId,
@@ -286,7 +408,7 @@ export class AgentLoop {
         ...(await this.memoryContextMessages(thread.projectId, runtimeConfig)),
         ...(await this.toolSystemPromptMessages(toolContext)),
         ...(await this.skillContextMessages(skillIds)),
-        ...conversationMessages,
+        ...modelConversationMessages,
       ];
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
@@ -367,7 +489,7 @@ export class AgentLoop {
           continue;
         }
 
-        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage);
+        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, { review: options.review ? roundText : undefined });
         activeAssistantMessageId = null;
         turnCompleted = true;
         break;
@@ -429,9 +551,10 @@ export class AgentLoop {
             createdAt: this.options.clock.now().toISOString(),
             payload: { messageId: assistantMessageId, text: fallbackText },
           });
+          finalText = fallbackText;
         }
 
-        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage);
+        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, { review: options.review ? finalText : undefined });
         activeAssistantMessageId = null;
       }
     } catch (error) {
@@ -509,7 +632,13 @@ export class AgentLoop {
     });
   }
 
-  private async finishAssistantTurn(threadId: string, turnId: string, messageId: string, usage?: RuntimeUsage): Promise<void> {
+  private async finishAssistantTurn(
+    threadId: string,
+    turnId: string,
+    messageId: string,
+    usage?: RuntimeUsage,
+    options: { review?: string } = {},
+  ): Promise<void> {
     if (usage) {
       await this.options.usageStore?.recordUsage({
         threadId,
@@ -519,6 +648,9 @@ export class AgentLoop {
       });
     }
     await this.completeMessage(threadId, turnId, messageId, { usage });
+    if (options.review !== undefined) {
+      await this.publishReviewModeMessage(threadId, turnId, 'exited', options.review.trim() || 'Review completed.');
+    }
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -526,6 +658,24 @@ export class AgentLoop {
       type: 'turn.completed',
       createdAt: this.options.clock.now().toISOString(),
       payload: { usage },
+    });
+  }
+
+  private async publishReviewModeMessage(
+    threadId: string,
+    turnId: string,
+    kind: NonNullable<RuntimeMessage['reviewMode']>['kind'],
+    review: string,
+  ): Promise<void> {
+    await this.publishMessage(threadId, turnId, {
+      id: this.options.ids.id('msg'),
+      turnId,
+      role: 'system',
+      content: '',
+      createdAt: this.options.clock.now().toISOString(),
+      status: 'complete',
+      visibility: 'transcript',
+      reviewMode: { kind, review },
     });
   }
 
@@ -561,6 +711,7 @@ export class AgentLoop {
       createdAt: this.options.clock.now().toISOString(),
       id: this.options.ids.id('msg'),
       summary: summary.text,
+      turnId,
     });
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
@@ -806,40 +957,66 @@ export class AgentLoop {
   ): Promise<ToolCallExecution> {
     let content = '';
     let processed = false;
+    let parsedArguments: unknown;
+    let startResultPreview: string | undefined;
+    let startedAtMs: number | undefined;
+    const outputDeltaPublishes: Promise<void>[] = [];
     try {
       throwIfAborted(context.signal);
-      const parsedArguments = parseToolArguments(toolCall.arguments);
+      parsedArguments = parseToolArguments(toolCall.arguments);
       const budgetBlock = options.checkBudget === false ? null : toolBudgetBlockForCall(toolCall, toolBudget);
       if (budgetBlock) {
         content = budgetBlock.content;
-        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'error', budgetBlock.display);
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', budgetBlock.display);
         return {
           message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
           processed,
         };
       }
+      const startPreview = await this.options.toolHost?.previewToolCall?.(toolCall.name, parsedArguments, context).catch(() => null);
+      startResultPreview = startPreview?.resultPreview;
+      startedAtMs = this.options.clock.now().getTime();
+      await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, startResultPreview);
       const approval = options.skipApproval ? 'not-required' : await this.approveToolCall(toolCall, parsedArguments, context, approvalPolicy);
       if (approval === 'reject') {
         content = `Tool ${toolCall.name} was rejected by the user.`;
-        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'rejected', content);
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'rejected', content, {
+          resultPreview: startResultPreview,
+          startedAtMs,
+        });
         return {
           message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
           processed,
         };
       }
       throwIfAborted(context.signal);
-      const startPreview = await this.options.toolHost?.previewToolCall?.(toolCall.name, parsedArguments, context).catch(() => null);
-      await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, startPreview?.resultPreview);
-      const result = await this.options.toolHost!.runTool(toolCall.name, parsedArguments, context);
+      const toolRunContext: RuntimeToolExecutionContext = {
+        ...context,
+        toolCallId: toolCall.id,
+        onToolOutputDelta: (delta) => {
+          const publish = this.publishToolOutputDelta(context.threadId, context.turnId, toolCall, delta).catch(() => undefined);
+          outputDeltaPublishes.push(publish);
+        },
+      };
+      const result = await this.options.toolHost!.runTool(toolCall.name, parsedArguments, toolRunContext);
       processed = true;
       throwIfAborted(context.signal);
       content = result.content;
-      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'success', result.preview ?? content);
+      await Promise.all(outputDeltaPublishes);
+      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', result.preview ?? content, {
+        data: result.data,
+        resultPreview: result.preview,
+        startedAtMs,
+      });
     } catch (error) {
       if (isAbortError(error)) throw error;
       processed = true;
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
-      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, 'error', content);
+      await Promise.all(outputDeltaPublishes);
+      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content, {
+        resultPreview: startResultPreview,
+        startedAtMs,
+      });
     }
     return {
       message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
@@ -930,24 +1107,54 @@ export class AgentLoop {
     });
   }
 
+  private async publishToolOutputDelta(
+    threadId: string,
+    turnId: string,
+    toolCall: RuntimeToolCall,
+    delta: ToolOutputDelta,
+  ): Promise<void> {
+    if (!delta.delta) return;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'tool.output_delta',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: {
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        delta: delta.delta,
+        stream: delta.stream,
+        processId: delta.processId,
+      },
+    });
+  }
+
   private async publishToolCompleted(
     threadId: string,
     turnId: string,
     toolCall: RuntimeToolCall,
+    parsedArguments: unknown,
     status: 'success' | 'error' | 'rejected',
     content: string,
+    metadata: { data?: unknown; resultPreview?: string; startedAtMs?: number } = {},
   ): Promise<void> {
+    const completedAt = this.options.clock.now();
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
       type: 'tool.completed',
-      createdAt: this.options.clock.now().toISOString(),
+      createdAt: completedAt.toISOString(),
       payload: {
         toolCallId: toolCall.id,
         toolName: toolCall.name,
         status,
         content: previewToolContent(content),
+        argumentsPreview: previewArguments(parsedArguments),
+        resultPreview: metadata.resultPreview ? previewToolContent(metadata.resultPreview) : undefined,
+        data: metadata.data,
+        durationMs: metadata.startedAtMs === undefined ? undefined : Math.max(0, completedAt.getTime() - metadata.startedAtMs),
       },
     });
   }

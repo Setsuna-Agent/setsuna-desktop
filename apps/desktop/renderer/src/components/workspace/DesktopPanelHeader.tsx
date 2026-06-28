@@ -191,7 +191,8 @@ export function DesktopPanelHeader({
               .filter(Boolean)
               .join(' ')}
             type="button"
-            aria-label={placement === 'side' ? '收起面板' : '关闭面板'}
+            aria-label={placement === 'side' ? '收起右侧栏' : '关闭面板'}
+            title={placement === 'side' ? '收起右侧栏' : '关闭面板'}
             onClick={onClose}
           >
             {placement === 'side' ? <PanelRight size={14} /> : <X size={14} />}

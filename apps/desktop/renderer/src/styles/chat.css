@@ -138,6 +138,30 @@
   color: var(--app-primary);
 }
 
+.chat-review-mode-marker {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: min(760px, 100%);
+  padding: 1px 0 1px 4px;
+  color: color-mix(in srgb, var(--app-text-secondary) 78%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-review-mode-marker__line {
+  height: 1px;
+  background: color-mix(in srgb, var(--app-primary) 36%, var(--app-border));
+}
+
+.chat-review-mode-marker__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-bubble-item--selecting {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr);

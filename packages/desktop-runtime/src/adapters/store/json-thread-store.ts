@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   CreateThreadInput,
@@ -61,6 +61,7 @@ export class JsonThreadStore implements ThreadStore {
     const now = this.clock.now().toISOString();
     const thread: RuntimeThread = {
       id: this.ids.id('thread'),
+      forkedFromId: input.forkedFromId?.trim() || undefined,
       projectId: input.projectId?.trim() || undefined,
       title: input.title?.trim() || 'New thread',
       createdAt: now,
@@ -81,6 +82,15 @@ export class JsonThreadStore implements ThreadStore {
       payload: { title: thread.title },
     });
     return (await this.getThread(thread.id)) ?? thread;
+  }
+
+  async deleteThread(threadId: string): Promise<void> {
+    return this.enqueueThreadWrite(threadId, async () => {
+      if (!await this.getThread(threadId)) throw new Error(`Thread not found: ${threadId}`);
+      await this.removeThreadFromIndex(threadId);
+      await rm(this.snapshotPath(threadId), { force: true });
+      await rm(this.eventsPath(threadId), { force: true });
+    });
   }
 
   async updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread> {
@@ -235,6 +245,11 @@ export class JsonThreadStore implements ThreadStore {
     await writeJsonFile(this.indexPath, { threads });
   }
 
+  private async removeThreadFromIndex(threadId: string): Promise<void> {
+    const index = await this.readIndex();
+    await writeJsonFile(this.indexPath, { threads: index.threads.filter((thread) => thread.id !== threadId) });
+  }
+
   private snapshotPath(threadId: string): string {
     return path.join(this.threadsDir, `${threadId}.json`);
   }
@@ -266,11 +281,14 @@ export class JsonThreadStore implements ThreadStore {
 function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
   return {
     id: thread.id,
+    forkedFromId: thread.forkedFromId,
     projectId: thread.projectId,
     title: thread.title,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     archived: thread.archived,
+    gitInfo: thread.gitInfo ? { ...thread.gitInfo } : thread.gitInfo,
+    goal: thread.goal ? { ...thread.goal } : undefined,
     messageCount: thread.messageCount,
     lastMessagePreview: thread.lastMessagePreview,
   };

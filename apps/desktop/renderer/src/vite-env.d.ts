@@ -71,6 +71,7 @@ declare global {
   interface Window {
     setsunaDesktop?: {
       desktop: {
+        platform: string;
         selectDirectory(options?: { title?: string }): Promise<string | null>;
         getUserProfile(): Promise<DesktopUserProfile>;
       };
@@ -94,6 +95,12 @@ declare global {
         resize(sessionId: string, cols: number, rows: number): Promise<boolean>;
         close(sessionId: string): Promise<boolean>;
         onEvent(sessionId: string, callback: (event: DesktopTerminalEvent) => void): () => void;
+      };
+      windowControls: {
+        minimize(): Promise<boolean>;
+        toggleMaximize(): Promise<boolean>;
+        close(): Promise<boolean>;
+        isMaximized(): Promise<boolean>;
       };
       workspaceApps: {
         list(workspaceRoot: string): Promise<DesktopWorkspaceApp[]>;

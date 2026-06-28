@@ -1,4 +1,5 @@
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import { buildChatTranscript } from './chatMessageDisplay.js';
 
 export type RuntimeFileDiffLine = {
   type: 'added' | 'removed' | 'context' | 'gap';
@@ -135,26 +136,11 @@ export function fileChangeSummaryFromRuns(runs: RuntimeToolRun[]): RuntimeFileCh
 }
 
 export function latestFileChangeSummaryFromMessages(messages: RuntimeMessage[]): RuntimeFileChangeSummary | null {
-  const assistantRuns: RuntimeMessage[][] = [];
-  let currentRun: RuntimeMessage[] = [];
-
-  const flushRun = () => {
-    if (currentRun.length) assistantRuns.push(currentRun);
-    currentRun = [];
-  };
-
-  for (const message of messages) {
-    if (message.role === 'assistant') {
-      currentRun.push(message);
-      continue;
-    }
-    if (message.role === 'tool' || message.role === 'system') continue;
-    flushRun();
-  }
-  flushRun();
-
-  for (let index = assistantRuns.length - 1; index >= 0; index -= 1) {
-    const displaySegments = collapseFileMutationRunsInSegments(assistantRuns[index]);
+  const transcript = buildChatTranscript(messages);
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    const item = transcript[index];
+    if (item.type !== 'assistant') continue;
+    const displaySegments = collapseFileMutationRunsInSegments(item.segments);
     const summary = fileChangeSummaryFromRuns(displaySegments.flatMap((segment) => segment.toolRuns ?? []));
     if (summary?.files.length) return summary;
   }

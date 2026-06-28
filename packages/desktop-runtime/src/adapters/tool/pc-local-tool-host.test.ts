@@ -26,6 +26,9 @@ describe('pc local tool host', () => {
       'run_shell_command',
     ]));
     expect(tools.map((tool) => tool.name)).not.toContain('workspace_write_file');
+    await expect(host.approvalForTool('plan_file_changes', {
+      files: [{ file_path: 'src/generated.txt', action: 'create' }],
+    }, context)).resolves.toBeNull();
 
     await expect(host.runTool('write_file', { file_path: 'src/generated.txt', content: 'nope\n' }, context))
       .rejects.toThrow('Call begin_file_change');
@@ -43,6 +46,11 @@ describe('pc local tool host', () => {
     await host.runTool('begin_file_change', { file_path: 'src/generated.txt', action: 'create' }, context);
     await expect(host.toolChoice?.(context, { tools, messages: [] }))
       .resolves.toEqual({ type: 'tool', name: 'write_file' });
+    const approval = await host.approvalForTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context);
+    expect(approval).toMatchObject({
+      reason: expect.stringContaining('Review file change before applying write_file to src/generated.txt'),
+      argumentsPreview: expect.stringContaining('src/generated.txt'),
+    });
     const written = await host.runTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context);
     await expect(host.toolChoice?.(context, { tools, messages: [] }))
       .resolves.toBeNull();
@@ -67,6 +75,29 @@ describe('pc local tool host', () => {
     await expect(host.approvalForTool('run_shell_command', { command: 'rm -rf dist', risk_level: 'low' }, context))
       .resolves.toMatchObject({ reason: expect.stringContaining('删除') });
   });
+  it('forwards shell stdout as tool output deltas', async () => {
+    const { host } = await createHost();
+    const deltas: Array<{ delta: string; stream?: string; processId?: string }> = [];
+
+    const result = await host.runTool(
+      'run_shell_command',
+      {
+        command: `${nodeCommand()} -e "process.stdout.write('pc delta\\n')"`,
+        risk_level: 'low',
+        yield_time_ms: 0,
+      },
+      {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        onToolOutputDelta: (delta) => deltas.push(delta),
+      },
+    );
+
+    expect(result.content).toContain('pc delta');
+    expect(deltas).toEqual(expect.arrayContaining([
+      expect.objectContaining({ delta: expect.stringContaining('pc delta'), stream: 'stdout', processId: expect.any(String) }),
+    ]));
+  });
 });
 
 async function createHost(): Promise<{ host: PcLocalToolHost; projectDir: string }> {
@@ -77,4 +108,8 @@ async function createHost(): Promise<{ host: PcLocalToolHost; projectDir: string
   const store = new FileWorkspaceProjectStore(dataDir, systemClock);
   await store.addProject({ path: projectDir });
   return { host: new PcLocalToolHost(store), projectDir };
+}
+
+function nodeCommand(): string {
+  return JSON.stringify(process.execPath);
 }

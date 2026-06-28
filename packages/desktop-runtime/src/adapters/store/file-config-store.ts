@@ -64,6 +64,9 @@ export class FileConfigStore implements ConfigStore {
       setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
       permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
+      sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite),
+      features: normalizeFeatureFlags(input.features ?? previous.features),
+      desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
       providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
     };
 
@@ -97,6 +100,9 @@ export class FileConfigStore implements ConfigStore {
       setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
+      sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite),
+      features: normalizeFeatureFlags(stored.features),
+      desktopSettings: normalizeDesktopSettings(stored.desktopSettings),
       providers: stored.providers.map((provider) => {
         const apiKey = secrets.providerApiKeys[provider.id] ?? '';
         return {
@@ -118,6 +124,9 @@ function defaultConfig(): StoredConfig {
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',
+    sandboxWorkspaceWrite: {},
+    features: {},
+    desktopSettings: {},
     providers: [
       {
         id: 'local-test',
@@ -248,6 +257,40 @@ function normalizeSetsunaStyle(value: unknown): RuntimeConfigState['setsunaStyle
     default:
       return 'developer';
   }
+}
+
+function normalizeFeatureFlags(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, boolean] => (
+      typeof entry[0] === 'string' && typeof entry[1] === 'boolean'
+    )),
+  );
+}
+
+function normalizeSandboxWorkspaceWrite(value: unknown): RuntimeConfigState['sandboxWorkspaceWrite'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  return {
+    writableRoots: Array.isArray(record.writableRoots)
+      ? record.writableRoots.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : [],
+    networkAccess: record.networkAccess === true,
+    excludeTmpdirEnvVar: record.excludeTmpdirEnvVar === true,
+    excludeSlashTmp: record.excludeSlashTmp === true,
+  };
+}
+
+function normalizeDesktopSettings(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(([key, setting]) => (
+      typeof key === 'string' &&
+      setting !== undefined &&
+      typeof setting !== 'function' &&
+      typeof setting !== 'symbol'
+    )),
+  );
 }
 
 function maskApiKey(apiKey: string): string {

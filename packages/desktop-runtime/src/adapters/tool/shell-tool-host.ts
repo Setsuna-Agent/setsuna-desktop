@@ -527,9 +527,23 @@ function appendShellOutput(session: ShellSession, stream: 'stdout' | 'stderr', c
 
 function shellSpawnSpec(command: string): { command: string; args: string[] } {
   if (process.platform === 'win32') {
-    return { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] };
+    return {
+      command: process.env.SETSUNA_WINDOWS_SHELL || process.env.SHELL || 'powershell.exe',
+      args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', powershellCommand(command)],
+    };
   }
   return { command: process.env.SHELL || '/bin/sh', args: ['-lc', command] };
+}
+
+function powershellCommand(command: string): string {
+  const normalized = normalizeLeadingJsonQuotedWindowsExecutable(command);
+  return /^"[a-zA-Z]:\\[^"]+"\s+/.test(normalized) ? `& ${normalized}` : normalized;
+}
+
+function normalizeLeadingJsonQuotedWindowsExecutable(command: string): string {
+  return command.replace(/^"([a-zA-Z]:\\\\[^"]+)"(\s+.*)?$/u, (_match, executable: string, rest = '') =>
+    `"${executable.replace(/\\\\/g, '\\')}"${rest}`
+  );
 }
 
 function shellEnvironment(): NodeJS.ProcessEnv {

@@ -112,7 +112,7 @@ Local tools operate directly in the selected desktop workspace. Use them only wh
 - For questions about current workspace contents, inspect with read-only tools first.
 - For every task that will create, edit, append, delete, generate, or save local workspace files, either use apply_patch for a concise patch or first call plan_file_changes with the target file list when using the single-file tools. plan_file_changes does not modify files; it lets the desktop runtime build a single-file queue.
 - After plan_file_changes succeeds, call begin_file_change for exactly one file, then use the matching write_file/edit/append_file/delete_file tool for only that same file. For new files or full-file rewrites, generate the exact file content directly inside write_file.content so the desktop UI can stream live + and - counts. Do not first emit the generated file body as normal assistant text. Repeat begin_file_change and the matching single-file mutation for each remaining file.
-- apply_patch may create, update, or delete multiple files in one Codex-style patch. Keep patches targeted and easy to review.
+- apply_patch may create, update, or delete multiple files in one app-server-style patch. Keep patches targeted and easy to review.
 - Never batch file creation or writing with write_file/edit/append_file/delete_file. A single write_file/edit/append_file/delete_file call must target exactly one file, and you must not generate content for later files before the current file is written.
 - If the user asks you to create, write, generate, rewrite, or save a local file with single-file tools, call plan_file_changes first, then begin_file_change for the current file, then call write_file with only that file's exact content in the tool arguments.
 - If the user asks you to append to a file, inspect only the context you need, then call append_file or apply_patch. Do not simulate a pure append with edit unless you need an exact replacement.
@@ -254,14 +254,14 @@ export const LOCAL_TOOL_DEFINITIONS = [
   localTool(
     'apply_patch',
     [
-      'Apply a Codex-style patch to local workspace text files. Supports *** Add File, *** Update File, and *** Delete File hunks.',
+      'Apply an app-server-style patch to local workspace text files. Supports *** Add File, *** Update File, and *** Delete File hunks.',
       'Format rules: the patch must begin with *** Begin Patch and end with *** End Patch. In *** Add File hunks, prefix every content line with +, including blank lines as +. In *** Update File hunks, use @@ and prefix context/removal/addition lines with space, -, or +.',
       'Example: *** Begin Patch\\n*** Add File: notes.txt\\n+hello\\n*** End Patch',
     ].join(' '),
     {
       patch: {
         type: 'string',
-        description: 'Codex patch text. Add File body lines should start with +, e.g. *** Begin Patch\\n*** Add File: notes.txt\\n+hello\\n*** End Patch.',
+        description: 'AppServer patch text. Add File body lines should start with +, e.g. *** Begin Patch\\n*** Add File: notes.txt\\n+hello\\n*** End Patch.',
       },
     },
     ['patch'],
@@ -406,7 +406,7 @@ export const LOCAL_TOOL_DEFINITIONS = [
       env_vars: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Optional Codex-style local environment variable allow-list for stdio servers.',
+        description: 'Optional app-server-style local environment variable allow-list for stdio servers.',
       },
       env_http_headers: {
         type: 'object',
@@ -2726,6 +2726,8 @@ async function runShellCommand(args, state, options = {}) {
     : await waitForShellSession(session, yieldTimeMs);
 
   if (!wait.completed) {
+    flushShellProgress(session, state.root);
+    session.onProgress = null;
     return runningShellResult(session, state.root);
   }
 

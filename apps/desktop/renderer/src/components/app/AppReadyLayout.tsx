@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { AppRouteContent } from './AppRouteContent.js';
 import { AppSidebarSurface } from './AppSidebarSurface.js';
 import { AppTopbarActions } from './AppTopbarActions.js';
@@ -45,6 +46,18 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     workspaceWidth,
     workspacePanels,
   } = controller;
+  const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
+  const windowMenuActions = useMemo(
+    () => ({
+      onNewChat: () => {
+        setDraft('');
+        navigation.startCurrentThread();
+      },
+      onOpenCapabilities: () => setActiveView('capabilities'),
+      onOpenSettings: () => setActiveView('settings'),
+    }),
+    [navigation, setActiveView, setDraft],
+  );
 
   return (
     <ShellFrame
@@ -52,9 +65,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       inspectorOpen={workspacePanels.sidePanelVisible}
       style={shellStyle}
       sidebarCollapsed={sidebarCollapsed}
-      onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
+      onToggleSidebar={handleToggleSidebar}
       toolbarTitle={toolbarTitle}
       workspaceToolbar={<AppWorkspaceToolbar activeProject={activeProject} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} />}
+      menuActions={windowMenuActions}
       className={shellClassName}
       actions={
         <>
@@ -76,11 +90,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
             hasProject={Boolean(activeProject)}
             bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
             sidePanelVisible={workspacePanels.sidePanelVisible}
-            reviewPanelOpen={workspacePanels.sideActivePanel?.type === 'review'}
-            onOpenReviewPanel={() => {
-              workspacePanels.openDesktopPanel('side', 'review');
-              void workspacePanels.loadReviewState();
-            }}
+            onToggleSidePanel={workspacePanels.toggleSidePanel}
             onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
           />
         </>

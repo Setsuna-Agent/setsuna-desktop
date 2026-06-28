@@ -150,6 +150,7 @@ function toProviderOptionJson(value: unknown): ProviderOptionJson | undefined {
 function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {
   const output: ModelMessage[] = [];
   for (const message of messages) {
+    if (message.visibility === 'transcript') continue;
     if (message.role === 'system') {
       continue;
     } else if (message.role === 'user') {
@@ -175,7 +176,7 @@ function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {
 
 function toAiSdkInstructions(messages: RuntimeMessage[]): string | undefined {
   const instructions = messages
-    .filter((message) => message.role === 'system' && message.content.trim())
+    .filter((message) => message.visibility !== 'transcript' && message.role === 'system' && message.content.trim())
     .map((message) => message.content.trim())
     .join('\n\n');
   return instructions || undefined;

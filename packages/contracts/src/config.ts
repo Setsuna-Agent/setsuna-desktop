@@ -36,9 +36,19 @@ export type RuntimeConfigState = {
   setsunaStyle: RuntimeSetsunaStyle;
   approvalPolicy: 'strict' | 'on-request' | 'full';
   permissionProfile: RuntimePermissionProfile;
+  sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  features?: Record<string, boolean>;
+  desktopSettings?: Record<string, unknown>;
 };
 
 export type RuntimePermissionProfile = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+export type RuntimeSandboxWorkspaceWrite = {
+  writableRoots?: string[];
+  networkAccess?: boolean;
+  excludeTmpdirEnvVar?: boolean;
+  excludeSlashTmp?: boolean;
+};
 
 export type RuntimeAvailableModel = {
   id: string;
@@ -80,5 +90,8 @@ export type RuntimeConfigInput = {
   setsunaStyle?: RuntimeSetsunaStyle | string;
   approvalPolicy?: RuntimeConfigState['approvalPolicy'];
   permissionProfile?: RuntimePermissionProfile;
+  sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  features?: Record<string, boolean>;
+  desktopSettings?: Record<string, unknown>;
   providers?: ProviderConfigInput[];
 };

@@ -1,10 +1,14 @@
 import type { RuntimeApprovalDecision, RuntimeApprovalRequest } from './approvals.js';
-import type { RuntimeMessage } from './threads.js';
+import type { RuntimeGitInfo, RuntimeMessage, RuntimeThreadGoal } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 
 export type RuntimeEventType =
   | 'thread.created'
   | 'thread.updated'
+  | 'thread.deleted'
+  | 'thread.metadata_updated'
+  | 'thread.goal_updated'
+  | 'thread.goal_cleared'
   | 'thread.context_cleared'
   | 'thread.context_compacting'
   | 'thread.context_compacted'
@@ -16,6 +20,7 @@ export type RuntimeEventType =
   | 'messages.deleted'
   | 'messages.truncated'
   | 'tool.started'
+  | 'tool.output_delta'
   | 'tool.completed'
   | 'approval.requested'
   | 'approval.resolved'
@@ -36,6 +41,10 @@ export type RuntimeEventBase<TType extends RuntimeEventType, TPayload> = {
 export type RuntimeEvent =
   | RuntimeEventBase<'thread.created', { title: string }>
   | RuntimeEventBase<'thread.updated', { title?: string; archived?: boolean }>
+  | RuntimeEventBase<'thread.deleted', Record<string, never>>
+  | RuntimeEventBase<'thread.metadata_updated', { gitInfo: RuntimeGitInfo | null }>
+  | RuntimeEventBase<'thread.goal_updated', { goal: RuntimeThreadGoal }>
+  | RuntimeEventBase<'thread.goal_cleared', { cleared: boolean }>
   | RuntimeEventBase<'thread.context_cleared', { clearedMessageCount: number }>
   | RuntimeEventBase<
       'thread.context_compacting',
@@ -55,10 +64,21 @@ export type RuntimeEvent =
   | RuntimeEventBase<'message.completed', { messageId: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls'] }>
   | RuntimeEventBase<'messages.deleted', { messageIds: string[] }>
   | RuntimeEventBase<'messages.truncated', { messageId: string; includeSelf?: boolean; removedMessageIds: string[] }>
-  | RuntimeEventBase<'tool.started', { toolCallId: string; toolName: string; argumentsPreview: string; resultPreview?: string }>
+  | RuntimeEventBase<'tool.started', { toolCallId: string; toolName: string; argumentsPreview: string; resultPreview?: string; source?: 'agent' | 'userShell' }>
+  | RuntimeEventBase<'tool.output_delta', { toolCallId: string; toolName: string; delta: string; stream?: 'stdout' | 'stderr'; processId?: string; source?: 'agent' | 'userShell' }>
   | RuntimeEventBase<
       'tool.completed',
-      { toolCallId: string; toolName: string; status: 'success' | 'error' | 'rejected'; content: string }
+      {
+        toolCallId: string;
+        toolName: string;
+        source?: 'agent' | 'userShell';
+        status: 'success' | 'error' | 'rejected';
+        content: string;
+        argumentsPreview?: string;
+        resultPreview?: string;
+        data?: unknown;
+        durationMs?: number;
+      }
     >
   | RuntimeEventBase<'approval.requested', { approval: RuntimeApprovalRequest }>
   | RuntimeEventBase<'approval.resolved', { approvalId: string; decision: RuntimeApprovalDecision; message?: string }>

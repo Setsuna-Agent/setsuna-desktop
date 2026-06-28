@@ -36,6 +36,8 @@ async function mkGitRepo(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-review-state-test-'));
   await mkdir(root, { recursive: true });
   await git(root, ['init']);
+  await git(root, ['config', 'core.autocrlf', 'false']);
+  await git(root, ['config', 'core.eol', 'lf']);
   await git(root, ['config', 'user.email', 'setsuna@example.invalid']);
   await git(root, ['config', 'user.name', 'Setsuna Test']);
   await writeFile(path.join(root, 'tracked.txt'), 'initial\n');
