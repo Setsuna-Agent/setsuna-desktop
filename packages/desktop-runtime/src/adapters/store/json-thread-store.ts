@@ -25,6 +25,7 @@ export class JsonThreadStore implements ThreadStore {
   private readonly threadsDir: string;
   private readonly indexPath: string;
   private readonly threadWriteQueues = new Map<string, Promise<void>>();
+  private indexWriteQueue: Promise<void> = Promise.resolve();
 
   constructor(
     dataDir: string,
@@ -94,26 +95,21 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   async updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread> {
-    const thread = await this.requireThread(threadId);
-    const next: RuntimeThread = {
-      ...thread,
-      title: patch.title?.trim() || thread.title,
-      archived: patch.archived ?? thread.archived,
-      updatedAt: this.clock.now().toISOString(),
-    };
-    await writeJsonFile(this.snapshotPath(threadId), next);
-    await this.writeIndexWithThread(next);
-    await this.appendEvent(threadId, {
-      id: this.ids.id('event'),
-      threadId,
-      type: 'thread.updated',
-      createdAt: next.updatedAt,
-      payload: {
-        title: patch.title,
-        archived: patch.archived,
-      },
+    return this.enqueueThreadWrite(threadId, async () => {
+      await this.appendEventUnlocked(threadId, {
+        id: this.ids.id('event'),
+        threadId,
+        type: 'thread.updated',
+        createdAt: this.clock.now().toISOString(),
+        payload: {
+          title: patch.title?.trim() || undefined,
+          archived: patch.archived,
+        },
+      });
+      const next = await this.getThread(threadId);
+      if (!next) throw new Error(`Thread not found: ${threadId}`);
+      return next;
     });
-    return (await this.getThread(threadId)) ?? next;
   }
 
   async updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread> {
@@ -239,15 +235,26 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   private async writeIndexWithThread(thread: RuntimeThread): Promise<void> {
-    const index = await this.readIndex();
-    const summary = toSummary(thread);
-    const threads = [summary, ...index.threads.filter((item) => item.id !== thread.id)];
-    await writeJsonFile(this.indexPath, { threads });
+    await this.enqueueIndexWrite(async () => {
+      const index = await this.readIndex();
+      const summary = toSummary(thread);
+      const threads = [summary, ...index.threads.filter((item) => item.id !== thread.id)];
+      await writeJsonFile(this.indexPath, { threads });
+    });
   }
 
   private async removeThreadFromIndex(threadId: string): Promise<void> {
-    const index = await this.readIndex();
-    await writeJsonFile(this.indexPath, { threads: index.threads.filter((thread) => thread.id !== threadId) });
+    await this.enqueueIndexWrite(async () => {
+      const index = await this.readIndex();
+      await writeJsonFile(this.indexPath, { threads: index.threads.filter((thread) => thread.id !== threadId) });
+    });
+  }
+
+  private async enqueueIndexWrite<T>(task: () => Promise<T>): Promise<T> {
+    const previous = this.indexWriteQueue;
+    const run = previous.catch(() => undefined).then(task);
+    this.indexWriteQueue = run.then(() => undefined, () => undefined);
+    return run;
   }
 
   private snapshotPath(threadId: string): string {

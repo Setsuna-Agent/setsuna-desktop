@@ -4,6 +4,7 @@ import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-ga
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
+import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
 import type { ModelClient } from '../ports/model-client.js';
@@ -340,6 +341,63 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[0].messages[0]).toMatchObject({ role: 'system' });
     expect(modelClient.requests[0].messages[0].content).toContain('<memory_context>');
     expect(modelClient.requests[0].messages[0].content).toContain('local-only runtime answers');
+  });
+
+  it('stores explicit user memory requests even when the model does not call the memory tool', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Explicit memory', projectId: 'project_1' });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new MemoryCapturingModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+    });
+
+    await loop.sendTurn(thread.id, { input: '请记住：这个项目用 pnpm 管理依赖。' });
+
+    await expect(memoryStore.listMemories({ projectId: 'project_1' })).resolves.toMatchObject({
+      memories: [
+        {
+          scope: 'project',
+          projectId: 'project_1',
+          content: '这个项目用 pnpm 管理依赖',
+          sourceThreadId: thread.id,
+        },
+      ],
+    });
+  });
+
+  it('does not duplicate explicit memories when the memory tool already saved them', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Memory tool', projectId: 'project_1' });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new RememberMemoryToolModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      toolHost: new MemoryToolHost(memoryStore),
+    });
+
+    await loop.sendTurn(thread.id, { input: '请记住：这个项目用 pnpm 管理依赖。' });
+
+    const list = await memoryStore.listMemories({ projectId: 'project_1' });
+    expect(list.memories).toHaveLength(1);
+    expect(list.memories[0]).toMatchObject({
+      scope: 'project',
+      projectId: 'project_1',
+      content: '这个项目用 pnpm 管理依赖。',
+      sourceThreadId: thread.id,
+    });
   });
 
   it('injects desktop personalization and honors disabled memories', async () => {
@@ -944,6 +1002,30 @@ class MemoryCapturingModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     yield { type: 'text_delta', text: 'Remembered.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RememberMemoryToolModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [
+          {
+            id: 'call_memory',
+            name: 'remember_memory',
+            arguments: JSON.stringify({ content: '这个项目用 pnpm 管理依赖。', scope: 'project' }),
+          },
+        ],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Saved.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

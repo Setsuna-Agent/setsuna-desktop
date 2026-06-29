@@ -412,6 +412,7 @@ export class AgentLoop {
         ...(await this.skillContextMessages(skillIds)),
         ...modelConversationMessages,
       ];
+      let memorySavedByTool = false;
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         const assistantMessageId = this.options.ids.id('msg');
@@ -487,11 +488,20 @@ export class AgentLoop {
             status: 'complete',
           });
           const toolMessages = await this.runToolCalls(toolCalls, toolContext, toolBudget, runtimeConfig?.approvalPolicy ?? 'on-request');
+          if (toolMessages.some(isSuccessfulRememberMemoryMessage)) memorySavedByTool = true;
           modelMessages.push(...toolMessages);
           continue;
         }
 
-        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, { review: options.review ? roundText : undefined });
+        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, {
+          explicitMemory: {
+            alreadySaved: memorySavedByTool,
+            config: runtimeConfig,
+            projectId: thread.projectId,
+            userContent: userMessage.content,
+          },
+          review: options.review ? roundText : undefined,
+        });
         activeAssistantMessageId = null;
         turnCompleted = true;
         break;
@@ -556,7 +566,15 @@ export class AgentLoop {
           finalText = fallbackText;
         }
 
-        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, { review: options.review ? finalText : undefined });
+        await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, {
+          explicitMemory: {
+            alreadySaved: memorySavedByTool,
+            config: runtimeConfig,
+            projectId: thread.projectId,
+            userContent: userMessage.content,
+          },
+          review: options.review ? finalText : undefined,
+        });
         activeAssistantMessageId = null;
       }
     } catch (error) {
@@ -639,7 +657,15 @@ export class AgentLoop {
     turnId: string,
     messageId: string,
     usage?: RuntimeUsage,
-    options: { review?: string } = {},
+    options: {
+      explicitMemory?: {
+        alreadySaved: boolean;
+        config: RuntimeConfigState | null | undefined;
+        projectId?: string;
+        userContent: string;
+      };
+      review?: string;
+    } = {},
   ): Promise<void> {
     if (usage) {
       await this.options.usageStore?.recordUsage({
@@ -653,6 +679,7 @@ export class AgentLoop {
     if (options.review !== undefined) {
       await this.publishReviewModeMessage(threadId, turnId, 'exited', options.review.trim() || 'Review completed.');
     }
+    await this.rememberExplicitUserMemory(threadId, turnId, options.explicitMemory);
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -661,6 +688,32 @@ export class AgentLoop {
       createdAt: this.options.clock.now().toISOString(),
       payload: { usage },
     });
+  }
+
+  private async rememberExplicitUserMemory(
+    threadId: string,
+    turnId: string,
+    input?: {
+      alreadySaved: boolean;
+      config: RuntimeConfigState | null | undefined;
+      projectId?: string;
+      userContent: string;
+    },
+  ): Promise<void> {
+    if (!input || input.alreadySaved || input.config?.memoryEnabled === false || !this.options.memoryStore) return;
+    const content = explicitMemoryContentFromUserText(input.userContent);
+    if (!content) return;
+    try {
+      await this.options.memoryStore.rememberMemory({
+        content,
+        scope: input.projectId ? 'project' : 'global',
+        projectId: input.projectId,
+        sourceThreadId: threadId,
+        sourceTurnId: turnId,
+      });
+    } catch {
+      // Memory should improve later turns, not make the current answer fail.
+    }
   }
 
   private async publishReviewModeMessage(
@@ -1323,6 +1376,39 @@ class TurnCancelledError extends Error {
 
 function activeTurnKey(threadId: string, turnId: string): string {
   return `${threadId}:${turnId}`;
+}
+
+function isSuccessfulRememberMemoryMessage(message: RuntimeMessage): boolean {
+  return message.role === 'tool'
+    && message.toolName === 'remember_memory'
+    && !message.content.startsWith('Tool remember_memory failed:')
+    && !message.content.includes('was rejected');
+}
+
+function explicitMemoryContentFromUserText(value: string): string {
+  const text = value.trim();
+  if (!text) return '';
+  const patterns = [
+    /^(?:请|帮我|麻烦你)?(?:记住|记一下|记下来)(?:这件事|一下|一点)?[：:，,\s]*(?<content>[\s\S]+)$/u,
+    /^(?:请|帮我|麻烦你)?(?:保存|存储|写入|加入)(?:为|成|到|进)?(?:长期)?记忆[：:，,\s]*(?<content>[\s\S]+)$/u,
+    /^(?:please\s+)?remember(?:\s+that)?[\s:,\-]*(?<content>[\s\S]+)$/i,
+    /^(?:please\s+)?(?:save|store)(?:\s+this)?(?:\s+(?:as|to|in))?\s+memory[\s:,\-]*(?<content>[\s\S]+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const content = cleanExplicitMemoryContent(pattern.exec(text)?.groups?.content);
+    if (content) return content;
+  }
+  return '';
+}
+
+function cleanExplicitMemoryContent(value: string | undefined): string {
+  const content = (value ?? '')
+    .trim()
+    .replace(/^["'“”‘’]+|["'“”‘’。.!?？]+$/g, '')
+    .trim();
+  if (content.length < 3) return '';
+  if (/^(吗|么|嘛|没有|了吗|一下)?[？?]*$/u.test(content)) return '';
+  return content;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

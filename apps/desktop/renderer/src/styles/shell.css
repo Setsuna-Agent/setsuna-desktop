@@ -358,6 +358,11 @@
   z-index: 15;
 }
 
+:root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-workbench__main-title,
+:root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-workbench__main-title {
+  display: none;
+}
+
 :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
 :root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
   display: flex;

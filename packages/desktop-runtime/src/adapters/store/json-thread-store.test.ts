@@ -25,6 +25,50 @@ describe('json thread store', () => {
     expect(anyProject).toMatchObject([{ id: project.id, projectId: 'project_1' }]);
   });
 
+  it('keeps the thread index complete across concurrent thread writes', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+
+    const threads = await Promise.all(
+      Array.from({ length: 12 }, (_, index) => store.createThread({ title: `Concurrent chat ${index}` })),
+    );
+    await Promise.all(
+      threads.map((thread, index) =>
+        store.appendEvent(thread.id, {
+          id: `event_msg_${index}`,
+          threadId: thread.id,
+          type: 'message.created',
+          createdAt: systemClock.now().toISOString(),
+          payload: {
+            message: {
+              id: `msg_${index}`,
+              role: 'user',
+              content: `hello ${index}`,
+              createdAt: systemClock.now().toISOString(),
+              status: 'complete',
+            },
+          },
+        }),
+      ),
+    );
+
+    const indexedIds = new Set((await store.listThreads({ includeArchived: true })).map((thread) => thread.id));
+
+    expect(indexedIds).toEqual(new Set(threads.map((thread) => thread.id)));
+  });
+
+  it('updates thread metadata through the serialized event log', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Original' });
+
+    const updated = await store.updateThread(thread.id, { title: '  Renamed  ', archived: true });
+
+    expect(updated).toMatchObject({ title: 'Renamed', archived: true, lastSeq: thread.lastSeq + 1 });
+    expect((await store.listEvents(thread.id)).at(-1)).toMatchObject({
+      type: 'thread.updated',
+      payload: { title: 'Renamed', archived: true },
+    });
+  });
+
   it('deletes thread snapshots, event logs, and index entries', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
     const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());

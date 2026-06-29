@@ -46,6 +46,7 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
 const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
+const MEMORY_DRAFT_MAX_LENGTH = 4000;
 
 type SettingsChoiceOption<TValue extends string> = {
   value: TValue;
@@ -75,6 +76,7 @@ export function SettingsPage({
   onSaveProviders,
   onSaveRuntimePreferences,
   onPreviewMemories,
+  onCreateMemory,
   onDeleteMemory,
   onResetMemories,
 }: {
@@ -88,6 +90,7 @@ export function SettingsPage({
   onSaveProviders: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
   onPreviewMemories: () => Promise<RuntimeMemoryPreview>;
+  onCreateMemory: (content: string) => Promise<void>;
   onDeleteMemory: (memoryId: string) => Promise<void>;
   onResetMemories: () => Promise<void>;
 }) {
@@ -112,6 +115,7 @@ export function SettingsPage({
           memoryPreviewLoading={memoryPreviewLoading}
           onSavePreferences={onSaveRuntimePreferences}
           onPreview={onPreviewMemories}
+          onCreate={onCreateMemory}
           onDelete={onDeleteMemory}
           onReset={onResetMemories}
         />
@@ -492,6 +496,7 @@ function PersonalizationSettings({
   memoryPreviewLoading,
   onSavePreferences,
   onPreview,
+  onCreate,
   onDelete,
   onReset,
 }: {
@@ -500,16 +505,20 @@ function PersonalizationSettings({
   memoryPreviewLoading: boolean;
   onSavePreferences: (input: RuntimePreferenceInput) => Promise<void>;
   onPreview: () => Promise<RuntimeMemoryPreview>;
+  onCreate: (content: string) => Promise<void>;
   onDelete: (memoryId: string) => Promise<void>;
   onReset: () => Promise<void>;
 }) {
   const [personalizationView, setPersonalizationView] = useState<'overview' | 'memoryPreview'>('overview');
   const [globalPromptDraft, setGlobalPromptDraft] = useState(config.globalPrompt);
+  const [memoryDraft, setMemoryDraft] = useState('');
   const [selectingStorage, setSelectingStorage] = useState(false);
+  const [memorySaving, setMemorySaving] = useState(false);
   const [memoryDeletingId, setMemoryDeletingId] = useState<string | null>(null);
   const [memoryResetting, setMemoryResetting] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const globalPromptLength = Array.from(globalPromptDraft).length;
+  const memoryDraftLength = Array.from(memoryDraft.trim()).length;
   const storagePath = config.storagePath || config.dataPath;
 
   useEffect(() => {
@@ -555,6 +564,22 @@ function PersonalizationSettings({
   const openMemoryPreview = async () => {
     setPersonalizationView('memoryPreview');
     await loadMemoryPreview();
+  };
+
+  const createMemoryItem = async () => {
+    const content = memoryDraft.trim();
+    if (!content) return;
+    setMemorySaving(true);
+    setMemoryError(null);
+    try {
+      await onCreate(content);
+      setMemoryDraft('');
+      await loadMemoryPreview();
+    } catch (unknownError) {
+      setMemoryError(errorMessage(unknownError, '保存记忆失败'));
+    } finally {
+      setMemorySaving(false);
+    }
   };
 
   const deleteMemoryItem = async (item: RuntimeMemoryPreviewItem) => {
@@ -729,6 +754,15 @@ function PersonalizationSettings({
               <span>开启</span>
             </label>
           </div>
+          <MemoryComposer
+            charCount={memoryDraftLength}
+            disabled={!config.memoryEnabled || memorySaving}
+            maxLength={MEMORY_DRAFT_MAX_LENGTH}
+            saving={memorySaving}
+            value={memoryDraft}
+            onChange={setMemoryDraft}
+            onSubmit={createMemoryItem}
+          />
           <div className="chat-user-settings__row chat-user-settings__local-field">
             <span className="chat-user-settings__row-label">
               <FolderOpen size={14} />
@@ -774,6 +808,49 @@ function PersonalizationSettings({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MemoryComposer({
+  charCount,
+  disabled,
+  maxLength,
+  saving,
+  value,
+  onChange,
+  onSubmit,
+}: {
+  charCount: number;
+  disabled: boolean;
+  maxLength: number;
+  saving: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void | Promise<void>;
+}) {
+  const canSubmit = Boolean(value.trim()) && !disabled;
+
+  return (
+    <div className="chat-user-settings__memory-composer">
+      <div className="chat-user-settings__row-label">
+        <FileText size={14} />
+        <span>新增记忆</span>
+      </div>
+      <div className="chat-user-settings__memory-compose-control">
+        <TextArea
+          className="chat-user-settings__memory-input"
+          disabled={disabled}
+          maxLength={maxLength}
+          placeholder="偏好、项目规则、固定流程或事实信息"
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+        <Button variant="primary" icon={<Save size={14} />} disabled={!canSubmit} onClick={() => void onSubmit()}>
+          {saving ? '保存中' : '保存'}
+        </Button>
+      </div>
+      <div className="chat-user-settings__memory-compose-meta">{charCount} / {maxLength}</div>
     </div>
   );
 }
