@@ -2,78 +2,221 @@ import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
 
 export type AssistantRunTimelineBlock =
-  | { type: 'work'; id: string; segments: RuntimeMessage[]; toolRuns: NonNullable<RuntimeMessage['toolRuns']>; active: boolean; thinkingSegments: AssistantWorkThinkingSegment[] }
+  | {
+      type: 'work';
+      id: string;
+      segments: RuntimeMessage[];
+      toolRuns: NonNullable<RuntimeMessage['toolRuns']>;
+      active: boolean;
+      items: AssistantWorkItem[];
+      contentSegments: AssistantWorkContentSegment[];
+      thinkingSegments: AssistantWorkThinkingSegment[];
+    }
   | { type: 'content'; id: string; segment: RuntimeMessage; content: string }
   | { type: 'loading'; id: string; segment: RuntimeMessage }
   | { type: 'error'; id: string; segment: RuntimeMessage };
+
+export type AssistantWorkContentSegment = {
+  id: string;
+  segment: RuntimeMessage;
+  content: string;
+};
 
 export type AssistantWorkThinkingSegment = {
   id: string;
   content: string;
 };
 
+export type AssistantWorkItem =
+  | { type: 'content'; segment: AssistantWorkContentSegment }
+  | { type: 'thinking'; segment: AssistantWorkThinkingSegment }
+  | { type: 'toolRuns'; id: string; toolRuns: NonNullable<RuntimeMessage['toolRuns']> };
+
 export function createAssistantRunTimeline(segments: RuntimeMessage[]): AssistantRunTimelineBlock[] {
-  const contentBlocks: AssistantRunTimelineBlock[] = [];
-  const workSegments: RuntimeMessage[] = [];
-  const workSegmentIds = new Set<string>();
-  const workToolRuns: NonNullable<RuntimeMessage['toolRuns']> = [];
-  const thinkingSegments: AssistantWorkThinkingSegment[] = [];
+  const parsedSegments = segments.map(parseAssistantSegment);
+  const lastProcessIndex = parsedSegments.reduce((lastIndex, parsed, index) => (hasProcessEvidence(parsed) ? index : lastIndex), -1);
+  const finalStartIndex = parsedSegments.findIndex(
+    (parsed, index) => index > lastProcessIndex && parsed.contentSegments.length > 0,
+  );
+  const finalStarted = finalStartIndex >= 0;
+  const blocks: AssistantRunTimelineBlock[] = [];
+  let workBlock: {
+    id: string;
+    contentSegments: AssistantWorkContentSegment[];
+    items: AssistantWorkItem[];
+    segments: RuntimeMessage[];
+    segmentIds: Set<string>;
+    toolRuns: NonNullable<RuntimeMessage['toolRuns']>;
+    thinkingSegments: AssistantWorkThinkingSegment[];
+  } | null = null;
 
-  for (const segment of segments) {
-    const toolRuns = segment.toolRuns ?? [];
-    const hasTools = toolRuns.length > 0;
-    let contentIndex = 0;
-    let thinkingIndex = 0;
+  const appendWork = (
+    segment: RuntimeMessage,
+    input: {
+      contentSegments?: AssistantWorkContentSegment[];
+      items?: AssistantWorkItem[];
+      thinkingSegments?: AssistantWorkThinkingSegment[];
+      toolRuns?: NonNullable<RuntimeMessage['toolRuns']>;
+    },
+  ) => {
+    if (!workBlock) {
+      workBlock = {
+        id: `${segment.id}:work`,
+        contentSegments: [],
+        items: [],
+        segments: [],
+        segmentIds: new Set<string>(),
+        toolRuns: [],
+        thinkingSegments: [],
+      };
+    }
+    addWorkSegment(workBlock.segments, workBlock.segmentIds, segment);
+    workBlock.contentSegments.push(...(input.contentSegments ?? []));
+    workBlock.thinkingSegments.push(...(input.thinkingSegments ?? []));
+    workBlock.toolRuns.push(...(input.toolRuns ?? []));
+    appendWorkItems(workBlock.items, input.items ?? defaultWorkItems(segment, input));
+  };
 
-    for (const thinkingSegment of splitThinkingContent(segment.content)) {
-      if (thinkingSegment.type === 'markdown') {
-        if (thinkingSegment.content.trim()) {
-          contentBlocks.push({
-            type: 'content',
-            id: contentBlockId(segment.id, contentIndex),
-            segment,
-            content: thinkingSegment.content,
-          });
-          contentIndex += 1;
-        }
-        continue;
+  const flushWork = () => {
+    if (!workBlock) return;
+    blocks.push({
+      type: 'work',
+      id: workBlock.id,
+      segments: workBlock.segments,
+      toolRuns: workBlock.toolRuns,
+      items: workBlock.items,
+      contentSegments: workBlock.contentSegments,
+      thinkingSegments: workBlock.thinkingSegments,
+      active: workBlock.segments.some((segment) => segment.status === 'streaming') || workBlock.toolRuns.some(isActiveWorkToolRun),
+    });
+    workBlock = null;
+  };
+
+  parsedSegments.forEach((parsed, index) => {
+    const inFinalAnswer = finalStarted && index >= finalStartIndex;
+    if (!inFinalAnswer) {
+      if (parsed.contentSegments.length || parsed.thinkingSegments.length || parsed.toolRuns.length) {
+        appendWork(parsed.segment, parsed);
       }
-
-      if (segment.status === 'streaming' && !thinkingSegment.closed && thinkingSegment.content.trim()) {
-        addWorkSegment(workSegments, workSegmentIds, segment);
-        thinkingSegments.push({
-          id: thinkingSegmentId(segment.id, thinkingIndex),
-          content: thinkingSegment.content,
+    } else {
+      parsed.thinkingSegments.forEach((thinkingSegment) => {
+        appendWork(parsed.segment, { thinkingSegments: [thinkingSegment] });
+      });
+      parsed.contentSegments.forEach((contentSegment) => {
+        flushWork();
+        blocks.push({
+          type: 'content',
+          id: contentSegment.id,
+          segment: parsed.segment,
+          content: contentSegment.content,
         });
-        thinkingIndex += 1;
+      });
+      if (parsed.toolRuns.length) {
+        appendWork(parsed.segment, { toolRuns: parsed.toolRuns });
       }
     }
 
-    if (hasTools) {
-      addWorkSegment(workSegments, workSegmentIds, segment);
-      workToolRuns.push(...toolRuns);
+    if (isEmptyStreamingAssistantSegment(parsed.segment)) {
+      flushWork();
+      blocks.push({ type: 'loading', id: `${parsed.segment.id}:loading`, segment: parsed.segment });
+    }
+    if (parsed.segment.error) {
+      flushWork();
+      blocks.push({ type: 'error', id: `${parsed.segment.id}:error`, segment: parsed.segment });
+    }
+  });
+
+  flushWork();
+  return blocks;
+}
+
+type ParsedAssistantSegment = {
+  segment: RuntimeMessage;
+  contentSegments: AssistantWorkContentSegment[];
+  items: AssistantWorkItem[];
+  thinkingSegments: AssistantWorkThinkingSegment[];
+  toolRuns: NonNullable<RuntimeMessage['toolRuns']>;
+};
+
+function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment {
+  const contentSegments: AssistantWorkContentSegment[] = [];
+  const items: AssistantWorkItem[] = [];
+  const thinkingSegments: AssistantWorkThinkingSegment[] = [];
+  let contentIndex = 0;
+  let thinkingIndex = 0;
+
+  for (const thinkingSegment of splitThinkingContent(segment.content)) {
+    if (thinkingSegment.type === 'markdown') {
+      if (thinkingSegment.content.trim()) {
+        const content = {
+          id: contentBlockId(segment.id, contentIndex),
+          segment,
+          content: thinkingSegment.content,
+        };
+        contentSegments.push(content);
+        items.push({ type: 'content', segment: content });
+        contentIndex += 1;
+      }
+      continue;
     }
 
-    if (isEmptyStreamingAssistantSegment(segment)) {
-      contentBlocks.push({ type: 'loading', id: `${segment.id}:loading`, segment });
-    }
-    if (segment.error) {
-      contentBlocks.push({ type: 'error', id: `${segment.id}:error`, segment });
+    if (segment.status === 'streaming' && !thinkingSegment.closed && thinkingSegment.content.trim()) {
+      const thinking = {
+        id: thinkingSegmentId(segment.id, thinkingIndex),
+        content: thinkingSegment.content,
+      };
+      thinkingSegments.push(thinking);
+      items.push({ type: 'thinking', segment: thinking });
+      thinkingIndex += 1;
     }
   }
 
-  if (!workSegments.length && !workToolRuns.length && !thinkingSegments.length) return contentBlocks;
+  const toolRuns = segment.toolRuns ?? [];
+  if (toolRuns.length) {
+    items.push({ type: 'toolRuns', id: `${segment.id}:tools`, toolRuns });
+  }
+
+  return {
+    segment,
+    contentSegments,
+    items,
+    thinkingSegments,
+    toolRuns,
+  };
+}
+
+function defaultWorkItems(
+  segment: RuntimeMessage,
+  input: {
+    contentSegments?: AssistantWorkContentSegment[];
+    thinkingSegments?: AssistantWorkThinkingSegment[];
+    toolRuns?: NonNullable<RuntimeMessage['toolRuns']>;
+  },
+): AssistantWorkItem[] {
   return [
-    {
-      type: 'work',
-      id: assistantRunWorkBlockId(segments),
-      segments: workSegments,
-      toolRuns: workToolRuns,
-      thinkingSegments,
-      active: workSegments.some((segment) => segment.status === 'streaming') || workToolRuns.some(isActiveWorkToolRun),
-    },
-    ...contentBlocks,
+    ...(input.contentSegments ?? []).map((item): AssistantWorkItem => ({ type: 'content', segment: item })),
+    ...(input.thinkingSegments ?? []).map((item): AssistantWorkItem => ({ type: 'thinking', segment: item })),
+    ...(input.toolRuns?.length ? [{ type: 'toolRuns' as const, id: `${segment.id}:tools`, toolRuns: input.toolRuns }] : []),
   ];
+}
+
+function appendWorkItems(items: AssistantWorkItem[], nextItems: AssistantWorkItem[]): void {
+  for (const nextItem of nextItems) {
+    const previousItem = items.at(-1);
+    if (previousItem?.type === 'toolRuns' && nextItem.type === 'toolRuns') {
+      items[items.length - 1] = {
+        type: 'toolRuns',
+        id: `${previousItem.id}+${nextItem.id}`,
+        toolRuns: [...previousItem.toolRuns, ...nextItem.toolRuns],
+      };
+      continue;
+    }
+    items.push(nextItem);
+  }
+}
+
+function hasProcessEvidence(segment: ParsedAssistantSegment): boolean {
+  return segment.thinkingSegments.length > 0 || segment.toolRuns.length > 0;
 }
 
 function addWorkSegment(
@@ -92,10 +235,6 @@ function contentBlockId(segmentId: string, index: number): string {
 
 function thinkingSegmentId(segmentId: string, index: number): string {
   return index === 0 ? `${segmentId}:thinking` : `${segmentId}:thinking:${index}`;
-}
-
-function assistantRunWorkBlockId(segments: RuntimeMessage[]): string {
-  return `${segments[0]?.id ?? 'assistant'}:work`;
 }
 
 function isEmptyStreamingAssistantSegment(segment: RuntimeMessage): boolean {

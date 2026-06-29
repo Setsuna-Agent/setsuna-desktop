@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useRef,
   useState,
   type CSSProperties,
@@ -11,13 +12,15 @@ import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 import { useProjectWorkspace } from './useProjectWorkspace.js';
 import { useRuntimeClientState } from './useRuntimeClientState.js';
 import { useThreadGroups } from './useThreadGroups.js';
-import type { MainView } from '../types/app.js';
+import type { ChatSkillSelectionRequest, MainView } from '../types/app.js';
 
 export function useDesktopAppController() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [activeView, setActiveView] = useState<MainView>('chat');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [skillSelectionRequest, setSkillSelectionRequest] = useState<ChatSkillSelectionRequest | null>(null);
+  const skillSelectionRequestIdRef = useRef(0);
 
   const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
   const {
@@ -118,9 +121,23 @@ export function useDesktopAppController() {
     terminalTurnIdsRef,
   });
 
+  const selectSkillForChat = useCallback((skillId: string) => {
+    skillSelectionRequestIdRef.current += 1;
+    setActiveView('chat');
+    setSkillSelectionRequest({
+      skillId,
+      requestId: skillSelectionRequestIdRef.current,
+    });
+  }, []);
+
+  const clearSkillSelectionRequest = useCallback((requestId: number) => {
+    setSkillSelectionRequest((current) => (current?.requestId === requestId ? null : current));
+  }, []);
+
   const shellStyle = {
     '--app-sidebar-width': activeView === 'settings' || sidebarCollapsed ? '0px' : `${sidebarWidth}px`,
-    '--app-topbar-sidebar-width': activeView === 'settings' || sidebarCollapsed ? '116px' : `${sidebarWidth}px`,
+    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarCollapsed ? '116px' : `${sidebarWidth}px`,
+    '--desktop-settings-nav-width': `${sidebarWidth}px`,
     '--desktop-agent-workspace-width': sidePanelVisible ? `${workspaceWidth}px` : '0px',
     '--app-bottom-panel-height': bottomPanelVisible ? `${terminalHeight}px` : '0px',
   } as CSSProperties;
@@ -139,6 +156,7 @@ export function useDesktopAppController() {
     activeProjectId,
     activeView,
     chatActions,
+    clearSkillSelectionRequest,
     draft,
     globalThreads,
     handleSidebarResizeStep,
@@ -152,6 +170,7 @@ export function useDesktopAppController() {
     projectWorkspace,
     runtime,
     searchTriggerRef,
+    selectSkillForChat,
     setActiveView,
     setDraft,
     setSidebarCollapsed,
@@ -162,6 +181,7 @@ export function useDesktopAppController() {
     sidebarMaxWidth,
     sidebarMinWidth,
     sidebarWidth,
+    skillSelectionRequest,
     terminalMaxHeight,
     terminalHeight,
     terminalMinHeight,

@@ -12,11 +12,13 @@ import type {
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
+  RuntimeMcpToolList,
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeThreadSummary,
+  RuntimeToolRun,
   RuntimeUsageResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -111,6 +113,15 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     }, 120);
   }, [client]);
 
+  const refreshCapabilities = useCallback(() => {
+    void Promise.all([client.listSkills(), client.listMcpServers()])
+      .then(([skillList, mcpList]) => {
+        setSkills(skillList.skills);
+        setMcpState(mcpList);
+      })
+      .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
+  }, [client]);
+
   useEffect(() => () => {
     if (threadListRefreshTimerRef.current !== null) {
       window.clearTimeout(threadListRefreshTimerRef.current);
@@ -141,7 +152,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       if (event.type === 'runtime.error') {
         setError(event.payload.message);
       }
-      if (event.type === 'turn.completed' && event.payload.usage) void client.getUsage().then(setUsage);
+      if (event.type === 'turn.completed') {
+        refreshCapabilities();
+        if (event.payload.usage) void client.getUsage().then(setUsage);
+      }
       if (event.type === 'approval.requested') {
         setApprovals((items) => [event.payload.approval, ...items.filter((item) => item.id !== event.payload.approval.id)]);
       }
@@ -163,7 +177,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [client, currentThreadId, refreshThreadsSoon]);
+  }, [client, currentThreadId, refreshCapabilities, refreshThreadsSoon]);
 
   useEffect(() => {
     setActivityEvents([]);
@@ -187,6 +201,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
         if (turnHasFinished(nextThread, turnId)) {
           terminalTurnIdsRef.current.add(turnId);
           setActiveTurnId((current) => (current === turnId ? null : current));
+          refreshCapabilities();
           void client.getUsage().then(setUsage);
           return;
         }
@@ -201,7 +216,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       cancelled = true;
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
-  }, [effectiveActiveTurnId, client, currentThreadId, refreshThreadsSoon]);
+  }, [effectiveActiveTurnId, client, currentThreadId, refreshCapabilities, refreshThreadsSoon]);
 
   useEffect(() => {
     client
@@ -346,6 +361,11 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     [client],
   );
 
+  const fetchMcpServerTools = useCallback(
+    async (input: RuntimeMcpServerInput): Promise<RuntimeMcpToolList> => client.fetchMcpServerTools(input),
+    [client],
+  );
+
   const updateMcpServer = useCallback(
     async (server: RuntimeMcpServer, patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>) => {
       const next = await client.updateMcpServer(server.key, patch);
@@ -411,6 +431,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const answerApproval = useCallback(
     async (approvalId: string, input: { decision: 'approve' | 'reject'; message?: string }) => {
       await client.answerApproval(approvalId, input);
+      const resolvedAt = new Date().toISOString();
       setApprovals((items) =>
         items.map((item) =>
           item.id === approvalId
@@ -418,13 +439,20 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
                 ...item,
                 status: input.decision === 'approve' ? 'approved' : 'rejected',
                 message: input.message,
-                resolvedAt: new Date().toISOString(),
+                resolvedAt,
               }
             : item,
         ),
       );
+      setCurrentThread((thread) => updateThreadApprovalRun(thread, approvalId, input, resolvedAt));
+      if (currentThreadId) {
+        client
+          .getThread(currentThreadId)
+          .then((nextThread) => setCurrentThread((thread) => (thread?.id === currentThreadId && nextThread.lastSeq >= thread.lastSeq ? nextThread : thread)))
+          .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
+      }
     },
-    [client],
+    [client, currentThreadId],
   );
 
   return {
@@ -445,6 +473,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     deleteSkill,
     error,
     fetchProviderModels,
+    fetchMcpServerTools,
     getSkillDetail,
     loadState,
     mcpState,
@@ -473,13 +502,47 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   };
 }
 
+function updateThreadApprovalRun(
+  thread: RuntimeThread | null,
+  approvalId: string,
+  input: { decision: 'approve' | 'reject'; message?: string },
+  resolvedAt: string,
+): RuntimeThread | null {
+  if (!thread) return thread;
+  let changed = false;
+  const messages = thread.messages.map((message) => {
+    if (!message.toolRuns?.some((run) => run.approvalId === approvalId)) return message;
+    changed = true;
+    return {
+      ...message,
+      toolRuns: message.toolRuns.map((run) => {
+        if (run.approvalId !== approvalId) return run;
+        const nextRun: RuntimeToolRun = {
+          ...run,
+          approvalStatus: input.decision === 'approve' ? 'approved' : 'rejected',
+          approvalMessage: input.message,
+          status: input.decision === 'approve' ? 'running' : 'rejected',
+          completedAt: input.decision === 'reject' ? resolvedAt : run.completedAt,
+          resultPreview: input.decision === 'reject' ? input.message || 'Tool call rejected.' : run.resultPreview,
+        };
+        return nextRun;
+      }),
+    };
+  });
+  return changed ? { ...thread, updatedAt: resolvedAt, messages } : thread;
+}
+
 export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
 
-function turnHasFinished(thread: RuntimeThread, turnId: string): boolean {
+export function turnHasFinished(thread: RuntimeThread, turnId: string): boolean {
   const turnMessages = thread.messages.filter((message) => message.turnId === turnId);
   if (!turnMessages.length) return false;
   if (turnMessages.some((message) => message.status === 'streaming')) return false;
-  return turnMessages.some((message) => message.role === 'assistant' && (message.status === 'complete' || message.status === 'error' || Boolean(message.error)));
+  if (turnMessages.some((message) => message.toolRuns?.some(isActiveToolRun))) return false;
+  const latestAssistant = turnMessages.findLast((message) => message.role === 'assistant');
+  if (!latestAssistant) return false;
+  if (latestAssistant.status === 'error' || latestAssistant.error) return true;
+  return latestAssistant.status === 'complete' && !latestAssistant.toolCalls?.length;
 }
 
 export function inferActiveTurnIdFromThread(thread: RuntimeThread | null, terminalTurnIds: ReadonlySet<string>): string | null {

@@ -2,7 +2,7 @@ import type { AnswerRuntimeApprovalInput, RuntimeApprovalList } from './approval
 import type { RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput } from './config.js';
 import type { RuntimeEvent } from './events.js';
 import type { CreateRuntimeMemoryInput, RuntimeMemoryList, RuntimeMemoryPreview, RuntimeMemoryQuery } from './memory.js';
-import type { RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerPatch } from './mcp.js';
+import type { RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerPatch, RuntimeMcpToolList } from './mcp.js';
 import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillList, RuntimeSkillPatch } from './skills.js';
 import type {
   CreateThreadInput,
@@ -82,6 +82,7 @@ export type DesktopRuntimeClient = {
   deleteMemory(memoryId: string): Promise<void>;
   clearMemories(): Promise<RuntimeMemoryList>;
   listMcpServers(): Promise<RuntimeMcpServerList>;
+  fetchMcpServerTools(input: RuntimeMcpServerInput): Promise<RuntimeMcpToolList>;
   upsertMcpServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;
   updateMcpServer(key: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList>;
   deleteMcpServer(key: string): Promise<void>;

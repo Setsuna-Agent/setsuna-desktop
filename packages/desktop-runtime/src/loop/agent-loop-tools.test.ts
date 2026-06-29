@@ -228,9 +228,11 @@ describe('agent loop tools', () => {
     });
     expect(compactingEvent?.turnId).toBeTruthy();
     expect(compactedEvent?.turnId).toBe(compactingEvent?.turnId);
-    expect(compacted.messages[0].contextCompaction?.triggerScopes).toEqual(['manual']);
-    expect(compacted.messages[0].turnId).toBe(compactedEvent?.turnId);
-    expect(compacted.messages[0].content).toContain('模型整理后的上下文摘要');
+    const compactedSummary = compacted.messages.find((message) => message.contextCompaction);
+    expect(compacted.messages.some((message) => message.id === 'msg_0' && message.visibility === 'transcript')).toBe(true);
+    expect(compactedSummary?.contextCompaction?.triggerScopes).toEqual(['manual']);
+    expect(compactedSummary?.turnId).toBe(compactedEvent?.turnId);
+    expect(compactedSummary?.content).toContain('模型整理后的上下文摘要');
   });
 
   it('automatically compacts oversized context before the next model request', async () => {
@@ -273,9 +275,11 @@ describe('agent loop tools', () => {
     expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
     expect(events.some((event) => event.type === 'thread.context_compacting' && event.turnId)).toBe(true);
     expect(compactedEvent?.turnId).toBeTruthy();
-    expect(saved?.messages[0].turnId).toBe(compactedEvent?.turnId);
-    expect(saved?.messages[0].contextCompaction?.triggerScopes).toEqual(['total']);
-    expect(saved?.messages[0].content).toContain('<context_compaction_summary');
+    const savedCompactionSummary = saved?.messages.find((message) => message.contextCompaction);
+    expect(saved?.messages.some((message) => message.id === 'msg_0' && message.visibility === 'transcript')).toBe(true);
+    expect(savedCompactionSummary?.turnId).toBe(compactedEvent?.turnId);
+    expect(savedCompactionSummary?.contextCompaction?.triggerScopes).toEqual(['total']);
+    expect(savedCompactionSummary?.content).toContain('<context_compaction_summary');
     expect(saved?.messages.some((message) => message.content === 'continue after history')).toBe(true);
     expect(mainRequest?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
     expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(oversizedHistory.slice(0, 200));
@@ -303,13 +307,13 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
     expect(events.some((event) => event.type === 'turn.completed')).toBe(true);
     expect(modelClient.requests.at(-1)?.toolChoice).toBe('none');
-    expect(modelClient.requests.length).toBeGreaterThan(4);
-    expect(toolHost.calls).toHaveLength(8);
+    expect(modelClient.requests).toHaveLength(201);
+    expect(toolHost.calls).toHaveLength(200);
     expect(events.some((event) =>
       event.type === 'tool.completed'
       && event.payload.status === 'error'
-      && event.payload.content.includes('本次请求已读取 8 个文件')
-    )).toBe(true);
+      && event.payload.content.includes('budget')
+    )).toBe(false);
     expect(saved?.messages.at(-1)?.content).toBe('Final answer after the available tool results.');
     expect(saved?.messages.at(-1)?.status).toBe('complete');
   });
@@ -484,6 +488,37 @@ describe('agent loop tools', () => {
     await pendingTurn;
 
     expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
+  });
+
+  it('skips file mutation approvals even when approval policy is strict', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Strict file write loop' });
+    const modelClient = new ToolDeltaModelClient();
+    const toolHost = new PreviewingToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new StrictApprovalConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'write file strictly' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const approvals = await approvalGate.listApprovals();
+
+    expect(approvals.approvals).toEqual([]);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'write_file'
+      && event.payload.status === 'success'
+    )).toBe(true);
   });
 
   it('skips tool approvals when approval policy is full', async () => {

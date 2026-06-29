@@ -1,6 +1,6 @@
 import { Boxes, File, Folder, LoaderCircle, X } from 'lucide-react';
 import type { RuntimeSkillSummary, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
-import { skillTokenText } from './chatCommandUtils.js';
+import { skillDisplayText } from './chatCommandUtils.js';
 
 export function ProjectEntryCommandMenu({
   activeIndex,
@@ -76,7 +76,7 @@ export function SelectedSkillChips({
       {skills.map((skill) => (
         <span className="chat-selected-skill" key={skill.id} title={skill.description || skill.id}>
           <Boxes size={13} />
-          <span>{skillTokenText(skill)}</span>
+          <span>{skillDisplayText(skill)}</span>
           <button type="button" aria-label={`移除 ${skill.name}`} onClick={() => onRemove(skill)}>
             <X size={12} />
           </button>

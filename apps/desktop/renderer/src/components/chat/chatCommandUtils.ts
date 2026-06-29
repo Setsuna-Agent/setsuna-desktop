@@ -19,7 +19,11 @@ export function entryLabel(entry: WorkspaceEntrySearchItem): string {
 }
 
 export function skillTokenText(skill: RuntimeSkillSummary): string {
-  return `/${skill.name}`;
+  return `/${skillDisplayText(skill)}`;
+}
+
+export function skillDisplayText(skill: RuntimeSkillSummary): string {
+  return skill.name.trim() || skill.id;
 }
 
 export function stripSkillToken(value: string, skill: RuntimeSkillSummary): string {

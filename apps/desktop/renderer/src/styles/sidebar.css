@@ -510,6 +510,19 @@
   transition: opacity 160ms ease, background 160ms ease, color 160ms ease;
 }
 
+.desktop-agent-session__running {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: color-mix(in srgb, var(--app-accent) 72%, var(--app-sidebar-text-secondary));
+}
+
+.desktop-agent-session.is-running .desktop-agent-session__meta {
+  color: color-mix(in srgb, var(--app-accent) 72%, var(--app-sidebar-text-secondary));
+}
+
 .desktop-agent-session:hover .desktop-agent-session__meta > span:first-child,
 .desktop-agent-session:focus-within .desktop-agent-session__meta > span:first-child {
   opacity: 0;
@@ -520,6 +533,12 @@
 .desktop-agent-session__menu-button:focus-visible {
   opacity: 1;
   pointer-events: auto;
+}
+
+.desktop-agent-session.is-running:hover .desktop-agent-session__running,
+.desktop-agent-session.is-running:focus-within .desktop-agent-session__running {
+  opacity: 1;
+  transform: translate(-22px, -50%);
 }
 
 .desktop-agent-session__menu-button:hover {

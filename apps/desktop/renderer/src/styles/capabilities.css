@@ -7,7 +7,7 @@
 
 .desktop-capabilities-panel__inner {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   align-content: stretch;
   gap: 16px;
   width: 100%;
@@ -171,6 +171,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  grid-row: 2;
   min-width: 0;
 }
 
@@ -201,10 +202,43 @@
   white-space: nowrap;
 }
 
+.desktop-capabilities-usage-note {
+  display: grid;
+  grid-row: 3;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #10b981 24%, var(--app-border));
+  border-radius: var(--app-radius-md);
+  color: color-mix(in srgb, #047857 84%, var(--app-text));
+  background: color-mix(in srgb, #10b981 8%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capabilities-usage-note svg {
+  margin-top: 2px;
+  color: currentcolor;
+}
+
+.desktop-capabilities-usage-note span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.desktop-capabilities-usage-note--mcp {
+  border-color: color-mix(in srgb, var(--app-primary) 14%, var(--app-border));
+  color: color-mix(in srgb, var(--app-text-muted) 86%, var(--app-text));
+  background: color-mix(in srgb, var(--app-text) 3%, transparent);
+}
+
 .desktop-capabilities-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  grid-auto-rows: minmax(170px, auto);
+  grid-row: 4;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-auto-rows: minmax(164px, auto);
   align-content: start;
   gap: 12px;
   min-width: 0;
@@ -230,7 +264,7 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-  min-height: 170px;
+  min-height: 164px;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
   border-radius: var(--desktop-agent-radius-md, var(--app-radius-md));
@@ -245,11 +279,28 @@
 
 .desktop-capability-card__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
   min-height: 24px;
+}
+
+.desktop-capability-card__head-main,
+.desktop-capability-card__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.desktop-capability-card__head-actions {
+  flex: 0 0 auto;
+}
+
+.desktop-capability-card__head-actions .sd-icon-button {
+  width: 26px;
+  height: 26px;
 }
 
 .desktop-capability-card__icon {
@@ -305,6 +356,13 @@
   -webkit-line-clamp: 2;
 }
 
+.desktop-capability-card--mcp p {
+  min-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: 1;
+}
+
 .desktop-capability-card__meta {
   display: flex;
   align-items: center;
@@ -317,8 +375,36 @@
 }
 
 .desktop-capability-card__meta span {
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
+  max-width: 100%;
+  padding: 1px 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-capability-card__tool-policy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capability-card__tool-policy span {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  padding: 1px 6px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
+  border-radius: var(--app-radius-xs);
+  background: color-mix(in srgb, var(--app-bg) 86%, var(--app-text) 4%);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -332,10 +418,21 @@
   margin-top: auto;
 }
 
+.desktop-capability-card__actions--mcp {
+  display: grid;
+  grid-template-columns: auto auto minmax(96px, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
 .desktop-capability-card__actions .sd-field {
   width: 112px;
   height: 28px;
   font-size: 12px;
+}
+
+.desktop-capability-card__actions--mcp .sd-field {
+  width: 100%;
 }
 
 .desktop-capabilities-empty {
@@ -373,44 +470,11 @@
   padding-top: 2px;
 }
 
-.desktop-capabilities-detail__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-  padding-bottom: 2px;
-}
-
-.desktop-capabilities-detail__head h2 {
-  margin: 0;
-  color: var(--app-text);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-}
-
-.desktop-capabilities-detail__subtitle {
-  display: block;
-  color: var(--app-text-muted);
-  font-size: 13px;
-  line-height: 19px;
-}
-
 .desktop-capabilities-skill-detail {
   width: min(940px, 100%);
   min-height: 0;
   margin-right: auto;
   margin-left: auto;
-}
-
-.desktop-capabilities-skill-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-width: 0;
 }
 
 .desktop-capabilities-skill-meta {
@@ -444,6 +508,13 @@
   color: var(--app-text-muted);
   font-size: 13px;
   line-height: 20px;
+}
+
+.desktop-capabilities-skill-usage-help {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .desktop-capabilities-skill-loading {
@@ -511,6 +582,12 @@
   margin-left: auto;
 }
 
+.desktop-capabilities-mcp-editor {
+  width: min(940px, 100%);
+  margin-right: auto;
+  margin-left: auto;
+}
+
 .desktop-capabilities-skill-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -565,11 +642,11 @@
 
 .mcp-form {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
-  padding: 12px;
+  padding: 14px;
   border-bottom: 1px solid var(--desktop-agent-panel-border);
 }
 
@@ -579,16 +656,191 @@
   background: color-mix(in srgb, var(--app-surface) 96%, var(--app-bg));
 }
 
-.mcp-form .sd-textarea {
-  grid-column: 1 / 4;
-  min-height: 38px;
-  max-height: 74px;
+.desktop-capabilities-mcp-form--page {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
 }
 
-.mcp-form .sd-button {
-  grid-column: 4;
-  justify-self: stretch;
-  min-width: 132px;
+.desktop-capabilities-mcp-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.desktop-capabilities-mcp-field > span {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.desktop-capabilities-mcp-field small {
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-capabilities-mcp-field .sd-textarea {
+  min-height: 70px;
+  max-height: 160px;
+  font-family: var(--app-code-font-family);
+}
+
+.desktop-capabilities-mcp-form__full,
+.desktop-capabilities-mcp-form__switches {
+  grid-column: 1 / -1;
+}
+
+.desktop-capabilities-mcp-form__wide {
+  grid-column: span 2;
+}
+
+.desktop-capabilities-mcp-form__switches {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 2px 0 4px;
+}
+
+.desktop-capabilities-mcp-form__switches p {
+  min-width: 0;
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-capabilities-mcp-tools {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
+  border-radius: var(--app-radius-md);
+  background: color-mix(in srgb, var(--app-bg) 94%, var(--app-text) 3%);
+}
+
+.desktop-capabilities-mcp-tools > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.desktop-capabilities-mcp-tools > header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-capabilities-mcp-tools strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.desktop-capabilities-mcp-tools span,
+.desktop-capabilities-mcp-tools__empty,
+.desktop-capabilities-mcp-tools__error {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capabilities-mcp-tools__error {
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 28%, var(--app-border));
+  border-radius: var(--app-radius-sm);
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
+  white-space: pre-wrap;
+}
+
+.desktop-capabilities-mcp-tools__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-capabilities-mcp-tools__toolbar button {
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: var(--app-surface);
+  font-size: 12px;
+}
+
+.desktop-capabilities-mcp-tools__toolbar button:hover {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-capabilities-mcp-tools__toolbar span {
+  margin-left: auto;
+}
+
+.desktop-capabilities-mcp-tools__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 7px;
+  min-width: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.desktop-capabilities-mcp-tool {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+}
+
+.desktop-capabilities-mcp-tool input {
+  margin: 2px 0 0;
+}
+
+.desktop-capabilities-mcp-tool > span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.desktop-capabilities-mcp-tool strong,
+.desktop-capabilities-mcp-tool small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-capabilities-mcp-tool small {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.desktop-capabilities-mcp-tools .is-spinning {
+  animation: desktop-capabilities-spin 0.85s linear infinite;
+}
+
+@keyframes desktop-capabilities-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .mcp-row {

@@ -1540,7 +1540,9 @@ describe('runtime server', () => {
       name: 'Forked before compaction',
     });
 
-    expect(compacted.messages[0]?.content).toContain('<context_compaction_summary');
+    const compactionSummary = compacted.messages.find((message) => message.contextCompaction);
+
+    expect(compactionSummary?.content).toContain('<context_compaction_summary');
     expect(read.thread.turns).toEqual(expect.arrayContaining([
       expect.objectContaining({
         items: expect.arrayContaining([
@@ -1573,7 +1575,7 @@ describe('runtime server', () => {
 
     const compacted = await waitForThread(
       thread.id,
-      (item) => item.messages[0]?.contextCompaction?.triggerScopes?.includes('manual') === true,
+      (item) => item.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('manual') === true),
     );
     const hasContextCompactionItem = await readEventStreamContains(
       thread.id,
@@ -1583,10 +1585,12 @@ describe('runtime server', () => {
     );
     const read = await appServerRpc('thread/read', { threadId: thread.id, includeTurns: true });
 
-    expect(compacted.messages[0]?.turnId).toBeTruthy();
+    const compactionSummary = compacted.messages.find((message) => message.contextCompaction);
+
+    expect(compactionSummary?.turnId).toBeTruthy();
     expect(read.thread.turns).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: compacted.messages[0]?.turnId,
+        id: compactionSummary?.turnId,
         items: expect.arrayContaining([
           expect.objectContaining({ type: 'contextCompaction' }),
         ]),
@@ -2081,6 +2085,36 @@ describe('runtime server', () => {
     await expect(appServerRpc('mcpServerStatus/list', {})).resolves.toEqual({ data: [], nextCursor: null });
   });
 
+  it('fetches MCP tools through the runtime API', async () => {
+    const mcpServer = await createMcpToolsServer();
+    try {
+      const tools = await runtimeFetch('/v1/mcp/tools', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: 'search',
+          transport: 'streamableHttp',
+          url: mcpServer.baseUrl,
+          headers: { Authorization: 'Bearer secret' },
+        }),
+      });
+
+      expect(tools).toEqual({
+        tools: [
+          { name: 'search_web', description: 'Search the web' },
+          { name: 'summarize_page' },
+        ],
+        errors: [],
+      });
+      expect(await mcpServer.requests).toEqual([
+        { method: 'initialize', authorization: 'Bearer secret', session: '' },
+        { method: 'notifications/initialized', authorization: 'Bearer secret', session: 'session_1' },
+        { method: 'tools/list', authorization: 'Bearer secret', session: 'session_1' },
+      ]);
+    } finally {
+      await mcpServer.close();
+    }
+  });
+
   async function startRuntimeServer(dataDir: string): Promise<void> {
     server = await createRuntimeServer({ dataDir, token, version: 'test' });
     await server.listen(0);
@@ -2348,6 +2382,65 @@ async function createModelListCaptureServer(): Promise<{
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     nextRequest,
+    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+  };
+}
+
+async function createMcpToolsServer(): Promise<{
+  baseUrl: string;
+  requests: Promise<Array<{ method?: string; authorization?: string; session?: string }>>;
+  close(): Promise<void>;
+}> {
+  const requests: Array<{ method?: string; authorization?: string; session?: string }> = [];
+  let resolveRequests: (requests: Array<{ method?: string; authorization?: string; session?: string }>) => void = () => undefined;
+  const requestsPromise = new Promise<Array<{ method?: string; authorization?: string; session?: string }>>((resolve) => {
+    resolveRequests = resolve;
+  });
+  const server = createServer(async (request, response) => {
+    const body = JSON.parse(await readRequestText(request)) as { method?: string };
+    requests.push({
+      method: body.method,
+      authorization: request.headers.authorization,
+      session: String(request.headers['mcp-session-id'] ?? ''),
+    });
+    if (body.method === 'initialize') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'mcp-session-id': 'session_1' });
+      response.end(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'test-mcp', version: '1.0.0' },
+        },
+      }));
+      return;
+    }
+    if (body.method === 'notifications/initialized') {
+      response.writeHead(202);
+      response.end();
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 2,
+      result: {
+        tools: [
+          { name: 'summarize_page' },
+          { name: 'search_web', description: 'Search the web' },
+        ],
+      },
+    }));
+    resolveRequests(requests);
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected TCP address for MCP tools server');
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    requests: requestsPromise,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
 }

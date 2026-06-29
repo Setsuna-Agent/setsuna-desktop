@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { flushSync } from 'react-dom';
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
+type ResolvedThemeMode = 'light' | 'dark';
 
 const storageKey = 'setusna-theme-mode';
 const themeChangeEventName = 'setsuna-theme-change';
@@ -14,8 +15,7 @@ export function useThemeTransition() {
   const [mode, setMode] = useState<ThemeMode>(() => getInitialThemeMode());
 
   useEffect(() => {
-    document.documentElement.dataset.theme = mode;
-    window.localStorage.setItem(storageKey, mode);
+    applyThemeModePreference(mode);
   }, [mode]);
 
   useEffect(() => {
@@ -28,10 +28,20 @@ export function useThemeTransition() {
     };
   }, []);
 
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemThemeChange = () => {
+      if (getInitialThemeMode() === 'system') {
+        applyThemeModePreference('system');
+      }
+    };
+    media.addEventListener('change', handleSystemThemeChange);
+    return () => media.removeEventListener('change', handleSystemThemeChange);
+  }, []);
+
   const setThemeMode = useCallback((nextMode: ThemeMode) => {
     setMode(nextMode);
-    document.documentElement.dataset.theme = nextMode;
-    window.localStorage.setItem(storageKey, nextMode);
+    applyThemeModePreference(nextMode);
     window.dispatchEvent(new CustomEvent(themeChangeEventName));
   }, []);
 
@@ -60,7 +70,7 @@ export function useThemeTransition() {
   }, [setThemeMode]);
 
   const toggleWithTransition = useCallback((event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
-    setThemeModeWithTransition(mode === 'dark' ? 'light' : 'dark', event);
+    setThemeModeWithTransition(resolveThemeMode(mode) === 'dark' ? 'light' : 'dark', event);
   }, [mode, setThemeModeWithTransition]);
 
   return { mode, setThemeMode, setThemeModeWithTransition, toggleWithTransition };
@@ -68,6 +78,19 @@ export function useThemeTransition() {
 
 function getInitialThemeMode(): ThemeMode {
   const saved = window.localStorage.getItem(storageKey);
-  if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+  return 'system';
+}
+
+function applyThemeModePreference(mode: ThemeMode): void {
+  document.documentElement.dataset.theme = resolveThemeMode(mode);
+  document.documentElement.dataset.themePreference = mode;
+  window.localStorage.setItem(storageKey, mode);
+}
+
+function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
+  if (mode === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return mode;
 }

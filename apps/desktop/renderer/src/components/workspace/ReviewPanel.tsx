@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, Dropdown, type MenuProps } from 'antd';
-import { Check, ChevronDown, Code2, RefreshCw } from 'lucide-react';
+import { Check, ChevronDown, Code2, PanelRightOpen, RefreshCw } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
+import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewState } from './model.js';
 
@@ -60,13 +61,14 @@ export function DesktopReviewPanel({
   onOpenProjectFile: (filePath: string) => void;
   onRefresh: () => void;
 }) {
-  const [reviewSource, setReviewSource] = useState<DesktopReviewSource>('unstaged');
+  const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
   const hasGit = Boolean(reviewState?.isGitRepository);
+  const reviewSourceStorageKey = activeProject ? reviewSourcePreferenceKey(activeProject) : null;
+  const storedReviewSource = useMemo(() => readReviewSourcePreference(reviewSourceStorageKey), [reviewSourceStorageKey]);
+  const reviewSource = reviewSourceStorageKey
+    ? reviewSourceByKey[reviewSourceStorageKey] ?? storedReviewSource ?? 'unstaged'
+    : 'unstaged';
   const activeSource = hasGit ? reviewSource : 'latest';
-
-  useEffect(() => {
-    if (reviewState && !reviewState.isGitRepository) setReviewSource('latest');
-  }, [reviewState]);
 
   if (!activeProject) {
     return (
@@ -101,7 +103,13 @@ export function DesktopReviewPanel({
     ),
   }));
   const handleSourceMenuClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
-    setReviewSource(key as DesktopReviewSource);
+    if (!isDesktopReviewSource(key)) return;
+    if (reviewSourceStorageKey) {
+      setReviewSourceByKey((current) => (
+        current[reviewSourceStorageKey] === key ? current : { ...current, [reviewSourceStorageKey]: key }
+      ));
+      writeReviewSourcePreference(reviewSourceStorageKey, key);
+    }
   };
 
   return (
@@ -160,6 +168,33 @@ function reviewSummaryForSource(
   return null;
 }
 
+function reviewSourcePreferenceKey(project: WorkspaceProject): string {
+  return `setsuna-desktop:review-source:${project.id || project.path}`;
+}
+
+function readReviewSourcePreference(key: string | null): DesktopReviewSource | null {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const value = window.localStorage.getItem(key);
+    return isDesktopReviewSource(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeReviewSourcePreference(key: string, source: DesktopReviewSource): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, source);
+  } catch {
+    // Preference persistence should never block the review panel itself.
+  }
+}
+
+function isDesktopReviewSource(value: unknown): value is DesktopReviewSource {
+  return typeof value === 'string' && reviewSourceOptions.some((item) => item.key === value);
+}
+
 function ReviewSummarySection({
   emptyText,
   summary,
@@ -205,37 +240,76 @@ function ReviewFileCard({
   onOpenProjectFile: (filePath: string) => void;
 }) {
   const visibleLines = file.lines.slice(0, 36);
+  const language = fileLanguage(file.path);
+  const highlightableSource = useMemo(() => visibleLines.map((line) => line.content).join('\n'), [visibleLines]);
+  const highlightedLines = useMemo(() => highlightedCodeLinesHtml(highlightableSource, language), [highlightableSource, language]);
   return (
-    <article className="desktop-review-file-card">
-      <header>
-        <button type="button" onClick={() => onOpenProjectFile(file.path)}>
+    <details className="desktop-review-file-card" open>
+      <summary className="desktop-review-file-card__summary">
+        <span className="desktop-review-file-card__path-main">
+          <ChevronDown className="desktop-review-file-card__chevron" size={13} />
           <WorkspaceFileIcon path={file.path} type="file" />
-          <span className="desktop-review-file-card__path" title={file.path}>{file.path}</span>
-        </button>
-        <div>
+          <span className="desktop-review-file-card__path" title={file.path}>
+            {file.path}
+          </span>
+        </span>
+        <div className="desktop-review-file-card__meta">
           <span>{file.action}</span>
           <em>+{file.additions} -{file.deletions}</em>
-          <IconButton label="Open in workspace app" variant="ghost" onClick={() => onExternalOpenFile(file.path)}>
+          <IconButton
+            label="Open file in panel"
+            variant="ghost"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onOpenProjectFile(file.path);
+            }}
+          >
+            <PanelRightOpen size={13} />
+          </IconButton>
+          <IconButton
+            label="Open in workspace app"
+            variant="ghost"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onExternalOpenFile(file.path);
+            }}
+          >
             <Code2 size={13} />
           </IconButton>
         </div>
-      </header>
+      </summary>
       {visibleLines.length ? (
         <div className="desktop-review-diff">
-          {visibleLines.map((line) => (
-            <button
-              className={`desktop-review-diff-line desktop-review-diff-line--${line.type}`}
-              key={`${file.path}:${line.lineNumber}`}
-              type="button"
-              onClick={() => onExternalOpenFile(file.path, line.newLine ?? line.oldLine)}
-            >
-              <span>{line.newLine ?? line.oldLine ?? ''}</span>
-              <code>{line.content || ' '}</code>
-            </button>
-          ))}
+          {visibleLines.map((line, index) => {
+            const highlighted = highlightedLines[index];
+            return (
+              <button
+                className={`desktop-review-diff-line desktop-review-diff-line--${line.type}`}
+                key={`${file.path}:${line.lineNumber}`}
+                type="button"
+                onClick={() => onExternalOpenFile(file.path, line.newLine ?? line.oldLine)}
+              >
+                <span className="desktop-review-diff-line__prefix">{diffLinePrefix(line)}</span>
+                <span className="desktop-review-diff-line__number">{line.newLine ?? line.oldLine ?? ''}</span>
+                {highlighted !== undefined ? (
+                  <code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />
+                ) : (
+                  <code>{line.content || ' '}</code>
+                )}
+              </button>
+            );
+          })}
           {file.truncated ? <div className="desktop-review-truncated">diff 过大，已截断展示。</div> : null}
         </div>
       ) : null}
-    </article>
+    </details>
   );
+}
+
+function diffLinePrefix(line: DesktopDiffFile['lines'][number]): string {
+  if (line.type === 'added') return '+';
+  if (line.type === 'removed') return '-';
+  return ' ';
 }

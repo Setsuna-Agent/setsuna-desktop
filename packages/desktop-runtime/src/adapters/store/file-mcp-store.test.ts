@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -46,6 +46,14 @@ describe('file mcp store', () => {
       transport: 'streamableHttp',
       url: 'https://example.com/mcp',
       headers: { Authorization: 'Bearer token' },
+      tools: [
+        {
+          name: 'search_web',
+          description: 'Search the web',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+          annotations: { readOnlyHint: true },
+        },
+      ],
     });
     const updated = await store.updateServer('remote', { enabled: false, toolTimeoutMs: 5000 });
 
@@ -56,10 +64,49 @@ describe('file mcp store', () => {
       url: 'https://example.com/mcp',
       headerKeys: ['Authorization'],
       toolTimeoutMs: 5000,
+      tools: [
+        {
+          name: 'search_web',
+          description: 'Search the web',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+          annotations: { readOnlyHint: true },
+        },
+      ],
     });
     expect(JSON.stringify(updated)).not.toContain('Bearer token');
+    await expect(store.listServerInputs()).resolves.toMatchObject([
+      {
+        key: 'remote',
+        headers: { Authorization: 'Bearer token' },
+        tools: [{ name: 'search_web' }],
+      },
+    ]);
 
     await store.deleteServer('remote');
     await expect(store.listServers()).resolves.toMatchObject({ servers: [] });
+  });
+
+  it('migrates legacy on-write approval to always', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
+    const store = new FileMcpStore(dataDir);
+    await writeFile(path.join(dataDir, 'mcp.json'), JSON.stringify({
+      mcpServers: {
+        remote: {
+          transport: 'streamableHttp',
+          url: 'https://example.com/mcp',
+          requireApproval: 'on-write',
+        },
+      },
+    }));
+
+    await expect(store.listServers()).resolves.toMatchObject({
+      servers: [{ key: 'remote', requireApproval: 'always' }],
+    });
+    await store.updateServer('remote', { enabled: false });
+
+    await expect(readFile(path.join(dataDir, 'mcp.json'), 'utf8')).resolves.not.toContain('on-write');
+    await expect(store.listServers()).resolves.toMatchObject({
+      servers: [{ key: 'remote', enabled: false, requireApproval: 'always' }],
+    });
   });
 });

@@ -135,7 +135,7 @@ Local tools operate directly in the selected desktop workspace. Use them only wh
 - Between tool calls, keep user-visible text short, normally under 25 words. Final answers should be concise unless the user asks for detail.
 - Never mention tool names, function names, JSON, or tool-call mechanics in user-visible text. Describe the action naturally.
 - For inspection of a directory or module, use a progressive read pattern: first list_directory / find_files to map the shape, then read 5-8 representative files in one batch, summarize what you see, and only read the next batch if the first pass leaves real questions open. Do not read every file in a directory by default.
-- Desktop runtime enforces a per-request budget for local inspection: at most 16 visible file/directory inspections and at most 8 read_file calls. Plan your first pass carefully and summarize before asking the user to continue.
+- Desktop runtime does not enforce a per-request count budget for local inspection or file mutation tools. Still inspect progressively and avoid unnecessary reads so the user gets useful progress quickly.
 - For file edits, keep changes closely scoped. Summarize completed edits before continuing if the user asks to pause.`;
 
 export const LOCAL_TOOL_DEFINITIONS = [
@@ -425,7 +425,7 @@ export const LOCAL_TOOL_DEFINITIONS = [
       },
       require_approval: {
         type: 'string',
-        enum: ['always', 'smart', 'never'],
+        enum: ['always', 'never'],
         description: 'Whether calls to this server require user approval. Defaults to always.',
       },
       enabled: {
@@ -2470,7 +2470,7 @@ function normalizeMcpTransport(value, server) {
 function normalizeMcpRequireApproval(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (raw === 'never' || raw === 'approve' || raw === 'approved' || raw === 'false') return 'never';
-  if (raw === 'smart' || raw === 'auto') return 'smart';
+  if (raw === 'always' || raw === 'true') return 'always';
   return 'always';
 }
 

@@ -11,7 +11,10 @@ import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
+import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host.js';
+import { McpRuntimeToolHost } from '../adapters/tool/mcp-runtime-tool-host.js';
 import { PcLocalToolHost } from '../adapters/tool/pc-local-tool-host.js';
+import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
 import { AgentLoop } from '../loop/agent-loop.js';
 import { systemClock } from '../ports/clock.js';
@@ -36,7 +39,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const skillRegistry = new FileSkillRegistry(path.join(process.cwd(), 'skills'), runtimeDataDir);
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
   const toolHost = new CompositeToolHost([
+    new McpManagementToolHost(mcpStore),
+    new McpRuntimeToolHost(mcpStore),
     new PcLocalToolHost(workspaceProjects),
+    new SkillManagementToolHost(skillRegistry),
     new MemoryToolHost(memoryStore),
   ]);
   const modelClient = new ConfiguredModelClient(configStore);

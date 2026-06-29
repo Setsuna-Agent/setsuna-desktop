@@ -30,10 +30,7 @@ describe('workspace tool host', () => {
     expect(list.content).toContain('file README.md');
     expect(read.content).toContain('tool host needle');
     expect(search.content).toContain('README.md:1');
-    expect(approval).toMatchObject({
-      reason: expect.stringContaining('Review file change before applying workspace_write_file to src/generated.txt'),
-      argumentsPreview: expect.stringContaining('src/generated.txt'),
-    });
+    expect(approval).toBeNull();
     expect(written.content).toContain('Created src/generated.txt');
     expect(JSON.parse(written.preview ?? '{}')).toMatchObject({
       diff: {

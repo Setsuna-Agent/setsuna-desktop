@@ -916,7 +916,7 @@
   background: var(--app-surface);
 }
 
-.desktop-review-file-card > header {
+.desktop-review-file-card__summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -924,34 +924,42 @@
   min-height: 34px;
   padding: 0 6px 0 8px;
   border-bottom: 1px solid var(--app-border);
+  cursor: pointer;
 }
 
-.desktop-review-file-card > header button:first-child,
-.desktop-review-file-card > header div {
+.desktop-review-file-card__summary::-webkit-details-marker {
+  display: none;
+}
+
+.desktop-review-file-card__path-main,
+.desktop-review-file-card__meta {
   display: inline-flex;
   align-items: center;
   min-width: 0;
   gap: 6px;
 }
 
-.desktop-review-file-card > header div {
+.desktop-review-file-card__meta {
   justify-content: flex-end;
 }
 
-.desktop-review-file-card > header button:first-child {
+.desktop-review-file-card__path-main {
   height: 28px;
   padding: 0 6px;
-  border: 0;
   border-radius: var(--app-radius-sm);
   color: var(--app-text);
-  background: transparent;
   font-family: var(--app-code-font-family);
   font-size: 12px;
-  text-align: left;
 }
 
-.desktop-review-file-card > header button:first-child:hover {
-  background: var(--desktop-agent-control-hover-bg);
+.desktop-review-file-card__chevron {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  transition: transform 0.16s ease;
+}
+
+.desktop-review-file-card:not([open]) .desktop-review-file-card__chevron {
+  transform: rotate(-90deg);
 }
 
 .desktop-review-file-card__path {
@@ -961,15 +969,15 @@
   white-space: nowrap;
 }
 
-.desktop-review-file-card > header div span,
-.desktop-review-file-card > header div em {
+.desktop-review-file-card__meta span,
+.desktop-review-file-card__meta em {
   color: var(--app-text-muted);
   font-size: 11px;
   font-style: normal;
   white-space: nowrap;
 }
 
-.desktop-review-file-card > header div em {
+.desktop-review-file-card__meta em {
   font-family: var(--app-code-font-family);
 }
 
@@ -985,7 +993,7 @@
 
 .desktop-review-diff-line {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 22px 38px minmax(0, 1fr);
   min-width: max-content;
   padding: 0 10px 0 0;
   border: 0;
@@ -999,11 +1007,18 @@
   background: color-mix(in srgb, var(--app-text) 5%, transparent);
 }
 
-.desktop-review-diff-line > span {
+.desktop-review-diff-line__prefix,
+.desktop-review-diff-line__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding-right: 10px;
   color: var(--app-text-subtle);
-  text-align: right;
   user-select: none;
+}
+
+.desktop-review-diff-line__number {
+  justify-content: flex-end;
 }
 
 .desktop-review-diff-line code {
@@ -1014,6 +1029,7 @@
   background: color-mix(in srgb, var(--app-success) 8%, transparent);
 }
 
+.desktop-review-diff-line--added .desktop-review-diff-line__prefix,
 .desktop-review-diff-line--added code {
   color: var(--app-success);
 }
@@ -1022,7 +1038,59 @@
   background: color-mix(in srgb, var(--app-danger) 8%, transparent);
 }
 
+.desktop-review-diff-line--removed .desktop-review-diff-line__prefix,
 .desktop-review-diff-line--removed code {
+  color: var(--app-danger);
+}
+
+.desktop-review-diff-line .hljs-keyword,
+.desktop-review-diff-line .hljs-selector-tag,
+.desktop-review-diff-line .hljs-built_in,
+.desktop-review-diff-line .hljs-name,
+.desktop-review-diff-line .hljs-tag {
+  color: #7c3aed;
+}
+
+.desktop-review-diff-line .hljs-string,
+.desktop-review-diff-line .hljs-attr,
+.desktop-review-diff-line .hljs-symbol,
+.desktop-review-diff-line .hljs-bullet,
+.desktop-review-diff-line .hljs-template-variable,
+.desktop-review-diff-line .hljs-addition {
+  color: var(--app-success);
+}
+
+.desktop-review-diff-line .hljs-comment,
+.desktop-review-diff-line .hljs-quote {
+  color: var(--app-text-subtle);
+  font-style: italic;
+}
+
+.desktop-review-diff-line .hljs-number,
+.desktop-review-diff-line .hljs-literal,
+.desktop-review-diff-line .hljs-variable,
+.desktop-review-diff-line .hljs-template-tag {
+  color: #b45309;
+}
+
+.desktop-review-diff-line .hljs-title,
+.desktop-review-diff-line .hljs-section,
+.desktop-review-diff-line .hljs-selector-id {
+  color: #0f6ab4;
+}
+
+.desktop-review-diff-line .hljs-type,
+.desktop-review-diff-line .hljs-class .hljs-title,
+.desktop-review-diff-line .hljs-selector-class {
+  color: #047857;
+}
+
+.desktop-review-diff-line .hljs-meta,
+.desktop-review-diff-line .hljs-doctag {
+  color: #2563eb;
+}
+
+.desktop-review-diff-line .hljs-deletion {
   color: var(--app-danger);
 }
 

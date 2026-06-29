@@ -26,6 +26,8 @@ describe('pc local tool host', () => {
       'run_shell_command',
     ]));
     expect(tools.map((tool) => tool.name)).not.toContain('workspace_write_file');
+    expect(tools.map((tool) => tool.name)).not.toContain('remember_memory');
+    expect(tools.map((tool) => tool.name)).not.toContain('configure_mcp_server');
     await expect(host.approvalForTool('plan_file_changes', {
       files: [{ file_path: 'src/generated.txt', action: 'create' }],
     }, context)).resolves.toBeNull();
@@ -46,11 +48,10 @@ describe('pc local tool host', () => {
     await host.runTool('begin_file_change', { file_path: 'src/generated.txt', action: 'create' }, context);
     await expect(host.toolChoice?.(context, { tools, messages: [] }))
       .resolves.toEqual({ type: 'tool', name: 'write_file' });
-    const approval = await host.approvalForTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context);
-    expect(approval).toMatchObject({
-      reason: expect.stringContaining('Review file change before applying write_file to src/generated.txt'),
-      argumentsPreview: expect.stringContaining('src/generated.txt'),
-    });
+    await expect(host.approvalForTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context))
+      .resolves.toBeNull();
+    await expect(host.approvalForTool('delete_file', { file_path: 'src/generated.txt' }, context))
+      .resolves.toBeNull();
     const written = await host.runTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context);
     await expect(host.toolChoice?.(context, { tools, messages: [] }))
       .resolves.toBeNull();
@@ -75,6 +76,17 @@ describe('pc local tool host', () => {
     await expect(host.approvalForTool('run_shell_command', { command: 'rm -rf dist', risk_level: 'low' }, context))
       .resolves.toMatchObject({ reason: expect.stringContaining('删除') });
   });
+
+  it('does not execute MCP configuration through the pc tool path', async () => {
+    const { host } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    await expect(host.previewToolCall('configure_mcp_server', { key: 'remote', url: 'https://example.com/mcp' }, context))
+      .resolves.toBeNull();
+    await expect(host.runTool('configure_mcp_server', { key: 'remote', url: 'https://example.com/mcp' }, context))
+      .rejects.toThrow('Unknown tool');
+  });
+
   it('forwards shell stdout as tool output deltas', async () => {
     const { host } = await createHost();
     const deltas: Array<{ delta: string; stream?: string; processId?: string }> = [];

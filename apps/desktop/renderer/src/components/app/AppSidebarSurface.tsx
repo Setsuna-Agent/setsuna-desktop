@@ -7,6 +7,7 @@ import type { MainView } from '../../types/app.js';
 export function AppSidebarSurface({
   activeProjectId,
   activeThreadId,
+  runningThreadId,
   activeView,
   globalThreads,
   navigation,
@@ -24,7 +25,8 @@ export function AppSidebarSurface({
   onResizeStart,
 }: {
   activeProjectId: string | null;
-  activeThreadId?: string;
+  activeThreadId?: string | null;
+  runningThreadId?: string | null;
   activeView: MainView;
   globalThreads: RuntimeThreadSummary[];
   navigation: DesktopNavigationState;
@@ -47,6 +49,7 @@ export function AppSidebarSurface({
     <AgentSidebar
       activeProjectId={activeProjectId}
       activeThreadId={activeThreadId}
+      runningThreadId={runningThreadId}
       activeView={activeView === 'capabilities' ? 'capabilities' : 'chat'}
       collapsedProjectIds={navigation.collapsedProjectIds}
       forceExpandedProjectIds={navigation.forceExpandedProjectIds}

@@ -92,6 +92,106 @@
   gap: 6px;
 }
 
+.sd-page-header {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.sd-page-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.sd-page-back:hover,
+.sd-page-back:focus-visible {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.sd-page-back--block {
+  width: 100%;
+}
+
+.sd-page-back__icon,
+.sd-page-back__label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.sd-page-back__icon {
+  flex: 0 0 auto;
+  justify-content: center;
+  width: 14px;
+}
+
+.sd-page-back__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-page-header__back.sd-page-back {
+  justify-self: start;
+  margin-left: -8px;
+}
+
+.sd-page-header__body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.sd-page-header__title-group {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sd-page-header__title-group h2 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.sd-page-header__title-group span {
+  display: block;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 19px;
+  overflow-wrap: anywhere;
+}
+
+.sd-page-header__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: min(460px, 52%);
+}
+
 .sd-button,
 .sd-icon-button {
   display: inline-flex;
@@ -139,7 +239,7 @@
   background: var(--desktop-agent-button-hover-bg);
 }
 
-.sd-button:disabled,
+.sd-button:disabled:not(.sd-button--primary),
 .sd-icon-button:disabled {
   color: var(--app-text-subtle);
   background: var(--app-surface-muted);
@@ -156,6 +256,15 @@
 .sd-button--primary:hover {
   border-color: var(--app-primary-hover);
   background: var(--app-primary-hover);
+}
+
+.sd-button--primary:disabled,
+.sd-button--primary:disabled:hover {
+  border-color: color-mix(in srgb, var(--app-primary) 14%, var(--app-border));
+  color: color-mix(in srgb, var(--app-text) 34%, var(--app-text-subtle));
+  background: color-mix(in srgb, var(--app-primary) 18%, var(--app-surface-muted));
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .sd-button--ghost,

@@ -51,11 +51,13 @@ export function createRuntimeContextCompactionCandidate({
   const maxTokens = CONTEXT_COMPACTION_MAX_TOKENS;
   if (!force && originalTokens <= maxTokens) return null;
 
-  const eligibleMessages = messages.filter((message) => message.visibility !== 'transcript' && (message.role !== 'system' || message.contextCompaction));
-  if (eligibleMessages.length <= 1) return null;
+  const eligibleIndexes = messages
+    .map((message, index) => (messageEligibleForCompaction(message) ? index : -1))
+    .filter((index) => index >= 0);
+  if (eligibleIndexes.length <= 1) return null;
 
-  const keepCount = Math.min(Math.max(1, keepRecentMessages), Math.max(1, eligibleMessages.length - 1));
-  const recentStart = Math.max(0, messages.length - keepCount);
+  const keepCount = Math.min(Math.max(1, keepRecentMessages), Math.max(1, eligibleIndexes.length - 1));
+  const recentStart = eligibleIndexes[eligibleIndexes.length - keepCount] ?? messages.length;
   const olderMessages = messages.slice(0, recentStart);
   const recentMessages = messages.slice(recentStart);
   if (!olderMessages.some(messageHasContextValue)) return null;
@@ -85,11 +87,15 @@ export function materializeRuntimeContextCompaction({
   turnId?: string;
 }): RuntimeContextCompactionResult {
   const normalizedSummary = summary.trim();
+  const compactedMessageCount = candidate.olderMessages.filter(messageHasContextValue).length;
+  const archivedMessages = candidate.olderMessages
+    .filter((message) => message.visibility !== 'model')
+    .map(cloneTranscriptMessage);
   const summaryTokens = estimateStringTokens(normalizedSummary);
   const compactedTokens = summaryTokens + estimateRuntimeMessageTokens(candidate.recentMessages);
 
   const notice: RuntimeContextCompactionNotice = {
-    compactedMessageCount: candidate.olderMessages.length,
+    compactedMessageCount,
     compactedRequestTokens: compactedTokens,
     compactedTokens,
     forced: candidate.triggerScopes.includes('manual') || undefined,
@@ -98,7 +104,7 @@ export function materializeRuntimeContextCompaction({
     maxContextTokens: CONTEXT_COMPACTION_MAX_TOKENS,
     maxContextTokensK: CONTEXT_COMPACTION_MAX_TOKENS_K,
     message: '正在智能压缩上下文',
-    originalMessageCount: candidate.olderMessages.length + candidate.recentMessages.length,
+    originalMessageCount: compactedMessageCount + candidate.recentMessages.filter(messageHasContextValue).length,
     originalRequestTokens: candidate.originalTokens,
     originalTokens: candidate.originalTokens,
     scope: candidate.triggerScopes[0],
@@ -119,7 +125,7 @@ export function materializeRuntimeContextCompaction({
   };
 
   return {
-    messages: [summaryMessage, ...candidate.recentMessages.map(cloneRuntimeMessage)],
+    messages: [...archivedMessages, summaryMessage, ...candidate.recentMessages.map(cloneRuntimeMessage)],
     notice,
   };
 }
@@ -154,6 +160,17 @@ function estimateStringTokens(value: string): number {
 function messageHasContextValue(message: RuntimeMessage): boolean {
   if (message.visibility === 'transcript') return false;
   return Boolean(message.content.trim() || message.attachments?.length || message.contextCompaction);
+}
+
+function messageEligibleForCompaction(message: RuntimeMessage): boolean {
+  return message.visibility !== 'transcript' && (message.role !== 'system' || Boolean(message.contextCompaction));
+}
+
+function cloneTranscriptMessage(message: RuntimeMessage): RuntimeMessage {
+  return {
+    ...cloneRuntimeMessage(message),
+    visibility: 'transcript',
+  };
 }
 
 function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {

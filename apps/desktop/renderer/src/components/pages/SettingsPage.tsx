@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { Popconfirm } from 'antd';
-import { ArrowLeft, Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, KeyRound, Moon, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, Sun, Trash2, Type } from 'lucide-react';
+import { Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, KeyRound, Monitor, Moon, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, Sun, Trash2, Type } from 'lucide-react';
 import type {
   ProviderConfigState,
   ProviderModelConfig,
@@ -13,7 +13,7 @@ import type {
   RuntimeMemoryPreviewItem,
   RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
-import { Button, EmptyState, IconButton, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
+import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import {
   fontFamilyOptions,
@@ -42,7 +42,20 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
 const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
-const setsunaStyleOptions: Array<{ value: RuntimeConfigState['setsunaStyle']; label: string; icon: ReactNode }> = [
+
+type SettingsChoiceOption<TValue extends string> = {
+  value: TValue;
+  label: string;
+  icon: ReactNode;
+};
+
+const themeModeOptions: Array<SettingsChoiceOption<ThemeMode>> = [
+  { value: 'light', label: '浅色', icon: <Sun size={14} /> },
+  { value: 'dark', label: '深色', icon: <Moon size={14} /> },
+  { value: 'system', label: '系统', icon: <Monitor size={14} /> },
+];
+
+const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsunaStyle']>> = [
   { value: 'developer', label: '开发', icon: <Cpu size={14} /> },
   { value: 'daily', label: '日常', icon: <Sun size={14} /> },
 ];
@@ -75,6 +88,12 @@ export function SettingsPage({
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
   const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId) ?? config?.providers[0];
   const activeProviderName = activeProvider ? `${activeProvider.name || activeProvider.id} · ${config?.providers.length ?? 0} 厂商` : 'local-test';
+  const headingSubtitle =
+    activeSection === 'localLlm'
+      ? activeProviderName
+      : activeSection === 'general'
+        ? null
+        : config?.dataPath ?? 'Local runtime';
   const content =
     activeSection === 'general' ? (
       <GeneralSettings />
@@ -106,10 +125,7 @@ export function SettingsPage({
     <main className="desktop-settings-panel">
       <div className="chat-user-settings chat-user-settings--page">
         <nav className="chat-user-settings__nav">
-          <button className="chat-user-settings__page-back" type="button" onClick={onBack}>
-            <ArrowLeft size={14} />
-            <span>返回应用</span>
-          </button>
+          <PageBackButton block className="chat-user-settings__page-back" label="返回应用" onClick={onBack} />
           <div className="chat-user-settings__title">设置</div>
           <div className="chat-user-settings__tabs">
             {settingsSections.map((section) => (
@@ -128,7 +144,7 @@ export function SettingsPage({
         <section className="chat-user-settings__content">
           <header className={`chat-user-settings__page-heading ${activeSection === 'localLlm' ? 'chat-user-settings__page-heading--wide' : ''}`}>
             <h1>{settingsSectionLabels[activeSection]}</h1>
-            <span>{activeSection === 'localLlm' ? activeProviderName : config?.dataPath ?? 'Local runtime'}</span>
+            {headingSubtitle ? <span>{headingSubtitle}</span> : null}
           </header>
           {content}
         </section>
@@ -137,11 +153,45 @@ export function SettingsPage({
   );
 }
 
+function SettingsChoiceGroup<TValue extends string>({
+  ariaLabel,
+  options,
+  value,
+  onChange,
+}: {
+  ariaLabel: string;
+  options: Array<SettingsChoiceOption<TValue>>;
+  value: TValue;
+  onChange: (value: TValue, event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <div className="chat-user-settings__option-group" role="radiogroup" aria-label={ariaLabel}>
+      {options.map((option) => {
+        const selected = value === option.value;
+        return (
+          <button
+            key={option.value}
+            className={`chat-user-settings__option-button ${selected ? 'is-active' : ''}`}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={(event) => onChange(option.value, event)}
+          >
+            <span className="chat-user-settings__option-icon">{option.icon}</span>
+            <span>{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function GeneralSettings() {
   const { fontFamily, fontSize, setFontFamily, setFontSize } = useAppearancePreferences();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const selectedFont = fontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions[0];
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
+  const fontSizeProgress = `${(fontSizeIndex / Math.max(fontSizeOptions.length - 1, 1)) * 100}%`;
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__section--general">
@@ -167,18 +217,28 @@ function GeneralSettings() {
             </SelectField>
           </label>
           <div className="chat-user-settings__font-preview" style={{ fontFamily: selectedFont.css }}>
-            <div className="chat-user-settings__font-preview-panel">
+            <div className="chat-user-settings__font-preview-pane">
               <span className="chat-user-settings__font-preview-label">Plain Text</span>
-              <div className="chat-user-settings__font-preview-plain">
-                <strong>Setsuna Desktop</strong>
-                <p>ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz</p>
-                <p>普通文本预览：中文、英文、数字 1234567890 与路径显示。</p>
+              <div className="chat-user-settings__font-preview-body">
+                <strong>Setsuna Agent</strong>
+                <p>ABCDEFGHIJKLMNOPQRSTUVWXYZ</p>
+                <p>abcdefghijklmnopqrstuvwxyz</p>
+                <p>Readable interface text, numbers 1234567890, and punctuation .,;!?()[]</p>
+                <p>普通文本预览：观察中文、英文、数字和标点的字重与间距。</p>
               </div>
             </div>
-            <div className="chat-user-settings__font-preview-panel">
-              <span className="chat-user-settings__font-preview-label">Code</span>
-              <div className="chat-user-settings__font-preview-code">
-                <code>pnpm typecheck && pnpm test</code>
+            <div className="chat-user-settings__font-preview-pane">
+              <span className="chat-user-settings__font-preview-label">Markdown</span>
+              <div className="chat-user-settings__font-preview-body chat-user-settings__font-preview-markdown">
+                <strong>1. Markdown preview</strong>
+                <p>
+                  Use <code>inline code</code> with links, emphasis, and mixed 中文内容.
+                </p>
+                <ul>
+                  <li>
+                    <strong>Clean:</strong> headings, lists, and code stay balanced.
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
@@ -193,7 +253,7 @@ function GeneralSettings() {
               <SlidersHorizontal size={14} />
               <span>页面缩放</span>
             </span>
-            <div className="chat-user-settings__slider">
+            <div className="chat-user-settings__slider" style={{ '--settings-scale-progress': fontSizeProgress } as CSSProperties}>
               <input
                 aria-label="页面缩放"
                 type="range"
@@ -204,8 +264,10 @@ function GeneralSettings() {
                 onChange={(event) => setFontSize(fontSizeOptions[Number(event.currentTarget.value)] ?? '100')}
               />
               <div className="settings-scale-control__marks" aria-hidden="true">
-                {fontSizeOptions.map((option) => (
-                  <span key={option}>{option === '100' ? '100%' : ''}</span>
+                {fontSizeOptions.map((option, index) => (
+                  <span key={option} className={index <= fontSizeIndex ? 'is-active' : undefined}>
+                    {Number(option) % 10 === 0 ? `${option}%` : ''}
+                  </span>
                 ))}
               </div>
             </div>
@@ -215,27 +277,7 @@ function GeneralSettings() {
               <Sun size={14} />
               <span>主题色彩</span>
             </span>
-            <div className="chat-user-settings__theme-options" role="radiogroup" aria-label="主题色彩">
-              {[
-                { value: 'light' as ThemeMode, label: '浅色', icon: <Sun size={14} /> },
-                { value: 'dark' as ThemeMode, label: '深色', icon: <Moon size={14} /> },
-              ].map((option) => {
-                const selected = mode === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    className={`chat-user-settings__theme-option ${selected ? 'is-active' : ''}`}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={(event) => setThemeModeWithTransition(option.value, event)}
-                  >
-                    <span className="chat-user-settings__theme-option-icon">{option.icon}</span>
-                    <span>{option.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <SettingsChoiceGroup ariaLabel="主题色彩" options={themeModeOptions} value={mode} onChange={setThemeModeWithTransition} />
           </div>
         </div>
       </div>
@@ -412,12 +454,11 @@ function PersonalizationSettings({
 
     return (
       <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__memory-preview-section">
-        <div className="chat-user-settings__memory-preview-head">
-          <button className="chat-user-settings__back" type="button" onClick={() => setPersonalizationView('overview')}>
-            <ArrowLeft size={14} />
-            <span>记忆预览</span>
-          </button>
-          <div className="chat-user-settings__memory-preview-actions">
+        <PageHeader
+          className="chat-user-settings__memory-preview-header"
+          onBack={() => setPersonalizationView('overview')}
+          title="记忆预览"
+          actions={
             <Button
               className="chat-user-settings__tiny-action"
               icon={<RefreshCw size={14} />}
@@ -426,8 +467,8 @@ function PersonalizationSettings({
             >
               {memoryPreviewLoading ? '刷新中' : '刷新'}
             </Button>
-          </div>
-        </div>
+          }
+        />
         <div className="chat-user-settings__memory-preview-summary">
           <div>
             <strong>{memoryPreview?.total ?? 0} 条记忆</strong>
@@ -488,31 +529,17 @@ function PersonalizationSettings({
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">风格</div>
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
-          <div className="chat-user-settings__row chat-user-settings__style-row">
+          <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Pencil size={14} />
               <span>Setsuna 风格</span>
             </span>
-            <div className="chat-user-settings__style-control" role="radiogroup" aria-label="Setsuna 风格">
-              <div className="chat-user-settings__persona-options">
-                {setsunaStyleOptions.map((option) => {
-                  const selected = config.setsunaStyle === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      className={`chat-user-settings__persona-option ${selected ? 'is-active' : ''}`}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => void onSavePreferences({ setsunaStyle: option.value })}
-                    >
-                      {option.icon}
-                      <span>{option.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <SettingsChoiceGroup
+              ariaLabel="Setsuna 风格"
+              options={setsunaStyleOptions}
+              value={config.setsunaStyle}
+              onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })}
+            />
           </div>
         </div>
       </div>
@@ -888,6 +915,9 @@ function ProviderSettings({
                     <Trash2 size={14} />
                   </IconButton>
                 ) : null}
+                <Button variant="primary" icon={<Save size={15} />} disabled={saving} onClick={save}>
+                  {saving ? '保存中' : '保存'}
+                </Button>
               </div>
             </div>
             <div className="chat-user-settings__local-provider-body">
@@ -1079,9 +1109,6 @@ function ProviderSettings({
                 <KeyRound size={14} />
                 {saveStatusMessage}
               </span>
-              <Button variant="primary" icon={<Save size={15} />} disabled={saving} onClick={save}>
-                {saving ? '保存中' : '保存'}
-              </Button>
             </div>
           </div>
         ) : (

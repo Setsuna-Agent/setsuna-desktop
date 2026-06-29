@@ -11,6 +11,7 @@ const isProjectActionTarget = (target: EventTarget | null) =>
 export function AgentSidebar({
   activeProjectId,
   activeThreadId,
+  runningThreadId,
   activeView,
   collapsedProjectIds,
   forceExpandedProjectIds,
@@ -49,6 +50,7 @@ export function AgentSidebar({
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
+  runningThreadId?: string | null;
   activeView: 'chat' | 'capabilities';
   collapsedProjectIds: Set<string>;
   forceExpandedProjectIds: Set<string>;
@@ -105,6 +107,7 @@ export function AgentSidebar({
         <ProjectSection
           activeProjectId={activeProjectId}
           activeThreadId={activeThreadId}
+          runningThreadId={runningThreadId}
           collapsedProjectIds={collapsedProjectIds}
           forceExpandedProjectIds={forceExpandedProjectIds}
           projectActionMenuId={projectActionMenuId}
@@ -127,6 +130,7 @@ export function AgentSidebar({
         <GlobalThreadSection
           activeProjectId={activeProjectId}
           activeThreadId={activeThreadId}
+          runningThreadId={runningThreadId}
           globalThreads={globalThreads}
           sessionsCollapsed={sessionsCollapsed}
           threadActionMenuId={threadActionMenuId}
@@ -168,6 +172,7 @@ export function AgentSidebar({
 function ProjectSection({
   activeProjectId,
   activeThreadId,
+  runningThreadId,
   collapsedProjectIds,
   forceExpandedProjectIds,
   projectActionMenuId,
@@ -189,6 +194,7 @@ function ProjectSection({
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
+  runningThreadId?: string | null;
   collapsedProjectIds: Set<string>;
   forceExpandedProjectIds: Set<string>;
   projectActionMenuId: string | null;
@@ -277,6 +283,7 @@ function ProjectSection({
                             <SidebarThreadRow
                               key={`${project.id}:${thread.id}`}
                               menuOpen={threadActionMenuId === thread.id}
+                              running={runningThreadId === thread.id}
                               selected={isActiveProject && activeThreadId === thread.id}
                               thread={thread}
                               variant="project"
@@ -383,6 +390,7 @@ function ProjectActionMenu({
 function GlobalThreadSection({
   activeProjectId,
   activeThreadId,
+  runningThreadId,
   globalThreads,
   sessionsCollapsed,
   threadActionMenuId,
@@ -396,6 +404,7 @@ function GlobalThreadSection({
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
+  runningThreadId?: string | null;
   globalThreads: RuntimeThreadSummary[];
   sessionsCollapsed: boolean;
   threadActionMenuId: string | null;
@@ -431,6 +440,7 @@ function GlobalThreadSection({
               <SidebarThreadRow
                 key={thread.id}
                 menuOpen={threadActionMenuId === thread.id}
+                running={runningThreadId === thread.id}
                 selected={!activeProjectId && activeThreadId === thread.id}
                 thread={thread}
                 variant="global"

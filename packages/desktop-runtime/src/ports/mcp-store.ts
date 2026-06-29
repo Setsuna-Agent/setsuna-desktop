@@ -2,6 +2,7 @@ import type { RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerPatch
 
 export type McpStore = {
   listServers(): Promise<RuntimeMcpServerList>;
+  listServerInputs(): Promise<RuntimeMcpServerInput[]>;
   upsertServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;
   updateServer(key: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList>;
   deleteServer(key: string): Promise<void>;

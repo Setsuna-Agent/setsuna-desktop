@@ -1,10 +1,11 @@
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { LoaderCircle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 
 export function SidebarThreadRow({
   menuOpen,
+  running = false,
   selected,
   thread,
   variant,
@@ -14,6 +15,7 @@ export function SidebarThreadRow({
   onToggleMenu,
 }: {
   menuOpen: boolean;
+  running?: boolean;
   selected: boolean;
   thread: RuntimeThreadSummary;
   variant: 'global' | 'project';
@@ -54,11 +56,39 @@ export function SidebarThreadRow({
       </button>
     </SidebarFloatingMenu>
   );
+  const className = ['desktop-agent-session', `desktop-agent-session--${variant}`, selected ? 'is-active' : '', running ? 'is-running' : '']
+    .filter(Boolean)
+    .join(' ');
+  const meta = (
+    <span className="desktop-agent-session__meta">
+      {running ? (
+        <span className="desktop-agent-session__running" aria-label="对话进行中" title="对话进行中">
+          <LoaderCircle className="is-spinning" size={13} />
+        </span>
+      ) : (
+        <span>{formatRelativeDate(thread.updatedAt)}</span>
+      )}
+      <span
+        className="desktop-agent-session__menu-button"
+        ref={menuTriggerRef}
+        role="button"
+        tabIndex={0}
+        aria-label="对话操作"
+        aria-expanded={menuOpen}
+        onClick={handleMenuClick}
+        onMouseDown={stopMenuPointerEvent}
+        onPointerDown={stopMenuPointerEvent}
+        onKeyDown={handleMenuKeyDown}
+      >
+        <MoreHorizontal size={13} />
+      </span>
+    </span>
+  );
 
   if (variant === 'project') {
     return (
       <div
-        className={`desktop-agent-session desktop-agent-session--project ${selected ? 'is-active' : ''}`}
+        className={className}
         role="button"
         tabIndex={0}
         title={thread.title}
@@ -66,23 +96,7 @@ export function SidebarThreadRow({
         onKeyDown={handleSelectKeyDown}
       >
         <span className="desktop-agent-session__title">{thread.title}</span>
-        <span className="desktop-agent-session__meta">
-          <span>{formatRelativeDate(thread.updatedAt)}</span>
-          <span
-            className="desktop-agent-session__menu-button"
-            ref={menuTriggerRef}
-            role="button"
-            tabIndex={0}
-            aria-label="对话操作"
-            aria-expanded={menuOpen}
-            onClick={handleMenuClick}
-            onMouseDown={stopMenuPointerEvent}
-            onPointerDown={stopMenuPointerEvent}
-            onKeyDown={handleMenuKeyDown}
-          >
-            <MoreHorizontal size={13} />
-          </span>
-        </span>
+        {meta}
         {menu}
       </div>
     );
@@ -90,7 +104,7 @@ export function SidebarThreadRow({
 
   return (
     <div
-      className={`desktop-agent-session desktop-agent-session--global ${selected ? 'is-active' : ''}`}
+      className={className}
       role="button"
       tabIndex={0}
       title={thread.title}
@@ -98,23 +112,7 @@ export function SidebarThreadRow({
       onKeyDown={handleSelectKeyDown}
     >
       <span className="desktop-agent-session__title">{thread.title}</span>
-      <span className="desktop-agent-session__meta">
-        <span>{formatRelativeDate(thread.updatedAt)}</span>
-        <span
-          className="desktop-agent-session__menu-button"
-          ref={menuTriggerRef}
-          role="button"
-          tabIndex={0}
-          aria-label="对话操作"
-          aria-expanded={menuOpen}
-          onClick={handleMenuClick}
-          onMouseDown={stopMenuPointerEvent}
-          onPointerDown={stopMenuPointerEvent}
-          onKeyDown={handleMenuKeyDown}
-        >
-          <MoreHorizontal size={13} />
-        </span>
-      </span>
+      {meta}
       {menu}
     </div>
   );

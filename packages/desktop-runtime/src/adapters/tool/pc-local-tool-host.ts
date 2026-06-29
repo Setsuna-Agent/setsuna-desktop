@@ -19,7 +19,7 @@ type ProjectToolState = {
   activeFileChange: FileChangeEntry | null;
 };
 
-const EXCLUDED_PC_TOOLS = new Set(['remember_memory']);
+const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
 const FILE_CHANGE_PLAN_TOOL_NAME = 'plan_file_changes';
 const FILE_CHANGE_BEGIN_TOOL_NAME = 'begin_file_change';
 const ACTUAL_FILE_MUTATION_TOOLS = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
@@ -58,14 +58,8 @@ export class PcLocalToolHost implements ToolHost {
 
   async approvalForTool(name: string, input: unknown, context: ToolExecutionContext) {
     const normalized = this.normalizeToolCall(name, input);
+    if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
     const projectState = await this.projectStateFor(context);
-    if (ACTUAL_FILE_MUTATION_TOOLS.has(normalized.name)) {
-      const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
-      return {
-        reason: fileMutationApprovalReason(normalized.name, normalized.args, preview),
-        argumentsPreview: preview ? previewPayload(preview) : previewArguments(normalized.args),
-      };
-    }
     if (FILE_MUTATION_TOOLS.has(normalized.name)) return null;
     if (normalized.name === 'run_shell_command') {
       const risk = pcTools.shellCommandRisk(
@@ -92,6 +86,7 @@ export class PcLocalToolHost implements ToolHost {
 
   async previewToolCall(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
     const normalized = this.normalizeToolCall(name, input);
+    if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
     const projectState = await this.projectStateFor(context);
     const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
     return {
@@ -102,6 +97,7 @@ export class PcLocalToolHost implements ToolHost {
 
   async previewPartialToolCall(name: string, rawArguments: string, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
     const normalizedName = this.normalizeToolName(name);
+    if (EXCLUDED_PC_TOOLS.has(normalizedName)) return null;
     const projectState = await this.projectStateFor(context);
     const partialArgs = parsePartialArguments(normalizedName, rawArguments);
     if (!partialArgs) return null;
@@ -114,6 +110,7 @@ export class PcLocalToolHost implements ToolHost {
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     const normalized = this.normalizeToolCall(name, input);
+    if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
     const projectState = await this.projectStateFor(context);
     projectState.toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
 
@@ -282,7 +279,6 @@ async function previewForTool(name: string, args: Record<string, unknown>, state
   if (name === 'append_file') return pcTools.previewAppendFileDiff(args, state);
   if (name === 'delete_file') return pcTools.previewDeleteFileDiff(args, state);
   if (name === 'edit' || name === 'edit_file') return pcTools.previewEditFileDiff(args, state);
-  if (name === 'configure_mcp_server') return pcTools.previewMcpServerConfig(args, state);
   return null;
 }
 
@@ -307,21 +303,6 @@ function previewPayload(value: unknown): string {
 
 function isDiffLike(value: Record<string, unknown>): boolean {
   return typeof value.path === 'string' && (typeof value.additions === 'number' || typeof value.deletions === 'number' || Array.isArray(value.diffs));
-}
-
-function fileMutationApprovalReason(name: string, args: Record<string, unknown>, preview: unknown): string {
-  const paths = previewFilePaths(preview);
-  const target = paths.length
-    ? paths.length === 1 ? paths[0] : `${paths.length} files`
-    : shortSingleLine(args.file_path ?? args.path ?? args.target_path ?? args.file ?? name);
-  return `Review file change before applying ${name}${target ? ` to ${target}` : ''}.`;
-}
-
-function previewFilePaths(value: unknown): string[] {
-  const record = recordInput(value);
-  const diff = recordInput(record.diff ?? record);
-  const diffs = Array.isArray(diff.diffs) ? diff.diffs : [diff];
-  return [...new Set(diffs.map((item) => recordInput(item).path).filter((item): item is string => typeof item === 'string' && Boolean(item.trim())))];
 }
 
 function previewArguments(value: unknown): string {

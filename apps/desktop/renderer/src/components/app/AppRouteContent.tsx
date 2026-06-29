@@ -7,7 +7,7 @@ import type { ChatTurnActions } from '../../hooks/useChatTurnActions.js';
 import type { DesktopWorkspacePanelsState } from '../../hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../hooks/useRuntimeClientState.js';
-import type { MainView } from '../../types/app.js';
+import type { ChatSkillSelectionRequest, MainView } from '../../types/app.js';
 
 export function AppRouteContent({
   activeProject,
@@ -18,7 +18,10 @@ export function AppRouteContent({
   runtime,
   setActiveView,
   setDraft,
+  skillSelectionRequest,
   workspacePanels,
+  onSelectSkillForChat,
+  onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
   terminalHeight,
@@ -38,7 +41,10 @@ export function AppRouteContent({
   runtime: RuntimeClientState;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
+  skillSelectionRequest: ChatSkillSelectionRequest | null;
   workspacePanels: DesktopWorkspacePanelsState;
+  onSelectSkillForChat: (skillId: string) => void;
+  onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   terminalHeight: number;
@@ -93,8 +99,10 @@ export function AppRouteContent({
         onCreateSkill={runtime.createSkill}
         onDeleteSkill={runtime.deleteSkill}
         onGetSkillDetail={runtime.getSkillDetail}
+        onCreateInConversation={onSelectSkillForChat}
         onRefresh={runtime.refresh}
         onUpdateSkill={runtime.updateSkill}
+        onFetchMcpTools={runtime.fetchMcpServerTools}
         onSaveMcpServer={runtime.saveMcpServer}
         onUpdateMcpServer={runtime.updateMcpServer}
         onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
@@ -115,6 +123,7 @@ export function AppRouteContent({
       currentThread={runtime.currentThread}
       draft={draft}
       filePreview={projectWorkspace.filePreview}
+      skillSelectionRequest={skillSelectionRequest}
       reviewError={workspacePanels.reviewError}
       reviewLoading={workspacePanels.reviewLoading}
       reviewState={workspacePanels.reviewState}
@@ -127,7 +136,7 @@ export function AppRouteContent({
       onAddFileToConversation={chatActions.addFileToConversation}
       onCancelActiveTurn={() => void chatActions.cancelActiveTurn()}
       onApprovalPolicyChange={(policy) => void runtime.saveRuntimePreferences({ approvalPolicy: policy })}
-      onAnswerApproval={(approvalId, decision) => void runtime.answerApproval(approvalId, { decision })}
+      onAnswerApproval={(approvalId, decision) => runtime.answerApproval(approvalId, { decision })}
       onCompactContext={() => void runtime.compactCurrentThreadContext()}
       onClearContext={() => void runtime.clearCurrentThreadContext()}
       onDeleteMessages={(messageIds) => chatActions.deleteMessages(messageIds)}
@@ -147,12 +156,13 @@ export function AppRouteContent({
         void workspacePanels.loadReviewState();
       }}
       onOpenBottomTerminalPanel={() => workspacePanels.openDesktopPanel('bottom', 'terminal')}
+      onOpenFilesPanel={() => workspacePanels.openDesktopPanel('side', 'files')}
       onOpenFileReviewPanel={openFileReviewPanel}
-      onPermissionProfileChange={(permissionProfile) => void runtime.saveRuntimePreferences({ permissionProfile })}
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={(filePath) => void projectWorkspace.openProjectFile(filePath)}
       onReviewRefresh={() => void workspacePanels.loadReviewState()}
       onSend={(value, options) => void chatActions.sendInput(value, options)}
+      onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}
       onTerminalResizeStart={onTerminalResizeStart}
       terminalHeight={terminalHeight}

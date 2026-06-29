@@ -85,22 +85,9 @@ export class WorkspaceToolHost implements ToolHost {
 
   async approvalForTool(name: string, input: unknown, context: ToolExecutionContext): Promise<{ reason: string; argumentsPreview?: string } | null> {
     if (name !== 'workspace_write_file') return null;
-    const args = objectInput(input);
-    const project = await this.projectFor(this.resolveProjectId(args.projectId, context));
-    const filePath = requiredStringArg(args.path, 'path');
-    const content = requiredContentArg(args.content);
-    const previous = await this.projects.readFile(project.id, filePath).catch(() => null);
-    const diff = fileChangePreview({
-      created: !previous,
-      nextContent: content,
-      path: filePath,
-      previousContent: previous?.content ?? null,
-      previousTruncated: Boolean(previous?.truncated),
-    });
-    return {
-      reason: `Review file change before applying workspace_write_file to ${diff.path}.`,
-      argumentsPreview: JSON.stringify({ diff }),
-    };
+    void input;
+    void context;
+    return null;
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {

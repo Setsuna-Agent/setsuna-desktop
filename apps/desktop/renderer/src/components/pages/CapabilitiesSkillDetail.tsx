@@ -1,6 +1,6 @@
-import { ArrowLeft, Boxes, Check, FileText, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { Boxes, Check, FileText, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import type { RuntimeSkillDetail, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
-import { Button, EmptyState } from '../primitives.js';
+import { Button, EmptyState, PageHeader } from '../primitives.js';
 
 export function CapabilitiesSkillDetail({
   detail,
@@ -22,44 +22,48 @@ export function CapabilitiesSkillDetail({
   onUpdateSkill: (skill: RuntimeSkillSummary, patch: Partial<Pick<RuntimeSkillSummary, 'enabled' | 'selected'>>) => Promise<void>;
 }) {
   const activeSkill = detail ?? summary;
+  const selectedByDefault = activeSkill.enabled && activeSkill.selected;
+  const updateEnabled = (enabled: boolean) => {
+    void onUpdateSkill(activeSkill, {
+      enabled,
+      ...(enabled ? {} : { selected: false }),
+    });
+  };
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-skill-detail">
-      <header className="desktop-capabilities-detail__head">
-        <div>
-          <Button type="button" variant="ghost" icon={<ArrowLeft size={14} />} onClick={onBack}>
-            返回
-          </Button>
-          <h2>{activeSkill.name || 'Skill 详情'}</h2>
-          <span className="desktop-capabilities-detail__subtitle">
-            {activeSkill.kind === 'user' ? '个人 Skill' : '系统 Skill'} · {activeSkill.path ?? activeSkill.id}
-          </span>
-        </div>
-        <div className="desktop-capabilities-skill-actions">
-          <Button
-            type="button"
-            variant={activeSkill.selected ? 'secondary' : 'primary'}
-            icon={activeSkill.selected ? <Check size={14} /> : <Boxes size={14} />}
-            disabled={!activeSkill.enabled || activeSkill.selected}
-            onClick={() => void onUpdateSkill(activeSkill, { selected: true })}
-          >
-            {activeSkill.selected ? '已使用' : '使用'}
-          </Button>
-          <label className="sd-check">
-            <input type="checkbox" checked={activeSkill.enabled} onChange={(event) => void onUpdateSkill(activeSkill, { enabled: event.currentTarget.checked })} />
-            <span>启用</span>
-          </label>
-          {activeSkill.kind === 'user' ? (
-            <>
-              <Button type="button" variant="ghost" icon={<Pencil size={14} />} onClick={onEdit}>
-                编辑
-              </Button>
-              <Button type="button" variant="danger" icon={<Trash2 size={14} />} onClick={() => onDelete?.(activeSkill)}>
-                删除
-              </Button>
-            </>
-          ) : null}
-        </div>
-      </header>
+      <PageHeader
+        onBack={onBack}
+        title={activeSkill.name || 'Skill 详情'}
+        subtitle={`${activeSkill.kind === 'user' ? '个人 Skill' : '系统 Skill'} · ${activeSkill.path ?? activeSkill.id}`}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant={selectedByDefault ? 'secondary' : 'primary'}
+              icon={selectedByDefault ? <Check size={14} /> : <Boxes size={14} />}
+              title="默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文"
+              disabled={!activeSkill.enabled || selectedByDefault}
+              onClick={() => void onUpdateSkill(activeSkill, { selected: true })}
+            >
+              {selectedByDefault ? '已默认使用' : '设为默认使用'}
+            </Button>
+            <label className="sd-check" title="启用后可在对话中选择这个 Skill">
+              <input type="checkbox" checked={activeSkill.enabled} onChange={(event) => updateEnabled(event.currentTarget.checked)} />
+              <span>启用</span>
+            </label>
+            {activeSkill.kind === 'user' ? (
+              <>
+                <Button type="button" variant="ghost" icon={<Pencil size={14} />} onClick={onEdit}>
+                  编辑
+                </Button>
+                <Button type="button" variant="danger" icon={<Trash2 size={14} />} onClick={() => onDelete?.(activeSkill)}>
+                  删除
+                </Button>
+              </>
+            ) : null}
+          </>
+        }
+      />
 
       <div className="desktop-capabilities-skill-meta">
         <span>{activeSkill.id}</span>
@@ -68,6 +72,10 @@ export function CapabilitiesSkillDetail({
       </div>
 
       {activeSkill.description ? <p className="desktop-capabilities-skill-description">{activeSkill.description}</p> : null}
+
+      <p className="desktop-capabilities-skill-usage-help">
+        默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文；对话输入框里的 Skill 词槽只影响当前这次发送。
+      </p>
 
       {loading ? (
         <div className="desktop-capabilities-skill-loading">

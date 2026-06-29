@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -6,6 +6,7 @@ import {
   Clock3,
   FileText,
   PanelRightOpen,
+  Pencil,
   Play,
   Search,
   ShieldAlert,
@@ -15,6 +16,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { RuntimeApprovalDecision, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import { fileLanguage, highlightedCodeLinesHtml } from '../workspace/codeHighlight.js';
 import {
   fileChangeFromToolRun,
   fileChangesFromToolRun,
@@ -25,37 +27,50 @@ import {
   type RuntimeFileDiffLine,
 } from './runtimeFileChanges.js';
 
-type ToolRunGroup =
+export type ToolRunGroup =
   | { type: 'single'; run: RuntimeToolRun }
   | { type: 'group'; id: string; kind: ToolRunGroupKind; runs: RuntimeToolRun[] };
 
+type ToolRunDisplayGroup =
+  | ToolRunGroup
+  | { type: 'mixed'; id: string; groups: ToolRunGroup[]; summaryMode: ToolRunSummaryMode };
+
 export type ToolRunGroupKind = 'inspection' | 'search' | 'shell' | 'fileMutation' | 'generic';
+export type ToolRunSummaryMode = 'aggregate' | 'latest';
+type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
 
 export function RuntimeToolRuns({
   runs,
   onAnswerApproval,
+  summaryMode = 'aggregate',
 }: {
   runs: RuntimeToolRun[];
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
+  summaryMode?: ToolRunSummaryMode;
 }) {
-  const visibleRuns = runs.filter((run) => run.name || run.status || run.argumentsPreview || run.resultPreview);
+  const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
-  const groups = groupToolRuns(visibleRuns);
+  const groups = compactToolRunGroups(groupToolRuns(visibleRuns), summaryMode);
   return (
     <div className="chat-tool-runs">
-      {groups.map((group) =>
-        group.type === 'single' && isFileMutationRun(group.run) ? (
-          <FileMutationRunRow key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />
-        ) : group.type === 'single' && isFlatInspectionRun(group.run) ? (
-          <FlatToolRunRow key={group.run.id} run={group.run} />
-        ) : group.type === 'single' ? (
-          <ToolRunPanel key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />
-        ) : (
-          <ToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />
-        ),
-      )}
+      {groups.map((group) => renderToolRunDisplayGroup(group, onAnswerApproval))}
     </div>
   );
+}
+
+export function isDisplayableRuntimeToolRun(run: RuntimeToolRun): boolean {
+  if (run.status === 'error') return false;
+  return Boolean(run.name || run.status || run.argumentsPreview || run.resultPreview);
+}
+
+function renderToolRunDisplayGroup(group: ToolRunDisplayGroup, onAnswerApproval: AnswerApprovalHandler): JSX.Element {
+  if (group.type === 'mixed') return <MixedToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />;
+  if (group.type === 'single' && isFileOperationRun(group.run)) {
+    return <FileMutationRunRow key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />;
+  }
+  if (group.type === 'single' && isFlatInspectionRun(group.run)) return <FlatToolRunRow key={group.run.id} run={group.run} />;
+  if (group.type === 'single') return <ToolRunPanel key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />;
+  return <ToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />;
 }
 
 function ToolRunPanel({
@@ -63,21 +78,22 @@ function ToolRunPanel({
   onAnswerApproval,
 }: {
   run: RuntimeToolRun;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
 }) {
   const pendingApproval = isPendingApprovalRun(run);
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
   const summary = toolRunSummary(run);
+  if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
   const open = toolRunPanelDefaultOpen(run);
   return (
-    <details className={`chat-tool-run chat-tool-run--${toolRunGroupKind(run)} chat-tool-run--${run.status}`} open={open}>
+    <details className={`chat-tool-run chat-tool-run--panel chat-tool-run--${toolRunGroupKind(run)} chat-tool-run--${run.status}`} open={open}>
       <summary className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{summary.title}</span>
           {summary.target ? <span className="chat-tool-run__target">{summary.target}</span> : null}
         </span>
-        <span className="chat-tool-run__status">{statusText(run)}</span>
+        <ToolRunStatus status={run.status} />
       </summary>
       <div className="chat-tool-run__body">
         <ToolRunDetails run={run} onAnswerApproval={onAnswerApproval} pendingApprovalId={pendingApprovalId} />
@@ -91,14 +107,17 @@ function ToolRunGroupPanel({
   onAnswerApproval,
 }: {
   group: Extract<ToolRunGroup, { type: 'group' }>;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
 }) {
   const status = toolRunGroupStatus(group.runs);
   const summary = toolRunGroupSummary(group);
   const hasPendingApproval = group.runs.some(isPendingApprovalRun);
+  const visibleRuns = hasPendingApproval ? group.runs.filter(isPendingApprovalRun) : group.runs;
   const open = toolRunGroupDefaultOpen(group.kind, status, hasPendingApproval);
-  const showRunTitles = group.kind !== 'shell';
+  const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
   const shellGroup = group.kind === 'shell';
+  const fileOperationGroup = group.kind === 'fileMutation';
+  const fileOperationSummary = fileOperationGroup ? fileOperationGroupSummary(group.runs) : null;
   return (
     <details className={`chat-tool-run chat-tool-run--group chat-tool-run--${group.kind} chat-tool-run--${status}`} open={open}>
       <summary className="chat-tool-run__summary">
@@ -106,16 +125,33 @@ function ToolRunGroupPanel({
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{summary.title}</span>
           {summary.target ? <span className="chat-tool-run__target">{summary.target}</span> : null}
+          {fileOperationSummary?.changeCounts ? (
+            <ChangeCounts
+              additions={fileOperationSummary.changeCounts.additions}
+              deletions={fileOperationSummary.changeCounts.deletions}
+              showZero={fileOperationSummary.changeCounts.showZero}
+            />
+          ) : null}
         </span>
-        <span className="chat-tool-run__status">{statusTextFromStatus(status)}</span>
+        <ToolRunStatus status={status} />
       </summary>
-      <div className={`chat-tool-run__body ${shellGroup ? 'chat-tool-run__body--shell-list' : 'chat-tool-run__body--group'}`}>
+      <div
+        className={`chat-tool-run__body ${
+          shellGroup
+            ? 'chat-tool-run__body--shell-list'
+            : fileOperationGroup
+              ? 'chat-tool-run__body--file-operation'
+              : 'chat-tool-run__body--group'
+        }`}
+      >
         {group.kind === 'inspection' ? (
-          <InspectionTargetList runs={group.runs} />
+          <InspectionTargetList runs={visibleRuns} />
+        ) : fileOperationGroup ? (
+          <FileOperationTargetList runs={visibleRuns} />
         ) : shellGroup ? (
-          group.runs.map((run) => <ToolRunPanel key={run.id} run={run} onAnswerApproval={onAnswerApproval} />)
+          visibleRuns.map((run) => <ToolRunPanel key={run.id} run={run} onAnswerApproval={onAnswerApproval} />)
         ) : (
-          group.runs.map((run) => {
+          visibleRuns.map((run) => {
             const pendingApproval = isPendingApprovalRun(run);
             const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
             const runSummary = toolRunSummary(run);
@@ -137,6 +173,67 @@ function ToolRunGroupPanel({
   );
 }
 
+function MixedToolRunGroupPanel({
+  group,
+  onAnswerApproval,
+}: {
+  group: Extract<ToolRunDisplayGroup, { type: 'mixed' }>;
+  onAnswerApproval: AnswerApprovalHandler;
+}) {
+  const runs = group.groups.flatMap(toolRunGroupRuns);
+  const status = toolRunGroupStatus(runs);
+  const hasPendingApproval = runs.some(isPendingApprovalRun);
+  const visibleGroups = hasPendingApproval ? group.groups.map(onlyPendingApprovalGroup).filter(isToolRunGroup) : group.groups;
+  const open = toolRunGroupDefaultOpen('generic', status, hasPendingApproval);
+  const compactSummary = mixedToolRunGroupSummary(group.groups, group.summaryMode);
+  return (
+    <details className={`chat-tool-run chat-tool-run--group chat-tool-run--mixed chat-tool-run--${status}`} open={open}>
+      <summary className="chat-tool-run__summary">
+        <span className="chat-tool-run__icon">{mixedToolRunGroupIcon(status)}</span>
+        <span className="chat-tool-run__summary-text">
+          <span className="chat-tool-run__title">{compactSummary.title}</span>
+          {compactSummary.target ? <span className="chat-tool-run__target">{compactSummary.target}</span> : null}
+          {compactSummary.changeCounts ? (
+            <ChangeCounts
+              additions={compactSummary.changeCounts.additions}
+              deletions={compactSummary.changeCounts.deletions}
+              showZero={compactSummary.changeCounts.showZero}
+            />
+          ) : null}
+        </span>
+        <ToolRunStatus status={status} />
+      </summary>
+      <div className="chat-tool-run__body chat-tool-run__body--mixed-list">
+        {visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))}
+      </div>
+    </details>
+  );
+}
+
+function renderMixedToolRunChildGroup(group: ToolRunGroup, onAnswerApproval: AnswerApprovalHandler): JSX.Element | null {
+  const runs = toolRunGroupRuns(group);
+  const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
+  if (kind === 'fileMutation') return <FileOperationTargetList key={toolRunGroupId(group)} runs={runs} />;
+  return renderToolRunDisplayGroup(group, onAnswerApproval);
+}
+
+function onlyPendingApprovalGroup(group: ToolRunGroup): ToolRunGroup | null {
+  const runs = toolRunGroupRuns(group).filter(isPendingApprovalRun);
+  if (!runs.length) return null;
+  return runs.length === 1
+    ? { type: 'single', run: runs[0] }
+    : {
+        type: 'group',
+        id: `${toolRunGroupId(group)}:pending`,
+        kind: group.type === 'single' ? toolRunGroupKind(group.run) : group.kind,
+        runs,
+      };
+}
+
+function isToolRunGroup(group: ToolRunGroup | null): group is ToolRunGroup {
+  return group !== null;
+}
+
 function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
   const summary = toolRunSummary(run);
   return (
@@ -147,7 +244,7 @@ function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
           <span className="chat-tool-run__title">{summary.title}</span>
           {summary.target ? <span className="chat-tool-run__target">{summary.target}</span> : null}
         </span>
-        <span className="chat-tool-run__status">{statusText(run)}</span>
+        <ToolRunStatus status={run.status} />
       </div>
     </div>
   );
@@ -158,19 +255,19 @@ function FileMutationRunRow({
   onAnswerApproval,
 }: {
   run: RuntimeToolRun;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
 }) {
   const pendingApprovalId = isPendingApprovalRun(run) ? run.approvalId : undefined;
-  const target = fileMutationTarget(run);
+  const target = fileOperationTarget(run);
   const error = run.status === 'error' ? formatPreview(run.resultPreview ?? '') : '';
-  const totals = fileMutationChangeTotals(run);
+  const totals = fileOperationChangeTotals(run);
   return (
     <div className={`chat-tool-run chat-tool-run--flat chat-tool-run--file-mutation chat-tool-run--${run.status}`}>
       <div className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__file-status">
-            <span>{fileMutationVerb(run)}</span>
+            <span>{fileOperationVerb(run)}</span>
             {target ? (
               <code className="chat-tool-run__file-target" title={target}>
                 {pathBaseName(target)}
@@ -199,8 +296,23 @@ export function FileChangesSummaryCard({
   const [discarded, setDiscarded] = useState(false);
   const [discardError, setDiscardError] = useState<string | null>(null);
   const fileCount = summary.files.length;
-  const filePaths = [...new Set(summary.files.map((file) => file.path).filter(Boolean))];
+  const filePaths = useMemo(() => [...new Set(summary.files.map((file) => file.path).filter(Boolean))], [summary.files]);
+  const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
+  const knownFilePathsRef = useRef(new Set(filePaths));
+  const [openFilePaths, setOpenFilePaths] = useState(() => new Set(filePaths));
   const canDiscard = Boolean(onDiscardChanges && filePaths.length && !discarded);
+  useEffect(() => {
+    const nextFilePaths = new Set(filePaths);
+    const previousKnownFilePaths = knownFilePathsRef.current;
+    setOpenFilePaths((current) => {
+      const next = new Set([...current].filter((path) => nextFilePaths.has(path)));
+      filePaths.forEach((path) => {
+        if (!previousKnownFilePaths.has(path)) next.add(path);
+      });
+      return setsEqual(current, next) ? current : next;
+    });
+    knownFilePathsRef.current = nextFilePaths;
+  }, [filePathKey, filePaths]);
   const discardChanges = async () => {
     if (!canDiscard || discarding || !onDiscardChanges) return;
     setDiscarding(true);
@@ -249,8 +361,19 @@ export function FileChangesSummaryCard({
       {discardError ? <div className="chat-file-changes__error">{discardError}</div> : null}
       <div className="chat-file-changes__list">
         {summary.files.map((file) => (
-          <details className="chat-file-changes__item" key={file.path}>
-            <summary className="chat-file-changes__row">
+          <details className="chat-file-changes__item" key={file.path} open={openFilePaths.has(file.path)}>
+            <summary
+              className="chat-file-changes__row"
+              onClick={(event) => {
+                event.preventDefault();
+                setOpenFilePaths((current) => {
+                  const next = new Set(current);
+                  if (next.has(file.path)) next.delete(file.path);
+                  else next.add(file.path);
+                  return next;
+                });
+              }}
+            >
               <span className="chat-file-changes__path" title={file.path}>
                 {file.path}
               </span>
@@ -267,19 +390,29 @@ export function FileChangesSummaryCard({
 
 function FileDiffPreview({ file }: { file: RuntimeFileChange }) {
   const lines = file.lines.slice(0, 120);
+  const highlightableSource = useMemo(() => lines.map((line) => (line.type === 'gap' ? '' : line.content)).join('\n'), [lines]);
+  const language = fileLanguage(file.path);
+  const highlightedLines = useMemo(() => highlightedCodeLinesHtml(highlightableSource, language), [highlightableSource, language]);
   if (!lines.length) return <div className="chat-file-review__empty">暂无可展示的 diff 内容。</div>;
   return (
     <div className="chat-file-review__diff">
-      {lines.map((line, index) => (
-        <div
-          className={`chat-file-review__line chat-file-review__line--${diffLineClass(line)}`}
-          key={`${file.path}:${index}:${line.type}`}
-        >
-          <span className="chat-file-review__prefix">{linePrefix(line)}</span>
-          <span className="chat-file-review__line-number">{lineNumber(line)}</span>
-          <code>{line.content || ' '}</code>
-        </div>
-      ))}
+      {lines.map((line, index) => {
+        const highlighted = line.type === 'gap' ? undefined : highlightedLines[index];
+        return (
+          <div
+            className={`chat-file-review__line chat-file-review__line--${diffLineClass(line)}`}
+            key={`${file.path}:${index}:${line.type}`}
+          >
+            <span className="chat-file-review__prefix">{linePrefix(line)}</span>
+            <span className="chat-file-review__line-number">{lineNumber(line)}</span>
+            {highlighted !== undefined ? (
+              <code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />
+            ) : (
+              <code>{line.content || ' '}</code>
+            )}
+          </div>
+        );
+      })}
       {file.truncated ? <div className="chat-file-review__empty">diff 过大，已截断展示。</div> : null}
     </div>
   );
@@ -291,8 +424,61 @@ function ChangeCounts({ additions, deletions, showZero = false }: { additions?: 
   if (!showZero && (add || 0) === 0 && (del || 0) === 0) return null;
   return (
     <span className="chat-change-counts" aria-label={`新增 ${add || 0} 行，删除 ${del || 0} 行`}>
-      <span className="chat-change-counts__add">+{add || 0}</span>
-      <span className="chat-change-counts__del">-{del || 0}</span>
+      <RollingChangeCount className="chat-change-counts__add" prefix="+" value={add || 0} />
+      <RollingChangeCount className="chat-change-counts__del" prefix="-" value={del || 0} />
+    </span>
+  );
+}
+
+function RollingChangeCount({ className, prefix, value }: { className: string; prefix: string; value: number }) {
+  const previousValueRef = useRef(value);
+  const [roll, setRoll] = useState<{
+    current: number;
+    direction: 'up' | 'down';
+    previous: number | null;
+    version: number;
+  }>({
+    current: value,
+    direction: 'up',
+    previous: null,
+    version: 0,
+  });
+
+  useEffect(() => {
+    const previous = previousValueRef.current;
+    if (previous === value) return;
+    previousValueRef.current = value;
+    setRoll((currentRoll) => ({
+      current: value,
+      direction: value >= previous ? 'up' : 'down',
+      previous,
+      version: currentRoll.version + 1,
+    }));
+  }, [value]);
+
+  const rolling = roll.previous !== null && roll.previous !== roll.current;
+  const values = rolling
+    ? roll.direction === 'up'
+      ? [roll.previous, roll.current]
+      : [roll.current, roll.previous]
+    : [roll.current];
+
+  return (
+    <span className={`${className} chat-change-counts__item`}>
+      <span className="chat-change-counts__sign">{prefix}</span>
+      <span className={`chat-change-counts__number ${rolling ? `is-rolling is-${roll.direction}` : ''}`}>
+        <span
+          className="chat-change-counts__number-stack"
+          key={roll.version}
+          onAnimationEnd={() => {
+            setRoll((currentRoll) => (currentRoll.previous === null ? currentRoll : { ...currentRoll, previous: null }));
+          }}
+        >
+          {values.map((item, index) => (
+            <span key={`${roll.version}:${index}:${item}`}>{item}</span>
+          ))}
+        </span>
+      </span>
     </span>
   );
 }
@@ -307,6 +493,79 @@ function fileMutationChangeTotals(run: RuntimeToolRun): { additions: number; del
   }
   const change = fileChangeFromToolRun(run);
   return change ? { additions: change.additions, deletions: change.deletions } : null;
+}
+
+function fileOperationChangeTotals(run: RuntimeToolRun): { additions: number; deletions: number; showZero: boolean } | null {
+  const resultTotals = fileMutationChangeTotals(run);
+  if (resultTotals) return { ...resultTotals, showZero: true };
+  const argumentTotals = fileOperationChangeTotalsFromArguments(run);
+  if (argumentTotals) return { ...argumentTotals, showZero: true };
+  return run.status === 'running' || run.status === 'pending_approval' ? { additions: 0, deletions: 0, showZero: true } : null;
+}
+
+function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: number; deletions: number; showZero: boolean } | null {
+  let hasTotals = false;
+  let showZero = false;
+  let additions = 0;
+  let deletions = 0;
+  for (const entry of fileOperationEntries(runs)) {
+    if (!entry.hasChangeCounts) continue;
+    hasTotals = true;
+    showZero = showZero || entry.showZeroChangeCounts === true;
+    additions += entry.additions ?? 0;
+    deletions += entry.deletions ?? 0;
+  }
+  if (hasTotals) return { additions, deletions, showZero: showZero || additions !== 0 || deletions !== 0 };
+  const active = runs.some((run) => run.status === 'running' || run.status === 'pending_approval');
+  return active ? { additions: 0, deletions: 0, showZero: true } : null;
+}
+
+function fileOperationChangeTotalsFromArguments(run: RuntimeToolRun): { additions: number; deletions: number } | null {
+  const args = recordFromJson(run.argumentsPreview);
+  const directAdditions = optionalNumber(args.additions);
+  const directDeletions = optionalNumber(args.deletions);
+  if (directAdditions !== null || directDeletions !== null) {
+    return { additions: directAdditions ?? 0, deletions: directDeletions ?? 0 };
+  }
+
+  const diffTotals = fileOperationDiffTotalsFromValue(args.diff ?? args.diffs ?? args.files ?? args.changes);
+  if (diffTotals) return diffTotals;
+
+  if (run.name === 'delete_file') return { additions: 0, deletions: 0 };
+  if (run.name === 'append_file') {
+    const content = stringField(args.content ?? args.text);
+    if (content) return { additions: countTextLines(content), deletions: 0 };
+  }
+  if (run.name === 'write_file') {
+    const content = stringField(args.content);
+    if (content && !content.includes('...[truncated ')) return { additions: countTextLines(content), deletions: 0 };
+  }
+  return null;
+}
+
+function fileOperationDiffTotalsFromValue(value: unknown): { additions: number; deletions: number } | null {
+  const items = Array.isArray(value) ? value : [value];
+  let hasDiff = false;
+  let additions = 0;
+  let deletions = 0;
+  for (const item of items) {
+    if (!isRecord(item)) continue;
+    const nested = fileOperationDiffTotalsFromValue(item.diff ?? item.diffs ?? item.files ?? item.changes);
+    if (nested) {
+      hasDiff = true;
+      additions += nested.additions;
+      deletions += nested.deletions;
+      continue;
+    }
+    const itemAdditions = optionalNumber(item.additions);
+    const itemDeletions = optionalNumber(item.deletions);
+    if (itemAdditions !== null || itemDeletions !== null) {
+      hasDiff = true;
+      additions += itemAdditions ?? 0;
+      deletions += itemDeletions ?? 0;
+    }
+  }
+  return hasDiff ? { additions, deletions } : null;
 }
 
 function diffLineClass(line: RuntimeFileDiffLine): string {
@@ -327,15 +586,39 @@ function lineNumber(line: RuntimeFileDiffLine): string {
   return value ? String(value) : '';
 }
 
+function setsEqual<T>(left: Set<T>, right: Set<T>): boolean {
+  if (left.size !== right.size) return false;
+  for (const item of left) {
+    if (!right.has(item)) return false;
+  }
+  return true;
+}
+
 function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
-  const targets = inspectionTargets(runs);
-  if (!targets.length) return null;
+  const entries = inspectionEntries(runs);
+  if (!entries.length) return null;
   return (
     <ul className="chat-tool-run__inspection-list">
-      {targets.map((target) => (
-        <li className="chat-tool-run__inspection-item" key={`${target.kind}:${target.path}`}>
-          <span>{target.kind === 'directory' ? '目录' : '文件'}</span>
-          <code title={target.path}>{target.path}</code>
+      {entries.map((entry) => (
+        <li className="chat-tool-run__inspection-item" key={`${entry.kind}:${entry.target}`}>
+          <span>{inspectionEntryLabel(entry.kind)}</span>
+          <code title={entry.target}>{entry.target}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
+  const entries = fileOperationEntries(runs);
+  if (!entries.length) return null;
+  return (
+    <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
+      {entries.map((entry) => (
+        <li className="chat-tool-run__inspection-item" key={`${entry.action}:${entry.path}`}>
+          <span>{fileOperationActionLabel(entry.action)}</span>
+          <code title={entry.path}>{entry.path}</code>
+          <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.hasChangeCounts} />
         </li>
       ))}
     </ul>
@@ -348,7 +631,7 @@ function ToolRunDetails({
   pendingApprovalId,
 }: {
   run: RuntimeToolRun;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
   pendingApprovalId?: string;
 }) {
   if (isShellRun(run)) {
@@ -367,7 +650,7 @@ function ToolRunDetails({
       </>
     );
   }
-  if (isFileMutationRun(run)) {
+  if (isFileOperationRun(run)) {
     return (
       <>
         {run.status === 'error' && run.resultPreview ? <div className="chat-tool-run__file-error">{formatPreview(run.resultPreview)}</div> : null}
@@ -375,14 +658,19 @@ function ToolRunDetails({
       </>
     );
   }
+  const diagnostic = genericToolRunDiagnostic(run);
   return (
     <>
-      {run.approvalReason ? <ToolPreview label="授权" value={run.approvalReason} /> : null}
-      {run.argumentsPreview ? <ToolPreview label="参数" value={formatPreview(run.argumentsPreview)} code /> : null}
-      {run.resultPreview ? <ToolPreview label={run.status === 'error' ? '错误' : '结果'} value={formatPreview(run.resultPreview)} code /> : null}
+      {diagnostic ? <ToolPreview label={run.status === 'rejected' ? '已拒绝' : '错误'} value={diagnostic} /> : null}
       {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} onAnswerApproval={onAnswerApproval} /> : null}
     </>
   );
+}
+
+function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boolean {
+  if (isShellRun(run) || toolRunGroupKind(run) === 'inspection' || isFileOperationRun(run)) return true;
+  if (pendingApprovalId) return true;
+  return Boolean(genericToolRunDiagnostic(run));
 }
 
 function ApprovalActions({
@@ -390,16 +678,32 @@ function ApprovalActions({
   onAnswerApproval,
 }: {
   approvalId: string;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
 }) {
+  const [submittingDecision, setSubmittingDecision] = useState<RuntimeApprovalDecision | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async (decision: RuntimeApprovalDecision) => {
+    if (submittingDecision) return;
+    setSubmittingDecision(decision);
+    setError(null);
+    try {
+      await onAnswerApproval(approvalId, decision);
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      setSubmittingDecision(null);
+    }
+  };
   return (
-    <div className="chat-tool-run__actions">
-      <button type="button" onClick={() => onAnswerApproval(approvalId, 'approve')}>
-        允许
-      </button>
-      <button type="button" onClick={() => onAnswerApproval(approvalId, 'reject')}>
-        拒绝
-      </button>
+    <div className="chat-tool-run__approval">
+      <div className="chat-tool-run__actions">
+        <button type="button" disabled={Boolean(submittingDecision)} onClick={() => void submit('approve')}>
+          {submittingDecision === 'approve' ? '允许中' : '允许'}
+        </button>
+        <button type="button" disabled={Boolean(submittingDecision)} onClick={() => void submit('reject')}>
+          {submittingDecision === 'reject' ? '拒绝中' : '拒绝'}
+        </button>
+      </div>
+      {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
     </div>
   );
 }
@@ -414,7 +718,7 @@ function ToolPreview({ code = false, label, value }: { code?: boolean; label: st
   );
 }
 
-function groupToolRuns(runs: RuntimeToolRun[]): ToolRunGroup[] {
+export function groupToolRuns(runs: RuntimeToolRun[]): ToolRunGroup[] {
   const groups: ToolRunGroup[] = [];
   let bucket: RuntimeToolRun[] = [];
   let bucketKey = '';
@@ -447,12 +751,123 @@ function groupToolRuns(runs: RuntimeToolRun[]): ToolRunGroup[] {
   return groups;
 }
 
+function compactToolRunGroups(groups: ToolRunGroup[], summaryMode: ToolRunSummaryMode): ToolRunDisplayGroup[] {
+  return groups.length > 1
+    ? [{ type: 'mixed', id: `mixed:${groups.map(toolRunGroupId).join(':')}`, groups, summaryMode }]
+    : groups;
+}
+
+function toolRunGroupId(group: ToolRunGroup): string {
+  return group.type === 'single' ? group.run.id : group.id;
+}
+
+function toolRunGroupRuns(group: ToolRunGroup): RuntimeToolRun[] {
+  return group.type === 'single' ? [group.run] : group.runs;
+}
+
+type CompactToolRunSummary = {
+  title: string;
+  target?: string;
+  changeCounts?: { additions: number; deletions: number; showZero: boolean };
+};
+
+function mixedToolRunGroupSummary(groups: ToolRunGroup[], summaryMode: ToolRunSummaryMode): CompactToolRunSummary {
+  if (summaryMode === 'latest') return compactToolRunGroupSummary(groups.at(-1));
+  return { title: mixedToolRunGroupAggregateTitle(groups) };
+}
+
+function compactToolRunGroupSummary(group: ToolRunGroup | undefined): CompactToolRunSummary {
+  if (!group) return { title: '' };
+  const runs = toolRunGroupRuns(group);
+  const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
+  if (kind === 'fileMutation') return fileOperationGroupSummary(runs);
+  if (group.type === 'single') return toolRunSummary(group.run);
+  if (kind === 'shell' && runs.length === 1) return toolRunSummary(runs[0]);
+  return { title: mixedToolRunGroupPart(group) };
+}
+
+function mixedToolRunGroupAggregateTitle(groups: ToolRunGroup[]): string {
+  const buckets: Array<{ key: string; kind: ToolRunGroupKind | 'webContent'; runs: RuntimeToolRun[] }> = [];
+  const bucketByKey = new Map<string, { key: string; kind: ToolRunGroupKind | 'webContent'; runs: RuntimeToolRun[] }>();
+
+  for (const group of groups) {
+    const runs = toolRunGroupRuns(group);
+    const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
+    const webContent = kind === 'generic' && webContentGroupSummary(runs);
+    const key = webContent ? 'webContent' : kind === 'generic' ? `generic:${runs[0]?.name ?? 'tool'}` : kind;
+    const bucketKind = webContent ? 'webContent' : kind;
+    let bucket = bucketByKey.get(key);
+    if (!bucket) {
+      bucket = { key, kind: bucketKind, runs: [] };
+      bucketByKey.set(key, bucket);
+      buckets.push(bucket);
+    }
+    bucket.runs.push(...runs);
+  }
+
+  return buckets
+    .map((bucket) => mixedToolRunBucketSummary(bucket.kind, bucket.runs))
+    .filter(Boolean)
+    .join('，');
+}
+
+function mixedToolRunBucketSummary(kind: ToolRunGroupKind | 'webContent', runs: RuntimeToolRun[]): string {
+  const status = toolRunGroupStatus(runs);
+  if (kind === 'fileMutation') return fileOperationGroupSummary(runs).title;
+  if (kind === 'inspection') {
+    const parts = inspectionSummaryParts(inspectionEntries(runs));
+    return parts.length ? parts.join('，') : inspectionGroupSummary(runs).title;
+  }
+  if (kind === 'shell') return shellCountSummary(runs, status);
+  if (kind === 'search') return searchCountSummary(runs, status);
+  if (kind === 'webContent') return webContentGroupSummary(runs)?.title ?? '';
+  const name = toolDisplayName(runs[0]?.name ?? '工具');
+  if (status === 'running' || status === 'pending_approval') return `正在使用 ${name}`;
+  if (status === 'rejected') return `已拒绝 ${name}`;
+  return `已使用 ${runs.length} 次 ${name}`;
+}
+
+function mixedToolRunGroupPart(group: ToolRunGroup): string {
+  const runs = toolRunGroupRuns(group);
+  const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
+  const status = toolRunGroupStatus(runs);
+  if (kind === 'fileMutation') return fileOperationGroupSummary(runs).title;
+  if (kind === 'shell') return shellCountSummary(runs, status);
+  if (kind === 'inspection') return inspectionGroupSummary(runs).title;
+  if (kind === 'search') return searchCountSummary(runs, status);
+  const webContentSummary = webContentGroupSummary(runs);
+  if (webContentSummary) return webContentSummary.title;
+  const name = toolDisplayName(runs[0]?.name ?? '工具');
+  if (status === 'running' || status === 'pending_approval') return `正在使用 ${name}`;
+  if (status === 'rejected') return `已拒绝 ${name}`;
+  return `已使用 ${runs.length} 次 ${name}`;
+}
+
+function shellCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status']): string {
+  if (status === 'running' || status === 'pending_approval') return `正在运行 ${runs.length} 条命令`;
+  if (status === 'rejected') return `已拒绝 ${runs.length} 条命令`;
+  return `已运行 ${runs.length} 条命令`;
+}
+
+function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status']): string {
+  if (status === 'running' || status === 'pending_approval') return `正在搜索 ${runs.length} 次代码`;
+  if (status === 'rejected') return `已拒绝 ${runs.length} 次搜索`;
+  return `已搜索 ${runs.length} 次代码`;
+}
+
+function mixedToolRunGroupIcon(status: RuntimeToolRun['status']) {
+  if (status === 'pending_approval') return <ShieldAlert size={14} />;
+  if (status === 'running') return <Clock3 size={14} />;
+  if (status === 'rejected') return <AlertCircle size={14} />;
+  return <CheckCircle2 size={14} />;
+}
+
 function isShellRun(run: RuntimeToolRun): boolean {
   return toolRunGroupKind(run) === 'shell';
 }
 
-function isFileMutationRun(run: RuntimeToolRun): boolean {
-  return isRuntimeFileMutationRun(run);
+function isFileOperationRun(run: RuntimeToolRun): boolean {
+  return isRuntimeFileMutationRun(run) || run.name === 'plan_file_changes' || run.name === 'begin_file_change';
 }
 
 function isPendingApprovalRun(run: RuntimeToolRun): boolean {
@@ -465,24 +880,23 @@ function isFlatInspectionRun(run: RuntimeToolRun): boolean {
 
 export function toolRunPanelDefaultOpen(run: RuntimeToolRun): boolean {
   if (isPendingApprovalRun(run)) return true;
-  if (isShellRun(run)) return run.status === 'running' || run.status === 'error' || run.status === 'rejected';
+  if (isShellRun(run)) return run.status === 'error' || run.status === 'rejected';
   return run.status === 'error' || run.status === 'rejected';
 }
 
-export function toolRunGroupDefaultOpen(kind: ToolRunGroupKind, status: RuntimeToolRun['status'], hasPendingApproval: boolean): boolean {
-  return hasPendingApproval || status === 'running' || status === 'error' || status === 'rejected';
+export function toolRunGroupDefaultOpen(_kind: ToolRunGroupKind, status: RuntimeToolRun['status'], hasPendingApproval: boolean): boolean {
+  return hasPendingApproval || status === 'error' || status === 'rejected';
 }
 
 function toolRunGroupingKey(run: RuntimeToolRun): string {
   const kind = toolRunGroupKind(run);
-  if (kind === 'fileMutation') return `${kind}:${run.id}`;
   return kind === 'generic' ? `${kind}:${run.name}` : kind;
 }
 
 function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
   if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory' || run.name === 'read_file' || run.name === 'list_directory' || run.name === 'find_files' || run.name === 'read_diff' || run.name === 'git_status') return 'inspection';
-  if (isRuntimeFileMutationRun(run)) return 'fileMutation';
-  if (run.name === 'workspace_search_text' || run.name.includes('search')) return 'search';
+  if (isFileOperationRun(run)) return 'fileMutation';
+  if (run.name === 'workspace_search_text' || run.name === 'search_text') return 'search';
   if (run.name.includes('shell') || run.name === 'run_shell_command' || run.name === 'read_shell_process') return 'shell';
   return 'generic';
 }
@@ -499,7 +913,9 @@ function toolRunGroupSummary(group: Extract<ToolRunGroup, { type: 'group' }>): {
   if (group.kind === 'inspection') return inspectionGroupSummary(group.runs);
   if (group.kind === 'shell') return shellGroupSummary(group.runs);
   if (group.kind === 'search') return searchGroupSummary(group.runs);
-  if (group.kind === 'fileMutation') return toolRunSummary(group.runs[0]);
+  if (group.kind === 'fileMutation') return fileOperationGroupSummary(group.runs);
+  const webContentSummary = webContentGroupSummary(group.runs);
+  if (webContentSummary) return webContentSummary;
   const status = toolRunGroupStatus(group.runs);
   const name = toolDisplayName(group.runs[0]?.name ?? '工具');
   if (status === 'running' || status === 'pending_approval') return { title: `正在使用 ${name}` };
@@ -509,66 +925,154 @@ function toolRunGroupSummary(group: Extract<ToolRunGroup, { type: 'group' }>): {
 
 function inspectionGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
-  const targets = uniqueTargets(runs);
   const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
-  const activeTarget = active ? toolRunTarget(active) : '';
+  const activeEntry = active ? inspectionEntryFromRun(active) : null;
+  const activeTarget = activeEntry?.target ?? '';
   if (status === 'running' || status === 'pending_approval') {
-    return { title: active?.name === 'workspace_list_directory' || active?.name === 'list_directory' || active?.name === 'find_files' ? '正在查看目录' : '正在读取文件', target: activeTarget };
+    return { title: activeEntry ? inspectionRunningTitle(activeEntry.kind) : '正在查看文件/目录', target: activeTarget };
   }
   if (status === 'error') return { title: '查看文件/目录失败', target: activeTarget };
-  if (targets.length > 1) return { title: `已查看 ${targets.length} 个文件/目录` };
-  return { title: active?.name === 'workspace_list_directory' || active?.name === 'list_directory' || active?.name === 'find_files' ? '已查看目录' : '已读取文件', target: activeTarget };
+  const parts = inspectionSummaryParts(inspectionEntries(runs));
+  if (parts.length) return { title: parts.join('，') };
+  return { title: activeEntry ? inspectionCompleteTitle(activeEntry.kind) : '已查看文件/目录', target: activeTarget };
 }
 
 function shellGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
   const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
-  const command = active ? toolRunTarget(active) : '';
-  if (status === 'running' || status === 'pending_approval') return { title: '正在执行命令', target: command };
-  if (status === 'error') return { title: '命令执行失败', target: command };
-  return { title: `已执行 ${runs.length} 条命令` };
+  const command = active ? shellCommand(active) : '';
+  if (status === 'running' || status === 'pending_approval') return { title: command ? `正在运行 ${command}` : '正在运行命令' };
+  if (status === 'error') return { title: command ? `命令运行失败 ${command}` : '命令运行失败' };
+  return { title: `已运行 ${runs.length} 条命令` };
 }
 
 function searchGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
   const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
   const query = active ? toolRunTarget(active) : '';
-  if (status === 'running' || status === 'pending_approval') return { title: '正在搜索文本', target: query };
-  if (status === 'error') return { title: '搜索文本失败', target: query };
-  if (runs.length > 1) return { title: `已完成 ${runs.length} 次搜索` };
-  return { title: '已搜索文本', target: query };
+  if (status === 'running' || status === 'pending_approval') return { title: '正在搜索代码', target: query };
+  if (status === 'error') return { title: '搜索代码失败', target: query };
+  if (runs.length > 1) return { title: `已搜索 ${runs.length} 次代码` };
+  return { title: '已搜索代码', target: query };
 }
 
-function uniqueTargets(runs: RuntimeToolRun[]): string[] {
-  return [...new Set(runs.map(toolRunTarget).filter(Boolean))];
+function webContentGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } | null {
+  if (!runs.length || runs.some((run) => !isWebContentRun(run))) return null;
+  const status = toolRunGroupStatus(runs);
+  const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
+  const target = active ? toolRunTarget(active) : '';
+  if (status === 'running' || status === 'pending_approval') return { title: '正在获取网页', target };
+  if (status === 'error') return { title: '获取网页失败', target };
+  if (status === 'rejected') return { title: '已拒绝获取网页', target };
+  if (runs.length > 1) return { title: `已获取 ${runs.length} 个网页` };
+  return { title: '已获取网页', target };
 }
 
-function inspectionTargets(runs: RuntimeToolRun[]): Array<{ path: string; kind: 'file' | 'directory' }> {
-  const targets = new Map<string, { path: string; kind: 'file' | 'directory' }>();
+type InspectionEntryKind = 'file' | 'directory' | 'fileSearch' | 'gitStatus';
+type InspectionEntry = { target: string; kind: InspectionEntryKind };
+
+function inspectionEntries(runs: RuntimeToolRun[]): InspectionEntry[] {
+  const entries = new Map<string, InspectionEntry>();
   for (const run of runs) {
-    const path = toolRunTarget(run) || (run.name === 'workspace_list_directory' ? '.' : '');
-    if (!path || targets.has(path)) continue;
-    targets.set(path, {
-      path,
-      kind: run.name === 'workspace_list_directory' || run.name === 'list_directory' || run.name === 'find_files' ? 'directory' : 'file',
-    });
+    const entry = inspectionEntryFromRun(run);
+    if (!entry) continue;
+    const key = `${entry.kind}:${entry.target}`;
+    if (!entries.has(key)) entries.set(key, entry);
   }
-  return [...targets.values()];
+  return [...entries.values()];
+}
+
+function inspectionEntryFromRun(run: RuntimeToolRun): InspectionEntry | null {
+  const target = toolRunTarget(run) || (run.name === 'workspace_list_directory' || run.name === 'list_directory' || run.name === 'git_status' ? '.' : '');
+  if (!target) return null;
+  return {
+    target,
+    kind: inspectionEntryKind(run),
+  };
+}
+
+function inspectionEntryKind(run: RuntimeToolRun): InspectionEntryKind {
+  if (run.name === 'workspace_list_directory' || run.name === 'list_directory') return 'directory';
+  if (run.name === 'find_files') return 'fileSearch';
+  if (run.name === 'git_status') return 'gitStatus';
+  return 'file';
+}
+
+function inspectionSummaryParts(entries: InspectionEntry[]): string[] {
+  const counts = new Map<InspectionEntryKind, number>();
+  const order: InspectionEntryKind[] = [];
+  for (const entry of entries) {
+    if (!counts.has(entry.kind)) order.push(entry.kind);
+    counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
+  }
+  return order.map((kind) => inspectionSummaryPart(kind, counts.get(kind) ?? 0)).filter(Boolean);
+}
+
+function inspectionSummaryPart(kind: InspectionEntryKind, count: number): string {
+  if (kind === 'directory') return `已查看 ${count} 个目录`;
+  if (kind === 'fileSearch') return `已查找 ${count} 次文件`;
+  if (kind === 'gitStatus') return '已查看 Git 状态';
+  return `已读取 ${count} 个文件`;
+}
+
+function inspectionEntryLabel(kind: InspectionEntryKind): string {
+  if (kind === 'directory') return '已查看目录';
+  if (kind === 'fileSearch') return '已查找文件';
+  if (kind === 'gitStatus') return '已查看状态';
+  return '已读取文件';
+}
+
+function inspectionRunningTitle(kind: InspectionEntryKind): string {
+  if (kind === 'directory') return '正在查看目录';
+  if (kind === 'fileSearch') return '正在查找文件';
+  if (kind === 'gitStatus') return '正在查看 Git 状态';
+  return '正在读取文件';
+}
+
+function inspectionCompleteTitle(kind: InspectionEntryKind): string {
+  if (kind === 'directory') return '已查看目录';
+  if (kind === 'fileSearch') return '已查找文件';
+  if (kind === 'gitStatus') return '已查看 Git 状态';
+  return '已读取文件';
 }
 
 function toolRunTarget(run: RuntimeToolRun): string {
   const args = recordFromJson(run.argumentsPreview);
+  const url = stringField(args.url ?? args.uri ?? args.href);
+  if (url) return compactUrlTarget(url);
   return stringField(args.command ?? args.query ?? args.path ?? args.file_path ?? args.target_path ?? args.file ?? args.process_id ?? args.processId);
 }
 
-function fileMutationTarget(run: RuntimeToolRun): string {
-  return fileMutationDisplayPath(run) || toolRunTarget(run) || fileMutationPathFromReason(run.approvalReason);
+function fileOperationTarget(run: RuntimeToolRun): string {
+  return fileMutationDisplayPath(run) || fileOperationTargetFromArguments(run) || toolRunTarget(run) || fileMutationPathFromReason(run.approvalReason);
 }
 
-function fileMutationVerb(run: RuntimeToolRun): string {
-  const action = String(fileChangeFromToolRun(run)?.action ?? '').toLowerCase();
-  const created = action === 'created' || action === 'create';
-  const deleted = action === 'deleted' || action === 'delete';
+function fileOperationTargetFromArguments(run: RuntimeToolRun): string {
+  const args = recordFromJson(run.argumentsPreview);
+  const direct = stringField(args.path ?? args.file_path ?? args.target_path ?? args.file);
+  if (direct) return direct;
+
+  const currentFile = args.current_file_change;
+  if (isRecord(currentFile)) {
+    const currentPath = stringField(currentFile.file_path ?? currentFile.path);
+    if (currentPath) return currentPath;
+  }
+
+  const plannedFiles = Array.isArray(args.files) ? args.files : Array.isArray(args.changes) ? args.changes : [];
+  const plannedPaths = plannedFiles
+    .map((item) => (isRecord(item) ? stringField(item.file_path ?? item.path) : ''))
+    .filter(Boolean);
+  if (plannedPaths.length === 1) return plannedPaths[0];
+  if (plannedPaths.length > 1) return `${plannedPaths.length} 个文件`;
+  return '';
+}
+
+function fileOperationVerb(run: RuntimeToolRun): string {
+  if (run.name === 'plan_file_changes') return runningAware(run, '规划文件改动', '已规划文件改动');
+  if (run.name === 'begin_file_change') return runningAware(run, '准备写入', '已准备写入');
+  const action = fileOperationAction(run);
+  const created = action === 'created';
+  const deleted = action === 'deleted';
   if (run.status === 'pending_approval') return '等待授权：写入';
   if (run.status === 'running') return '正在写入';
   if (run.status === 'error') return created ? '生成失败' : deleted ? '删除失败' : '编辑失败';
@@ -576,6 +1080,128 @@ function fileMutationVerb(run: RuntimeToolRun): string {
   if (created) return '已生成';
   if (deleted) return '已删除';
   return '已编辑';
+}
+
+type FileOperationRunSummary = {
+  title: string;
+  target?: string;
+  changeCounts?: { additions: number; deletions: number; showZero: boolean };
+};
+
+function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSummary {
+  const status = toolRunGroupStatus(runs);
+  const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
+  const entries = fileOperationEntries(runs);
+  const activeTarget = active ? fileOperationTarget(active) : '';
+  const fallbackTarget = activeTarget || (entries.length === 1 ? entries[0]?.path : entries.length > 1 ? `${entries.length} 个文件` : '');
+  const changeCounts = fileOperationGroupChangeTotals(runs) ?? undefined;
+  if (status === 'running' || status === 'pending_approval') {
+    return { title: active ? fileOperationVerb(active) : '正在处理文件', target: fallbackTarget, changeCounts };
+  }
+  if (status === 'error') return { title: '文件操作失败', target: fallbackTarget, changeCounts };
+  if (status === 'rejected') return { title: '已拒绝文件操作', target: fallbackTarget, changeCounts };
+
+  const hasAppliedMutation = runs.some(isRuntimeFileMutationRun);
+  if (!hasAppliedMutation) {
+    if (runs.some((run) => run.name === 'begin_file_change')) {
+      return entries.length > 1
+        ? { title: `已准备写入 ${entries.length} 个文件`, changeCounts }
+        : { title: '已准备写入', target: entries[0]?.path, changeCounts };
+    }
+    return entries.length > 1
+      ? { title: `已规划 ${entries.length} 个文件改动`, changeCounts }
+      : { title: '已规划文件改动', target: entries[0]?.path, changeCounts };
+  }
+
+  const counts = entries.reduce(
+    (result, entry) => {
+      result[entry.action] += 1;
+      return result;
+    },
+    { created: 0, modified: 0, deleted: 0 },
+  );
+  const parts = [
+    counts.created ? `已创建 ${counts.created} 个文件` : '',
+    counts.modified ? `已编辑 ${counts.modified} 个文件` : '',
+    counts.deleted ? `已删除 ${counts.deleted} 个文件` : '',
+  ].filter(Boolean);
+  return { title: parts.length ? parts.join('，') : `已处理 ${runs.length} 个文件操作`, changeCounts };
+}
+
+type FileOperationAction = 'created' | 'modified' | 'deleted';
+type FileOperationEntry = {
+  action: FileOperationAction;
+  additions?: number;
+  deletions?: number;
+  hasChangeCounts?: boolean;
+  showZeroChangeCounts?: boolean;
+  path: string;
+  priority: number;
+};
+
+function fileOperationEntries(runs: RuntimeToolRun[]): FileOperationEntry[] {
+  const byPath = new Map<string, FileOperationEntry>();
+  for (const run of runs) {
+    const priority = isRuntimeFileMutationRun(run) ? 2 : run.name === 'begin_file_change' ? 1 : 0;
+    const changes = fileChangesFromToolRun(run);
+    const entries = changes.length
+      ? changes.map((change) => ({
+          action: normalizeFileOperationAction(change.action),
+          additions: change.additions,
+          deletions: change.deletions,
+          hasChangeCounts: true,
+          showZeroChangeCounts: true,
+          path: change.path,
+          priority,
+        }))
+      : [fileOperationEntryFromRun(run, priority)];
+
+    for (const entry of entries) {
+      if (!entry.path) continue;
+      const key = normalizeFileOperationPath(entry.path);
+      const current = byPath.get(key);
+      if (!current || entry.priority >= current.priority) byPath.set(key, entry);
+    }
+  }
+  return [...byPath.values()];
+}
+
+function fileOperationEntryFromRun(run: RuntimeToolRun, priority: number): FileOperationEntry {
+  const totals = fileOperationChangeTotals(run);
+  return {
+    action: fileOperationAction(run),
+    additions: totals?.additions,
+    deletions: totals?.deletions,
+    hasChangeCounts: Boolean(totals),
+    showZeroChangeCounts: totals?.showZero,
+    path: fileOperationTarget(run),
+    priority,
+  };
+}
+
+function fileOperationAction(run: RuntimeToolRun): FileOperationAction {
+  const args = recordFromJson(run.argumentsPreview);
+  const action = stringField(fileChangeFromToolRun(run)?.action ?? args.action);
+  if (action) return normalizeFileOperationAction(action);
+  if (run.name === 'delete_file') return 'deleted';
+  return 'modified';
+}
+
+function normalizeFileOperationAction(value: unknown): FileOperationAction {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'created' || normalized === 'create' || normalized === 'new') return 'created';
+  if (normalized === 'deleted' || normalized === 'delete' || normalized === 'remove' || normalized === 'removed') return 'deleted';
+  return 'modified';
+}
+
+function normalizeFileOperationPath(value: string): string {
+  return value.trim().replace(/\\/g, '/').replace(/\/+$/u, '').toLowerCase();
+}
+
+function fileOperationActionLabel(action: FileOperationAction): string {
+  if (action === 'created') return '创建';
+  if (action === 'deleted') return '删除';
+  return '编辑';
 }
 
 function pathBaseName(path: string): string {
@@ -717,16 +1343,28 @@ function toolRunSummary(run: RuntimeToolRun): { title: string; target?: string }
   const path = stringField(args.path ?? args.file_path ?? args.target_path ?? args.file);
   const query = stringField(args.query);
   const command = stringField(args.command);
+  const url = stringField(args.url ?? args.uri ?? args.href);
 
+  if (isWebContentRun(run, url)) return { title: runningAware(run, '获取网页', '已获取网页'), target: compactUrlTarget(url) };
   if (name === 'workspace_read_file' || name === 'read_file') return { title: runningAware(run, '读取文件', '已读取文件'), target: path };
-  if (name === 'workspace_list_directory' || name === 'list_directory' || name === 'find_files') return { title: runningAware(run, '查看目录', '已查看目录'), target: path || query || '.' };
-  if (name === 'workspace_search_text' || name === 'search_text') return { title: runningAware(run, '搜索文本', '已搜索文本'), target: query };
-  if (isRuntimeFileMutationRun(run)) return { title: fileMutationVerb(run), target: path };
-  if (name === 'run_shell_command') return { title: runningAware(run, '执行命令', '已执行命令'), target: command };
+  if (name === 'workspace_list_directory' || name === 'list_directory') return { title: runningAware(run, '查看目录', '已查看目录'), target: path || '.' };
+  if (name === 'find_files') return { title: runningAware(run, '查找文件', '已查找文件'), target: query || path };
+  if (name === 'workspace_search_text' || name === 'search_text') return { title: runningAware(run, '搜索代码', '已搜索代码'), target: query };
+  if (isFileOperationRun(run)) return { title: fileOperationVerb(run), target: fileOperationTarget(run) || path };
+  if (name === 'run_shell_command') return shellRunSummary(run, command);
   if (name === 'read_shell_process') return { title: runningAware(run, '读取命令输出', '已读取命令输出'), target: stringField(args.process_id ?? args.processId) };
   if (name === 'remember_memory') return { title: runningAware(run, '保存记忆', '已保存记忆') };
   if (name === 'recall_memory') return { title: runningAware(run, '检索记忆', '已检索记忆'), target: query };
   return { title: runningAware(run, toolDisplayName(name), `已使用 ${toolDisplayName(name)}`) };
+}
+
+function shellRunSummary(run: RuntimeToolRun, command: string): { title: string; target?: string } {
+  const displayCommand = command || shellCommand(run);
+  if (run.status === 'pending_approval') return { title: displayCommand ? `等待授权：运行 ${displayCommand}` : '等待授权：运行命令' };
+  if (run.status === 'running') return { title: displayCommand ? `正在运行 ${displayCommand}` : '正在运行命令' };
+  if (run.status === 'error') return { title: displayCommand ? `命令运行失败 ${displayCommand}` : '命令运行失败' };
+  if (run.status === 'rejected') return { title: displayCommand ? `已拒绝运行 ${displayCommand}` : '已拒绝运行命令' };
+  return { title: displayCommand ? `已运行 ${displayCommand}` : '已运行命令' };
 }
 
 function runningAware(run: RuntimeToolRun, running: string, complete: string) {
@@ -737,16 +1375,17 @@ function runningAware(run: RuntimeToolRun, running: string, complete: string) {
   return complete;
 }
 
-function statusText(run: RuntimeToolRun) {
-  return statusTextFromStatus(run.status);
+function ToolRunStatus({ status }: { status: RuntimeToolRun['status'] }) {
+  const text = statusTextFromStatus(status);
+  return text ? <span className="chat-tool-run__status">{text}</span> : null;
 }
 
 function statusTextFromStatus(status: RuntimeToolRun['status']) {
   if (status === 'pending_approval') return '待确认';
   if (status === 'running') return '运行中';
-  if (status === 'success') return '完成';
   if (status === 'rejected') return '已拒绝';
-  return '失败';
+  if (status === 'error') return '失败';
+  return '';
 }
 
 function toolRunGroupIcon(group: Extract<ToolRunGroup, { type: 'group' }>) {
@@ -758,6 +1397,7 @@ function toolRunGroupIcon(group: Extract<ToolRunGroup, { type: 'group' }>) {
   if (group.kind === 'inspection') return <FileText size={14} />;
   if (group.kind === 'search') return <Search size={14} />;
   if (group.kind === 'shell') return <TerminalSquare size={14} />;
+  if (group.kind === 'fileMutation') return <Pencil size={14} />;
   return <CheckCircle2 size={14} />;
 }
 
@@ -768,6 +1408,7 @@ function toolRunIcon(run: RuntimeToolRun) {
   if (run.status === 'rejected') return <AlertCircle size={14} />;
   if (run.name.includes('search')) return <Search size={14} />;
   if (run.name.includes('shell')) return <TerminalSquare size={14} />;
+  if (isFileOperationRun(run)) return <Pencil size={14} />;
   if (run.name.includes('file') || run.name.includes('workspace')) return <FileText size={14} />;
   if (run.name.includes('run')) return <Play size={14} />;
   if (run.status === 'success') return <CheckCircle2 size={14} />;
@@ -778,18 +1419,34 @@ function recordFromJson(value: string | undefined): Record<string, unknown> {
   if (!value) return {};
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function stringField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function optionalNumber(value: unknown): number | null {
+  const numberValue = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(numberValue) ? Math.max(0, numberValue) : null;
+}
+
+function countTextLines(value: string): number {
+  if (!value) return 0;
+  const lines = value.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines.length;
+}
+
 function toolDisplayName(name: string): string {
-  return name.replace(/_/g, ' ').trim() || '工具';
+  return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || '工具';
 }
 
 function formatPreview(value: string): string {
@@ -800,4 +1457,31 @@ function formatPreview(value: string): string {
   } catch {
     return trimmed.length > 4000 ? `${trimmed.slice(0, 4000)}\n...` : trimmed;
   }
+}
+
+function isWebContentRun(run: RuntimeToolRun, url = stringField(recordFromJson(run.argumentsPreview).url)): boolean {
+  if (!url) return false;
+  return /(^|\s|_|-)fetch(web)?content($|\s|_|-)/iu.test(run.name) || /^https?:\/\//iu.test(url);
+}
+
+function compactUrlTarget(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    const path = `${url.pathname}${url.search}`.replace(/\/$/u, '') || '/';
+    return `${url.hostname}${path}`;
+  } catch {
+    return trimmed.replace(/^https?:\/\//iu, '').replace(/\/$/u, '');
+  }
+}
+
+function genericToolRunDiagnostic(run: RuntimeToolRun): string {
+  if (run.status !== 'error' && run.status !== 'rejected') return '';
+  return concisePreview(run.approvalMessage || run.resultPreview || run.approvalReason || '');
+}
+
+function concisePreview(value: string): string {
+  const normalized = formatPreview(value).replace(/\s+/gu, ' ').trim();
+  return normalized.length > 600 ? `${normalized.slice(0, 600)}...` : normalized;
 }

@@ -1,6 +1,6 @@
 export type RuntimeMcpTransport = 'stdio' | 'streamableHttp';
 
-export type RuntimeMcpRequireApproval = 'never' | 'on-write' | 'always';
+export type RuntimeMcpRequireApproval = 'never' | 'always';
 
 export type RuntimeMcpServerSource = 'local' | 'workspace' | 'legacy' | 'builtin';
 
@@ -21,6 +21,7 @@ export type RuntimeMcpServer = {
   enabled: boolean;
   allowedTools: string[];
   disabledTools: string[];
+  tools: RuntimeMcpToolInfo[];
   envKeys: string[];
   headerKeys: string[];
   source: RuntimeMcpServerSource;
@@ -32,6 +33,18 @@ export type RuntimeMcpServerList = {
   configPath: string;
   workspaceConfigPaths: string[];
   servers: RuntimeMcpServer[];
+  errors: string[];
+};
+
+export type RuntimeMcpToolInfo = {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
+};
+
+export type RuntimeMcpToolList = {
+  tools: RuntimeMcpToolInfo[];
   errors: string[];
 };
 
@@ -52,6 +65,7 @@ export type RuntimeMcpServerInput = {
   enabled?: boolean;
   allowedTools?: string[];
   disabledTools?: string[];
+  tools?: RuntimeMcpToolInfo[];
   env?: Record<string, string>;
   headers?: Record<string, string>;
 };

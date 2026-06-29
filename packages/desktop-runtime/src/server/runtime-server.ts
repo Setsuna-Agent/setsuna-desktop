@@ -34,6 +34,7 @@ import type {
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
 import { createSweNotificationMapper, runtimeThreadToSweTurns } from '@setsuna-desktop/contracts';
+import { fetchMcpServerTools } from '../adapters/mcp/mcp-tool-discovery.js';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { createRuntimeFactory } from '../runtime/runtime-factory.js';
 
@@ -220,6 +221,11 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
 
       if (request.method === 'GET' && url.pathname === '/v1/mcp/servers') {
         sendJson(response, 200, await runtime.mcpStore.listServers());
+        return;
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/mcp/tools') {
+        sendJson(response, 200, await fetchMcpServerTools(await readBody<RuntimeMcpServerInput>(request)));
         return;
       }
 
@@ -2536,7 +2542,9 @@ function sweMcpServerStatus(server: RuntimeMcpServer) {
   return {
     name: server.key,
     serverInfo: null,
-    tools: {},
+    tools: Object.fromEntries(server.tools.map((tool) => [tool.name, {
+      description: tool.description ?? null,
+    }])),
     resources: [],
     resourceTemplates: [],
     authStatus: 'unsupported',

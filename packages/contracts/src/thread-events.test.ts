@@ -140,6 +140,59 @@ describe('applyRuntimeEventToThread context compaction', () => {
     });
   });
 
+  it('marks approved tool runs as running while the tool continues', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [
+        {
+          id: 'msg_1',
+          role: 'assistant',
+          turnId: 'turn_1',
+          content: '',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          status: 'streaming',
+          toolRuns: [
+            {
+              id: 'call_1',
+              name: 'workspace_write_file',
+              status: 'pending_approval',
+              approvalId: 'approval_1',
+              approvalStatus: 'pending',
+              argumentsPreview: '{"path":"merge_sort.py"}',
+            },
+          ],
+        },
+      ],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_approval',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.resolved',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        approvalId: 'approval_1',
+        decision: 'approve',
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, event);
+
+    expect(updated.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      status: 'running',
+      approvalStatus: 'approved',
+    });
+  });
+
   it('records assistant completion time from message.completed events', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',
@@ -468,6 +521,8 @@ describe('applyRuntimeEventToThread context compaction', () => {
       status: 'completed',
       usedTokens: 128,
     });
-    expect(completed.messages).toHaveLength(1);
+    expect(completed.messages).toHaveLength(2);
+    expect(completed.messages[0]).toMatchObject({ id: 'msg_1', visibility: 'transcript' });
+    expect(completed.messages[1]).toMatchObject({ id: 'msg_compact', contextCompaction: compactedMessage.contextCompaction });
   });
 });

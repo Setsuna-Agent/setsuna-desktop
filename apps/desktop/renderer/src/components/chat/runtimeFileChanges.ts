@@ -31,8 +31,6 @@ type FileMutationEntry = {
 
 const fileMutationToolNames = new Set([
   'workspace_write_file',
-  'plan_file_changes',
-  'begin_file_change',
   'apply_patch',
   'write_file',
   'append_file',
@@ -187,7 +185,7 @@ function normalizeFileChange(file: RuntimeFileChange): RuntimeFileChange {
 
 function normalizeDiffLine(value: unknown): RuntimeFileDiffLine | null {
   if (!isRecord(value)) return null;
-  const type = value.type === 'added' || value.type === 'removed' || value.type === 'context' || value.type === 'gap' ? value.type : 'context';
+  const type = normalizeDiffLineType(value.type);
   return {
     type,
     lineNumber: optionalCount(value.lineNumber),
@@ -195,6 +193,13 @@ function normalizeDiffLine(value: unknown): RuntimeFileDiffLine | null {
     newLine: optionalCount(value.newLine),
     content: typeof value.content === 'string' ? value.content : '',
   };
+}
+
+function normalizeDiffLineType(value: unknown): RuntimeFileDiffLine['type'] {
+  if (value === 'added' || value === 'add') return 'added';
+  if (value === 'removed' || value === 'del') return 'removed';
+  if (value === 'context' || value === 'gap') return value;
+  return 'context';
 }
 
 function isRuntimeFileDiffLine(value: RuntimeFileDiffLine | null): value is RuntimeFileDiffLine {

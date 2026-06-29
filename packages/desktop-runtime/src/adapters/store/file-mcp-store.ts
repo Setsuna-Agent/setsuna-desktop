@@ -6,6 +6,7 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
+  RuntimeMcpToolInfo,
   RuntimeMcpTransport,
 } from '@setsuna-desktop/contracts';
 import type { McpStore } from '../../ports/mcp-store.js';
@@ -47,6 +48,7 @@ type StoredMcpServer = {
   allowed_tools?: unknown;
   disabledTools?: unknown;
   disabled_tools?: unknown;
+  tools?: unknown;
   env?: Record<string, unknown>;
   headers?: Record<string, unknown>;
   extraHeaders?: Record<string, unknown>;
@@ -54,7 +56,7 @@ type StoredMcpServer = {
 };
 
 export class FileMcpStore implements McpStore {
-  private readonly configPath: string;
+  readonly configPath: string;
 
   constructor(dataDir: string) {
     this.configPath = path.join(dataDir, 'mcp.json');
@@ -72,6 +74,14 @@ export class FileMcpStore implements McpStore {
       servers,
       errors,
     };
+  }
+
+  async listServerInputs(): Promise<RuntimeMcpServerInput[]> {
+    const { config } = await this.readConfig();
+    return Object.entries(config.mcpServers ?? {})
+      .map(([key, server]) => normalizeServerInput(key, server))
+      .filter((server): server is RuntimeMcpServerInput => Boolean(server))
+      .sort((left, right) => (left.label ?? left.key).localeCompare(right.label ?? right.key) || left.key.localeCompare(right.key));
   }
 
   async upsertServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList> {
@@ -173,6 +183,7 @@ function normalizeServer(
       enabled: rawServer.enabled !== false && rawServer.disabled !== true,
       allowedTools: stringList(rawServer.allowedTools ?? rawServer.allowed_tools),
       disabledTools: stringList(rawServer.disabledTools ?? rawServer.disabled_tools),
+      tools: mcpToolList(rawServer.tools),
       envKeys: objectKeys(rawServer.env),
       headerKeys: objectKeys(rawServer.headers ?? rawServer.extraHeaders ?? rawServer.extra_headers),
       source: 'local',
@@ -181,6 +192,42 @@ function normalizeServer(
     };
   } catch (error) {
     errors.push(`${sourcePath}: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function normalizeServerInput(rawKey: string, rawServer: StoredMcpServer): RuntimeMcpServerInput | null {
+  try {
+    const key = normalizeKey(rawKey);
+    const command = nonEmpty(rawServer.command);
+    const url = nonEmpty(rawServer.url ?? rawServer.serverUrl ?? rawServer.server_url);
+    const transport = normalizeTransport(rawServer.transport ?? rawServer.type, command, url);
+    validateTransport(key, transport, command, url);
+    const timeoutMs = timeout(rawServer.timeoutMs ?? rawServer.timeout_ms ?? rawServer.timeout, DEFAULT_TIMEOUT_MS);
+    const startupTimeoutMs = timeout(rawServer.startupTimeoutMs ?? rawServer.startup_timeout_ms, timeoutMs);
+    const toolTimeoutMs = timeout(rawServer.toolTimeoutMs ?? rawServer.tool_timeout_ms, timeoutMs);
+    return {
+      key,
+      label: nonEmpty(rawServer.label ?? rawServer.name) ?? key,
+      description: nonEmpty(rawServer.description),
+      transport,
+      command,
+      args: stringList(rawServer.args),
+      cwd: nonEmpty(rawServer.cwd),
+      url,
+      timeoutMs,
+      startupTimeoutMs,
+      toolTimeoutMs,
+      required: rawServer.required === true,
+      requireApproval: normalizeRequireApproval(rawServer.requireApproval ?? rawServer.require_approval),
+      enabled: rawServer.enabled !== false && rawServer.disabled !== true,
+      allowedTools: stringList(rawServer.allowedTools ?? rawServer.allowed_tools),
+      disabledTools: stringList(rawServer.disabledTools ?? rawServer.disabled_tools),
+      tools: mcpToolList(rawServer.tools),
+      env: stringMap(rawServer.env),
+      headers: stringMap(rawServer.headers ?? rawServer.extraHeaders ?? rawServer.extra_headers),
+    };
+  } catch {
     return null;
   }
 }
@@ -202,13 +249,14 @@ function applyServerInput(previous: StoredMcpServer, input: RuntimeMcpServerInpu
   if (input.enabled !== undefined) next.enabled = input.enabled;
   if (input.allowedTools !== undefined) next.allowedTools = input.allowedTools.filter((item) => item.trim()).map((item) => item.trim());
   if (input.disabledTools !== undefined) next.disabledTools = input.disabledTools.filter((item) => item.trim()).map((item) => item.trim());
+  if (input.tools !== undefined) next.tools = mcpToolList(input.tools);
   if (input.env !== undefined) next.env = normalizeStringMap(input.env);
   if (input.headers !== undefined) next.headers = normalizeStringMap(input.headers);
+  next.requireApproval = normalizeRequireApproval(next.requireApproval);
   if (!next.transport) next.transport = next.command ? 'stdio' : 'streamableHttp';
   if (!next.timeoutMs) next.timeoutMs = DEFAULT_TIMEOUT_MS;
   if (!next.startupTimeoutMs) next.startupTimeoutMs = next.timeoutMs;
   if (!next.toolTimeoutMs) next.toolTimeoutMs = next.timeoutMs;
-  if (!next.requireApproval) next.requireApproval = 'on-write';
   return next;
 }
 
@@ -254,17 +302,49 @@ function normalizeTransport(value: unknown, command?: string, url?: string): Run
 }
 
 function normalizeRequireApproval(value: unknown): RuntimeMcpRequireApproval {
-  if (value === 'never' || value === 'always' || value === 'on-write') return value;
-  if (value === 'onWrite' || value === 'on_write') return 'on-write';
-  return 'on-write';
+  if (value === 'never') return 'never';
+  return 'always';
 }
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()) : [];
 }
 
+function mcpToolList(value: unknown): RuntimeMcpToolInfo[] {
+  if (!Array.isArray(value)) return [];
+  const byName = new Map<string, RuntimeMcpToolInfo>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const name = nonEmpty(record.name);
+    if (!name) continue;
+    const description = nonEmpty(record.description);
+    const inputSchema = plainRecord(record.inputSchema);
+    const annotations = plainRecord(record.annotations);
+    byName.set(name, {
+      name,
+      ...(description ? { description } : {}),
+      ...(inputSchema ? { inputSchema } : {}),
+      ...(annotations ? { annotations } : {}),
+    });
+  }
+  return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function plainRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
 function normalizeStringMap(value: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(value).filter(([key, item]) => key.trim() && item.trim()).map(([key, item]) => [key.trim(), item.trim()]));
+}
+
+function stringMap(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value)
+    .map(([key, item]) => [key.trim(), typeof item === 'string' ? item.trim() : ''] as const)
+    .filter(([key, item]) => key && item);
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function objectKeys(value: unknown): string[] {

@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -56,6 +57,62 @@ export function Panel({ title, meta, actions, children, className = '' }: { titl
       </header>
       {children}
     </section>
+  );
+}
+
+type PageBackButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
+  block?: boolean;
+  icon?: ReactNode;
+  label?: ReactNode;
+};
+
+export function PageBackButton({
+  block = false,
+  className = '',
+  icon = <ArrowLeft size={14} />,
+  label = '返回',
+  type = 'button',
+  ...props
+}: PageBackButtonProps) {
+  const classes = ['sd-page-back', block ? 'sd-page-back--block' : '', className].filter(Boolean).join(' ');
+  return (
+    <button className={classes} type={type} {...props}>
+      {icon ? <span className="sd-page-back__icon">{icon}</span> : null}
+      <span className="sd-page-back__label">{label}</span>
+    </button>
+  );
+}
+
+export function PageHeader({
+  actions,
+  backIcon,
+  backLabel = '返回',
+  className = '',
+  onBack,
+  subtitle,
+  title,
+}: {
+  actions?: ReactNode;
+  backIcon?: ReactNode;
+  backLabel?: string;
+  className?: string;
+  onBack?: () => void;
+  subtitle?: ReactNode;
+  title: ReactNode;
+}) {
+  return (
+    <header className={`sd-page-header ${className}`}>
+      {onBack ? (
+        <PageBackButton className="sd-page-header__back" icon={backIcon} label={backLabel} onClick={onBack} />
+      ) : null}
+      <div className="sd-page-header__body">
+        <div className="sd-page-header__title-group">
+          <h2>{title}</h2>
+          {subtitle ? <span>{subtitle}</span> : null}
+        </div>
+        {actions ? <div className="sd-page-header__actions">{actions}</div> : null}
+      </div>
+    </header>
   );
 }
 

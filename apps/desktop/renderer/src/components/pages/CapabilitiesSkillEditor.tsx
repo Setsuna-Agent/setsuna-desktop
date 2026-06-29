@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import type { RuntimeSkillDetail, RuntimeSkillInput } from '@setsuna-desktop/contracts';
-import { Button, TextArea, TextField } from '../primitives.js';
+import { Button, PageHeader, TextArea, TextField } from '../primitives.js';
 
 type SkillEditorDraft = {
   id: string;
@@ -32,28 +32,31 @@ export function CapabilitiesSkillEditor({
   }, [skill]);
 
   const creating = mode === 'create';
+  const setEnabled = (enabled: boolean) => {
+    setDraft((current) => ({
+      ...current,
+      enabled,
+      selected: enabled ? current.selected : false,
+    }));
+  };
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-skill-editor">
-      <header className="desktop-capabilities-detail__head">
-        <div>
-          <Button type="button" variant="ghost" icon={<ArrowLeft size={14} />} onClick={onBack}>
-            返回
+      <PageHeader
+        onBack={onBack}
+        title={creating ? '新建 Skill' : skill?.name || '编辑 Skill'}
+        subtitle={creating ? '保存到本地 user-skills，不请求外部接口。' : '只支持编辑本地个人 Skill。'}
+        actions={
+          <Button
+            type="button"
+            variant="primary"
+            icon={<Save size={14} />}
+            disabled={saving || !draft.name.trim() || !draft.content.trim()}
+            onClick={() => void onSave(toInput(draft, creating))}
+          >
+            {saving ? '保存中' : '保存'}
           </Button>
-          <h2>{creating ? '新建 Skill' : skill?.name || '编辑 Skill'}</h2>
-          <span className="desktop-capabilities-detail__subtitle">
-            {creating ? '保存到本地 user-skills，不请求外部接口。' : '只支持编辑本地个人 Skill。'}
-          </span>
-        </div>
-        <Button
-          type="button"
-          variant="primary"
-          icon={<Save size={14} />}
-          disabled={saving || !draft.name.trim() || !draft.content.trim()}
-          onClick={() => void onSave(toInput(draft, creating))}
-        >
-          {saving ? '保存中' : '保存'}
-        </Button>
-      </header>
+        }
+      />
 
       <div className="desktop-capabilities-skill-form">
         <label>
@@ -84,15 +87,18 @@ export function CapabilitiesSkillEditor({
           />
         </label>
         <div className="desktop-capabilities-skill-form__checks">
-          <label className="sd-check">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraftField(setDraft, 'enabled', event.currentTarget.checked)} />
+          <label className="sd-check" title="启用后可在对话中选择这个 Skill">
+            <input type="checkbox" checked={draft.enabled} onChange={(event) => setEnabled(event.currentTarget.checked)} />
             <span>启用</span>
           </label>
-          <label className="sd-check">
+          <label className="sd-check" title="默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文">
             <input type="checkbox" checked={draft.selected} disabled={!draft.enabled} onChange={(event) => setDraftField(setDraft, 'selected', event.currentTarget.checked)} />
-            <span>立即使用</span>
+            <span>默认使用</span>
           </label>
         </div>
+        <p className="desktop-capabilities-skill-usage-help desktop-capabilities-skill-form__full">
+          默认使用会在每轮对话自动注入这个 Skill 的 SKILL.md 正文；只建议给常用且内容较短的 Skill 开启。手动词槽只影响当前这次发送。
+        </p>
       </div>
     </section>
   );

@@ -14,6 +14,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     activeProjectId,
     activeView,
     chatActions,
+    clearSkillSelectionRequest,
     draft,
     globalThreads,
     handleSidebarResizeStep,
@@ -26,6 +27,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     projectWorkspace,
     runtime,
     searchTriggerRef,
+    selectSkillForChat,
     setActiveView,
     setDraft,
     setSidebarCollapsed,
@@ -36,6 +38,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     sidebarMaxWidth,
     sidebarMinWidth,
     sidebarWidth,
+    skillSelectionRequest,
     terminalMaxHeight,
     terminalHeight,
     terminalMinHeight,
@@ -99,6 +102,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       <AppSidebarSurface
         activeProjectId={activeProjectId}
         activeThreadId={runtime.currentThread?.id}
+        runningThreadId={runtime.activeTurnId ? runtime.currentThread?.id ?? null : null}
         activeView={activeView}
         globalThreads={globalThreads}
         navigation={navigation}
@@ -125,7 +129,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         runtime={runtime}
         setActiveView={setActiveView}
         setDraft={setDraft}
+        skillSelectionRequest={skillSelectionRequest}
         workspacePanels={workspacePanels}
+        onSelectSkillForChat={selectSkillForChat}
+        onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
         onTerminalResizeStart={handleTerminalResizeStart}
         onTerminalResizeStep={handleTerminalResizeStep}
         terminalHeight={terminalHeight}

@@ -176,6 +176,10 @@
   display: none;
 }
 
+.desktop-agent-page--settings-open .app-topbar {
+  grid-template-columns: var(--app-topbar-sidebar-width, var(--desktop-settings-nav-width)) minmax(0, 1fr) var(--desktop-agent-workspace-width);
+}
+
 :root[data-desktop-platform='win32'],
 :root[data-desktop-platform='linux'] {
   --app-topbar-height: 34px;
@@ -515,4 +519,9 @@ body.desktop-terminal-resizing {
 :root[data-desktop-platform='win32'] .app-topbar,
 :root[data-desktop-platform='linux'] .app-topbar {
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
+}
+
+:root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-topbar,
+:root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-topbar {
+  grid-template-columns: var(--app-topbar-sidebar-width, var(--desktop-settings-nav-width)) minmax(0, 1fr) var(--app-titlebar-control-width);
 }

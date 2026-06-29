@@ -9,7 +9,8 @@ import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
-import { entryLabel, parseMentionCommand, parseSlashCommand, skillTokenText } from './chatCommandUtils.js';
+import { entryLabel, parseMentionCommand, parseSlashCommand, skillDisplayText } from './chatCommandUtils.js';
+import type { ChatSkillSelectionRequest } from '../../types/app.js';
 
 type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
 type ActiveThinkingConfig = {
@@ -27,6 +28,7 @@ export function ChatComposer({
   contextCompacting = false,
   contextUsage,
   draft,
+  skillSelectionRequest,
   skills,
   starter = false,
   onCancelActiveTurn,
@@ -37,6 +39,7 @@ export function ChatComposer({
   onSelectModel,
   onSearchProjectEntries,
   onSend,
+  onSkillSelectionRequestConsumed,
 }: {
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
@@ -45,6 +48,7 @@ export function ChatComposer({
   contextCompacting?: boolean;
   contextUsage: ChatContextTokenUsage;
   draft: string;
+  skillSelectionRequest?: ChatSkillSelectionRequest | null;
   skills: RuntimeSkillSummary[];
   starter?: boolean;
   onCancelActiveTurn: () => void;
@@ -52,10 +56,10 @@ export function ChatComposer({
   onCompactContext: () => void;
   onClearContext: () => void;
   onDraftChange: (value: string) => void;
-  onPermissionProfileChange: (profile: RuntimeConfigState['permissionProfile']) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onSkillSelectionRequestConsumed?: (requestId: number) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
@@ -73,6 +77,7 @@ export function ChatComposer({
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
+  const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const mentionCommand = useMemo(() => parseMentionCommand(draft), [draft]);
   const slashCommand = useMemo(() => parseSlashCommand(draft), [draft]);
@@ -168,6 +173,20 @@ export function ChatComposer({
   useEffect(() => {
     setActiveSkillIndex(0);
   }, [skillQuery]);
+
+  useEffect(() => {
+    if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
+    const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
+    if (!skill || !skill.enabled) return;
+    consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
+    const alreadySelected = selectedSkills.some((item) => item.id === skill.id);
+    if (!alreadySelected) {
+      setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
+      senderRef.current?.insert?.([createSelectedSkillSlot(skill), createTextSlot(' ')], 'start', undefined, true);
+    }
+    setFocused(true);
+    onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
+  }, [onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
 
   useEffect(() => {
     if (!supportsImageInput && imageAttachments.length) setImageAttachments([]);
@@ -588,7 +607,7 @@ function selectedSkillSlotKey(skillId: string): string {
 }
 
 function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigType {
-  const tokenText = skillTokenText(skill);
+  const tokenText = skillDisplayText(skill);
   return {
     type: 'tag',
     key: selectedSkillSlotKey(skill.id),

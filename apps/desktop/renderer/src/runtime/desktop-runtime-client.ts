@@ -13,6 +13,7 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
+  RuntimeMcpToolList,
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeFetchModelsInput,
@@ -217,6 +218,9 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     listMcpServers() {
       return request<RuntimeMcpServerList>({ path: '/v1/mcp/servers' });
+    },
+    fetchMcpServerTools(input: RuntimeMcpServerInput) {
+      return request<RuntimeMcpToolList>({ path: '/v1/mcp/tools', method: 'POST', body: input });
     },
     upsertMcpServer(input: RuntimeMcpServerInput) {
       return request<RuntimeMcpServerList>({ path: '/v1/mcp/servers', method: 'POST', body: input });

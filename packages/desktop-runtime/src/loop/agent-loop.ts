@@ -44,10 +44,12 @@ export type AgentLoopOptions = {
   memoryStore?: MemoryStore;
 };
 
-const MAX_TOOL_ROUNDS = 64;
-const MAX_READ_FILE_CALLS_PER_RUN = 8;
-const MAX_INSPECTION_CALLS_PER_RUN = 16;
-const MAX_FILE_MUTATION_CALLS_PER_RUN = 40;
+type ToolBudgetLimit = number | null;
+
+const MAX_TOOL_ROUNDS = 200;
+const MAX_READ_FILE_CALLS_PER_RUN: ToolBudgetLimit = null;
+const MAX_INSPECTION_CALLS_PER_RUN: ToolBudgetLimit = null;
+const MAX_FILE_MUTATION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
 const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'workspace_write_file']);
@@ -438,7 +440,7 @@ export class AgentLoop {
         };
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
-          messages: modelMessages,
+          messages: modelRequestMessages(modelMessages),
           tools,
           toolChoice,
           ...thinkingOptions,
@@ -517,7 +519,7 @@ export class AgentLoop {
         };
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
-          messages: modelMessages,
+          messages: modelRequestMessages(modelMessages),
           toolChoice: 'none',
           ...thinkingOptions,
           signal,
@@ -1166,6 +1168,7 @@ export class AgentLoop {
     approvalPolicy: RuntimeConfigState['approvalPolicy'],
   ): Promise<RuntimeApprovalDecision | 'not-required'> {
     if (!this.options.approvalGate || !this.options.toolHost) return 'not-required';
+    if (FILE_MUTATION_TOOL_NAMES.has(toolCall.name)) return 'not-required';
     if (approvalPolicy === 'full') return 'not-required';
     const requirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, context);
     if (!requirement && approvalPolicy !== 'strict') return 'not-required';
@@ -1245,37 +1248,44 @@ function mergeToolArgumentDelta(current: string, delta: string): string {
 
 function toolBudgetBlockForCall(toolCall: RuntimeToolCall, budget: ToolBudget): ToolBudgetBlock | null {
   const name = toolCall.name;
-  if (READ_FILE_TOOL_NAMES.has(name) && budget.readFileCallCount >= MAX_READ_FILE_CALLS_PER_RUN) {
+  const readFileLimit = MAX_READ_FILE_CALLS_PER_RUN;
+  if (READ_FILE_TOOL_NAMES.has(name) && isToolBudgetExhausted(budget.readFileCallCount, readFileLimit)) {
     return {
-      display: `本次请求已读取 ${MAX_READ_FILE_CALLS_PER_RUN} 个文件，剩余本地操作已暂缓。`,
+      display: `本次请求已读取 ${readFileLimit} 个文件，剩余本地操作已暂缓。`,
       content: [
         'Skipped by desktop runtime: The read_file budget for this user request is exhausted.',
-        `Already executed this turn: ${budget.readFileCallCount}/${MAX_READ_FILE_CALLS_PER_RUN}.`,
+        `Already executed this turn: ${budget.readFileCallCount}/${readFileLimit}.`,
         `Skipped call: ${name}.`,
       ].join('\n'),
     };
   }
-  if (INSPECTION_TOOL_NAMES.has(name) && budget.inspectionCallCount >= MAX_INSPECTION_CALLS_PER_RUN) {
+  const inspectionLimit = MAX_INSPECTION_CALLS_PER_RUN;
+  if (INSPECTION_TOOL_NAMES.has(name) && isToolBudgetExhausted(budget.inspectionCallCount, inspectionLimit)) {
     return {
-      display: `本次请求已查看 ${MAX_INSPECTION_CALLS_PER_RUN} 个文件/目录，剩余本地操作已暂缓。`,
+      display: `本次请求已查看 ${inspectionLimit} 个文件/目录，剩余本地操作已暂缓。`,
       content: [
         'Skipped by desktop runtime: The inspection budget for this user request is exhausted.',
-        `Already executed this turn: ${budget.inspectionCallCount}/${MAX_INSPECTION_CALLS_PER_RUN}.`,
+        `Already executed this turn: ${budget.inspectionCallCount}/${inspectionLimit}.`,
         `Skipped call: ${name}.`,
       ].join('\n'),
     };
   }
-  if (FILE_MUTATION_TOOL_NAMES.has(name) && budget.fileMutationCallCount >= MAX_FILE_MUTATION_CALLS_PER_RUN) {
+  const fileMutationLimit = MAX_FILE_MUTATION_CALLS_PER_RUN;
+  if (FILE_MUTATION_TOOL_NAMES.has(name) && isToolBudgetExhausted(budget.fileMutationCallCount, fileMutationLimit)) {
     return {
-      display: `本次请求已执行 ${MAX_FILE_MUTATION_CALLS_PER_RUN} 个文件变更，剩余本地操作已暂缓。`,
+      display: `本次请求已执行 ${fileMutationLimit} 个文件变更，剩余本地操作已暂缓。`,
       content: [
         'Skipped by desktop runtime: The file mutation budget for this user request is exhausted.',
-        `Already executed this turn: ${budget.fileMutationCallCount}/${MAX_FILE_MUTATION_CALLS_PER_RUN}.`,
+        `Already executed this turn: ${budget.fileMutationCallCount}/${fileMutationLimit}.`,
         `Skipped call: ${name}.`,
       ].join('\n'),
     };
   }
   return null;
+}
+
+function isToolBudgetExhausted(count: number, limit: ToolBudgetLimit): limit is number {
+  return limit !== null && count >= limit;
 }
 
 function markToolBudgetProcessed(budget: ToolBudget, toolCall: RuntimeToolCall): void {
@@ -1373,6 +1383,7 @@ function previewToolContent(value: string): string {
 
 function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
   return messages
+    .filter((message) => message.visibility !== 'transcript')
     .map((message, index) => {
       const role = message.role === 'user' ? '用户' : message.role === 'assistant' ? '助手' : message.role === 'tool' ? '工具' : '系统';
       const attachments = message.attachments?.length
@@ -1385,6 +1396,10 @@ function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
       return `#${index + 1} ${role} ${message.createdAt}\n${content || '(empty)'}${attachments}${toolRuns}`;
     })
     .join('\n\n');
+}
+
+function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
+  return messages.filter((message) => message.visibility !== 'transcript');
 }
 
 function compactedSummaryFromModelText(value: string): string {

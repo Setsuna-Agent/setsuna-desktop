@@ -140,6 +140,40 @@ describe('createChatDisplayItems', () => {
     expect(createChatDisplayItems(messages).map((item) => item.id)).toEqual(['visible_user']);
   });
 
+  it('keeps transcript-only archived history visible before compaction summaries', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'archived_user',
+        role: 'user',
+        content: 'old visible question',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+        visibility: 'transcript',
+      },
+      {
+        id: 'compact_1',
+        role: 'system',
+        content: '<context_compaction_summary>older context</context_compaction_summary>',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+        contextCompaction: {
+          compactedMessageCount: 1,
+          compactedTokens: 128,
+          keptRecentMessageCount: 2,
+          maxContextTokensK: 256,
+          originalMessageCount: 3,
+          originalTokens: 512,
+          triggerScopes: ['manual'],
+        },
+      },
+    ];
+
+    expect(createChatDisplayItems(messages).map((item) => `${item.type}:${item.id}`)).toEqual([
+      'user:archived_user',
+      'context:compact_1',
+    ]);
+  });
+
   it('excludes completed thinking content from assistant copy text', () => {
     expect(assistantRunCopyText({
       type: 'assistant',

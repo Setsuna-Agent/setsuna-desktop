@@ -1,19 +1,28 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { Bubble, CodeHighlighter, Think } from '@ant-design/x';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { Bubble, CodeHighlighter } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
-import { ArrowDown, ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
 import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
-import { FileChangesSummaryCard, RuntimeToolRuns } from './RuntimeToolRuns.js';
+import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
+import { FileChangesSummaryCard, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
+import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
 import { assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent.js';
+import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
+import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import '@ant-design/x-markdown/themes/light.css';
 import '@ant-design/x-markdown/themes/dark.css';
 
-const scrollBottomThresholdPx = 32;
+const scrollBottomThresholdPx = 96;
+const stickyBottomThresholdPx = 4;
+const pinnedScrollSettleFrameCount = 3;
+const overviewAutoCollapseWidthPx = 620;
+const keyboardScrollIntentKeys = new Set(['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' ']);
+type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
 
 export function ChatWorkspace({
   activeTurnId,
@@ -23,6 +32,8 @@ export function ChatWorkspace({
   contextCompacting = false,
   currentThread,
   draft,
+  skillSelectionRequest,
+  sidePanelVisible = false,
   skills,
   onCancelActiveTurn,
   onApprovalPolicyChange,
@@ -33,11 +44,12 @@ export function ChatWorkspace({
   onDiscardFileChanges,
   onDraftChange,
   onEditUserMessage,
+  onOpenFilesPanel,
   onOpenFileReview,
-  onPermissionProfileChange,
   onSelectModel,
   onSearchProjectEntries,
   onSend,
+  onSkillSelectionRequestConsumed,
 }: {
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
@@ -46,30 +58,39 @@ export function ChatWorkspace({
   contextCompacting?: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
+  skillSelectionRequest: ChatSkillSelectionRequest | null;
+  sidePanelVisible?: boolean;
   skills: RuntimeSkillSummary[];
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
+  onOpenFilesPanel: () => void;
   onOpenFileReview?: () => void;
-  onPermissionProfileChange: (profile: RuntimeConfigState['permissionProfile']) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; skillIds?: string[] }) => void;
+  onSkillSelectionRequestConsumed: (requestId: number) => void;
 }) {
   const messages = currentThread?.messages ?? [];
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
+  const conversationRef = useRef<HTMLDivElement | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread), [currentThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const showEmptyStarter = displayItems.length === 0;
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const shouldStickToBottomRef = useRef(true);
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const conversationOverview = useMemo(() => (activeProject ? conversationOverviewFromMessages(messages) : null), [activeProject, messages]);
+  const overviewNarrow = useElementWidthBelow(conversationRef, overviewAutoCollapseWidthPx);
+  const [overviewExpanded, setOverviewExpanded] = useState(false);
+  const overviewCompact = !overviewExpanded || sidePanelVisible || overviewNarrow;
+  const overviewContextLabel = useMemo(
+    () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status),
+    [contextUsage, currentThread?.contextCompaction?.status],
+  );
+  const showEmptyStarter = displayItems.length === 0 && !activeTurnId;
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
   const [editingSubmitting, setEditingSubmitting] = useState(false);
@@ -77,44 +98,45 @@ export function ChatWorkspace({
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
-  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode }), [activeTurnId, deleteMode, displayItems]);
+  const [showFullHistory, setShowFullHistory] = useState(false);
+  useEffect(() => {
+    setShowFullHistory(false);
+    setOverviewExpanded(false);
+  }, [currentThread?.id]);
+  const renderWindow = useMemo(
+    () => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory }),
+    [activeTurnId, deleteMode, displayItems, showFullHistory],
+  );
   const renderedDisplayItems = renderWindow.items;
+  const activeAssistantVisible = useMemo(
+    () => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'assistant' && assistantRunIsActive(item, activeTurnId))),
+    [activeTurnId, renderedDisplayItems],
+  );
+  const activeUserVisible = useMemo(
+    () => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'user' && item.message.turnId === activeTurnId)),
+    [activeTurnId, renderedDisplayItems],
+  );
+  const showActiveTurnPlaceholder = Boolean(activeTurnId && !activeAssistantVisible);
   const scrollSignal = useMemo(
     () => createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id }),
     [activeTurnId, contextCompactionRunning, currentThread?.id, renderWindow],
   );
-
-  const scrollDistanceToBottom = useCallback((node: HTMLDivElement) => Math.max(0, node.scrollHeight - node.scrollTop - node.clientHeight), []);
-  const syncScrollBottomState = useCallback(() => {
-    const node = scrollRef.current;
-    if (!node || showEmptyStarter) {
-      setShowScrollBottom(false);
-      return;
-    }
-    const nearBottom = scrollDistanceToBottom(node) <= scrollBottomThresholdPx;
-    shouldStickToBottomRef.current = nearBottom;
-    setShowScrollBottom(!nearBottom);
-  }, [scrollDistanceToBottom, showEmptyStarter]);
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    const node = scrollRef.current;
-    if (!node) return;
-    shouldStickToBottomRef.current = true;
-    node.scrollTo({ top: node.scrollHeight, behavior });
-    setShowScrollBottom(false);
-  }, []);
-
-  useLayoutEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    if (showEmptyStarter) {
-      node.scrollTop = 0;
-      shouldStickToBottomRef.current = false;
-      setShowScrollBottom(false);
-      return;
-    }
-    shouldStickToBottomRef.current = true;
-    requestAnimationFrame(() => scrollToBottom('auto'));
-  }, [currentThread?.id, scrollToBottom, showEmptyStarter]);
+  const {
+    contentRef,
+    handleScroll,
+    handleScrollKeyDown,
+    handleScrollTouchMove,
+    handleScrollWheel,
+    listRef,
+    markScrollbarDragIntent,
+    scrollRef,
+    scrollToBottom,
+    showScrollBottom,
+  } = usePinnedChatScroll({
+    scrollSignal,
+    showEmptyStarter,
+    threadId: currentThread?.id ?? null,
+  });
 
   useLayoutEffect(() => {
     setEditingMessageId(null);
@@ -125,15 +147,6 @@ export function ChatWorkspace({
     setSelectedDeleteItemIds(new Set());
     setActionError(null);
   }, [currentThread?.id]);
-
-  useLayoutEffect(() => {
-    if (showEmptyStarter) return;
-    if (shouldStickToBottomRef.current) {
-      requestAnimationFrame(() => scrollToBottom('auto'));
-    } else {
-      syncScrollBottomState();
-    }
-  }, [scrollSignal, scrollToBottom, showEmptyStarter, syncScrollBottomState]);
 
   const selectableDeleteItems = useMemo(
     () =>
@@ -252,6 +265,7 @@ export function ChatWorkspace({
       contextUsage={contextUsage}
       config={config}
       draft={draft}
+      skillSelectionRequest={skillSelectionRequest}
       skills={skills}
       starter={starter}
       onCancelActiveTurn={onCancelActiveTurn}
@@ -259,10 +273,10 @@ export function ChatWorkspace({
       onCompactContext={onCompactContext}
       onClearContext={onClearContext}
       onDraftChange={onDraftChange}
-      onPermissionProfileChange={onPermissionProfileChange}
       onSelectModel={onSelectModel}
       onSearchProjectEntries={onSearchProjectEntries}
       onSend={onSend}
+      onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
     />
   );
   const starterTitle = activeProject ? `我们应该在 ${activeProject.name} 中构建什么？` : '我们该做什么？';
@@ -299,43 +313,75 @@ export function ChatWorkspace({
   return (
     <main className="chat-main-panel desktop-chat-panel">
       <div className="chat-main-workspace">
-        <div className={`chat-main-conversation ${showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender'}`}>
-          <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRef} onScroll={syncScrollBottomState}>
-            <div className="chat-content-frame">
+        <div
+          className={`chat-main-conversation ${showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender'}`}
+          ref={conversationRef}
+        >
+          <div
+            className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`}
+            ref={scrollRef}
+            onKeyDownCapture={handleScrollKeyDown}
+            onPointerDownCapture={markScrollbarDragIntent}
+            onScroll={handleScroll}
+            onTouchMoveCapture={handleScrollTouchMove}
+            onWheelCapture={handleScrollWheel}
+          >
+            <div className="chat-content-frame" ref={contentRef}>
               {showEmptyStarter ? (
                 <div className="chat-starter">
                   <h1>{starterTitle}</h1>
                   {composer(true)}
                 </div>
               ) : (
-                <div className="chat-bubble-list">
-                  {renderWindow.hiddenItemCount ? <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} /> : null}
+                <div className="chat-bubble-list" ref={listRef}>
+                  {renderWindow.hiddenItemCount ? (
+                    <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} />
+                  ) : null}
                   {renderedDisplayItems.map((item) => (
-                    <MessageItem
-                      key={item.id}
-                      activeTurnId={activeTurnId}
-                      deleteMode={deleteMode}
-                      editingDraft={editingDraft}
-                      editingMessageId={editingMessageId}
-                      editingSubmitting={editingSubmitting}
-                      item={item}
-                      onAnswerApproval={onAnswerApproval}
-                      onCancelEdit={cancelEditingMessage}
-                      onDiscardFileChanges={onDiscardFileChanges}
-                      onEditDraftChange={setEditingDraft}
-                      onOpenFileReview={onOpenFileReview}
-                      onStartEdit={startEditingMessage}
-                      onStartDelete={startDeleteSelection}
-                      onSubmitEdit={submitEditingMessage}
-                      onToggleDelete={toggleDeleteSelection}
-                      selectedForDelete={selectedDeleteItemIds.has(item.id)}
-                    />
+                    <Fragment key={item.id}>
+                      <MessageItem
+                        activeTurnId={activeTurnId}
+                        deleteMode={deleteMode}
+                        editingDraft={editingDraft}
+                        editingMessageId={editingMessageId}
+                        editingSubmitting={editingSubmitting}
+                        item={item}
+                        onAnswerApproval={onAnswerApproval}
+                        onCancelEdit={cancelEditingMessage}
+                        onDiscardFileChanges={onDiscardFileChanges}
+                        onEditDraftChange={setEditingDraft}
+                        onOpenFileReview={onOpenFileReview}
+                        onStartEdit={startEditingMessage}
+                        onStartDelete={startDeleteSelection}
+                        onSubmitEdit={submitEditingMessage}
+                        onToggleDelete={toggleDeleteSelection}
+                        selectedForDelete={selectedDeleteItemIds.has(item.id)}
+                      />
+                      {showActiveTurnPlaceholder && item.type === 'user' && item.message.turnId === activeTurnId ? (
+                        <ActiveWorkPlaceholder segments={[item.message]} />
+                      ) : null}
+                    </Fragment>
                   ))}
+                  {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
                   {contextCompactionRunning ? <ContextCompactionDivider active usage={contextUsage} /> : null}
                 </div>
               )}
             </div>
           </div>
+          {conversationOverview ? (
+            <div className="chat-conversation-overview">
+              <ConversationOverviewPanel
+                compact={overviewCompact}
+                contextLabel={overviewContextLabel}
+                contextPercent={contextUsage.visiblePercent || contextUsage.percent}
+                overview={conversationOverview}
+                onCollapse={() => setOverviewExpanded(false)}
+                onExpand={() => setOverviewExpanded(true)}
+                onOpenFiles={onOpenFilesPanel}
+                onOpenReview={onOpenFileReview}
+              />
+            </div>
+          ) : null}
           {showScrollBottom && !showEmptyStarter ? (
             <div className="chat-scroll-bottom-anchor">
               <button className="chat-scroll-bottom" type="button" aria-label="滚动到底部" onClick={() => scrollToBottom()}>
@@ -365,6 +411,249 @@ export function ChatWorkspace({
   );
 }
 
+function usePinnedChatScroll({
+  scrollSignal,
+  showEmptyStarter,
+  threadId,
+}: {
+  scrollSignal: string;
+  showEmptyStarter: boolean;
+  threadId: string | null;
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const userScrollIntentRef = useRef(false);
+  const scrollFrameRef = useRef<number | null>(null);
+  const scrollScheduleTokenRef = useRef(0);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
+  const scrollDistanceToBottom = useCallback((node: HTMLDivElement) => Math.max(0, node.scrollHeight - node.scrollTop - node.clientHeight), []);
+  const cancelScheduledScroll = useCallback(() => {
+    scrollScheduleTokenRef.current += 1;
+    if (scrollFrameRef.current !== null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+    scrollFrameRef.current = null;
+  }, []);
+  const scrollToBottomNow = useCallback(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+    setShowScrollBottom(false);
+  }, []);
+  const schedulePinnedScroll = useCallback((frameCount = pinnedScrollSettleFrameCount) => {
+    if (showEmptyStarter || !shouldStickToBottomRef.current) return;
+    if (typeof window === 'undefined') {
+      scrollToBottomNow();
+      return;
+    }
+
+    const token = scrollScheduleTokenRef.current + 1;
+    scrollScheduleTokenRef.current = token;
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+
+    const tick = (remainingFrames: number) => {
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        if (token !== scrollScheduleTokenRef.current) return;
+        scrollFrameRef.current = null;
+        if (!shouldStickToBottomRef.current) return;
+        scrollToBottomNow();
+        if (remainingFrames > 1) tick(remainingFrames - 1);
+      });
+    };
+
+    tick(Math.max(1, frameCount));
+  }, [scrollToBottomNow, showEmptyStarter]);
+
+  const syncScrollBottomState = useCallback(() => {
+    const node = scrollRef.current;
+    if (!node || showEmptyStarter) {
+      setShowScrollBottom(false);
+      return;
+    }
+
+    const distanceToBottom = scrollDistanceToBottom(node);
+    const atBottom = distanceToBottom <= stickyBottomThresholdPx;
+    if (atBottom) {
+      userScrollIntentRef.current = false;
+      shouldStickToBottomRef.current = true;
+      setShowScrollBottom(false);
+      return;
+    }
+
+    const nearBottom = distanceToBottom <= scrollBottomThresholdPx;
+    // Resize and programmatic scroll events share the same browser event as user scrolls; only explicit user gestures are allowed to unlock sticky bottom.
+    if (userScrollIntentRef.current) {
+      shouldStickToBottomRef.current = false;
+      setShowScrollBottom(!nearBottom);
+      return;
+    }
+
+    if (shouldStickToBottomRef.current) {
+      setShowScrollBottom(false);
+      schedulePinnedScroll(1);
+      return;
+    }
+
+    setShowScrollBottom(true);
+  }, [schedulePinnedScroll, scrollDistanceToBottom, showEmptyStarter]);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const node = scrollRef.current;
+    if (!node) return;
+    userScrollIntentRef.current = false;
+    shouldStickToBottomRef.current = true;
+    setShowScrollBottom(false);
+    node.scrollTo({ top: node.scrollHeight, behavior });
+    if (behavior === 'auto') schedulePinnedScroll(2);
+  }, [schedulePinnedScroll]);
+
+  const markUserScrollIntent = useCallback(() => {
+    if (!showEmptyStarter) userScrollIntentRef.current = true;
+  }, [showEmptyStarter]);
+
+  const releasePinnedScrollForUser = useCallback(() => {
+    if (showEmptyStarter) return;
+    cancelScheduledScroll();
+    userScrollIntentRef.current = true;
+    shouldStickToBottomRef.current = false;
+    const node = scrollRef.current;
+    if (!node) return;
+    setShowScrollBottom(scrollDistanceToBottom(node) > scrollBottomThresholdPx);
+  }, [cancelScheduledScroll, scrollDistanceToBottom, showEmptyStarter]);
+
+  const handleScrollWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (showEmptyStarter) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const distanceToBottom = scrollDistanceToBottom(node);
+    if (event.deltaY < 0 || distanceToBottom > stickyBottomThresholdPx) {
+      releasePinnedScrollForUser();
+      return;
+    }
+    markUserScrollIntent();
+  }, [markUserScrollIntent, releasePinnedScrollForUser, scrollDistanceToBottom, showEmptyStarter]);
+
+  const handleScrollTouchMove = useCallback((_event: ReactTouchEvent<HTMLDivElement>) => {
+    releasePinnedScrollForUser();
+  }, [releasePinnedScrollForUser]);
+
+  const handleScrollKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (!keyboardScrollIntentKeys.has(event.key)) return;
+    if (event.key === 'End') {
+      markUserScrollIntent();
+      return;
+    }
+    releasePinnedScrollForUser();
+  }, [markUserScrollIntent, releasePinnedScrollForUser]);
+
+  const markScrollbarDragIntent = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const node = scrollRef.current;
+    if (!node || node.scrollHeight <= node.clientHeight || showEmptyStarter) return;
+    const scrollbarHitWidth = Math.max(12, node.offsetWidth - node.clientWidth);
+    const { right } = node.getBoundingClientRect();
+    if (event.clientX >= right - scrollbarHitWidth) {
+      releasePinnedScrollForUser();
+    }
+  }, [releasePinnedScrollForUser, showEmptyStarter]);
+
+  useLayoutEffect(() => {
+    cancelScheduledScroll();
+    userScrollIntentRef.current = false;
+    const node = scrollRef.current;
+    if (!node) return;
+    if (showEmptyStarter) {
+      node.scrollTop = 0;
+      shouldStickToBottomRef.current = false;
+      setShowScrollBottom(false);
+      return;
+    }
+    shouldStickToBottomRef.current = true;
+    schedulePinnedScroll();
+  }, [cancelScheduledScroll, schedulePinnedScroll, showEmptyStarter, threadId]);
+
+  useLayoutEffect(() => {
+    if (showEmptyStarter) return;
+    if (shouldStickToBottomRef.current) {
+      schedulePinnedScroll();
+    } else {
+      syncScrollBottomState();
+    }
+  }, [schedulePinnedScroll, scrollSignal, showEmptyStarter, syncScrollBottomState]);
+
+  useLayoutEffect(() => {
+    const contentNode = contentRef.current;
+    const listNode = listRef.current;
+    const scrollNode = scrollRef.current;
+    if (!scrollNode || showEmptyStarter || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => {
+      if (shouldStickToBottomRef.current) {
+        schedulePinnedScroll();
+      } else {
+        syncScrollBottomState();
+      }
+    });
+    if (contentNode) observer.observe(contentNode);
+    if (listNode && listNode !== contentNode) observer.observe(listNode);
+    observer.observe(scrollNode);
+    return () => observer.disconnect();
+  }, [schedulePinnedScroll, scrollSignal, showEmptyStarter, syncScrollBottomState]);
+
+  useEffect(() => cancelScheduledScroll, [cancelScheduledScroll]);
+
+  return {
+    contentRef,
+    handleScroll: syncScrollBottomState,
+    handleScrollKeyDown,
+    handleScrollTouchMove,
+    handleScrollWheel,
+    listRef,
+    markScrollbarDragIntent,
+    scrollRef,
+    scrollToBottom,
+    showScrollBottom,
+  };
+}
+
+function useElementWidthBelow(ref: RefObject<HTMLElement>, thresholdPx: number): boolean {
+  const [below, setBelow] = useState(false);
+
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node || typeof window === 'undefined') return undefined;
+    const sync = () => setBelow(node.getBoundingClientRect().width < thresholdPx);
+    sync();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', sync);
+      return () => window.removeEventListener('resize', sync);
+    }
+
+    const observer = new ResizeObserver(sync);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ref, thresholdPx]);
+
+  return below;
+}
+
+function conversationOverviewContextLabel(
+  usage: ChatContextTokenUsage,
+  compactionStatus?: NonNullable<RuntimeThread['contextCompaction']>['status'],
+): string {
+  if (compactionStatus === 'running') return '压缩中';
+  const percent = usage.visiblePercent || usage.percent;
+  if (percent > 0) return `${formatPercent(percent)}%`;
+  return '就绪';
+}
+
+function formatPercent(value: number): string {
+  const safeValue = Math.min(100, Math.max(0, value));
+  return safeValue > 0 && safeValue < 1 ? safeValue.toFixed(1) : safeValue.toFixed(0);
+}
+
 function MessageItem({
   activeTurnId,
   deleteMode,
@@ -389,7 +678,7 @@ function MessageItem({
   editingMessageId: string | null;
   editingSubmitting: boolean;
   item: ChatDisplayItem;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
   onCancelEdit: () => void;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onEditDraftChange: (value: string) => void;
@@ -503,7 +792,7 @@ function AssistantRunItem({
   activeTurnId: string | null;
   deleteMode: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: () => void;
   onStartDelete: (itemId: string) => void;
@@ -670,14 +959,14 @@ function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
   );
 }
 
-function TranscriptWindowDivider({ hiddenMessageCount }: { hiddenMessageCount: number }) {
+function TranscriptWindowDivider({ hiddenMessageCount, onShowAll }: { hiddenMessageCount: number; onShowAll: () => void }) {
   const count = Math.max(0, hiddenMessageCount);
   return (
     <div className="chat-context-compact-divider chat-transcript-window-divider" aria-label="较早记录已折叠">
       <span className="chat-context-compact-divider__line" />
-      <span className="chat-context-compact-divider__text">
+      <button className="chat-context-compact-divider__button" type="button" onClick={onShowAll}>
         {count > 0 ? `已折叠较早的 ${count} 条消息` : '已折叠较早的消息'}
-      </span>
+      </button>
       <span className="chat-context-compact-divider__line" />
     </div>
   );
@@ -743,7 +1032,7 @@ function AssistantRunContent({
 }: {
   active: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: () => void;
 }) {
@@ -752,34 +1041,48 @@ function AssistantRunContent({
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
   const timelineBlocks = useMemo(() => createAssistantRunTimeline(displaySegments), [displaySegments]);
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
-  const hasPendingApproval = displaySegments.some((segment) => segment.toolRuns?.some(isPendingApprovalToolRun));
   const hasRenderableContent = timelineBlocks.length > 0;
-  const hasActiveWorkBlock = timelineBlocks.some((block) => block.type === 'work' && block.active);
-  const showContinuationLoading = active && status !== 'error' && !hasStreamingSegment && !hasPendingApproval && !hasActiveWorkBlock;
+  const hasWorkBlock = timelineBlocks.some((block) => block.type === 'work');
+  const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
+  const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
+  const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
   const fileChangeSummary = useMemo(() => {
-    if (active) return null;
+    if (active || !hasFinalAnswerContent) return null;
     return fileChangeSummaryFromRuns(toolRuns);
-  }, [active, toolRuns]);
+  }, [active, hasFinalAnswerContent, toolRuns]);
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
-    return <AssistantLoadingIndicator label={active ? '正在处理' : '思考中'} />;
+    return active ? <ActiveWorkPlaceholder segments={displaySegments} /> : <AssistantLoadingIndicator label="思考中" />;
   }
   return (
     <div className="chat-assistant-run">
-      {timelineBlocks.map((block) => assistantTimelineNode(block, onAnswerApproval))}
+      {showActiveWorkPlaceholder ? <ActiveWorkPlaceholder segments={displaySegments} /> : null}
+      {timelineBlocks.map((block, index) =>
+        assistantTimelineNode(
+          block,
+          onAnswerApproval,
+          active,
+          workHistoryState.active,
+          workHistoryState.expanded,
+          timelineBlocks.slice(index + 1).some((nextBlock) => nextBlock.type === 'content' && nextBlock.content.trim()),
+        ),
+      )}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
           <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
         </div>
       ) : null}
-      {showContinuationLoading ? <AssistantLoadingIndicator label="继续处理" /> : null}
     </div>
   );
 }
 
 function assistantTimelineNode(
   block: AssistantRunTimelineBlock,
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void,
-): JSX.Element {
+  onAnswerApproval: AnswerApprovalHandler,
+  runActive: boolean,
+  keepWorkHistoryActive: boolean,
+  keepWorkHistoryExpanded: boolean,
+  hasFollowingContent: boolean,
+): ReactNode {
   if (block.type === 'content') {
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
@@ -788,6 +1091,7 @@ function assistantTimelineNode(
     );
   }
   if (block.type === 'loading') {
+    if (runActive) return null;
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
         <AssistantLoadingIndicator label="正在处理" />
@@ -802,26 +1106,57 @@ function assistantTimelineNode(
     );
   }
 
-  const workThinkingNodes = block.thinkingSegments.length
-    ? block.thinkingSegments.map((segment) => streamingThinkingNode(segment.id, segment.content))
-    : streamingThinkingNodes(block.segments);
+  const toolRunSummaryMode: ToolRunSummaryMode = hasFollowingContent ? 'aggregate' : 'latest';
+  const workEntries = block.items.flatMap((item): Array<{ kind: 'thinking' | 'work'; node: ReactNode }> => {
+    if (item.type === 'content') {
+      return [{
+        kind: 'work',
+        node: <MarkdownContent key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />,
+      }];
+    }
+    if (item.type === 'thinking') {
+      return block.active && item.segment.content.trim()
+        ? [{ kind: 'thinking', node: <ActiveThinkingBox key={item.segment.id} content={item.segment.content} /> }]
+        : [];
+    }
+    const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
+    return visibleToolRuns.length
+      ? [{
+          kind: 'work',
+          node: <RuntimeToolRuns key={item.id} runs={visibleToolRuns} summaryMode={toolRunSummaryMode} onAnswerApproval={onAnswerApproval} />,
+        }]
+      : [];
+  });
+  const workNodes = workEntries.map((entry) => entry.node);
   const workTiming = inferWorkTiming(block.segments);
-  const hasWorkDetails = workThinkingNodes.length > 0 || block.toolRuns.length > 0;
+  const hasWorkDetails = workNodes.length > 0;
+  const showWorkHistory = hasWorkDetails || runActive;
+  const workHistoryActive = block.active || keepWorkHistoryActive;
+  if (!showWorkHistory) return null;
   return (
-    <WorkHistoryPanel
-      key={block.id}
-      active={block.active}
-      completedAtMs={workTiming.completedAtMs}
-      hasDetails={hasWorkDetails}
-      startedAtMs={workTiming.startedAtMs}
-    >
-      {workThinkingNodes}
-      {block.toolRuns.length ? <RuntimeToolRuns runs={block.toolRuns} onAnswerApproval={onAnswerApproval} /> : null}
-    </WorkHistoryPanel>
+    <Fragment key={block.id}>
+      <WorkHistoryPanel
+        active={workHistoryActive}
+        completedAtMs={workTiming.completedAtMs}
+        hasDetails={hasWorkDetails}
+        keepExpanded={keepWorkHistoryExpanded}
+        startedAtMs={workTiming.startedAtMs}
+      >
+        {workNodes}
+      </WorkHistoryPanel>
+    </Fragment>
   );
 }
-function isPendingApprovalToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
-  return run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected';
+
+function ActiveWorkPlaceholder({ segments }: { segments: RuntimeMessage[] }) {
+  return (
+    <WorkHistoryPanel
+      active
+      completedAtMs={null}
+      hasDetails={false}
+      startedAtMs={inferActiveTurnStartedAtMs(segments)}
+    />
+  );
 }
 
 function inferWorkTiming(segments: RuntimeMessage[]): { startedAtMs: number | null; completedAtMs: number | null } {
@@ -864,46 +1199,49 @@ function inferWorkTiming(segments: RuntimeMessage[]): { startedAtMs: number | nu
   };
 }
 
+function inferActiveTurnStartedAtMs(segments: RuntimeMessage[]): number | null {
+  const startedAtMs: number[] = [];
+  for (const segment of segments) {
+    const segmentStartedAtMs = parseDateMs(segment.createdAt);
+    if (segmentStartedAtMs !== null) startedAtMs.push(segmentStartedAtMs);
+    for (const run of segment.toolRuns ?? []) {
+      const runStartedAtMs = parseDateMs(run.startedAt);
+      if (runStartedAtMs !== null) startedAtMs.push(runStartedAtMs);
+    }
+  }
+  return startedAtMs.length ? Math.min(...startedAtMs) : null;
+}
+
 function parseDateMs(value?: string | null): number | null {
   if (!value) return null;
   const time = Date.parse(value);
   return Number.isFinite(time) ? time : null;
 }
 
-function streamingThinkingNodes(segments: RuntimeMessage[]): JSX.Element[] {
-  const nodes: JSX.Element[] = [];
-  for (const segment of segments) {
-    splitThinkingContent(segment.content).forEach((thinkingSegment, index) => {
-      if (thinkingSegment.type !== 'think' || thinkingSegment.closed || segment.status !== 'streaming' || !thinkingSegment.content.trim()) return;
-      nodes.push(
-        <Think
-          key={`${segment.id}-think-${index}`}
-          className="chat-think"
-          title="思考中"
-          loading
-          blink
-          defaultExpanded
-        >
-          <MarkdownContent content={thinkingSegment.content} streaming />
-        </Think>,
-      );
-    });
-  }
-  return nodes;
-}
+function ActiveThinkingBox({ content }: { content: string }): JSX.Element {
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
-function streamingThinkingNode(key: string, content: string): JSX.Element {
+  useLayoutEffect(() => {
+    const node = contentRef.current;
+    if (!node) return undefined;
+
+    const scrollToBottom = () => {
+      node.scrollTop = node.scrollHeight;
+    };
+    scrollToBottom();
+
+    if (typeof window === 'undefined') return undefined;
+    const frame = window.requestAnimationFrame(scrollToBottom);
+    return () => window.cancelAnimationFrame(frame);
+  }, [content]);
+
   return (
-    <Think
-      key={key}
-      className="chat-think"
-      title="思考中"
-      loading
-      blink
-      defaultExpanded
-    >
-      <MarkdownContent content={content} streaming />
-    </Think>
+    <div className="chat-thinking-box" aria-live="polite" aria-label="正在思考">
+      <div className="chat-thinking-box__content" ref={contentRef}>
+        <MarkdownContent content={content} streaming />
+      </div>
+      <div className="chat-thinking-box__status">正在思考</div>
+    </div>
   );
 }
 
@@ -912,22 +1250,38 @@ function WorkHistoryPanel({
   children,
   completedAtMs,
   hasDetails,
+  keepExpanded = false,
   startedAtMs,
 }: {
   active: boolean;
   children?: ReactNode;
   completedAtMs?: number | null;
   hasDetails: boolean;
+  keepExpanded?: boolean;
   startedAtMs?: number | null;
 }) {
-  const [expanded, setExpanded] = useState(active && hasDetails);
   const wasActiveRef = useRef(active);
+  const userToggledRef = useRef(false);
+  const defaultExpanded = hasDetails && (active || keepExpanded);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
+  const [manualExpanded, setManualExpanded] = useState(defaultExpanded);
+  const canToggle = hasDetails && !active;
+  const expanded = hasDetails && (active || manualExpanded);
 
   useEffect(() => {
-    setExpanded(active && hasDetails);
-  }, [active, hasDetails]);
+    if (!hasDetails) {
+      userToggledRef.current = false;
+      setManualExpanded(false);
+      return;
+    }
+    if (active) {
+      userToggledRef.current = false;
+      setManualExpanded(true);
+      return;
+    }
+    if (!userToggledRef.current) setManualExpanded(defaultExpanded);
+  }, [active, defaultExpanded, hasDetails]);
 
   useEffect(() => {
     if (completedAtMs !== null && completedAtMs !== undefined) {
@@ -961,25 +1315,33 @@ function WorkHistoryPanel({
       ? Math.max(0, durationEndMs - startedAtMs)
       : null,
   );
+  const summaryContent = (
+    <>
+      <span className="chat-work-history__title">{title}</span>
+      {durationLabel ? <span className="chat-work-history__duration">{durationLabel}</span> : null}
+    </>
+  );
+  const toggleExpanded = () => {
+    if (!canToggle) return;
+    userToggledRef.current = true;
+    setManualExpanded((value) => !value);
+  };
+
   return (
-    <div className={`chat-work-history ${expanded ? 'is-expanded' : ''}`}>
-      <button
-        className="chat-work-history__summary"
-        type="button"
-        aria-expanded={expanded}
-        disabled={!hasDetails}
-        onClick={() => {
-          if (hasDetails) setExpanded((value) => !value);
-        }}
-      >
-        <span className="chat-work-history__title">{title}</span>
-        {durationLabel ? <span className="chat-work-history__duration">{durationLabel}</span> : null}
-        {hasDetails ? (
-          <span className="chat-work-history__chevron" aria-hidden="true">
-            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </span>
-        ) : null}
-      </button>
+    <div className={`chat-work-history ${expanded ? 'is-expanded' : ''} ${canToggle ? 'is-toggleable' : ''}`}>
+      {canToggle ? (
+        <button
+          className="chat-work-history__summary"
+          type="button"
+          aria-expanded={expanded}
+          title={expanded ? '收起工作详情' : '展开工作详情'}
+          onClick={toggleExpanded}
+        >
+          {summaryContent}
+        </button>
+      ) : (
+        <div className="chat-work-history__summary">{summaryContent}</div>
+      )}
       {expanded && hasDetails ? <div className="chat-work-history__body">{children}</div> : null}
     </div>
   );

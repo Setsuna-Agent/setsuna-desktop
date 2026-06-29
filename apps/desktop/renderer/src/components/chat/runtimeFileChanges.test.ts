@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns, latestFileChangeSummaryFromMessages } from './runtimeFileChanges.js';
 
 describe('runtime file changes', () => {
@@ -131,6 +131,57 @@ describe('runtime file changes', () => {
       additions: 35,
       deletions: 0,
     });
+  });
+
+  it('ignores planning-only file tools in applied change summaries', () => {
+    const runs: RuntimeToolRun[] = [
+      {
+        id: 'call_plan',
+        name: 'plan_file_changes',
+        status: 'success',
+        resultPreview: JSON.stringify({
+          diff: { path: 'merge_sort.py', action: 'Modified', additions: 9, deletions: 59, truncated: false, lines: [] },
+        }),
+      },
+      {
+        id: 'call_begin',
+        name: 'begin_file_change',
+        status: 'success',
+        resultPreview: JSON.stringify({
+          diff: { path: 'merge_sort.py', action: 'Modified', additions: 9, deletions: 59, truncated: false, lines: [] },
+        }),
+      },
+    ];
+
+    expect(fileChangeSummaryFromRuns(runs)).toBeNull();
+  });
+
+  it('normalizes runtime add and del diff lines for renderer previews', () => {
+    const summary = fileChangeSummaryFromRuns([
+      {
+        id: 'call_edit',
+        name: 'edit_file',
+        status: 'success',
+        resultPreview: JSON.stringify({
+          diff: {
+            path: 'src/domain/agent/drawer/ChatLogDrawer.vue',
+            action: 'Edited',
+            additions: 1,
+            deletions: 1,
+            truncated: false,
+            lines: [
+              { type: 'del', lineNumber: 66, oldLine: 66, content: 'const now = new Date()' },
+              { type: 'add', lineNumber: 66, newLine: 66, content: 'const today = new Date()' },
+            ],
+          },
+        }),
+      },
+    ]);
+
+    expect(summary?.files[0]?.lines).toEqual([
+      { type: 'removed', lineNumber: 66, oldLine: 66, newLine: undefined, content: 'const now = new Date()' },
+      { type: 'added', lineNumber: 66, oldLine: undefined, newLine: 66, content: 'const today = new Date()' },
+    ]);
   });
 
   it('does not merge adjacent assistant file change groups from different turns', () => {

@@ -70,7 +70,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       status: 'completed',
       usedTokens: event.payload.notice.compactedTokens,
     };
-    next.messages = event.payload.messages.map(cloneMessage);
+    next.messages = mergeCompactedMessages(next.messages, event.payload.messages);
     refreshThreadSummary(next);
     return next;
   }
@@ -159,7 +159,9 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     if (run) {
       run.approvalStatus = event.payload.decision === 'approve' ? 'approved' : 'rejected';
       run.approvalMessage = event.payload.message;
-      if (event.payload.decision === 'reject') {
+      if (event.payload.decision === 'approve') {
+        run.status = 'running';
+      } else {
         run.status = 'rejected';
         run.completedAt = event.createdAt;
         run.resultPreview = event.payload.message || 'Tool call rejected.';
@@ -253,6 +255,21 @@ function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),
+  };
+}
+
+function mergeCompactedMessages(previousMessages: RuntimeMessage[], compactedMessages: RuntimeMessage[]): RuntimeMessage[] {
+  const compactedIds = new Set(compactedMessages.map((message) => message.id));
+  const archivedMessages = previousMessages
+    .filter((message) => !compactedIds.has(message.id) && message.visibility !== 'model')
+    .map(cloneTranscriptMessage);
+  return [...archivedMessages, ...compactedMessages.map(cloneMessage)];
+}
+
+function cloneTranscriptMessage(message: RuntimeMessage): RuntimeMessage {
+  return {
+    ...cloneMessage(message),
+    visibility: 'transcript',
   };
 }
 

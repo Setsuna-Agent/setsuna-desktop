@@ -12,6 +12,7 @@ import type {
 import { ChatWorkspace } from '../chat/ChatWorkspace.js';
 import { BottomToolsPanel } from '../workspace/BottomToolsPanel.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
+import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import type {
   DesktopPanelSlotState,
   DesktopPanelTab,
@@ -20,6 +21,8 @@ import type {
   DesktopWorkspaceApp,
 } from '../workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../workspace/runtimeReviewSummary.js';
+
+type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
 
 export function AppChatSurface({
   activeProject,
@@ -33,6 +36,7 @@ export function AppChatSurface({
   currentThread,
   draft,
   filePreview,
+  skillSelectionRequest,
   reviewError,
   reviewLoading,
   reviewState,
@@ -60,12 +64,13 @@ export function AppChatSurface({
   onSearchProjectEntries,
   onOpenBottomReviewPanel,
   onOpenBottomTerminalPanel,
+  onOpenFilesPanel,
   onOpenFileReviewPanel,
-  onPermissionProfileChange,
   onOpenEntry,
   onOpenProjectFile,
   onReviewRefresh,
   onSend,
+  onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
   terminalHeight,
@@ -88,6 +93,7 @@ export function AppChatSurface({
   currentThread: RuntimeThread | null;
   draft: string;
   filePreview: WorkspaceFileRead | null;
+  skillSelectionRequest: ChatSkillSelectionRequest | null;
   reviewError: string | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
@@ -100,7 +106,7 @@ export function AppChatSurface({
   onAddFileToConversation: (filePath: string) => void;
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
-  onAnswerApproval: (approvalId: string, decision: RuntimeApprovalDecision) => void;
+  onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
@@ -115,12 +121,13 @@ export function AppChatSurface({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
+  onOpenFilesPanel: () => void;
   onOpenFileReviewPanel?: () => void;
-  onPermissionProfileChange: (profile: RuntimeConfigState['permissionProfile']) => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onReviewRefresh: () => void;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; skillIds?: string[] }) => void;
+  onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   terminalHeight: number;
@@ -147,6 +154,8 @@ export function AppChatSurface({
         config={config}
         currentThread={currentThread}
         draft={draft}
+        skillSelectionRequest={skillSelectionRequest}
+        sidePanelVisible={sidePanelVisible}
         skills={skills}
         onCancelActiveTurn={onCancelActiveTurn}
         onApprovalPolicyChange={onApprovalPolicyChange}
@@ -157,11 +166,12 @@ export function AppChatSurface({
         onDiscardFileChanges={onDiscardFileChanges}
         onDraftChange={onDraftChange}
         onEditUserMessage={onEditUserMessage}
+        onOpenFilesPanel={onOpenFilesPanel}
         onOpenFileReview={onOpenFileReviewPanel}
-        onPermissionProfileChange={onPermissionProfileChange}
         onSelectModel={onSelectModel}
         onSearchProjectEntries={onSearchProjectEntries}
         onSend={onSend}
+        onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       />
       {sidePanelVisible && sideActivePanel ? (
         <WorkspacePanel
