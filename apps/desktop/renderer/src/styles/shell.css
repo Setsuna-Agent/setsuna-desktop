@@ -167,6 +167,24 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
+.app-topbar-update-alert {
+  position: relative;
+  color: #9a6700;
+  background: color-mix(in srgb, #f2b705 14%, transparent);
+}
+
+.app-topbar-update-alert__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--app-bg);
+  border-radius: 999px;
+  background: #f2b705;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #f2b705 18%, transparent);
+}
+
 .desktop-agent-page--sidebar-collapsed .app-topbar__brand {
   gap: 4px;
 }

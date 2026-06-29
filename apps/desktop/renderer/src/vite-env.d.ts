@@ -27,6 +27,39 @@ type DesktopUserProfile = {
   hostName: string | null;
 };
 
+type DesktopUpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
+
+type DesktopUpdaterProgress = {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+};
+
+type DesktopUpdaterState = {
+  status: DesktopUpdaterStatus;
+  currentVersion: string;
+  platform: string;
+  arch: string;
+  availableVersion?: string | null;
+  downloadedVersion?: string | null;
+  error?: string | null;
+  progress?: DesktopUpdaterProgress | null;
+  canUpdate?: boolean;
+  feedUrl?: string | null;
+  manualInstall?: boolean;
+  downloadedFilePath?: string | null;
+  releaseUrl?: string | null;
+  assetName?: string | null;
+};
+
+type DesktopUpdateActionResult = {
+  ok: boolean;
+  action: 'none' | 'opened-installer' | 'opened-folder' | 'unsupported';
+  state: DesktopUpdaterState;
+  error?: string;
+};
+
 type DesktopDiffLine = {
   type: 'context' | 'added' | 'removed';
   lineNumber: number;
@@ -83,6 +116,14 @@ declare global {
       };
       links: {
         openExternal(url: string): Promise<boolean>;
+      };
+      updater: {
+        getState(): Promise<DesktopUpdaterState>;
+        checkForUpdates(): Promise<DesktopUpdaterState>;
+        downloadUpdate(): Promise<DesktopUpdaterState>;
+        quitAndInstall(): Promise<DesktopUpdateActionResult>;
+        promptReadyUpdate(): Promise<DesktopUpdateActionResult>;
+        onStateChange(callback: (state: DesktopUpdaterState) => void): () => void;
       };
       runtime: Pick<DesktopRuntimeClient, 'subscribeEvents'> & {
         request<T = unknown>(input: RuntimeRequestInput): Promise<T>;

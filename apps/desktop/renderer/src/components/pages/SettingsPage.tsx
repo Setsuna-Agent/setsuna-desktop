@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { Popconfirm } from 'antd';
-import { Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, KeyRound, Monitor, Moon, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, Sun, Trash2, Type } from 'lucide-react';
+import { Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, KeyRound, Monitor, Moon, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, Sun, Trash2, Type } from 'lucide-react';
 import type {
   ProviderConfigState,
   ProviderModelConfig,
@@ -18,12 +18,14 @@ import { formatTokens } from '../workspace/model.js';
 import {
   fontFamilyOptions,
   fontSizeOptions,
+  getFontFamilyOptionsForPlatform,
   useAppearancePreferences,
   type FontFamilyMode,
 } from '../../hooks/useAppearancePreferences.js';
+import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 
-type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'runtime';
+type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'runtime' | 'about';
 type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>;
 
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
@@ -31,6 +33,7 @@ const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: Reac
   { id: 'personalization', label: '个性化', icon: <Pencil size={14} /> },
   { id: 'localLlm', label: '本地模型', icon: <HardDrive size={14} /> },
   { id: 'runtime', label: '运行时', icon: <Cpu size={14} /> },
+  { id: 'about', label: '关于', icon: <Info size={14} /> },
 ];
 
 const settingsSectionLabels: Record<SettingsSectionId, string> = {
@@ -38,6 +41,7 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
   personalization: '个性化',
   localLlm: '本地模型',
   runtime: '运行时',
+  about: '关于',
 };
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
@@ -62,6 +66,7 @@ const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsun
 
 export function SettingsPage({
   config,
+  updater,
   usage,
   memoryPreview,
   memoryPreviewLoading,
@@ -74,6 +79,7 @@ export function SettingsPage({
   onResetMemories,
 }: {
   config: RuntimeConfigState | null;
+  updater: DesktopUpdaterStateView;
   usage: RuntimeUsageResponse | null;
   memoryPreview: RuntimeMemoryPreview | null;
   memoryPreviewLoading: boolean;
@@ -88,12 +94,7 @@ export function SettingsPage({
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
   const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId) ?? config?.providers[0];
   const activeProviderName = activeProvider ? `${activeProvider.name || activeProvider.id} · ${config?.providers.length ?? 0} 厂商` : 'local-test';
-  const headingSubtitle =
-    activeSection === 'localLlm'
-      ? activeProviderName
-      : activeSection === 'general'
-        ? null
-        : config?.dataPath ?? 'Local runtime';
+  const headingSubtitle = getSettingsHeadingSubtitle(activeSection, activeProviderName, updater.currentVersion, config?.dataPath);
   const content =
     activeSection === 'general' ? (
       <GeneralSettings />
@@ -117,6 +118,8 @@ export function SettingsPage({
       ) : (
         <EmptyState title="Config unavailable" />
       )
+    ) : activeSection === 'about' ? (
+      <AboutSettings updater={updater} />
     ) : (
       config ? <RuntimePolicySettings config={config} onSave={onSaveRuntimePreferences} /> : <EmptyState title="Config unavailable" />
     );
@@ -151,6 +154,13 @@ export function SettingsPage({
       </div>
     </main>
   );
+}
+
+function getSettingsHeadingSubtitle(section: SettingsSectionId, activeProviderName: string, currentVersion: string, dataPath?: string): string | null {
+  if (section === 'general') return null;
+  if (section === 'localLlm') return activeProviderName;
+  if (section === 'about') return `v${currentVersion}`;
+  return dataPath ?? 'Local runtime';
 }
 
 function SettingsChoiceGroup<TValue extends string>({
@@ -189,9 +199,18 @@ function SettingsChoiceGroup<TValue extends string>({
 function GeneralSettings() {
   const { fontFamily, fontSize, setFontFamily, setFontSize } = useAppearancePreferences();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
-  const selectedFont = fontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions[0];
+  const availableFontFamilyOptions = getFontFamilyOptionsForPlatform();
+  const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
+  const fontFamilySelectOptions = availableFontFamilyOptions.some((item) => item.value === selectedFont.value)
+    ? availableFontFamilyOptions
+    : [selectedFont, ...availableFontFamilyOptions];
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
-  const fontSizeProgress = `${(fontSizeIndex / Math.max(fontSizeOptions.length - 1, 1)) * 100}%`;
+  const scaleMarkMaxIndex = Math.max(fontSizeOptions.length - 1, 1);
+  const fontSizeProgress = `${(fontSizeIndex / scaleMarkMaxIndex) * 100}%`;
+  const getScaleMarkLeft = (index: number) => {
+    const ratio = index / scaleMarkMaxIndex;
+    return `calc(${ratio * 100}% + ${7 - 14 * ratio}px)`;
+  };
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__section--general">
@@ -205,11 +224,11 @@ function GeneralSettings() {
             </span>
             <SelectField
               className="settings-local-control"
-              value={fontFamily}
+              value={selectedFont.value}
               style={{ fontFamily: selectedFont.css }}
               onChange={(event) => setFontFamily(event.currentTarget.value as FontFamilyMode)}
             >
-              {fontFamilyOptions.map((option) => (
+              {fontFamilySelectOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -265,7 +284,11 @@ function GeneralSettings() {
               />
               <div className="settings-scale-control__marks" aria-hidden="true">
                 {fontSizeOptions.map((option, index) => (
-                  <span key={option} className={index <= fontSizeIndex ? 'is-active' : undefined}>
+                  <span
+                    key={option}
+                    className={index <= fontSizeIndex ? 'is-active' : undefined}
+                    style={{ '--settings-scale-mark-left': getScaleMarkLeft(index) } as CSSProperties}
+                  >
                     {Number(option) % 10 === 0 ? `${option}%` : ''}
                   </span>
                 ))}
@@ -283,6 +306,116 @@ function GeneralSettings() {
       </div>
     </div>
   );
+}
+
+function AboutSettings({ updater }: { updater: DesktopUpdaterStateView }) {
+  const state = updater.state;
+  const updatePercent = updater.ready ? 100 : Math.round(state?.progress?.percent ?? 0);
+  const updateBusy = updater.checking || state?.status === 'checking' || state?.status === 'available' || state?.status === 'downloading';
+  const updateUnsupported = state?.canUpdate === false || state?.status === 'unsupported';
+  const showCheckButton = Boolean(updater.api && !updater.ready);
+  const showProgress = updateBusy || updater.ready;
+  const releaseUrl = state?.releaseUrl ?? state?.feedUrl ?? null;
+  const platform = state?.platform ?? (typeof window === 'undefined' ? 'desktop' : window.setsunaDesktop?.desktop.platform ?? 'desktop');
+  const arch = state?.arch ?? 'unknown';
+
+  return (
+    <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__about-section">
+      <div className="chat-user-settings__section-block">
+        <div className="chat-user-settings__group-title">应用信息</div>
+        <div className="chat-user-settings__group">
+          <div className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <Info size={14} />
+              <span>当前版本</span>
+            </span>
+            <strong className="chat-user-settings__value">v{updater.currentVersion}</strong>
+          </div>
+          <div className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <Monitor size={14} />
+              <span>平台</span>
+            </span>
+            <code>
+              {platform} / {arch}
+            </code>
+          </div>
+        </div>
+      </div>
+
+      <div className="chat-user-settings__section-block">
+        <div className="chat-user-settings__group-title">更新</div>
+        <div className="chat-user-settings__group chat-user-settings__update-panel">
+          <div className="chat-user-settings__update-main">
+            {showProgress ? (
+              <span className="chat-user-settings__update-progress" style={{ '--settings-update-progress': `${updatePercent}%` } as CSSProperties}>
+                <span>{updatePercent}%</span>
+              </span>
+            ) : null}
+            <div className="chat-user-settings__update-copy">
+              <strong>
+                {updater.statusTitle}
+                <StatusBadge tone={updateBadgeTone(state)}>{updateBadgeText(state)}</StatusBadge>
+              </strong>
+              <span>{updater.statusText}</span>
+              {updater.updateVersion ? <span>目标版本：v{updater.updateVersion.replace(/^v/u, '')}</span> : null}
+              {state?.assetName ? <span>安装包：{state.assetName}</span> : null}
+              {releaseUrl ? (
+                <button
+                  className="chat-user-settings__release-link"
+                  type="button"
+                  title={releaseUrl}
+                  onClick={() => void window.setsunaDesktop?.links.openExternal(releaseUrl)}
+                >
+                  更新内容：<span>{releaseUrl}</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="chat-user-settings__update-actions">
+            {showCheckButton ? (
+              <Button
+                className="chat-user-settings__update-action"
+                icon={<RefreshCw size={14} />}
+                disabled={updateBusy || updateUnsupported}
+                onClick={() => void updater.checkForUpdates()}
+              >
+                {updateBusy ? '检查中' : '检查更新'}
+              </Button>
+            ) : null}
+            {updater.ready ? (
+              <Button
+                className="chat-user-settings__update-action chat-user-settings__update-action--primary"
+                variant="primary"
+                disabled={updater.installing}
+                onClick={() => void updater.installReadyUpdate()}
+              >
+                {updater.installButtonText}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function updateBadgeTone(state: DesktopUpdaterBridgeState | null): 'neutral' | 'success' | 'warning' | 'danger' {
+  if (state?.status === 'downloaded') return 'warning';
+  if (state?.status === 'not-available') return 'success';
+  if (state?.status === 'error' || state?.status === 'unsupported') return 'danger';
+  return 'neutral';
+}
+
+function updateBadgeText(state: DesktopUpdaterBridgeState | null): string {
+  if (state?.status === 'downloaded') return '待安装';
+  if (state?.status === 'downloading') return '下载中';
+  if (state?.status === 'checking') return '检查中';
+  if (state?.status === 'not-available') return '最新';
+  if (state?.status === 'error') return '失败';
+  if (state?.status === 'unsupported') return '不可用';
+  return '自动';
 }
 
 function RuntimePolicySettings({

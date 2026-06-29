@@ -23,6 +23,10 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm package
+pnpm package:mac:arm64
+pnpm package:mac:x64
+pnpm package:win:x64
+pnpm package:linux:x64
 pnpm release:dry-run
 ```
 
@@ -62,3 +66,11 @@ The renderer does not know provider protocols and does not directly construct ru
 GitHub Releases are the canonical source for installable artifacts and metadata. `pnpm release:dry-run` creates a local release manifest preview with platform signing state, checksum placeholders, and log bundle expectations. Formal CI release publishing will upload installers, archives, checksums, `release-manifest.json`, updater metadata, and long-lived build logs.
 
 macOS v1 is currently treated as `unsigned`, `notarization: skipped`, and `installMode: manual`.
+
+Formal publishing is handled by the manual `Release` GitHub Actions workflow. Run it with a tag such as `v0.1.0`; the workflow builds and uploads these GitHub Release assets:
+
+- macOS Apple Silicon: unsigned `.dmg` and `.zip`.
+- macOS Intel: unsigned `.dmg` and `.zip`.
+- Windows x64: NSIS `.exe` installer and `.zip`.
+- Ubuntu x64: `.AppImage`, `.deb`, and `.tar.gz`.
+- Shared metadata: `SHA256SUMS`, `release-manifest.json`, and `build-logs-vX.Y.Z.zip`.

@@ -40,8 +40,10 @@ body,
 
 body {
   font-family: var(--app-font-family);
+  font-size: var(--app-font-size, 14px);
   color: var(--app-text);
   background: var(--app-window-bg);
+  zoom: var(--app-page-scale);
   letter-spacing: 0;
 }
 

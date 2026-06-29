@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { Bubble, CodeHighlighter } from '@ant-design/x';
+import { Actions, Bubble, CodeHighlighter } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
 import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
 import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
@@ -1446,10 +1446,11 @@ function MessageFooter({
 
 function MarkdownContent({ content, streaming }: { content: string; streaming: boolean }) {
   const segments = useMemo(() => splitThinkingContent(content), [content]);
+  const themeMode = getResolvedMarkdownTheme();
   const renderMarkdown = (value: string, key: string, activeStreaming: boolean, className = '') => (
     <XMarkdown
       key={key}
-      className={['chat-markdown', 'x-markdown-light', className].filter(Boolean).join(' ')}
+      className={['chat-markdown', `x-markdown-${themeMode}`, className].filter(Boolean).join(' ')}
       content={value}
       components={{ code: MarkdownCode }}
       openLinksInNewTab
@@ -1479,32 +1480,72 @@ function MarkdownCode({ block, children, className, lang }: XMarkdownComponentPr
   const code = String(children || '');
   if (!block) return <code className={className}>{children}</code>;
   const language = lang?.split(/\s+/)[0] || className?.match(/language-([\w-]+)/)?.[1] || '';
+  const copiedCode = code.replace(/\n$/, '');
   return (
     <CodeHighlighter
       className="chat-code-highlighter"
-      header={<div className="chat-code-highlighter__header">{(language || 'text').toUpperCase()}</div>}
+      header={
+        <div className="chat-code-highlighter__header">
+          <span className="chat-code-highlighter__language">{(language || 'text').toUpperCase()}</span>
+          <Actions.Copy text={copiedCode} />
+        </div>
+      }
+      highlightProps={{
+        codeTagProps: {
+          style: {
+            background: 'transparent',
+            margin: 0,
+          },
+        },
+        customStyle: {
+          background: 'var(--chat-code-highlighter-bg)',
+          margin: 0,
+          padding: '16px',
+        },
+      }}
       lang={normalizeCodeLanguage(language)}
       prismLightMode={false}
+      style={{ margin: '12px 0' }}
+      styles={{
+        code: {
+          background: 'var(--chat-code-highlighter-bg)',
+        },
+      }}
     >
-      {code.replace(/\n$/, '')}
+      {copiedCode}
     </CodeHighlighter>
   );
 }
 
 const markdownStyle = {
   '--border-color': 'var(--app-border)',
-  '--code-inline-text': 'calc(var(--app-font-size, 14px) - 1px)',
+  '--border-font-weight': '650',
+  '--cite-bg': 'color-mix(in srgb, var(--app-border) 28%, transparent)',
+  '--cite-hover-bg': 'color-mix(in srgb, var(--app-border) 28%, transparent)',
+  '--code-inline-text': 'calc(var(--app-font-size, 14px) - 1.5px)',
   '--dark-bg': 'var(--chat-code-bg)',
   '--font-size': 'var(--app-font-size, 14px)',
   '--heading-color': 'var(--app-text)',
   '--light-bg': '#fafafa',
   '--line-color': 'var(--app-border)',
+  '--margin-block': '0 0 0.85em 0',
+  '--margin-li': '0.35em 0',
+  '--margin-pre': '0.85em 0 0.9em',
+  '--margin-ul-ol': '0.5em 0 0.9em 1.5em',
+  '--padding-code': '16px',
+  '--padding-ul-ol': '0 0 0 0.6em',
   '--primary-color': 'var(--app-primary)',
+  '--primary-color-hover': 'var(--app-primary)',
   '--table-body-bg': 'var(--app-surface)',
   '--table-head-bg': 'color-mix(in srgb, var(--app-text) 5%, var(--app-surface))',
+  '--table-margin': '0.85em 0 1em',
+  '--td-th-padding': '8px 12px',
   '--text-color': 'var(--app-text)',
+  '--xmd-tail-color': 'var(--app-text)',
   fontFamily: 'var(--app-font-family)',
   fontFeatureSettings: '"kern"',
+  fontKerning: 'normal',
+  fontOpticalSizing: 'auto',
   fontSize: 'var(--app-font-size, 14px)',
   fontWeight: 400,
   lineHeight: 1.72,
@@ -1514,17 +1555,24 @@ const markdownStyle = {
 
 const codeLanguageAliases: Record<string, string> = {
   cjs: 'javascript',
+  cs: 'csharp',
+  cts: 'typescript',
   htm: 'markup',
   html: 'markup',
   js: 'javascript',
   md: 'markdown',
+  mdx: 'markdown',
   mjs: 'javascript',
+  mts: 'typescript',
   py: 'python',
+  rs: 'rust',
   sh: 'bash',
   shell: 'bash',
+  svg: 'markup',
   ts: 'typescript',
   tsx: 'typescript',
   vue: 'markup',
+  xml: 'markup',
   yml: 'yaml',
   zsh: 'bash',
 };
@@ -1532,6 +1580,11 @@ const codeLanguageAliases: Record<string, string> = {
 function normalizeCodeLanguage(language: string) {
   const normalized = language.trim().toLowerCase();
   return codeLanguageAliases[normalized] || normalized;
+}
+
+function getResolvedMarkdownTheme(): 'light' | 'dark' {
+  if (typeof document === 'undefined') return 'light';
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }
 
 function formatTime(value: string): string {

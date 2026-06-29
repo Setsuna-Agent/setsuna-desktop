@@ -8,6 +8,7 @@ import { useChatTurnActions } from './useChatTurnActions.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { useDesktopPanelResize } from './useDesktopPanelResize.js';
 import { useDesktopWorkspacePanels } from './useDesktopWorkspacePanels.js';
+import { useDesktopUpdater } from './useDesktopUpdater.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 import { useProjectWorkspace } from './useProjectWorkspace.js';
 import { useRuntimeClientState } from './useRuntimeClientState.js';
@@ -22,6 +23,7 @@ export function useDesktopAppController() {
   const [skillSelectionRequest, setSkillSelectionRequest] = useState<ChatSkillSelectionRequest | null>(null);
   const skillSelectionRequestIdRef = useRef(0);
 
+  const updater = useDesktopUpdater();
   const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
   const {
     activeTurnId,
@@ -187,6 +189,7 @@ export function useDesktopAppController() {
     terminalMinHeight,
     threadsByProjectId,
     toolbarTitle,
+    updater,
     workspaceMaxWidth,
     workspaceMinWidth,
     workspacePanels,

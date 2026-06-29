@@ -14,22 +14,37 @@ const manifest = {
   platforms: [
     {
       platform: 'darwin',
-      artifacts: [],
+      arch: 'arm64',
+      label: 'macOS Apple Silicon',
+      artifacts: ['Setsuna-Desktop-*-mac-arm64.dmg', 'Setsuna-Desktop-*-mac-arm64.zip'],
+      signing: 'unsigned',
+      notarization: 'skipped',
+      installMode: 'manual',
+    },
+    {
+      platform: 'darwin',
+      arch: 'x64',
+      label: 'macOS Intel',
+      artifacts: ['Setsuna-Desktop-*-mac-x64.dmg', 'Setsuna-Desktop-*-mac-x64.zip'],
       signing: 'unsigned',
       notarization: 'skipped',
       installMode: 'manual',
     },
     {
       platform: 'win32',
-      artifacts: [],
-      signing: 'pending',
+      arch: 'x64',
+      label: 'Windows x64',
+      artifacts: ['Setsuna-Desktop-*-windows-x64.exe', 'Setsuna-Desktop-*-windows-x64.zip'],
+      signing: 'unsigned',
       notarization: 'not-applicable',
       installMode: 'installer-or-portable',
     },
     {
       platform: 'linux',
-      artifacts: [],
-      signing: 'pending',
+      arch: 'x64',
+      label: 'Ubuntu x64',
+      artifacts: ['Setsuna-Desktop-*-ubuntu-x64.AppImage', 'Setsuna-Desktop-*-ubuntu-x64.deb', 'Setsuna-Desktop-*-ubuntu-x64.tar.gz'],
+      signing: 'unsigned',
       notarization: 'not-applicable',
       installMode: 'package-or-appimage',
     },
@@ -52,4 +67,3 @@ await writeFile(
 );
 
 console.log(`Wrote dry-run release metadata to ${outDir}`);
-

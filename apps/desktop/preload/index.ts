@@ -26,6 +26,39 @@ type DesktopUserProfile = {
   hostName: string | null;
 };
 
+type DesktopUpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
+
+type DesktopUpdaterProgress = {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+};
+
+type DesktopUpdaterState = {
+  status: DesktopUpdaterStatus;
+  currentVersion: string;
+  platform: string;
+  arch: string;
+  availableVersion?: string | null;
+  downloadedVersion?: string | null;
+  error?: string | null;
+  progress?: DesktopUpdaterProgress | null;
+  canUpdate?: boolean;
+  feedUrl?: string | null;
+  manualInstall?: boolean;
+  downloadedFilePath?: string | null;
+  releaseUrl?: string | null;
+  assetName?: string | null;
+};
+
+type DesktopUpdateActionResult = {
+  ok: boolean;
+  action: 'none' | 'opened-installer' | 'opened-folder' | 'unsupported';
+  state: DesktopUpdaterState;
+  error?: string;
+};
+
 type RuntimeApi = {
   request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
   startSse(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void): () => void;
@@ -68,6 +101,19 @@ const links = {
   openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke('desktop:open-external', url),
 };
 
+const updater = {
+  getState: (): Promise<DesktopUpdaterState> => ipcRenderer.invoke('desktop-updater:get-state'),
+  checkForUpdates: (): Promise<DesktopUpdaterState> => ipcRenderer.invoke('desktop-updater:check'),
+  downloadUpdate: (): Promise<DesktopUpdaterState> => ipcRenderer.invoke('desktop-updater:download'),
+  quitAndInstall: (): Promise<DesktopUpdateActionResult> => ipcRenderer.invoke('desktop-updater:quit-and-install'),
+  promptReadyUpdate: (): Promise<DesktopUpdateActionResult> => ipcRenderer.invoke('desktop-updater:prompt-ready'),
+  onStateChange(callback: (state: DesktopUpdaterState) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, state: DesktopUpdaterState) => callback(state);
+    ipcRenderer.on('desktop-updater:state-change', listener);
+    return () => ipcRenderer.off('desktop-updater:state-change', listener);
+  },
+};
+
 const desktopReview = {
   getState: (workspaceRoot: string): Promise<unknown> => ipcRenderer.invoke('desktop-review:get-state', { workspaceRoot }),
   discardUnstaged: (workspaceRoot: string, filePaths: string[]): Promise<unknown> =>
@@ -101,4 +147,4 @@ const terminal = {
   },
 };
 
-contextBridge.exposeInMainWorld('setsunaDesktop', { desktop, desktopReview, links, runtime, terminal, windowControls, workspaceApps });
+contextBridge.exposeInMainWorld('setsunaDesktop', { desktop, desktopReview, links, runtime, terminal, updater, windowControls, workspaceApps });

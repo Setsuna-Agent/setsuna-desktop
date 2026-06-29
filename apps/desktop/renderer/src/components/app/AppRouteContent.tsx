@@ -4,6 +4,7 @@ import { CapabilitiesPage } from '../pages/CapabilitiesPage.js';
 import { SettingsPage } from '../pages/SettingsPage.js';
 import { AppChatSurface } from './AppChatSurface.js';
 import type { ChatTurnActions } from '../../hooks/useChatTurnActions.js';
+import type { DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import type { DesktopWorkspacePanelsState } from '../../hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../hooks/useRuntimeClientState.js';
@@ -19,6 +20,7 @@ export function AppRouteContent({
   setActiveView,
   setDraft,
   skillSelectionRequest,
+  updater,
   workspacePanels,
   onSelectSkillForChat,
   onSkillSelectionRequestConsumed,
@@ -42,6 +44,7 @@ export function AppRouteContent({
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
+  updater: DesktopUpdaterStateView;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
@@ -76,6 +79,7 @@ export function AppRouteContent({
     return (
       <SettingsPage
         config={runtime.config}
+        updater={updater}
         usage={runtime.usage}
         memoryPreview={runtime.memoryPreview}
         memoryPreviewLoading={runtime.memoryPreviewLoading}

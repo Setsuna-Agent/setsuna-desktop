@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } fr
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DesktopUpdater } from './desktop-updater.js';
 import { discardUnstagedReviewFiles, getDesktopReviewState, stageReviewFiles, unstageReviewFiles } from './review-state.js';
 import { RuntimeHost } from './runtime-host.js';
 import { DesktopTerminalStore } from './terminal-sessions.js';
@@ -11,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
+let desktopUpdater: DesktopUpdater | null = null;
 const usesCustomFrame = process.platform !== 'darwin';
 
 async function createWindow(): Promise<void> {
@@ -42,13 +44,21 @@ async function createWindow(): Promise<void> {
     },
   });
   if (usesCustomFrame) mainWindow.setMenu(null);
+  desktopUpdater = new DesktopUpdater({
+    currentVersion: app.getVersion(),
+    repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',
+    downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
+    enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
+  });
   terminalStore = new DesktopTerminalStore((payload) => {
     mainWindow?.webContents.send('terminal:event', payload);
   });
-  registerDesktopIpc(terminalStore);
+  registerDesktopIpc(terminalStore, desktopUpdater);
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => {
+    desktopUpdater?.stop();
+    desktopUpdater = null;
     terminalStore?.closeAll();
     terminalStore = null;
     mainWindow = null;
@@ -64,6 +74,7 @@ async function createWindow(): Promise<void> {
   } else {
     await mainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
   }
+  desktopUpdater.start();
 }
 
 function registerRuntimeIpc(host: RuntimeHost): void {
@@ -82,10 +93,15 @@ function registerRuntimeIpc(host: RuntimeHost): void {
   });
 }
 
-function registerDesktopIpc(terminal: DesktopTerminalStore): void {
+function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpdater): void {
   ipcMain.removeHandler('desktop:select-directory');
   ipcMain.removeHandler('desktop:get-user-profile');
   ipcMain.removeHandler('desktop:open-external');
+  ipcMain.removeHandler('desktop-updater:get-state');
+  ipcMain.removeHandler('desktop-updater:check');
+  ipcMain.removeHandler('desktop-updater:download');
+  ipcMain.removeHandler('desktop-updater:prompt-ready');
+  ipcMain.removeHandler('desktop-updater:quit-and-install');
   ipcMain.removeHandler('window-control:minimize');
   ipcMain.removeHandler('window-control:toggle-maximize');
   ipcMain.removeHandler('window-control:close');
@@ -115,6 +131,11 @@ function registerDesktopIpc(terminal: DesktopTerminalStore): void {
     await shell.openExternal(String(url ?? ''));
     return true;
   });
+  ipcMain.handle('desktop-updater:get-state', async () => updater.getState());
+  ipcMain.handle('desktop-updater:check', async () => updater.checkAndDownload());
+  ipcMain.handle('desktop-updater:download', async () => updater.checkAndDownload());
+  ipcMain.handle('desktop-updater:prompt-ready', async () => updater.promptReady(mainWindow));
+  ipcMain.handle('desktop-updater:quit-and-install', async () => updater.installReady());
   ipcMain.handle('window-control:minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
     return true;
@@ -186,6 +207,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+  desktopUpdater?.stop();
   terminalStore?.closeAll();
   runtimeHost?.stop();
 });

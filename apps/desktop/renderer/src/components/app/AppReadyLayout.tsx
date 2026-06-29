@@ -90,6 +90,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           ) : null}
           <AppTopbarActions
             activeView={activeView}
+            updater={controller.updater}
             hasProject={Boolean(activeProject)}
             bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
             sidePanelVisible={workspacePanels.sidePanelVisible}
@@ -130,6 +131,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         setActiveView={setActiveView}
         setDraft={setDraft}
         skillSelectionRequest={skillSelectionRequest}
+        updater={controller.updater}
         workspacePanels={workspacePanels}
         onSelectSkillForChat={selectSkillForChat}
         onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
