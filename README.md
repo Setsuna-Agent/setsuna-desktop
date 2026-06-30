@@ -16,29 +16,43 @@
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black.svg">
 </p>
 
-## 截图
+## 产品界面与关键能力
+
+Setsuna Desktop 把本地对话、项目工作区、文件审查、MCP、Skills 和模型配置收在同一个桌面工作台里。下面的界面图展示当前 `0.1.x` 阶段已经落地的核心体验。
 
 <table>
   <tr>
-    <td width="50%">
+    <td width="100%">
       <img src="assets/readme/chat-review.png" alt="对话与文件审查" width="100%">
+      <br>
+      <strong>对话与文件审查</strong>
       <br>
       <sub>对话、工作区审查和代码 diff 在同一窗口内协作。</sub>
     </td>
-    <td width="50%">
+  </tr>
+  <tr>
+    <td width="100%">
       <img src="assets/readme/workspace-start.png" alt="新对话工作台" width="100%">
+      <br>
+      <strong>项目工作区启动任务</strong>
       <br>
       <sub>从项目工作区直接开始新任务，保留侧栏、文件和审查区域。</sub>
     </td>
   </tr>
   <tr>
-    <td width="50%">
+    <td width="100%">
       <img src="assets/readme/capabilities.png" alt="MCP 与 Skill 能力管理" width="100%">
+      <br>
+      <strong>MCP 与 Skill 能力管理</strong>
       <br>
       <sub>MCP 与 Skill 作为本地能力管理，可启用、默认使用或在对话中创建。</sub>
     </td>
-    <td width="50%">
+  </tr>
+  <tr>
+    <td width="100%">
       <img src="assets/readme/local-models.png" alt="本地模型配置" width="100%">
+      <br>
+      <strong>本地模型配置</strong>
       <br>
       <sub>本地模型供应商、模型列表、思考能力和多模态能力由桌面端配置。</sub>
     </td>
@@ -108,6 +122,12 @@ pnpm dev
 
 ## 架构
 
+<p align="center">
+  <img src="assets/readme/runtime-architecture.png" alt="Setsuna Desktop Agent 运行时架构" width="100%">
+</p>
+
+这张图展示了 renderer、preload、Electron main、本地 runtime、模型客户端和工具 Host 之间的运行时边界。应用层只负责桌面交互和状态渲染，Agent loop、模型调用、工具执行、事件流和本地存储都收敛在 runtime 内。
+
 ```text
 React renderer
   -> preload bridge
@@ -122,7 +142,7 @@ React renderer
 - `packages/contracts`：renderer、main 和 runtime 共享的 DTO、事件、线程、配置、workspace、MCP、Skill、memory、usage 类型。
 - `packages/desktop-runtime`：本地 runtime service、Agent loop、model adapters、tool hosts、本地存储和 HTTP/SSE API。
 - `skills`：随桌面应用打包的内置 Skill。
-- `assets`：应用图标、品牌资源和 README 截图。
+- `assets`：应用图标、品牌资源和 README 展示资源。
 - `docs/local-desktop-runtime-architecture-review.md`：当前本地优先架构的设计背景和阶段目标。
 
 renderer 不直接知道 provider 协议，也不直接构造 runtime URL。模型调用、工具执行、审批、存储和事件流都在 runtime 边界内完成。
