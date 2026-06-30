@@ -25,7 +25,7 @@
     "package:linux:x64": "pnpm build && electron-builder --linux --x64 --publish never",
     "package:mac:arm64": "pnpm build && electron-builder --mac --arm64 --publish never",
     "package:mac:x64": "pnpm build && electron-builder --mac --x64 --publish never",
-    "package:win:x64": "pnpm build && electron-builder --win --x64 --publish never",
+    "package:win:x64": "pnpm build && electron-builder --win --x64 --publish never --config.npmRebuild=false",
     "postinstall": "node scripts/prepare-node-pty.mjs",
     "release:dry-run": "pnpm build && node scripts/release-dry-run.mjs",
     "start": "electron .",
