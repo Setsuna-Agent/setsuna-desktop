@@ -18,6 +18,8 @@ describe('desktop terminal store', () => {
 
     const queuedEvents = store.read(session.sessionId);
     expect(queuedEvents.some((event) => event.event === 'output' && String(event.data.text ?? '').includes('setsuna-terminal-smoke'))).toBe(true);
+    expect(queuedEvents.every((event) => Number.isInteger(event.seq) && event.seq > 0)).toBe(true);
+    expect(queuedEvents.map((event) => event.seq)).toEqual([...queuedEvents].sort((left, right) => left.seq - right.seq).map((event) => event.seq));
     expect(store.close(session.sessionId)).toBe(true);
   });
 });

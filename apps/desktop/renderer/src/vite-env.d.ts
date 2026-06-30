@@ -9,6 +9,7 @@ type DesktopTerminalSession = {
 };
 
 type DesktopTerminalEvent = {
+  seq: number;
   event: 'ready' | 'output' | 'exit' | 'closed' | 'error';
   data: Record<string, unknown>;
 };

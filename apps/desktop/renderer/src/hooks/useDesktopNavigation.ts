@@ -8,6 +8,7 @@ type DesktopNavigationOptions = {
   currentThread: RuntimeThread | null;
   globalThreads: RuntimeThreadSummary[];
   reloadThreads: () => Promise<RuntimeThreadSummary[]>;
+  resetProjectWorkspacePanels: () => void;
   resetWorkspacePanels: () => void;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
   setActiveView: Dispatch<SetStateAction<MainView>>;
@@ -23,6 +24,7 @@ export function useDesktopNavigation({
   currentThread,
   globalThreads,
   reloadThreads,
+  resetProjectWorkspacePanels,
   resetWorkspacePanels,
   setActiveProjectId,
   setActiveView,
@@ -42,6 +44,7 @@ export function useDesktopNavigation({
   const [threadActionMenuId, setThreadActionMenuId] = useState<string | null>(null);
   const [renamingThread, setRenamingThread] = useState<RuntimeThreadSummary | null>(null);
   const [renameThreadTitle, setRenameThreadTitle] = useState('');
+  const currentProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
 
   const closeNavigationMenus = useCallback(() => {
     setProjectActionMenuId(null);
@@ -92,12 +95,12 @@ export function useDesktopNavigation({
       setActiveView('chat');
       setThreadActionMenuId(null);
       setProjectActionMenuId(null);
+      if (projectId !== currentProjectId) resetProjectWorkspacePanels();
       setActiveProjectId(projectId);
       expandProject(projectId);
       setCurrentThread(null);
-      if (projectId !== activeProjectId) resetWorkspacePanels();
     },
-    [activeProjectId, expandProject, resetWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread],
+    [currentProjectId, expandProject, resetProjectWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread],
   );
 
   const selectThread = useCallback(
@@ -105,6 +108,8 @@ export function useDesktopNavigation({
       setActiveView('chat');
       setThreadActionMenuId(null);
       const thread = await client.getThread(threadId);
+      const nextProjectId = thread.projectId ?? null;
+      if (nextProjectId !== currentProjectId) resetProjectWorkspacePanels();
       if (thread.projectId) {
         setActiveProjectId(thread.projectId);
         expandProject(thread.projectId);
@@ -113,7 +118,7 @@ export function useDesktopNavigation({
       }
       setCurrentThread(thread);
     },
-    [client, expandProject, setActiveProjectId, setActiveView, setCurrentThread],
+    [client, currentProjectId, expandProject, resetProjectWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread],
   );
 
   const openRenameThread = useCallback((thread: RuntimeThreadSummary) => {
@@ -151,6 +156,8 @@ export function useDesktopNavigation({
         return;
       }
       const fallback = await client.getThread(fallbackSummary.id);
+      const nextProjectId = fallback.projectId ?? null;
+      if (nextProjectId !== (thread.projectId ?? null)) resetProjectWorkspacePanels();
       if (fallback.projectId) {
         setActiveProjectId(fallback.projectId);
         expandProject(fallback.projectId);
@@ -159,30 +166,30 @@ export function useDesktopNavigation({
       }
       setCurrentThread(fallback);
     },
-    [client, currentThread?.id, expandProject, reloadThreads, setActiveProjectId, setCurrentThread],
+    [client, currentThread?.id, expandProject, reloadThreads, resetProjectWorkspacePanels, setActiveProjectId, setCurrentThread],
   );
 
   const selectProject = useCallback(
     async (project: WorkspaceProject) => {
       setActiveView('chat');
+      if (project.id !== currentProjectId) resetProjectWorkspacePanels();
       setActiveProjectId(project.id);
       expandProject(project.id);
-      resetWorkspacePanels();
       const projectThread = (threadsByProjectId.get(project.id) ?? [])[0];
       setCurrentThread(projectThread ? await client.getThread(projectThread.id) : null);
     },
-    [client, expandProject, resetWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread, threadsByProjectId],
+    [client, currentProjectId, expandProject, resetProjectWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread, threadsByProjectId],
   );
 
   const enterChatMode = useCallback(async () => {
     setActiveView('chat');
     setSessionsCollapsed(false);
     setActiveProjectId(null);
-    resetWorkspacePanels();
+    if (currentProjectId) resetProjectWorkspacePanels();
     if (!currentThread?.projectId) return;
     const fallback = globalThreads[0];
     setCurrentThread(fallback ? await client.getThread(fallback.id) : null);
-  }, [client, currentThread?.projectId, globalThreads, resetWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread]);
+  }, [client, currentProjectId, currentThread?.projectId, globalThreads, resetProjectWorkspacePanels, setActiveProjectId, setActiveView, setCurrentThread]);
 
   const toggleProjectCollapsed = useCallback((projectId: string) => {
     setForceExpandedProjectIds((current) => {

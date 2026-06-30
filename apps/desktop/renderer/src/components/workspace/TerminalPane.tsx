@@ -6,12 +6,14 @@ import '@xterm/xterm/css/xterm.css';
 import type { DesktopTerminalEvent, DesktopTerminalSession } from './model.js';
 
 const terminalRestoreBuffers = new Map<string, string>();
+const terminalLastEventSeqs = new Map<string, number>();
 const MAX_TERMINAL_RESTORE_BUFFER = 1_000_000;
 const TERMINAL_URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+/gi;
 const TERMINAL_URL_TRAILING_PUNCTUATION_PATTERN = /[),.;:!?]+$/;
 
 export function clearTerminalRestoreBuffer(sessionId: string): void {
   terminalRestoreBuffers.delete(sessionId);
+  terminalLastEventSeqs.delete(sessionId);
 }
 
 function appendTerminalRestoreBuffer(sessionId: string, text: string): void {
@@ -67,6 +69,9 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     });
 
     const handleEvent = (event: DesktopTerminalEvent) => {
+      const lastSeq = terminalLastEventSeqs.get(session.sessionId) ?? 0;
+      if (event.seq <= lastSeq) return;
+      terminalLastEventSeqs.set(session.sessionId, event.seq);
       if (event.event === 'ready') return;
       if (event.event === 'output') {
         const text = String(event.data.text ?? '');

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   DesktopRuntimeClient,
   WorkspaceEntry,
@@ -10,25 +10,37 @@ type ProjectWorkspaceOptions = {
   activeProjectId: string | null;
   client: DesktopRuntimeClient;
   onOpenFilePanel: (filePath: string) => void;
+  onResetProjectPanels: () => void;
   onResetPanels: () => void;
 };
 
-export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, onResetPanels }: ProjectWorkspaceOptions) {
+export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, onResetPanels, onResetProjectPanels }: ProjectWorkspaceOptions) {
   const [filePreview, setFilePreview] = useState<WorkspaceFileRead | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<WorkspaceSearchResult[]>([]);
+  const previousProjectIdRef = useRef(activeProjectId);
+
+  const resetProjectWorkspaceState = useCallback(() => {
+    setFilePreview(null);
+    setSearchQuery('');
+    setSearchResults([]);
+  }, []);
 
   const resetWorkspacePanels = useCallback(() => {
-    setFilePreview(null);
-    setSearchResults([]);
+    resetProjectWorkspaceState();
     onResetPanels();
-  }, [onResetPanels]);
+  }, [onResetPanels, resetProjectWorkspaceState]);
+
+  const resetProjectWorkspacePanels = useCallback(() => {
+    resetProjectWorkspaceState();
+    onResetProjectPanels();
+  }, [onResetProjectPanels, resetProjectWorkspaceState]);
 
   useEffect(() => {
-    if (!activeProjectId) {
-      setFilePreview(null);
-    }
-  }, [activeProjectId]);
+    if (previousProjectIdRef.current === activeProjectId) return;
+    previousProjectIdRef.current = activeProjectId;
+    resetProjectWorkspaceState();
+  }, [activeProjectId, resetProjectWorkspaceState]);
 
   const openEntry = useCallback(
     async (entry: WorkspaceEntry) => {
@@ -73,6 +85,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
     filePreview,
     openEntry,
     openProjectFile,
+    resetProjectWorkspacePanels,
     resetWorkspacePanels,
     searchProject,
     searchProjectEntries,

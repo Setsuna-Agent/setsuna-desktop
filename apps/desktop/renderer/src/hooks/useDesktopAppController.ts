@@ -78,9 +78,10 @@ export function useDesktopAppController() {
     activeProjectId: effectiveProjectId,
     client,
     onOpenFilePanel: openFilePanel,
+    onResetProjectPanels: workspacePanels.resetProjectBoundPanels,
     onResetPanels: resetPanelSlots,
   });
-  const { resetWorkspacePanels } = projectWorkspace;
+  const { resetProjectWorkspacePanels, resetWorkspacePanels } = projectWorkspace;
   const { globalThreads, threadsByProjectId } = useThreadGroups(threads);
 
   const navigation = useDesktopNavigation({
@@ -89,6 +90,7 @@ export function useDesktopAppController() {
     currentThread,
     globalThreads,
     reloadThreads,
+    resetProjectWorkspacePanels,
     resetWorkspacePanels,
     setActiveProjectId,
     setActiveView,

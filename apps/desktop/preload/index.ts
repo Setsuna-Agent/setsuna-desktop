@@ -8,6 +8,7 @@ type DesktopTerminalSession = {
 };
 
 type DesktopTerminalEvent = {
+  seq: number;
   event: 'ready' | 'output' | 'exit' | 'closed' | 'error';
   data: Record<string, unknown>;
 };
@@ -144,7 +145,7 @@ const terminal = {
   onEvent(sessionId: string, callback: (event: DesktopTerminalEvent) => void): () => void {
     const listener = (_event: Electron.IpcRendererEvent, payload: DesktopTerminalEvent & { sessionId: string }) => {
       if (payload.sessionId !== sessionId) return;
-      callback({ event: payload.event, data: payload.data });
+      callback({ seq: payload.seq, event: payload.event, data: payload.data });
     };
     ipcRenderer.on('terminal:event', listener);
     return () => ipcRenderer.off('terminal:event', listener);

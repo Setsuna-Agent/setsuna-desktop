@@ -16,6 +16,7 @@ export type DesktopTerminalSession = {
 
 export type DesktopTerminalEvent = {
   sessionId: string;
+  seq: number;
   event: 'ready' | 'output' | 'exit' | 'closed' | 'error';
   data: Record<string, unknown>;
 };
@@ -25,6 +26,7 @@ type TerminalSession = DesktopTerminalSession & {
   events: DesktopTerminalEvent[];
   exitDisposable: IDisposable;
   ptyProcess: IPty;
+  seq: number;
 };
 
 type TerminalOpenInput = {
@@ -60,6 +62,7 @@ export class DesktopTerminalStore {
       events: [],
       exitDisposable: { dispose: () => undefined },
       ptyProcess,
+      seq: 0,
     };
     this.sessions.set(sessionId, session);
 
@@ -114,7 +117,7 @@ export class DesktopTerminalStore {
     } catch {
       // The PTY can already be gone when the renderer closes a restored panel.
     }
-    this.publish({ sessionId, event: 'closed', data: {} });
+    this.publish({ sessionId, seq: session.seq + 1, event: 'closed', data: {} });
     return true;
   }
 
@@ -129,8 +132,9 @@ export class DesktopTerminalStore {
   }
 
   private emit(sessionId: string, event: DesktopTerminalEvent['event'], data: Record<string, unknown>): void {
-    const payload: DesktopTerminalEvent = { sessionId, event, data };
     const session = this.sessions.get(sessionId);
+    const seq = session ? ++session.seq : 0;
+    const payload: DesktopTerminalEvent = { sessionId, seq, event, data };
     if (session) {
       session.events.push(payload);
       if (session.events.length > MAX_EVENT_QUEUE) session.events.splice(0, session.events.length - MAX_EVENT_QUEUE);
@@ -168,6 +172,7 @@ function terminalEnvironment(): NodeJS.ProcessEnv {
     GIT_PAGER: 'cat',
     LESS: '-FRX',
     PAGER: 'cat',
+    PROMPT_EOL_MARK: '',
     npm_config_color: 'always',
   };
   delete env.NO_COLOR;

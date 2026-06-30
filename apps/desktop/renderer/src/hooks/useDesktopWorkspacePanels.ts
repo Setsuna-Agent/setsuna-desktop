@@ -32,10 +32,14 @@ type WorkspacePanelsOptions = {
   setError: (message: string | null) => void;
 };
 
+type TerminalSessionsByPanelId = Record<string, Record<string, DesktopTerminalSession>>;
+
+const GLOBAL_TERMINAL_PROJECT_KEY = '__global__';
+
 export function useDesktopWorkspacePanels({ activeProject, activeView, setError }: WorkspacePanelsOptions) {
   const [sidePanelSlot, setSidePanelSlot] = useState<DesktopPanelSlotState>(() => createEmptyPanelSlot());
   const [bottomPanelSlot, setBottomPanelSlot] = useState<DesktopPanelSlotState>(() => createEmptyPanelSlot());
-  const [terminalSessionsByPanelId, setTerminalSessionsByPanelId] = useState<Record<string, DesktopTerminalSession>>({});
+  const [terminalSessionsByPanelId, setTerminalSessionsByPanelId] = useState<TerminalSessionsByPanelId>({});
   const [workspaceAppMenuOpen, setWorkspaceAppMenuOpen] = useState(false);
   const [panelLauncherMenuOpen, setPanelLauncherMenuOpen] = useState(false);
   const [workspaceApps, setWorkspaceApps] = useState<DesktopWorkspaceApp[]>([]);
@@ -43,6 +47,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
   const [reviewState, setReviewState] = useState<DesktopReviewState | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const pendingTerminalSessionKeysRef = useRef<Set<string>>(new Set());
   const terminalPanelSeqRef = useRef(0);
 
   const selectedWorkspaceApp = workspaceApps.find((app) => app.id === selectedWorkspaceAppId) ?? workspaceApps[0] ?? null;
@@ -51,6 +56,15 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
   const sidePanelVisible = activeView === 'chat' && Boolean(sideActivePanel);
   const bottomPanelVisible = activeView === 'chat' && Boolean(bottomActivePanel);
   const bottomTerminalPanelOpen = slotHasPanelType(bottomPanelSlot, 'terminal');
+  const terminalProjectKey = activeProject?.id ?? GLOBAL_TERMINAL_PROJECT_KEY;
+  const activeTerminalSessionsByPanelId = useMemo(() => {
+    const sessions: Record<string, DesktopTerminalSession> = {};
+    for (const [panelId, sessionsByProject] of Object.entries(terminalSessionsByPanelId)) {
+      const session = sessionsByProject[terminalProjectKey];
+      if (session) sessions[panelId] = session;
+    }
+    return sessions;
+  }, [terminalProjectKey, terminalSessionsByPanelId]);
 
   const closeWorkspaceMenus = useCallback(() => {
     setWorkspaceAppMenuOpen(false);
@@ -58,12 +72,32 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
   }, []);
 
   const closeAllTerminalSessions = useCallback(() => {
-    setTerminalSessionsByPanelId((sessions) => {
-      for (const session of Object.values(sessions)) {
+    pendingTerminalSessionKeysRef.current.clear();
+    setTerminalSessionsByPanelId((sessionsByPanel) => {
+      for (const sessionsByProject of Object.values(sessionsByPanel)) {
+        for (const session of Object.values(sessionsByProject)) {
+          clearTerminalRestoreBuffer(session.sessionId);
+          void window.setsunaDesktop?.terminal.close(session.sessionId).catch(() => undefined);
+        }
+      }
+      return {};
+    });
+  }, []);
+
+  const closeTerminalSessionsForPanel = useCallback((panelId: string) => {
+    for (const key of pendingTerminalSessionKeysRef.current) {
+      if (key.startsWith(`${panelId}:`)) pendingTerminalSessionKeysRef.current.delete(key);
+    }
+    setTerminalSessionsByPanelId((sessionsByPanel) => {
+      const sessionsByProject = sessionsByPanel[panelId];
+      if (!sessionsByProject) return sessionsByPanel;
+      for (const session of Object.values(sessionsByProject)) {
         clearTerminalRestoreBuffer(session.sessionId);
         void window.setsunaDesktop?.terminal.close(session.sessionId).catch(() => undefined);
       }
-      return {};
+      const next = { ...sessionsByPanel };
+      delete next[panelId];
+      return next;
     });
   }, []);
 
@@ -73,6 +107,15 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
     setBottomPanelSlot(createEmptyPanelSlot());
     closeWorkspaceMenus();
   }, [closeAllTerminalSessions, closeWorkspaceMenus]);
+
+  const resetProjectBoundPanels = useCallback(() => {
+    closeWorkspaceMenus();
+    setReviewState(null);
+    setReviewError(null);
+    setReviewLoading(false);
+    setSidePanelSlot(clearProjectBoundPanelsFromSlot);
+    setBottomPanelSlot(clearProjectBoundPanelsFromSlot);
+  }, [closeWorkspaceMenus]);
 
   useEffect(() => {
     if (!activeProject?.path) {
@@ -146,31 +189,41 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
 
   const openTerminalSessionForPanel = useCallback(
     async (panelId: string) => {
-      if (terminalSessionsByPanelId[panelId]) return;
+      const sessionKey = terminalSessionKey(panelId, terminalProjectKey);
+      if (terminalSessionsByPanelId[panelId]?.[terminalProjectKey]) return;
+      if (pendingTerminalSessionKeysRef.current.has(sessionKey)) return;
       const api = window.setsunaDesktop?.terminal;
       if (!api) {
         setError('Desktop terminal bridge is unavailable.');
         return;
       }
-      const session = await api.open(activeProject?.path ?? null, 100, 24);
-      setTerminalSessionsByPanelId((items) => ({ ...items, [panelId]: session }));
+      pendingTerminalSessionKeysRef.current.add(sessionKey);
+      try {
+        const session = await api.open(activeProject?.path ?? null, 100, 24);
+        if (!pendingTerminalSessionKeysRef.current.has(sessionKey)) {
+          void window.setsunaDesktop?.terminal.close(session.sessionId).catch(() => undefined);
+          return;
+        }
+        setTerminalSessionsByPanelId((items) => {
+          if (items[panelId]?.[terminalProjectKey]) {
+            void window.setsunaDesktop?.terminal.close(session.sessionId).catch(() => undefined);
+            return items;
+          }
+          return {
+            ...items,
+            [panelId]: {
+              ...(items[panelId] ?? {}),
+              [terminalProjectKey]: session,
+            },
+          };
+        });
+      } catch (unknownError) {
+        setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      } finally {
+        pendingTerminalSessionKeysRef.current.delete(sessionKey);
+      }
     },
-    [activeProject?.path, setError, terminalSessionsByPanelId],
-  );
-
-  const closeTerminalSessionForPanel = useCallback(
-    (panelId: string) => {
-      const session = terminalSessionsByPanelId[panelId];
-      if (!session) return;
-      clearTerminalRestoreBuffer(session.sessionId);
-      void window.setsunaDesktop?.terminal.close(session.sessionId).catch(() => undefined);
-      setTerminalSessionsByPanelId((items) => {
-        const next = { ...items };
-        delete next[panelId];
-        return next;
-      });
-    },
-    [terminalSessionsByPanelId],
+    [activeProject?.path, setError, terminalProjectKey, terminalSessionsByPanelId],
   );
 
   const openDesktopPanel = useCallback(
@@ -223,7 +276,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
     (slot: DesktopPanelSlot, panelId: string) => {
       const slotState = slot === 'side' ? sidePanelSlot : bottomPanelSlot;
       const panel = slotState.panels.find((item) => item.id === panelId);
-      if (panel?.type === 'terminal') closeTerminalSessionForPanel(panel.id);
+      if (panel?.type === 'terminal') closeTerminalSessionsForPanel(panel.id);
       const updater = (current: DesktopPanelSlotState) => removePanelFromSlotState(current, panelId);
       if (slot === 'side') {
         setSidePanelSlot(updater);
@@ -231,20 +284,20 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       }
       setBottomPanelSlot(updater);
     },
-    [bottomPanelSlot, closeTerminalSessionForPanel, sidePanelSlot],
+    [bottomPanelSlot, closeTerminalSessionsForPanel, sidePanelSlot],
   );
 
   const closeDesktopPanelSlot = useCallback(
     (slot: DesktopPanelSlot) => {
       const slotState = slot === 'side' ? sidePanelSlot : bottomPanelSlot;
-      slotState.panels.filter((panel) => panel.type === 'terminal').forEach((panel) => closeTerminalSessionForPanel(panel.id));
+      slotState.panels.filter((panel) => panel.type === 'terminal').forEach((panel) => closeTerminalSessionsForPanel(panel.id));
       if (slot === 'side') {
         setSidePanelSlot(createEmptyPanelSlot());
         return;
       }
       setBottomPanelSlot(createEmptyPanelSlot());
     },
-    [bottomPanelSlot, closeTerminalSessionForPanel, sidePanelSlot],
+    [bottomPanelSlot, closeTerminalSessionsForPanel, sidePanelSlot],
   );
 
   const toggleSidePanel = useCallback(() => {
@@ -269,8 +322,9 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
   }, [activateDesktopPanel, bottomPanelSlot, closeDesktopPanelItem, createTerminalPanel]);
 
   useEffect(() => {
-    const activeTerminalPanel = [sideActivePanel, bottomActivePanel].find((panel) => panel?.type === 'terminal');
-    if (activeTerminalPanel) void openTerminalSessionForPanel(activeTerminalPanel.id);
+    [sideActivePanel, bottomActivePanel]
+      .filter((panel): panel is DesktopPanelTab => panel?.type === 'terminal')
+      .forEach((panel) => void openTerminalSessionForPanel(panel.id));
   }, [bottomActivePanel, openTerminalSessionForPanel, sideActivePanel]);
 
   const openFileInWorkspaceApp = useCallback(
@@ -324,6 +378,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       openFilePanel,
       openSelectedWorkspaceApp,
       panelLauncherMenuOpen,
+      resetProjectBoundPanels,
       resetPanelSlots,
       reviewError,
       reviewLoading,
@@ -334,7 +389,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       sideActivePanel,
       sidePanelSlot,
       sidePanelVisible,
-      terminalSessionsByPanelId,
+      terminalSessionsByPanelId: activeTerminalSessionsByPanelId,
       toggleBottomTerminal,
       togglePanelLauncherMenu,
       toggleSidePanel,
@@ -357,6 +412,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       openFilePanel,
       openSelectedWorkspaceApp,
       panelLauncherMenuOpen,
+      resetProjectBoundPanels,
       resetPanelSlots,
       reviewError,
       reviewLoading,
@@ -367,7 +423,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       sideActivePanel,
       sidePanelSlot,
       sidePanelVisible,
-      terminalSessionsByPanelId,
+      activeTerminalSessionsByPanelId,
       toggleBottomTerminal,
       togglePanelLauncherMenu,
       toggleSidePanel,
@@ -376,6 +432,17 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       workspaceApps,
     ],
   );
+}
+
+function terminalSessionKey(panelId: string, projectKey: string): string {
+  return `${panelId}:${projectKey}`;
+}
+
+function clearProjectBoundPanelsFromSlot(slot: DesktopPanelSlotState): DesktopPanelSlotState {
+  const panels = slot.panels.filter((panel) => panel.type === 'terminal');
+  const active = panels.some((panel) => panel.id === slot.active) ? slot.active : panels[0]?.id ?? null;
+  if (panels.length === slot.panels.length && active === slot.active) return slot;
+  return { active, panels };
 }
 
 export type DesktopWorkspacePanelsState = ReturnType<typeof useDesktopWorkspacePanels>;
