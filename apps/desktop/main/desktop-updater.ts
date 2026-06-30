@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { checksumForAsset, isNewerVersion, parseSha256Sums, selectUpdateAsset, type ReleaseAsset, type ReleaseInfo } from './update-metadata.js';
 
@@ -56,6 +56,9 @@ type DesktopUpdaterOptions = {
 };
 
 const DEFAULT_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const METADATA_REQUEST_TIMEOUT_MS = 20 * 1000;
+const DOWNLOAD_STALL_TIMEOUT_MS = 45 * 1000;
+const PROGRESS_EMIT_INTERVAL_MS = 250;
 
 export class DesktopUpdater {
   private state: DesktopUpdateState;
@@ -226,10 +229,15 @@ export class DesktopUpdater {
     const checksumAsset = assets.find((asset) => asset.name === 'SHA256SUMS');
     if (!checksumAsset) return null;
 
-    const response = await fetch(checksumAsset.browser_download_url, requestInit());
-    if (!response.ok) return null;
+    const checksumText = await fetchWithTimeout(
+      checksumAsset.browser_download_url,
+      METADATA_REQUEST_TIMEOUT_MS,
+      `Timed out while fetching checksums for ${selectedAsset.name}.`,
+      async (response) => (response.ok ? response.text() : null),
+    );
+    if (!checksumText) return null;
 
-    const checksums = parseSha256Sums(await response.text());
+    const checksums = parseSha256Sums(checksumText);
     return checksumForAsset(checksums, selectedAsset.name);
   }
 
@@ -241,21 +249,18 @@ export class DesktopUpdater {
     const tempDestination = `${destination}.download`;
     await rm(tempDestination, { force: true });
 
-    const response = await fetch(asset.browser_download_url, requestInit());
-    if (!response.ok) throw new Error(`Failed to download ${asset.name}: HTTP ${response.status}`);
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    this.setState({
-      status: 'downloading',
-      progress: {
-        percent: 100,
-        transferred: buffer.byteLength,
-        total: buffer.byteLength,
-        bytesPerSecond: 0,
-      },
-    });
-    await writeFile(tempDestination, buffer);
-    await rename(tempDestination, destination);
+    try {
+      await downloadFile(asset.browser_download_url, tempDestination, {
+        assetName: asset.name,
+        onProgress: (progress) => {
+          this.setState({ status: 'downloading', progress });
+        },
+      });
+      await rename(tempDestination, destination);
+    } catch (error) {
+      await rm(tempDestination, { force: true });
+      throw error;
+    }
 
     return destination;
   }
@@ -340,20 +345,157 @@ function promptOptionsForState(state: DesktopUpdateState): Electron.MessageBoxOp
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, requestInit());
-  if (!response.ok) throw new Error(`Failed to check updates: HTTP ${response.status}`);
-  return (await response.json()) as T;
+  return fetchWithTimeout(url, METADATA_REQUEST_TIMEOUT_MS, 'Timed out while checking for updates.', async (response) => {
+    if (!response.ok) throw new Error(`Failed to check updates: HTTP ${response.status}`);
+    return (await response.json()) as T;
+  });
 }
 
-function requestInit(): RequestInit {
+function requestInit(signal?: AbortSignal): RequestInit {
   return {
     headers: {
       Accept: 'application/vnd.github+json',
       'User-Agent': 'Setsuna-Desktop-Updater',
     },
+    signal,
   };
 }
 
 async function sha256File(filePath: string): Promise<string> {
   return createHash('sha256').update(await readFile(filePath)).digest('hex');
+}
+
+async function fetchWithTimeout<T>(
+  url: string,
+  timeoutMs: number,
+  timeoutMessage: string,
+  readResponse: (response: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error(timeoutMessage)), timeoutMs);
+
+  try {
+    const response = await fetch(url, requestInit(controller.signal));
+    return await readResponse(response);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(timeoutMessage, { cause: error });
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+type DownloadFileOptions = {
+  assetName: string;
+  onProgress: (progress: DesktopUpdateProgress) => void;
+};
+
+async function downloadFile(url: string, destination: string, options: DownloadFileOptions): Promise<void> {
+  const controller = new AbortController();
+  const stallMessage = `Download stalled while fetching ${options.assetName}.`;
+  const resetStallTimer = createResettableTimeout(() => controller.abort(new Error(stallMessage)), DOWNLOAD_STALL_TIMEOUT_MS);
+
+  try {
+    resetStallTimer.reset();
+    const response = await fetch(url, requestInit(controller.signal));
+    if (!response.ok) throw new Error(`Failed to download ${options.assetName}: HTTP ${response.status}`);
+    if (!response.body) throw new Error(`Failed to download ${options.assetName}: empty response body.`);
+
+    await writeResponseBody(response.body, destination, {
+      total: contentLength(response),
+      onProgress: options.onProgress,
+      resetStallTimer: resetStallTimer.reset,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(stallMessage, { cause: error });
+    throw error;
+  } finally {
+    resetStallTimer.clear();
+  }
+}
+
+type WriteResponseBodyOptions = {
+  total: number;
+  onProgress: (progress: DesktopUpdateProgress) => void;
+  resetStallTimer: () => void;
+};
+
+async function writeResponseBody(
+  body: NonNullable<Response['body']>,
+  destination: string,
+  options: WriteResponseBodyOptions,
+): Promise<void> {
+  const reader = body.getReader();
+  const file = await open(destination, 'w');
+  const startedAt = Date.now();
+  let transferred = 0;
+  let lastEmitAt = 0;
+  let lastEmitPercent = -1;
+
+  try {
+    for (;;) {
+      options.resetStallTimer();
+      const { done, value } = await reader.read();
+      options.resetStallTimer();
+      if (done) break;
+      if (!value?.byteLength) continue;
+
+      await file.write(value);
+      transferred += value.byteLength;
+
+      const progress = buildDownloadProgress(transferred, options.total, startedAt, false);
+      const now = Date.now();
+      if (shouldEmitProgress(progress, now, lastEmitAt, lastEmitPercent)) {
+        options.onProgress(progress);
+        lastEmitAt = now;
+        lastEmitPercent = Math.floor(progress.percent);
+      }
+    }
+
+    options.onProgress(buildDownloadProgress(transferred, options.total, startedAt, true));
+  } finally {
+    reader.releaseLock();
+    await file.close();
+  }
+}
+
+function contentLength(response: Response): number {
+  const value = Number.parseInt(response.headers.get('content-length') ?? '', 10);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function buildDownloadProgress(transferred: number, total: number, startedAt: number, complete: boolean): DesktopUpdateProgress {
+  const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001);
+  const rawPercent = total > 0 ? (transferred / total) * 100 : 0;
+
+  return {
+    percent: complete ? 100 : Math.min(rawPercent, 99),
+    transferred,
+    total,
+    bytesPerSecond: Math.round(transferred / elapsedSeconds),
+  };
+}
+
+function shouldEmitProgress(progress: DesktopUpdateProgress, now: number, lastEmitAt: number, lastEmitPercent: number): boolean {
+  if (lastEmitAt === 0) return true;
+  if (Math.floor(progress.percent) !== lastEmitPercent) return true;
+  return now - lastEmitAt >= PROGRESS_EMIT_INTERVAL_MS;
+}
+
+function createResettableTimeout(callback: () => void, timeoutMs: number): { reset: () => void; clear: () => void } {
+  let timeout: NodeJS.Timeout | null = null;
+
+  const clear = () => {
+    if (!timeout) return;
+    clearTimeout(timeout);
+    timeout = null;
+  };
+
+  return {
+    reset: () => {
+      clear();
+      timeout = setTimeout(callback, timeoutMs);
+    },
+    clear,
+  };
 }

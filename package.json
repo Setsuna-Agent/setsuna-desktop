@@ -76,6 +76,7 @@
   "build": {
     "appId": "dev.setsuna.desktop",
     "productName": "Setsuna Desktop",
+    "afterPack": "scripts/after-pack-mac.cjs",
     "directories": {
       "output": "release-artifacts",
       "buildResources": "assets/build"
