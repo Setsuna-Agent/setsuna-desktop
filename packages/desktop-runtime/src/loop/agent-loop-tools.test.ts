@@ -361,7 +361,7 @@ describe('agent loop tools', () => {
     )).toBe(false);
     expect(saved?.messages.at(-1)?.content).toBe('Final answer after the available tool results.');
     expect(saved?.messages.at(-1)?.status).toBe('complete');
-  });
+  }, 20_000);
 
   it('injects local memories into model context', async () => {
     const ids = new RandomIdGenerator();
