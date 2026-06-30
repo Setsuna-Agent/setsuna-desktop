@@ -18,17 +18,16 @@ describe('mcp management tool host', () => {
     try {
       const tools = await host.listTools(context);
       expect(tools.map((tool) => tool.name)).toEqual(['configure_mcp_server']);
-      await expect(host.approvalForTool('configure_mcp_server', {
+      const approval = await host.approvalForTool('configure_mcp_server', {
         key: 'Search MCP',
         label: 'Search MCP',
         transport: 'streamableHttp',
         url: mcpServer.baseUrl,
         headers: { Authorization: 'Bearer secret-token' },
         require_approval: 'smart',
-      })).resolves.toMatchObject({
-        reason: expect.stringContaining('创建 MCP 服务'),
-        argumentsPreview: expect.stringContaining(configPath),
       });
+      expect(approval?.reason).toContain('创建 MCP 服务');
+      expect(JSON.parse(approval?.argumentsPreview ?? '{}')).toMatchObject({ configPath });
 
       const created = await host.runTool('configure_mcp_server', {
         key: 'Search MCP',

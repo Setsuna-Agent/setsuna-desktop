@@ -6,7 +6,7 @@ describe('runtime host packaging paths', () => {
   it('uses a real directory for the runtime child process cwd when packaged in asar', () => {
     const appRoot = path.join('/Applications/Setsuna Desktop.app/Contents/Resources', 'app.asar');
 
-    expect(resolveRuntimeSpawnCwd(appRoot)).toBe('/Applications/Setsuna Desktop.app/Contents/Resources');
+    expect(resolveRuntimeSpawnCwd(appRoot)).toBe(path.join('/Applications/Setsuna Desktop.app/Contents/Resources'));
   });
 
   it('keeps the source app root as cwd during local development', () => {
@@ -16,10 +16,10 @@ describe('runtime host packaging paths', () => {
   });
 
   it('points packaged runtime startup at the CommonJS bundle', () => {
-    const appRoot = '/Applications/Setsuna Desktop.app/Contents/Resources/app.asar';
+    const appRoot = path.join('/Applications/Setsuna Desktop.app/Contents/Resources', 'app.asar');
 
     expect(resolvePackagedRuntimeEntry(appRoot)).toBe(
-      '/Applications/Setsuna Desktop.app/Contents/Resources/app.asar/dist/runtime/cli.cjs',
+      path.join('/Applications/Setsuna Desktop.app/Contents/Resources/app.asar/dist/runtime/cli.cjs'),
     );
   });
 });

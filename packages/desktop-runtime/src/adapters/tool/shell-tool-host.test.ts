@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -9,6 +9,7 @@ import { ShellToolHost } from './shell-tool-host.js';
 describe('shell tool host', () => {
   it('runs shell commands inside the active project with a filtered environment', async () => {
     const { host, projectDir } = await createHost();
+    const expectedProjectDir = await realpath(projectDir);
     const previousSecret = process.env.SETSUNA_SECRET_TOKEN;
     process.env.SETSUNA_SECRET_TOKEN = 'do-not-leak';
 
@@ -23,7 +24,7 @@ describe('shell tool host', () => {
         context(),
       );
 
-      expect(result.content).toContain(projectDir);
+      expect(normalizePathText(result.content)).toContain(normalizePathText(expectedProjectDir));
       expect(result.content).toContain('missing');
       expect(result.content).not.toContain('do-not-leak');
     } finally {
@@ -112,7 +113,7 @@ describe('shell tool host', () => {
     const result = await host.runTool(
       'run_shell_command',
       {
-        command: 'pwd',
+        command: `${nodeCommand()} -e "console.log(process.cwd())"`,
         directory: parentDir,
         risk_level: 'low',
         yield_time_ms: 0,
@@ -120,8 +121,8 @@ describe('shell tool host', () => {
       { ...context(), permissionProfile: 'danger-full-access' },
     );
 
-    expect(result.content).toContain(parentDir);
-  });
+    expect(normalizePathText(result.content)).toContain(normalizePathText(await realpath(parentDir)));
+  }, 20_000);
 });
 
 async function createHost() {
@@ -140,4 +141,8 @@ function context() {
 
 function nodeCommand(): string {
   return JSON.stringify(process.execPath);
+}
+
+function normalizePathText(value: string): string {
+  return process.platform === 'win32' ? value.replaceAll('\\', '/').toLowerCase() : value;
 }
