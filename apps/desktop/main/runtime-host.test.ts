@@ -34,6 +34,6 @@ describe('runtime host packaging paths', () => {
   it('points local built-in skills at the source app root', () => {
     const appRoot = '/Users/zy/Documents/setsuna-desktop';
 
-    expect(resolveBuiltinSkillsDir(appRoot)).toBe('/Users/zy/Documents/setsuna-desktop/skills');
+    expect(resolveBuiltinSkillsDir(appRoot)).toBe(path.join('/Users/zy/Documents/setsuna-desktop', 'skills'));
   });
 });
