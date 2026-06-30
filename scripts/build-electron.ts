@@ -44,6 +44,9 @@ export async function buildElectron(): Promise<void> {
   ]);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const currentModulePath = fileURLToPath(import.meta.url);
+const invokedScriptPath = process.argv[1] ? resolve(process.argv[1]) : null;
+
+if (invokedScriptPath === currentModulePath) {
   await buildElectron();
 }
