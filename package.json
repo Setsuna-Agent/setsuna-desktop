@@ -19,7 +19,7 @@
     "build:runtime": "tsc -b packages/desktop-runtime",
     "build:electron": "tsx scripts/build-electron.ts",
     "build:renderer": "vite build",
-    "clean": "rimraf dist packages/*/dist *.tsbuildinfo packages/*/*.tsbuildinfo",
+    "clean": "node scripts/clean.mjs",
     "lint": "eslint . --max-warnings=0",
     "package": "pnpm build && electron-builder --dir",
     "package:linux:x64": "pnpm build && electron-builder --linux --x64 --publish never",
