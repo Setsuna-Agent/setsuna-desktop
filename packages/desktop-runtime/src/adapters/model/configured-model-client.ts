@@ -35,7 +35,6 @@ export class ConfiguredModelClient implements ModelClient {
 
 function shouldUseConfiguredProvider(provider: RuntimeProviderConfig | null): provider is RuntimeProviderConfig {
   if (!provider?.enabled || !provider.activeModel?.code) return false;
-  if (provider.provider !== 'openai-compatible') return Boolean(provider.apiKey);
   return Boolean(provider.apiKey || provider.activeModel.code !== 'local-runtime-smoke');
 }
 

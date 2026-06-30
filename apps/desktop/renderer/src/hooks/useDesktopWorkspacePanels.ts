@@ -17,6 +17,7 @@ import {
   type DesktopPanelSlotState,
   type DesktopPanelTab,
   type DesktopPanelType,
+  type DesktopReviewLoadOptions,
   type DesktopReviewState,
   type DesktopTerminalSession,
   type DesktopWorkspaceApp,
@@ -101,7 +102,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
     };
   }, [activeProject?.path]);
 
-  const loadReviewState = useCallback(async () => {
+  const loadReviewState = useCallback(async (options: DesktopReviewLoadOptions = {}) => {
     if (!activeProject?.path) {
       setReviewState(null);
       setReviewError(null);
@@ -115,7 +116,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
     setReviewLoading(true);
     setReviewError(null);
     try {
-      const state = await api.getState(activeProject.path);
+      const state = await api.getState(activeProject.path, options);
       setReviewState(state);
     } catch (unknownError) {
       setReviewState(null);

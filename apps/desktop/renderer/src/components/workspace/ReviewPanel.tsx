@@ -1,13 +1,39 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Dropdown, type MenuProps } from 'antd';
-import { Check, ChevronDown, Code2, PanelRightOpen, RefreshCw } from 'lucide-react';
+import { Check, ChevronDown, Code2, Columns2, GitBranch, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
-import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewState } from './model.js';
+import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState, DesktopWorkspaceApp } from './model.js';
 
-type DesktopReviewSource = 'unstaged' | 'staged' | 'branch' | 'latest';
+export type DesktopReviewSource = 'unstaged' | 'staged' | 'branch' | 'latest';
+type DesktopReviewDiffLayout = 'unified' | 'split';
+
+export type ReviewPathContext = {
+  source: DesktopReviewSource;
+  workspaceRoot?: string | null;
+  gitRoot?: string | null;
+};
+
+type ReviewLineContextMenuState = {
+  line?: number;
+  x: number;
+  y: number;
+};
+
+type HighlightedReviewDiffLine = {
+  key: string;
+  line: DesktopDiffFile['lines'][number];
+  highlighted?: string;
+};
+
+type SplitReviewDiffRow = {
+  key: string;
+  oldLine: HighlightedReviewDiffLine | null;
+  newLine: HighlightedReviewDiffLine | null;
+};
 
 const reviewSourceLabels: Record<DesktopReviewSource, string> = {
   branch: '分支',
@@ -41,6 +67,15 @@ const reviewSourceOptions: Array<{ key: DesktopReviewSource; label: string }> = 
   { key: 'branch', label: '分支' },
   { key: 'latest', label: '上轮对话' },
 ];
+const REVIEW_REFRESH_FEEDBACK_MS = 650;
+
+function ReviewActionTip({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <span className="desktop-review-action-tip" data-tooltip={title}>
+      {children}
+    </span>
+  );
+}
 
 export function DesktopReviewPanel({
   activeProject,
@@ -48,6 +83,7 @@ export function DesktopReviewPanel({
   latestSummary,
   loading,
   reviewState,
+  workspaceApp,
   onExternalOpenFile,
   onOpenProjectFile,
   onRefresh,
@@ -57,18 +93,60 @@ export function DesktopReviewPanel({
   latestSummary: DesktopDiffSummary | null;
   loading: boolean;
   reviewState: DesktopReviewState | null;
+  workspaceApp?: DesktopWorkspaceApp | null;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
-  onRefresh: () => void;
+  onRefresh: (options?: DesktopReviewLoadOptions) => void;
 }) {
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
+  const [branchBaseRefByKey, setBranchBaseRefByKey] = useState<Record<string, string>>({});
+  const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
+  const [reviewLineWrapByKey, setReviewLineWrapByKey] = useState<Record<string, boolean>>({});
+  const [refreshFeedbackVisible, setRefreshFeedbackVisible] = useState(false);
+  const refreshFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasGit = Boolean(reviewState?.isGitRepository);
   const reviewSourceStorageKey = activeProject ? reviewSourcePreferenceKey(activeProject) : null;
+  const branchBaseRefStorageKey = activeProject ? branchBaseRefPreferenceKey(activeProject) : null;
+  const reviewDiffLayoutStorageKey = activeProject ? reviewDiffLayoutPreferenceKey(activeProject) : null;
+  const reviewLineWrapStorageKey = activeProject ? reviewLineWrapPreferenceKey(activeProject) : null;
   const storedReviewSource = useMemo(() => readReviewSourcePreference(reviewSourceStorageKey), [reviewSourceStorageKey]);
+  const storedBranchBaseRef = useMemo(() => readBranchBaseRefPreference(branchBaseRefStorageKey), [branchBaseRefStorageKey]);
+  const storedReviewDiffLayout = useMemo(() => readReviewDiffLayoutPreference(reviewDiffLayoutStorageKey), [reviewDiffLayoutStorageKey]);
+  const storedReviewLineWrap = useMemo(() => readReviewLineWrapPreference(reviewLineWrapStorageKey), [reviewLineWrapStorageKey]);
   const reviewSource = reviewSourceStorageKey
     ? reviewSourceByKey[reviewSourceStorageKey] ?? storedReviewSource ?? 'unstaged'
     : 'unstaged';
+  const reviewDiffLayout = reviewDiffLayoutStorageKey
+    ? reviewDiffLayoutByKey[reviewDiffLayoutStorageKey] ?? storedReviewDiffLayout ?? 'unified'
+    : 'unified';
+  const reviewLineWrap = reviewLineWrapStorageKey
+    ? reviewLineWrapByKey[reviewLineWrapStorageKey] ?? storedReviewLineWrap ?? false
+    : false;
   const activeSource = hasGit ? reviewSource : 'latest';
+  const availableBaseRefs = reviewState?.baseRefs ?? [];
+  const activeBranchBaseRef = branchBaseRefStorageKey
+    ? branchBaseRefByKey[branchBaseRefStorageKey] ?? reviewState?.baseRef ?? ''
+    : reviewState?.baseRef ?? '';
+  const reviewLayoutToggleTip = reviewDiffLayout === 'split'
+    ? '当前：左右对比，点击切换为单列对比'
+    : '当前：单列对比，点击切换为左右对比';
+  const reviewLineWrapToggleTip = reviewLineWrap
+    ? '当前：自动换行已开启，点击关闭'
+    : '当前：自动换行已关闭，点击开启';
+  const reviewRefreshing = loading || refreshFeedbackVisible;
+  const reviewRefreshTip = reviewRefreshing ? '正在刷新审查信息' : '刷新审查信息';
+
+  useEffect(() => {
+    if (activeSource !== 'branch') return;
+    if (!branchBaseRefStorageKey || !storedBranchBaseRef || !availableBaseRefs.includes(storedBranchBaseRef)) return;
+    if (reviewState?.baseRef === storedBranchBaseRef || branchBaseRefByKey[branchBaseRefStorageKey] === storedBranchBaseRef) return;
+    setBranchBaseRefByKey((current) => ({ ...current, [branchBaseRefStorageKey]: storedBranchBaseRef }));
+    onRefresh({ baseRef: storedBranchBaseRef });
+  }, [activeSource, availableBaseRefs, branchBaseRefByKey, branchBaseRefStorageKey, onRefresh, reviewState?.baseRef, storedBranchBaseRef]);
+
+  useEffect(() => () => {
+    if (refreshFeedbackTimerRef.current) clearTimeout(refreshFeedbackTimerRef.current);
+  }, []);
 
   if (!activeProject) {
     return (
@@ -93,6 +171,11 @@ export function DesktopReviewPanel({
   }
 
   const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
+  const pathContext: ReviewPathContext = {
+    source: activeSource,
+    workspaceRoot: reviewState?.workspaceRoot ?? activeProject.path,
+    gitRoot: reviewState?.gitRoot ?? null,
+  };
   const sourceMenuItems: MenuProps['items'] = reviewSourceOptions.map((item) => ({
     key: item.key,
     label: (
@@ -110,6 +193,41 @@ export function DesktopReviewPanel({
       ));
       writeReviewSourcePreference(reviewSourceStorageKey, key);
     }
+  };
+  const handleBranchBaseRefChange = (baseRef: string) => {
+    if (branchBaseRefStorageKey) {
+      setBranchBaseRefByKey((current) => (
+        current[branchBaseRefStorageKey] === baseRef ? current : { ...current, [branchBaseRefStorageKey]: baseRef }
+      ));
+      writeBranchBaseRefPreference(branchBaseRefStorageKey, baseRef);
+    }
+    onRefresh({ baseRef });
+  };
+  const handleReviewDiffLayoutToggle = () => {
+    const nextLayout: DesktopReviewDiffLayout = reviewDiffLayout === 'split' ? 'unified' : 'split';
+    if (!reviewDiffLayoutStorageKey) return;
+    setReviewDiffLayoutByKey((current) => (
+      current[reviewDiffLayoutStorageKey] === nextLayout ? current : { ...current, [reviewDiffLayoutStorageKey]: nextLayout }
+    ));
+    writeReviewDiffLayoutPreference(reviewDiffLayoutStorageKey, nextLayout);
+  };
+  const handleReviewLineWrapToggle = () => {
+    if (!reviewLineWrapStorageKey) return;
+    const nextLineWrap = !reviewLineWrap;
+    setReviewLineWrapByKey((current) => (
+      current[reviewLineWrapStorageKey] === nextLineWrap ? current : { ...current, [reviewLineWrapStorageKey]: nextLineWrap }
+    ));
+    writeReviewLineWrapPreference(reviewLineWrapStorageKey, nextLineWrap);
+  };
+  const handleReviewRefresh = () => {
+    if (reviewRefreshing) return;
+    setRefreshFeedbackVisible(true);
+    if (refreshFeedbackTimerRef.current) clearTimeout(refreshFeedbackTimerRef.current);
+    refreshFeedbackTimerRef.current = setTimeout(() => {
+      setRefreshFeedbackVisible(false);
+      refreshFeedbackTimerRef.current = null;
+    }, REVIEW_REFRESH_FEEDBACK_MS);
+    onRefresh();
   };
 
   return (
@@ -140,14 +258,62 @@ export function DesktopReviewPanel({
             <span className="desktop-review-change-counts__deletion">-{activeSummary?.deletions ?? 0}</span>
           </div>
         </div>
-        <IconButton className="desktop-review-panel__refresh" label="Refresh review" variant="ghost" onClick={onRefresh}>
-          <RefreshCw size={14} />
-        </IconButton>
+        <div className="desktop-review-panel__actions">
+          <ReviewActionTip title={reviewLayoutToggleTip}>
+            <IconButton
+              aria-pressed={reviewDiffLayout === 'split'}
+              className={`desktop-review-panel__layout-toggle ${reviewDiffLayout === 'split' ? 'is-active' : ''}`}
+              label={reviewLayoutToggleTip}
+              title=""
+              variant="ghost"
+              onClick={handleReviewDiffLayoutToggle}
+            >
+              {reviewDiffLayout === 'split' ? <Rows3 size={14} /> : <Columns2 size={14} />}
+            </IconButton>
+          </ReviewActionTip>
+          <ReviewActionTip title={reviewLineWrapToggleTip}>
+            <IconButton
+              aria-pressed={reviewLineWrap}
+              className={`desktop-review-panel__wrap-toggle ${reviewLineWrap ? 'is-active' : ''}`}
+              label={reviewLineWrapToggleTip}
+              title=""
+              variant="ghost"
+              onClick={handleReviewLineWrapToggle}
+            >
+              <WrapText size={14} />
+            </IconButton>
+          </ReviewActionTip>
+          <ReviewActionTip title={reviewRefreshTip}>
+            <IconButton
+              aria-disabled={reviewRefreshing}
+              aria-busy={reviewRefreshing}
+              className={`desktop-review-panel__refresh ${reviewRefreshing ? 'is-refreshing' : ''}`}
+              label={reviewRefreshTip}
+              title=""
+              variant="ghost"
+              onClick={handleReviewRefresh}
+            >
+              <RefreshCw className="desktop-review-panel__refresh-icon" size={14} />
+            </IconButton>
+          </ReviewActionTip>
+        </div>
       </header>
+      {activeSource === 'branch' && hasGit ? (
+        <BranchCompareBar
+          baseRef={activeBranchBaseRef || reviewState?.baseRef}
+          baseRefs={availableBaseRefs}
+          currentBranch={reviewState?.currentBranch}
+          onBaseRefChange={handleBranchBaseRefChange}
+        />
+      ) : null}
       <div className="desktop-review-panel__sections">
         <ReviewSummarySection
           emptyText={reviewEmptyText[activeSource]}
+          diffLayout={reviewDiffLayout}
+          lineWrap={reviewLineWrap}
+          pathContext={pathContext}
           summary={activeSummary}
+          workspaceApp={workspaceApp}
           onExternalOpenFile={onExternalOpenFile}
           onOpenProjectFile={onOpenProjectFile}
         />
@@ -168,8 +334,89 @@ function reviewSummaryForSource(
   return null;
 }
 
+export function reviewWorkspaceFilePath(filePath: string, context: ReviewPathContext): string | null {
+  const normalizedFilePath = normalizeRelativeReviewPath(filePath);
+  if (!normalizedFilePath) return null;
+  if (context.source === 'latest') return normalizedFilePath;
+
+  const workspaceRoot = normalizeAbsoluteReviewPath(context.workspaceRoot);
+  const gitRoot = normalizeAbsoluteReviewPath(context.gitRoot);
+  if (!workspaceRoot || !gitRoot) return normalizedFilePath;
+
+  const workspaceRelativePath = relativeReviewPath(workspaceRoot, `${gitRoot}/${normalizedFilePath}`);
+  return isSafeWorkspaceRelativePath(workspaceRelativePath) ? workspaceRelativePath : null;
+}
+
+function normalizeRelativeReviewPath(value: string): string | null {
+  const normalized = value.trim().replace(/\\/gu, '/').replace(/\/+/gu, '/');
+  if (!normalized || normalized === '.' || isAbsoluteReviewPath(normalized)) return null;
+  const segments: string[] = [];
+  for (const segment of normalized.split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') return null;
+    segments.push(segment);
+  }
+  return segments.join('/') || null;
+}
+
+function normalizeAbsoluteReviewPath(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim().replace(/\\/gu, '/');
+  if (!normalized) return '';
+  if (normalized === '/') return normalized;
+  return normalized.replace(/\/+$/u, '');
+}
+
+function relativeReviewPath(fromRoot: string, targetPath: string): string {
+  const fromParts = splitReviewPath(fromRoot);
+  const targetParts = splitReviewPath(normalizeAbsoluteReviewPath(targetPath));
+  const windowsPath = isWindowsReviewPath(fromParts);
+  let shared = 0;
+  while (
+    shared < fromParts.length
+    && shared < targetParts.length
+    && reviewPathSegmentEquals(fromParts[shared], targetParts[shared], windowsPath)
+  ) {
+    shared += 1;
+  }
+  return [...fromParts.slice(shared).map(() => '..'), ...targetParts.slice(shared)].join('/') || '.';
+}
+
+function splitReviewPath(value: string): string[] {
+  if (/^[a-z]:\//iu.test(value)) return [value.slice(0, 2).toLowerCase(), ...value.slice(3).split('/').filter(Boolean)];
+  if (value.startsWith('/')) return ['', ...value.slice(1).split('/').filter(Boolean)];
+  return value.split('/').filter(Boolean);
+}
+
+function isWindowsReviewPath(pathParts: string[]): boolean {
+  return Boolean(pathParts[0]?.match(/^[a-z]:$/iu));
+}
+
+function reviewPathSegmentEquals(left: string, right: string, windowsPath: boolean): boolean {
+  return windowsPath ? left.toLowerCase() === right.toLowerCase() : left === right;
+}
+
+function isSafeWorkspaceRelativePath(value: string): boolean {
+  return Boolean(value && value !== '.' && value !== '..' && !value.startsWith('../') && !isAbsoluteReviewPath(value));
+}
+
+function isAbsoluteReviewPath(value: string): boolean {
+  return value.startsWith('/') || /^[a-z]:\//iu.test(value);
+}
+
 function reviewSourcePreferenceKey(project: WorkspaceProject): string {
   return `setsuna-desktop:review-source:${project.id || project.path}`;
+}
+
+function branchBaseRefPreferenceKey(project: WorkspaceProject): string {
+  return `setsuna-desktop:review-base-ref:${project.id || project.path}`;
+}
+
+function reviewDiffLayoutPreferenceKey(project: WorkspaceProject): string {
+  return `setsuna-desktop:review-diff-layout:${project.id || project.path}`;
+}
+
+function reviewLineWrapPreferenceKey(project: WorkspaceProject): string {
+  return `setsuna-desktop:review-line-wrap:${project.id || project.path}`;
 }
 
 function readReviewSourcePreference(key: string | null): DesktopReviewSource | null {
@@ -177,6 +424,38 @@ function readReviewSourcePreference(key: string | null): DesktopReviewSource | n
   try {
     const value = window.localStorage.getItem(key);
     return isDesktopReviewSource(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function readBranchBaseRefPreference(key: string | null): string | null {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const value = window.localStorage.getItem(key);
+    return value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function readReviewDiffLayoutPreference(key: string | null): DesktopReviewDiffLayout | null {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const value = window.localStorage.getItem(key);
+    return isDesktopReviewDiffLayout(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function readReviewLineWrapPreference(key: string | null): boolean | null {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const value = window.localStorage.getItem(key);
+    if (value === 'wrap') return true;
+    if (value === 'nowrap') return false;
+    return null;
   } catch {
     return null;
   }
@@ -191,18 +470,142 @@ function writeReviewSourcePreference(key: string, source: DesktopReviewSource): 
   }
 }
 
+function writeBranchBaseRefPreference(key: string, baseRef: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, baseRef);
+  } catch {
+    // Preference persistence should never block the review panel itself.
+  }
+}
+
+function writeReviewDiffLayoutPreference(key: string, layout: DesktopReviewDiffLayout): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, layout);
+  } catch {
+    // Preference persistence should never block the review panel itself.
+  }
+}
+
+function writeReviewLineWrapPreference(key: string, lineWrap: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, lineWrap ? 'wrap' : 'nowrap');
+  } catch {
+    // Preference persistence should never block the review panel itself.
+  }
+}
+
 function isDesktopReviewSource(value: unknown): value is DesktopReviewSource {
   return typeof value === 'string' && reviewSourceOptions.some((item) => item.key === value);
 }
 
+function isDesktopReviewDiffLayout(value: unknown): value is DesktopReviewDiffLayout {
+  return value === 'unified' || value === 'split';
+}
+
+function BranchCompareBar({
+  baseRef,
+  baseRefs,
+  currentBranch,
+  onBaseRefChange,
+}: {
+  baseRef?: string | null;
+  baseRefs: string[];
+  currentBranch?: string | null;
+  onBaseRefChange: (baseRef: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const selectableBaseRefs = useMemo(() => {
+    if (!baseRef || baseRefs.includes(baseRef)) return baseRefs;
+    return [baseRef, ...baseRefs];
+  }, [baseRef, baseRefs]);
+  const filteredBaseRefs = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return selectableBaseRefs;
+    return selectableBaseRefs.filter((ref) => ref.toLowerCase().includes(normalizedQuery));
+  }, [selectableBaseRefs, query]);
+  const menuItems: MenuProps['items'] = filteredBaseRefs.length
+    ? filteredBaseRefs.map((ref) => ({
+      key: ref,
+      label: (
+        <span className="desktop-review-branch-menu__item">
+          <GitBranch size={13} />
+          <span>{ref}</span>
+          <span className="desktop-review-branch-menu__check">{baseRef === ref ? <Check size={13} /> : null}</span>
+        </span>
+      ),
+    }))
+    : [{
+      key: '__empty',
+      disabled: true,
+      label: <span className="desktop-review-branch-menu__empty">无匹配分支</span>,
+    }];
+  const handleMenuClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
+    if (key === '__empty') return;
+    onBaseRefChange(String(key));
+  };
+
+  return (
+    <div className="desktop-review-branch-compare">
+      <Dropdown
+        rootClassName="desktop-review-branch-dropdown"
+        trigger={['click']}
+        placement="bottomLeft"
+        onOpenChange={(open) => {
+          if (!open) setQuery('');
+        }}
+        popupRender={(menu) => (
+          <div className="desktop-review-branch-menu">
+            <label className="desktop-review-branch-menu__search">
+              <Search size={13} />
+              <input
+                value={query}
+                placeholder="搜索分支"
+                onChange={(event) => setQuery(event.target.value)}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+              />
+            </label>
+            <div className="desktop-review-branch-menu__label">分支</div>
+            {menu}
+          </div>
+        )}
+        menu={{
+          items: menuItems,
+          selectedKeys: baseRef ? [baseRef] : [],
+          onClick: handleMenuClick,
+        }}
+      >
+        <Button className="desktop-review-branch-compare__button" type="text" size="small" disabled={!selectableBaseRefs.length}>
+          <span className="desktop-review-branch-compare__current">{currentBranch || 'HEAD'}</span>
+          <span className="desktop-review-branch-compare__arrow">→</span>
+          <span className="desktop-review-branch-compare__base">{baseRef || '未设置'}</span>
+          <ChevronDown className="desktop-review-branch-compare__caret" size={12} />
+        </Button>
+      </Dropdown>
+    </div>
+  );
+}
+
 function ReviewSummarySection({
+  diffLayout,
   emptyText,
+  lineWrap,
+  pathContext,
   summary,
+  workspaceApp,
   onExternalOpenFile,
   onOpenProjectFile,
 }: {
+  diffLayout: DesktopReviewDiffLayout;
   emptyText: { title: string; description: string };
+  lineWrap: boolean;
+  pathContext: ReviewPathContext;
   summary: DesktopDiffSummary | null;
+  workspaceApp?: DesktopWorkspaceApp | null;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
 }) {
@@ -213,8 +616,12 @@ function ReviewSummarySection({
         <div className="desktop-review-file-list">
           {files.map((file) => (
             <ReviewFileCard
+              diffLayout={diffLayout}
               file={file}
               key={file.path}
+              lineWrap={lineWrap}
+              pathContext={pathContext}
+              workspaceApp={workspaceApp}
               onExternalOpenFile={onExternalOpenFile}
               onOpenProjectFile={onOpenProjectFile}
             />
@@ -231,81 +638,366 @@ function ReviewSummarySection({
 }
 
 function ReviewFileCard({
+  diffLayout,
   file,
+  lineWrap,
+  pathContext,
+  workspaceApp,
   onExternalOpenFile,
   onOpenProjectFile,
 }: {
+  diffLayout: DesktopReviewDiffLayout;
   file: DesktopDiffFile;
+  lineWrap: boolean;
+  pathContext: ReviewPathContext;
+  workspaceApp?: DesktopWorkspaceApp | null;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
 }) {
-  const visibleLines = file.lines.slice(0, 36);
+  const [expanded, setExpanded] = useState(true);
+  const [lineContextMenu, setLineContextMenu] = useState<ReviewLineContextMenuState | null>(null);
+  const lineContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
+  const canOpenFile = Boolean(workspaceFilePath);
+  const visibleLines = useMemo(() => file.lines.slice(0, 36), [file.lines]);
   const language = fileLanguage(file.path);
   const highlightableSource = useMemo(() => visibleLines.map((line) => line.content).join('\n'), [visibleLines]);
   const highlightedLines = useMemo(() => highlightedCodeLinesHtml(highlightableSource, language), [highlightableSource, language]);
-  return (
-    <details className="desktop-review-file-card" open>
-      <summary className="desktop-review-file-card__summary">
-        <span className="desktop-review-file-card__path-main">
-          <ChevronDown className="desktop-review-file-card__chevron" size={13} />
-          <WorkspaceFileIcon path={file.path} type="file" />
-          <span className="desktop-review-file-card__path" title={file.path}>
-            {file.path}
-          </span>
-        </span>
-        <div className="desktop-review-file-card__meta">
-          <span>{file.action}</span>
-          <em>+{file.additions} -{file.deletions}</em>
-          <IconButton
-            label="Open file in panel"
-            variant="ghost"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onOpenProjectFile(file.path);
-            }}
-          >
-            <PanelRightOpen size={13} />
-          </IconButton>
-          <IconButton
-            label="Open in workspace app"
-            variant="ghost"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onExternalOpenFile(file.path);
-            }}
-          >
-            <Code2 size={13} />
-          </IconButton>
-        </div>
-      </summary>
-      {visibleLines.length ? (
-        <div className="desktop-review-diff">
-          {visibleLines.map((line, index) => {
-            const highlighted = highlightedLines[index];
-            return (
-              <button
-                className={`desktop-review-diff-line desktop-review-diff-line--${line.type}`}
-                key={`${file.path}:${line.lineNumber}`}
-                type="button"
-                onClick={() => onExternalOpenFile(file.path, line.newLine ?? line.oldLine)}
-              >
-                <span className="desktop-review-diff-line__prefix">{diffLinePrefix(line)}</span>
-                <span className="desktop-review-diff-line__number">{line.newLine ?? line.oldLine ?? ''}</span>
-                {highlighted !== undefined ? (
-                  <code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />
-                ) : (
-                  <code>{line.content || ' '}</code>
-                )}
-              </button>
-            );
-          })}
-          {file.truncated ? <div className="desktop-review-truncated">diff 过大，已截断展示。</div> : null}
-        </div>
-      ) : null}
-    </details>
+  const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
+    () => visibleLines.map((line, index) => ({
+      highlighted: highlightedLines[index],
+      key: `${file.path}:${line.lineNumber}:${index}`,
+      line,
+    })),
+    [file.path, highlightedLines, visibleLines],
   );
+  const splitRows = useMemo(() => splitReviewDiffRows(highlightedVisibleLines), [highlightedVisibleLines]);
+
+  const openDiffLine = (line: DesktopDiffFile['lines'][number], preferredLine?: number) => {
+    if (!workspaceFilePath) return;
+    onExternalOpenFile(workspaceFilePath, preferredLine ?? line.newLine ?? line.oldLine);
+  };
+  const openDiffLineContextMenu = (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => {
+    if (!workspaceFilePath) return;
+    event.preventDefault();
+    setLineContextMenu({ line: preferredLine ?? line.newLine ?? line.oldLine, x: event.clientX, y: event.clientY });
+  };
+
+  useEffect(() => {
+    if (!lineContextMenu) return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (lineContextMenuRef.current?.contains(event.target as Node)) return;
+      setLineContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLineContextMenu(null);
+    };
+    const closeMenu = () => setLineContextMenu(null);
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    };
+  }, [lineContextMenu]);
+
+  return (
+    <>
+      <article className={`desktop-review-file-card ${expanded ? 'is-open' : ''}`}>
+        <header className="desktop-review-file-card__summary">
+          <button
+            className="desktop-review-file-card__path-main"
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <ChevronDown className="desktop-review-file-card__chevron" size={13} />
+            <WorkspaceFileIcon path={file.path} type="file" />
+            <span className="desktop-review-file-card__path" title={file.path}>
+              {file.path}
+            </span>
+          </button>
+          <div className="desktop-review-file-card__meta">
+            <span>{file.action}</span>
+            <em>+{file.additions} -{file.deletions}</em>
+            <IconButton
+              disabled={!canOpenFile}
+              label={canOpenFile ? 'Open file in panel' : '文件不在当前项目目录内'}
+              variant="ghost"
+              onClick={() => {
+                if (workspaceFilePath) onOpenProjectFile(workspaceFilePath);
+              }}
+            >
+              <PanelRightOpen size={13} />
+            </IconButton>
+            <IconButton
+              disabled={!workspaceApp || !canOpenFile}
+              label={!canOpenFile ? '文件不在当前项目目录内' : workspaceApp ? `Open in ${workspaceApp.label}` : '未检测到打开方式'}
+              variant="ghost"
+              onClick={() => {
+                if (workspaceFilePath) onExternalOpenFile(workspaceFilePath);
+              }}
+            >
+              <Code2 size={13} />
+            </IconButton>
+          </div>
+        </header>
+        {expanded && visibleLines.length ? (
+          <div className={`desktop-review-diff desktop-review-diff--${diffLayout} ${lineWrap ? 'desktop-review-diff--wrap' : ''}`}>
+            {diffLayout === 'split' ? (
+              <ReviewSplitDiff
+                canOpenLine={Boolean(workspaceApp && canOpenFile)}
+                language={language}
+                lineWrap={lineWrap}
+                rows={splitRows}
+                onLineContextMenu={openDiffLineContextMenu}
+                onOpenLine={openDiffLine}
+              />
+            ) : (
+              <ReviewUnifiedDiff
+                canOpenLine={Boolean(workspaceApp && canOpenFile)}
+                language={language}
+                lines={highlightedVisibleLines}
+                onLineContextMenu={openDiffLineContextMenu}
+                onOpenLine={openDiffLine}
+              />
+            )}
+            {file.truncated ? <div className="desktop-review-truncated">diff 过大，已截断展示。</div> : null}
+          </div>
+        ) : null}
+      </article>
+      <ReviewDiffLineContextMenu
+        contextMenu={lineContextMenu}
+        menuRef={lineContextMenuRef}
+        workspaceApp={workspaceApp}
+        onOpen={() => {
+          if (!workspaceFilePath || !lineContextMenu) return;
+          const line = lineContextMenu.line;
+          setLineContextMenu(null);
+          onExternalOpenFile(workspaceFilePath, line);
+        }}
+      />
+    </>
+  );
+}
+
+function ReviewUnifiedDiff({
+  canOpenLine,
+  language,
+  lines,
+  onLineContextMenu,
+  onOpenLine,
+}: {
+  canOpenLine: boolean;
+  language: string;
+  lines: HighlightedReviewDiffLine[];
+  onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+}) {
+  return (
+    <>
+      {lines.map((item) => {
+        const targetLine = item.line.newLine ?? item.line.oldLine;
+        return (
+          <button
+            className={`desktop-review-diff-line desktop-review-diff-line--${item.line.type}`}
+            disabled={!canOpenLine}
+            key={item.key}
+            type="button"
+            onClick={() => onOpenLine(item.line, targetLine)}
+            onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
+          >
+            <span className="desktop-review-diff-line__prefix">{diffLinePrefix(item.line)}</span>
+            <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
+            <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} />
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function ReviewSplitDiff({
+  canOpenLine,
+  language,
+  lineWrap,
+  rows,
+  onLineContextMenu,
+  onOpenLine,
+}: {
+  canOpenLine: boolean;
+  language: string;
+  lineWrap: boolean;
+  rows: SplitReviewDiffRow[];
+  onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+}) {
+  if (!lineWrap) {
+    return (
+      <>
+        <div className="desktop-review-diff-split-pane desktop-review-diff-split-pane--old">
+          {rows.map((row) => (
+            <ReviewSplitDiffCell
+              canOpenLine={canOpenLine}
+              item={row.oldLine}
+              key={`${row.key}:old`}
+              language={language}
+              side="old"
+              onLineContextMenu={onLineContextMenu}
+              onOpenLine={onOpenLine}
+            />
+          ))}
+        </div>
+        <div className="desktop-review-diff-split-pane desktop-review-diff-split-pane--new">
+          {rows.map((row) => (
+            <ReviewSplitDiffCell
+              canOpenLine={canOpenLine}
+              item={row.newLine}
+              key={`${row.key}:new`}
+              language={language}
+              side="new"
+              onLineContextMenu={onLineContextMenu}
+              onOpenLine={onOpenLine}
+            />
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {rows.map((row) => (
+        <div className="desktop-review-diff-split-row" key={row.key}>
+          <ReviewSplitDiffCell
+            canOpenLine={canOpenLine}
+            item={row.oldLine}
+            language={language}
+            side="old"
+            onLineContextMenu={onLineContextMenu}
+            onOpenLine={onOpenLine}
+          />
+          <ReviewSplitDiffCell
+            canOpenLine={canOpenLine}
+            item={row.newLine}
+            language={language}
+            side="new"
+            onLineContextMenu={onLineContextMenu}
+            onOpenLine={onOpenLine}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function ReviewSplitDiffCell({
+  canOpenLine,
+  item,
+  language,
+  side,
+  onLineContextMenu,
+  onOpenLine,
+}: {
+  canOpenLine: boolean;
+  item: HighlightedReviewDiffLine | null;
+  language: string;
+  side: 'old' | 'new';
+  onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+}) {
+  if (!item) {
+    return <span aria-hidden="true" className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--empty`} />;
+  }
+  const targetLine = side === 'old' ? item.line.oldLine ?? item.line.newLine : item.line.newLine ?? item.line.oldLine;
+  return (
+    <button
+      className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--${item.line.type}`}
+      disabled={!canOpenLine}
+      type="button"
+      onClick={() => onOpenLine(item.line, targetLine)}
+      onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
+    >
+      <span className="desktop-review-diff-line__prefix">{diffLinePrefix(item.line)}</span>
+      <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
+      <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} />
+    </button>
+  );
+}
+
+function ReviewDiffCode({ content, highlighted, language }: { content: string; highlighted?: string; language: string }) {
+  if (highlighted !== undefined) {
+    return <code className={`desktop-review-diff-code language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />;
+  }
+  return <code className="desktop-review-diff-code">{content || ' '}</code>;
+}
+
+function splitReviewDiffRows(lines: HighlightedReviewDiffLine[]): SplitReviewDiffRow[] {
+  const rows: SplitReviewDiffRow[] = [];
+  let removedLines: HighlightedReviewDiffLine[] = [];
+  let addedLines: HighlightedReviewDiffLine[] = [];
+  const flushChangedLines = () => {
+    const rowCount = Math.max(removedLines.length, addedLines.length);
+    for (let index = 0; index < rowCount; index += 1) {
+      rows.push({
+        key: `change:${rows.length}:${removedLines[index]?.key ?? ''}:${addedLines[index]?.key ?? ''}`,
+        oldLine: removedLines[index] ?? null,
+        newLine: addedLines[index] ?? null,
+      });
+    }
+    removedLines = [];
+    addedLines = [];
+  };
+
+  for (const line of lines) {
+    if (line.line.type === 'removed') {
+      removedLines.push(line);
+      continue;
+    }
+    if (line.line.type === 'added') {
+      addedLines.push(line);
+      continue;
+    }
+    flushChangedLines();
+    rows.push({ key: `context:${line.key}`, oldLine: line, newLine: line });
+  }
+  flushChangedLines();
+  return rows;
+}
+
+function ReviewDiffLineContextMenu({
+  contextMenu,
+  menuRef,
+  workspaceApp,
+  onOpen,
+}: {
+  contextMenu: ReviewLineContextMenuState | null;
+  menuRef: RefObject<HTMLDivElement>;
+  workspaceApp?: DesktopWorkspaceApp | null;
+  onOpen: () => void;
+}) {
+  if (!contextMenu || typeof document === 'undefined') return null;
+  const style: CSSProperties = {
+    left: Math.min(contextMenu.x, Math.max(8, window.innerWidth - 224)),
+    top: Math.min(contextMenu.y, Math.max(8, window.innerHeight - 72)),
+  };
+  return createPortal(
+    <div className="desktop-file-context-menu desktop-review-line-context-menu" ref={menuRef} role="menu" style={style}>
+      <button type="button" role="menuitem" disabled={!workspaceApp} onClick={onOpen}>
+        <Code2 size={14} />
+        <span>{workspaceApp ? reviewLineContextMenuLabel(workspaceApp.label, contextMenu.line) : '未检测到打开方式'}</span>
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
+function reviewLineContextMenuLabel(appLabel: string, line?: number): string {
+  return line ? `用 ${appLabel} 打开第 ${line} 行` : `用 ${appLabel} 打开`;
 }
 
 function diffLinePrefix(line: DesktopDiffFile['lines'][number]): string {

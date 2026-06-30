@@ -3,6 +3,7 @@ import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
   DEFAULT_MAX_OUTPUT_TOKENS,
+  anthropicApiKeyHeader,
   assertOkResponse,
   doneEvent,
   normalizeAnthropicUsage,
@@ -36,8 +37,8 @@ export class AnthropicMessagesModelClient implements ModelClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': this.provider.apiKey,
         'anthropic-version': DEFAULT_ANTHROPIC_VERSION,
+        ...anthropicApiKeyHeader(this.provider.apiKey),
       },
       signal: request.signal,
       body: JSON.stringify({

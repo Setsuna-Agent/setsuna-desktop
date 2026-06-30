@@ -69,6 +69,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       style={shellStyle}
       sidebarCollapsed={sidebarCollapsed}
       onToggleSidebar={handleToggleSidebar}
+      showSidebarToggle={activeView !== 'settings'}
       toolbarTitle={toolbarTitle}
       workspaceToolbar={<AppWorkspaceToolbar activeProject={activeProject} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} />}
       menuActions={windowMenuActions}

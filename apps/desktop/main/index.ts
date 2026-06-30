@@ -97,6 +97,7 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('desktop:select-directory');
   ipcMain.removeHandler('desktop:get-user-profile');
   ipcMain.removeHandler('desktop:open-external');
+  ipcMain.removeHandler('desktop:open-path');
   ipcMain.removeHandler('desktop-updater:get-state');
   ipcMain.removeHandler('desktop-updater:check');
   ipcMain.removeHandler('desktop-updater:download');
@@ -131,6 +132,17 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
     await shell.openExternal(String(url ?? ''));
     return true;
   });
+  ipcMain.handle('desktop:open-path', async (_event, targetPath) => {
+    const localPath = String(targetPath ?? '').trim();
+    if (!localPath) return { ok: false, error: 'Path is empty.' };
+    if (!path.isAbsolute(localPath)) return { ok: false, error: 'Only absolute local paths can be opened.' };
+    try {
+      const error = await shell.openPath(localPath);
+      return error ? { ok: false, error } : { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'Failed to open path.' };
+    }
+  });
   ipcMain.handle('desktop-updater:get-state', async () => updater.getState());
   ipcMain.handle('desktop-updater:check', async () => updater.checkAndDownload());
   ipcMain.handle('desktop-updater:download', async () => updater.checkAndDownload());
@@ -155,7 +167,9 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
     return true;
   });
   ipcMain.handle('window-control:is-maximized', (event) => Boolean(BrowserWindow.fromWebContents(event.sender)?.isMaximized()));
-  ipcMain.handle('desktop-review:get-state', async (_event, input) => getDesktopReviewState(String(input?.workspaceRoot ?? '')));
+  ipcMain.handle('desktop-review:get-state', async (_event, input) =>
+    getDesktopReviewState(String(input?.workspaceRoot ?? ''), { baseRef: typeof input?.baseRef === 'string' ? input.baseRef : null }),
+  );
   ipcMain.handle('desktop-review:discard-unstaged', async (_event, input) =>
     discardUnstagedReviewFiles(String(input?.workspaceRoot ?? ''), normalizeFilePathList(input?.filePaths)),
   );

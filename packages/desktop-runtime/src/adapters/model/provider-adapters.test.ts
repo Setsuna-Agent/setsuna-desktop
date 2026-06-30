@@ -473,6 +473,70 @@ describe('provider model adapters', () => {
     expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Local' });
   });
 
+  it('uses Responses and Anthropic providers without an API key', async () => {
+    const responsesCaptured: CapturedRequest = {};
+    const responsesClient = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => ({ ...provider('openai-responses', 'https://local-responses.test/v1'), apiKey: '' }),
+      },
+      fakeFetch(
+        [
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"Responses"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"status":"completed"}}',
+          '',
+        ].join('\n'),
+        responsesCaptured,
+      ),
+    );
+
+    const responsesEvents = await collect(responsesClient);
+
+    expect(responsesCaptured.url).toBe('https://local-responses.test/v1/responses');
+    expect(expectHeaders(responsesCaptured).Authorization).toBeUndefined();
+    expect(responsesEvents.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Responses' });
+
+    const anthropicCaptured: CapturedRequest = {};
+    const anthropicClient = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => ({ ...provider('anthropic', 'https://local-anthropic.test'), apiKey: '' }),
+      },
+      fakeFetch(
+        [
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Anthropic"}}',
+          '',
+          'event: message_stop',
+          'data: {"type":"message_stop"}',
+          '',
+        ].join('\n'),
+        anthropicCaptured,
+      ),
+    );
+
+    const anthropicEvents = await collect(anthropicClient);
+
+    expect(anthropicCaptured.url).toBe('https://local-anthropic.test/v1/messages');
+    const anthropicHeaders = expectHeaders(anthropicCaptured);
+    expect(anthropicHeaders['x-api-key']).toBeUndefined();
+    expect(anthropicHeaders['anthropic-version']).toBe('2023-06-01');
+    expect(anthropicEvents.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Anthropic' });
+  });
+
   it('uses the configured provider when an API key is present', async () => {
     const captured: CapturedRequest = {};
     const client = new ConfiguredModelClient(

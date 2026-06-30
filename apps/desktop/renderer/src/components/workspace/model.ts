@@ -92,9 +92,14 @@ export type DesktopReviewState = {
   gitRoot: string | null;
   currentBranch: string | null;
   baseRef: string | null;
+  baseRefs: string[];
   branchSummary: DesktopDiffSummary | null;
   stagedSummary: DesktopDiffSummary | null;
   unstagedSummary: DesktopDiffSummary | null;
+};
+
+export type DesktopReviewLoadOptions = {
+  baseRef?: string | null;
 };
 
 export type ProjectTreeNode = {

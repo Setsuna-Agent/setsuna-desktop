@@ -429,6 +429,36 @@ function RuntimePolicySettings({
   config: RuntimeConfigState;
   onSave: (input: RuntimePreferenceInput) => Promise<void>;
 }) {
+  const [openingPath, setOpeningPath] = useState<string | null>(null);
+  const [localPathError, setLocalPathError] = useState<string | null>(null);
+
+  const openRuntimePath = async (targetPath: string, label: string) => {
+    const normalizedPath = targetPath.trim();
+    if (!normalizedPath) {
+      setLocalPathError(`${label}路径为空。`);
+      return;
+    }
+    const api = window.setsunaDesktop?.desktop;
+    if (!api?.openPath) {
+      setLocalPathError('当前环境不支持打开本地路径。');
+      return;
+    }
+    setOpeningPath(normalizedPath);
+    setLocalPathError(null);
+    try {
+      const result = await api.openPath(normalizedPath);
+      if (!result.ok) setLocalPathError(result.error || `${label}打开失败。`);
+    } catch (unknownError) {
+      setLocalPathError(errorMessage(unknownError, `${label}打开失败。`));
+    } finally {
+      setOpeningPath(null);
+    }
+  };
+
+  const isOpeningConfig = openingPath === config.configPath;
+  const isOpeningData = openingPath === config.dataPath;
+  const pathActionDisabled = Boolean(openingPath);
+
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__runtime-section">
       <div className="chat-user-settings__section-block">
@@ -475,16 +505,37 @@ function RuntimePolicySettings({
               <Cpu size={14} />
               <span>配置文件</span>
             </span>
-            <code>{config.configPath}</code>
+            <div className="chat-user-settings__path-control">
+              <code title={config.configPath}>{config.configPath}</code>
+              <Button
+                className="chat-user-settings__path-open"
+                icon={<FolderOpen size={14} />}
+                disabled={pathActionDisabled}
+                onClick={() => void openRuntimePath(config.configPath, '配置文件')}
+              >
+                {isOpeningConfig ? '打开中' : '打开'}
+              </Button>
+            </div>
           </div>
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Database size={14} />
               <span>数据目录</span>
             </span>
-            <code>{config.dataPath}</code>
+            <div className="chat-user-settings__path-control">
+              <code title={config.dataPath}>{config.dataPath}</code>
+              <Button
+                className="chat-user-settings__path-open"
+                icon={<FolderOpen size={14} />}
+                disabled={pathActionDisabled}
+                onClick={() => void openRuntimePath(config.dataPath, '数据目录')}
+              >
+                {isOpeningData ? '打开中' : '打开'}
+              </Button>
+            </div>
           </div>
         </div>
+        {localPathError ? <div className="chat-user-settings__runtime-error">{localPathError}</div> : null}
       </div>
     </div>
   );
@@ -792,6 +843,7 @@ function PersonalizationSettings({
             <Popconfirm
               title="重置全部记忆？"
               description="这会清空所有已保存记忆，无法撤销。"
+              placement="topRight"
               okText="重置"
               cancelText="取消"
               okButtonProps={{ danger: true, loading: memoryResetting }}
@@ -1018,7 +1070,7 @@ function ProviderSettings({
     }));
     void onFetchModels({
       providerId: provider.id,
-      provider: LOCAL_PROVIDER_KIND,
+      provider: provider.provider,
       baseUrl: provider.baseUrl,
       apiKey: apiKeysByProviderId[provider.id] || undefined,
     })
@@ -1092,7 +1144,7 @@ function ProviderSettings({
                   <span className="chat-user-settings__local-provider-item-body">
                     <span className="chat-user-settings__local-provider-item-name">{provider.name || `厂商 ${providerIndex + 1}`}</span>
                     <span className="chat-user-settings__local-provider-item-meta">
-                      {`${provider.enabled ? '启用' : '停用'} · ${provider.models.length} 模型${activeModel?.name ? ` · ${activeModel.name}` : ''}`}
+                      {`${provider.enabled ? '启用' : '停用'} · ${providerProtocolLabel(provider.provider)} · ${provider.models.length} 模型${activeModel?.name ? ` · ${activeModel.name}` : ''}`}
                     </span>
                   </span>
                 </button>
@@ -1119,7 +1171,7 @@ function ProviderSettings({
                   />
                   <span>启用</span>
                 </label>
-                <span className="chat-user-settings__provider-meta">{selectedProvider.models.length} models</span>
+                <span className="chat-user-settings__provider-meta">{`${providerProtocolLabel(selectedProvider.provider)} · ${selectedProvider.models.length} models`}</span>
                 {providers.length > 1 ? (
                   <IconButton label="删除厂商" variant="danger" onClick={() => removeProvider(selectedProvider.id)}>
                     <Trash2 size={14} />
@@ -1134,43 +1186,61 @@ function ProviderSettings({
               <section className="settings-form-section">
                 <div className="settings-form-section__head">
                   <span>连接</span>
-                  <code>OpenAI-compatible · AI SDK</code>
+                  <code>{providerProtocolMeta(selectedProvider.provider)}</code>
                 </div>
                 <div className="chat-user-settings__group chat-user-settings__local-provider-form">
-              <label className="chat-user-settings__row">
-                <span className="chat-user-settings__row-label">供应商名称</span>
-                <TextField
-                  className="settings-local-control"
-                  value={selectedProvider.name}
-                  onChange={(event) => {
-                    const name = event.target.value;
-                    updateProvider(selectedProvider.id, (item) => ({ ...item, name }));
-                  }}
-                />
-              </label>
-              <label className="chat-user-settings__row">
-                <span className="chat-user-settings__row-label">服务地址</span>
-                <TextField
-                  className="settings-local-control"
-                  value={selectedProvider.baseUrl}
-                  placeholder="http://127.0.0.1:11434/v1"
-                  onChange={(event) => {
-                    const baseUrl = event.target.value;
-                    setFetchStateByProviderId((current) => ({ ...current, [selectedProvider.id]: emptyModelFetchState() }));
-                    updateProvider(selectedProvider.id, (item) => ({ ...item, baseUrl }));
-                  }}
-                />
-              </label>
-              <label className="chat-user-settings__row">
-                <span className="chat-user-settings__row-label">API Key {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
-                <TextField
-                  className="settings-local-control"
-                  type="password"
-                  value={apiKeysByProviderId[selectedProvider.id] ?? ''}
-                  onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)}
-                  placeholder={selectedProvider.apiKeySet ? '留空则保留当前密钥' : '本地服务可留空'}
-                />
-              </label>
+                  <label className="chat-user-settings__row">
+                    <span className="chat-user-settings__row-label">协议</span>
+                    <SelectField
+                      className="settings-local-control"
+                      value={selectedProvider.provider}
+                      onChange={(event) => {
+                        const provider = normalizeProviderKind(event.currentTarget.value);
+                        setFetchStateByProviderId((current) => ({ ...current, [selectedProvider.id]: emptyModelFetchState() }));
+                        updateProvider(selectedProvider.id, (item) => ({ ...item, provider }));
+                      }}
+                    >
+                      {providerProtocolOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </SelectField>
+                  </label>
+                  <label className="chat-user-settings__row">
+                    <span className="chat-user-settings__row-label">供应商名称</span>
+                    <TextField
+                      className="settings-local-control"
+                      value={selectedProvider.name}
+                      onChange={(event) => {
+                        const name = event.target.value;
+                        updateProvider(selectedProvider.id, (item) => ({ ...item, name }));
+                      }}
+                    />
+                  </label>
+                  <label className="chat-user-settings__row">
+                    <span className="chat-user-settings__row-label">服务地址</span>
+                    <TextField
+                      className="settings-local-control"
+                      value={selectedProvider.baseUrl}
+                      placeholder={providerBaseUrlPlaceholder(selectedProvider.provider)}
+                      onChange={(event) => {
+                        const baseUrl = event.target.value;
+                        setFetchStateByProviderId((current) => ({ ...current, [selectedProvider.id]: emptyModelFetchState() }));
+                        updateProvider(selectedProvider.id, (item) => ({ ...item, baseUrl }));
+                      }}
+                    />
+                  </label>
+                  <label className="chat-user-settings__row">
+                    <span className="chat-user-settings__row-label">API Key {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
+                    <TextField
+                      className="settings-local-control"
+                      type="password"
+                      value={apiKeysByProviderId[selectedProvider.id] ?? ''}
+                      onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)}
+                      placeholder={providerApiKeyPlaceholder(selectedProvider)}
+                    />
+                  </label>
                 </div>
               </section>
               <section className="settings-form-section">
@@ -1331,9 +1401,29 @@ function ProviderSettings({
   );
 }
 
-const LOCAL_PROVIDER_KIND: ProviderConfigState['provider'] = 'openai-compatible';
+const DEFAULT_PROVIDER_KIND: ProviderConfigState['provider'] = 'openai-compatible';
 const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 68000;
 const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+const providerProtocolOptions: Array<{ value: ProviderConfigState['provider']; label: string; meta: string; placeholder: string }> = [
+  {
+    value: 'openai-compatible',
+    label: 'OpenAI-compatible',
+    meta: 'OpenAI-compatible · AI SDK',
+    placeholder: 'http://127.0.0.1:11434/v1',
+  },
+  {
+    value: 'openai-responses',
+    label: 'OpenAI Responses',
+    meta: 'OpenAI Responses · /responses',
+    placeholder: 'https://api.openai.com/v1',
+  },
+  {
+    value: 'anthropic',
+    label: 'Anthropic Messages',
+    meta: 'Anthropic · /v1/messages',
+    placeholder: 'https://api.anthropic.com',
+  },
+];
 type ModelFetchState = {
   models: RuntimeAvailableModel[];
   error: string;
@@ -1360,7 +1450,7 @@ function selectedProviderIdFromConfig(config: RuntimeConfigState): string {
 function normalizeSettingsProviders(providers: ProviderConfigState[]): ProviderConfigState[] {
   const normalized = (providers.length ? providers : [defaultProviderConfig()]).map((provider) => ({
     ...provider,
-    provider: LOCAL_PROVIDER_KIND,
+    provider: normalizeProviderKind(provider.provider),
     name: provider.name || 'Local provider',
     models: normalizeProviderModels(provider.models),
   }));
@@ -1394,7 +1484,7 @@ function defaultProviderConfig(): ProviderConfigState {
   return {
     id: uniqueLocalId('provider'),
     name: 'Local provider',
-    provider: LOCAL_PROVIDER_KIND,
+    provider: DEFAULT_PROVIDER_KIND,
     baseUrl: 'http://127.0.0.1:11434/v1',
     enabled: true,
     apiKeySet: false,
@@ -1419,12 +1509,37 @@ function defaultProviderModel(code: string, enabled = true): ProviderModelConfig
 function prepareProviderForSave(provider: ProviderConfigState): ProviderConfigState {
   return {
     ...provider,
-    provider: LOCAL_PROVIDER_KIND,
+    provider: normalizeProviderKind(provider.provider),
     models: normalizeProviderModels(provider.models).map((model) => ({
       ...model,
       defaultThinkingEffort: normalizedDefaultThinkingEffort(model),
     })),
   };
+}
+
+function normalizeProviderKind(value: unknown): ProviderConfigState['provider'] {
+  return providerProtocolOptions.find((option) => option.value === value)?.value ?? DEFAULT_PROVIDER_KIND;
+}
+
+function providerProtocolLabel(provider: ProviderConfigState['provider']): string {
+  return providerProtocolOption(provider).label;
+}
+
+function providerProtocolMeta(provider: ProviderConfigState['provider']): string {
+  return providerProtocolOption(provider).meta;
+}
+
+function providerBaseUrlPlaceholder(provider: ProviderConfigState['provider']): string {
+  return providerProtocolOption(provider).placeholder;
+}
+
+function providerProtocolOption(provider: ProviderConfigState['provider']) {
+  return providerProtocolOptions.find((option) => option.value === provider) ?? providerProtocolOptions[0];
+}
+
+function providerApiKeyPlaceholder(provider: ProviderConfigState): string {
+  if (provider.apiKeySet) return '留空则保留当前密钥';
+  return provider.provider === 'openai-compatible' ? '本地服务可留空' : '本地兼容服务可留空';
 }
 
 function ensureProviderActiveModel(provider: ProviderConfigState): ProviderConfigState {

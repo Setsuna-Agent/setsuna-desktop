@@ -1382,7 +1382,6 @@ function ToolRunStatus({ status }: { status: RuntimeToolRun['status'] }) {
 
 function statusTextFromStatus(status: RuntimeToolRun['status']) {
   if (status === 'pending_approval') return '待确认';
-  if (status === 'running') return '运行中';
   if (status === 'rejected') return '已拒绝';
   if (status === 'error') return '失败';
   return '';

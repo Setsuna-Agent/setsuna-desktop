@@ -8,7 +8,7 @@ import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
-import type { DesktopDiffSummary, DesktopPanelTab, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp, ProjectTreeNode } from './model.js';
+import type { DesktopDiffSummary, DesktopPanelTab, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp, ProjectTreeNode } from './model.js';
 
 export function WorkspacePanel({
   activePanel,
@@ -48,7 +48,7 @@ export function WorkspacePanel({
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onGoRoot: () => void;
-  onReviewRefresh: () => void;
+  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   resizeMax: number;
@@ -227,6 +227,7 @@ export function WorkspacePanel({
         latestSummary={latestReviewSummary}
         loading={reviewLoading}
         reviewState={reviewState}
+        workspaceApp={selectedWorkspaceApp}
         onExternalOpenFile={onExternalOpenFile}
         onOpenProjectFile={onOpenProjectFile}
         onRefresh={onReviewRefresh}

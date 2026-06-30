@@ -1,19 +1,19 @@
 import { ArrowLeft } from 'lucide-react';
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   icon?: ReactNode;
 };
 
-export function Button({ className = '', variant = 'secondary', icon, children, type = 'button', ...props }: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ className = '', variant = 'secondary', icon, children, type = 'button', ...props }, ref) {
   return (
-    <button className={`sd-button sd-button--${variant} ${className}`} type={type} {...props}>
+    <button ref={ref} className={`sd-button sd-button--${variant} ${className}`} type={type} {...props}>
       {icon ? <span className="sd-button__icon">{icon}</span> : null}
       {children ? <span className="sd-button__label">{children}</span> : null}
     </button>
   );
-}
+});
 
 type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   label: string;
@@ -21,13 +21,13 @@ type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'secondary' | 'ghost' | 'danger';
 };
 
-export function IconButton({ label, children, className = '', variant = 'ghost', type = 'button', ...props }: IconButtonProps) {
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ label, children, className = '', variant = 'ghost', type = 'button', ...props }, ref) {
   return (
-    <button aria-label={label} title={label} className={`sd-icon-button sd-icon-button--${variant} ${className}`} type={type} {...props}>
+    <button ref={ref} aria-label={label} title={label} className={`sd-icon-button sd-icon-button--${variant} ${className}`} type={type} {...props}>
       {children}
     </button>
   );
-}
+});
 
 export function TextField({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`sd-field ${className}`} {...props} />;

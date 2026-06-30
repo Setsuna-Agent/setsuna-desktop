@@ -165,7 +165,7 @@ export function AppRouteContent({
       onOpenFileReviewPanel={openFileReviewPanel}
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={(filePath) => void projectWorkspace.openProjectFile(filePath)}
-      onReviewRefresh={() => void workspacePanels.loadReviewState()}
+      onReviewRefresh={(options) => void workspacePanels.loadReviewState(options)}
       onSend={(value, options) => void chatActions.sendInput(value, options)}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}

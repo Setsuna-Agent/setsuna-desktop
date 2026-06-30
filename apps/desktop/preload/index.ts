@@ -26,6 +26,8 @@ type DesktopUserProfile = {
   hostName: string | null;
 };
 
+type DesktopOpenPathResult = { ok: true } | { ok: false; error: string };
+
 type DesktopUpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
 
 type DesktopUpdaterProgress = {
@@ -88,6 +90,7 @@ const desktop = {
   platform: process.platform,
   selectDirectory: (options?: { title?: string }): Promise<string | null> => ipcRenderer.invoke('desktop:select-directory', options ?? {}),
   getUserProfile: (): Promise<DesktopUserProfile> => ipcRenderer.invoke('desktop:get-user-profile'),
+  openPath: (targetPath: string): Promise<DesktopOpenPathResult> => ipcRenderer.invoke('desktop:open-path', targetPath),
 };
 
 const windowControls = {
@@ -115,7 +118,8 @@ const updater = {
 };
 
 const desktopReview = {
-  getState: (workspaceRoot: string): Promise<unknown> => ipcRenderer.invoke('desktop-review:get-state', { workspaceRoot }),
+  getState: (workspaceRoot: string, options?: { baseRef?: string | null }): Promise<unknown> =>
+    ipcRenderer.invoke('desktop-review:get-state', { workspaceRoot, baseRef: options?.baseRef ?? null }),
   discardUnstaged: (workspaceRoot: string, filePaths: string[]): Promise<unknown> =>
     ipcRenderer.invoke('desktop-review:discard-unstaged', { workspaceRoot, filePaths }),
   stageFiles: (workspaceRoot: string, filePaths: string[]): Promise<unknown> =>

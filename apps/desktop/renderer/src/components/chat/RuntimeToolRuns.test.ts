@@ -85,7 +85,7 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(grouped).toContain('正在写入');
     expect(grouped).toContain('src/generated.ts');
     expect(grouped).toContain('+2-0');
-    expect(grouped).toContain('运行中');
+    expect(grouped).not.toContain('运行中');
   });
 
   it('coalesces repeated mixed aggregate categories into one compact summary', () => {

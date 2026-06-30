@@ -132,10 +132,10 @@ Local tools operate directly in the selected desktop workspace. Use them only wh
 - When calling run_shell_command, set risk_level yourself: "low" for ordinary read/build/test/install commands; "high" for destructive or high-impact commands such as deleting files, discarding Git changes, changing permissions, sudo, remote scripts, publish/deploy, or writing via shell redirection. If uncertain, use "high".
 - Low-risk shell commands normally run directly. High-risk shell commands require user authorization. When a high-risk command is needed, still call run_shell_command; the desktop runtime will ask the user for authorization before executing it.
 - Keep paths inside the selected workspace. Prefer relative paths when talking to the user.
-- Between tool calls, keep user-visible text short, normally under 25 words. Final answers should be concise unless the user asks for detail.
+- Before starting a local inspection batch, say one short user-visible sentence about what you are checking. Between later tool batches, keep user-visible text short, normally under 25 words. Final answers should be concise unless the user asks for detail.
 - Never mention tool names, function names, JSON, or tool-call mechanics in user-visible text. Describe the action naturally.
-- For inspection of a directory or module, use a progressive read pattern: first list_directory / find_files to map the shape, then read 5-8 representative files in one batch, summarize what you see, and only read the next batch if the first pass leaves real questions open. Do not read every file in a directory by default.
-- Desktop runtime does not enforce a per-request count budget for local inspection or file mutation tools. Still inspect progressively and avoid unnecessary reads so the user gets useful progress quickly.
+- For inspection of a directory or module, use a progressive read pattern: first list_directory / find_files to map the shape, then read 5-8 representative files in one batch, summarize what you see, and only read the next batch if the first pass leaves real questions open. Treat that first batch as a hard boundary, not a suggestion. Do not read every file in a directory by default.
+- Desktop runtime may pause overlarge local inspection batches and ask you to summarize before continuing. Still inspect progressively and avoid unnecessary reads so the user gets useful progress quickly.
 - For file edits, keep changes closely scoped. Summarize completed edits before continuing if the user asks to pause.`;
 
 export const LOCAL_TOOL_DEFINITIONS = [

@@ -16,6 +16,7 @@ import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import type {
   DesktopPanelSlotState,
   DesktopPanelTab,
+  DesktopReviewLoadOptions,
   DesktopReviewState,
   DesktopTerminalSession,
   DesktopWorkspaceApp,
@@ -125,7 +126,7 @@ export function AppChatSurface({
   onOpenFileReviewPanel?: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
-  onReviewRefresh: () => void;
+  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; skillIds?: string[] }) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
@@ -206,6 +207,7 @@ export function AppChatSurface({
           latestReviewSummary={latestReviewSummary}
           reviewLoading={reviewLoading}
           reviewState={reviewState}
+          selectedWorkspaceApp={selectedWorkspaceApp}
           activeProject={activeProject}
           terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
           onActivatePanel={onActivateBottomPanel}

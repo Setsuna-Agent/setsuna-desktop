@@ -15,12 +15,7 @@ import { readJsonFile, writeJsonFile } from './json-file.js';
 
 type StoredMemoryRecord = RuntimeMemoryRecord & {
   kind?: string;
-  origin?: 'active' | 'passive';
-  source?: string;
   status?: string;
-  tags?: string[];
-  title?: string;
-  workspaceRoot?: string;
 };
 
 type MemoryIndex = {
@@ -86,8 +81,13 @@ export class FileMemoryStore implements MemoryStore {
       scope,
       projectId: scope === 'project' ? input.projectId : undefined,
       content,
+      origin: input.origin === 'passive' ? 'passive' : 'active',
+      source: optionalText(input.source),
       sourceThreadId: input.sourceThreadId,
       sourceTurnId: input.sourceTurnId,
+      title: optionalText(input.title),
+      tags: normalizeTags(input.tags),
+      workspaceRoot: optionalText(input.workspaceRoot),
       createdAt: now,
       updatedAt: now,
     };
@@ -179,6 +179,16 @@ function clampLimit(value: unknown): number {
 
 function normalizeStorageRoot(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeTags(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const tags = [...new Set(value.map(optionalText).filter((tag): tag is string => Boolean(tag)))];
+  return tags.length ? tags : undefined;
 }
 
 function isInactiveMemory(memory: StoredMemoryRecord): boolean {

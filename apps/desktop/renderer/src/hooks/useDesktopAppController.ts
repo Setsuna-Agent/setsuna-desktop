@@ -138,7 +138,7 @@ export function useDesktopAppController() {
 
   const shellStyle = {
     '--app-sidebar-width': activeView === 'settings' || sidebarCollapsed ? '0px' : `${sidebarWidth}px`,
-    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarCollapsed ? '116px' : `${sidebarWidth}px`,
+    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarCollapsed ? '150px' : `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
     '--desktop-agent-workspace-width': sidePanelVisible ? `${workspaceWidth}px` : '0px',
     '--app-bottom-panel-height': bottomPanelVisible ? `${terminalHeight}px` : '0px',

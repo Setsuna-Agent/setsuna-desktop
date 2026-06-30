@@ -187,10 +187,25 @@
 
 .desktop-agent-page--sidebar-collapsed .app-topbar__brand {
   gap: 4px;
+  background: var(--app-bg);
 }
 
-.desktop-agent-page--sidebar-collapsed .app-topbar__brand .sd-icon-button:not(:first-child),
-.desktop-agent-page--settings-open .app-topbar__brand .sd-icon-button:not(:first-child) {
+.desktop-agent-page--settings-open .app-topbar__brand {
+  border-right: 1px solid color-mix(in srgb, var(--app-border) 62%, transparent);
+  background: color-mix(in srgb, var(--app-sidebar-bg) 86%, var(--app-bg) 14%);
+}
+
+.app-topbar .app-topbar__new-chat {
+  display: none;
+}
+
+.desktop-agent-page--sidebar-collapsed .app-topbar .app-topbar__new-chat {
+  display: inline-flex;
+}
+
+.desktop-agent-page--settings-open .app-topbar .app-topbar__new-chat,
+.desktop-agent-page--sidebar-collapsed .app-topbar .app-topbar__history-button,
+.desktop-agent-page--settings-open .app-topbar .app-topbar__history-button {
   display: none;
 }
 

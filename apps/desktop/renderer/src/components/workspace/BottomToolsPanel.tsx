@@ -2,7 +2,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
-import type { DesktopDiffSummary, DesktopPanelTab, DesktopPanelType, DesktopReviewState, DesktopTerminalSession } from './model.js';
+import type { DesktopDiffSummary, DesktopPanelTab, DesktopPanelType, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp } from './model.js';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 export function BottomToolsPanel({
@@ -13,6 +13,7 @@ export function BottomToolsPanel({
   reviewError,
   reviewLoading,
   reviewState,
+  selectedWorkspaceApp,
   terminalSession,
   onActivatePanel,
   onClosePanel,
@@ -35,6 +36,7 @@ export function BottomToolsPanel({
   reviewError: string | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
+  selectedWorkspaceApp: DesktopWorkspaceApp | null;
   terminalSession: DesktopTerminalSession | null;
   onActivatePanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
@@ -43,7 +45,7 @@ export function BottomToolsPanel({
   onOpenProjectFile: (filePath: string) => void;
   onOpenReviewPanel: () => void;
   onOpenTerminalPanel: () => void;
-  onReviewRefresh: () => void;
+  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   resizeMax: number;
@@ -105,6 +107,7 @@ export function BottomToolsPanel({
             latestSummary={latestReviewSummary}
             loading={reviewLoading}
             reviewState={reviewState}
+            workspaceApp={selectedWorkspaceApp}
             onExternalOpenFile={onExternalOpenFile}
             onOpenProjectFile={onOpenProjectFile}
             onRefresh={onReviewRefresh}

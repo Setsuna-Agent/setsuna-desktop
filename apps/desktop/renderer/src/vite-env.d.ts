@@ -27,6 +27,8 @@ type DesktopUserProfile = {
   hostName: string | null;
 };
 
+type DesktopOpenPathResult = { ok: true } | { ok: false; error: string };
+
 type DesktopUpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
 
 type DesktopUpdaterProgress = {
@@ -89,6 +91,7 @@ type DesktopReviewState = {
   gitRoot: string | null;
   currentBranch: string | null;
   baseRef: string | null;
+  baseRefs: string[];
   branchSummary: DesktopDiffSummary | null;
   stagedSummary: DesktopDiffSummary | null;
   unstagedSummary: DesktopDiffSummary | null;
@@ -107,9 +110,10 @@ declare global {
         platform: string;
         selectDirectory(options?: { title?: string }): Promise<string | null>;
         getUserProfile(): Promise<DesktopUserProfile>;
+        openPath(targetPath: string): Promise<DesktopOpenPathResult>;
       };
       desktopReview: {
-        getState(workspaceRoot: string): Promise<DesktopReviewState>;
+        getState(workspaceRoot: string, options?: { baseRef?: string | null }): Promise<DesktopReviewState>;
         discardUnstaged(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
         stageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
         unstageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;

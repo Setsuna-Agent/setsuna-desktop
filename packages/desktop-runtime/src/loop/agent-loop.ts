@@ -2,6 +2,7 @@ import type {
   ModelRequest,
   RuntimeApprovalDecision,
   RuntimeConfigState,
+  RuntimeMemoryScope,
   RuntimeMessage,
   RuntimeThread,
   RuntimeToolCall,
@@ -50,6 +51,13 @@ const MAX_TOOL_ROUNDS = 200;
 const MAX_READ_FILE_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_INSPECTION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_FILE_MUTATION_CALLS_PER_RUN: ToolBudgetLimit = null;
+const MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE = 8;
+const MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND = 8;
+const INSPECTION_PROGRESS_NOTE = '我先查看项目结构和第一批关键文件，读完后再继续收敛。\n\n';
+const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
+const PASSIVE_MEMORY_MAX_ITEMS = 5;
+const PASSIVE_MEMORY_MAX_OUTPUT_TOKENS = 900;
+const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
 const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'workspace_write_file']);
@@ -65,6 +73,12 @@ type ToolBudget = {
 type ToolBudgetBlock = {
   content: string;
   display: string;
+};
+type PassiveMemoryCandidate = {
+  content: string;
+  scope: RuntimeMemoryScope;
+  title?: string;
+  tags?: string[];
 };
 type RuntimeToolExecutionContext = ToolExecutionContext & {
   turnId: string;
@@ -479,6 +493,9 @@ export class AgentLoop {
 
         if (toolCalls.length) {
           throwIfAborted(signal);
+          if (shouldPublishInspectionProgressNote(roundText, toolCalls)) {
+            await appendRoundText(INSPECTION_PROGRESS_NOTE);
+          }
           await this.completeMessage(threadId, turnId, assistantMessageId, { toolCalls });
           activeAssistantMessageId = null;
           modelMessages.push({
@@ -487,7 +504,7 @@ export class AgentLoop {
             toolCalls,
             status: 'complete',
           });
-          const toolMessages = await this.runToolCalls(toolCalls, toolContext, toolBudget, runtimeConfig?.approvalPolicy ?? 'on-request');
+          const toolMessages = await this.runToolCalls(toolCalls, toolContext, toolBudget, runtimeConfig?.approvalPolicy ?? 'on-request', new Set(announcedToolPreviews.keys()));
           if (toolMessages.some(isSuccessfulRememberMemoryMessage)) memorySavedByTool = true;
           modelMessages.push(...toolMessages);
           continue;
@@ -688,6 +705,98 @@ export class AgentLoop {
       createdAt: this.options.clock.now().toISOString(),
       payload: { usage },
     });
+    await this.extractPassiveMemoriesForTurn(threadId, turnId).catch(() => undefined);
+  }
+
+  private async extractPassiveMemoriesForTurn(threadId: string, turnId: string): Promise<void> {
+    if (!this.options.memoryStore) return;
+    const config = await this.options.configStore?.getConfig().catch(() => null);
+    if (config?.memoryEnabled === false) return;
+
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread) return;
+    if (turnAlreadySavedMemory(thread.messages, turnId)) return;
+    const turnMessages = passiveMemorySourceMessages(thread.messages, turnId);
+    if (!turnMessages.length) return;
+
+    let text = '';
+    let usage: RuntimeUsage | undefined;
+    for await (const item of this.options.modelClient.stream({
+      model: PASSIVE_MEMORY_MODEL,
+      messages: this.passiveMemoryPromptMessages(thread, turnMessages),
+      maxOutputTokens: PASSIVE_MEMORY_MAX_OUTPUT_TOKENS,
+      temperature: 0,
+      toolChoice: 'none',
+    })) {
+      if (item.type === 'text_delta') text += item.text;
+      if (item.type === 'usage') usage = item.usage;
+    }
+    if (usage) {
+      await this.options.usageStore?.recordUsage({
+        threadId,
+        turnId,
+        createdAt: this.options.clock.now().toISOString(),
+        ...usage,
+      });
+    }
+
+    const candidates = passiveMemoryCandidatesFromModelText(text, thread.projectId);
+    if (!candidates.length) return;
+
+    const existing = await this.options.memoryStore.listMemories(
+      thread.projectId ? { projectId: thread.projectId, limit: 500 } : { limit: 500 },
+    ).catch(() => ({ memories: [] }));
+    const seen = new Set(existing.memories.map((memory) => memoryDedupeText(memory.content)));
+    for (const candidate of candidates) {
+      const key = memoryDedupeText(candidate.content);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      await this.options.memoryStore.rememberMemory({
+        content: candidate.content,
+        scope: candidate.scope,
+        projectId: candidate.scope === 'project' ? thread.projectId : undefined,
+        origin: 'passive',
+        source: thread.title,
+        sourceThreadId: threadId,
+        sourceTurnId: turnId,
+        title: candidate.title,
+        tags: candidate.tags,
+      });
+    }
+  }
+
+  private passiveMemoryPromptMessages(thread: RuntimeThread, messages: RuntimeMessage[]): RuntimeMessage[] {
+    const now = this.options.clock.now().toISOString();
+    return [
+      {
+        id: 'passive_memory_system',
+        role: 'system',
+        content: [
+          '你是 Setsuna Desktop 的被动记忆抽取器。',
+          '只从当前刚完成的一轮对话里提取未来长期有用的信息：用户稳定偏好、项目规则、事实、决策或可复用流程。',
+          '不要保存一次性问题、普通寒暄、临时调试输出、文件内容、命令输出、密钥、账号、隐私数据或不确定推断。',
+          '没有值得长期保留的信息时返回 {"memories":[]}。',
+          `最多输出 ${PASSIVE_MEMORY_MAX_ITEMS} 条。输出严格 JSON，不要 Markdown，不要解释。`,
+          'JSON 结构：{"memories":[{"content":"自包含记忆内容","title":"短标题","scope":"global|project","tags":["可选标签"]}]}。',
+        ].join('\n'),
+        createdAt: now,
+        status: 'complete',
+      },
+      {
+        id: 'passive_memory_user',
+        role: 'user',
+        content: [
+          `线程标题：${thread.title}`,
+          `项目 ID：${thread.projectId || '(none)'}`,
+          thread.projectId ? '如果记忆只适用于该项目，scope 使用 project；否则使用 global。' : '当前没有项目 ID，scope 只能使用 global。',
+          '',
+          '当前完成的一轮对话：',
+          messagesAsPassiveMemorySource(messages),
+        ].join('\n'),
+        createdAt: now,
+        status: 'complete',
+      },
+    ];
   }
 
   private async rememberExplicitUserMemory(
@@ -940,17 +1049,29 @@ export class AgentLoop {
     context: RuntimeToolExecutionContext,
     toolBudget: ToolBudget,
     approvalPolicy: RuntimeConfigState['approvalPolicy'],
+    previewedToolCallIds: ReadonlySet<string> = new Set(),
   ): Promise<RuntimeMessage[]> {
     if (!this.options.toolHost) return [];
     const messages: RuntimeMessage[] = [];
+    let inspectionCallsExecutedThisRound = 0;
     for (let index = 0; index < toolCalls.length;) {
+      if (inspectionCallsExecutedThisRound >= MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND) {
+        for (; index < toolCalls.length; index += 1) {
+          messages.push(await this.publishDeferredToolMessage(context.threadId, context.turnId, toolCalls[index], inspectionCallsExecutedThisRound, previewedToolCallIds));
+        }
+        break;
+      }
+
       const parallelBatch = await this.collectParallelToolBatch(toolCalls, index, context, toolBudget, approvalPolicy);
       if (parallelBatch.length > 1) {
         const executions = await Promise.all(parallelBatch.map((toolCall) =>
           this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, { checkBudget: false, skipApproval: true })
         ));
         for (let batchIndex = 0; batchIndex < parallelBatch.length; batchIndex += 1) {
-          if (executions[batchIndex].processed) markToolBudgetProcessed(toolBudget, parallelBatch[batchIndex]);
+          if (executions[batchIndex].processed) {
+            markToolBudgetProcessed(toolBudget, parallelBatch[batchIndex]);
+            if (isInspectionToolCall(parallelBatch[batchIndex])) inspectionCallsExecutedThisRound += 1;
+          }
           messages.push(executions[batchIndex].message);
         }
         index += parallelBatch.length;
@@ -959,7 +1080,10 @@ export class AgentLoop {
 
       const toolCall = toolCalls[index];
       const execution = await this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy);
-      if (execution.processed) markToolBudgetProcessed(toolBudget, toolCall);
+      if (execution.processed) {
+        markToolBudgetProcessed(toolBudget, toolCall);
+        if (isInspectionToolCall(toolCall)) inspectionCallsExecutedThisRound += 1;
+      }
       messages.push(execution.message);
       index += 1;
     }
@@ -977,6 +1101,7 @@ export class AgentLoop {
     const readFileKeys = new Set<string>();
     const batch: RuntimeToolCall[] = [];
     for (let index = startIndex; index < toolCalls.length; index += 1) {
+      if (batch.length >= MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE) break;
       const toolCall = toolCalls[index];
       const parsedArguments = parseToolArguments(toolCall.arguments);
       if (!(await this.canRunToolCallInParallel(toolCall, parsedArguments, context, approvalPolicy))) break;
@@ -1097,6 +1222,27 @@ export class AgentLoop {
     };
     await this.publishMessage(threadId, turnId, message);
     return message;
+  }
+
+  private async publishDeferredToolMessage(
+    threadId: string,
+    turnId: string,
+    toolCall: RuntimeToolCall,
+    executedInspectionCount: number,
+    previewedToolCallIds: ReadonlySet<string>,
+  ): Promise<RuntimeMessage> {
+    const content = deferredToolCallContent(toolCall, executedInspectionCount);
+    if (previewedToolCallIds.has(toolCall.id)) {
+      await this.publishToolCompleted(
+        threadId,
+        turnId,
+        toolCall,
+        parseToolArguments(toolCall.arguments),
+        'error',
+        deferredToolCallDisplay(executedInspectionCount),
+      );
+    }
+    return this.publishToolMessage(threadId, turnId, toolCall, content);
   }
 
   private async publishToolStarted(threadId: string, turnId: string, toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string): Promise<void> {
@@ -1299,6 +1445,32 @@ function mergeToolArgumentDelta(current: string, delta: string): string {
   return `${current}${delta}`;
 }
 
+function shouldPublishInspectionProgressNote(roundText: string, toolCalls: RuntimeToolCall[]): boolean {
+  if (stripThinkingMarkup(roundText).trim()) return false;
+  return toolCalls.filter(isInspectionToolCall).length > 1;
+}
+
+function isInspectionToolCall(toolCall: RuntimeToolCall): boolean {
+  return INSPECTION_TOOL_NAMES.has(toolCall.name);
+}
+
+function deferredToolCallDisplay(executedInspectionCount: number): string {
+  return `本轮已先执行 ${executedInspectionCount} 个本地查看，后续操作已暂缓。`;
+}
+
+function deferredToolCallContent(toolCall: RuntimeToolCall, executedInspectionCount: number): string {
+  return [
+    `Deferred by desktop runtime: ${toolCall.name} was not executed.`,
+    `The current model response already executed ${executedInspectionCount} local inspection calls.`,
+    'Summarize the completed inspection batch before requesting more workspace inspection.',
+    'Do not assume this deferred tool call happened.',
+  ].join('\n');
+}
+
+function stripThinkingMarkup(value: string): string {
+  return value.replace(/<think>[\s\S]*?<\/think>/g, '');
+}
+
 function toolBudgetBlockForCall(toolCall: RuntimeToolCall, budget: ToolBudget): ToolBudgetBlock | null {
   const name = toolCall.name;
   const readFileLimit = MAX_READ_FILE_CALLS_PER_RUN;
@@ -1484,6 +1656,93 @@ function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
     .join('\n\n');
 }
 
+function passiveMemorySourceMessages(messages: RuntimeMessage[], turnId: string): RuntimeMessage[] {
+  const scoped = messages.filter((message) =>
+    message.turnId === turnId
+    && message.visibility !== 'transcript'
+    && (message.role === 'user' || message.role === 'assistant')
+    && Boolean(message.content.trim())
+  );
+  const hasUser = scoped.some((message) => message.role === 'user');
+  const hasAssistant = scoped.some((message) => message.role === 'assistant');
+  return hasUser && hasAssistant ? scoped : [];
+}
+
+function turnAlreadySavedMemory(messages: RuntimeMessage[], turnId: string): boolean {
+  return messages.some((message) =>
+    message.turnId === turnId
+    && (
+      message.toolRuns?.some((run) => run.name === REMEMBER_MEMORY_TOOL_NAME && run.status === 'success')
+      || (message.role === 'tool' && message.toolName === REMEMBER_MEMORY_TOOL_NAME && message.content.startsWith('Saved memory '))
+    )
+  );
+}
+
+function messagesAsPassiveMemorySource(messages: RuntimeMessage[]): string {
+  return messages
+    .map((message, index) => {
+      const role = message.role === 'user' ? '用户' : '助手';
+      const content = compactForPrompt(message.contextCompaction ? stripContextCompactionTags(message.content) : message.content, 2500);
+      const attachments = message.attachments?.length
+        ? `\n附件：${message.attachments.map((item) => `${item.name || 'attachment'}(${item.type || 'unknown'}, ${item.size || 0} bytes)`).join('；')}`
+        : '';
+      return `#${index + 1} ${role} ${message.createdAt}\n${content || '(empty)'}${attachments}`;
+    })
+    .join('\n\n');
+}
+
+function passiveMemoryCandidatesFromModelText(value: string, projectId: string | undefined): PassiveMemoryCandidate[] {
+  const parsed = parseJsonObjectFromText(value);
+  const rawMemories = Array.isArray(parsed?.memories) ? parsed.memories : parseJsonArrayFromText(value);
+  const candidates: PassiveMemoryCandidate[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawMemories) {
+    const candidate = normalizePassiveMemoryCandidate(raw, projectId);
+    if (!candidate) continue;
+    const key = memoryDedupeText(candidate.content);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(candidate);
+    if (candidates.length >= PASSIVE_MEMORY_MAX_ITEMS) break;
+  }
+  return candidates;
+}
+
+function normalizePassiveMemoryCandidate(value: unknown, projectId: string | undefined): PassiveMemoryCandidate | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const content = normalizePassiveMemoryText(record.content, 2000);
+  if (!content) return null;
+  return {
+    content,
+    scope: passiveMemoryScope(record.scope, projectId),
+    title: normalizePassiveMemoryText(record.title, 80),
+    tags: passiveMemoryTags(record.tags),
+  };
+}
+
+function passiveMemoryScope(value: unknown, projectId: string | undefined): RuntimeMemoryScope {
+  if (value === 'project' && projectId) return 'project';
+  return 'global';
+}
+
+function passiveMemoryTags(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const tags = [...new Set(value.map((item) => normalizePassiveMemoryText(item, 24)).filter((tag): tag is string => Boolean(tag)))];
+  return tags.length ? tags.slice(0, 6) : undefined;
+}
+
+function normalizePassiveMemoryText(value: unknown, maxChars: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (!text) return undefined;
+  return Array.from(text).slice(0, maxChars).join('');
+}
+
+function memoryDedupeText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
   return messages.filter((message) => message.visibility !== 'transcript');
 }
@@ -1517,10 +1776,29 @@ function parseJsonObjectFromText(value: string): Record<string, unknown> | null 
   return tryParseJsonObject(value.slice(start, end + 1));
 }
 
+function parseJsonArrayFromText(value: string): unknown[] {
+  const text = stripMarkdownFence(value).trim();
+  const direct = tryParseJsonArray(text);
+  if (direct) return direct;
+  const start = text.indexOf('[');
+  const end = text.lastIndexOf(']');
+  if (start < 0 || end <= start) return [];
+  return tryParseJsonArray(text.slice(start, end + 1)) ?? [];
+}
+
 function tryParseJsonObject(value: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(value) as unknown;
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function tryParseJsonArray(value: string): unknown[] | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
   }

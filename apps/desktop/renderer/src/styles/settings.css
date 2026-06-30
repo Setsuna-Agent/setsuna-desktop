@@ -229,6 +229,23 @@
   max-width: 360px;
 }
 
+.desktop-settings-panel .chat-user-settings__path-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__path-control code {
+  justify-self: stretch;
+}
+
+.desktop-settings-panel .chat-user-settings__path-open.sd-button {
+  min-height: 30px;
+  padding: 0 9px;
+}
+
 .desktop-settings-panel .chat-user-settings__section--general .settings-local-control {
   max-width: 260px;
 }
@@ -515,7 +532,8 @@
   min-width: 0;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-error {
+.desktop-settings-panel .chat-user-settings__memory-error,
+.desktop-settings-panel .chat-user-settings__runtime-error {
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 28%, transparent);
   border-radius: 7px;

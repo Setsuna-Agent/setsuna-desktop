@@ -34,9 +34,14 @@ export type DesktopReviewState = {
   gitRoot: string | null;
   currentBranch: string | null;
   baseRef: string | null;
+  baseRefs: string[];
   branchSummary: DesktopDiffSummary | null;
   stagedSummary: DesktopDiffSummary | null;
   unstagedSummary: DesktopDiffSummary | null;
+};
+
+export type DesktopReviewStateOptions = {
+  baseRef?: string | null;
 };
 
 export type DesktopReviewActionResult = {
@@ -48,7 +53,7 @@ export type DesktopReviewActionResult = {
 const MAX_DIFF_LINES_PER_FILE = 2500;
 const MAX_UNTRACKED_FILE_BYTES = 512 * 1024;
 
-export async function getDesktopReviewState(workspaceRoot: string): Promise<DesktopReviewState> {
+export async function getDesktopReviewState(workspaceRoot: string, options: DesktopReviewStateOptions = {}): Promise<DesktopReviewState> {
   const root = await resolveWorkspaceDirectory(workspaceRoot);
   const gitRoot = await gitRootFor(root);
   if (!gitRoot) {
@@ -58,6 +63,7 @@ export async function getDesktopReviewState(workspaceRoot: string): Promise<Desk
       gitRoot: null,
       currentBranch: null,
       baseRef: null,
+      baseRefs: [],
       branchSummary: null,
       stagedSummary: null,
       unstagedSummary: null,
@@ -65,9 +71,10 @@ export async function getDesktopReviewState(workspaceRoot: string): Promise<Desk
   }
 
   const currentBranch = await currentGitBranch(gitRoot);
-  const baseRef = await resolveBaseRef(gitRoot);
+  const baseRefs = await listBaseRefs(gitRoot);
+  const baseRef = await resolveBaseRef(gitRoot, options.baseRef, baseRefs, currentBranch);
   const [branchSummary, stagedSummary, unstagedSummary] = await Promise.all([
-    baseRef ? diffSummary(gitRoot, [baseRef, 'HEAD', '--']) : Promise.resolve(null),
+    baseRef ? branchDiffSummary(gitRoot, baseRef) : Promise.resolve(null),
     diffSummary(gitRoot, ['--cached', '--']),
     unstagedDiffSummary(gitRoot),
   ]);
@@ -78,6 +85,7 @@ export async function getDesktopReviewState(workspaceRoot: string): Promise<Desk
     gitRoot,
     currentBranch,
     baseRef,
+    baseRefs,
     branchSummary,
     stagedSummary,
     unstagedSummary,
@@ -181,14 +189,56 @@ async function currentGitBranch(gitRoot: string): Promise<string | null> {
   return runGit(['rev-parse', '--short', 'HEAD'], gitRoot).catch(() => null);
 }
 
-async function resolveBaseRef(gitRoot: string): Promise<string | null> {
-  const upstream = await runGit(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], gitRoot).catch(() => '');
-  if (upstream) return upstream;
-  for (const candidate of ['origin/main', 'origin/master', 'main', 'master']) {
-    const exists = await runGit(['rev-parse', '--verify', candidate], gitRoot).then(() => true).catch(() => false);
-    if (exists) return candidate;
+async function listBaseRefs(gitRoot: string): Promise<string[]> {
+  const [localRefs, remoteRefs] = await Promise.all([
+    runGit(['for-each-ref', '--format=%(refname:short)', 'refs/heads'], gitRoot).catch(() => ''),
+    runGit(['for-each-ref', '--format=%(refname:short)', 'refs/remotes'], gitRoot).catch(() => ''),
+  ]);
+  const refs = [...localRefs.split(/\r?\n/), ...remoteRefs.split(/\r?\n/)]
+    .map((line) => line.trim())
+    .filter((ref) => ref && !ref.endsWith('/HEAD'));
+  return sortBaseRefs([...new Set(refs)]);
+}
+
+function sortBaseRefs(refs: string[]): string[] {
+  const priority = new Map(['origin/main', 'origin/master', 'upstream/main', 'upstream/master', 'main', 'master'].map((ref, index) => [ref, index]));
+  return [...refs].sort((left, right) => {
+    const leftPriority = priority.get(left);
+    const rightPriority = priority.get(right);
+    if (leftPriority !== undefined || rightPriority !== undefined) return (leftPriority ?? Number.MAX_SAFE_INTEGER) - (rightPriority ?? Number.MAX_SAFE_INTEGER);
+    return left.localeCompare(right);
+  });
+}
+
+async function resolveBaseRef(
+  gitRoot: string,
+  requestedBaseRef: string | null | undefined,
+  baseRefs: string[],
+  currentBranch: string | null,
+): Promise<string | null> {
+  const requested = requestedBaseRef?.trim();
+  if (requested && baseRefs.includes(requested)) return requested;
+  for (const candidate of defaultBaseRefCandidates(currentBranch)) {
+    if (baseRefs.includes(candidate)) return candidate;
   }
-  return null;
+  const upstream = await runGit(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], gitRoot).catch(() => '');
+  if (upstream && baseRefs.includes(upstream)) return upstream;
+  return baseRefs[0] ?? null;
+}
+
+function defaultBaseRefCandidates(currentBranch: string | null): string[] {
+  if (currentBranch === 'master') return ['origin/master', 'upstream/master', 'master', 'origin/main', 'upstream/main', 'main'];
+  if (currentBranch === 'main') return ['origin/main', 'upstream/main', 'main', 'origin/master', 'upstream/master', 'master'];
+  return ['origin/main', 'origin/master', 'upstream/main', 'upstream/master', 'main', 'master'];
+}
+
+async function branchDiffSummary(gitRoot: string, baseRef: string): Promise<DesktopDiffSummary> {
+  const mergeBase = await runGit(['merge-base', baseRef, 'HEAD'], gitRoot).catch(() => baseRef);
+  const [tracked, untracked] = await Promise.all([
+    diffSummary(gitRoot, [mergeBase, '--']),
+    untrackedDiffSummary(gitRoot),
+  ]);
+  return mergeDiffSummaries(tracked, untracked);
 }
 
 async function unstagedDiffSummary(gitRoot: string): Promise<DesktopDiffSummary> {
@@ -199,11 +249,23 @@ async function unstagedDiffSummary(gitRoot: string): Promise<DesktopDiffSummary>
       .catch(() => []),
   ]);
   const untracked = await Promise.all(untrackedFiles.map((filePath) => summarizeUntrackedFile(gitRoot, filePath)));
-  return mergeDiffSummaries(tracked, {
-    files: untracked.filter((file): file is DesktopDiffFile => Boolean(file)),
-    additions: untracked.reduce((total, file) => total + (file?.additions ?? 0), 0),
+  return mergeDiffSummaries(tracked, untrackedSummary(untracked));
+}
+
+async function untrackedDiffSummary(gitRoot: string): Promise<DesktopDiffSummary> {
+  const untrackedFiles = await runGit(['ls-files', '--others', '--exclude-standard'], gitRoot)
+    .then((output) => output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))
+    .catch(() => []);
+  const untracked = await Promise.all(untrackedFiles.map((filePath) => summarizeUntrackedFile(gitRoot, filePath)));
+  return untrackedSummary(untracked);
+}
+
+function untrackedSummary(files: Array<DesktopDiffFile | null>): DesktopDiffSummary {
+  return {
+    files: files.filter((file): file is DesktopDiffFile => Boolean(file)),
+    additions: files.reduce((total, file) => total + (file?.additions ?? 0), 0),
     deletions: 0,
-  });
+  };
 }
 
 async function diffSummary(gitRoot: string, diffArgs: string[]): Promise<DesktopDiffSummary> {

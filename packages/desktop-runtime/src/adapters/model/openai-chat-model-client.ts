@@ -5,6 +5,7 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   arrayValue,
   assertOkResponse,
+  bearerAuthHeader,
   doneEvent,
   normalizeOpenAiUsage,
   objectValue,
@@ -31,7 +32,7 @@ export class OpenAiChatModelClient implements ModelClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.provider.apiKey}`,
+        ...bearerAuthHeader(this.provider.apiKey),
       },
       signal: request.signal,
       body: JSON.stringify({

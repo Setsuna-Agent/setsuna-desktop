@@ -72,6 +72,7 @@
   --chat-code-highlighter-bg: #fafafa;
   --chat-content-max-width: 750px;
   --chat-content-inline-padding: 28px;
+  --chat-message-footer-gap: 3px;
   --chat-input-shadow: none;
   --chat-scrollbar-width: 8px;
   --chat-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 34%, transparent);

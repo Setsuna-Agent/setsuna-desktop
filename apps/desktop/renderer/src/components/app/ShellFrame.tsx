@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Maximize2, Minus, PanelLeft, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Maximize2, Minus, PanelLeft, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type Ref } from 'react';
 import { IconButton } from '../primitives.js';
 import { usesCustomFrameLayout } from '../../utils/desktopPlatform.js';
@@ -33,6 +33,7 @@ export function ShellFrame({
   style,
   sidebarCollapsed = false,
   onToggleSidebar,
+  showSidebarToggle = true,
   toolbarTitle,
   viewTabs,
   workspaceToolbar,
@@ -47,6 +48,7 @@ export function ShellFrame({
   style?: CSSProperties;
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  showSidebarToggle?: boolean;
   toolbarTitle?: ReactNode;
   viewTabs?: ReactNode;
   workspaceToolbar?: ReactNode;
@@ -56,13 +58,22 @@ export function ShellFrame({
   inspectorOpen?: boolean;
 }) {
   const customFrame = usesCustomFrameLayout();
-  const topbarMenuActions = useMemo(() => ({ ...menuActions, onToggleSidebar }), [menuActions, onToggleSidebar]);
+  const sidebarToggleAction = showSidebarToggle ? onToggleSidebar : undefined;
+  const topbarMenuActions = useMemo(
+    () => ({ ...menuActions, onToggleSidebar: sidebarToggleAction }),
+    [menuActions, sidebarToggleAction],
+  );
 
   return (
     <div ref={rootRef} className={`app-shell desktop-agent-page ${className}`} style={style}>
       <header className="app-topbar">
         <div className="app-topbar__brand">
-          <TitlebarNavigation sidebarCollapsed={sidebarCollapsed} onToggleSidebar={onToggleSidebar} />
+          <TitlebarNavigation
+            sidebarCollapsed={sidebarCollapsed}
+            showSidebarToggle={showSidebarToggle}
+            onNewChat={menuActions?.onNewChat}
+            onToggleSidebar={sidebarToggleAction}
+          />
           {customFrame ? <WindowTopbarMenu actions={topbarMenuActions} /> : null}
           {customFrame && status ? <div className="app-topbar__status">{status}</div> : null}
         </div>
@@ -92,25 +103,36 @@ export function ShellFrame({
 }
 
 function TitlebarNavigation({
+  onNewChat,
   sidebarCollapsed,
+  showSidebarToggle,
   onToggleSidebar,
 }: {
+  onNewChat?: () => void;
   sidebarCollapsed: boolean;
+  showSidebarToggle: boolean;
   onToggleSidebar?: () => void;
 }) {
   return (
     <div className="app-topbar__nav">
-      <IconButton
-        label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-        className={!sidebarCollapsed ? 'is-active' : ''}
-        onClick={onToggleSidebar}
-      >
-        <PanelLeft size={16} />
-      </IconButton>
-      <IconButton label="后退" disabled>
+      {showSidebarToggle && onToggleSidebar ? (
+        <IconButton
+          label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+          className={!sidebarCollapsed ? 'is-active' : ''}
+          onClick={onToggleSidebar}
+        >
+          <PanelLeft size={16} />
+        </IconButton>
+      ) : null}
+      {onNewChat ? (
+        <IconButton label="新对话" className="app-topbar__new-chat" onClick={onNewChat}>
+          <Plus size={15} />
+        </IconButton>
+      ) : null}
+      <IconButton label="后退" className="app-topbar__history-button" disabled>
         <ArrowLeft size={15} />
       </IconButton>
-      <IconButton label="前进" disabled>
+      <IconButton label="前进" className="app-topbar__history-button" disabled>
         <ArrowRight size={15} />
       </IconButton>
     </div>

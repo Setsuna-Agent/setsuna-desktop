@@ -4,8 +4,8 @@ import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-ga
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
-import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
+import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
 import type { ModelClient } from '../ports/model-client.js';
 import { systemClock } from '../ports/clock.js';
@@ -128,6 +128,50 @@ describe('agent loop tools', () => {
     expect(modelClient.requests).toHaveLength(2);
     expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['read_file', 'search_text']);
     expect(saved?.messages.at(-1)?.content).toContain('parallel results received');
+  });
+
+  it('pauses overlarge local inspection batches after a visible progress note', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Inspection batch', projectId: 'project_1' });
+    const modelClient = new OverlargeInspectionModelClient();
+    const toolHost = new CountingReadToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'inspect the project' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const assistantWithTools = saved?.messages.find((message) => message.role === 'assistant' && message.toolCalls?.length);
+    const secondRequestToolMessages = modelClient.requests[1].messages.filter((message) => message.role === 'tool');
+
+    expect(toolHost.calls).toHaveLength(8);
+    expect(toolHost.calls.map((input) => input.file_path)).toEqual([
+      'src/file-1.ts',
+      'src/file-2.ts',
+      'src/file-3.ts',
+      'src/file-4.ts',
+      'src/file-5.ts',
+      'src/file-6.ts',
+      'src/file-7.ts',
+      'src/file-8.ts',
+    ]);
+    expect(modelClient.requests).toHaveLength(2);
+    expect(assistantWithTools?.content).toContain('第一批关键文件');
+    expect(assistantWithTools?.toolCalls).toHaveLength(10);
+    expect(assistantWithTools?.toolRuns).toHaveLength(8);
+    expect(secondRequestToolMessages).toHaveLength(10);
+    expect(secondRequestToolMessages.slice(8).map((message) => message.toolCallId)).toEqual(['call_9', 'call_10']);
+    expect(secondRequestToolMessages.slice(8).every((message) => message.content.includes('was not executed'))).toBe(true);
+    expect(events.filter((event) => event.type === 'tool.started')).toHaveLength(8);
+    expect(events.filter((event) => event.type === 'tool.completed')).toHaveLength(8);
+    expect(saved?.messages.at(-1)?.content).toContain('summarized after first batch');
   });
 
   it('honors a tool host forced tool choice for the next model request', async () => {
@@ -426,6 +470,103 @@ describe('agent loop tools', () => {
     expect(contents).toContain('Prefer crisp context before the answer.');
     expect(contents).not.toContain('<memory_context>');
     expect(contents).not.toContain('This memory should stay out.');
+  });
+
+  it('extracts passive memories after completed turns without exposing a tool call', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Memory extraction', projectId: 'project_1' });
+    const modelClient = new PassiveMemoryModelClient();
+    const usageStore = new CapturingUsageStore();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      usageStore,
+    });
+
+    await loop.sendTurn(thread.id, { input: '以后记忆生成模型要跟随当前切换的模型。' });
+
+    const preview = await memoryStore.previewMemories();
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'passive-memory-extraction']);
+    expect(modelClient.requests[1]).toMatchObject({
+      maxOutputTokens: 900,
+      temperature: 0,
+      toolChoice: 'none',
+    });
+    expect(modelClient.requests[1].tools).toBeUndefined();
+    expect(preview.items).toMatchObject([
+      {
+        title: '记忆模型',
+        scope: 'project',
+        origin: 'passive',
+        projectId: 'project_1',
+        source: 'Memory extraction',
+        tags: ['memory', 'model'],
+      },
+    ]);
+    expect(preview.items[0].preview).toContain('记忆生成模型要跟随当前切换的模型');
+    expect(usageStore.records).toMatchObject([{ provider: 'test-provider', model: 'selected-model' }]);
+  });
+
+  it('skips passive memory extraction when the same turn already saved an active memory', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Active memory', projectId: 'project_1' });
+    const modelClient = new ActiveMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      toolHost: new MemoryToolHost(memoryStore),
+    });
+
+    await loop.sendTurn(thread.id, { input: '请记住，当前仓库的样式需要尽可能使用 UnoCSS。' });
+
+    const preview = await memoryStore.previewMemories();
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'local-runtime-smoke']);
+    expect(preview.total).toBe(1);
+    expect(preview.items).toMatchObject([
+      {
+        scope: 'project',
+        origin: 'active',
+        projectId: 'project_1',
+        preview: '当前仓库的样式需要尽可能使用 UnoCSS。',
+      },
+    ]);
+  });
+
+  it('skips passive memory extraction when memories are disabled', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Disabled memory extraction' });
+    const modelClient = new PassiveMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      configStore: new PersonalizationConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'do not extract memory' });
+
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke']);
   });
 
   it('passes per-turn thinking options and stores reasoning deltas', async () => {
@@ -734,6 +875,28 @@ class ParallelReadModelClient implements ModelClient {
   }
 }
 
+class OverlargeInspectionModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: Array.from({ length: 10 }, (_, index) => ({
+          id: `call_${index + 1}`,
+          name: 'read_file',
+          arguments: JSON.stringify({ file_path: `src/file-${index + 1}.ts` }),
+        })),
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'summarized after first batch' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class ForcedToolChoiceModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -923,6 +1086,30 @@ class ParallelReadToolHost implements ToolHost {
   }
 }
 
+class CountingReadToolHost implements ToolHost {
+  readonly calls: Array<{ file_path?: unknown }> = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'read_file',
+        description: 'Read a file',
+        inputSchema: {
+          type: 'object',
+          properties: { file_path: { type: 'string' } },
+          required: ['file_path'],
+        },
+      },
+    ];
+  }
+
+  async runTool(_name: string, input: unknown) {
+    const parsed = input && typeof input === 'object' && !Array.isArray(input) ? input as { file_path?: unknown } : {};
+    this.calls.push(parsed);
+    return { content: `contents for ${String(parsed.file_path ?? 'unknown')}` };
+  }
+}
+
 class ForcedToolChoiceHost implements ToolHost {
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
@@ -1026,6 +1213,86 @@ class RememberMemoryToolModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'Saved.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class PassiveMemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          memories: [
+            {
+              content: '用户要求记忆生成模型要跟随当前切换的模型。',
+              title: '记忆模型',
+              scope: 'project',
+              tags: ['memory', 'model'],
+            },
+          ],
+        }),
+      };
+      yield {
+        type: 'usage',
+        usage: {
+          provider: 'test-provider',
+          model: 'selected-model',
+          inputTokens: 10,
+          outputTokens: 4,
+          totalTokens: 14,
+        },
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Done.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ActiveMemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          memories: [
+            {
+              content: '用户偏好当前仓库样式尽量使用 UnoCSS。',
+              title: '仓库样式',
+              scope: 'project',
+            },
+          ],
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [
+          {
+            id: 'call_memory',
+            name: 'remember_memory',
+            arguments: JSON.stringify({
+              content: '当前仓库的样式需要尽可能使用 UnoCSS。',
+              scope: 'project',
+            }),
+          },
+        ],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: '已记录到项目级记忆中。' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

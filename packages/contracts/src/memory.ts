@@ -1,12 +1,18 @@
 export type RuntimeMemoryScope = 'global' | 'project';
+export type RuntimeMemoryOrigin = 'active' | 'passive';
 
 export type RuntimeMemoryRecord = {
   id: string;
   scope: RuntimeMemoryScope;
   projectId?: string;
   content: string;
+  origin?: RuntimeMemoryOrigin;
+  source?: string;
   sourceThreadId?: string;
   sourceTurnId?: string;
+  title?: string;
+  tags?: string[];
+  workspaceRoot?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -22,8 +28,13 @@ export type CreateRuntimeMemoryInput = {
   scope?: RuntimeMemoryScope;
   projectId?: string;
   content: string;
+  origin?: RuntimeMemoryOrigin;
+  source?: string;
   sourceThreadId?: string;
   sourceTurnId?: string;
+  title?: string;
+  tags?: string[];
+  workspaceRoot?: string;
 };
 
 export type RuntimeMemoryList = {
@@ -34,7 +45,7 @@ export type RuntimeMemoryPreviewItem = {
   id: string;
   title: string;
   scope: RuntimeMemoryScope;
-  origin: 'active' | 'passive';
+  origin: RuntimeMemoryOrigin;
   source?: string;
   projectId?: string;
   workspaceRoot?: string;

@@ -4,6 +4,7 @@ import type { ModelClient } from '../../ports/model-client.js';
 import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   assertOkResponse,
+  bearerAuthHeader,
   doneEvent,
   normalizeOpenAiUsage,
   objectValue,
@@ -33,7 +34,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.provider.apiKey}`,
+        ...bearerAuthHeader(this.provider.apiKey),
       },
       signal: request.signal,
       body: JSON.stringify({
