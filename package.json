@@ -73,7 +73,8 @@
     "appId": "dev.setsuna.desktop",
     "productName": "Setsuna Desktop",
     "directories": {
-      "output": "release-artifacts"
+      "output": "release-artifacts",
+      "buildResources": "assets/build"
     },
     "files": [
       "dist/**/*",
@@ -86,6 +87,7 @@
       "**/node_modules/node-pty/prebuilds/**/*"
     ],
     "mac": {
+      "icon": "assets/build/icon.icns",
       "target": [
         "dmg",
         "zip"
@@ -94,6 +96,7 @@
       "identity": null
     },
     "win": {
+      "icon": "assets/build/icon.ico",
       "target": [
         "nsis",
         "zip"
@@ -101,6 +104,7 @@
       "artifactName": "Setsuna-Desktop-${version}-windows-${arch}.${ext}"
     },
     "linux": {
+      "icon": "assets/build/icon.png",
       "target": [
         "AppImage",
         "deb",

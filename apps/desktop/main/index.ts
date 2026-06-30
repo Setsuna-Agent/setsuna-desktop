@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type NativeImage, type OpenDialogOptions } from 'electron';
+import { existsSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ import { DesktopTerminalStore } from './terminal-sessions.js';
 import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
@@ -16,6 +18,11 @@ let desktopUpdater: DesktopUpdater | null = null;
 const usesCustomFrame = process.platform !== 'darwin';
 
 async function createWindow(): Promise<void> {
+  const desktopIcon = loadDesktopIcon();
+  if (process.platform === 'darwin' && desktopIcon) {
+    app.dock?.setIcon(desktopIcon);
+  }
+
   runtimeHost = new RuntimeHost({
     appRoot: app.getAppPath(),
     dataDir: app.getPath('userData'),
@@ -35,6 +42,7 @@ async function createWindow(): Promise<void> {
     trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 14 } : undefined,
     autoHideMenuBar: usesCustomFrame,
     backgroundColor: '#ffffff',
+    icon: desktopIcon,
     show: false,
     webPreferences: {
       preload: path.resolve(__dirname, '../preload/index.cjs'),
@@ -75,6 +83,22 @@ async function createWindow(): Promise<void> {
     await mainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
   }
   desktopUpdater.start();
+}
+
+function loadDesktopIcon(): NativeImage | undefined {
+  const iconPath = resolveDesktopIconPath();
+  if (!iconPath) return undefined;
+  const image = nativeImage.createFromPath(iconPath);
+  return image.isEmpty() ? undefined : image;
+}
+
+function resolveDesktopIconPath(): string | undefined {
+  const candidates = [
+    path.join(app.getAppPath(), desktopIconRelativePath),
+    path.join(process.resourcesPath, 'icon.png'),
+    path.join(process.resourcesPath, desktopIconRelativePath),
+  ];
+  return candidates.find((candidate) => existsSync(candidate));
 }
 
 function registerRuntimeIpc(host: RuntimeHost): void {
