@@ -331,6 +331,7 @@ describe('agent loop tools', () => {
   });
 
   it('forces a final no-tool response when the tool loop reaches its round limit', async () => {
+    const maxToolRounds = 3;
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Tool loop limit', projectId: 'project_1' });
@@ -343,6 +344,7 @@ describe('agent loop tools', () => {
       clock: systemClock,
       ids,
       toolHost,
+      maxToolRounds,
     });
 
     await loop.sendTurn(thread.id, { input: 'keep inspecting files' });
@@ -352,8 +354,8 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
     expect(events.some((event) => event.type === 'turn.completed')).toBe(true);
     expect(modelClient.requests.at(-1)?.toolChoice).toBe('none');
-    expect(modelClient.requests).toHaveLength(201);
-    expect(toolHost.calls).toHaveLength(200);
+    expect(modelClient.requests).toHaveLength(maxToolRounds + 1);
+    expect(toolHost.calls).toHaveLength(maxToolRounds);
     expect(events.some((event) =>
       event.type === 'tool.completed'
       && event.payload.status === 'error'

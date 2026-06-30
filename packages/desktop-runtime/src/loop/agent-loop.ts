@@ -43,6 +43,7 @@ export type AgentLoopOptions = {
   toolHost?: ToolHost;
   usageStore?: UsageStore;
   memoryStore?: MemoryStore;
+  maxToolRounds?: number;
 };
 
 type ToolBudgetLimit = number | null;
@@ -427,8 +428,9 @@ export class AgentLoop {
         ...modelConversationMessages,
       ];
       let memorySavedByTool = false;
+      const maxToolRounds = normalizedMaxToolRounds(this.options.maxToolRounds);
 
-      for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+      for (let round = 0; round < maxToolRounds; round += 1) {
         const assistantMessageId = this.options.ids.id('msg');
         const assistantCreatedAt = this.options.clock.now().toISOString();
         activeAssistantMessageId = assistantMessageId;
@@ -571,7 +573,7 @@ export class AgentLoop {
         }
 
         if (!finalText.trim()) {
-          const fallbackText = `已经连续执行了 ${MAX_TOOL_ROUNDS} 轮工具调用，我先停止继续调用工具并保留当前结果。可以继续让我接着处理剩余部分。`;
+          const fallbackText = `已经连续执行了 ${maxToolRounds} 轮工具调用，我先停止继续调用工具并保留当前结果。可以继续让我接着处理剩余部分。`;
           await this.appendAndPublish(threadId, {
             id: this.options.ids.id('event'),
             threadId,
@@ -1511,6 +1513,11 @@ function toolBudgetBlockForCall(toolCall: RuntimeToolCall, budget: ToolBudget): 
 
 function isToolBudgetExhausted(count: number, limit: ToolBudgetLimit): limit is number {
   return limit !== null && count >= limit;
+}
+
+function normalizedMaxToolRounds(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return MAX_TOOL_ROUNDS;
+  return Math.max(1, Math.floor(value));
 }
 
 function markToolBudgetProcessed(budget: ToolBudget, toolCall: RuntimeToolCall): void {
