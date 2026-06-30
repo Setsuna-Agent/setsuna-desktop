@@ -88,7 +88,6 @@ export function AppRouteContent({
         onSaveProviders={runtime.saveProviders}
         onSaveRuntimePreferences={runtime.saveRuntimePreferences}
         onPreviewMemories={runtime.previewMemories}
-        onCreateMemory={runtime.saveMemory}
         onDeleteMemory={runtime.deleteMemory}
         onResetMemories={runtime.clearMemories}
       />

@@ -29,12 +29,14 @@ export class RuntimeHost {
     if (this.child) return;
     this.port = await findAvailablePort();
     const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
+    const builtinSkillsDir = resolveBuiltinSkillsDir(this.options.appRoot);
     const child = spawn(process.execPath, [runtimeEntry, '--port', String(this.port)], {
       cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',
+        SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR: builtinSkillsDir,
         SETSUNA_DESKTOP_DATA_DIR: this.options.dataDir,
         SETSUNA_DESKTOP_RUNTIME_TOKEN: this.token,
       },
@@ -170,6 +172,10 @@ export class RuntimeHost {
 
 export function resolvePackagedRuntimeEntry(appRoot: string): string {
   return path.join(appRoot, 'dist/runtime/cli.cjs');
+}
+
+export function resolveBuiltinSkillsDir(appRoot: string): string {
+  return path.join(appRoot, 'skills');
 }
 
 export function resolveRuntimeSpawnCwd(appRoot: string): string {

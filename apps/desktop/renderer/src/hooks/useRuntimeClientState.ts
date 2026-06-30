@@ -383,22 +383,6 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     [client],
   );
 
-  const saveMemory = useCallback(
-    async (content: string, sourceThreadId?: string | null) => {
-      const trimmed = content.trim();
-      if (!trimmed) return;
-      await client.createMemory({
-        content: trimmed,
-        scope: activeProjectId ? 'project' : 'global',
-        projectId: activeProjectId ?? undefined,
-        sourceThreadId: sourceThreadId ?? undefined,
-      });
-      const list = await client.listMemories({ projectId: activeProjectId ?? undefined, limit: 20 });
-      setMemories(list.memories);
-    },
-    [activeProjectId, client],
-  );
-
   const previewMemories = useCallback(async () => {
     setMemoryPreviewLoading(true);
     try {
@@ -485,7 +469,6 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     refresh,
     reloadThreads,
     saveMcpServer,
-    saveMemory,
     saveProviders,
     saveRuntimePreferences,
     selectProviderModel,

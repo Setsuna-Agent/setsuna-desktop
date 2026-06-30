@@ -47,6 +47,7 @@ export type RuntimeServerOptions = {
   dataDir: string;
   token: string;
   version: string;
+  builtinSkillsDir?: string;
 };
 
 export type RuntimeServer = {
@@ -57,7 +58,10 @@ export type RuntimeServer = {
 
 export async function createRuntimeServer(options: RuntimeServerOptions): Promise<RuntimeServer> {
   const startedAt = new Date().toISOString();
-  const runtime = createRuntimeFactory({ dataDir: options.dataDir });
+  const runtime = createRuntimeFactory({
+    dataDir: options.dataDir,
+    builtinSkillsDir: options.builtinSkillsDir,
+  });
   await settleStaleRuntimeTurns(runtime);
   const commandExecManager = createAppServerCommandExecManager();
   const server = http.createServer(async (request, response) => {

@@ -21,6 +21,7 @@ import { systemClock } from '../ports/clock.js';
 
 export type RuntimeFactoryOptions = {
   dataDir: string;
+  builtinSkillsDir?: string;
 };
 
 export type RuntimeContainer = ReturnType<typeof createRuntimeFactory>;
@@ -36,7 +37,9 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const mcpStore = new FileMcpStore(runtimeDataDir);
   const configStore = new FileConfigStore(runtimeDataDir);
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids, async () => (await configStore.getConfig()).storagePath);
-  const skillRegistry = new FileSkillRegistry(path.join(process.cwd(), 'skills'), runtimeDataDir);
+  const builtinSkillsDir =
+    options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
+  const skillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
   const toolHost = new CompositeToolHost([
     new McpManagementToolHost(mcpStore),

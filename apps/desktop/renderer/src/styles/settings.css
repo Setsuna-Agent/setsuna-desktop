@@ -543,38 +543,6 @@
   line-height: 18px;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-composer {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px 14px;
-  min-width: 0;
-  padding: 12px 14px;
-  border-top: 1px solid var(--chat-settings-divider);
-}
-
-.desktop-settings-panel .chat-user-settings__memory-compose-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 8px;
-  min-width: 0;
-}
-
-.desktop-settings-panel .chat-user-settings__memory-input {
-  min-height: 76px;
-  resize: vertical;
-}
-
-.desktop-settings-panel .chat-user-settings__memory-compose-meta {
-  grid-column: 2;
-  min-width: 0;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 15px;
-  text-align: right;
-}
-
 .desktop-settings-panel .chat-user-settings__memory-preview-section {
   width: min(720px, 100%);
   padding: 10px 0 0;
@@ -1486,21 +1454,8 @@
   }
 
   .desktop-settings-panel .chat-user-settings__local-storage-control,
-  .desktop-settings-panel .chat-user-settings__memory-composer,
   .desktop-settings-panel .chat-user-settings__memory-preview-summary {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-settings-panel .chat-user-settings__memory-compose-control {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-settings-panel .chat-user-settings__memory-compose-control .sd-button {
-    justify-self: end;
-  }
-
-  .desktop-settings-panel .chat-user-settings__memory-compose-meta {
-    grid-column: 1;
   }
 
   .desktop-settings-panel .chat-user-settings__font-preview {
