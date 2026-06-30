@@ -2,6 +2,10 @@
   "name": "setsuna-desktop",
   "version": "0.1.0",
   "description": "Local-first desktop runtime and workbench for Setsuna Agent workflows.",
+  "author": {
+    "name": "Setsuna Agent",
+    "email": "1182900548@qq.com"
+  },
   "license": "MIT",
   "type": "module",
   "main": "dist/electron/main/index.js",
