@@ -23,21 +23,30 @@ if (!token) {
   process.exit(1);
 }
 
-const server = await createRuntimeServer({
-  dataDir,
-  token,
-  version: process.env.npm_package_version ?? '0.1.0',
-});
+const runtimeDataDir = dataDir;
+const runtimeToken = token;
 
-await server.listen(port);
-const address = server.address();
-const resolvedPort = typeof address === 'object' && address ? address.port : port;
-console.log(JSON.stringify({ type: 'ready', port: resolvedPort }));
+async function main(): Promise<void> {
+  const server = await createRuntimeServer({
+    dataDir: runtimeDataDir,
+    token: runtimeToken,
+    version: process.env.npm_package_version ?? '0.1.0',
+  });
 
-function shutdown(): void {
-  server.close().finally(() => process.exit(0)).catch(() => process.exit(1));
+  await server.listen(port);
+  const address = server.address();
+  const resolvedPort = typeof address === 'object' && address ? address.port : port;
+  console.log(JSON.stringify({ type: 'ready', port: resolvedPort }));
+
+  function shutdown(): void {
+    server.close().finally(() => process.exit(0)).catch(() => process.exit(1));
+  }
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
-
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

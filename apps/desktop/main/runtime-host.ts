@@ -28,9 +28,9 @@ export class RuntimeHost {
   async start(): Promise<void> {
     if (this.child) return;
     this.port = await findAvailablePort();
-    const runtimeEntry = this.options.runtimeEntry ?? path.join(this.options.appRoot, 'dist/runtime/cli.js');
+    const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
     const child = spawn(process.execPath, [runtimeEntry, '--port', String(this.port)], {
-      cwd: this.options.appRoot,
+      cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
@@ -166,6 +166,14 @@ export class RuntimeHost {
       this.subscriptions.delete(subscriptionId);
     }
   }
+}
+
+export function resolvePackagedRuntimeEntry(appRoot: string): string {
+  return path.join(appRoot, 'dist/runtime/cli.cjs');
+}
+
+export function resolveRuntimeSpawnCwd(appRoot: string): string {
+  return appRoot.endsWith('.asar') ? path.dirname(appRoot) : appRoot;
 }
 
 function normalizeRuntimePath(value: string): string {

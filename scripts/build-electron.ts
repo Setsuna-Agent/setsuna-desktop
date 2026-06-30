@@ -34,11 +34,11 @@ export async function buildElectron(): Promise<void> {
     }),
     build({
       entryPoints: [resolve(rootDir, 'packages/desktop-runtime/src/cli.ts')],
-      outfile: resolve(rootDir, 'dist/runtime/cli.js'),
+      outfile: resolve(rootDir, 'dist/runtime/cli.cjs'),
       bundle: true,
       platform: 'node',
       target: 'node22',
-      format: 'esm',
+      format: 'cjs',
       sourcemap: true,
     }),
   ]);
