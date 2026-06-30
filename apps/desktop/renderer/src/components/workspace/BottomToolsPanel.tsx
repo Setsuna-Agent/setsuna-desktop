@@ -2,7 +2,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
-import type { DesktopDiffSummary, DesktopPanelTab, DesktopPanelType, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp } from './model.js';
+import type { DesktopDiffSummary, DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp } from './model.js';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 export function BottomToolsPanel({
@@ -22,6 +22,7 @@ export function BottomToolsPanel({
   onOpenProjectFile,
   onOpenReviewPanel,
   onOpenTerminalPanel,
+  onReorderPanels,
   onReviewRefresh,
   onResizeStep,
   onResizeStart,
@@ -45,6 +46,7 @@ export function BottomToolsPanel({
   onOpenProjectFile: (filePath: string) => void;
   onOpenReviewPanel: () => void;
   onOpenTerminalPanel: () => void;
+  onReorderPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -93,6 +95,7 @@ export function BottomToolsPanel({
         onClose={onCloseSlot}
         onClosePanel={onClosePanel}
         onOpenPanel={handleOpenPanel}
+        onReorderPanels={onReorderPanels}
         onSelectPanel={onActivatePanel}
       />
       {activePanel.type === 'terminal' ? (

@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest';
+import {
+  WORKSPACE_OVERVIEW_PANEL_ID,
+  addPanelToSlotState,
+  createDefaultSidePanelSlot,
+  createFilePanel,
+  createFilesPanel,
+  createReviewPanel,
+  createWorkspaceOverviewPanel,
+  reorderPanelInSlotState,
+} from './model.js';
+
+describe('desktop workspace panel model', () => {
+  it('opens the direct side panel on the workspace overview', () => {
+    expect(createDefaultSidePanelSlot()).toEqual({
+      active: WORKSPACE_OVERVIEW_PANEL_ID,
+      panels: [createWorkspaceOverviewPanel()],
+    });
+  });
+
+  it('keeps only one workspace overview tab', () => {
+    const slot = addPanelToSlotState(
+      {
+        active: 'files',
+        panels: [createWorkspaceOverviewPanel(), createFilesPanel()],
+      },
+      createWorkspaceOverviewPanel(),
+    );
+
+    expect(slot.active).toBe(WORKSPACE_OVERVIEW_PANEL_ID);
+    expect(slot.panels.filter((panel) => panel.type === 'overview')).toHaveLength(1);
+  });
+
+  it('replaces the workspace overview when opening a concrete panel', () => {
+    const slot = addPanelToSlotState(createDefaultSidePanelSlot(), createFilesPanel());
+
+    expect(slot.active).toBe('files');
+    expect(slot.panels.map((panel) => panel.type)).toEqual(['files']);
+  });
+
+  it('reorders panels without changing the active tab', () => {
+    const slot = {
+      active: 'file:src/main.ts',
+      panels: [createReviewPanel(), createFilesPanel(), createFilePanel('src/main.ts')],
+    };
+
+    const next = reorderPanelInSlotState(slot, 'file:src/main.ts', 'review', 'before');
+
+    expect(next.active).toBe('file:src/main.ts');
+    expect(next.panels.map((panel) => panel.id)).toEqual(['file:src/main.ts', 'review', 'files']);
+  });
+
+  it('can move a panel after the drop target', () => {
+    const slot = {
+      active: 'review',
+      panels: [createReviewPanel(), createFilesPanel(), createFilePanel('src/main.ts')],
+    };
+
+    const next = reorderPanelInSlotState(slot, 'review', 'file:src/main.ts', 'after');
+
+    expect(next.panels.map((panel) => panel.id)).toEqual(['files', 'file:src/main.ts', 'review']);
+  });
+
+  it('keeps the same slot object when the requested order is unchanged', () => {
+    const slot = {
+      active: 'review',
+      panels: [createReviewPanel(), createFilesPanel(), createFilePanel('src/main.ts')],
+    };
+
+    expect(reorderPanelInSlotState(slot, 'review', 'files', 'before')).toBe(slot);
+  });
+});

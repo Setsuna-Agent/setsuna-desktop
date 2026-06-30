@@ -160,10 +160,15 @@ export function AppRouteContent({
         void workspacePanels.loadReviewState();
       }}
       onOpenBottomTerminalPanel={() => workspacePanels.openDesktopPanel('bottom', 'terminal')}
-      onOpenFilesPanel={() => workspacePanels.openDesktopPanel('side', 'files')}
+      onOpenFilesPanel={() => {
+        projectWorkspace.setFilePreview(null);
+        workspacePanels.openDesktopPanel('side', 'files');
+      }}
       onOpenFileReviewPanel={openFileReviewPanel}
+      onOpenSideTerminalPanel={() => workspacePanels.openDesktopPanel('side', 'terminal')}
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={(filePath) => void projectWorkspace.openProjectFile(filePath)}
+      onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
       onReviewRefresh={(options) => void workspacePanels.loadReviewState(options)}
       onSend={(value, options) => void chatActions.sendInput(value, options)}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}

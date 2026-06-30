@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Code2, Folder, FolderOpen, MessageSquare, Search } from 'lucide-react';
+import { ChevronDown, Code2, FileText, Folder, FolderOpen, MessageSquare, Search, Terminal } from 'lucide-react';
 import type { WorkspaceEntry, WorkspaceEntrySearchItem, WorkspaceFileRead, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState } from '../primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
@@ -25,6 +25,9 @@ export function WorkspacePanel({
   onSearchProjectEntries,
   onOpenEntry,
   onOpenProjectFile,
+  onOpenFilesPanel,
+  onOpenReviewPanel,
+  onOpenTerminalPanel,
   onGoRoot,
   onReviewRefresh,
   onResizeStep,
@@ -47,6 +50,9 @@ export function WorkspacePanel({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
+  onOpenFilesPanel: () => void;
+  onOpenReviewPanel?: () => void;
+  onOpenTerminalPanel: () => void;
   onGoRoot: () => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onResizeStep: (delta: number) => void;
@@ -81,6 +87,11 @@ export function WorkspacePanel({
       setTreeQuery('');
       return undefined;
     }
+    if (!showsFileExplorer) {
+      setTreeSearching(false);
+      setTreeError(null);
+      return undefined;
+    }
 
     let cancelled = false;
     const parent = query ? undefined : '';
@@ -105,7 +116,7 @@ export function WorkspacePanel({
     return () => {
       cancelled = true;
     };
-  }, [activeProject, onSearchProjectEntries, query]);
+  }, [activeProject, onSearchProjectEntries, query, showsFileExplorer]);
 
   useEffect(() => {
     if (!contextMenu) return undefined;
@@ -220,7 +231,15 @@ export function WorkspacePanel({
   };
 
   const mainPanel =
-    activePanel.type === 'review' ? (
+    activePanel.type === 'overview' ? (
+      <WorkspaceOverviewPanel
+        activeProject={activeProject}
+        latestReviewSummary={latestReviewSummary}
+        onOpenFilesPanel={onOpenFilesPanel}
+        onOpenReviewPanel={onOpenReviewPanel}
+        onOpenTerminalPanel={onOpenTerminalPanel}
+      />
+    ) : activePanel.type === 'review' ? (
       <DesktopReviewPanel
         activeProject={activeProject}
         error={reviewError}
@@ -392,6 +411,72 @@ export function WorkspacePanel({
           )
         : null}
     </>
+  );
+}
+
+function WorkspaceOverviewPanel({
+  activeProject,
+  latestReviewSummary,
+  onOpenFilesPanel,
+  onOpenReviewPanel,
+  onOpenTerminalPanel,
+}: {
+  activeProject?: WorkspaceProject;
+  latestReviewSummary: DesktopDiffSummary | null;
+  onOpenFilesPanel: () => void;
+  onOpenReviewPanel?: () => void;
+  onOpenTerminalPanel: () => void;
+}) {
+  const reviewMeta = latestReviewSummary?.files.length
+    ? `${latestReviewSummary.files.length} 个文件  +${latestReviewSummary.additions} -${latestReviewSummary.deletions}`
+    : '查看代码变更';
+  const actions = [
+    {
+      key: 'review',
+      label: '审查',
+      meta: reviewMeta,
+      icon: <FileText size={15} />,
+      disabled: !activeProject || !onOpenReviewPanel,
+      onClick: onOpenReviewPanel ?? (() => undefined),
+    },
+    {
+      key: 'files',
+      label: '文件目录',
+      meta: activeProject?.name ?? '未选择项目',
+      icon: <FolderOpen size={15} />,
+      disabled: !activeProject?.path,
+      onClick: onOpenFilesPanel,
+    },
+    {
+      key: 'terminal',
+      label: '终端',
+      meta: activeProject?.path ? '项目 Shell' : '未选择项目',
+      icon: <Terminal size={15} />,
+      disabled: !activeProject?.path,
+      onClick: onOpenTerminalPanel,
+    },
+  ];
+
+  return (
+    <section className="desktop-workspace-overview" aria-label="汇总目录">
+      <div className="desktop-workspace-overview__actions">
+        {actions.map((action) => (
+          <button
+            className="desktop-workspace-overview__action"
+            disabled={action.disabled}
+            key={action.key}
+            type="button"
+            onClick={action.onClick}
+          >
+            <span className="desktop-workspace-overview__action-icon">{action.icon}</span>
+            <span className="desktop-workspace-overview__action-body">
+              <span>{action.label}</span>
+              <em>{action.meta}</em>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 

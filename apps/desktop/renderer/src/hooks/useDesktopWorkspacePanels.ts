@@ -11,8 +11,11 @@ import {
   createFilePanel,
   createFilesPanel,
   createReviewPanel,
+  createWorkspaceOverviewPanel,
   removePanelFromSlotState,
+  reorderPanelInSlotState,
   slotHasPanelType,
+  type DesktopPanelDropPlacement,
   type DesktopPanelSlot,
   type DesktopPanelSlotState,
   type DesktopPanelTab,
@@ -174,7 +177,15 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
     (slot: DesktopPanelSlot, type: DesktopPanelType) => {
       if (type === 'review' && !activeProject) return;
       if ((type === 'files' || type === 'file') && !activeProject?.path) return;
-      const panel = type === 'review' ? createReviewPanel() : type === 'files' ? createFilesPanel() : createTerminalPanel();
+      if (type === 'file') return;
+      const panel =
+        type === 'overview'
+          ? createWorkspaceOverviewPanel()
+          : type === 'review'
+            ? createReviewPanel()
+            : type === 'files'
+              ? createFilesPanel()
+              : createTerminalPanel();
       const updater = (current: DesktopPanelSlotState) => addPanelToSlotState(current, panel);
       if (slot === 'side') {
         setSidePanelSlot(updater);
@@ -192,6 +203,15 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
 
   const activateDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string) => {
     const updater = (current: DesktopPanelSlotState) => activatePanelInSlotState(current, panelId);
+    if (slot === 'side') {
+      setSidePanelSlot(updater);
+      return;
+    }
+    setBottomPanelSlot(updater);
+  }, []);
+
+  const reorderDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => {
+    const updater = (current: DesktopPanelSlotState) => reorderPanelInSlotState(current, panelId, targetPanelId, placement);
     if (slot === 'side') {
       setSidePanelSlot(updater);
       return;
@@ -308,6 +328,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       reviewError,
       reviewLoading,
       reviewState,
+      reorderDesktopPanel,
       selectWorkspaceApp,
       selectedWorkspaceApp,
       sideActivePanel,
@@ -340,6 +361,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       reviewError,
       reviewLoading,
       reviewState,
+      reorderDesktopPanel,
       selectWorkspaceApp,
       selectedWorkspaceApp,
       sideActivePanel,

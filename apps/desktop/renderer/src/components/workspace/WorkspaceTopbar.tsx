@@ -1,5 +1,5 @@
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
-import type { DesktopPanelTab, DesktopPanelType } from './model.js';
+import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
 
 export function WorkspaceTopbar({
   activePanelId,
@@ -11,6 +11,7 @@ export function WorkspaceTopbar({
   onOpenReviewPanel,
   onOpenTerminalPanel,
   onSelectPanel,
+  onReorderPanels,
   onToggleTerminal,
   onToggleWorkspace,
 }: {
@@ -23,6 +24,7 @@ export function WorkspaceTopbar({
   onOpenReviewPanel: () => void;
   onOpenTerminalPanel: () => void;
   onSelectPanel: (panelId: string) => void;
+  onReorderPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onToggleTerminal: () => void;
   onToggleWorkspace: () => void;
 }) {
@@ -51,6 +53,7 @@ export function WorkspaceTopbar({
         onClose={onToggleWorkspace}
         onClosePanel={onClosePanel}
         onOpenPanel={handleOpenPanel}
+        onReorderPanels={onReorderPanels}
         onSelectPanel={onSelectPanel}
         onToggleBottomTerminal={onToggleTerminal}
         panels={panels}

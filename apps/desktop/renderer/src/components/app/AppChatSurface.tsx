@@ -16,6 +16,7 @@ import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import type {
   DesktopPanelSlotState,
   DesktopPanelTab,
+  DesktopPanelDropPlacement,
   DesktopReviewLoadOptions,
   DesktopReviewState,
   DesktopTerminalSession,
@@ -67,8 +68,10 @@ export function AppChatSurface({
   onOpenBottomTerminalPanel,
   onOpenFilesPanel,
   onOpenFileReviewPanel,
+  onOpenSideTerminalPanel,
   onOpenEntry,
   onOpenProjectFile,
+  onReorderBottomPanels,
   onReviewRefresh,
   onSend,
   onSkillSelectionRequestConsumed,
@@ -124,8 +127,10 @@ export function AppChatSurface({
   onOpenBottomTerminalPanel: () => void;
   onOpenFilesPanel: () => void;
   onOpenFileReviewPanel?: () => void;
+  onOpenSideTerminalPanel: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
+  onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; skillIds?: string[] }) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
@@ -191,6 +196,9 @@ export function AppChatSurface({
           onOpenEntry={onOpenEntry}
           onOpenProjectFile={onOpenProjectFile}
           onGoRoot={onGoRoot}
+          onOpenFilesPanel={onOpenFilesPanel}
+          onOpenReviewPanel={onOpenFileReviewPanel}
+          onOpenTerminalPanel={onOpenSideTerminalPanel}
           onReviewRefresh={onReviewRefresh}
           onResizeStep={onWorkspaceResizeStep}
           onResizeStart={onWorkspaceResizeStart}
@@ -217,6 +225,7 @@ export function AppChatSurface({
           onOpenProjectFile={onOpenProjectFile}
           onOpenReviewPanel={onOpenBottomReviewPanel}
           onOpenTerminalPanel={onOpenBottomTerminalPanel}
+          onReorderPanels={onReorderBottomPanels}
           onReviewRefresh={onReviewRefresh}
           onResizeStep={onTerminalResizeStep}
           onResizeStart={onTerminalResizeStart}

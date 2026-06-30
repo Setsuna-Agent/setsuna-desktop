@@ -1,4 +1,4 @@
-import { Code2, FileText, FolderOpen, Terminal } from 'lucide-react';
+import { Code2, FileText, FolderOpen, PanelRight, Terminal } from 'lucide-react';
 import { addCollection, Icon } from '@iconify/react';
 import { icons as vscodeIcons } from '@iconify-json/vscode-icons';
 import { getIconForFile } from 'vscode-icons-js';
@@ -8,6 +8,7 @@ addCollection(vscodeIcons);
 
 export function desktopPanelTitle(panel: DesktopPanelTab): string {
   if (panel.title) return panel.title;
+  if (panel.type === 'overview') return '汇总目录';
   if (panel.type === 'review') return '审查';
   if (panel.type === 'terminal') return '终端';
   if (panel.type === 'file' && panel.filePath) return fileName(panel.filePath);
@@ -17,6 +18,7 @@ export function desktopPanelTitle(panel: DesktopPanelTab): string {
 export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; type?: DesktopPanelType }) {
   const panelType = panel?.type ?? type;
   if (panel?.type === 'file') return <FileTabIcon filePath={panel.filePath ?? panel.title} />;
+  if (panelType === 'overview') return <PanelRight size={14} />;
   if (panelType === 'terminal') return <Terminal size={14} />;
   if (panelType === 'review' || panelType === 'file') return <FileText size={14} />;
   return <FolderOpen size={14} />;
