@@ -82,6 +82,20 @@ function inferKind(fileName) {
   return 'artifact';
 }
 
+function releaseAssetName(filePath) {
+  const fileName = path.basename(filePath);
+
+  if (/^latest-mac\.ya?ml$/iu.test(fileName)) {
+    const relativePath = path.relative(downloadedDir, filePath);
+    const arch = inferArch(relativePath);
+    if (arch) {
+      return `latest-mac-${arch}${path.extname(fileName)}`;
+    }
+  }
+
+  return fileName;
+}
+
 const downloadedFiles = await listFiles(downloadedDir);
 
 for (const filePath of downloadedFiles) {
@@ -94,10 +108,11 @@ for (const filePath of downloadedFiles) {
     continue;
   }
 
-  const destination = path.join(uploadDir, path.basename(filePath));
+  const assetName = releaseAssetName(filePath);
+  const destination = path.join(uploadDir, assetName);
   try {
     await access(destination, fsConstants.F_OK);
-    throw new Error(`Release asset name collision: ${path.basename(filePath)}`);
+    throw new Error(`Release asset name collision: ${assetName}`);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
