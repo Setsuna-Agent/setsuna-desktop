@@ -83,12 +83,13 @@ export function ChatComposer({
   const slashCommand = useMemo(() => parseSlashCommand(draft), [draft]);
   const mentionQuery = mentionCommand?.query ?? '';
   const commandOpen = Boolean(focused && mentionCommand && dismissedCommandValue !== draft);
-  const skillCommandOpen = Boolean(focused && slashCommand && dismissedSlashValue !== draft && !commandOpen);
+  const skillCommandOpen = Boolean(!activeTurnId && focused && slashCommand && dismissedSlashValue !== draft && !commandOpen);
   const selectedSkillIds = useMemo(() => new Set(selectedSkills.map((skill) => skill.id)), [selectedSkills]);
   const skillQuery = slashCommand?.query.trim().toLowerCase() ?? '';
   const supportsImageInput = activeModelSupportsImages(config);
   const thinkingConfig = useMemo(() => activeModelThinkingConfig(config), [config]);
   const attachmentOnlyReady = imageAttachments.length > 0 && !draft.trim();
+  const activeSteerReady = Boolean(activeTurnId && (draft.trim() || imageAttachments.length));
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const slashEntries = useMemo(() => {
     const actions: SlashQuickAction[] = [
@@ -175,6 +176,7 @@ export function ChatComposer({
   }, [skillQuery]);
 
   useEffect(() => {
+    if (activeTurnId) return;
     if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
     const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
     if (!skill || !skill.enabled) return;
@@ -186,7 +188,7 @@ export function ChatComposer({
     }
     setFocused(true);
     onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
-  }, [onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
+  }, [activeTurnId, onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
 
   useEffect(() => {
     if (!supportsImageInput && imageAttachments.length) setImageAttachments([]);
@@ -238,7 +240,9 @@ export function ChatComposer({
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (skillCommandOpen) return handleSkillKeyDown(event);
-    if (!commandOpen) return undefined;
+    if (!commandOpen) {
+      return submitActiveSteerFromKeyboard(event);
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -264,7 +268,7 @@ export function ChatComposer({
       selectEntry(entries[activeIndex]);
       return false;
     }
-    return undefined;
+    return submitActiveSteerFromKeyboard(event);
   };
 
   const handleSkillKeyDown = (event: ReactKeyboardEvent) => {
@@ -323,16 +327,25 @@ export function ChatComposer({
   };
 
   const submitDraft = (value?: string) => {
-    const thinking = thinkingConfig.supported && thinkingEnabled;
+    const steering = Boolean(activeTurnId);
+    const thinking = !steering && thinkingConfig.supported && thinkingEnabled;
     onSend(value, {
       attachments: supportsImageInput ? imageAttachments : [],
-      skillIds: selectedSkills.map((skill) => skill.id),
-      thinking,
-      ...(thinking && thinkingEffort ? { thinkingEffort } : {}),
+      ...(!steering ? { skillIds: selectedSkills.map((skill) => skill.id) } : {}),
+      ...(!steering ? { thinking } : {}),
+      ...(!steering && thinking && thinkingEffort ? { thinkingEffort } : {}),
     });
     setSelectedSkills([]);
     setImageAttachments([]);
     senderRef.current?.clear?.();
+  };
+
+  const submitActiveSteerFromKeyboard = (event: ReactKeyboardEvent) => {
+    if (!activeSteerReady || !isPlainEnter(event)) return undefined;
+    event.preventDefault();
+    event.stopPropagation();
+    submitDraft(draft);
+    return false;
   };
 
   const syncSelectedSkillsFromSlots = (slotConfig: SlotConfigType[] | undefined) => {
@@ -466,8 +479,12 @@ export function ChatComposer({
                 onSelect={onSelectModel}
               />
               <span className="chat-sender-divider" aria-hidden="true" />
-              {activeTurnId ? (
-                <button className="chat-sender-stop" type="button" aria-label="停止生成" onClick={onCancelActiveTurn}>
+              {activeSteerReady ? (
+                <button className="chat-sender-attachment-submit" type="button" aria-label="插入引导" title="插入引导" onClick={() => submitDraft(draft)}>
+                  <ArrowUp size={16} />
+                </button>
+              ) : activeTurnId ? (
+                <button className="chat-sender-stop" type="button" aria-label="停止生成" title="停止生成" onClick={onCancelActiveTurn}>
                   <Square size={11} />
                 </button>
               ) : attachmentOnlyReady ? (
@@ -638,6 +655,11 @@ function activeModelSupportsImages(config: RuntimeConfigState | null): boolean {
   const provider = config?.providers.find((item) => item.id === config.activeProviderId) ?? config?.providers[0];
   const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
   return Boolean(model?.supportsImages);
+}
+
+function isPlainEnter(event: ReactKeyboardEvent): boolean {
+  const nativeEvent = event.nativeEvent as KeyboardEvent & { isComposing?: boolean };
+  return event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !nativeEvent.isComposing;
 }
 
 function activeModelThinkingConfig(config: RuntimeConfigState | null): ActiveThinkingConfig {

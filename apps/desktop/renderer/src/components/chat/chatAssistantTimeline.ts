@@ -24,13 +24,14 @@ export type AssistantWorkContentSegment = {
 
 export type AssistantWorkThinkingSegment = {
   id: string;
+  segment: RuntimeMessage;
   content: string;
 };
 
 export type AssistantWorkItem =
   | { type: 'content'; segment: AssistantWorkContentSegment }
   | { type: 'thinking'; segment: AssistantWorkThinkingSegment }
-  | { type: 'toolRuns'; id: string; toolRuns: NonNullable<RuntimeMessage['toolRuns']> };
+  | { type: 'toolRuns'; id: string; segment: RuntimeMessage; toolRuns: NonNullable<RuntimeMessage['toolRuns']> };
 
 export function createAssistantRunTimeline(segments: RuntimeMessage[]): AssistantRunTimelineBlock[] {
   const parsedSegments = segments.map(parseAssistantSegment);
@@ -163,6 +164,7 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
     if (segment.status === 'streaming' && !thinkingSegment.closed && thinkingSegment.content.trim()) {
       const thinking = {
         id: thinkingSegmentId(segment.id, thinkingIndex),
+        segment,
         content: thinkingSegment.content,
       };
       thinkingSegments.push(thinking);
@@ -173,7 +175,7 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
 
   const toolRuns = segment.toolRuns ?? [];
   if (toolRuns.length) {
-    items.push({ type: 'toolRuns', id: `${segment.id}:tools`, toolRuns });
+    items.push({ type: 'toolRuns', id: `${segment.id}:tools`, segment, toolRuns });
   }
 
   return {
@@ -196,7 +198,7 @@ function defaultWorkItems(
   return [
     ...(input.contentSegments ?? []).map((item): AssistantWorkItem => ({ type: 'content', segment: item })),
     ...(input.thinkingSegments ?? []).map((item): AssistantWorkItem => ({ type: 'thinking', segment: item })),
-    ...(input.toolRuns?.length ? [{ type: 'toolRuns' as const, id: `${segment.id}:tools`, toolRuns: input.toolRuns }] : []),
+    ...(input.toolRuns?.length ? [{ type: 'toolRuns' as const, id: `${segment.id}:tools`, segment, toolRuns: input.toolRuns }] : []),
   ];
 }
 
@@ -207,6 +209,7 @@ function appendWorkItems(items: AssistantWorkItem[], nextItems: AssistantWorkIte
       items[items.length - 1] = {
         type: 'toolRuns',
         id: `${previousItem.id}+${nextItem.id}`,
+        segment: previousItem.segment,
         toolRuns: [...previousItem.toolRuns, ...nextItem.toolRuns],
       };
       continue;

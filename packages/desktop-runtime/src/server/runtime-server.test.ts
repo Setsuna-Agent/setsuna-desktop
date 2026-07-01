@@ -1776,6 +1776,13 @@ describe('runtime server', () => {
         input: [{ type: 'text', text: 'Steer this active turn.' }],
       })).resolves.toEqual({ turnId: startedTurn.turn.id });
 
+      const beforeRelease = await runtimeFetch(`/v1/threads/${encodeURIComponent(startedThread.thread.id)}`);
+      expect(beforeRelease.messages.find((message: { clientId?: string }) => message.clientId === 'client-steer-message-1')).toMatchObject({
+        content: 'Steer this active turn.',
+        role: 'user',
+        turnId: startedTurn.turn.id,
+      });
+      capture.release();
       const updated = await waitForThread(
         startedThread.thread.id,
         (item) => item.messages.some((message) =>
@@ -1807,6 +1814,111 @@ describe('runtime server', () => {
           content: [{ type: 'text', text: 'Steer this active turn.' }],
         }),
       ]));
+    } finally {
+      capture.release();
+      await capture.close();
+    }
+  });
+
+  it('steers additional REST user input into the active turn', async () => {
+    const capture = await createDelayedOpenAiCaptureServer();
+    try {
+      await configureOpenAiProvider('rest-steer-provider', capture.baseUrl);
+      const thread = await runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'REST steer active turn' }),
+      });
+      const started = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+        method: 'POST',
+        body: JSON.stringify({ clientId: 'rest-start-message-1', input: 'Keep this REST turn active.' }),
+      });
+      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed REST provider request');
+
+      const activeSnapshot = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+      expect(activeSnapshot.activeTurnId).toBe(started.turnId);
+
+      await expect(runtimeFetch(
+        `/v1/threads/${encodeURIComponent(thread.id)}/turns/${encodeURIComponent(started.turnId)}/steer`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            clientId: 'rest-steer-message-1',
+            expectedTurnId: started.turnId,
+            input: 'Steer this REST active turn.',
+          }),
+        },
+      )).resolves.toEqual({ accepted: true, turnId: started.turnId });
+
+      const beforeRelease = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+      expect(beforeRelease.messages.find((message: { clientId?: string }) => message.clientId === 'rest-steer-message-1')).toMatchObject({
+        content: 'Steer this REST active turn.',
+        role: 'user',
+        turnId: started.turnId,
+      });
+      capture.release();
+      const updated = await waitForThread(
+        thread.id,
+        (item) => item.messages.some((message) =>
+          message.turnId === started.turnId
+          && message.role === 'user'
+          && message.clientId === 'rest-steer-message-1'
+        ),
+      );
+
+      expect(updated.messages.filter((message) => message.turnId === started.turnId && message.role === 'user')).toHaveLength(2);
+      expect(updated.messages.find((message) => message.clientId === 'rest-steer-message-1')).toMatchObject({
+        content: 'Steer this REST active turn.',
+        role: 'user',
+        turnId: started.turnId,
+      });
+    } finally {
+      capture.release();
+      await capture.close();
+    }
+  });
+
+  it('treats REST turn starts during an active conversation as steering the active turn', async () => {
+    const capture = await createDelayedOpenAiCaptureServer();
+    try {
+      await configureOpenAiProvider('rest-start-steer-provider', capture.baseUrl);
+      const thread = await runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'REST start while active' }),
+      });
+      const started = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+        method: 'POST',
+        body: JSON.stringify({ clientId: 'rest-start-active-1', input: 'Keep this REST turn active.' }),
+      });
+      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed REST provider request');
+
+      await expect(runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+        method: 'POST',
+        body: JSON.stringify({
+          clientId: 'rest-start-while-active-steer',
+          input: 'This should stay in the current turn.',
+        }),
+      })).resolves.toEqual({ accepted: true, turnId: started.turnId });
+
+      const beforeRelease = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+      expect(beforeRelease.activeTurnId).toBe(started.turnId);
+      expect(beforeRelease.messages.find((message: { clientId?: string }) => message.clientId === 'rest-start-while-active-steer')).toMatchObject({
+        content: 'This should stay in the current turn.',
+        role: 'user',
+        turnId: started.turnId,
+      });
+
+      capture.release();
+      const updated = await waitForThread(
+        thread.id,
+        (item) => item.activeTurnId === null
+          && item.messages.some((message) =>
+            message.turnId === started.turnId
+            && message.role === 'user'
+            && message.clientId === 'rest-start-while-active-steer'
+          ),
+      );
+
+      expect(updated.messages.filter((message) => message.turnId === started.turnId && message.role === 'user')).toHaveLength(2);
     } finally {
       capture.release();
       await capture.close();
@@ -2185,6 +2297,36 @@ describe('runtime server', () => {
     });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
+  }
+
+  async function configureOpenAiProvider(id: string, providerBaseUrl: string) {
+    await runtimeFetch('/v1/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        activeProviderId: id,
+        providers: [
+          {
+            id,
+            name: id,
+            provider: 'openai-compatible',
+            baseUrl: providerBaseUrl,
+            apiKey: `sk-${id}`,
+            enabled: true,
+            models: [
+              {
+                id: `${id}-model`,
+                name: `${id} model`,
+                code: `${id}-model`,
+                enabled: true,
+                maxOutputTokens: 1000,
+                thinkingEnabled: false,
+                thinkingEfforts: [],
+              },
+            ],
+          },
+        ],
+      }),
+    });
   }
 
   async function appServerRpc(method: string, params: Record<string, unknown>) {

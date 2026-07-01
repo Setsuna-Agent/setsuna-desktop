@@ -12,6 +12,7 @@ import type {
   RuntimeThread,
   SendTurnInput,
   SendTurnResponse,
+  SteerTurnInput,
   ThreadList,
   ThreadPatch,
   ThreadQuery,
@@ -50,6 +51,7 @@ export type DesktopRuntimeClient = {
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
   sendTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse>;
+  steerTurn(threadId: string, turnId: string, input: SteerTurnInput): Promise<SendTurnResponse>;
   updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread>;
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput): Promise<SendTurnResponse>;

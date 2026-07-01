@@ -33,7 +33,6 @@ export function useChatTurnActions({
 }) {
   const sendInput = useCallback(
     async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
-      if (activeTurnId) return;
       const input = (value ?? draft).trim();
       const attachments = options.attachments ?? [];
       if (!input && !attachments.length) return;
@@ -47,14 +46,24 @@ export function useChatTurnActions({
           setCurrentThread(thread);
           await reloadThreads();
         }
+        const threadId = thread.id;
         setDraft('');
-        const response = await client.sendTurn(thread.id, {
+        const startTurn = () => client.sendTurn(threadId, {
           attachments,
           input,
           skillIds: options.skillIds,
           thinking: options.thinking === true,
           ...(options.thinking === true && options.thinkingEffort ? { thinkingEffort: options.thinkingEffort } : {}),
         });
+        const response = activeTurnId
+          ? await steerActiveTurn({
+              activeTurnId,
+              attachments,
+              client,
+              input,
+              threadId,
+            })
+          : await startTurn();
         if (!terminalTurnIdsRef.current.has(response.turnId)) setActiveTurnId(response.turnId);
       } catch (unknownError) {
         setDraft((current) => current || input);
@@ -135,4 +144,49 @@ export type ChatTurnActions = ReturnType<typeof useChatTurnActions>;
 function normalizeRuntimeActionError(error: unknown, notFoundMessage: string): string {
   const message = error instanceof Error ? error.message : String(error);
   return /\bnot found\b/i.test(message) ? notFoundMessage : message;
+}
+
+async function steerActiveTurn({
+  activeTurnId,
+  attachments,
+  client,
+  input,
+  threadId,
+}: {
+  activeTurnId: string;
+  attachments: RuntimeMessageAttachment[];
+  client: DesktopRuntimeClient;
+  input: string;
+  threadId: string;
+}) {
+  try {
+    return await client.steerTurn(threadId, activeTurnId, {
+      attachments,
+      expectedTurnId: activeTurnId,
+      input,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const retryTurnId = steerMismatchTurnId(message);
+    if (retryTurnId) {
+      return client.steerTurn(threadId, retryTurnId, {
+        attachments,
+        expectedTurnId: retryTurnId,
+        input,
+      });
+    }
+    if (isExpiredSteerError(message)) {
+      throw new Error('当前对话已经结束，未插入引导。请重新发送这条消息。');
+    }
+    throw error;
+  }
+}
+
+function steerMismatchTurnId(message: string): string | null {
+  const match = message.match(/but found `([^`]+)`/);
+  return match?.[1] ?? null;
+}
+
+function isExpiredSteerError(message: string): boolean {
+  return /no active turn to steer|active turn is finishing/i.test(message);
 }

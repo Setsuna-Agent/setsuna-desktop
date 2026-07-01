@@ -11,6 +11,7 @@ import type {
   RuntimeUsage,
   SendTurnInput,
   SendTurnResponse,
+  SteerTurnInput,
 } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
@@ -98,6 +99,8 @@ type ActiveTurnState = {
   turnId: string;
   controller: AbortController;
   kind: ActiveTurnKind;
+  acceptingSteers: boolean;
+  pendingSteers: RuntimeMessage[];
 };
 type ReviewTurnInput = {
   displayText: string;
@@ -125,6 +128,16 @@ export class AgentLoop {
    * @param input 用户输入、附件、skill 选择和客户端消息 ID。
    */
   async startTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse> {
+    const active = this.activeTurnByThread.get(threadId);
+    if (active?.kind === 'conversation' && active.acceptingSteers && !active.controller.signal.aborted) {
+      // 防御 renderer/SSE 短暂不同步：active 期间的普通发送必须落回当前 turn 的 steer。
+      return this.steerTurn(threadId, {
+        attachments: input.attachments,
+        clientId: input.clientId,
+        expectedTurnId: active.turnId,
+        input: input.input,
+      });
+    }
     const run = await this.createTurnRun(threadId, input);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
@@ -190,6 +203,22 @@ export class AgentLoop {
     return active.turnId;
   }
 
+  private takePendingSteers(threadId: string, turnId: string): RuntimeMessage[] {
+    const active = this.activeTurnByThread.get(threadId);
+    if (!active || active.turnId !== turnId || active.controller.signal.aborted) return [];
+    return active.pendingSteers.splice(0);
+  }
+
+  private async drainPendingSteers(threadId: string, turnId: string): Promise<RuntimeMessage[]> {
+    return this.takePendingSteers(threadId, turnId);
+  }
+
+  private stopAcceptingSteers(threadId: string, turnId: string): void {
+    const active = this.activeTurnByThread.get(threadId);
+    if (!active || active.turnId !== turnId) return;
+    active.acceptingSteers = false;
+  }
+
   /**
    * 向正在运行的普通对话 turn 追加用户输入，不创建新的 turn。
    *
@@ -198,7 +227,7 @@ export class AgentLoop {
    */
   async steerTurn(
     threadId: string,
-    input: SendTurnInput & { expectedTurnId: string },
+    input: SteerTurnInput,
   ): Promise<SendTurnResponse> {
     const text = input.input.trim();
     const attachments = normalizeAttachments(input.attachments);
@@ -211,11 +240,11 @@ export class AgentLoop {
     if (active.turnId !== input.expectedTurnId) {
       throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active.turnId}\``);
     }
+    if (!active.acceptingSteers) throw new Error('active turn is finishing and can no longer be steered');
 
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
-    // steer 输入追加到同一个 turn，让模型下一轮继续看到正在进行中的用户补充。
-    await this.publishMessage(threadId, active.turnId, {
+    const message: RuntimeMessage = {
       id: this.options.ids.id('msg'),
       clientId: input.clientId,
       turnId: active.turnId,
@@ -224,7 +253,10 @@ export class AgentLoop {
       attachments,
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
-    });
+    };
+    // steer 先进入 transcript，保证插话立即可见；模型消费仍等当前模型段/工具链路结束后 drain。
+    await this.publishMessage(threadId, active.turnId, message);
+    active.pendingSteers.push(message);
     return { accepted: true, turnId: active.turnId };
   }
 
@@ -298,7 +330,13 @@ export class AgentLoop {
     const controller = new AbortController();
     const key = activeTurnKey(threadId, turnId);
     this.activeTurns.set(key, controller);
-    this.activeTurnByThread.set(threadId, { turnId, controller, kind: 'conversation' });
+    this.activeTurnByThread.set(threadId, {
+      turnId,
+      controller,
+      kind: 'conversation',
+      acceptingSteers: true,
+      pendingSteers: [],
+    });
     const done = this.runTurn(
       threadId,
       text,
@@ -338,7 +376,13 @@ export class AgentLoop {
     const controller = new AbortController();
     const key = activeTurnKey(threadId, turnId);
     this.activeTurns.set(key, controller);
-    this.activeTurnByThread.set(threadId, { turnId, controller, kind: 'review' });
+    this.activeTurnByThread.set(threadId, {
+      turnId,
+      controller,
+      kind: 'review',
+      acceptingSteers: false,
+      pendingSteers: [],
+    });
     const done = this.runTurn(
       threadId,
       displayText,
@@ -404,7 +448,13 @@ export class AgentLoop {
     const controller = new AbortController();
     const key = activeTurnKey(threadId, turnId);
     this.activeTurns.set(key, controller);
-    this.activeTurnByThread.set(threadId, { turnId, controller, kind: 'conversation' });
+    this.activeTurnByThread.set(threadId, {
+      turnId,
+      controller,
+      kind: 'conversation',
+      acceptingSteers: true,
+      pendingSteers: [],
+    });
     const done = this.runTurn(
       threadId,
       text,
@@ -515,11 +565,22 @@ export class AgentLoop {
         ...(await this.skillContextMessages(skillIds)),
         ...modelConversationMessages,
       ];
+      let explicitMemoryUserContent = userMessage.content;
+      const appendSteerMessagesToModel = (messages: RuntimeMessage[]) => {
+        if (!messages.length) return false;
+        // 与 Codex turn/steer 对齐：steer 是同一 turn 的原始用户输入，
+        // 不在 runtime 侧改写成额外提示词，只在下一个模型检查点并入上下文。
+        modelMessages.push(...messages);
+        const steerText = messages.map((message) => message.content.trim()).filter(Boolean).join('\n\n');
+        if (steerText) explicitMemoryUserContent = [explicitMemoryUserContent, steerText].filter(Boolean).join('\n\n');
+        return true;
+      };
       let memorySavedByTool = false;
       const maxToolRounds = normalizedMaxToolRounds(this.options.maxToolRounds);
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       for (let round = 0; round < maxToolRounds; round += 1) {
+        appendSteerMessagesToModel(await this.drainPendingSteers(threadId, turnId));
         const assistantMessageId = this.options.ids.id('msg');
         const assistantCreatedAt = this.options.clock.now().toISOString();
         activeAssistantMessageId = assistantMessageId;
@@ -603,12 +664,27 @@ export class AgentLoop {
           continue;
         }
 
+        const pendingSteers = await this.drainPendingSteers(threadId, turnId);
+        if (pendingSteers.length) {
+          await this.completeMessage(threadId, turnId, assistantMessageId, { usage });
+          activeAssistantMessageId = null;
+          modelMessages.push({
+            ...assistantMessage,
+            content: roundText,
+            status: 'complete',
+          });
+          appendSteerMessagesToModel(pendingSteers);
+          usage = undefined;
+          continue;
+        }
+
+        this.stopAcceptingSteers(threadId, turnId);
         await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, {
           explicitMemory: {
             alreadySaved: memorySavedByTool,
             config: runtimeConfig,
             projectId: thread.projectId,
-            userContent: userMessage.content,
+            userContent: explicitMemoryUserContent,
           },
           review: options.review ? roundText : undefined,
         });
@@ -619,6 +695,8 @@ export class AgentLoop {
 
       if (!turnCompleted) {
         // 达到工具轮次上限后禁用 toolChoice 再要一次最终回答，避免无限工具循环。
+        appendSteerMessagesToModel(await this.drainPendingSteers(threadId, turnId));
+        this.stopAcceptingSteers(threadId, turnId);
         const assistantMessageId = this.options.ids.id('msg');
         const assistantCreatedAt = this.options.clock.now().toISOString();
         activeAssistantMessageId = assistantMessageId;
@@ -682,7 +760,7 @@ export class AgentLoop {
             alreadySaved: memorySavedByTool,
             config: runtimeConfig,
             projectId: thread.projectId,
-            userContent: userMessage.content,
+            userContent: explicitMemoryUserContent,
           },
           review: options.review ? finalText : undefined,
         });

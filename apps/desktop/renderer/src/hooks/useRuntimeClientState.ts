@@ -64,7 +64,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   // 终态 turn 记录在本地，避免延迟快照把已完成 turn 重新推断成 active。
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadId = currentThread?.id ?? null;
-  const effectiveActiveTurnId = activeTurnId ?? inferActiveTurnIdFromThread(currentThread, terminalTurnIdsRef.current);
+  const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
   currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
 
   const refresh = useCallback(async () => {
@@ -202,22 +202,14 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     let cancelled = false;
     let timeoutId: number | undefined;
     const threadId = currentThreadId;
-    const turnId = effectiveActiveTurnId;
 
-    // polling 是 SSE 丢帧或 renderer 恢复时的兜底路径，防止运行中的 turn 卡在旧状态。
+    // polling 只校正线程快照；turn 终态必须以事件为准，避免模型段之间误清空 activeTurnId。
     const pollThread = async () => {
       try {
         const nextThread = await client.getThread(threadId);
         if (cancelled) return;
         setCurrentThread((thread) => (thread?.id === threadId && nextThread.lastSeq >= thread.lastSeq ? nextThread : thread));
         refreshThreadsSoon();
-        if (turnHasFinished(nextThread, turnId)) {
-          terminalTurnIdsRef.current.add(turnId);
-          setActiveTurnId((current) => (current === turnId ? null : current));
-          refreshCapabilities();
-          void client.getUsage().then(setUsage);
-          return;
-        }
       } catch (unknownError) {
         if (!cancelled) setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       }
@@ -541,24 +533,6 @@ function updateThreadApprovalRun(
 export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
 
 /**
- * 判断指定 turn 是否已经从 renderer 视角完成。
- *
- * @param thread 当前线程快照。
- * @param turnId 需要判断的 turn ID。
- */
-export function turnHasFinished(thread: RuntimeThread, turnId: string): boolean {
-  // 这里是 renderer 的兜底判断，不能依赖 turn.completed 事件一定到达。
-  const turnMessages = thread.messages.filter((message) => message.turnId === turnId);
-  if (!turnMessages.length) return false;
-  if (turnMessages.some((message) => message.status === 'streaming')) return false;
-  if (turnMessages.some((message) => message.toolRuns?.some(isActiveToolRun))) return false;
-  const latestAssistant = turnMessages.findLast((message) => message.role === 'assistant');
-  if (!latestAssistant) return false;
-  if (latestAssistant.status === 'error' || latestAssistant.error) return true;
-  return latestAssistant.status === 'complete' && !latestAssistant.toolCalls?.length;
-}
-
-/**
  * 从线程快照中反推仍在运行的 turn。
  *
  * @param thread 当前线程快照。
@@ -574,6 +548,13 @@ export function inferActiveTurnIdFromThread(thread: RuntimeThread | null, termin
     if (message.toolRuns?.some(isActiveToolRun)) return message.turnId;
   }
   return null;
+}
+
+function activeTurnIdFromThreadSnapshot(thread: RuntimeThread | null, terminalTurnIds: ReadonlySet<string>): string | null {
+  if (!thread) return null;
+  // runtime 快照里的 activeTurnId 是真源；消息状态推断只作为旧快照/事件丢失时的兜底。
+  if (thread.activeTurnId && !terminalTurnIds.has(thread.activeTurnId)) return thread.activeTurnId;
+  return inferActiveTurnIdFromThread(thread, terminalTurnIds);
 }
 
 function isActiveToolRun(run: NonNullable<RuntimeThread['messages'][number]['toolRuns']>[number]): boolean {

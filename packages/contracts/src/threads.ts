@@ -107,6 +107,7 @@ export type RuntimeToolRun = {
 
 export type RuntimeThreadSummary = {
   id: string;
+  activeTurnId?: string | null;
   forkedFromId?: string;
   projectId?: string;
   title: string;
@@ -154,6 +155,13 @@ export type SendTurnInput = {
   skillIds?: string[];
   thinking?: boolean;
   thinkingEffort?: string;
+};
+
+export type SteerTurnInput = {
+  input: string;
+  expectedTurnId: string;
+  clientId?: string;
+  attachments?: RuntimeMessageAttachment[];
 };
 
 export type SendTurnResponse = {

@@ -775,6 +775,148 @@ describe('agent loop tools', () => {
     expect(saved?.messages.at(-1)?.status).toBe('complete');
   });
 
+  it('steers active user input into the next model request of the same turn', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Steer loop' });
+    const modelClient = new SteerableModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
+    await waitForModelRequestCount(modelClient, 1);
+
+    await expect(loop.steerTurn(thread.id, {
+      clientId: 'client-steer-1',
+      expectedTurnId: started.turnId,
+      input: 'Prefer the shorter path.',
+    })).resolves.toEqual({ accepted: true, turnId: started.turnId });
+    const steeredBeforeRelease = await threadStore.getThread(thread.id);
+    expect(steeredBeforeRelease?.messages.find((message) => message.clientId === 'client-steer-1')).toMatchObject({
+      content: 'Prefer the shorter path.',
+      role: 'user',
+      turnId: started.turnId,
+    });
+
+    modelClient.releaseFirstResponse();
+    const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+    const saved = await threadStore.getThread(thread.id);
+    const secondTurnMessages = modelClient.requests[1].messages.filter((message) => message.turnId === started.turnId);
+    const modelSteerMessage = secondTurnMessages.find((message) => message.clientId === 'client-steer-1');
+
+    expect(modelClient.requests).toHaveLength(2);
+    expect(secondTurnMessages.slice(0, 2).map((message) => `${message.role}:${message.content}`)).toEqual([
+      'user:initial prompt',
+      'assistant:initial answer',
+    ]);
+    expect(modelSteerMessage).toMatchObject({ role: 'user' });
+    expect(modelSteerMessage?.content).toBe('Prefer the shorter path.');
+    expect(saved?.messages.map((message) => `${message.role}:${message.content}`)).toEqual([
+      'user:initial prompt',
+      'assistant:initial answer',
+      'user:Prefer the shorter path.',
+      'assistant:guided answer',
+    ]);
+    expect(saved?.messages.find((message) => message.clientId === 'client-steer-1')).toMatchObject({
+      role: 'user',
+      turnId: started.turnId,
+    });
+    expect(events.filter((event) => event.type === 'turn.completed' && event.turnId === started.turnId)).toHaveLength(1);
+  });
+
+  it('treats a new start request during an active conversation as a steer', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Start while active' });
+    const modelClient = new SteerableModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
+    await waitForModelRequestCount(modelClient, 1);
+
+    await expect(loop.startTurn(thread.id, {
+      clientId: 'client-start-while-active',
+      input: 'Treat this as guidance.',
+    })).resolves.toEqual({ accepted: true, turnId: started.turnId });
+
+    const steeredBeforeRelease = await threadStore.getThread(thread.id);
+    expect(steeredBeforeRelease?.messages.find((message) => message.clientId === 'client-start-while-active')).toMatchObject({
+      content: 'Treat this as guidance.',
+      role: 'user',
+      turnId: started.turnId,
+    });
+
+    modelClient.releaseFirstResponse();
+    await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+
+    expect(modelClient.requests).toHaveLength(2);
+    const secondTurnMessages = modelClient.requests[1].messages.filter((message) => message.turnId === started.turnId);
+    const modelSteerMessage = secondTurnMessages.find((message) => message.clientId === 'client-start-while-active');
+    expect(secondTurnMessages.slice(0, 2).map((message) => `${message.role}:${message.content}`)).toEqual([
+      'user:initial prompt',
+      'assistant:initial answer',
+    ]);
+    expect(modelSteerMessage).toMatchObject({ role: 'user' });
+    expect(modelSteerMessage?.content).toBe('Treat this as guidance.');
+  });
+
+  it('publishes steered input immediately but queues it behind the current tool result for the next model request', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Steer during tool loop', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new BlockingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'read README' });
+    await toolHost.started;
+
+    await expect(loop.steerTurn(thread.id, {
+      clientId: 'client-steer-during-tool',
+      expectedTurnId: started.turnId,
+      input: 'Prefer the shorter path.',
+    })).resolves.toEqual({ accepted: true, turnId: started.turnId });
+    const eventsBeforeToolRelease = await threadStore.listEvents(thread.id, 0);
+    expect(eventsBeforeToolRelease.some((event) =>
+      event.type === 'message.created' && event.payload.message.clientId === 'client-steer-during-tool',
+    )).toBe(true);
+
+    toolHost.release();
+    const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+    const toolCompletedIndex = events.findIndex((event) => event.type === 'tool.completed' && event.payload.toolName === 'workspace_read_file');
+    const steerCreatedIndex = events.findIndex((event) =>
+      event.type === 'message.created' && event.payload.message.clientId === 'client-steer-during-tool',
+    );
+    const secondRequestMessages = modelClient.requests[1].messages.filter((message) => message.turnId === started.turnId);
+    const toolMessageIndex = secondRequestMessages.findIndex((message) => message.role === 'tool');
+    const steerMessageIndex = secondRequestMessages.findIndex((message) => message.clientId === 'client-steer-during-tool');
+
+    expect(toolCompletedIndex).toBeGreaterThanOrEqual(0);
+    expect(steerCreatedIndex).toBeGreaterThanOrEqual(0);
+    expect(steerCreatedIndex).toBeLessThan(toolCompletedIndex);
+    expect(toolMessageIndex).toBeGreaterThanOrEqual(0);
+    expect(steerMessageIndex).toBeGreaterThan(toolMessageIndex);
+    expect(secondRequestMessages[steerMessageIndex]?.content).toBe('Prefer the shorter path.');
+  });
+
   it('edits a user message, truncates following replies, and regenerates without duplicating the user turn', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -1010,6 +1152,43 @@ class CapturingToolHost implements ToolHost {
   async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     this.calls.push({ name, input, projectId: context.projectId });
     return { content: 'file contents from tool' };
+  }
+}
+
+class BlockingToolHost implements ToolHost {
+  calls: Array<{ name: string; input: unknown; projectId?: string }> = [];
+  private markStarted: () => void = () => undefined;
+  private releaseTool: () => void = () => undefined;
+  readonly started = new Promise<void>((resolve) => {
+    this.markStarted = resolve;
+  });
+  private readonly released = new Promise<void>((resolve) => {
+    this.releaseTool = resolve;
+  });
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'workspace_read_file',
+        description: 'Read a file',
+        inputSchema: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+        },
+      },
+    ];
+  }
+
+  async runTool(name: string, input: unknown, context: ToolExecutionContext) {
+    this.calls.push({ name, input, projectId: context.projectId });
+    this.markStarted();
+    await this.released;
+    return { content: 'file contents from blocked tool' };
+  }
+
+  release(): void {
+    this.releaseTool();
   }
 }
 
@@ -1371,6 +1550,30 @@ class CancellableModelClient implements ModelClient {
   }
 }
 
+class SteerableModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private releaseFirst: () => void = () => undefined;
+  private readonly firstResponseReleased = new Promise<void>((resolve) => {
+    this.releaseFirst = resolve;
+  });
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield { type: 'text_delta', text: 'initial answer' };
+      await this.firstResponseReleased;
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'guided answer' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+
+  releaseFirstResponse(): void {
+    this.releaseFirst();
+  }
+}
+
 class ApprovalToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown }> = [];
 
@@ -1562,11 +1765,15 @@ async function waitForPendingApproval(approvalGate: InMemoryApprovalGate) {
 }
 
 async function waitForModelRequest(modelClient: CancellableModelClient) {
+  await waitForModelRequestCount(modelClient, 1);
+}
+
+async function waitForModelRequestCount(modelClient: { requests: ModelRequest[] }, count: number) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (modelClient.requests.length) return;
+    if (modelClient.requests.length >= count) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('Timed out waiting for model request');
+  throw new Error(`Timed out waiting for ${count} model request(s); saw ${modelClient.requests.length}.`);
 }
 
 async function waitForToolStarts(toolHost: ParallelReadToolHost, count: number) {

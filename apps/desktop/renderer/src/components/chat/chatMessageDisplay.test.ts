@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { assistantRunCopyText, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal } from './chatMessageDisplay.js';
+import { activeAssistantRunItemId, assistantRunCopyText, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal } from './chatMessageDisplay.js';
 
 describe('createChatDisplayItems', () => {
   it('keeps manually compacted context at its runtime position instead of appending it', () => {
@@ -118,6 +118,322 @@ describe('createChatDisplayItems', () => {
     ]);
   });
 
+  it('folds steered user input into the same assistant turn item', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_initial',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'initial prompt',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_initial',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'initial answer',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_steer',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'extra guidance',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_followup',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'guided answer',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        status: 'complete',
+      },
+    ];
+
+    expect(createChatDisplayItems(messages).map((item) => `${item.type}:${item.id}`)).toEqual([
+      'user:user_initial',
+      'assistant:assistant_initial__assistant_run__assistant_followup',
+    ]);
+    const items = createChatDisplayItems(messages);
+    expect(items.find((item) => item.id === 'user_initial')).toMatchObject({
+      type: 'user',
+      guidanceProcessed: true,
+      handledSteerMessageIds: ['user_steer'],
+      messageIds: ['user_initial', 'user_steer'],
+      steered: false,
+      steerMessages: [expect.objectContaining({ id: 'user_steer' })],
+    });
+    expect(items.find((item) => item.id === 'user_steer')).toBeUndefined();
+    expect(items.find((item) => item.type === 'assistant')).toMatchObject({
+      type: 'assistant',
+      handledSteerMessageIds: ['user_steer'],
+      messageIds: ['assistant_initial', 'user_steer', 'assistant_followup'],
+      segments: [
+        expect.objectContaining({ id: 'assistant_initial' }),
+        expect.objectContaining({ id: 'assistant_followup' }),
+      ],
+      steerMessages: [expect.objectContaining({ id: 'user_steer' })],
+    });
+    expect(activeAssistantRunItemId(items, 'turn_1')).toBe('assistant_initial__assistant_run__assistant_followup');
+  });
+
+  it('keeps the same assistant turn item active while steered input waits for a follow-up segment', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_initial',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'initial prompt',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_initial',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'initial answer',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_steer',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'extra guidance',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+    const items = createChatDisplayItems(messages);
+
+    expect(createChatDisplayItems(messages).map((item) => `${item.type}:${item.id}`)).toEqual([
+      'user:user_initial',
+      'assistant:assistant_initial',
+    ]);
+    expect(activeAssistantRunItemId(items, 'turn_1')).toBe('assistant_initial');
+    expect(items.find((item) => item.id === 'user_initial')).toMatchObject({
+      type: 'user',
+      guidanceProcessed: false,
+      handledSteerMessageIds: [],
+      messageIds: ['user_initial', 'user_steer'],
+      steerMessages: [expect.objectContaining({ id: 'user_steer' })],
+    });
+    expect(items.find((item) => item.type === 'assistant')).toMatchObject({
+      type: 'assistant',
+      handledSteerMessageIds: [],
+      messageIds: ['assistant_initial', 'user_steer'],
+      steerMessages: [expect.objectContaining({ id: 'user_steer' })],
+    });
+  });
+
+  it('folds steered input even when the original user message lacks a turn id', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_initial',
+        role: 'user',
+        content: 'legacy initial prompt',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_initial',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'initial work',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_steer',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'extra guidance',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_followup',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'guided follow-up',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        status: 'streaming',
+      },
+    ];
+    const items = createChatDisplayItems(messages);
+
+    expect(items.map((item) => `${item.type}:${item.id}`)).toEqual([
+      'user:user_initial',
+      'assistant:assistant_initial__assistant_run__assistant_followup',
+    ]);
+    expect(items.find((item) => item.id === 'user_steer')).toBeUndefined();
+    expect(items.find((item) => item.id === 'user_initial')).toMatchObject({
+      type: 'user',
+      messageIds: ['user_initial', 'user_steer'],
+      steerMessages: [expect.objectContaining({ id: 'user_steer' })],
+    });
+    expect(items.find((item) => item.type === 'assistant')).toMatchObject({
+      type: 'assistant',
+      messageIds: ['assistant_initial', 'user_steer', 'assistant_followup'],
+      segments: [
+        expect.objectContaining({ id: 'assistant_initial' }),
+        expect.objectContaining({ id: 'assistant_followup' }),
+      ],
+      steerMessages: [expect.objectContaining({ id: 'user_steer' })],
+    });
+    expect(activeAssistantRunItemId(items, 'turn_1')).toBe('assistant_initial__assistant_run__assistant_followup');
+  });
+
+  it('does not mark steered input handled for an empty assistant placeholder', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_initial',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'initial prompt',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_initial',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'initial work',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_steer',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'extra guidance',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_placeholder',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        status: 'streaming',
+      },
+    ];
+    const items = createChatDisplayItems(messages);
+
+    expect(items.find((item) => item.id === 'user_initial')).toMatchObject({
+      type: 'user',
+      guidanceProcessed: false,
+      handledSteerMessageIds: [],
+      steerMessages: [expect.objectContaining({ id: 'user_steer' })],
+    });
+    expect(items.find((item) => item.type === 'assistant')).toMatchObject({
+      type: 'assistant',
+      handledSteerMessageIds: [],
+      segments: [
+        expect.objectContaining({ id: 'assistant_initial' }),
+        expect.objectContaining({ id: 'assistant_placeholder' }),
+      ],
+    });
+  });
+
+  it('keeps multiple steers and streaming placeholders inside one assistant turn item', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_initial',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'initial prompt',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_initial',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'initial work',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+        toolRuns: [{ id: 'tool_1', name: 'workspace_read_file', status: 'success' }],
+      },
+      {
+        id: 'user_steer_1',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'first steer',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_placeholder',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        status: 'streaming',
+      },
+      {
+        id: 'user_steer_2',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'second steer',
+        createdAt: '2026-06-26T00:00:04.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_followup',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'follow-up work',
+        createdAt: '2026-06-26T00:00:05.000Z',
+        status: 'streaming',
+      },
+    ];
+    const items = createChatDisplayItems(messages);
+
+    expect(items.map((item) => `${item.type}:${item.id}`)).toEqual([
+      'user:user_initial',
+      'assistant:assistant_initial__assistant_run__assistant_placeholder__assistant_run__assistant_followup',
+    ]);
+    expect(items.find((item) => item.id === 'user_initial')).toMatchObject({
+      type: 'user',
+      guidanceProcessed: true,
+      handledSteerMessageIds: ['user_steer_1', 'user_steer_2'],
+      messageIds: ['user_initial', 'user_steer_1', 'user_steer_2'],
+      steerMessages: [
+        expect.objectContaining({ id: 'user_steer_1' }),
+        expect.objectContaining({ id: 'user_steer_2' }),
+      ],
+    });
+    expect(items.find((item) => item.id === 'user_steer_1')).toBeUndefined();
+    expect(items.find((item) => item.id === 'user_steer_2')).toBeUndefined();
+    expect(items.find((item) => item.type === 'assistant')).toMatchObject({
+      type: 'assistant',
+      handledSteerMessageIds: ['user_steer_1', 'user_steer_2'],
+      messageIds: [
+        'assistant_initial',
+        'user_steer_1',
+        'assistant_placeholder',
+        'user_steer_2',
+        'assistant_followup',
+      ],
+      segments: [
+        expect.objectContaining({ id: 'assistant_initial' }),
+        expect.objectContaining({ id: 'assistant_placeholder' }),
+        expect.objectContaining({ id: 'assistant_followup' }),
+      ],
+      steerMessages: [
+        expect.objectContaining({ id: 'user_steer_1' }),
+        expect.objectContaining({ id: 'user_steer_2' }),
+      ],
+    });
+    expect(activeAssistantRunItemId(items, 'turn_1')).toBe('assistant_initial__assistant_run__assistant_placeholder__assistant_run__assistant_followup');
+  });
+
   it('keeps model-only injected history out of the transcript', () => {
     const messages: RuntimeMessage[] = [
       {
@@ -178,7 +494,9 @@ describe('createChatDisplayItems', () => {
     expect(assistantRunCopyText({
       type: 'assistant',
       id: 'assistant_1',
+      handledSteerMessageIds: [],
       messageIds: ['assistant_1'],
+      steerMessages: [],
       segments: [
         {
           id: 'assistant_1',

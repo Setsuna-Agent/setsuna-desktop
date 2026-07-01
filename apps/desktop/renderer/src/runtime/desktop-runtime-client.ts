@@ -29,6 +29,7 @@ import type {
   RuntimeUsageResponse,
   SendTurnInput,
   SendTurnResponse,
+  SteerTurnInput,
   ThreadList,
   ThreadPatch,
   ThreadQuery,
@@ -91,6 +92,13 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     sendTurn(threadId: string, input: SendTurnInput) {
       return request<SendTurnResponse>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/turns`,
+        method: 'POST',
+        body: input,
+      });
+    },
+    steerTurn(threadId: string, turnId: string, input: SteerTurnInput) {
+      return request<SendTurnResponse>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/turns/${encodeURIComponent(turnId)}/steer`,
         method: 'POST',
         body: input,
       });

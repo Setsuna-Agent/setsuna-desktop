@@ -92,6 +92,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
+  if (event.type === 'turn.started') {
+    next.activeTurnId = event.turnId ?? next.activeTurnId ?? null;
+    return next;
+  }
+
   if (event.type === 'message.delta') {
     const message = next.messages.find((item) => item.id === event.payload.messageId);
     if (message) {
@@ -230,6 +235,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'runtime.error') {
+    if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
       message.status = 'error';
@@ -243,6 +249,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'turn.cancelled') {
     const reason = event.payload.reason || 'Turn cancelled.';
+    if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     for (const message of next.messages) {
       if (event.turnId && message.turnId !== event.turnId) continue;
       if (message.status === 'streaming' || (message.role === 'assistant' && hasActiveToolRun(message))) {
@@ -252,6 +259,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       }
       completeActiveToolRuns(message, event.createdAt, reason);
     }
+    return next;
+  }
+
+  if (event.type === 'turn.completed') {
+    if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     return next;
   }
 

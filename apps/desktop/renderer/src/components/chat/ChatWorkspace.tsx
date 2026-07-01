@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { Actions, Bubble, CodeHighlighter } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
-import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
 import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
@@ -9,7 +9,8 @@ import { FileChangesSummaryCard, RuntimeToolRuns, isDisplayableRuntimeToolRun, t
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
+import { interleaveGuidanceByMessageOrder, type GuidanceTimelineEntry } from './chatGuidanceTimeline.js';
+import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
@@ -23,6 +24,7 @@ const pinnedScrollSettleFrameCount = 3;
 const overviewAutoCollapseWidthPx = 620;
 const keyboardScrollIntentKeys = new Set(['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' ']);
 type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
+type WorkHistoryExpandedChangeHandler = (itemId: string, expanded: boolean) => void;
 
 export function ChatWorkspace({
   activeTurnId,
@@ -99,24 +101,51 @@ export function ChatWorkspace({
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     setShowFullHistory(false);
     setOverviewExpanded(false);
+    setExpandedWorkHistoryItemIds(new Set());
   }, [currentThread?.id]);
+  const assistantItemIdByTurnId = useMemo(() => {
+    const itemIdByTurnId = new Map<string, string>();
+    for (const item of displayItems) {
+      if (item.type !== 'assistant') continue;
+      for (const segment of item.segments) {
+        if (segment.turnId) itemIdByTurnId.set(segment.turnId, item.id);
+      }
+    }
+    return itemIdByTurnId;
+  }, [displayItems]);
+  const handleWorkHistoryExpandedChange = useCallback<WorkHistoryExpandedChangeHandler>((itemId, expanded) => {
+    setExpandedWorkHistoryItemIds((current) => {
+      const alreadyExpanded = current.has(itemId);
+      if (alreadyExpanded === expanded) return current;
+      const next = new Set(current);
+      if (expanded) next.add(itemId);
+      else next.delete(itemId);
+      return next;
+    });
+  }, []);
   const renderWindow = useMemo(
     () => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory }),
     [activeTurnId, deleteMode, displayItems, showFullHistory],
   );
   const renderedDisplayItems = renderWindow.items;
-  const activeAssistantVisible = useMemo(
-    () => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'assistant' && assistantRunIsActive(item, activeTurnId))),
+  const activeAssistantItemId = useMemo(
+    () => activeAssistantRunItemId(renderedDisplayItems, activeTurnId),
     [activeTurnId, renderedDisplayItems],
   );
+  const activeAssistantVisible = Boolean(activeAssistantItemId);
   const activeUserVisible = useMemo(
     () => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'user' && item.message.turnId === activeTurnId)),
     [activeTurnId, renderedDisplayItems],
   );
   const showActiveTurnPlaceholder = Boolean(activeTurnId && !activeAssistantVisible);
+  const activePlaceholderUserItemId = useMemo(() => {
+    if (!showActiveTurnPlaceholder || !activeTurnId) return null;
+    return [...renderedDisplayItems].reverse().find((item) => item.type === 'user' && item.message.turnId === activeTurnId)?.id ?? null;
+  }, [activeTurnId, renderedDisplayItems, showActiveTurnPlaceholder]);
   const scrollSignal = useMemo(
     () => createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id }),
     [activeTurnId, contextCompactionRunning, currentThread?.id, renderWindow],
@@ -154,7 +183,7 @@ export function ChatWorkspace({
         .filter((item) => item.type !== 'context' && item.type !== 'review')
         .map((item) => ({
           id: item.id,
-          messageIds: item.type === 'assistant' ? item.messageIds : [item.message.id],
+          messageIds: item.messageIds,
           type: item.type,
         })),
     [displayItems],
@@ -342,11 +371,14 @@ export function ChatWorkspace({
                   {renderedDisplayItems.map((item) => (
                     <Fragment key={item.id}>
                       <MessageItem
+                        activeAssistantItemId={activeAssistantItemId}
                         activeTurnId={activeTurnId}
+                        assistantItemIdByTurnId={assistantItemIdByTurnId}
                         deleteMode={deleteMode}
                         editingDraft={editingDraft}
                         editingMessageId={editingMessageId}
                         editingSubmitting={editingSubmitting}
+                        expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
                         item={item}
                         onAnswerApproval={onAnswerApproval}
                         onCancelEdit={cancelEditingMessage}
@@ -357,9 +389,10 @@ export function ChatWorkspace({
                         onStartDelete={startDeleteSelection}
                         onSubmitEdit={submitEditingMessage}
                         onToggleDelete={toggleDeleteSelection}
+                        onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
                         selectedForDelete={selectedDeleteItemIds.has(item.id)}
                       />
-                      {showActiveTurnPlaceholder && item.type === 'user' && item.message.turnId === activeTurnId ? (
+                      {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
                         <ActiveWorkPlaceholder segments={[item.message]} />
                       ) : null}
                     </Fragment>
@@ -679,11 +712,14 @@ function formatPercent(value: number): string {
 }
 
 function MessageItem({
+  activeAssistantItemId,
   activeTurnId,
+  assistantItemIdByTurnId,
   deleteMode,
   editingDraft,
   editingMessageId,
   editingSubmitting,
+  expandedWorkHistoryItemIds,
   item,
   onAnswerApproval,
   onCancelEdit,
@@ -694,13 +730,17 @@ function MessageItem({
   onStartDelete,
   onSubmitEdit,
   onToggleDelete,
+  onWorkHistoryExpandedChange,
   selectedForDelete,
 }: {
+  activeAssistantItemId: string | null;
   activeTurnId: string | null;
+  assistantItemIdByTurnId: Map<string, string>;
   deleteMode: boolean;
   editingDraft: string;
   editingMessageId: string | null;
   editingSubmitting: boolean;
+  expandedWorkHistoryItemIds: Set<string>;
   item: ChatDisplayItem;
   onAnswerApproval: AnswerApprovalHandler;
   onCancelEdit: () => void;
@@ -711,12 +751,14 @@ function MessageItem({
   onStartDelete: (itemId: string) => void;
   onSubmitEdit: (messageId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
+  onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   selectedForDelete: boolean;
 }) {
   if (item.type === 'assistant') {
     return (
       <AssistantRunItem
         activeTurnId={activeTurnId}
+        activeAssistantItemId={activeAssistantItemId}
         deleteMode={deleteMode}
         item={item}
         onAnswerApproval={onAnswerApproval}
@@ -724,6 +766,7 @@ function MessageItem({
         onOpenFileReview={onOpenFileReview}
         onStartDelete={onStartDelete}
         onToggleDelete={onToggleDelete}
+        onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
         selectedForDelete={selectedForDelete}
       />
     );
@@ -737,6 +780,17 @@ function MessageItem({
   const { message } = item;
   const streaming = message.status === 'streaming';
   const editing = editingMessageId === message.id;
+  const steered = item.steered;
+  const assistantItemId = message.turnId ? assistantItemIdByTurnId.get(message.turnId) : undefined;
+  const workHistoryExpanded = assistantItemId ? expandedWorkHistoryItemIds.has(assistantItemId) : false;
+  const showExtractedGuidance = Boolean(
+    !steered
+      && message.turnId
+      && message.turnId !== activeTurnId
+      && item.guidanceProcessed
+      && item.steerMessages.length
+      && !workHistoryExpanded,
+  );
   if (editing) {
     return (
       <UserMessageEditor
@@ -768,21 +822,30 @@ function MessageItem({
           onChange={(checked) => onToggleDelete(item.id, checked)}
         />
       ) : null}
-      <Bubble
-        className="chat-user-bubble"
-        content={<UserMessageContent message={message} streaming={streaming} />}
-        footer={
-          <MessageFooter
-            actionsDisabled={Boolean(activeTurnId) || deleteMode}
-            align="end"
-            message={message}
-            onDelete={() => onStartDelete(item.id)}
-            onEdit={() => onStartEdit(message)}
+      <div className="chat-user-turn">
+        <Bubble
+          className="chat-user-bubble"
+          content={<UserMessageContent message={message} streaming={streaming} />}
+          footer={
+            <MessageFooter
+              actionsDisabled={Boolean(activeTurnId) || deleteMode}
+              align="end"
+              message={message}
+              onDelete={steered ? undefined : () => onStartDelete(item.id)}
+              onEdit={steered ? undefined : () => onStartEdit(message)}
+              timePosition={steered ? 'none' : 'before-actions'}
+            />
+          }
+          placement="end"
+          variant="filled"
+        />
+        {showExtractedGuidance ? (
+          <GuidanceMessageList
+            handledMessageIds={new Set(item.handledSteerMessageIds)}
+            messages={item.steerMessages}
           />
-        }
-        placement="end"
-        variant="filled"
-      />
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -803,6 +866,7 @@ function UserMessageContent({ message, streaming }: { message: RuntimeMessage; s
 }
 
 function AssistantRunItem({
+  activeAssistantItemId,
   activeTurnId,
   deleteMode,
   item,
@@ -811,8 +875,10 @@ function AssistantRunItem({
   onOpenFileReview,
   onStartDelete,
   onToggleDelete,
+  onWorkHistoryExpandedChange,
   selectedForDelete,
 }: {
+  activeAssistantItemId: string | null;
   activeTurnId: string | null;
   deleteMode: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
@@ -821,10 +887,12 @@ function AssistantRunItem({
   onOpenFileReview?: () => void;
   onStartDelete: (itemId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
+  onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   selectedForDelete: boolean;
 }) {
   const status = assistantRunStatus(item);
-  const active = assistantRunIsActive(item, activeTurnId);
+  const belongsToActiveTurn = assistantRunIsActive(item, activeTurnId);
+  const active = belongsToActiveTurn && item.id === activeAssistantItemId;
   const streaming = status === 'streaming' || active;
   const lastSegment = item.segments[item.segments.length - 1];
   const footerMessage = {
@@ -859,10 +927,11 @@ function AssistantRunItem({
             onAnswerApproval={onAnswerApproval}
             onDiscardFileChanges={onDiscardFileChanges}
             onOpenFileReview={onOpenFileReview}
+            onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
           />
         }
         footer={
-          active ? undefined : (
+          belongsToActiveTurn ? undefined : (
             <MessageFooter
               actionsDisabled={Boolean(activeTurnId) || deleteMode}
               message={footerMessage}
@@ -1053,12 +1122,14 @@ function AssistantRunContent({
   onAnswerApproval,
   onDiscardFileChanges,
   onOpenFileReview,
+  onWorkHistoryExpandedChange,
 }: {
   active: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: () => void;
+  onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
 }) {
   const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
   const status = assistantRunStatus(item);
@@ -1070,26 +1141,47 @@ function AssistantRunContent({
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
+  const guidanceMessageIds = useMemo(() => new Set(item.handledSteerMessageIds), [item.handledSteerMessageIds]);
+  const assistantGuidanceMessages = item.steerMessages;
+  const guidanceByBlockIndex = useMemo(
+    () => active ? groupGuidanceByPrecedingBlock(timelineBlocks, assistantGuidanceMessages, item.messageIds) : new Map<number, RuntimeMessage[]>(),
+    [active, assistantGuidanceMessages, item.messageIds, timelineBlocks],
+  );
+  const activeGuidanceBeforeFirstBlock = active && !hasWorkBlock ? (guidanceByBlockIndex.get(-1) ?? []) : [];
+  const activePlaceholderGuidance = activeGuidanceBeforeFirstBlock.length ? (
+    <GuidanceMessageList
+      handledMessageIds={guidanceMessageIds}
+      markerMode="handled"
+      messages={activeGuidanceBeforeFirstBlock}
+    />
+  ) : null;
   const fileChangeSummary = useMemo(() => {
     if (active || !hasFinalAnswerContent) return null;
     return fileChangeSummaryFromRuns(toolRuns);
   }, [active, hasFinalAnswerContent, toolRuns]);
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
-    return active ? <ActiveWorkPlaceholder segments={displaySegments} /> : <AssistantLoadingIndicator label="思考中" />;
+    return active ? (
+      <div className="chat-assistant-run">
+        <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder>
+      </div>
+    ) : <AssistantLoadingIndicator label="思考中" />;
   }
   return (
     <div className="chat-assistant-run">
-      {showActiveWorkPlaceholder ? <ActiveWorkPlaceholder segments={displaySegments} /> : null}
-      {timelineBlocks.map((block, index) =>
-        assistantTimelineNode(
-          block,
-          onAnswerApproval,
-          active,
-          workHistoryState.active,
-          workHistoryState.expanded,
-          timelineBlocks.slice(index + 1).some((nextBlock) => nextBlock.type === 'content' && nextBlock.content.trim()),
-        ),
-      )}
+      {showActiveWorkPlaceholder ? <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder> : null}
+      {assistantTimelineNodes({
+        active,
+        blocks: timelineBlocks,
+        guidanceByBlockIndex,
+        guidanceMessages: assistantGuidanceMessages,
+        handledGuidanceMessageIds: guidanceMessageIds,
+        itemId: item.id,
+        messageOrderIds: item.messageIds,
+        onAnswerApproval,
+        onWorkHistoryExpandedChange,
+        workHistoryActive: workHistoryState.active,
+        workHistoryExpanded: workHistoryState.expanded,
+      })}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
           <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
@@ -1099,13 +1191,264 @@ function AssistantRunContent({
   );
 }
 
+function GuidanceMessageList({
+  handledMessageIds,
+  markerMode = 'none',
+  messages,
+}: {
+  handledMessageIds: Set<string>;
+  markerMode?: 'none' | 'handled' | 'always';
+  messages: RuntimeMessage[];
+}) {
+  if (!messages.length) return null;
+  const showMarker = markerMode === 'always' || (markerMode === 'handled' && messages.some((message) => handledMessageIds.has(message.id)));
+  return (
+    <div className="chat-guidance-list">
+      {messages.map((message) => (
+        <GuidanceMessage key={message.id} message={message} />
+      ))}
+      {showMarker ? <GuidanceProcessedMarker /> : null}
+    </div>
+  );
+}
+
+function GuidanceMessage({ message }: { message: RuntimeMessage }) {
+  return (
+    <div className="chat-guidance-message">
+      <div className="chat-guidance-message__bubble">
+        <UserMessageContent message={message} streaming={false} />
+      </div>
+      <MessageFooter align="end" message={message} timePosition="none" />
+    </div>
+  );
+}
+
+function GuidanceProcessedMarker() {
+  return <div className="chat-guidance-marker" aria-label="已引导对话">已引导对话</div>;
+}
+
+function groupGuidanceByPrecedingBlock(
+  blocks: AssistantRunTimelineBlock[],
+  guidanceMessages: RuntimeMessage[],
+  messageOrderIds: string[],
+): Map<number, RuntimeMessage[]> {
+  const orderIndex = new Map(messageOrderIds.map((id, index) => [id, index]));
+  const blockOrderIndexes = blocks.map((block) => blockOrderIds(block)
+    .map((id) => orderIndex.get(id))
+    .filter((index): index is number => index !== undefined));
+  const grouped = new Map<number, RuntimeMessage[]>();
+  for (const message of guidanceMessages) {
+    const guidanceIndex = orderIndex.get(message.id) ?? Number.MAX_SAFE_INTEGER;
+    let precedingBlockIndex = -1;
+    blockOrderIndexes.forEach((indexes, blockIndex) => {
+      const maxIndex = indexes.length ? Math.max(...indexes) : -1;
+      if (maxIndex >= 0 && maxIndex < guidanceIndex) precedingBlockIndex = blockIndex;
+    });
+    const messages = grouped.get(precedingBlockIndex) ?? [];
+    messages.push(message);
+    grouped.set(precedingBlockIndex, messages);
+  }
+  return grouped;
+}
+
+function blockOrderIds(block: AssistantRunTimelineBlock): string[] {
+  if (block.type === 'work') return block.segments.map((segment) => segment.id);
+  return [block.segment.id];
+}
+
+function assistantTimelineNodes({
+  active,
+  blocks,
+  guidanceByBlockIndex,
+  guidanceMessages,
+  handledGuidanceMessageIds,
+  itemId,
+  messageOrderIds,
+  onAnswerApproval,
+  onWorkHistoryExpandedChange,
+  workHistoryActive,
+  workHistoryExpanded,
+}: {
+  active: boolean;
+  blocks: AssistantRunTimelineBlock[];
+  guidanceByBlockIndex: Map<number, RuntimeMessage[]>;
+  guidanceMessages: RuntimeMessage[];
+  handledGuidanceMessageIds: Set<string>;
+  itemId: string;
+  messageOrderIds: string[];
+  onAnswerApproval: AnswerApprovalHandler;
+  onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
+  workHistoryActive: boolean;
+  workHistoryExpanded: boolean;
+}): ReactNode[] {
+  const firstWorkBlockIndex = blocks.findIndex((block) => block.type === 'work');
+  const blockIndexById = new Map(blocks.map((block, index) => [block.id, index]));
+  const hasFollowingContent = blocks.some((block) => block.type === 'content' && block.content.trim());
+  const nodes: ReactNode[] = [];
+
+  blocks.forEach((block, index) => {
+    const activeGuidance = guidanceByBlockIndex.get(index) ?? [];
+    if (block.type === 'work') {
+      if (index === firstWorkBlockIndex) {
+        const workBlocks = blocks.filter(isAssistantWorkBlock);
+        nodes.push(assistantWorkHistoryNode({
+          active,
+          blockIndexById,
+          blocks: workBlocks,
+          collapsedGuidanceMessages: active ? [] : guidanceMessages,
+          guidanceByBlockIndex,
+          guidanceMessages,
+          hasFollowingContent,
+          handledGuidanceMessageIds,
+          itemId,
+          messageOrderIds,
+          onAnswerApproval,
+          onExpandedChange: onWorkHistoryExpandedChange,
+          workHistoryActive,
+          workHistoryExpanded,
+        }));
+      }
+      return;
+    }
+    nodes.push(assistantTimelineNode(
+      block,
+      onAnswerApproval,
+      active,
+    ));
+    if (active && activeGuidance.length) {
+      nodes.push(
+        <GuidanceMessageList
+          handledMessageIds={handledGuidanceMessageIds}
+          key={`${block.id}:guidance`}
+          markerMode="handled"
+          messages={activeGuidance}
+        />,
+      );
+    }
+  });
+
+  return nodes;
+}
+
+function isAssistantWorkBlock(block: AssistantRunTimelineBlock): block is Extract<AssistantRunTimelineBlock, { type: 'work' }> {
+  return block.type === 'work';
+}
+
+function assistantWorkHistoryNode({
+  active,
+  blockIndexById,
+  blocks,
+  collapsedGuidanceMessages,
+  guidanceByBlockIndex,
+  guidanceMessages,
+  hasFollowingContent,
+  handledGuidanceMessageIds,
+  itemId,
+  messageOrderIds,
+  onAnswerApproval,
+  onExpandedChange,
+  workHistoryActive,
+  workHistoryExpanded,
+}: {
+  active: boolean;
+  blockIndexById: Map<string, number>;
+  blocks: Array<Extract<AssistantRunTimelineBlock, { type: 'work' }>>;
+  collapsedGuidanceMessages: RuntimeMessage[];
+  guidanceByBlockIndex: Map<number, RuntimeMessage[]>;
+  guidanceMessages: RuntimeMessage[];
+  hasFollowingContent: boolean;
+  handledGuidanceMessageIds: Set<string>;
+  itemId: string;
+  messageOrderIds: string[];
+  onAnswerApproval: AnswerApprovalHandler;
+  onExpandedChange: WorkHistoryExpandedChangeHandler;
+  workHistoryActive: boolean;
+  workHistoryExpanded: boolean;
+}): ReactNode {
+  const workNodes: ReactNode[] = [];
+  let consumedGuidanceIds = new Set<string>();
+  blocks.forEach((block) => {
+    const interleaved = active
+      ? interleaveGuidanceByMessageOrder({
+          consumedGuidanceIds,
+          getItemMessageId: assistantWorkItemMessageId,
+          guidanceMessages,
+          items: block.items,
+          messageOrderIds,
+        })
+      : {
+          consumedGuidanceIds,
+          entries: block.items.map((item): GuidanceTimelineEntry<(typeof block.items)[number]> => ({ type: 'item', item })),
+        };
+    consumedGuidanceIds = interleaved.consumedGuidanceIds;
+    workNodes.push(...assistantWorkEntriesNodes(
+      block,
+      interleaved.entries,
+      onAnswerApproval,
+      hasFollowingContent,
+      handledGuidanceMessageIds,
+    ));
+    const originalBlockIndex = blockIndexById.get(block.id) ?? -1;
+    const inlineGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(originalBlockIndex) ?? [], consumedGuidanceIds) : [];
+    if (inlineGuidanceMessages.length) {
+      workNodes.push(
+        <GuidanceMessageList
+          handledMessageIds={handledGuidanceMessageIds}
+          key={`${block.id}:guidance-inline`}
+          markerMode="handled"
+          messages={inlineGuidanceMessages}
+        />,
+      );
+    }
+  });
+  const beforeFirstGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(-1) ?? [], consumedGuidanceIds) : [];
+  if (beforeFirstGuidanceMessages.length) {
+    // Steer messages can arrive before the next assistant segment is created.
+    // Keep them inside the active work panel instead of lifting them above the turn header.
+    workNodes.push(
+      <GuidanceMessageList
+        handledMessageIds={handledGuidanceMessageIds}
+        key="active-guidance-before-first-inline"
+        markerMode="handled"
+        messages={beforeFirstGuidanceMessages}
+      />,
+    );
+  }
+  if (!active && collapsedGuidanceMessages.length) {
+    workNodes.push(
+      <GuidanceMessageList
+        handledMessageIds={handledGuidanceMessageIds}
+        key="completed-guidance-inline"
+        markerMode="handled"
+        messages={collapsedGuidanceMessages}
+      />,
+    );
+  }
+  const workTiming = inferWorkTiming(blocks.flatMap((block) => block.segments));
+  const hasWorkDetails = workNodes.length > 0;
+  const activeWorkBlock = blocks.some((block) => block.active);
+  const mergedWorkHistoryActive = activeWorkBlock || workHistoryActive;
+  if (!hasWorkDetails && !mergedWorkHistoryActive) return null;
+  return (
+    <WorkHistoryPanel
+      active={mergedWorkHistoryActive}
+      completedAtMs={workTiming.completedAtMs}
+      hasDetails={hasWorkDetails}
+      key="assistant-work-history"
+      keepExpanded={workHistoryExpanded}
+      panelId={itemId}
+      startedAtMs={workTiming.startedAtMs}
+      onExpandedChange={onExpandedChange}
+    >
+      {workNodes}
+    </WorkHistoryPanel>
+  );
+}
+
 function assistantTimelineNode(
-  block: AssistantRunTimelineBlock,
+  block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>,
   onAnswerApproval: AnswerApprovalHandler,
   runActive: boolean,
-  keepWorkHistoryActive: boolean,
-  keepWorkHistoryExpanded: boolean,
-  hasFollowingContent: boolean,
 ): ReactNode {
   if (block.type === 'content') {
     return (
@@ -1129,57 +1472,71 @@ function assistantTimelineNode(
       </div>
     );
   }
-
-  const toolRunSummaryMode: ToolRunSummaryMode = hasFollowingContent ? 'aggregate' : 'latest';
-  const workEntries = block.items.flatMap((item): Array<{ kind: 'thinking' | 'work'; node: ReactNode }> => {
-    if (item.type === 'content') {
-      return [{
-        kind: 'work',
-        node: <MarkdownContent key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />,
-      }];
-    }
-    if (item.type === 'thinking') {
-      return block.active && item.segment.content.trim()
-        ? [{ kind: 'thinking', node: <ActiveThinkingBox key={item.segment.id} content={item.segment.content} /> }]
-        : [];
-    }
-    const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
-    return visibleToolRuns.length
-      ? [{
-          kind: 'work',
-          node: <RuntimeToolRuns key={item.id} runs={visibleToolRuns} summaryMode={toolRunSummaryMode} onAnswerApproval={onAnswerApproval} />,
-        }]
-      : [];
-  });
-  const workNodes = workEntries.map((entry) => entry.node);
-  const workTiming = inferWorkTiming(block.segments);
-  const hasWorkDetails = workNodes.length > 0;
-  const showWorkHistory = hasWorkDetails || runActive;
-  const workHistoryActive = block.active || keepWorkHistoryActive;
-  if (!showWorkHistory) return null;
-  return (
-    <Fragment key={block.id}>
-      <WorkHistoryPanel
-        active={workHistoryActive}
-        completedAtMs={workTiming.completedAtMs}
-        hasDetails={hasWorkDetails}
-        keepExpanded={keepWorkHistoryExpanded}
-        startedAtMs={workTiming.startedAtMs}
-      >
-        {workNodes}
-      </WorkHistoryPanel>
-    </Fragment>
-  );
 }
 
-function ActiveWorkPlaceholder({ segments }: { segments: RuntimeMessage[] }) {
+function assistantWorkEntriesNodes(
+  block: Extract<AssistantRunTimelineBlock, { type: 'work' }>,
+  entries: Array<GuidanceTimelineEntry<(typeof block.items)[number]>>,
+  onAnswerApproval: AnswerApprovalHandler,
+  hasFollowingContent: boolean,
+  handledGuidanceMessageIds: Set<string>,
+): ReactNode[] {
+  const toolRunSummaryMode: ToolRunSummaryMode = hasFollowingContent ? 'aggregate' : 'latest';
+  return entries.flatMap((entry) => {
+    if (entry.type === 'guidance') {
+      return [(
+        <GuidanceMessageList
+          handledMessageIds={handledGuidanceMessageIds}
+          key={`guidance-before-${entry.messages.map((message) => message.id).join('-')}`}
+          markerMode="handled"
+          messages={entry.messages}
+        />
+      )];
+    }
+    return assistantWorkItemNodes(entry.item, block.active, toolRunSummaryMode, onAnswerApproval);
+  });
+}
+
+function assistantWorkItemNodes(
+  item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
+  blockActive: boolean,
+  toolRunSummaryMode: ToolRunSummaryMode,
+  onAnswerApproval: AnswerApprovalHandler,
+): ReactNode[] {
+  if (item.type === 'content') {
+    return [<MarkdownContent key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />];
+  }
+  if (item.type === 'thinking') {
+    return blockActive && item.segment.content.trim()
+      ? [<ActiveThinkingBox key={item.segment.id} content={item.segment.content} />]
+      : [];
+  }
+  const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
+  return visibleToolRuns.length
+    ? [<RuntimeToolRuns key={item.id} runs={visibleToolRuns} summaryMode={toolRunSummaryMode} onAnswerApproval={onAnswerApproval} />]
+    : [];
+}
+
+function assistantWorkItemMessageId(item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number]): string | undefined {
+  if (item.type === 'content') return item.segment.segment.id;
+  if (item.type === 'thinking') return item.segment.segment.id;
+  return item.segment.id;
+}
+
+function withoutConsumedGuidance(messages: RuntimeMessage[], consumedIds: Set<string>): RuntimeMessage[] {
+  return messages.filter((message) => !consumedIds.has(message.id));
+}
+
+function ActiveWorkPlaceholder({ children, segments }: { children?: ReactNode; segments: RuntimeMessage[] }) {
   return (
     <WorkHistoryPanel
       active
       completedAtMs={null}
-      hasDetails={false}
+      hasDetails={Boolean(children)}
       startedAtMs={inferActiveTurnStartedAtMs(segments)}
-    />
+    >
+      {children}
+    </WorkHistoryPanel>
   );
 }
 
@@ -1275,6 +1632,8 @@ function WorkHistoryPanel({
   completedAtMs,
   hasDetails,
   keepExpanded = false,
+  onExpandedChange,
+  panelId,
   startedAtMs,
 }: {
   active: boolean;
@@ -1282,6 +1641,8 @@ function WorkHistoryPanel({
   completedAtMs?: number | null;
   hasDetails: boolean;
   keepExpanded?: boolean;
+  onExpandedChange?: WorkHistoryExpandedChangeHandler;
+  panelId?: string;
   startedAtMs?: number | null;
 }) {
   const wasActiveRef = useRef(active);
@@ -1332,7 +1693,12 @@ function WorkHistoryPanel({
     return () => window.clearInterval(timer);
   }, [active]);
 
-  const title = active ? '工作中' : '工作用时';
+  useEffect(() => {
+    if (!panelId) return;
+    onExpandedChange?.(panelId, expanded);
+  }, [expanded, onExpandedChange, panelId]);
+
+  const title = active ? '工作中' : '已处理';
   const durationEndMs = active ? nowMs : (capturedCompletedAtMs ?? completedAtMs ?? null);
   const durationLabel = formatDurationMs(
     startedAtMs !== null && startedAtMs !== undefined && durationEndMs !== null
@@ -1343,6 +1709,9 @@ function WorkHistoryPanel({
     <>
       <span className="chat-work-history__title">{title}</span>
       {durationLabel ? <span className="chat-work-history__duration">{durationLabel}</span> : null}
+      {canToggle ? (
+        expanded ? <ChevronDown className="chat-work-history__toggle-icon" size={13} /> : <ChevronRight className="chat-work-history__toggle-icon" size={13} />
+      ) : null}
     </>
   );
   const toggleExpanded = () => {
@@ -1397,7 +1766,7 @@ function MessageFooter({
   align?: 'start' | 'end';
   onDelete?: () => void;
   onEdit?: () => void;
-  timePosition?: 'before-actions' | 'after-actions';
+  timePosition?: 'before-actions' | 'after-actions' | 'none';
 }) {
   const [copied, setCopied] = useState(false);
   const copyMessage = async () => {

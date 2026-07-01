@@ -2,8 +2,8 @@ import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { visibleMarkdownContent } from './chatThinkingContent.js';
 
 export type ChatTranscriptItem =
-  | { type: 'user'; id: string; message: RuntimeMessage }
-  | { type: 'assistant'; id: string; messageIds: string[]; segments: RuntimeMessage[]; turnId?: string }
+  | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
+  | { type: 'assistant'; id: string; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
@@ -29,8 +29,14 @@ export type ChatScrollSignalOptions = {
 export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptItem[] {
   const items: ChatTranscriptItem[] = [];
   let assistantRun: RuntimeMessage[] = [];
+  let assistantRunHandledSteerMessageIds: string[] = [];
   let assistantRunMessageIds: string[] = [];
+  let assistantRunSteerMessages: RuntimeMessage[] = [];
   let assistantRunTurnId: string | undefined;
+  const pendingSteerMessageIdsByTurnId = new Map<string, string[]>();
+  const userItemByTurnId = new Map<string, Extract<ChatTranscriptItem, { type: 'user' }>>();
+  const seenUserTurnIds = new Set<string>();
+  let lastUserItem: Extract<ChatTranscriptItem, { type: 'user' }> | null = null;
 
   const flushAssistantRun = () => {
     if (!assistantRun.length) return;
@@ -38,12 +44,16 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
     items.push({
       type: 'assistant',
       id: assistantRun.map((message) => message.id).join('__assistant_run__'),
+      handledSteerMessageIds: assistantRunHandledSteerMessageIds,
       messageIds: assistantRunMessageIds,
       segments: assistantRun,
+      steerMessages: assistantRunSteerMessages,
       turnId: assistantRunTurnId,
     });
     assistantRun = [];
+    assistantRunHandledSteerMessageIds = [];
     assistantRunMessageIds = [];
+    assistantRunSteerMessages = [];
     assistantRunTurnId = undefined;
   };
 
@@ -68,12 +78,64 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       // 同一 turn 的连续 assistant 消息代表同一个可见 run，只是 runtime 分成了多段。
       if (assistantRun.length && !sameTurn(message.turnId, assistantRunTurnId)) flushAssistantRun();
       assistantRunTurnId = assistantRunTurnId ?? message.turnId;
+      const turnId = message.turnId;
+      if (turnId && !userItemByTurnId.has(turnId) && lastUserItem && (!lastUserItem.message.turnId || lastUserItem.message.turnId === turnId)) {
+        userItemByTurnId.set(turnId, lastUserItem);
+      }
+      const handledSteerMessageIds = turnId && assistantHasProcessingEvidence(message)
+        ? (pendingSteerMessageIdsByTurnId.get(turnId) ?? [])
+        : [];
+      if (turnId && handledSteerMessageIds.length) {
+        assistantRunHandledSteerMessageIds.push(...handledSteerMessageIds);
+        const userItem = userItemByTurnId.get(turnId);
+        if (userItem) {
+          userItem.handledSteerMessageIds.push(...handledSteerMessageIds);
+          userItem.guidanceProcessed = true;
+        }
+        pendingSteerMessageIdsByTurnId.delete(turnId);
+      }
       assistantRun.push(message);
       assistantRunMessageIds.push(message.id);
       continue;
     }
+    const steered = Boolean(
+      message.turnId
+        && (seenUserTurnIds.has(message.turnId) || (assistantRun.length > 0 && sameTurn(message.turnId, assistantRunTurnId))),
+    );
+    if (message.turnId) seenUserTurnIds.add(message.turnId);
+    if (steered && message.turnId) {
+      let userItem = userItemByTurnId.get(message.turnId);
+      if (!userItem && lastUserItem && (!lastUserItem.message.turnId || lastUserItem.message.turnId === message.turnId)) {
+        userItem = lastUserItem;
+        userItemByTurnId.set(message.turnId, userItem);
+      }
+      if (userItem) {
+        userItem.messageIds.push(message.id);
+        userItem.steerMessages.push(message);
+      }
+      if (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId)) {
+        assistantRunMessageIds.push(message.id);
+        assistantRunSteerMessages.push(message);
+      }
+      const pending = pendingSteerMessageIdsByTurnId.get(message.turnId) ?? [];
+      pending.push(message.id);
+      pendingSteerMessageIdsByTurnId.set(message.turnId, pending);
+      if (userItem || (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId))) continue;
+    }
     flushAssistantRun();
-    items.push({ type: 'user', id: message.id, message });
+    const item: Extract<ChatTranscriptItem, { type: 'user' }> = {
+      type: 'user',
+      handledSteerMessageIds: [],
+      id: message.id,
+      message,
+      messageIds: [message.id],
+      guidanceProcessed: false,
+      steered,
+      steerMessages: [],
+    };
+    if (message.turnId) userItemByTurnId.set(message.turnId, item);
+    lastUserItem = item;
+    items.push(item);
   }
 
   flushAssistantRun();
@@ -171,6 +233,30 @@ export function assistantRunIsActive(item: Extract<ChatDisplayItem, { type: 'ass
 }
 
 /**
+ * 找出当前 active turn 真正位于最前沿的 assistant run。
+ *
+ * 同一个 turn 里插入引导后，早先完成的 assistant 段仍有同一个 turnId，
+ * 但不能继续显示“工作中”；最新的 active-turn user 之后还没生成 assistant 时返回 null。
+ */
+export function activeAssistantRunItemId(items: ChatDisplayItem[], activeTurnId: string | null): string | null {
+  if (!activeTurnId) return null;
+  let activeAssistantItemId: string | null = null;
+  for (const item of items) {
+    if (item.type === 'assistant' && assistantRunIncludesTurn(item, activeTurnId)) {
+      activeAssistantItemId = item.id;
+      continue;
+    }
+    if (item.type === 'user' && item.message.turnId === activeTurnId && !item.steered) {
+      activeAssistantItemId = null;
+    }
+    if (item.type === 'review' && item.message.turnId === activeTurnId) {
+      activeAssistantItemId = null;
+    }
+  }
+  return activeAssistantItemId;
+}
+
+/**
  * 生成复制 assistant run 时使用的纯文本内容。
  *
  * @param item assistant 类型的 transcript 行。
@@ -192,18 +278,33 @@ function sameTurn(nextTurnId: string | undefined, currentTurnId: string | undefi
 
 function itemIncludesTurn(item: ChatTranscriptItem, turnId: string): boolean {
   // context 分隔符没有 turn 归属，不参与 active turn 保留策略。
-  if (item.type === 'assistant') return item.turnId === turnId || item.segments.some((message) => message.turnId === turnId);
+  if (item.type === 'assistant') return assistantRunIncludesTurn(item, turnId);
   return item.type === 'user' || item.type === 'review' ? item.message.turnId === turnId : false;
 }
 
+function assistantRunIncludesTurn(item: Extract<ChatDisplayItem, { type: 'assistant' }>, turnId: string): boolean {
+  return item.turnId === turnId || item.segments.some((message) => message.turnId === turnId);
+}
+
+function assistantHasProcessingEvidence(message: RuntimeMessage): boolean {
+  return Boolean(message.content.trim() || message.toolCalls?.length || message.toolRuns?.length || message.error);
+}
+
 function transcriptItemMessageCount(item: ChatTranscriptItem): number {
-  if (item.type === 'assistant') return item.messageIds.length || item.segments.length;
+  if (item.type === 'assistant') {
+    const steerMessageIds = new Set(item.steerMessages.map((message) => message.id));
+    return item.messageIds.filter((id) => !steerMessageIds.has(id)).length || item.segments.length;
+  }
+  if (item.type === 'user') return item.messageIds.length || 1;
   return 1;
 }
 
 function transcriptItemScrollSignal(item: ChatTranscriptItem): string {
   if (item.type === 'assistant') {
-    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}`;
+    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}`;
+  }
+  if (item.type === 'user') {
+    return `user:${messageScrollSignal(item.message)}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:${item.handledSteerMessageIds.join(',')}`;
   }
   return `${item.type}:${messageScrollSignal(item.message)}`;
 }

@@ -143,6 +143,14 @@
   width: 100%;
 }
 
+.chat-user-turn {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  width: min(680px, 100%);
+  min-width: 0;
+}
+
 .chat-context-compact-divider {
   display: grid;
   grid-template-columns: minmax(20px, 1fr) auto minmax(20px, 1fr);
@@ -210,6 +218,40 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chat-guidance-list {
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+  min-width: 0;
+}
+
+.chat-guidance-message {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  max-width: min(680px, 100%);
+  min-width: 0;
+}
+
+.chat-guidance-marker {
+  justify-self: start;
+  color: color-mix(in srgb, var(--app-text-muted) 88%, transparent);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.chat-guidance-message__bubble {
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text);
+  background: var(--chat-message-user-bg);
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
 }
 
 .chat-bubble-item--selecting {
@@ -285,7 +327,7 @@
 }
 
 .chat-user-bubble.ant-bubble {
-  max-width: min(680px, 100%);
+  max-width: 100%;
 }
 
 .chat-message-select {
@@ -1036,6 +1078,11 @@
   overflow-wrap: anywhere;
   color: currentColor;
   font-weight: 400;
+}
+
+.chat-work-history__toggle-icon {
+  flex: 0 0 auto;
+  color: currentColor;
 }
 
 .chat-work-history__body {

@@ -11,8 +11,11 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerPatch,
   RuntimeMemoryQuery,
+  RuntimeThread,
+  RuntimeThreadSummary,
   RuntimeUsageQuery,
   SendTurnInput,
+  SteerTurnInput,
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
@@ -55,7 +58,8 @@ export async function handleRuntimeRestRequest(
       scope: threadScope(url.searchParams.get('scope')),
       projectId: url.searchParams.get('projectId') ?? undefined,
     };
-    sendJson(response, 200, { threads: await runtime.threadStore.listThreads(query) });
+    const threads = await runtime.threadStore.listThreads(query);
+    sendJson(response, 200, { threads: threads.map((thread) => withActiveTurn(runtime, thread)) });
     return true;
   }
 
@@ -273,7 +277,7 @@ export async function handleRuntimeRestRequest(
       sendJson(response, 404, { error: 'Thread not found' });
       return true;
     }
-    sendJson(response, 200, thread);
+    sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }
 
@@ -282,7 +286,7 @@ export async function handleRuntimeRestRequest(
       decodeURIComponent(threadMatch[1]),
       await readBody<ThreadPatch>(request),
     );
-    sendJson(response, 200, thread);
+    sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }
 
@@ -296,7 +300,7 @@ export async function handleRuntimeRestRequest(
       await readBody<MessagePatch>(request),
     );
     await publishThreadEventsSince(runtime, threadId, beforeSeq);
-    sendJson(response, 200, thread);
+    sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }
 
@@ -306,7 +310,7 @@ export async function handleRuntimeRestRequest(
     const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
     const thread = await runtime.threadStore.deleteMessages(threadId, await readBody<MessageDeleteInput>(request));
     await publishThreadEventsSince(runtime, threadId, beforeSeq);
-    sendJson(response, 200, thread);
+    sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }
 
@@ -333,21 +337,21 @@ export async function handleRuntimeRestRequest(
     const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
     const thread = await runtime.threadStore.clearThreadMessages(threadId);
     await publishThreadEventsSince(runtime, threadId, beforeSeq);
-    sendJson(response, 200, thread);
+    sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }
 
   const compactContextMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/context\/compact$/);
   if (compactContextMatch && request.method === 'POST') {
     const threadId = decodeURIComponent(compactContextMatch[1]);
-    sendJson(response, 200, await runtime.agentLoop.compactThreadContext(threadId, true));
+    sendJson(response, 200, withActiveTurn(runtime, await runtime.agentLoop.compactThreadContext(threadId, true)));
     return true;
   }
 
   const turnMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/turns$/);
   if (turnMatch && request.method === 'POST') {
     const threadId = decodeURIComponent(turnMatch[1]);
-    const input = await readBody<{ attachments?: unknown; input?: unknown; skillIds?: unknown; thinking?: unknown; thinkingEffort?: unknown; thinking_effort?: unknown }>(request);
+    const input = await readBody<{ attachments?: unknown; clientId?: unknown; input?: unknown; skillIds?: unknown; thinking?: unknown; thinkingEffort?: unknown; thinking_effort?: unknown }>(request);
     const text = typeof input.input === 'string' ? input.input : '';
     const skillIds = Array.isArray(input.skillIds) ? input.skillIds.filter((item): item is string => typeof item === 'string') : [];
     const attachments: SendTurnInput['attachments'] = Array.isArray(input.attachments)
@@ -355,11 +359,30 @@ export async function handleRuntimeRestRequest(
       : [];
     sendJson(response, 202, await runtime.agentLoop.startTurn(threadId, {
       attachments,
+      clientId: stringInput(input.clientId),
       input: text,
       skillIds,
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
       thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
     } satisfies SendTurnInput));
+    return true;
+  }
+
+  const steerTurnMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/turns\/([^/]+)\/steer$/);
+  if (steerTurnMatch && request.method === 'POST') {
+    const threadId = decodeURIComponent(steerTurnMatch[1]);
+    const turnId = decodeURIComponent(steerTurnMatch[2]);
+    const input = await readBody<{ attachments?: unknown; clientId?: unknown; expectedTurnId?: unknown; input?: unknown }>(request);
+    const expectedTurnId = stringInput(input.expectedTurnId) ?? turnId;
+    const attachments: SteerTurnInput['attachments'] = Array.isArray(input.attachments)
+      ? input.attachments.filter(isRuntimeMessageAttachment)
+      : [];
+    sendJson(response, 202, await runtime.agentLoop.steerTurn(threadId, {
+      attachments,
+      clientId: stringInput(input.clientId),
+      expectedTurnId,
+      input: typeof input.input === 'string' ? input.input : '',
+    }));
     return true;
   }
 
@@ -389,4 +412,14 @@ export async function handleRuntimeRestRequest(
     return true;
   }
   return false;
+}
+
+function withActiveTurn<TThread extends RuntimeThread | RuntimeThreadSummary>(
+  runtime: RuntimeFactory,
+  thread: TThread,
+): TThread {
+  return {
+    ...thread,
+    activeTurnId: runtime.agentLoop.activeTurnId(thread.id),
+  };
 }
