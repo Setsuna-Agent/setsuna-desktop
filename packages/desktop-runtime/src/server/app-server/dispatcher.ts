@@ -1,0 +1,456 @@
+import path from 'node:path';
+import type { ThreadQuery } from '@setsuna-desktop/contracts';
+import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
+import type { AppServerCommandExecManager } from './command-exec.js';
+import { AppServerRpcError } from './errors.js';
+import { recordInput, requiredArray, requiredPositiveInteger, requiredString, stringInput, numericInput } from './input.js';
+import { platformOs } from './platform.js';
+import {
+  appendAndPublishRuntimeEvent,
+  cancelRuntimeTurn,
+  copyRuntimeMessagesToThread,
+  randomRuntimeId,
+  requireRuntimeThread,
+  rollbackStartMessageId,
+  runAppServerThreadShellCommand,
+  runtimeMessagesThroughTurn,
+} from '../runtime-thread-events.js';
+import {
+  appServerConfigEdit,
+  appServerConfigReadResponse,
+  appServerConfigWriteResponse,
+  appServerRuntimeConfigInputFromEdits,
+  sweClientUserMessageId,
+  sweCollaborationModeListResponse,
+  sweExperimentalFeatureListResponse,
+  sweFeatureEnablementRuntimeInput,
+  sweInjectedResponseItemsToRuntimeMessages,
+  sweInitialTurnsPage,
+  sweLoadedThreadListResponse,
+  sweMcpServerStatusListResponse,
+  sweModelListResponse,
+  sweModelProviderCapabilitiesResponse,
+  swePatchThreadGitInfo,
+  swePermissionProfileListResponse,
+  sweReviewRequestFromTarget,
+  sweReviewUserMessageItem,
+  sweSetThreadGoal,
+  sweSupportedFeatureEnablement,
+  sweThreadFromRuntimeSummary,
+  sweThreadFromRuntimeThread,
+  sweThreadItemsListResponse,
+  sweThreadSessionResponse,
+  sweThreadTurnsListResponse,
+  sweTurn,
+  sweUserInputText,
+  sweValidateConfigWriteTarget,
+} from './protocol.js';
+
+export async function dispatchAppServerRpcRequest(
+  runtime: RuntimeFactory,
+  method: string,
+  params: unknown,
+  options: RuntimeServerOptions,
+  commandExecManager: AppServerCommandExecManager,
+): Promise<unknown> {
+  if (method === 'initialize') {
+    return {
+      userAgent: `setsuna-desktop/${options.version}`,
+      appHome: path.resolve(options.dataDir),
+      platformFamily: process.platform === 'win32' ? 'windows' : 'unix',
+      platformOs: platformOs(),
+    };
+  }
+
+  if (method === 'config/read') {
+    const input = recordInput(params);
+    const config = await runtime.configStore.getConfig();
+    return appServerConfigReadResponse(config, input);
+  }
+
+  if (method === 'configRequirements/read') {
+    return { requirements: null };
+  }
+
+  if (method === 'config/value/write') {
+    const input = recordInput(params);
+    const config = await runtime.configStore.getConfig();
+    sweValidateConfigWriteTarget(config, input.filePath ?? input.file_path, input.expectedVersion ?? input.expected_version);
+    const edit = appServerConfigEdit(input);
+    const saved = await runtime.configStore.saveConfig(appServerRuntimeConfigInputFromEdits(config, [edit]));
+    return appServerConfigWriteResponse(saved);
+  }
+
+  if (method === 'config/batchWrite') {
+    const input = recordInput(params);
+    const config = await runtime.configStore.getConfig();
+    sweValidateConfigWriteTarget(config, input.filePath ?? input.file_path, input.expectedVersion ?? input.expected_version);
+    const edits = requiredArray(input.edits, 'edits').map((edit, index) => appServerConfigEdit(recordInput(edit), index));
+    const saved = await runtime.configStore.saveConfig(appServerRuntimeConfigInputFromEdits(config, edits));
+    return appServerConfigWriteResponse(saved);
+  }
+
+  if (method === 'experimentalFeature/list') {
+    const input = recordInput(params);
+    const threadId = stringInput(input.threadId) || stringInput(input.thread_id);
+    if (threadId) {
+      const thread = await runtime.threadStore.getThread(threadId);
+      if (!thread) throw new AppServerRpcError(-32600, `thread not found: ${threadId}`);
+    }
+    const config = await runtime.configStore.getConfig();
+    return sweExperimentalFeatureListResponse(config, input);
+  }
+
+  if (method === 'experimentalFeature/enablement/set') {
+    const config = await runtime.configStore.getConfig();
+    const input = recordInput(params);
+    const requested = recordInput(input.enablement);
+    const enablement = sweSupportedFeatureEnablement(requested);
+    if (Object.keys(enablement).length) {
+      await runtime.configStore.saveConfig(sweFeatureEnablementRuntimeInput(config, enablement));
+    }
+    return { enablement };
+  }
+
+  if (method === 'collaborationMode/list') {
+    return sweCollaborationModeListResponse();
+  }
+
+  if (method === 'model/list') {
+    const input = recordInput(params);
+    const config = await runtime.configStore.getConfig();
+    return sweModelListResponse(config, input);
+  }
+
+  if (method === 'modelProvider/capabilities/read') {
+    const config = await runtime.configStore.getConfig();
+    return sweModelProviderCapabilitiesResponse(config);
+  }
+
+  if (method === 'permissionProfile/list') {
+    return swePermissionProfileListResponse(recordInput(params));
+  }
+
+  if (method === 'mcpServerStatus/list') {
+    return sweMcpServerStatusListResponse(await runtime.mcpStore.listServers(), recordInput(params));
+  }
+
+  if (method === 'command/exec') {
+    return await commandExecManager.exec(params);
+  }
+
+  if (method === 'command/exec/write') {
+    return commandExecManager.write(params);
+  }
+
+  if (method === 'command/exec/terminate') {
+    return commandExecManager.terminate(params);
+  }
+
+  if (method === 'command/exec/resize') {
+    return commandExecManager.resize(params);
+  }
+
+  if (method === 'thread/start') {
+    const input = recordInput(params);
+    const cwd = stringInput(input.cwd) || process.cwd();
+    const thread = await runtime.threadStore.createThread({
+      title: stringInput(input.name) || stringInput(input.threadName) || path.basename(cwd) || 'New thread',
+      projectId: stringInput(input.projectId),
+    });
+    const config = await runtime.configStore.getConfig();
+    return sweThreadSessionResponse(thread, cwd, config, options);
+  }
+
+  if (method === 'thread/resume') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await runtime.threadStore.getThread(threadId);
+    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    const config = await runtime.configStore.getConfig();
+    const response = sweThreadSessionResponse(thread, process.cwd(), config, options, input.excludeTurns !== true);
+    const initialTurnsPage = sweInitialTurnsPage(thread, input.initialTurnsPage);
+    return initialTurnsPage ? { ...response, initialTurnsPage } : response;
+  }
+
+  if (method === 'thread/fork') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const source = await runtime.threadStore.getThread(threadId);
+    if (!source) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    const messages = runtimeMessagesThroughTurn(source.messages, stringInput(input.lastTurnId));
+    const cwd = stringInput(input.cwd) || process.cwd();
+    const thread = await runtime.threadStore.createThread({
+      title: stringInput(input.name) || source.title,
+      projectId: source.projectId,
+      forkedFromId: source.id,
+    });
+    await copyRuntimeMessagesToThread(runtime, thread.id, messages);
+    const forked = await runtime.threadStore.getThread(thread.id) ?? thread;
+    const config = await runtime.configStore.getConfig();
+    return sweThreadSessionResponse(forked, cwd, config, options, input.excludeTurns !== true);
+  }
+
+  if (method === 'thread/read') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await runtime.threadStore.getThread(threadId);
+    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    return { thread: sweThreadFromRuntimeThread(thread, process.cwd(), options, Boolean(input.includeTurns)) };
+  }
+
+  if (method === 'thread/turns/list') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await runtime.threadStore.getThread(threadId);
+    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    return sweThreadTurnsListResponse(thread, input);
+  }
+
+  if (method === 'thread/items/list') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
+    const thread = await runtime.threadStore.getThread(threadId);
+    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    return sweThreadItemsListResponse(thread, input);
+  }
+
+  if (method === 'thread/inject_items') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    await requireRuntimeThread(runtime, threadId);
+    const messages = sweInjectedResponseItemsToRuntimeMessages(requiredArray(input.items, 'items'));
+    for (const message of messages) {
+      await appendAndPublishRuntimeEvent(runtime, threadId, {
+        id: randomRuntimeId('event_inject'),
+        threadId,
+        type: 'message.created',
+        createdAt: message.createdAt,
+        payload: { message },
+      });
+    }
+    return {};
+  }
+
+  if (method === 'thread/list') {
+    const input = recordInput(params);
+    const query: ThreadQuery = {
+      includeArchived: input.archived === true,
+      search: stringInput(input.searchTerm),
+    };
+    const threads = await runtime.threadStore.listThreads(query);
+    return {
+      data: threads.map((thread) => sweThreadFromRuntimeSummary(thread, process.cwd(), options)),
+      nextCursor: null,
+      backwardsCursor: threads.length ? null : null,
+    };
+  }
+
+  if (method === 'thread/loaded/list') {
+    const input = recordInput(params);
+    const threads = await runtime.threadStore.listThreads({ includeArchived: true });
+    return sweLoadedThreadListResponse(
+      threads.map((thread) => thread.id),
+      stringInput(input.cursor),
+      numericInput(input.limit),
+    );
+  }
+
+  if (method === 'thread/name/set') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const name = requiredString(input.name, 'name');
+    await requireRuntimeThread(runtime, threadId);
+    await runtime.threadStore.updateThread(threadId, { title: name });
+    return {};
+  }
+
+  if (method === 'thread/goal/set') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await requireRuntimeThread(runtime, threadId);
+    const goal = sweSetThreadGoal(thread, input);
+    await appendAndPublishRuntimeEvent(runtime, threadId, {
+      id: randomRuntimeId('event_goal'),
+      threadId,
+      type: 'thread.goal_updated',
+      createdAt: new Date(goal.updatedAt * 1000).toISOString(),
+      payload: { goal },
+    });
+    return { goal };
+  }
+
+  if (method === 'thread/goal/get') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await requireRuntimeThread(runtime, threadId);
+    return { goal: thread.goal ? { ...thread.goal } : null };
+  }
+
+  if (method === 'thread/goal/clear') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await requireRuntimeThread(runtime, threadId);
+    const cleared = Boolean(thread.goal);
+    if (!cleared) return { cleared };
+    await appendAndPublishRuntimeEvent(runtime, threadId, {
+      id: randomRuntimeId('event_goal'),
+      threadId,
+      type: 'thread.goal_cleared',
+      createdAt: new Date().toISOString(),
+      payload: { cleared },
+    });
+    return { cleared };
+  }
+
+  if (method === 'thread/metadata/update') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await requireRuntimeThread(runtime, threadId);
+    const gitInfo = swePatchThreadGitInfo(thread, input);
+    await appendAndPublishRuntimeEvent(runtime, threadId, {
+      id: randomRuntimeId('event_metadata'),
+      threadId,
+      type: 'thread.metadata_updated',
+      createdAt: new Date().toISOString(),
+      payload: { gitInfo },
+    });
+    const updated = await runtime.threadStore.getThread(threadId);
+    return {
+      thread: sweThreadFromRuntimeThread(updated ?? thread, process.cwd(), options),
+    };
+  }
+
+  if (method === 'thread/archive') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    await requireRuntimeThread(runtime, threadId);
+    await runtime.threadStore.updateThread(threadId, { archived: true });
+    return {};
+  }
+
+  if (method === 'thread/delete') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await requireRuntimeThread(runtime, threadId);
+    const activeTurnId = runtime.agentLoop.activeTurnId(threadId);
+    if (activeTurnId) await runtime.agentLoop.cancelTurn(threadId, activeTurnId);
+    runtime.eventBus.publish({
+      id: randomRuntimeId('event_deleted'),
+      seq: thread.lastSeq + 1,
+      threadId,
+      type: 'thread.deleted',
+      createdAt: new Date().toISOString(),
+      payload: {},
+    });
+    await runtime.threadStore.deleteThread(threadId);
+    return {};
+  }
+
+  if (method === 'thread/unarchive') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    await requireRuntimeThread(runtime, threadId);
+    const thread = await runtime.threadStore.updateThread(threadId, { archived: false });
+    return { thread: sweThreadFromRuntimeThread(thread, process.cwd(), options) };
+  }
+
+  if (method === 'thread/compact/start') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const thread = await runtime.threadStore.getThread(threadId);
+    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    void runtime.agentLoop.compactThreadContext(threadId, true).catch(() => undefined);
+    return {};
+  }
+
+  if (method === 'thread/unsubscribe') {
+    return { status: 'notLoaded' };
+  }
+
+  if (method === 'thread/shellCommand') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const command = requiredString(input.command, 'command');
+    const thread = await runtime.threadStore.getThread(threadId);
+    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    void runAppServerThreadShellCommand(runtime, thread, command, runtime.agentLoop.activeTurnId(threadId)).catch(() => undefined);
+    return {};
+  }
+
+  if (method === 'thread/rollback') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const numTurns = requiredPositiveInteger(input.numTurns, 'numTurns');
+    const thread = await runtime.threadStore.getThread(threadId);
+    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+    const rollbackMessageId = rollbackStartMessageId(thread.messages, numTurns);
+    const rolledBack = rollbackMessageId
+      ? await runtime.threadStore.truncateMessagesAfter(threadId, rollbackMessageId, true)
+      : thread;
+    return { thread: sweThreadFromRuntimeThread(rolledBack, process.cwd(), options, true) };
+  }
+
+  if (method === 'review/start') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
+    const delivery = stringInput(input.delivery) ?? 'inline';
+    if (delivery !== 'inline') throw new AppServerRpcError(-32600, 'review/start detached delivery is not supported yet');
+    const review = sweReviewRequestFromTarget(input.target);
+    try {
+      const started = await runtime.agentLoop.startReview(threadId, review);
+      return {
+        turn: sweTurn(started.turnId, 'inProgress', {
+          items: [sweReviewUserMessageItem(started.turnId, review.displayText)],
+          itemsView: 'notLoaded',
+        }),
+        reviewThreadId: threadId,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('Thread not found:')) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+      throw new AppServerRpcError(-32600, message);
+    }
+  }
+
+  if (method === 'turn/start') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const text = sweUserInputText(input.input);
+    const started = await runtime.agentLoop.startTurn(threadId, {
+      input: text,
+      clientId: sweClientUserMessageId(input),
+    });
+    return { turn: sweTurn(started.turnId, 'inProgress') };
+  }
+
+  if (method === 'turn/steer') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
+    const expectedTurnId = requiredString(input.expectedTurnId ?? input.expected_turn_id, 'expectedTurnId');
+    const text = sweUserInputText(input.input);
+    if (!text.trim()) throw new AppServerRpcError(-32600, 'input must not be empty');
+    try {
+      const steered = await runtime.agentLoop.steerTurn(threadId, {
+        input: text,
+        clientId: sweClientUserMessageId(input),
+        expectedTurnId,
+      });
+      return { turnId: steered.turnId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('Thread not found:')) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+      throw new AppServerRpcError(-32600, message);
+    }
+  }
+
+  if (method === 'turn/interrupt') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId, 'threadId');
+    const turnId = requiredString(input.turnId, 'turnId');
+    await cancelRuntimeTurn(runtime, threadId, turnId);
+    return {};
+  }
+
+  throw new AppServerRpcError(-32601, `Method not found: ${method}`);
+}
