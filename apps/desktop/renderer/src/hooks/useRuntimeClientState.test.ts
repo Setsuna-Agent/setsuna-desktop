@@ -1,8 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
-import { inferActiveTurnIdFromThread } from './useRuntimeClientState.js';
+import { activeTurnIdFromThreadSnapshot, inferActiveTurnIdFromThread } from './useRuntimeClientState.js';
 
 describe('inferActiveTurnIdFromThread', () => {
+  it('prefers the runtime snapshot active turn id even without streaming evidence', () => {
+    const thread = threadWithMessages([
+      {
+        id: 'assistant_complete',
+        turnId: 'turn_active',
+        role: 'assistant',
+        content: 'still active between model segments',
+        createdAt: '2026-06-29T00:00:00.000Z',
+        status: 'complete',
+      },
+    ]);
+    thread.activeTurnId = 'turn_active';
+
+    expect(activeTurnIdFromThreadSnapshot(thread, new Set())).toBe('turn_active');
+  });
+
+  it('clears active state when the runtime snapshot has no active turn and no fallback evidence', () => {
+    const thread = threadWithMessages([
+      {
+        id: 'assistant_complete',
+        turnId: 'turn_done',
+        role: 'assistant',
+        content: 'done',
+        createdAt: '2026-06-29T00:00:00.000Z',
+        status: 'complete',
+      },
+    ]);
+    thread.activeTurnId = null;
+
+    expect(activeTurnIdFromThreadSnapshot(thread, new Set())).toBeNull();
+  });
+
   it('keeps a running tool turn cancellable even when local active state is empty', () => {
     const thread = threadWithMessages([
       {

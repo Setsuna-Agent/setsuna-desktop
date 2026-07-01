@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelRequest, ModelStreamEvent, RuntimeEvent, RuntimeToolDefinition, RuntimeUsageRecord } from '@setsuna-desktop/contracts';
+import type {
+  CreateThreadInput,
+  MessageDeleteInput,
+  MessagePatch,
+  ModelRequest,
+  ModelStreamEvent,
+  RuntimeEvent,
+  RuntimeThread,
+  RuntimeThreadSummary,
+  RuntimeToolDefinition,
+  RuntimeUsageRecord,
+  ThreadPatch,
+  ThreadQuery,
+} from '@setsuna-desktop/contracts';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
@@ -9,6 +22,7 @@ import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
 import type { ModelClient } from '../ports/model-client.js';
 import { systemClock } from '../ports/clock.js';
+import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import { AgentLoop } from './agent-loop.js';
@@ -917,6 +931,43 @@ describe('agent loop tools', () => {
     expect(secondRequestMessages[steerMessageIndex]?.content).toBe('Prefer the shorter path.');
   });
 
+  it('waits for an accepted steer message to be stored before the final drain closes the turn', async () => {
+    const ids = new RandomIdGenerator();
+    const innerThreadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const threadStore = new DelayedSteerAppendThreadStore(innerThreadStore, 'client-delayed-steer');
+    const thread = await threadStore.createThread({ title: 'Delayed steer append' });
+    const modelClient = new SteerableModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
+    await waitForModelRequestCount(modelClient, 1);
+
+    const steer = loop.steerTurn(thread.id, {
+      clientId: 'client-delayed-steer',
+      expectedTurnId: started.turnId,
+      input: 'Do not finish before this is stored.',
+    });
+    await threadStore.steerAppendStarted;
+
+    modelClient.releaseFirstResponse();
+    threadStore.releaseSteerAppend();
+
+    await expect(steer).resolves.toEqual({ accepted: true, turnId: started.turnId });
+    await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+
+    expect(modelClient.requests).toHaveLength(2);
+    expect(modelClient.requests[1].messages.find((message) => message.clientId === 'client-delayed-steer')).toMatchObject({
+      content: 'Do not finish before this is stored.',
+      role: 'user',
+    });
+  });
+
   it('edits a user message, truncates following replies, and regenerates without duplicating the user turn', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -1189,6 +1240,75 @@ class BlockingToolHost implements ToolHost {
 
   release(): void {
     this.releaseTool();
+  }
+}
+
+class DelayedSteerAppendThreadStore implements ThreadStore {
+  private markStarted: () => void = () => undefined;
+  private releaseAppend: () => void = () => undefined;
+  readonly steerAppendStarted = new Promise<void>((resolve) => {
+    this.markStarted = resolve;
+  });
+  private readonly appendReleased = new Promise<void>((resolve) => {
+    this.releaseAppend = resolve;
+  });
+
+  constructor(
+    private readonly inner: ThreadStore,
+    private readonly delayedClientId: string,
+  ) {}
+
+  listThreads(query?: ThreadQuery): Promise<RuntimeThreadSummary[]> {
+    return this.inner.listThreads(query);
+  }
+
+  getThread(threadId: string): Promise<RuntimeThread | null> {
+    return this.inner.getThread(threadId);
+  }
+
+  createThread(input?: CreateThreadInput): Promise<RuntimeThread> {
+    return this.inner.createThread(input);
+  }
+
+  deleteThread(threadId: string): Promise<void> {
+    return this.inner.deleteThread(threadId);
+  }
+
+  updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread> {
+    return this.inner.updateThread(threadId, patch);
+  }
+
+  updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread> {
+    return this.inner.updateMessage(threadId, messageId, patch);
+  }
+
+  deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread> {
+    return this.inner.deleteMessages(threadId, input);
+  }
+
+  truncateMessagesAfter(threadId: string, messageId: string, includeSelf?: boolean): Promise<RuntimeThread> {
+    return this.inner.truncateMessagesAfter(threadId, messageId, includeSelf);
+  }
+
+  clearThreadMessages(threadId: string): Promise<RuntimeThread> {
+    return this.inner.clearThreadMessages(threadId);
+  }
+
+  async appendEvent(threadId: string, event: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent> {
+    const payload = event.payload as { message?: { clientId?: string } };
+    if (event.type === 'message.created' && payload.message?.clientId === this.delayedClientId) {
+      this.markStarted();
+      await this.appendReleased;
+    }
+    return this.inner.appendEvent(threadId, event);
+  }
+
+  listEvents(threadId: string, sinceSeq?: number): Promise<RuntimeEvent[]> {
+    return this.inner.listEvents(threadId, sinceSeq);
+  }
+
+  releaseSteerAppend(): void {
+    this.releaseAppend();
   }
 }
 
@@ -1793,7 +1913,7 @@ async function waitForTurnCancelled(threadStore: JsonThreadStore, threadId: stri
   throw new Error('Timed out waiting for turn cancellation');
 }
 
-async function waitForTurnCompleted(threadStore: JsonThreadStore, threadId: string, turnId: string) {
+async function waitForTurnCompleted(threadStore: ThreadStore, threadId: string, turnId: string) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const events = await threadStore.listEvents(threadId, 0);
     if (events.some((event) => event.type === 'turn.completed' && event.turnId === turnId)) return events;

@@ -202,14 +202,25 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     let cancelled = false;
     let timeoutId: number | undefined;
     const threadId = currentThreadId;
+    const turnId = effectiveActiveTurnId;
 
-    // polling 只校正线程快照；turn 终态必须以事件为准，避免模型段之间误清空 activeTurnId。
+    // polling 校正线程快照和 activeTurnId；runtime 快照里的 activeTurnId 是终态兜底真源。
     const pollThread = async () => {
       try {
         const nextThread = await client.getThread(threadId);
         if (cancelled) return;
         setCurrentThread((thread) => (thread?.id === threadId && nextThread.lastSeq >= thread.lastSeq ? nextThread : thread));
         refreshThreadsSoon();
+        const snapshotActiveTurnId = activeTurnIdFromThreadSnapshot(nextThread, terminalTurnIdsRef.current);
+        if (snapshotActiveTurnId === turnId) return;
+        if (!snapshotActiveTurnId) {
+          terminalTurnIdsRef.current.add(turnId);
+          setActiveTurnId((current) => (current === turnId ? null : current));
+          refreshCapabilities();
+          void client.getUsage().then(setUsage);
+          return;
+        }
+        setActiveTurnId(snapshotActiveTurnId);
       } catch (unknownError) {
         if (!cancelled) setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       }
@@ -550,7 +561,7 @@ export function inferActiveTurnIdFromThread(thread: RuntimeThread | null, termin
   return null;
 }
 
-function activeTurnIdFromThreadSnapshot(thread: RuntimeThread | null, terminalTurnIds: ReadonlySet<string>): string | null {
+export function activeTurnIdFromThreadSnapshot(thread: RuntimeThread | null, terminalTurnIds: ReadonlySet<string>): string | null {
   if (!thread) return null;
   // runtime 快照里的 activeTurnId 是真源；消息状态推断只作为旧快照/事件丢失时的兜底。
   if (thread.activeTurnId && !terminalTurnIds.has(thread.activeTurnId)) return thread.activeTurnId;

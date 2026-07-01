@@ -1,10 +1,11 @@
-import { useCallback, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from 'react';
 
 type CssVariableName = string | readonly string[];
 
 const SIDEBAR_WIDTH_VARIABLES = ['--app-sidebar-width', '--app-topbar-sidebar-width'] as const;
 const SIDEBAR_MIN_WIDTH = 208;
 const SIDEBAR_MAX_WIDTH = 360;
+const WORKBENCH_MAIN_MIN_WIDTH = 420;
 const WORKSPACE_MIN_WIDTH = 460;
 const WORKSPACE_MAX_WIDTH = 860;
 const TERMINAL_MIN_HEIGHT = 180;
@@ -45,6 +46,15 @@ export function useDesktopPanelResize(shellRef: RefObject<HTMLDivElement | null>
     value: sidebarWidth,
   });
 
+  const clampWorkspaceWidth = useCallback(
+    (value: number) =>
+      clampWorkspaceWidthForLayout(value, {
+        sidebarWidth: readShellPixelVariable(shellRef.current, '--app-sidebar-width', sidebarWidth),
+        viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
+      }),
+    [shellRef, sidebarWidth],
+  );
+
   const handleWorkspaceResizeStart = usePointerResize({
     bodyClassName: 'desktop-agent-workspace-resizing',
     clamp: clampWorkspaceWidth,
@@ -72,12 +82,34 @@ export function useDesktopPanelResize(shellRef: RefObject<HTMLDivElement | null>
   );
   const handleWorkspaceResizeStep = useCallback(
     (delta: number) => stepResizeValue('--desktop-agent-workspace-width', clampWorkspaceWidth, setWorkspaceWidth, delta),
-    [stepResizeValue],
+    [clampWorkspaceWidth, stepResizeValue],
   );
   const handleTerminalResizeStep = useCallback(
     (delta: number) => stepResizeValue('--app-bottom-panel-height', clampTerminalHeight, setTerminalHeight, delta),
     [stepResizeValue],
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    let frame = 0;
+    const syncResponsiveBounds = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        setWorkspaceWidth((current) => {
+          const nextValue = clampWorkspaceWidth(current);
+          if (nextValue === current) return current;
+          setShellVariables('--desktop-agent-workspace-width', `${nextValue}px`);
+          return nextValue;
+        });
+      });
+    };
+    window.addEventListener('resize', syncResponsiveBounds);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', syncResponsiveBounds);
+    };
+  }, [clampWorkspaceWidth, setShellVariables]);
 
   return {
     handleSidebarResizeStep,
@@ -161,12 +193,32 @@ function clampSidebarWidth(value: number): number {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)));
 }
 
-function clampWorkspaceWidth(value: number): number {
-  const maxWidth = typeof window === 'undefined' ? WORKSPACE_MAX_WIDTH : Math.max(WORKSPACE_MIN_WIDTH, Math.min(WORKSPACE_MAX_WIDTH, window.innerWidth - 560));
+export function clampWorkspaceWidthForLayout(
+  value: number,
+  {
+    sidebarWidth,
+    viewportWidth: availableViewportWidth,
+  }: {
+    sidebarWidth: number;
+    viewportWidth: number;
+  },
+): number {
+  const layoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_MAIN_MIN_WIDTH;
+  const maxWidth = Math.max(WORKSPACE_MIN_WIDTH, Math.min(WORKSPACE_MAX_WIDTH, Math.floor(layoutMaxWidth)));
   return Math.min(maxWidth, Math.max(WORKSPACE_MIN_WIDTH, Math.round(value)));
 }
 
 function clampTerminalHeight(value: number): number {
   const maxHeight = typeof window === 'undefined' ? TERMINAL_MAX_HEIGHT : Math.max(220, Math.min(TERMINAL_MAX_HEIGHT, window.innerHeight - 260));
   return Math.min(maxHeight, Math.max(TERMINAL_MIN_HEIGHT, Math.round(value)));
+}
+
+function readShellPixelVariable(shell: HTMLElement | null, name: string, fallback: number): number {
+  if (!shell || typeof window === 'undefined') return fallback;
+  const value = Number.parseFloat(window.getComputedStyle(shell).getPropertyValue(name));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function viewportWidth(): number {
+  return typeof window === 'undefined' ? WORKSPACE_MAX_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_MAIN_MIN_WIDTH : window.innerWidth;
 }

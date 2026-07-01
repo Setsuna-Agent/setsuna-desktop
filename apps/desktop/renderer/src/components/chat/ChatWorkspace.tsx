@@ -6,10 +6,10 @@ import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, Runti
 import { ChatComposer } from './ChatComposer.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
 import { FileChangesSummaryCard, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
+import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { interleaveGuidanceByMessageOrder, type GuidanceTimelineEntry } from './chatGuidanceTimeline.js';
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
@@ -1143,11 +1143,17 @@ function AssistantRunContent({
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
   const guidanceMessageIds = useMemo(() => new Set(item.handledSteerMessageIds), [item.handledSteerMessageIds]);
   const assistantGuidanceMessages = item.steerMessages;
-  const guidanceByBlockIndex = useMemo(
-    () => active ? groupGuidanceByPrecedingBlock(timelineBlocks, assistantGuidanceMessages, item.messageIds) : new Map<number, RuntimeMessage[]>(),
-    [active, assistantGuidanceMessages, item.messageIds, timelineBlocks],
+  const timelinePlan = useMemo(
+    () => createAssistantGuidanceTimelinePlan({
+      active,
+      blocks: timelineBlocks,
+      guidanceMessages: assistantGuidanceMessages,
+      messageOrderIds: item.messageIds,
+      workHistoryActive: workHistoryState.active,
+    }),
+    [active, assistantGuidanceMessages, item.messageIds, timelineBlocks, workHistoryState.active],
   );
-  const activeGuidanceBeforeFirstBlock = active && !hasWorkBlock ? (guidanceByBlockIndex.get(-1) ?? []) : [];
+  const activeGuidanceBeforeFirstBlock = timelinePlan.placeholderGuidance;
   const activePlaceholderGuidance = activeGuidanceBeforeFirstBlock.length ? (
     <GuidanceMessageList
       handledMessageIds={guidanceMessageIds}
@@ -1169,17 +1175,13 @@ function AssistantRunContent({
   return (
     <div className="chat-assistant-run">
       {showActiveWorkPlaceholder ? <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder> : null}
-      {assistantTimelineNodes({
+      {renderAssistantTimelinePlan({
         active,
-        blocks: timelineBlocks,
-        guidanceByBlockIndex,
-        guidanceMessages: assistantGuidanceMessages,
         handledGuidanceMessageIds: guidanceMessageIds,
         itemId: item.id,
-        messageOrderIds: item.messageIds,
         onAnswerApproval,
         onWorkHistoryExpandedChange,
-        workHistoryActive: workHistoryState.active,
+        plan: timelinePlan,
         workHistoryExpanded: workHistoryState.expanded,
       })}
       {fileChangeSummary ? (
@@ -1227,101 +1229,47 @@ function GuidanceProcessedMarker() {
   return <div className="chat-guidance-marker" aria-label="已引导对话">已引导对话</div>;
 }
 
-function groupGuidanceByPrecedingBlock(
-  blocks: AssistantRunTimelineBlock[],
-  guidanceMessages: RuntimeMessage[],
-  messageOrderIds: string[],
-): Map<number, RuntimeMessage[]> {
-  const orderIndex = new Map(messageOrderIds.map((id, index) => [id, index]));
-  const blockOrderIndexes = blocks.map((block) => blockOrderIds(block)
-    .map((id) => orderIndex.get(id))
-    .filter((index): index is number => index !== undefined));
-  const grouped = new Map<number, RuntimeMessage[]>();
-  for (const message of guidanceMessages) {
-    const guidanceIndex = orderIndex.get(message.id) ?? Number.MAX_SAFE_INTEGER;
-    let precedingBlockIndex = -1;
-    blockOrderIndexes.forEach((indexes, blockIndex) => {
-      const maxIndex = indexes.length ? Math.max(...indexes) : -1;
-      if (maxIndex >= 0 && maxIndex < guidanceIndex) precedingBlockIndex = blockIndex;
-    });
-    const messages = grouped.get(precedingBlockIndex) ?? [];
-    messages.push(message);
-    grouped.set(precedingBlockIndex, messages);
-  }
-  return grouped;
-}
-
-function blockOrderIds(block: AssistantRunTimelineBlock): string[] {
-  if (block.type === 'work') return block.segments.map((segment) => segment.id);
-  return [block.segment.id];
-}
-
-function assistantTimelineNodes({
+function renderAssistantTimelinePlan({
   active,
-  blocks,
-  guidanceByBlockIndex,
-  guidanceMessages,
   handledGuidanceMessageIds,
   itemId,
-  messageOrderIds,
   onAnswerApproval,
   onWorkHistoryExpandedChange,
-  workHistoryActive,
+  plan,
   workHistoryExpanded,
 }: {
   active: boolean;
-  blocks: AssistantRunTimelineBlock[];
-  guidanceByBlockIndex: Map<number, RuntimeMessage[]>;
-  guidanceMessages: RuntimeMessage[];
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
-  messageOrderIds: string[];
   onAnswerApproval: AnswerApprovalHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
-  workHistoryActive: boolean;
+  plan: AssistantGuidanceTimelinePlan;
   workHistoryExpanded: boolean;
 }): ReactNode[] {
-  const firstWorkBlockIndex = blocks.findIndex((block) => block.type === 'work');
-  const blockIndexById = new Map(blocks.map((block, index) => [block.id, index]));
-  const hasFollowingContent = blocks.some((block) => block.type === 'content' && block.content.trim());
   const nodes: ReactNode[] = [];
 
-  blocks.forEach((block, index) => {
-    const activeGuidance = guidanceByBlockIndex.get(index) ?? [];
-    if (block.type === 'work') {
-      if (index === firstWorkBlockIndex) {
-        const workBlocks = blocks.filter(isAssistantWorkBlock);
-        nodes.push(assistantWorkHistoryNode({
-          active,
-          blockIndexById,
-          blocks: workBlocks,
-          collapsedGuidanceMessages: active ? [] : guidanceMessages,
-          guidanceByBlockIndex,
-          guidanceMessages,
-          hasFollowingContent,
-          handledGuidanceMessageIds,
-          itemId,
-          messageOrderIds,
-          onAnswerApproval,
-          onExpandedChange: onWorkHistoryExpandedChange,
-          workHistoryActive,
-          workHistoryExpanded,
-        }));
-      }
+  plan.nodes.forEach((node) => {
+    if (node.type === 'workHistory') {
+      nodes.push(assistantWorkHistoryNode({
+        hasFollowingContent: plan.hasFollowingContent,
+        handledGuidanceMessageIds,
+        itemId,
+        onAnswerApproval,
+        onExpandedChange: onWorkHistoryExpandedChange,
+        plan: node,
+        workHistoryExpanded,
+      }));
       return;
     }
-    nodes.push(assistantTimelineNode(
-      block,
-      onAnswerApproval,
-      active,
-    ));
-    if (active && activeGuidance.length) {
+
+    nodes.push(assistantTimelineNode(node.block, active));
+    if (active && node.guidanceAfter.length) {
       nodes.push(
         <GuidanceMessageList
           handledMessageIds={handledGuidanceMessageIds}
-          key={`${block.id}:guidance`}
+          key={`${node.block.id}:guidance`}
           markerMode="handled"
-          messages={activeGuidance}
+          messages={node.guidanceAfter}
         />,
       );
     }
@@ -1330,108 +1278,35 @@ function assistantTimelineNodes({
   return nodes;
 }
 
-function isAssistantWorkBlock(block: AssistantRunTimelineBlock): block is Extract<AssistantRunTimelineBlock, { type: 'work' }> {
-  return block.type === 'work';
-}
-
 function assistantWorkHistoryNode({
-  active,
-  blockIndexById,
-  blocks,
-  collapsedGuidanceMessages,
-  guidanceByBlockIndex,
-  guidanceMessages,
   hasFollowingContent,
   handledGuidanceMessageIds,
   itemId,
-  messageOrderIds,
   onAnswerApproval,
   onExpandedChange,
-  workHistoryActive,
+  plan,
   workHistoryExpanded,
 }: {
-  active: boolean;
-  blockIndexById: Map<string, number>;
-  blocks: Array<Extract<AssistantRunTimelineBlock, { type: 'work' }>>;
-  collapsedGuidanceMessages: RuntimeMessage[];
-  guidanceByBlockIndex: Map<number, RuntimeMessage[]>;
-  guidanceMessages: RuntimeMessage[];
   hasFollowingContent: boolean;
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
-  messageOrderIds: string[];
   onAnswerApproval: AnswerApprovalHandler;
   onExpandedChange: WorkHistoryExpandedChangeHandler;
-  workHistoryActive: boolean;
+  plan: Extract<AssistantGuidanceTimelinePlan['nodes'][number], { type: 'workHistory' }>;
   workHistoryExpanded: boolean;
 }): ReactNode {
-  const workNodes: ReactNode[] = [];
-  let consumedGuidanceIds = new Set<string>();
-  blocks.forEach((block) => {
-    const interleaved = active
-      ? interleaveGuidanceByMessageOrder({
-          consumedGuidanceIds,
-          getItemMessageId: assistantWorkItemMessageId,
-          guidanceMessages,
-          items: block.items,
-          messageOrderIds,
-        })
-      : {
-          consumedGuidanceIds,
-          entries: block.items.map((item): GuidanceTimelineEntry<(typeof block.items)[number]> => ({ type: 'item', item })),
-        };
-    consumedGuidanceIds = interleaved.consumedGuidanceIds;
-    workNodes.push(...assistantWorkEntriesNodes(
-      block,
-      interleaved.entries,
-      onAnswerApproval,
-      hasFollowingContent,
-      handledGuidanceMessageIds,
-    ));
-    const originalBlockIndex = blockIndexById.get(block.id) ?? -1;
-    const inlineGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(originalBlockIndex) ?? [], consumedGuidanceIds) : [];
-    if (inlineGuidanceMessages.length) {
-      workNodes.push(
-        <GuidanceMessageList
-          handledMessageIds={handledGuidanceMessageIds}
-          key={`${block.id}:guidance-inline`}
-          markerMode="handled"
-          messages={inlineGuidanceMessages}
-        />,
-      );
-    }
-  });
-  const beforeFirstGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(-1) ?? [], consumedGuidanceIds) : [];
-  if (beforeFirstGuidanceMessages.length) {
-    // Steer messages can arrive before the next assistant segment is created.
-    // Keep them inside the active work panel instead of lifting them above the turn header.
-    workNodes.push(
-      <GuidanceMessageList
-        handledMessageIds={handledGuidanceMessageIds}
-        key="active-guidance-before-first-inline"
-        markerMode="handled"
-        messages={beforeFirstGuidanceMessages}
-      />,
-    );
-  }
-  if (!active && collapsedGuidanceMessages.length) {
-    workNodes.push(
-      <GuidanceMessageList
-        handledMessageIds={handledGuidanceMessageIds}
-        key="completed-guidance-inline"
-        markerMode="handled"
-        messages={collapsedGuidanceMessages}
-      />,
-    );
-  }
-  const workTiming = inferWorkTiming(blocks.flatMap((block) => block.segments));
+  const workNodes = assistantWorkEntriesNodes(
+    plan.entries,
+    onAnswerApproval,
+    hasFollowingContent,
+    handledGuidanceMessageIds,
+  );
+  const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
   const hasWorkDetails = workNodes.length > 0;
-  const activeWorkBlock = blocks.some((block) => block.active);
-  const mergedWorkHistoryActive = activeWorkBlock || workHistoryActive;
-  if (!hasWorkDetails && !mergedWorkHistoryActive) return null;
+  if (!hasWorkDetails && !plan.active) return null;
   return (
     <WorkHistoryPanel
-      active={mergedWorkHistoryActive}
+      active={plan.active}
       completedAtMs={workTiming.completedAtMs}
       hasDetails={hasWorkDetails}
       key="assistant-work-history"
@@ -1447,7 +1322,6 @@ function assistantWorkHistoryNode({
 
 function assistantTimelineNode(
   block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>,
-  onAnswerApproval: AnswerApprovalHandler,
   runActive: boolean,
 ): ReactNode {
   if (block.type === 'content') {
@@ -1475,26 +1349,28 @@ function assistantTimelineNode(
 }
 
 function assistantWorkEntriesNodes(
-  block: Extract<AssistantRunTimelineBlock, { type: 'work' }>,
-  entries: Array<GuidanceTimelineEntry<(typeof block.items)[number]>>,
+  entries: AssistantWorkHistoryPlanEntry[],
   onAnswerApproval: AnswerApprovalHandler,
   hasFollowingContent: boolean,
   handledGuidanceMessageIds: Set<string>,
 ): ReactNode[] {
   const toolRunSummaryMode: ToolRunSummaryMode = hasFollowingContent ? 'aggregate' : 'latest';
-  return entries.flatMap((entry) => {
+  const nodes: ReactNode[] = [];
+  entries.forEach((entry) => {
     if (entry.type === 'guidance') {
-      return [(
+      nodes.push(
         <GuidanceMessageList
           handledMessageIds={handledGuidanceMessageIds}
-          key={`guidance-before-${entry.messages.map((message) => message.id).join('-')}`}
+          key={entry.id}
           markerMode="handled"
           messages={entry.messages}
-        />
-      )];
+        />,
+      );
+      return;
     }
-    return assistantWorkItemNodes(entry.item, block.active, toolRunSummaryMode, onAnswerApproval);
+    nodes.push(...assistantWorkItemNodes(entry.item, entry.blockActive, toolRunSummaryMode, onAnswerApproval));
   });
+  return nodes;
 }
 
 function assistantWorkItemNodes(
@@ -1515,16 +1391,6 @@ function assistantWorkItemNodes(
   return visibleToolRuns.length
     ? [<RuntimeToolRuns key={item.id} runs={visibleToolRuns} summaryMode={toolRunSummaryMode} onAnswerApproval={onAnswerApproval} />]
     : [];
-}
-
-function assistantWorkItemMessageId(item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number]): string | undefined {
-  if (item.type === 'content') return item.segment.segment.id;
-  if (item.type === 'thinking') return item.segment.segment.id;
-  return item.segment.id;
-}
-
-function withoutConsumedGuidance(messages: RuntimeMessage[], consumedIds: Set<string>): RuntimeMessage[] {
-  return messages.filter((message) => !consumedIds.has(message.id));
 }
 
 function ActiveWorkPlaceholder({ children, segments }: { children?: ReactNode; segments: RuntimeMessage[] }) {
