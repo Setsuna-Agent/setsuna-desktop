@@ -51,7 +51,7 @@ Runtime service
 
 ## 源码目录树
 
-下面是当前应关注的源码树。`dist`、`node_modules`、`*.tsbuildinfo`、`release-artifacts` 等生成目录不放进主树，后文单独说明。
+下面是当前应关注的源码与项目资产树。`dist`、`node_modules`、`packages/*/dist`、`*.tsbuildinfo`、`release-artifacts`、`release-logs` 等生成目录不放进主树，后文单独说明。
 
 ```text
 .
@@ -59,6 +59,14 @@ Runtime service
 │   └── workflows/
 │       ├── ci.yml
 │       └── release.yml
+├── .gitignore
+├── .npmrc
+├── AGENTS.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── README.md
+├── SECURITY.md
+├── Tree.md
 ├── apps/
 │   └── desktop/
 │       ├── main/
@@ -87,8 +95,17 @@ Runtime service
 │               ├── styles/
 │               ├── types/
 │               └── utils/
+├── assets/
+│   ├── branding/
+│   ├── build/
+│   └── readme/
 ├── docs/
-│   └── local-desktop-runtime-architecture-review.md
+│   ├── README.md
+│   ├── architecture-overview.md
+│   ├── build-release.md
+│   ├── contracts-and-data.md
+│   ├── desktop-app.md
+│   └── local-runtime.md
 ├── packages/
 │   ├── contracts/
 │   │   └── src/
@@ -105,6 +122,8 @@ Runtime service
 ├── skills/
 ├── index.html
 ├── package.json
+├── pnpm
+├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
 ├── vite.config.ts
 ├── tsconfig.json
@@ -114,6 +133,29 @@ Runtime service
 ```
 
 ## 根目录
+
+### `.gitignore` / `.npmrc`
+
+仓库级工具配置。
+
+职责：
+
+- `.gitignore`：忽略依赖、构建产物、日志、环境变量、tsbuildinfo、release 产物和本地 `.setsuna` 数据。
+- `.npmrc`：pnpm/npm 安装行为配置。
+
+### `AGENTS.md`
+
+面向后续 coding agent 的仓库工作准则。
+
+主要职责：
+
+- 记录默认不要主动使用 `computer-use`、不要主动打开浏览器确认样式的约束。
+- 明确开发相关需求不要写屎山代码，要做好组件、样式、hook、helper 的封装。
+- 明确复杂逻辑需要添加必要注释，但不要写显而易见的空注释。
+- 汇总当前项目定位、常见改动入口、设计约束和验证建议。
+- 指向 `docs/` 下的模块设计文档和 `Tree.md` 目录索引。
+
+后续如果调整项目工作约定，应优先同步这里。
 
 ### `package.json`
 
@@ -153,6 +195,24 @@ workspace 声明文件。
 - 允许 `electron`、`esbuild`、`node-pty` 执行构建脚本。
 
 注意：`apps/desktop` 当前不是独立 workspace package，而是由根 package 脚本直接构建。
+
+### `pnpm-lock.yaml`
+
+pnpm 锁文件。
+
+职责：
+
+- 固定依赖解析结果。
+- CI 使用 `pnpm install --frozen-lockfile` 校验它。
+
+### `pnpm`
+
+当前仓库存在的顶层 pnpm 文件。
+
+注意：
+
+- 常规开发入口仍以 `package.json` scripts 和系统 pnpm/corepack 为准。
+- 不应把它当成源码模块或手写修改入口。
 
 ### `vite.config.ts`
 
@@ -304,6 +364,38 @@ Vite renderer HTML 入口。
 - Windows：NSIS installer + ZIP。
 - Ubuntu：AppImage/deb/tar.gz。
 - 共享资产：`SHA256SUMS`、`release-manifest.json`、`build-logs-vX.Y.Z.zip`。
+
+## `assets`
+
+应用和文档使用的静态资产。
+
+### `assets/branding`
+
+品牌图标资产。
+
+职责：
+
+- 存放 README 顶部展示和品牌相关的 PNG 图标。
+
+### `assets/build`
+
+Electron 打包图标资源。
+
+职责：
+
+- `icon.icns`：macOS app icon。
+- `icon.ico`：Windows app icon。
+- `icon.png`：Linux 和 runtime 图标候选。
+- 被 `package.json` 的 Electron Builder `buildResources` 和 main 侧图标加载逻辑使用。
+
+### `assets/readme`
+
+README 展示图和架构图。
+
+职责：
+
+- 存放聊天、工作区、能力页、本地模型和 runtime 架构截图。
+- 只服务文档展示，不参与 runtime 数据流。
 
 ## `apps/desktop/main`
 
@@ -2523,28 +2615,71 @@ adapter 测试。
 
 ## `docs`
 
-### `local-desktop-runtime-architecture-review.md`
+`docs` 存放模块设计文档。根目录 `AGENTS.md` 负责短准则和入口索引，`Tree.md` 负责目录级职责索引，`docs` 负责按模块沉淀更稳定的架构说明。
 
-本地桌面 runtime 架构评审和方向文档。
+### `docs/README.md`
+
+模块文档索引。
 
 职责：
 
-- 说明为什么新项目采用独立 local-first Electron 架构。
-- 明确不依赖远端 WebView 和后端 Agent API。
-- 规定 runtime 边界：
-  - 模型调用
-  - 工具执行
-  - 状态持久化
-  - 审批 gate
-  - 用户输入 gate
-  - context compaction
-  - events
-- 规定开源仓库和 GitHub Releases 发布策略。
-- 规定 macOS unsigned/manual-install 过渡策略。
-- 规定 UI 设计、token、布局、组件、hook、性能和样式组织原则。
-- 规定封装与复用原则。
+- 说明 `docs` 下各文档的覆盖范围。
+- 指向 `AGENTS.md` 和 `Tree.md` 的使用方式。
 
-这是当前仓库架构方向的背景真源。涉及大结构调整时应先读它。
+### `docs/architecture-overview.md`
+
+总体架构说明。
+
+职责：
+
+- 说明 local-first Electron 分层。
+- 串起 renderer -> preload -> Electron main -> RuntimeHost -> local HTTP/SSE runtime -> AgentLoop 的主链路。
+- 说明 runtime 请求、SSE 订阅、线程事件模型、本地数据边界和安全边界。
+- 记录为什么 REST 用于 snapshot、SSE 用于增量，append-only event 作为线程真源。
+
+### `docs/desktop-app.md`
+
+桌面应用模块说明。
+
+职责：
+
+- 拆解 `apps/desktop/main` 的窗口、IPC、runtime host、review、terminal、workspace apps、updater。
+- 说明 `apps/desktop/preload` 暴露的 `window.setsunaDesktop` 能力面。
+- 梳理 renderer 的 App 入口、状态 hooks、runtime client、聊天、workspace、设置、能力页和样式分域。
+- 明确 renderer 不能直接访问 Node/Electron/runtime token。
+
+### `docs/local-runtime.md`
+
+本地 runtime 模块说明。
+
+职责：
+
+- 说明 runtime CLI、`createRuntimeFactory()` 组装和 server 路由。
+- 梳理 AgentLoop turn 生命周期、context compaction、ports、stores、model adapters 和 ToolHost。
+- 记录 MCP、Skill、memory、PC local tools 的运行边界。
+- 给出 runtime 改动的测试重点。
+
+### `docs/contracts-and-data.md`
+
+共享契约和本地数据说明。
+
+职责：
+
+- 说明 `packages/contracts` 各模块职责。
+- 记录 contract 变更扩散路径。
+- 说明 `RuntimeEvent`、`RuntimeThread`、HTTP client contract、本地数据布局和数据安全边界。
+- 给出新增 preference、toolRun 字段、provider 的扩散范例。
+
+### `docs/build-release.md`
+
+构建和发布说明。
+
+职责：
+
+- 说明 Node/pnpm 环境、workspace、构建脚本、Vite、Electron Builder。
+- 梳理 CI 和 Release workflow。
+- 说明 release metadata、manifest、SHA256SUMS 和 build logs 的生成链路。
+- 给出按影响面选择验证命令的建议。
 
 ## `scripts`
 
@@ -2745,6 +2880,18 @@ TypeScript project references 增量构建缓存。
 - release workflow 脚本。
 
 不应手写修改；需要改 release metadata 时改 `scripts/*` 或 `package.json` build config。
+
+### `release-logs`
+
+本地或 CI 打包过程产生的日志目录。
+
+来源：
+
+- `scripts/run-with-log.mjs`
+- release workflow package job
+- 本地排查打包问题时的日志收集
+
+不应手写修改；需要改变日志采集方式时改 release 脚本。
 
 ## runtime 本地数据位置
 
@@ -3054,12 +3201,14 @@ git diff --check
 
 ## 维护注意事项
 
-- 不要手写修改 `dist`、`packages/*/dist`、`*.tsbuildinfo`、`release-artifacts`。
+- 不要手写修改 `dist`、`packages/*/dist`、`*.tsbuildinfo`、`release-artifacts`、`release-logs`。
 - renderer 不应该直接访问 Node/Electron API；需要本机能力时走 main IPC + preload bridge。
 - renderer 不应该直接拼 runtime token、host、port；必须走 `createDesktopRuntimeClient()`。
 - runtime API 合同应优先放在 `packages/contracts`。
 - 同一 DTO 不要在 main/preload/renderer/runtime 各写一套。
 - 新增 runtime dependency 应从 port 抽象开始，再做 adapter 实现，最后在 `runtime-factory.ts` 接线。
+- 不要写屎山代码；开发时应尽可能做好组件、样式、hook、helper、adapter 的边界拆分和复用。
+- 必要注释要解释复杂逻辑的原因，例如跨进程桥接、事件投影、并发写队列、路径安全、审批策略；不要给显而易见的代码堆空注释。
 - 新增通用 UI 优先扩展 `components/primitives.tsx` 和 `styles/primitives.css`。
 - 新增全局颜色、尺寸、状态样式优先加 `styles/tokens.css`。
 - 大型页面如 `SettingsPage.tsx`、`CapabilitiesPage.tsx`、`ChatWorkspace.tsx` 已经较重；继续新增复杂逻辑时应拆组件、hook 或 helper。

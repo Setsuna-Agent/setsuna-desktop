@@ -42,10 +42,14 @@ import type {
   WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 
+/**
+ * 基于 preload bridge 构造 renderer 侧 runtime client；renderer 永远不直接访问 runtime 端口。
+ */
 export function createDesktopRuntimeClient(): DesktopRuntimeClient {
   const bridge = window.setsunaDesktop?.runtime;
   if (!bridge) throw new Error('Desktop runtime bridge is unavailable.');
 
+  // request 是唯一底层出口，所有业务方法只负责拼受控路径和请求体。
   const request = <T = unknown>(input: RuntimeRequestInput): Promise<T> => bridge.request<T>(input);
 
   return {

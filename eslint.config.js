@@ -12,8 +12,11 @@ export default [
     languageOptions: {
       globals: {
         Buffer: 'readonly',
+        clearInterval: 'readonly',
+        clearTimeout: 'readonly',
         console: 'readonly',
         process: 'readonly',
+        setInterval: 'readonly',
         setTimeout: 'readonly',
       },
     },

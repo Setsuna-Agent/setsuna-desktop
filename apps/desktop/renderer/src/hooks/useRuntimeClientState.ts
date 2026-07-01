@@ -32,6 +32,12 @@ type RuntimeClientStateOptions = {
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
 };
 
+/**
+ * 维护 renderer 侧所有跨 runtime bridge 的状态，并协调 REST 快照与 SSE 增量事件。
+ *
+ * @param activeProjectId 当前 renderer 选中的项目 ID。
+ * @param setActiveProjectId 更新当前项目 ID 的 React setter。
+ */
 export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: RuntimeClientStateOptions) {
   const client = useMemo(() => createDesktopRuntimeClient(), []);
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -52,8 +58,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const initializedSelectionRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  // SSE 订阅从这个 seq 续接，组件重挂载时不会重复应用已处理事件。
   const currentThreadLastSeqRef = useRef(0);
   const threadListRefreshTimerRef = useRef<number | null>(null);
+  // 终态 turn 记录在本地，避免延迟快照把已完成 turn 重新推断成 active。
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadId = currentThread?.id ?? null;
   const effectiveActiveTurnId = activeTurnId ?? inferActiveTurnIdFromThread(currentThread, terminalTurnIdsRef.current);
@@ -61,6 +69,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
   const refresh = useCallback(async () => {
     setError(null);
+    // 首屏需要多个 runtime 域的数据；并行拉取能避免设置页/侧栏/对话区分批闪烁。
     const [nextConfig, threadList, skillList, mcpList, projectList, usageSummary, memoryList, approvalList] = await Promise.all([
       client.getConfig(),
       client.listThreads(),
@@ -104,6 +113,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
   const refreshThreadsSoon = useCallback(() => {
     if (threadListRefreshTimerRef.current !== null) return;
+    // 线程列表摘要不需要每条 SSE 都立即刷新，短 debounce 足够保持侧栏一致。
     threadListRefreshTimerRef.current = window.setTimeout(() => {
       threadListRefreshTimerRef.current = null;
       void client
@@ -132,6 +142,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   useEffect(() => {
     unsubscribeRef.current?.();
     if (!currentThreadId) return undefined;
+    // 当前线程以 SSE 增量为主，侧栏/list 摘要再通过短 debounce 刷新。
     unsubscribeRef.current = client.subscribeEvents(currentThreadId, currentThreadLastSeqRef.current, (event) => {
       setCurrentThread((thread) => {
         if (!thread || thread.id !== event.threadId || event.seq <= thread.lastSeq) return thread;
@@ -146,6 +157,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
         setActiveTurnId(event.turnId);
       }
       if ((event.type === 'turn.completed' || event.type === 'turn.cancelled' || event.type === 'runtime.error') && event.turnId) {
+        // runtime.error 也视作 turn 终态，否则 polling/infer 可能继续显示停止按钮。
         terminalTurnIdsRef.current.add(event.turnId);
         setActiveTurnId((current) => (current === event.turnId ? null : current));
       }
@@ -192,6 +204,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     const threadId = currentThreadId;
     const turnId = effectiveActiveTurnId;
 
+    // polling 是 SSE 丢帧或 renderer 恢复时的兜底路径，防止运行中的 turn 卡在旧状态。
     const pollThread = async () => {
       try {
         const nextThread = await client.getThread(threadId);
@@ -283,6 +296,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     if (!currentThread || contextCompacting) return null;
     setContextCompacting(true);
     try {
+      // 手动压缩会立刻置本地 loading，最终状态仍以 runtime 返回的 thread 为准。
       const compacted = await client.compactThreadContext(currentThread.id);
       setCurrentThread(compacted);
       await reloadThreads();
@@ -416,6 +430,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     async (approvalId: string, input: { decision: 'approve' | 'reject'; message?: string }) => {
       await client.answerApproval(approvalId, input);
       const resolvedAt = new Date().toISOString();
+      // 先乐观更新审批列表和当前线程 toolRun，再异步拉一次线程快照校正 seq。
       setApprovals((items) =>
         items.map((item) =>
           item.id === approvalId
@@ -485,6 +500,14 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   };
 }
 
+/**
+ * 在当前线程快照里乐观更新审批对应的 toolRun。
+ *
+ * @param thread 当前线程快照。
+ * @param approvalId 被回复的 approval ID。
+ * @param input 用户审批结果。
+ * @param resolvedAt 本地记录的审批完成时间。
+ */
 function updateThreadApprovalRun(
   thread: RuntimeThread | null,
   approvalId: string,
@@ -517,7 +540,14 @@ function updateThreadApprovalRun(
 
 export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
 
+/**
+ * 判断指定 turn 是否已经从 renderer 视角完成。
+ *
+ * @param thread 当前线程快照。
+ * @param turnId 需要判断的 turn ID。
+ */
 export function turnHasFinished(thread: RuntimeThread, turnId: string): boolean {
+  // 这里是 renderer 的兜底判断，不能依赖 turn.completed 事件一定到达。
   const turnMessages = thread.messages.filter((message) => message.turnId === turnId);
   if (!turnMessages.length) return false;
   if (turnMessages.some((message) => message.status === 'streaming')) return false;
@@ -528,8 +558,15 @@ export function turnHasFinished(thread: RuntimeThread, turnId: string): boolean 
   return latestAssistant.status === 'complete' && !latestAssistant.toolCalls?.length;
 }
 
+/**
+ * 从线程快照中反推仍在运行的 turn。
+ *
+ * @param thread 当前线程快照。
+ * @param terminalTurnIds renderer 已确认终态的 turn ID 集合。
+ */
 export function inferActiveTurnIdFromThread(thread: RuntimeThread | null, terminalTurnIds: ReadonlySet<string>): string | null {
   if (!thread) return null;
+  // 从后往前找可以优先命中最新还在 streaming 或工具运行中的 turn。
   for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
     const message = thread.messages[index];
     if (!message?.turnId || terminalTurnIds.has(message.turnId)) continue;

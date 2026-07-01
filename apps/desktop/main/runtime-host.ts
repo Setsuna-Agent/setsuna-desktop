@@ -17,19 +17,27 @@ type Subscription = {
   abort: AbortController;
 };
 
+/**
+ * 管理本地 runtime 子进程，并把它的 HTTP/SSE 能力收敛到 Electron bridge 后面。
+ */
 export class RuntimeHost {
   private child: ChildProcessByStdio<null, Readable, Readable> | null = null;
   private port = 0;
+  // 每次启动生成独立 token，避免任意 localhost 调用者绕过 Electron main 访问 runtime。
   private readonly token = randomBytes(32).toString('hex');
   private readonly subscriptions = new Map<string, Subscription>();
 
   constructor(private readonly options: RuntimeHostOptions) {}
 
+  /**
+   * 启动 runtime 子进程并等待 health check 通过。
+   */
   async start(): Promise<void> {
     if (this.child) return;
     this.port = await findAvailablePort();
     const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
     const builtinSkillsDir = resolveBuiltinSkillsDir(this.options.appRoot);
+    // Electron 打包后仍复用当前可执行文件，通过 ELECTRON_RUN_AS_NODE 切换成 Node runtime 进程。
     const child = spawn(process.execPath, [runtimeEntry, '--port', String(this.port)], {
       cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -51,14 +59,23 @@ export class RuntimeHost {
     await this.healthCheck();
   }
 
+  /**
+   * 停止 runtime 子进程，并取消所有 SSE 订阅。
+   */
   stop(): void {
     for (const subscriptionId of this.subscriptions.keys()) this.unsubscribe(subscriptionId);
     this.child?.kill('SIGTERM');
     this.child = null;
   }
 
+  /**
+   * 通过受限 path 代理一次 renderer 到 runtime 的请求。
+   *
+   * @param input renderer 传来的 method、path 和 body。
+   */
   async request<T = unknown>(input: RuntimeRequestInput): Promise<T> {
     const safePath = normalizeRuntimePath(input.path);
+    // renderer 只能传入受限 path，真正的 token 和端口都留在 main 进程内。
     const response = await fetch(`http://127.0.0.1:${this.port}${safePath}`, {
       method: input.method ?? 'GET',
       headers: {
@@ -76,26 +93,44 @@ export class RuntimeHost {
     return body as T;
   }
 
+  /**
+   * 为指定线程建立 SSE 订阅，并把事件转发给 renderer。
+   *
+   * @param webContents 接收 runtime:event 的 renderer webContents。
+   * @param input 线程 ID 和可选续订 seq。
+   */
   subscribeEvents(webContents: WebContents, input: { threadId: string; sinceSeq?: number }): string {
     const subscriptionId = randomUUID();
     const abort = new AbortController();
+    // 每个 renderer 订阅都有独立 AbortController，窗口切换或销毁时可以精确断开。
     this.subscriptions.set(subscriptionId, { abort });
     void this.readSse(subscriptionId, webContents, input, abort.signal);
     return subscriptionId;
   }
 
+  /**
+   * 取消指定 SSE 订阅。
+   *
+   * @param subscriptionId subscribeEvents 返回的订阅 ID。
+   */
   unsubscribe(subscriptionId: string): void {
     const subscription = this.subscriptions.get(subscriptionId);
     subscription?.abort.abort();
     this.subscriptions.delete(subscriptionId);
   }
 
+  /**
+   * 等待 runtime stdout 输出 ready 握手事件。
+   *
+   * @param child 刚启动的 runtime 子进程。
+   */
   private async waitForReady(child: ChildProcessByStdio<null, Readable, Readable>): Promise<void> {
     let buffer = '';
     const ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Runtime did not become ready in time')), 10000);
       child.stdout.on('data', (chunk) => {
         buffer += String(chunk);
+        // runtime 启动日志按行输出；只有 JSON ready 事件用于握手，其他行仅作为日志透传。
         for (;;) {
           const newline = buffer.indexOf('\n');
           if (newline === -1) break;
@@ -121,11 +156,22 @@ export class RuntimeHost {
     await ready;
   }
 
+  /**
+   * 检查 runtime HTTP 服务是否可用。
+   */
   private async healthCheck(): Promise<void> {
     const response = await fetch(`http://127.0.0.1:${this.port}/health`);
     if (!response.ok) throw new Error(`Runtime health check failed: ${response.status}`);
   }
 
+  /**
+   * 读取 runtime SSE 流并转成 renderer 事件。
+   *
+   * @param subscriptionId 当前订阅 ID。
+   * @param webContents 接收事件的 renderer webContents。
+   * @param input 线程 ID 和续订 seq。
+   * @param signal 用于取消 SSE 读取的信号。
+   */
   private async readSse(
     subscriptionId: string,
     webContents: WebContents,
@@ -135,6 +181,7 @@ export class RuntimeHost {
     try {
       const params = new URLSearchParams();
       if (typeof input.sinceSeq === 'number') params.set('sinceSeq', String(input.sinceSeq));
+      // SSE 连接由 main 持有，renderer 重载后可以续订，但不会拿到 runtime token。
       const response = await fetch(
         `http://127.0.0.1:${this.port}/v1/threads/${encodeURIComponent(input.threadId)}/events?${params}`,
         {
@@ -146,6 +193,7 @@ export class RuntimeHost {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      // SSE 按空行分帧；buffer 保留半截事件，避免流式读取拆包时丢事件。
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -183,18 +231,21 @@ export function resolveRuntimeSpawnCwd(appRoot: string): string {
 }
 
 function normalizeRuntimePath(value: string): string {
+  // bridge 必须是窄白名单，避免 renderer 借 runtime host 代理任意 localhost 路径。
   if (!value.startsWith('/')) throw new Error('Runtime path must be absolute.');
   if (!value.startsWith('/v1/') && value !== '/health') throw new Error('Runtime path is not allowed.');
   return value;
 }
 
 function parseSseChunk(chunk: string): RuntimeEvent | null {
+  // 当前 runtime 只消费 data 行；event/id/retry 等 SSE 元数据暂不参与线程投影。
   const dataLine = chunk.split('\n').find((line) => line.startsWith('data: '));
   if (!dataLine) return null;
   return JSON.parse(dataLine.slice(6)) as RuntimeEvent;
 }
 
 async function findAvailablePort(): Promise<number> {
+  // 让系统分配空闲端口，再关闭探测 server，交给 runtime 子进程监听。
   const server = net.createServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');

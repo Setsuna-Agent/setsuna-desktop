@@ -3,7 +3,14 @@ import type { RuntimeMessage, RuntimeThread, RuntimeToolRun, RuntimeToolRunStatu
 
 const TOOL_OUTPUT_PREVIEW_MAX_LENGTH = 12000;
 
+/**
+ * 将一条 append-only runtime event 投影到线程快照上，供 renderer state 和持久化测试共用。
+ *
+ * @param thread 当前线程快照。
+ * @param event 需要应用到线程上的 runtime event。
+ */
 export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeEvent): RuntimeThread {
+  // 先 clone，再让各分支就地更新投影，避免把可变引用泄漏回 React state。
   const next: RuntimeThread = {
     ...thread,
     contextCompaction: thread.contextCompaction ? cloneThreadContextCompaction(thread.contextCompaction) : undefined,
@@ -70,6 +77,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       status: 'completed',
       usedTokens: event.payload.notice.compactedTokens,
     };
+    // 压缩事件带的是新的模型窗口，reducer 负责把旧可见历史降级为 transcript。
     next.messages = mergeCompactedMessages(next.messages, event.payload.messages);
     refreshThreadSummary(next);
     return next;
@@ -87,6 +95,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'message.delta') {
     const message = next.messages.find((item) => item.id === event.payload.messageId);
     if (message) {
+      // delta 只追加文本；完整状态、usage 和 toolCalls 等到 message.completed 再定稿。
       message.content += event.payload.text;
       message.status = 'streaming';
       if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
@@ -139,6 +148,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const approval = event.payload.approval;
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
+      // approval 在 UI 上表现为一个 pending toolRun，因此挂到同 turn 的 assistant 消息下。
       upsertToolRun(message, {
         id: approval.toolCallId,
         name: approval.toolName,
@@ -189,6 +199,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'tool.output_delta') {
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
+      // 长命令输出持续合并到同一个 toolRun preview，而不是生成多条工具记录。
       appendToolRunOutputDelta(message, {
         id: event.payload.toolCallId,
         name: event.payload.toolName,
@@ -258,8 +269,15 @@ function cloneMessage(message: RuntimeMessage): RuntimeMessage {
   };
 }
 
+/**
+ * 合并上下文压缩后的消息窗口，并把旧可见消息降级为 transcript。
+ *
+ * @param previousMessages 压缩前的线程消息列表。
+ * @param compactedMessages 压缩事件给出的新消息窗口。
+ */
 function mergeCompactedMessages(previousMessages: RuntimeMessage[], compactedMessages: RuntimeMessage[]): RuntimeMessage[] {
   const compactedIds = new Set(compactedMessages.map((message) => message.id));
+  // 保留用户可见历史为 transcript，同时用压缩结果替换模型可见窗口。
   const archivedMessages = previousMessages
     .filter((message) => !compactedIds.has(message.id) && message.visibility !== 'model')
     .map(cloneTranscriptMessage);
@@ -289,7 +307,14 @@ function percentForNotice(notice: NonNullable<RuntimeMessage['contextCompaction'
   return Math.min(100, Math.max(0, Math.round((usedTokens / maxTokens) * 100)));
 }
 
+/**
+ * 查找某个 turn 最近的 assistant 消息，用于挂载 toolRun 和 approval 状态。
+ *
+ * @param messages 当前线程消息列表。
+ * @param turnId 事件所属 turn ID。
+ */
 function assistantMessageForTurn(messages: RuntimeMessage[], turnId?: string): RuntimeMessage | undefined {
+  // tool/approval 事件挂到所属 turn 的最近 assistant 段，保证工作记录显示在正确气泡里。
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message || message.role !== 'assistant') continue;
@@ -298,6 +323,12 @@ function assistantMessageForTurn(messages: RuntimeMessage[], turnId?: string): R
   return undefined;
 }
 
+/**
+ * 新增或合并 assistant 消息上的 toolRun。
+ *
+ * @param message 要更新的 assistant 消息。
+ * @param input 新的 toolRun 增量。
+ */
 function upsertToolRun(message: RuntimeMessage, input: RuntimeToolRun): void {
   const runs = message.toolRuns ? [...message.toolRuns] : [];
   const index = runs.findIndex((item) => item.id === input.id);
@@ -309,6 +340,12 @@ function upsertToolRun(message: RuntimeMessage, input: RuntimeToolRun): void {
   message.toolRuns = runs;
 }
 
+/**
+ * 将工具流式输出追加到对应 toolRun 的 resultPreview。
+ *
+ * @param message 要更新的 assistant 消息。
+ * @param input 工具输出增量和所属工具信息。
+ */
 function appendToolRunOutputDelta(
   message: RuntimeMessage,
   input: Pick<RuntimeToolRun, 'id' | 'name' | 'source'> & { createdAt: string; delta: string },
@@ -334,6 +371,13 @@ function appendToolRunOutputDelta(
   message.toolRuns = runs;
 }
 
+/**
+ * turn 取消时结束仍在运行或等待审批的工具记录。
+ *
+ * @param message 要处理的消息。
+ * @param completedAt 取消完成时间。
+ * @param reason 取消原因。
+ */
 function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, reason: string): void {
   if (!message.toolRuns?.length) return;
   let changed = false;
@@ -361,7 +405,14 @@ function isActiveToolRun(run: RuntimeToolRun): boolean {
   return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected');
 }
 
+/**
+ * 合并同一个工具运行的多次事件增量。
+ *
+ * @param current 当前已投影的 toolRun。
+ * @param next 新事件带来的 toolRun 增量。
+ */
 function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): RuntimeToolRun {
+  // tool.started / approval / output_delta / completed 会多次更新同一 run，这里按非空字段增量合并。
   return {
     ...current,
     ...next,
@@ -383,10 +434,12 @@ function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): RuntimeToo
 function appendPreviewDelta(current: string, delta: string): string {
   const next = current + delta;
   if (next.length <= TOOL_OUTPUT_PREVIEW_MAX_LENGTH) return next;
+  // 终端类输出的尾部通常包含最终状态或错误，所以超长时保留尾部。
   return next.slice(next.length - TOOL_OUTPUT_PREVIEW_MAX_LENGTH);
 }
 
 function updatePreviewFromMessage(thread: RuntimeThread, message: RuntimeMessage): void {
+  // 线程列表预览只取用户/助手可见内容，tool/system 不直接覆盖会话摘要。
   if (!isTranscriptVisibleMessage(message) || message.role === 'tool' || message.role === 'system') return;
   const text = preview(message.content || attachmentPreview(message));
   if (text) thread.lastMessagePreview = text;

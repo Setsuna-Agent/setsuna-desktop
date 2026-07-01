@@ -15,7 +15,9 @@ type FileChangeEntry = {
 type ProjectToolState = {
   root: string;
   toolState: PcToolState;
+  // plan_file_changes 产出的队列，把多文件变更拆成可审计的单文件步骤。
   fileChangePlanQueue: FileChangeEntry[];
+  // begin_file_change 后当前唯一允许写入的文件。
   activeFileChange: FileChangeEntry | null;
 };
 
@@ -26,36 +28,64 @@ const ACTUAL_FILE_MUTATION_TOOLS = new Set(['apply_patch', 'write_file', 'append
 const FILE_MUTATION_TOOLS = new Set([FILE_CHANGE_PLAN_TOOL_NAME, FILE_CHANGE_BEGIN_TOOL_NAME, ...ACTUAL_FILE_MUTATION_TOOLS]);
 
 const TOOL_ALIASES: Record<string, { name: string; args: (input: Record<string, unknown>) => Record<string, unknown> }> = {
+  // workspace_* 名称兼容上层调用习惯，真正执行仍落到 PC local tools 的原始工具名。
   workspace_list_directory: { name: 'list_directory', args: (input) => ({ path: input.path ?? '.' }) },
   workspace_read_file: { name: 'read_file', args: (input) => ({ ...input, file_path: input.file_path ?? input.path }) },
   workspace_search_text: { name: 'search_text', args: (input) => input },
   workspace_write_file: { name: 'write_file', args: (input) => ({ ...input, file_path: input.file_path ?? input.path }) },
 };
 
+/**
+ * 将 PC local tool 实现适配到桌面 runtime 的 ToolHost 协议。
+ */
 export class PcLocalToolHost implements ToolHost {
+  // 每个项目根目录维护独立状态，避免 shell 进程、已读文件和文件变更计划串到别的项目。
   private readonly projectStates = new Map<string, ProjectToolState>();
+  // shell process store 跨项目状态复用，但执行目录和权限仍由每个 toolState 控制。
   private readonly shellProcessStore = pcTools.createShellProcessStore();
 
   constructor(private readonly projects: WorkspaceProjectStore) {}
 
+  /**
+   * 暴露 PC local tools 中允许模型调用的工具定义。
+   *
+   * @param _context ToolHost 协议参数；列工具阶段不依赖上下文。
+   */
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return pcTools.LOCAL_TOOL_DEFINITIONS
       .map(toRuntimeToolDefinition)
       .filter((tool): tool is RuntimeToolDefinition => Boolean(tool && !EXCLUDED_PC_TOOLS.has(tool.name)));
   }
 
+  /**
+   * 返回 PC local tools 的系统提示规则。
+   */
   systemPrompt(): string {
     return pcTools.LOCAL_TOOL_SYSTEM_PROMPT;
   }
 
+  /**
+   * 在文件变更计划未完成时强制模型按下一步工具执行。
+   *
+   * @param context 当前工具执行上下文。
+   * @param request 当前模型请求中的工具定义和消息上下文。
+   */
   async toolChoice(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> {
     const availableToolNames = new Set(request.tools.map((tool) => tool.name));
     const projectState = await this.projectStateFor(context);
     const forcedToolName = this.forcedToolName(projectState);
+    // 有未完成文件计划时强制下一步工具，防止模型跳过 begin/read 直接写文件。
     if (!forcedToolName || !availableToolNames.has(forcedToolName)) return null;
     return { type: 'tool', name: forcedToolName };
   }
 
+  /**
+   * 判断本地工具调用是否需要用户确认。
+   *
+   * @param name 模型请求的工具名。
+   * @param input 工具调用参数。
+   * @param context 当前工具执行上下文。
+   */
   async approvalForTool(name: string, input: unknown, context: ToolExecutionContext) {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
@@ -84,6 +114,13 @@ export class PcLocalToolHost implements ToolHost {
     return null;
   }
 
+  /**
+   * 生成本地工具调用的参数和结果预览。
+   *
+   * @param name 模型请求的工具名。
+   * @param input 工具调用参数。
+   * @param context 当前工具执行上下文。
+   */
   async previewToolCall(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
@@ -95,6 +132,13 @@ export class PcLocalToolHost implements ToolHost {
     };
   }
 
+  /**
+   * 根据未完整输出的参数生成渐进式文件变更预览。
+   *
+   * @param name 模型请求的工具名。
+   * @param rawArguments 模型流式输出的原始 arguments 字符串。
+   * @param context 当前工具执行上下文。
+   */
   async previewPartialToolCall(name: string, rawArguments: string, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
     const normalizedName = this.normalizeToolName(name);
     if (EXCLUDED_PC_TOOLS.has(normalizedName)) return null;
@@ -108,6 +152,13 @@ export class PcLocalToolHost implements ToolHost {
     };
   }
 
+  /**
+   * 执行本地工具并把 PC 工具结果适配成 ToolHost 返回值。
+   *
+   * @param name 模型请求的工具名。
+   * @param input 工具调用参数。
+   * @param context 当前工具执行上下文。
+   */
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
@@ -115,6 +166,7 @@ export class PcLocalToolHost implements ToolHost {
     projectState.toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
 
     const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
+    // 真正执行前再次校验文件变更顺序，避免模型绕过 preview 阶段的约束。
     this.validateFileChangeSequence(projectState, normalized.name, normalized.args, preview);
 
     const result = await pcTools.executeLocalTool(normalized.name, normalized.args, projectState.toolState, {
@@ -141,6 +193,11 @@ export class PcLocalToolHost implements ToolHost {
     };
   }
 
+  /**
+   * 获取或创建项目根目录对应的 PC local tool 状态。
+   *
+   * @param context 当前工具执行上下文，包含项目 ID 和权限配置。
+   */
   private async projectStateFor(context: ToolExecutionContext): Promise<ProjectToolState> {
     const project = await this.projectFor(context.projectId);
     const root = path.resolve(project.path);
@@ -156,6 +213,11 @@ export class PcLocalToolHost implements ToolHost {
     return created;
   }
 
+  /**
+   * 根据 projectId 找到当前工具调用要操作的项目。
+   *
+   * @param projectId 工具上下文中的项目 ID；为空时回落到第一个项目。
+   */
   private async projectFor(projectId: unknown): Promise<WorkspaceProject> {
     const list = await this.projects.listProjects();
     const project =
@@ -166,6 +228,12 @@ export class PcLocalToolHost implements ToolHost {
     return project;
   }
 
+  /**
+   * 归一化工具别名和参数名。
+   *
+   * @param name 模型请求的工具名。
+   * @param input 原始工具参数。
+   */
   private normalizeToolCall(name: string, input: unknown): { name: string; args: Record<string, unknown> } {
     const args = recordInput(input);
     const alias = TOOL_ALIASES[name];
@@ -173,13 +241,24 @@ export class PcLocalToolHost implements ToolHost {
     return { name: alias.name, args: alias.args(args) };
   }
 
+  /**
+   * 归一化工具名但不处理参数，用于 partial preview。
+   *
+   * @param name 模型请求的工具名。
+   */
   private normalizeToolName(name: string): string {
     return TOOL_ALIASES[name]?.name ?? name;
   }
 
+  /**
+   * 根据文件变更状态决定是否强制下一步工具。
+   *
+   * @param projectState 当前项目的工具状态。
+   */
   private forcedToolName(projectState: ProjectToolState): string {
     const active = projectState.activeFileChange;
     if (active) {
+      // edit 前要求先读文件，让模型基于当前内容生成变更，而不是凭空覆盖。
       if (active.action === 'create') return 'write_file';
       if (active.action === 'append') return 'append_file';
       if (active.action === 'delete') return 'delete_file';
@@ -188,7 +267,16 @@ export class PcLocalToolHost implements ToolHost {
     return projectState.fileChangePlanQueue.length ? FILE_CHANGE_BEGIN_TOOL_NAME : '';
   }
 
+  /**
+   * 校验文件变更必须按计划逐文件执行。
+   *
+   * @param projectState 当前项目的工具状态。
+   * @param name 归一化后的工具名。
+   * @param args 归一化后的工具参数。
+   * @param preview 工具执行前生成的预览结果。
+   */
   private validateFileChangeSequence(projectState: ProjectToolState, name: string, args: Record<string, unknown>, preview: unknown): void {
+    // 模型必须先声明文件，再只写这个文件，防止一次工具调用里静默修改多个文件。
     if (name === FILE_CHANGE_BEGIN_TOOL_NAME) {
       const file = normalizeFileChangeEntry(args, projectState) ?? normalizeFileChangeEntry(preview, projectState);
       if (!file?.file_path) throw new Error('begin_file_change must include exactly one file_path before file content generation.');
@@ -234,8 +322,18 @@ export class PcLocalToolHost implements ToolHost {
     }
   }
 
+  /**
+   * 根据工具执行结果推进文件变更计划队列。
+   *
+   * @param projectState 当前项目的工具状态。
+   * @param name 归一化后的工具名。
+   * @param args 归一化后的工具参数。
+   * @param result 工具实际执行结果。
+   * @param preview 工具执行前生成的预览结果。
+   */
   private recordFileChangeProgress(projectState: ProjectToolState, name: string, args: Record<string, unknown>, result: Record<string, unknown>, preview: unknown): void {
     if (name === FILE_CHANGE_PLAN_TOOL_NAME) {
+      // 新计划会替换旧计划，确保模型重新规划后不会继续执行过期队列。
       projectState.fileChangePlanQueue = normalizeFileChangeEntries(result.planned_file_changes, projectState);
       projectState.activeFileChange = null;
       return;
@@ -346,6 +444,7 @@ function normalizeRuntimeFilePath(value: unknown, projectState: ProjectToolState
   if (!raw) return '';
   const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(projectState.root, raw);
   const relative = path.relative(projectState.root, resolved).replace(/\\/g, '/');
+  // 项目内路径统一转相对路径；项目外路径保留原样，交给权限层判断是否允许。
   if (!relative || relative === '.') return '.';
   if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) return raw;
   return relative;

@@ -185,6 +185,7 @@ export function ChatWorkspace({
       if (index < 0) return [itemId];
       const item = selectableDeleteItems[index];
       const ids = [item.id];
+      // 默认删除完整的“提问/回答”组，避免只删一半后留下孤立 turn。
       if (item.type === 'assistant') {
         const previousUser = [...selectableDeleteItems.slice(0, index)].reverse().find((candidate) => candidate.type === 'user');
         if (previousUser) ids.push(previousUser.id);
@@ -247,6 +248,7 @@ export function ChatWorkspace({
     setDeletingMessages(true);
     setActionError(null);
     try {
+      // 删除时传 messageIds 而不是 display item ids，因为一个 assistant item 可能包含多段消息和工具消息。
       await onDeleteMessages(selectedDeleteMessageIds);
       cancelDeleteSelection();
     } catch (unknownError) {
@@ -411,6 +413,13 @@ export function ChatWorkspace({
   );
 }
 
+/**
+ * 在用户没有主动离开底部时，让流式聊天持续吸附到底部。
+ *
+ * @param scrollSignal 影响滚动高度或活动状态的紧凑信号。
+ * @param showEmptyStarter 当前是否处于空线程 starter 页面。
+ * @param threadId 当前线程 ID，切换线程时用于重置滚动状态。
+ */
 function usePinnedChatScroll({
   scrollSignal,
   showEmptyStarter,
@@ -423,14 +432,17 @@ function usePinnedChatScroll({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // sticky 状态放在 ref 里，滚动事件高频触发时不需要每次 rerender。
   const shouldStickToBottomRef = useRef(true);
   const userScrollIntentRef = useRef(false);
   const scrollFrameRef = useRef<number | null>(null);
+  // token 递增会让已排队的 animation-frame 滚动失效，用于线程切换或用户手势打断。
   const scrollScheduleTokenRef = useRef(0);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   const scrollDistanceToBottom = useCallback((node: HTMLDivElement) => Math.max(0, node.scrollHeight - node.scrollTop - node.clientHeight), []);
   const cancelScheduledScroll = useCallback(() => {
+    // 先递增 token，再 cancel frame，覆盖已经进入回调队列但尚未执行的情况。
     scrollScheduleTokenRef.current += 1;
     if (scrollFrameRef.current !== null && typeof window !== 'undefined') {
       window.cancelAnimationFrame(scrollFrameRef.current);
@@ -450,6 +462,7 @@ function usePinnedChatScroll({
       return;
     }
 
+    // 流式 Markdown 和工具面板可能连续几帧增高，多帧 settle 可以避免滚动少一截。
     const token = scrollScheduleTokenRef.current + 1;
     scrollScheduleTokenRef.current = token;
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
@@ -477,6 +490,7 @@ function usePinnedChatScroll({
     const distanceToBottom = scrollDistanceToBottom(node);
     const atBottom = distanceToBottom <= stickyBottomThresholdPx;
     if (atBottom) {
+      // 回到底部后重新进入 sticky 模式，后续流式内容继续自动跟随。
       userScrollIntentRef.current = false;
       shouldStickToBottomRef.current = true;
       setShowScrollBottom(false);
@@ -484,7 +498,7 @@ function usePinnedChatScroll({
     }
 
     const nearBottom = distanceToBottom <= scrollBottomThresholdPx;
-    // Resize and programmatic scroll events share the same browser event as user scrolls; only explicit user gestures are allowed to unlock sticky bottom.
+    // Resize 和程序滚动也会触发 scroll；只有明确用户手势才允许解除 sticky。
     if (userScrollIntentRef.current) {
       shouldStickToBottomRef.current = false;
       setShowScrollBottom(!nearBottom);
@@ -517,6 +531,7 @@ function usePinnedChatScroll({
   const releasePinnedScrollForUser = useCallback(() => {
     if (showEmptyStarter) return;
     cancelScheduledScroll();
+    // 用户主动滚动后保持当前位置，直到用户点击“滚动到底部”或真的回到底部。
     userScrollIntentRef.current = true;
     shouldStickToBottomRef.current = false;
     const node = scrollRef.current;
@@ -554,6 +569,7 @@ function usePinnedChatScroll({
     if (!node || node.scrollHeight <= node.clientHeight || showEmptyStarter) return;
     const scrollbarHitWidth = Math.max(12, node.offsetWidth - node.clientWidth);
     const { right } = node.getBoundingClientRect();
+    // 只在点击滚动条轨道区域时认为是拖拽意图，普通内容点击不解除 sticky。
     if (event.clientX >= right - scrollbarHitWidth) {
       releasePinnedScrollForUser();
     }
@@ -565,6 +581,7 @@ function usePinnedChatScroll({
     const node = scrollRef.current;
     if (!node) return;
     if (showEmptyStarter) {
+      // starter 页面没有 transcript，滚动位置固定在顶部，避免 composer 被强行贴底。
       node.scrollTop = 0;
       shouldStickToBottomRef.current = false;
       setShowScrollBottom(false);
@@ -589,6 +606,7 @@ function usePinnedChatScroll({
     const scrollNode = scrollRef.current;
     if (!scrollNode || showEmptyStarter || typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(() => {
+      // 监听内容和容器尺寸变化，覆盖图片/代码块/工具面板异步撑高的情况。
       if (shouldStickToBottomRef.current) {
         schedulePinnedScroll();
       } else {
@@ -617,6 +635,12 @@ function usePinnedChatScroll({
   };
 }
 
+/**
+ * 直接观察元素宽度；在桌面分栏布局里这比全局 viewport breakpoint 更准确。
+ *
+ * @param ref 需要观察宽度的元素 ref。
+ * @param thresholdPx 判定为窄布局的宽度阈值。
+ */
 function useElementWidthBelow(ref: RefObject<HTMLElement>, thresholdPx: number): boolean {
   const [below, setBelow] = useState(false);
 

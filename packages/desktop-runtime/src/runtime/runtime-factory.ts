@@ -26,21 +26,29 @@ export type RuntimeFactoryOptions = {
 
 export type RuntimeContainer = ReturnType<typeof createRuntimeFactory>;
 
+/**
+ * 为一个桌面数据目录组装 runtime 依赖，把 ports 接到文件存储和内存适配器上。
+ *
+ * @param options runtime 数据目录和可选内置 skills 目录。
+ */
 export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const runtimeDataDir = path.join(options.dataDir, 'runtime');
   const clock = systemClock;
   const ids = new RandomIdGenerator();
   const eventBus = new InMemoryEventBus();
   const approvalGate = new InMemoryApprovalGate(clock, ids);
+  // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
   const threadStore = new JsonThreadStore(runtimeDataDir, clock, ids);
   const usageStore = new FileUsageStore(runtimeDataDir, ids);
   const mcpStore = new FileMcpStore(runtimeDataDir);
   const configStore = new FileConfigStore(runtimeDataDir);
+  // memory 的实际存储根会跟随用户配置变化，因此这里用延迟读取的 storagePath。
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids, async () => (await configStore.getConfig()).storagePath);
   const builtinSkillsDir =
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
   const skillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
+  // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
     new McpManagementToolHost(mcpStore),
     new McpRuntimeToolHost(mcpStore),

@@ -49,10 +49,12 @@ export type AgentLoopOptions = {
 type ToolBudgetLimit = number | null;
 
 const MAX_TOOL_ROUNDS = 200;
+// null 表示“统计但不限制”；计数器仍保留，后续打开限额或测试 defer 文案时不用重写流程。
 const MAX_READ_FILE_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_INSPECTION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_FILE_MUTATION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE = 8;
+// 单轮模型响应里最多先执行一批查看类工具，避免模型一次性长链路查看导致界面无文字反馈。
 const MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND = 8;
 const INSPECTION_PROGRESS_NOTE = '我先查看项目结构和第一批关键文件，读完后再继续收敛。\n\n';
 const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
@@ -62,6 +64,7 @@ const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
 const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'workspace_write_file']);
+// 并行集合要比 INSPECTION_TOOL_NAMES 更窄：只有确定性的本地只读工具才允许批处理。
 const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
@@ -109,34 +112,66 @@ type RunTurnOptions = {
 };
 
 export class AgentLoop {
+  // activeTurns 用于精确取消 turn，activeTurnByThread 用于 UI 查询当前线程是否仍有任务。
   private readonly activeTurns = new Map<string, AbortController>();
   private readonly activeTurnByThread = new Map<string, ActiveTurnState>();
 
   constructor(private readonly options: AgentLoopOptions) {}
 
+  /**
+   * 启动一轮异步对话，立即返回 turnId，实际执行在后台继续。
+   *
+   * @param threadId 目标线程 ID。
+   * @param input 用户输入、附件、skill 选择和客户端消息 ID。
+   */
   async startTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse> {
     const run = await this.createTurnRun(threadId, input);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
   }
 
+  /**
+   * 从某条用户消息重新生成回答，会先截断该消息之后的历史。
+   *
+   * @param threadId 目标线程 ID。
+   * @param messageId 要作为重新生成起点的用户消息 ID。
+   * @param input 可选的新内容、skill 选择和思考参数。
+   */
   async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}): Promise<SendTurnResponse> {
     const run = await this.createRegenerateRun(threadId, messageId, input);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
   }
 
+  /**
+   * 同步执行一轮对话，主要给测试或命令式调用等待完整结果使用。
+   *
+   * @param threadId 目标线程 ID。
+   * @param input 用户输入、附件和 skill 选择。
+   */
   async sendTurn(threadId: string, input: SendTurnInput): Promise<void> {
     const run = await this.createTurnRun(threadId, input);
     await run.done;
   }
 
+  /**
+   * 启动 review turn，展示文本和模型 prompt 可以不同。
+   *
+   * @param threadId 目标线程 ID。
+   * @param input review 的用户可见文本和模型实际 prompt。
+   */
   async startReview(threadId: string, input: ReviewTurnInput): Promise<SendTurnResponse> {
     const run = await this.createReviewRun(threadId, input);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
   }
 
+  /**
+   * 取消指定 turn，返回 false 表示该 turn 已不存在或已经结束。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 要取消的 turn ID。
+   */
   async cancelTurn(threadId: string, turnId: string): Promise<boolean> {
     const controller = this.activeTurns.get(activeTurnKey(threadId, turnId));
     if (!controller || controller.signal.aborted) return false;
@@ -144,12 +179,23 @@ export class AgentLoop {
     return true;
   }
 
+  /**
+   * 查询线程当前运行中的 turnId，供 renderer 恢复 active 状态。
+   *
+   * @param threadId 要查询的线程 ID。
+   */
   activeTurnId(threadId: string): string | null {
     const active = this.activeTurnByThread.get(threadId);
     if (!active || active.controller.signal.aborted) return null;
     return active.turnId;
   }
 
+  /**
+   * 向正在运行的普通对话 turn 追加用户输入，不创建新的 turn。
+   *
+   * @param threadId 目标线程 ID。
+   * @param input 用户补充输入；expectedTurnId 用来防止补充写入过期 turn。
+   */
   async steerTurn(
     threadId: string,
     input: SendTurnInput & { expectedTurnId: string },
@@ -168,6 +214,7 @@ export class AgentLoop {
 
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
+    // steer 输入追加到同一个 turn，让模型下一轮继续看到正在进行中的用户补充。
     await this.publishMessage(threadId, active.turnId, {
       id: this.options.ids.id('msg'),
       clientId: input.clientId,
@@ -181,12 +228,19 @@ export class AgentLoop {
     return { accepted: true, turnId: active.turnId };
   }
 
+  /**
+   * 手动压缩线程上下文，并把压缩生命周期写入线程事件流。
+   *
+   * @param threadId 需要压缩上下文的线程 ID。
+   * @param force 是否忽略 token 阈值强制压缩。
+   */
   async compactThreadContext(threadId: string, force = true): Promise<RuntimeThread> {
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
     const candidate = createRuntimeContextCompactionCandidate({ force, messages: thread.messages });
     if (!candidate) return thread;
     const turnId = this.options.ids.id('turn');
+    // 手动压缩也走事件链，保证 renderer 能看到“压缩中 -> 已压缩”的完整生命周期。
     await this.publishContextCompacting(threadId, turnId, force, thread.messages);
     try {
       const summary = await this.generateContextCompactionSummary(candidate);
@@ -222,6 +276,12 @@ export class AgentLoop {
     }
   }
 
+  /**
+   * 创建普通对话 turn 的后台执行任务，并登记取消控制器。
+   *
+   * @param threadId 目标线程 ID。
+   * @param input 用户输入、附件和运行选项。
+   */
   private async createTurnRun(
     threadId: string,
     input: SendTurnInput,
@@ -256,6 +316,12 @@ export class AgentLoop {
     return { turnId, done };
   }
 
+  /**
+   * 创建 review turn 的后台执行任务，并把 review prompt 注入模型输入。
+   *
+   * @param threadId 目标线程 ID。
+   * @param input review 的展示文本和模型 prompt。
+   */
   private async createReviewRun(
     threadId: string,
     input: ReviewTurnInput,
@@ -301,6 +367,13 @@ export class AgentLoop {
     return { turnId, done };
   }
 
+  /**
+   * 准备重新生成：更新用户消息、截断后续历史、再启动新的对话 turn。
+   *
+   * @param threadId 目标线程 ID。
+   * @param messageId 重新生成所基于的用户消息 ID。
+   * @param input 可覆盖原消息内容、skill 选择和思考参数。
+   */
   private async createRegenerateRun(
     threadId: string,
     messageId: string,
@@ -352,6 +425,19 @@ export class AgentLoop {
     return { turnId, done };
   }
 
+  /**
+   * 执行完整 agent loop：发消息、组装上下文、流式调用模型、执行工具直到得到最终回答。
+   *
+   * @param threadId 目标线程 ID。
+   * @param text 用户可见输入文本。
+   * @param skillIds 本轮显式选择的 skill ID 列表。
+   * @param attachments 本轮用户输入携带的附件。
+   * @param thread turn 开始前读取到的线程快照。
+   * @param turnId 当前 turn ID。
+   * @param signal 用于取消模型流和工具执行的信号。
+   * @param options review、重生成等特殊运行选项。
+   * @param thinkingOptions 透传给模型客户端的思考参数。
+   */
   private async runTurn(
     threadId: string,
     text: string,
@@ -406,6 +492,7 @@ export class AgentLoop {
       const modelConversationMessages = options.modelInput && publishUserMessage
         ? conversationMessages.map((message) => (message.id === userMessage.id ? modelUserMessage : message))
         : conversationMessages;
+      // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
       const toolContext = {
         threadId,
@@ -420,6 +507,7 @@ export class AgentLoop {
         inspectionCallCount: 0,
         fileMutationCallCount: 0,
       };
+      // 模型上下文按“长期规则 -> 临时能力 -> 对话历史”排序，当前用户 turn 保持离模型最近。
       const modelMessages: RuntimeMessage[] = [
         ...this.personalizationContextMessages(runtimeConfig),
         ...(await this.memoryContextMessages(thread.projectId, runtimeConfig)),
@@ -430,6 +518,7 @@ export class AgentLoop {
       let memorySavedByTool = false;
       const maxToolRounds = normalizedMaxToolRounds(this.options.maxToolRounds);
 
+      // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       for (let round = 0; round < maxToolRounds; round += 1) {
         const assistantMessageId = this.options.ids.id('msg');
         const assistantCreatedAt = this.options.clock.now().toISOString();
@@ -455,6 +544,7 @@ export class AgentLoop {
           roundText += delta;
           await this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
         };
+        // reasoning_delta 统一包进 <think>，renderer 后续只需要解析一种思考标记。
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
           messages: modelRequestMessages(modelMessages),
@@ -498,6 +588,7 @@ export class AgentLoop {
           if (shouldPublishInspectionProgressNote(roundText, toolCalls)) {
             await appendRoundText(INSPECTION_PROGRESS_NOTE);
           }
+          // 先把 toolCalls 挂到 assistant 消息上，再执行工具，UI 才能把后续 toolRuns 归到正确气泡。
           await this.completeMessage(threadId, turnId, assistantMessageId, { toolCalls });
           activeAssistantMessageId = null;
           modelMessages.push({
@@ -527,6 +618,7 @@ export class AgentLoop {
       }
 
       if (!turnCompleted) {
+        // 达到工具轮次上限后禁用 toolChoice 再要一次最终回答，避免无限工具循环。
         const assistantMessageId = this.options.ids.id('msg');
         const assistantCreatedAt = this.options.clock.now().toISOString();
         activeAssistantMessageId = assistantMessageId;
@@ -626,6 +718,11 @@ export class AgentLoop {
     }
   }
 
+  /**
+   * 校验当前模型是否允许图片附件输入。
+   *
+   * @param attachments 用户输入归一化后的附件列表。
+   */
   private async assertImageAttachmentsSupported(attachments: NonNullable<RuntimeMessage['attachments']>): Promise<void> {
     if (!attachments.length || !attachments.some((attachment) => attachment.type.startsWith('image/'))) return;
     const activeProvider = await this.options.configStore?.getActiveProviderConfig().catch(() => null);
@@ -633,6 +730,13 @@ export class AgentLoop {
     throw new Error('当前模型未启用图片输入。');
   }
 
+  /**
+   * 以 message.created 事件写入并广播一条完整消息。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 消息所属 turn ID。
+   * @param message 要写入线程的 runtime message。
+   */
   private async publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void> {
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
@@ -644,6 +748,14 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 发布 assistant 流式文本增量。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 增量所属 turn ID。
+   * @param messageId 要追加文本的 assistant 消息 ID。
+   * @param text 本次追加的文本片段。
+   */
   private async publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void> {
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
@@ -655,6 +767,14 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 标记消息完成，并可附带 usage 或最终 toolCalls。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 消息所属 turn ID。
+   * @param messageId 要完成的消息 ID。
+   * @param payload 可选的 usage 和 toolCalls 补充数据。
+   */
   private async completeMessage(
     threadId: string,
     turnId: string,
@@ -671,6 +791,15 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 完成 assistant turn，记录 usage、review 退出标记、显式记忆和 turn.completed 事件。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   * @param messageId 最终 assistant 消息 ID。
+   * @param usage 模型返回的 token 使用量。
+   * @param options review 退出内容和显式记忆上下文。
+   */
   private async finishAssistantTurn(
     threadId: string,
     turnId: string,
@@ -687,6 +816,7 @@ export class AgentLoop {
     } = {},
   ): Promise<void> {
     if (usage) {
+      // usage 只在模型返回时记录；工具失败或取消不会伪造 token 消耗。
       await this.options.usageStore?.recordUsage({
         threadId,
         turnId,
@@ -707,9 +837,16 @@ export class AgentLoop {
       createdAt: this.options.clock.now().toISOString(),
       payload: { usage },
     });
+    // 被动记忆失败不影响本轮回答完成，避免辅助功能阻塞主对话。
     await this.extractPassiveMemoriesForTurn(threadId, turnId).catch(() => undefined);
   }
 
+  /**
+   * 从刚完成的一轮对话中抽取长期记忆候选。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 需要抽取记忆的 turn ID。
+   */
   private async extractPassiveMemoriesForTurn(threadId: string, turnId: string): Promise<void> {
     if (!this.options.memoryStore) return;
     const config = await this.options.configStore?.getConfig().catch(() => null);
@@ -723,6 +860,7 @@ export class AgentLoop {
 
     let text = '';
     let usage: RuntimeUsage | undefined;
+    // 被动记忆使用独立模型名和禁用工具，避免抽取过程再次触发 agent loop。
     for await (const item of this.options.modelClient.stream({
       model: PASSIVE_MEMORY_MODEL,
       messages: this.passiveMemoryPromptMessages(thread, turnMessages),
@@ -767,6 +905,12 @@ export class AgentLoop {
     }
   }
 
+  /**
+   * 构造被动记忆抽取模型使用的系统消息和用户消息。
+   *
+   * @param thread 当前线程快照，用于提供标题和项目范围。
+   * @param messages 当前 turn 内可作为记忆来源的用户/助手消息。
+   */
   private passiveMemoryPromptMessages(thread: RuntimeThread, messages: RuntimeMessage[]): RuntimeMessage[] {
     const now = this.options.clock.now().toISOString();
     return [
@@ -801,6 +945,13 @@ export class AgentLoop {
     ];
   }
 
+  /**
+   * 处理“记住/remember”类显式记忆请求。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   * @param input 显式记忆的配置、项目和用户原文上下文。
+   */
   private async rememberExplicitUserMemory(
     threadId: string,
     turnId: string,
@@ -823,16 +974,25 @@ export class AgentLoop {
         sourceTurnId: turnId,
       });
     } catch {
-      // Memory should improve later turns, not make the current answer fail.
+      // 记忆只能改善后续对话，不能让当前回答因为存储失败而失败。
     }
   }
 
+  /**
+   * 写入 review 模式进入/退出标记，供 transcript 展示使用。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId review turn ID。
+   * @param kind 标记 review 进入或退出。
+   * @param review 展示给用户的 review 文案。
+   */
   private async publishReviewModeMessage(
     threadId: string,
     turnId: string,
     kind: NonNullable<RuntimeMessage['reviewMode']>['kind'],
     review: string,
   ): Promise<void> {
+    // reviewMode 是 transcript-only 系统消息，只控制 UI 展示，不进入下一轮模型上下文。
     await this.publishMessage(threadId, turnId, {
       id: this.options.ids.id('msg'),
       turnId,
@@ -845,16 +1005,38 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 追加事件到线程存储后广播给订阅者。
+   *
+   * @param threadId 目标线程 ID。
+   * @param event 未分配 seq 前的 runtime event。
+   */
   private async appendAndPublish(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void> {
+    // 先落盘再发布，订阅端按 seq 重放时才能得到和存储一致的事件顺序。
     const stored = await this.options.threadStore.appendEvent(threadId, event);
     this.options.eventBus.publish(stored);
   }
 
+  /**
+   * 重新广播指定 seq 之后的已存储事件，用于重生成后同步 renderer。
+   *
+   * @param threadId 目标线程 ID。
+   * @param sinceSeq 只发布大于该 seq 的事件。
+   */
   private async publishStoredEventsSince(threadId: string, sinceSeq: number): Promise<void> {
     const events = await this.options.threadStore.listEvents(threadId, sinceSeq);
     for (const event of events) this.options.eventBus.publish(event);
   }
 
+  /**
+   * 在模型请求前必要时压缩消息，并返回真正进入 prompt 的消息窗口。
+   *
+   * @param force 是否强制压缩。
+   * @param messages 候选消息列表。
+   * @param signal 当前 turn 的取消信号。
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   */
   private async compactMessagesBeforeModelRequest({
     force,
     messages,
@@ -868,6 +1050,7 @@ export class AgentLoop {
     threadId: string;
     turnId: string;
   }): Promise<RuntimeMessage[]> {
+    // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
     const candidate = createRuntimeContextCompactionCandidate({ force, messages });
     if (!candidate) return messages;
     await this.publishContextCompacting(threadId, turnId, force, messages);
@@ -890,6 +1073,12 @@ export class AgentLoop {
     return result.messages;
   }
 
+  /**
+   * 调用压缩模型生成上下文摘要。
+   *
+   * @param candidate 已选出的上下文压缩候选。
+   * @param signal 可选取消信号，自动压缩时跟随当前 turn。
+   */
   private async generateContextCompactionSummary(
     candidate: RuntimeContextCompactionCandidate,
     signal?: AbortSignal,
@@ -916,6 +1105,11 @@ export class AgentLoop {
     throw new Error('Context compaction model returned an empty summary.');
   }
 
+  /**
+   * 构造上下文压缩模型的输入消息。
+   *
+   * @param candidate 已选出的上下文压缩候选。
+   */
   private contextCompactionPromptMessages(candidate: RuntimeContextCompactionCandidate): RuntimeMessage[] {
     const now = this.options.clock.now().toISOString();
     return [
@@ -949,6 +1143,14 @@ export class AgentLoop {
     ];
   }
 
+  /**
+   * 发布 thread.context_compacting 事件，通知 UI 当前压缩进度和 token 使用。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 触发压缩的 turn ID，手动压缩也会生成临时 turn。
+   * @param force 是否为手动强制压缩。
+   * @param messages 用于估算 token 使用量的消息列表。
+   */
   private async publishContextCompacting(
     threadId: string,
     turnId: string | undefined,
@@ -972,9 +1174,15 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 根据本轮选择的 skill 构造注入模型的 system 消息。
+   *
+   * @param skillIds 本轮用户显式选择的 skill ID 列表。
+   */
   private async skillContextMessages(skillIds: string[] = []) {
     const injections = await this.options.skillRegistry?.selectedSkillInjections(skillIds);
     if (!injections?.length) return [];
+    // Skill 内容包在自定义标签里，并转义闭合标签，避免 skill 文本提前截断注入块。
     return injections.map((skill) => ({
       id: `skill_${skill.id}`,
       role: 'system' as const,
@@ -984,6 +1192,11 @@ export class AgentLoop {
     }));
   }
 
+  /**
+   * 从 ToolHost 读取本地工具规则，并封装为 system prompt。
+   *
+   * @param context 当前工具执行上下文。
+   */
   private async toolSystemPromptMessages(context: RuntimeToolExecutionContext) {
     const prompt = await this.options.toolHost?.systemPrompt?.(context);
     if (typeof prompt !== 'string' || !prompt.trim()) return [];
@@ -998,6 +1211,13 @@ export class AgentLoop {
     ];
   }
 
+  /**
+   * 计算本轮模型请求的 toolChoice，允许 ToolHost 强制下一步工具。
+   *
+   * @param context 当前工具执行上下文。
+   * @param tools 当前可提供给模型的工具定义。
+   * @param messages 当前模型上下文消息。
+   */
   private async toolChoiceForRequest(context: RuntimeToolExecutionContext, tools: RuntimeToolDefinition[] | undefined, messages: RuntimeMessage[]): Promise<ModelRequest['toolChoice']> {
     if (!tools?.length) return undefined;
     let forcedChoice: ModelRequest['toolChoice'] | null = null;
@@ -1009,6 +1229,11 @@ export class AgentLoop {
     return forcedChoice ?? 'auto';
   }
 
+  /**
+   * 根据用户配置构造个性化 system prompt。
+   *
+   * @param config 当前 runtime 配置；缺失时不注入个性化。
+   */
   private personalizationContextMessages(config: RuntimeConfigState | null | undefined) {
     if (!config) return [];
     const globalPrompt = config.globalPrompt.trim();
@@ -1031,10 +1256,17 @@ export class AgentLoop {
     ];
   }
 
+  /**
+   * 读取长期记忆并构造成模型上下文。
+   *
+   * @param projectId 当前线程绑定的项目 ID。
+   * @param config 当前 runtime 配置，用于判断 memory 是否启用。
+   */
   private async memoryContextMessages(projectId: string | undefined, config: RuntimeConfigState | null | undefined) {
     if (config?.memoryEnabled === false) return [];
     const memories = await this.options.memoryStore?.listMemories(projectId ? { projectId, limit: 8 } : { scope: 'global', limit: 8 });
     if (!memories?.memories.length) return [];
+    // 只取少量高相关 memory 注入系统消息，避免长期记忆把用户当前上下文挤出窗口。
     return [
       {
         id: 'memory_context',
@@ -1046,6 +1278,15 @@ export class AgentLoop {
     ];
   }
 
+  /**
+   * 执行模型返回的一组工具调用，并把每个工具结果转换成 tool 消息回填模型上下文。
+   *
+   * @param toolCalls 模型本轮返回的工具调用列表。
+   * @param context 当前工具执行上下文。
+   * @param toolBudget 本轮累计工具预算计数器。
+   * @param approvalPolicy 当前审批策略。
+   * @param previewedToolCallIds 已通过 delta 预览发布过的工具调用 ID。
+   */
   private async runToolCalls(
     toolCalls: RuntimeToolCall[],
     context: RuntimeToolExecutionContext,
@@ -1057,6 +1298,7 @@ export class AgentLoop {
     const messages: RuntimeMessage[] = [];
     let inspectionCallsExecutedThisRound = 0;
     for (let index = 0; index < toolCalls.length;) {
+      // 超过单轮查看上限的 tool call 会回写“未执行”工具消息，让模型显式总结已完成查看。
       if (inspectionCallsExecutedThisRound >= MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND) {
         for (; index < toolCalls.length; index += 1) {
           messages.push(await this.publishDeferredToolMessage(context.threadId, context.turnId, toolCalls[index], inspectionCallsExecutedThisRound, previewedToolCallIds));
@@ -1066,6 +1308,7 @@ export class AgentLoop {
 
       const parallelBatch = await this.collectParallelToolBatch(toolCalls, index, context, toolBudget, approvalPolicy);
       if (parallelBatch.length > 1) {
+        // 批量执行只读工具时统一跳过审批和预算二次检查，预算已在 collect 阶段模拟预留。
         const executions = await Promise.all(parallelBatch.map((toolCall) =>
           this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, { checkBudget: false, skipApproval: true })
         ));
@@ -1092,6 +1335,15 @@ export class AgentLoop {
     return messages;
   }
 
+  /**
+   * 从当前位置开始收集一个连续的可并行只读工具批次。
+   *
+   * @param toolCalls 完整工具调用列表。
+   * @param startIndex 本次尝试收集的起始下标。
+   * @param context 当前工具执行上下文。
+   * @param toolBudget 当前已消耗的工具预算。
+   * @param approvalPolicy 当前审批策略。
+   */
   private async collectParallelToolBatch(
     toolCalls: RuntimeToolCall[],
     startIndex: number,
@@ -1102,12 +1354,14 @@ export class AgentLoop {
     const simulatedBudget = { ...toolBudget };
     const readFileKeys = new Set<string>();
     const batch: RuntimeToolCall[] = [];
+    // 只收集连续批次；保留模型输出顺序，避免后面的工具依赖前一个工具结果时被提前执行。
     for (let index = startIndex; index < toolCalls.length; index += 1) {
       if (batch.length >= MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE) break;
       const toolCall = toolCalls[index];
       const parsedArguments = parseToolArguments(toolCall.arguments);
       if (!(await this.canRunToolCallInParallel(toolCall, parsedArguments, context, approvalPolicy))) break;
       const readFileKey = parallelReadFileKey(toolCall, parsedArguments);
+      // 同一个文件片段重复读取不并行，避免浪费上下文并让模型误以为拿到了不同信息。
       if (readFileKey && readFileKeys.has(readFileKey)) break;
       if (toolBudgetBlockForCall(toolCall, simulatedBudget)) break;
       reserveToolBudgetForCall(simulatedBudget, toolCall);
@@ -1117,6 +1371,14 @@ export class AgentLoop {
     return batch;
   }
 
+  /**
+   * 判断单个工具调用是否满足并行执行条件。
+   *
+   * @param toolCall 待判断的工具调用。
+   * @param parsedArguments 已解析的工具参数。
+   * @param context 当前工具执行上下文。
+   * @param approvalPolicy 当前审批策略。
+   */
   private async canRunToolCallInParallel(
     toolCall: RuntimeToolCall,
     parsedArguments: unknown,
@@ -1130,6 +1392,15 @@ export class AgentLoop {
     return !approval;
   }
 
+  /**
+   * 执行单个工具调用，负责预算、预览、审批、运行、结果事件和 tool 消息。
+   *
+   * @param toolCall 要执行的工具调用。
+   * @param context 当前工具执行上下文。
+   * @param toolBudget 本轮工具预算计数器。
+   * @param approvalPolicy 当前审批策略。
+   * @param options 批处理场景下可跳过预算或审批的内部选项。
+   */
   private async runSingleToolCall(
     toolCall: RuntimeToolCall,
     context: RuntimeToolExecutionContext,
@@ -1158,6 +1429,7 @@ export class AgentLoop {
       const startPreview = await this.options.toolHost?.previewToolCall?.(toolCall.name, parsedArguments, context).catch(() => null);
       startResultPreview = startPreview?.resultPreview;
       startedAtMs = this.options.clock.now().getTime();
+      // preview 先作为 tool.started 发出，用户无需等工具完成就能看到模型准备做什么。
       await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, startResultPreview);
       const approval = options.skipApproval ? 'not-required' : await this.approveToolCall(toolCall, parsedArguments, context, approvalPolicy);
       if (approval === 'reject') {
@@ -1176,6 +1448,7 @@ export class AgentLoop {
         ...context,
         toolCallId: toolCall.id,
         onToolOutputDelta: (delta) => {
+          // shell/stdout 等流式输出单独发 delta，避免等长命令完成后 UI 才刷新。
           const publish = this.publishToolOutputDelta(context.threadId, context.turnId, toolCall, delta).catch(() => undefined);
           outputDeltaPublishes.push(publish);
         },
@@ -1206,6 +1479,14 @@ export class AgentLoop {
     };
   }
 
+  /**
+   * 将工具执行结果写成 role=tool 的消息，供下一轮模型继续读取。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   * @param toolCall 对应的模型工具调用。
+   * @param content 工具返回给模型的文本内容。
+   */
   private async publishToolMessage(
     threadId: string,
     turnId: string,
@@ -1226,6 +1507,15 @@ export class AgentLoop {
     return message;
   }
 
+  /**
+   * 发布被 runtime 暂缓执行的工具消息，让模型知道该工具没有真的运行。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   * @param toolCall 被暂缓的工具调用。
+   * @param executedInspectionCount 本轮已经执行的查看类工具数量。
+   * @param previewedToolCallIds 已经在 UI 中预览过的工具调用 ID。
+   */
   private async publishDeferredToolMessage(
     threadId: string,
     turnId: string,
@@ -1247,6 +1537,15 @@ export class AgentLoop {
     return this.publishToolMessage(threadId, turnId, toolCall, content);
   }
 
+  /**
+   * 发布 tool.started 事件，提前展示工具名、参数和可选预览。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   * @param toolCall 对应的模型工具调用。
+   * @param parsedArguments 已解析的工具参数。
+   * @param resultPreview 工具执行前可展示的结果预览。
+   */
   private async publishToolStarted(threadId: string, turnId: string, toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string): Promise<void> {
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
@@ -1263,6 +1562,16 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 根据模型流式输出的 tool_call_delta 发布渐进式工具预览。
+   *
+   * @param announcedToolPreviews 已发布预览的签名缓存。
+   * @param call 本次模型输出的工具调用增量。
+   * @param partialToolCalls 已合并的部分工具调用缓存。
+   * @param threadId 目标线程 ID。
+   * @param toolContext 当前工具执行上下文。
+   * @param turnId 当前 turn ID。
+   */
   private async publishToolCallDeltaPreview({
     announcedToolPreviews,
     call,
@@ -1281,6 +1590,7 @@ export class AgentLoop {
     if (!this.options.toolHost) return;
     const id = call.id || `tool_call_${partialToolCalls.size}`;
     const current = partialToolCalls.get(id) ?? { id, name: '', arguments: '' };
+    // 部分模型会分片输出 arguments；这里尽量合并成可预览的渐进工具调用。
     const next = {
       id,
       name: call.name || current.name,
@@ -1293,6 +1603,7 @@ export class AgentLoop {
     const argumentsPreview = preview?.argumentsPreview ?? previewPartialArguments(next.arguments);
     const resultPreview = preview?.resultPreview;
     const signature = JSON.stringify({ name: next.name, argumentsPreview, resultPreview });
+    // 预览内容没变化时不重复发 tool.started，避免 UI 闪烁和 toolRun 重复合并。
     if (announcedToolPreviews.get(id) === signature) return;
     announcedToolPreviews.set(id, signature);
     await this.appendAndPublish(threadId, {
@@ -1310,6 +1621,14 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 发布工具运行过程中的流式输出片段。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   * @param toolCall 对应的模型工具调用。
+   * @param delta 工具输出流片段和来源信息。
+   */
   private async publishToolOutputDelta(
     threadId: string,
     turnId: string,
@@ -1333,6 +1652,17 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 发布 tool.completed 事件，记录最终状态、预览、数据和耗时。
+   *
+   * @param threadId 目标线程 ID。
+   * @param turnId 当前 turn ID。
+   * @param toolCall 对应的模型工具调用。
+   * @param parsedArguments 已解析的工具参数。
+   * @param status 工具最终状态。
+   * @param content 工具返回内容或错误文案。
+   * @param metadata 可选数据、预览和开始时间。
+   */
   private async publishToolCompleted(
     threadId: string,
     turnId: string,
@@ -1362,6 +1692,14 @@ export class AgentLoop {
     });
   }
 
+  /**
+   * 按审批策略为工具调用申请用户确认。
+   *
+   * @param toolCall 待审批的工具调用。
+   * @param parsedArguments 已解析的工具参数。
+   * @param context 当前工具执行上下文。
+   * @param approvalPolicy 当前审批策略。
+   */
   private async approveToolCall(
     toolCall: RuntimeToolCall,
     parsedArguments: unknown,
@@ -1369,6 +1707,7 @@ export class AgentLoop {
     approvalPolicy: RuntimeConfigState['approvalPolicy'],
   ): Promise<RuntimeApprovalDecision | 'not-required'> {
     if (!this.options.approvalGate || !this.options.toolHost) return 'not-required';
+    // 文件变更由 PC local tool host 的 plan/begin/write 顺序保护，这里不再插入额外审批打断流程。
     if (FILE_MUTATION_TOOL_NAMES.has(toolCall.name)) return 'not-required';
     if (approvalPolicy === 'full') return 'not-required';
     const requirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, context);
@@ -1430,6 +1769,11 @@ export class AgentLoop {
   }
 }
 
+/**
+ * 解析模型返回的工具参数字符串。
+ *
+ * @param value 模型输出的 arguments 字符串。
+ */
 function parseToolArguments(value: string): unknown {
   if (!value.trim()) return {};
   try {
@@ -1439,6 +1783,12 @@ function parseToolArguments(value: string): unknown {
   }
 }
 
+/**
+ * 合并流式工具参数片段，兼容全量覆盖和增量追加两种模型输出方式。
+ *
+ * @param current 当前已合并的参数字符串。
+ * @param delta 本次收到的参数片段。
+ */
 function mergeToolArgumentDelta(current: string, delta: string): string {
   if (!delta) return current;
   if (!current) return delta;
@@ -1447,6 +1797,12 @@ function mergeToolArgumentDelta(current: string, delta: string): string {
   return `${current}${delta}`;
 }
 
+/**
+ * 判断是否需要在连续查看类工具前先给用户一个进度提示。
+ *
+ * @param roundText 本轮 assistant 已输出的文本。
+ * @param toolCalls 本轮模型请求的工具调用列表。
+ */
 function shouldPublishInspectionProgressNote(roundText: string, toolCalls: RuntimeToolCall[]): boolean {
   if (stripThinkingMarkup(roundText).trim()) return false;
   return toolCalls.filter(isInspectionToolCall).length > 1;
@@ -1460,6 +1816,12 @@ function deferredToolCallDisplay(executedInspectionCount: number): string {
   return `本轮已先执行 ${executedInspectionCount} 个本地查看，后续操作已暂缓。`;
 }
 
+/**
+ * 生成回填给模型的工具暂缓内容，明确告知该工具没有执行。
+ *
+ * @param toolCall 被暂缓的工具调用。
+ * @param executedInspectionCount 当前模型轮次已执行的查看类工具数量。
+ */
 function deferredToolCallContent(toolCall: RuntimeToolCall, executedInspectionCount: number): string {
   return [
     `Deferred by desktop runtime: ${toolCall.name} was not executed.`,
@@ -1473,6 +1835,12 @@ function stripThinkingMarkup(value: string): string {
   return value.replace(/<think>[\s\S]*?<\/think>/g, '');
 }
 
+/**
+ * 判断某个工具调用是否被当前预算挡住，并生成对应模型/展示文案。
+ *
+ * @param toolCall 待执行的工具调用。
+ * @param budget 当前 turn 已累计的工具预算。
+ */
 function toolBudgetBlockForCall(toolCall: RuntimeToolCall, budget: ToolBudget): ToolBudgetBlock | null {
   const name = toolCall.name;
   const readFileLimit = MAX_READ_FILE_CALLS_PER_RUN;
@@ -1531,6 +1899,12 @@ function reserveToolBudgetForCall(budget: ToolBudget, toolCall: RuntimeToolCall)
   if (FILE_MUTATION_TOOL_NAMES.has(name)) budget.fileMutationCallCount += 1;
 }
 
+/**
+ * 生成只读文件工具的去重 key，避免并行批次重复读取同一片段。
+ *
+ * @param toolCall 待读取的工具调用。
+ * @param parsedArguments 已解析的工具参数。
+ */
 function parallelReadFileKey(toolCall: RuntimeToolCall, parsedArguments: unknown): string {
   if (!READ_FILE_TOOL_NAMES.has(toolCall.name) || !isPlainRecord(parsedArguments)) return '';
   return [
@@ -1564,14 +1938,19 @@ function isSuccessfulRememberMemoryMessage(message: RuntimeMessage): boolean {
     && !message.content.includes('was rejected');
 }
 
+/**
+ * 从用户自然语言里提取显式记忆内容。
+ *
+ * @param value 用户本轮输入文本。
+ */
 function explicitMemoryContentFromUserText(value: string): string {
   const text = value.trim();
   if (!text) return '';
   const patterns = [
     /^(?:请|帮我|麻烦你)?(?:记住|记一下|记下来)(?:这件事|一下|一点)?[：:，,\s]*(?<content>[\s\S]+)$/u,
     /^(?:请|帮我|麻烦你)?(?:保存|存储|写入|加入)(?:为|成|到|进)?(?:长期)?记忆[：:，,\s]*(?<content>[\s\S]+)$/u,
-    /^(?:please\s+)?remember(?:\s+that)?[\s:,\-]*(?<content>[\s\S]+)$/i,
-    /^(?:please\s+)?(?:save|store)(?:\s+this)?(?:\s+(?:as|to|in))?\s+memory[\s:,\-]*(?<content>[\s\S]+)$/i,
+    /^(?:please\s+)?remember(?:\s+that)?[\s:,-]*(?<content>[\s\S]+)$/i,
+    /^(?:please\s+)?(?:save|store)(?:\s+this)?(?:\s+(?:as|to|in))?\s+memory[\s:,-]*(?<content>[\s\S]+)$/i,
   ];
   for (const pattern of patterns) {
     const content = cleanExplicitMemoryContent(pattern.exec(text)?.groups?.content);
@@ -1596,6 +1975,11 @@ function throwIfAborted(signal?: AbortSignal): void {
   throw abortReason(signal);
 }
 
+/**
+ * 把 AbortSignal.reason 归一化成 Error。
+ *
+ * @param signal 已触发或可能触发的取消信号。
+ */
 function abortReason(signal: AbortSignal): Error {
   if (signal.reason instanceof Error) return signal.reason;
   const reason = typeof signal.reason === 'string' ? signal.reason : 'Turn cancelled.';
@@ -1608,6 +1992,12 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.message === 'This operation was aborted');
 }
 
+/**
+ * 给任意 Promise 增加 AbortSignal 支持。
+ *
+ * @param promise 待等待的异步任务。
+ * @param signal 用于中断等待的取消信号。
+ */
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(abortReason(signal));
   return new Promise<T>((resolve, reject) => {
@@ -1642,10 +2032,20 @@ function previewPartialArguments(value: string): string {
   return value.slice(0, 1200);
 }
 
+/**
+ * 截断工具输出，避免超大结果写入事件 payload。
+ *
+ * @param value 工具完整输出。
+ */
 function previewToolContent(value: string): string {
   return value.length > 60_000 ? `${value.slice(0, 60_000)}\n[truncated ${value.length - 60_000} chars]` : value;
 }
 
+/**
+ * 将消息列表格式化为上下文压缩模型可读的历史文本。
+ *
+ * @param messages 候选历史消息。
+ */
 function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
   return messages
     .filter((message) => message.visibility !== 'transcript')
@@ -1663,6 +2063,12 @@ function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
     .join('\n\n');
 }
 
+/**
+ * 取出某个 turn 中可用于被动记忆抽取的用户/助手消息。
+ *
+ * @param messages 当前线程消息列表。
+ * @param turnId 需要抽取的 turn ID。
+ */
 function passiveMemorySourceMessages(messages: RuntimeMessage[], turnId: string): RuntimeMessage[] {
   const scoped = messages.filter((message) =>
     message.turnId === turnId
@@ -1675,6 +2081,12 @@ function passiveMemorySourceMessages(messages: RuntimeMessage[], turnId: string)
   return hasUser && hasAssistant ? scoped : [];
 }
 
+/**
+ * 判断某个 turn 是否已经通过 remember_memory 保存过记忆。
+ *
+ * @param messages 当前线程消息列表。
+ * @param turnId 需要检查的 turn ID。
+ */
 function turnAlreadySavedMemory(messages: RuntimeMessage[], turnId: string): boolean {
   return messages.some((message) =>
     message.turnId === turnId
@@ -1698,6 +2110,12 @@ function messagesAsPassiveMemorySource(messages: RuntimeMessage[]): string {
     .join('\n\n');
 }
 
+/**
+ * 从模型输出中解析并去重被动记忆候选。
+ *
+ * @param value 模型原始输出文本。
+ * @param projectId 当前线程项目 ID，用于校正 project scope。
+ */
 function passiveMemoryCandidatesFromModelText(value: string, projectId: string | undefined): PassiveMemoryCandidate[] {
   const parsed = parseJsonObjectFromText(value);
   const rawMemories = Array.isArray(parsed?.memories) ? parsed.memories : parseJsonArrayFromText(value);
@@ -1754,6 +2172,11 @@ function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
   return messages.filter((message) => message.visibility !== 'transcript');
 }
 
+/**
+ * 从压缩模型输出中提取最终摘要文本。
+ *
+ * @param value 压缩模型原始输出。
+ */
 function compactedSummaryFromModelText(value: string): string {
   const text = stripMarkdownFence(value).trim();
   if (!text) return '';
@@ -1832,6 +2255,12 @@ function stripContextCompactionTags(value: string): string {
   return value.replace(/^<context_compaction_summary[^>]*>\n?/, '').replace(/\n?<\/context_compaction_summary>$/, '');
 }
 
+/**
+ * 压缩长文本供 prompt 使用，保留头尾以兼顾背景和错误尾部。
+ *
+ * @param value 原始长文本。
+ * @param maxChars 最大字符数。
+ */
 function compactForPrompt(value: string, maxChars: number): string {
   const normalized = value.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').trim();
   if (normalized.length <= maxChars) return normalized;
@@ -1840,6 +2269,11 @@ function compactForPrompt(value: string, maxChars: number): string {
   return `${normalized.slice(0, head)}\n...[omitted ${normalized.length - head - tail} chars]...\n${normalized.slice(-tail)}`;
 }
 
+/**
+ * 归一化外部输入附件，过滤缺少 id 或 url 的无效项。
+ *
+ * @param value 外部传入的附件字段。
+ */
 function normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attachments']> {
   if (!Array.isArray(value)) return [];
   return value
@@ -1857,6 +2291,11 @@ function normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attac
     .filter((item): item is NonNullable<RuntimeMessage['attachments']>[number] => Boolean(item));
 }
 
+/**
+ * 从 API 输入中提取模型思考选项。
+ *
+ * @param input 含 thinking 和 thinkingEffort 的请求片段。
+ */
 function turnThinkingOptions(input: { thinking?: boolean; thinkingEffort?: string }): TurnThinkingOptions {
   const thinking = input.thinking === true;
   const reasoningEffort = typeof input.thinkingEffort === 'string' && input.thinkingEffort.trim()
