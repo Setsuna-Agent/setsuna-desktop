@@ -575,8 +575,7 @@ function diffLineClass(line: RuntimeFileDiffLine): string {
 }
 
 function linePrefix(line: RuntimeFileDiffLine): string {
-  if (line.type === 'added') return '+';
-  if (line.type === 'removed') return '-';
+  if (line.type === 'added' || line.type === 'removed') return '';
   if (line.type === 'gap') return '...';
   return ' ';
 }

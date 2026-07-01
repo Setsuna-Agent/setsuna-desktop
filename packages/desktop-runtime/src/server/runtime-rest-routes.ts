@@ -11,6 +11,7 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerPatch,
   RuntimeMemoryQuery,
+  RuntimeMessage,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeUsageQuery,
@@ -48,6 +49,13 @@ export async function handleRuntimeRestRequest(
     const activeProvider = await runtime.configStore.getActiveProviderConfig();
     const savedProvider = !input.providerId || activeProvider?.id === input.providerId ? activeProvider : null;
     sendJson(response, 200, { models: await fetchAvailableModels(input, savedProvider) });
+    return true;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/v1/git/commit-message/generate') {
+    sendJson(response, 200, {
+      message: await generateCommitMessage(runtime, await readBody(request, {})),
+    });
     return true;
   }
 
@@ -412,6 +420,114 @@ export async function handleRuntimeRestRequest(
     return true;
   }
   return false;
+}
+
+async function generateCommitMessage(runtime: RuntimeFactory, input: unknown): Promise<string> {
+  const body = recordInput(input);
+  const branch = stringInput(body.branch) ?? '';
+  const status = rawStringInput(body.status);
+  const diff = rawStringInput(body.diff);
+  if (!status.trim() && !diff.trim()) throw new Error('No git changes were provided.');
+  const provider = await runtime.configStore.getActiveProviderConfig();
+  if (!provider?.enabled || !provider.activeModel?.code || (!provider.apiKey && provider.activeModel.code === 'local-runtime-smoke')) {
+    throw new Error('请先配置默认模型。');
+  }
+
+  const now = new Date().toISOString();
+  const messages: RuntimeMessage[] = [
+    {
+      id: 'git_commit_system',
+      role: 'system',
+      content: [
+        'You generate concise Git commit messages.',
+        'Return only the commit message, with no markdown, quotes, explanation, or alternatives.',
+        'Prefer Conventional Commit style when it is clearly appropriate.',
+        'Keep the subject line under 72 characters.',
+      ].join('\n'),
+      createdAt: now,
+      status: 'complete',
+      visibility: 'model',
+    },
+    {
+      id: 'git_commit_user',
+      role: 'user',
+      content: [
+        branch ? `Branch: ${branch}` : '',
+        status ? `Status:\n${status}` : '',
+        diff ? `Diff:\n${diff}` : '',
+      ].filter(Boolean).join('\n\n'),
+      createdAt: now,
+      status: 'complete',
+      visibility: 'model',
+    },
+  ];
+
+  let text = '';
+  for await (const item of runtime.modelClient.stream({
+    model: 'local-runtime-smoke',
+    messages,
+    maxOutputTokens: 120,
+    temperature: 0.2,
+    toolChoice: 'none',
+  })) {
+    if (item.type === 'text_delta') text += item.text;
+  }
+
+  const message = normalizeGeneratedCommitMessage(text);
+  return message || fallbackGeneratedCommitMessage(status, diff);
+}
+
+function recordInput(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function normalizeGeneratedCommitMessage(value: string): string {
+  const withoutFences = stripInvisibleCommitMessageChars(value)
+    .replace(/^```(?:git|text)?/iu, '')
+    .replace(/```$/u, '')
+    .trim();
+  const lines = withoutFences
+    .split(/\r?\n/)
+    .map((line) => stripInvisibleCommitMessageChars(line).trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^commit message:\s*/iu, '').trim())
+    .filter(Boolean);
+  return stripInvisibleCommitMessageChars(lines[0] ?? '').replace(/^["'`]+|["'`]+$/gu, '').trim();
+}
+
+function stripInvisibleCommitMessageChars(value: string): string {
+  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/gu, '');
+}
+
+function fallbackGeneratedCommitMessage(status: string, diff: string): string {
+  const paths = changedPathsFromStatus(status);
+  if (paths.length === 1) return truncateCommitSubject(`chore: update ${paths[0]}`);
+  if (paths.length > 1) return `chore: update ${paths.length} files`;
+  if (diff.trim()) return 'chore: update changes';
+  throw new Error('Failed to generate a commit message.');
+}
+
+function changedPathsFromStatus(status: string): string[] {
+  const paths = status
+    .split(/\r?\n/)
+    .map(statusPathFromLine)
+    .map((line) => line.includes(' -> ') ? line.split(' -> ').at(-1)?.trim() ?? '' : line)
+    .filter(Boolean);
+  return [...new Set(paths)];
+}
+
+function rawStringInput(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value : '';
+}
+
+function statusPathFromLine(line: string): string {
+  const trimmed = line.trimEnd();
+  const match = trimmed.match(/^(?:[ MADRCU?!]{2}|[MADRCU?!])\s+(.+)$/u);
+  return (match?.[1] ?? trimmed).trim();
+}
+
+function truncateCommitSubject(value: string): string {
+  return value.length <= 72 ? value : `${value.slice(0, 69).trimEnd()}...`;
 }
 
 function withActiveTurn<TThread extends RuntimeThread | RuntimeThreadSummary>(

@@ -15,6 +15,7 @@ import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
+import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import '@ant-design/x-markdown/themes/light.css';
 import '@ant-design/x-markdown/themes/dark.css';
 
@@ -35,7 +36,6 @@ export function ChatWorkspace({
   currentThread,
   draft,
   skillSelectionRequest,
-  sidePanelVisible = false,
   skills,
   onCancelActiveTurn,
   onApprovalPolicyChange,
@@ -51,7 +51,10 @@ export function ChatWorkspace({
   onSelectModel,
   onSearchProjectEntries,
   onSend,
+  onReviewRefresh,
   onSkillSelectionRequestConsumed,
+  reviewLoading = false,
+  reviewState = null,
 }: {
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
@@ -61,7 +64,6 @@ export function ChatWorkspace({
   currentThread: RuntimeThread | null;
   draft: string;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
-  sidePanelVisible?: boolean;
   skills: RuntimeSkillSummary[];
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
@@ -77,17 +79,21 @@ export function ChatWorkspace({
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; skillIds?: string[] }) => void;
+  onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
+  reviewLoading?: boolean;
+  reviewState?: DesktopReviewState | null;
 }) {
   const messages = currentThread?.messages ?? [];
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
+  const requestedReviewProjectRef = useRef<string | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread), [currentThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (activeProject ? conversationOverviewFromMessages(messages) : null), [activeProject, messages]);
   const overviewNarrow = useElementWidthBelow(conversationRef, overviewAutoCollapseWidthPx);
   const [overviewExpanded, setOverviewExpanded] = useState(false);
-  const overviewCompact = !overviewExpanded || sidePanelVisible || overviewNarrow;
+  const overviewCompact = !overviewExpanded || overviewNarrow;
   const overviewContextLabel = useMemo(
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status),
     [contextUsage, currentThread?.contextCompaction?.status],
@@ -97,6 +103,11 @@ export function ChatWorkspace({
   const [editingDraft, setEditingDraft] = useState('');
   const [editingSubmitting, setEditingSubmitting] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
+  const conversationClassName = [
+    'chat-main-conversation',
+    showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender',
+    conversationOverview && !overviewCompact ? 'chat-main-conversation--overview-expanded' : '',
+  ].filter(Boolean).join(' ');
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
@@ -107,6 +118,13 @@ export function ChatWorkspace({
     setOverviewExpanded(false);
     setExpandedWorkHistoryItemIds(new Set());
   }, [currentThread?.id]);
+  useEffect(() => {
+    const workspaceRoot = activeProject?.path ?? null;
+    if (requestedReviewProjectRef.current !== workspaceRoot) requestedReviewProjectRef.current = null;
+    if (!workspaceRoot || !conversationOverview || reviewState || reviewLoading || requestedReviewProjectRef.current === workspaceRoot) return;
+    requestedReviewProjectRef.current = workspaceRoot;
+    void onReviewRefresh?.();
+  }, [activeProject?.path, conversationOverview, onReviewRefresh, reviewLoading, reviewState]);
   const assistantItemIdByTurnId = useMemo(() => {
     const itemIdByTurnId = new Map<string, string>();
     for (const item of displayItems) {
@@ -344,10 +362,7 @@ export function ChatWorkspace({
   return (
     <main className="chat-main-panel desktop-chat-panel">
       <div className="chat-main-workspace">
-        <div
-          className={`chat-main-conversation ${showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender'}`}
-          ref={conversationRef}
-        >
+        <div className={conversationClassName} ref={conversationRef}>
           <div
             className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`}
             ref={scrollRef}
@@ -406,14 +421,18 @@ export function ChatWorkspace({
           {conversationOverview ? (
             <div className="chat-conversation-overview">
               <ConversationOverviewPanel
+                activeProject={activeProject}
                 compact={overviewCompact}
                 contextLabel={overviewContextLabel}
                 contextPercent={contextUsage.visiblePercent || contextUsage.percent}
                 overview={conversationOverview}
+                reviewLoading={reviewLoading}
+                reviewState={reviewState}
                 onCollapse={() => setOverviewExpanded(false)}
                 onExpand={() => setOverviewExpanded(true)}
                 onOpenFiles={onOpenFilesPanel}
                 onOpenReview={onOpenFileReview}
+                onReviewRefresh={onReviewRefresh}
               />
             </div>
           ) : null}

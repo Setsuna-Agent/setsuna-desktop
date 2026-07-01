@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dropdown, type MenuProps } from 'antd';
-import { Check, ChevronDown, Code2, Columns2, GitBranch, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
+import { Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, Maximize2, Minimize2, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
@@ -33,6 +33,16 @@ type SplitReviewDiffRow = {
   key: string;
   oldLine: HighlightedReviewDiffLine | null;
   newLine: HighlightedReviewDiffLine | null;
+};
+
+type ReviewFileExpansionRequest = {
+  expanded: boolean;
+  version: number;
+};
+
+export type BranchCompareRefOption = {
+  value: string;
+  label: string;
 };
 
 const reviewSourceLabels: Record<DesktopReviewSource, string> = {
@@ -102,6 +112,7 @@ export function DesktopReviewPanel({
   const [branchBaseRefByKey, setBranchBaseRefByKey] = useState<Record<string, string>>({});
   const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
   const [reviewLineWrapByKey, setReviewLineWrapByKey] = useState<Record<string, boolean>>({});
+  const [fileExpansionRequest, setFileExpansionRequest] = useState<ReviewFileExpansionRequest>({ expanded: true, version: 0 });
   const [refreshFeedbackVisible, setRefreshFeedbackVisible] = useState(false);
   const refreshFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasGit = Boolean(reviewState?.isGitRepository);
@@ -124,8 +135,9 @@ export function DesktopReviewPanel({
     : false;
   const activeSource = hasGit ? reviewSource : 'latest';
   const availableBaseRefs = reviewState?.baseRefs ?? [];
+  const pendingBranchBaseRef = branchBaseRefStorageKey ? branchBaseRefByKey[branchBaseRefStorageKey] : undefined;
   const activeBranchBaseRef = branchBaseRefStorageKey
-    ? branchBaseRefByKey[branchBaseRefStorageKey] ?? reviewState?.baseRef ?? ''
+    ? pendingBranchBaseRef ?? reviewState?.baseRef ?? ''
     : reviewState?.baseRef ?? '';
   const reviewLayoutToggleTip = reviewDiffLayout === 'split'
     ? '当前：左右对比，点击切换为单列对比'
@@ -138,11 +150,20 @@ export function DesktopReviewPanel({
 
   useEffect(() => {
     if (activeSource !== 'branch') return;
-    if (!branchBaseRefStorageKey || !storedBranchBaseRef || !availableBaseRefs.includes(storedBranchBaseRef)) return;
-    if (reviewState?.baseRef === storedBranchBaseRef || branchBaseRefByKey[branchBaseRefStorageKey] === storedBranchBaseRef) return;
-    setBranchBaseRefByKey((current) => ({ ...current, [branchBaseRefStorageKey]: storedBranchBaseRef }));
-    onRefresh({ baseRef: storedBranchBaseRef });
-  }, [activeSource, availableBaseRefs, branchBaseRefByKey, branchBaseRefStorageKey, onRefresh, reviewState?.baseRef, storedBranchBaseRef]);
+    if (!branchBaseRefStorageKey) return;
+    const restoredBaseRef = storedBranchBaseRef;
+    if (!restoredBaseRef) return;
+    const preferredRestoredBaseRef = preferredBranchCompareRef(restoredBaseRef, availableBaseRefs);
+    if (!shouldRestoreBranchBaseRefPreference({
+      availableBaseRefs,
+      currentBaseRef: reviewState?.baseRef,
+      pendingBaseRef: pendingBranchBaseRef,
+      storedBaseRef: preferredRestoredBaseRef,
+    })) return;
+    setBranchBaseRefByKey((current) => ({ ...current, [branchBaseRefStorageKey]: preferredRestoredBaseRef }));
+    writeBranchBaseRefPreference(branchBaseRefStorageKey, preferredRestoredBaseRef);
+    onRefresh({ baseRef: preferredRestoredBaseRef });
+  }, [activeSource, availableBaseRefs, branchBaseRefStorageKey, onRefresh, pendingBranchBaseRef, reviewState?.baseRef, storedBranchBaseRef]);
 
   useEffect(() => () => {
     if (refreshFeedbackTimerRef.current) clearTimeout(refreshFeedbackTimerRef.current);
@@ -171,6 +192,8 @@ export function DesktopReviewPanel({
   }
 
   const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
+  const hasReviewFiles = Boolean(activeSummary?.files.length);
+  const reviewFileExpansionTip = fileExpansionRequest.expanded ? '折叠所有文件改动' : '展开所有文件改动';
   const pathContext: ReviewPathContext = {
     source: activeSource,
     workspaceRoot: reviewState?.workspaceRoot ?? activeProject.path,
@@ -219,6 +242,10 @@ export function DesktopReviewPanel({
     ));
     writeReviewLineWrapPreference(reviewLineWrapStorageKey, nextLineWrap);
   };
+  const handleReviewFileExpansionToggle = () => {
+    if (!hasReviewFiles) return;
+    setFileExpansionRequest((current) => ({ expanded: !current.expanded, version: current.version + 1 }));
+  };
   const handleReviewRefresh = () => {
     if (reviewRefreshing) return;
     setRefreshFeedbackVisible(true);
@@ -253,12 +280,22 @@ export function DesktopReviewPanel({
           ) : (
             <span className="chat-file-review-panel__source-title">最新改动</span>
           )}
-          <div className="desktop-review-change-counts">
-            <span className="desktop-review-change-counts__addition">+{activeSummary?.additions ?? 0}</span>
-            <span className="desktop-review-change-counts__deletion">-{activeSummary?.deletions ?? 0}</span>
-          </div>
+          <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
         </div>
         <div className="desktop-review-panel__actions">
+          <ReviewActionTip title={reviewFileExpansionTip}>
+            <IconButton
+              aria-pressed={!fileExpansionRequest.expanded}
+              className={`desktop-review-panel__file-expansion-toggle ${fileExpansionRequest.expanded ? '' : 'is-collapsed'}`}
+              disabled={!hasReviewFiles}
+              label={reviewFileExpansionTip}
+              title=""
+              variant="ghost"
+              onClick={handleReviewFileExpansionToggle}
+            >
+              {fileExpansionRequest.expanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+            </IconButton>
+          </ReviewActionTip>
           <ReviewActionTip title={reviewLayoutToggleTip}>
             <IconButton
               aria-pressed={reviewDiffLayout === 'split'}
@@ -310,6 +347,7 @@ export function DesktopReviewPanel({
         <ReviewSummarySection
           emptyText={reviewEmptyText[activeSource]}
           diffLayout={reviewDiffLayout}
+          fileExpansionRequest={fileExpansionRequest}
           lineWrap={reviewLineWrap}
           pathContext={pathContext}
           summary={activeSummary}
@@ -332,6 +370,15 @@ function reviewSummaryForSource(
   if (source === 'staged') return reviewState?.stagedSummary ?? null;
   if (source === 'branch') return reviewState?.branchSummary ?? null;
   return null;
+}
+
+function ReviewChangeCounts({ additions, deletions }: { additions: number; deletions: number }) {
+  return (
+    <span className="desktop-review-change-counts">
+      <span className="desktop-review-change-counts__addition">+{additions}</span>
+      <span className="desktop-review-change-counts__deletion">-{deletions}</span>
+    </span>
+  );
 }
 
 export function reviewWorkspaceFilePath(filePath: string, context: ReviewPathContext): string | null {
@@ -505,6 +552,22 @@ function isDesktopReviewDiffLayout(value: unknown): value is DesktopReviewDiffLa
   return value === 'unified' || value === 'split';
 }
 
+export function shouldRestoreBranchBaseRefPreference({
+  availableBaseRefs,
+  currentBaseRef,
+  pendingBaseRef,
+  storedBaseRef,
+}: {
+  availableBaseRefs: string[];
+  currentBaseRef?: string | null;
+  pendingBaseRef?: string;
+  storedBaseRef?: string | null;
+}): boolean {
+  if (!storedBaseRef || !availableBaseRefs.includes(storedBaseRef)) return false;
+  if (pendingBaseRef !== undefined) return false;
+  return currentBaseRef !== storedBaseRef;
+}
+
 function BranchCompareBar({
   baseRef,
   baseRefs,
@@ -521,19 +584,25 @@ function BranchCompareBar({
     if (!baseRef || baseRefs.includes(baseRef)) return baseRefs;
     return [baseRef, ...baseRefs];
   }, [baseRef, baseRefs]);
+  const selectableOptions = useMemo(() => branchCompareRefOptions(selectableBaseRefs, baseRef), [selectableBaseRefs, baseRef]);
+  const selectedBaseValue = preferredBranchCompareRef(baseRef ?? '', selectableBaseRefs);
+  const selectedBaseLabel = branchCompareDisplayName(selectedBaseValue) || '未设置';
   const filteredBaseRefs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return selectableBaseRefs;
-    return selectableBaseRefs.filter((ref) => ref.toLowerCase().includes(normalizedQuery));
-  }, [selectableBaseRefs, query]);
+    if (!normalizedQuery) return selectableOptions;
+    return selectableOptions.filter((option) => (
+      option.label.toLowerCase().includes(normalizedQuery)
+      || option.value.toLowerCase().includes(normalizedQuery)
+    ));
+  }, [selectableOptions, query]);
   const menuItems: MenuProps['items'] = filteredBaseRefs.length
-    ? filteredBaseRefs.map((ref) => ({
-      key: ref,
+    ? filteredBaseRefs.map((option) => ({
+      key: option.value,
       label: (
         <span className="desktop-review-branch-menu__item">
           <GitBranch size={13} />
-          <span>{ref}</span>
-          <span className="desktop-review-branch-menu__check">{baseRef === ref ? <Check size={13} /> : null}</span>
+          <span>{option.label}</span>
+          <span className="desktop-review-branch-menu__check">{branchCompareRefsMatch(baseRef, option.value) ? <Check size={13} /> : null}</span>
         </span>
       ),
     }))
@@ -575,14 +644,14 @@ function BranchCompareBar({
         )}
         menu={{
           items: menuItems,
-          selectedKeys: baseRef ? [baseRef] : [],
+          selectedKeys: selectedBaseValue ? [selectedBaseValue] : [],
           onClick: handleMenuClick,
         }}
       >
         <Button className="desktop-review-branch-compare__button" type="text" size="small" disabled={!selectableBaseRefs.length}>
           <span className="desktop-review-branch-compare__current">{currentBranch || 'HEAD'}</span>
           <span className="desktop-review-branch-compare__arrow">→</span>
-          <span className="desktop-review-branch-compare__base">{baseRef || '未设置'}</span>
+          <span className="desktop-review-branch-compare__base" title={selectedBaseValue || undefined}>{selectedBaseLabel}</span>
           <ChevronDown className="desktop-review-branch-compare__caret" size={12} />
         </Button>
       </Dropdown>
@@ -590,9 +659,72 @@ function BranchCompareBar({
   );
 }
 
+export function branchCompareRefOptions(refs: string[], selectedRef?: string | null): BranchCompareRefOption[] {
+  const options = new Map<string, BranchCompareRefOption>();
+  const selectedValue = preferredBranchCompareRef(selectedRef ?? '', refs);
+  for (const ref of refs) {
+    const logicalName = branchCompareLogicalName(ref);
+    if (!logicalName) continue;
+    const value = preferredBranchCompareRef(ref, refs);
+    const label = branchCompareDisplayName(value);
+    const current = options.get(logicalName);
+    if (!current || shouldPreferBranchCompareRef(value, current.value, selectedValue)) {
+      options.set(logicalName, { value, label });
+    }
+  }
+  return [...options.values()];
+}
+
+export function branchCompareDisplayName(ref?: string | null): string {
+  const trimmed = String(ref ?? '').trim();
+  if (!trimmed || trimmed === 'origin' || trimmed === 'upstream') return '';
+  return trimmed;
+}
+
+function shouldPreferBranchCompareRef(
+  candidate: string,
+  current: string,
+  selectedRef: string | null,
+): boolean {
+  if (selectedRef && candidate === selectedRef) return true;
+  if (selectedRef && current === selectedRef) return false;
+  return !isRemoteCompareRef(current) && isRemoteCompareRef(candidate);
+}
+
+function branchCompareRefsMatch(left?: string | null, right?: string | null): boolean {
+  const leftName = branchCompareLogicalName(left ?? '');
+  return Boolean(leftName && leftName === branchCompareLogicalName(right ?? ''));
+}
+
+function branchCompareLogicalName(ref: string): string {
+  const trimmed = ref.trim();
+  if (!trimmed) return '';
+  if (trimmed === 'origin' || trimmed === 'upstream') return '';
+  for (const remote of ['origin/', 'upstream/']) {
+    if (trimmed.startsWith(remote)) return trimmed.slice(remote.length);
+  }
+  return trimmed;
+}
+
+function preferredBranchCompareRef(ref: string, refs: string[]): string {
+  const logicalName = branchCompareLogicalName(ref);
+  if (!logicalName) return '';
+  if (isRemoteCompareRef(ref)) return ref;
+  for (const remote of ['origin', 'upstream']) {
+    const remoteRef = `${remote}/${logicalName}`;
+    if (refs.includes(remoteRef)) return remoteRef;
+  }
+  return ref;
+}
+
+function isRemoteCompareRef(ref: string): boolean {
+  return ref.startsWith('origin/') || ref.startsWith('upstream/');
+}
+
 function ReviewSummarySection({
   diffLayout,
   emptyText,
+  fileExpansionRequest,
   lineWrap,
   pathContext,
   summary,
@@ -602,6 +734,7 @@ function ReviewSummarySection({
 }: {
   diffLayout: DesktopReviewDiffLayout;
   emptyText: { title: string; description: string };
+  fileExpansionRequest: ReviewFileExpansionRequest;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
   summary: DesktopDiffSummary | null;
@@ -617,6 +750,7 @@ function ReviewSummarySection({
           {files.map((file) => (
             <ReviewFileCard
               diffLayout={diffLayout}
+              fileExpansionRequest={fileExpansionRequest}
               file={file}
               key={file.path}
               lineWrap={lineWrap}
@@ -639,6 +773,7 @@ function ReviewSummarySection({
 
 function ReviewFileCard({
   diffLayout,
+  fileExpansionRequest,
   file,
   lineWrap,
   pathContext,
@@ -647,6 +782,7 @@ function ReviewFileCard({
   onOpenProjectFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
+  fileExpansionRequest: ReviewFileExpansionRequest;
   file: DesktopDiffFile;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
@@ -654,24 +790,29 @@ function ReviewFileCard({
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
+  const [diffHeightExpanded, setDiffHeightExpanded] = useState(false);
   const [lineContextMenu, setLineContextMenu] = useState<ReviewLineContextMenuState | null>(null);
   const lineContextMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
   const canOpenFile = Boolean(workspaceFilePath);
   const visibleLines = useMemo(() => file.lines.slice(0, 36), [file.lines]);
   const language = fileLanguage(file.path);
-  const highlightableSource = useMemo(() => visibleLines.map((line) => line.content).join('\n'), [visibleLines]);
+  const highlightableSource = useMemo(() => visibleLines.map((line) => (line.type === 'gap' ? '' : line.content)).join('\n'), [visibleLines]);
   const highlightedLines = useMemo(() => highlightedCodeLinesHtml(highlightableSource, language), [highlightableSource, language]);
   const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
     () => visibleLines.map((line, index) => ({
-      highlighted: highlightedLines[index],
+      highlighted: line.type === 'gap' ? undefined : highlightedLines[index],
       key: `${file.path}:${line.lineNumber}:${index}`,
       line,
     })),
     [file.path, highlightedLines, visibleLines],
   );
   const splitRows = useMemo(() => splitReviewDiffRows(highlightedVisibleLines), [highlightedVisibleLines]);
+
+  useEffect(() => {
+    setExpanded(fileExpansionRequest.expanded);
+  }, [fileExpansionRequest.expanded, fileExpansionRequest.version]);
 
   const openDiffLine = (line: DesktopDiffFile['lines'][number], preferredLine?: number) => {
     if (!workspaceFilePath) return;
@@ -723,7 +864,17 @@ function ReviewFileCard({
           </button>
           <div className="desktop-review-file-card__meta">
             <span>{file.action}</span>
-            <em>+{file.additions} -{file.deletions}</em>
+            <ReviewChangeCounts additions={file.additions} deletions={file.deletions} />
+            <IconButton
+              aria-pressed={diffHeightExpanded}
+              className={`desktop-review-file-card__height-toggle ${diffHeightExpanded ? 'is-active' : ''}`}
+              disabled={!visibleLines.length}
+              label={diffHeightExpanded ? '收起 diff 高度' : '展开 diff 高度'}
+              variant="ghost"
+              onClick={() => setDiffHeightExpanded((value) => !value)}
+            >
+              {diffHeightExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            </IconButton>
             <IconButton
               disabled={!canOpenFile}
               label={canOpenFile ? 'Open file in panel' : '文件不在当前项目目录内'}
@@ -747,7 +898,7 @@ function ReviewFileCard({
           </div>
         </header>
         {expanded && visibleLines.length ? (
-          <div className={`desktop-review-diff desktop-review-diff--${diffLayout} ${lineWrap ? 'desktop-review-diff--wrap' : ''}`}>
+          <div className={`desktop-review-diff desktop-review-diff--${diffLayout} ${lineWrap ? 'desktop-review-diff--wrap' : ''} ${diffHeightExpanded ? 'desktop-review-diff--expanded' : ''}`}>
             {diffLayout === 'split' ? (
               <ReviewSplitDiff
                 canOpenLine={Boolean(workspaceApp && canOpenFile)}
@@ -801,6 +952,15 @@ function ReviewUnifiedDiff({
   return (
     <>
       {lines.map((item) => {
+        if (item.line.type === 'gap') {
+          return (
+            <div className="desktop-review-diff-line desktop-review-diff-line--gap" key={item.key}>
+              <span className="desktop-review-diff-line__prefix" />
+              <span className="desktop-review-diff-line__number" />
+              <ReviewDiffCode content={item.line.content} language={language} />
+            </div>
+          );
+        }
         const targetLine = item.line.newLine ?? item.line.oldLine;
         return (
           <button
@@ -913,6 +1073,15 @@ function ReviewSplitDiffCell({
   if (!item) {
     return <span aria-hidden="true" className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--empty`} />;
   }
+  if (item.line.type === 'gap') {
+    return (
+      <span className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--gap`}>
+        <span className="desktop-review-diff-line__prefix" />
+        <span className="desktop-review-diff-line__number" />
+        <ReviewDiffCode content={item.line.content} language={language} />
+      </span>
+    );
+  }
   const targetLine = side === 'old' ? item.line.oldLine ?? item.line.newLine : item.line.newLine ?? item.line.oldLine;
   return (
     <button
@@ -963,7 +1132,11 @@ function splitReviewDiffRows(lines: HighlightedReviewDiffLine[]): SplitReviewDif
       continue;
     }
     flushChangedLines();
-    rows.push({ key: `context:${line.key}`, oldLine: line, newLine: line });
+    rows.push({
+      key: `${line.line.type}:${line.key}`,
+      oldLine: line,
+      newLine: line.line.type === 'gap' ? null : line,
+    });
   }
   flushChangedLines();
   return rows;
@@ -1001,7 +1174,6 @@ function reviewLineContextMenuLabel(appLabel: string, line?: number): string {
 }
 
 function diffLinePrefix(line: DesktopDiffFile['lines'][number]): string {
-  if (line.type === 'added') return '+';
-  if (line.type === 'removed') return '-';
+  if (line.type === 'added' || line.type === 'removed') return '';
   return ' ';
 }

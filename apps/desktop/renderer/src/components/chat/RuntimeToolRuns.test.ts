@@ -262,6 +262,7 @@ describe('RuntimeToolRuns default expansion', () => {
             lines: [
               { type: 'del', lineNumber: 66, oldLine: 66, content: 'const now = new Date()' },
               { type: 'add', lineNumber: 66, newLine: 66, content: 'const today = new Date()' },
+              { type: 'gap', content: '6 unmodified lines' },
             ],
           },
         }),
@@ -273,8 +274,11 @@ describe('RuntimeToolRuns default expansion', () => {
 
     expect(html).toContain('chat-file-review__line--del');
     expect(html).toContain('chat-file-review__line--add');
-    expect(html).toContain('chat-file-review__prefix">-</span>');
-    expect(html).toContain('chat-file-review__prefix">+</span>');
+    expect(html).toContain('chat-file-review__prefix"></span>');
+    expect(html).not.toContain('chat-file-review__prefix">-</span>');
+    expect(html).not.toContain('chat-file-review__prefix">+</span>');
+    expect(html).toContain('chat-file-review__line--gap');
+    expect(html).toContain('6 unmodified lines');
     expect(html).toContain('hljs-keyword');
   });
 });

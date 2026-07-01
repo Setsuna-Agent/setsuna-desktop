@@ -2,11 +2,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { DesktopReviewPanel, reviewWorkspaceFilePath } from './ReviewPanel.js';
+import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, reviewWorkspaceFilePath, shouldRestoreBranchBaseRefPreference } from './ReviewPanel.js';
 import type { DesktopDiffSummary, DesktopReviewState } from './model.js';
 
 describe('DesktopReviewPanel', () => {
-  it('renders collapsible file diffs with prefixes and syntax highlighting', () => {
+  it('renders collapsible file diffs with status bars, gaps, and syntax highlighting', () => {
     const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
       activeProject: project,
       error: null,
@@ -24,10 +24,19 @@ describe('DesktopReviewPanel', () => {
     expect(html).toContain('desktop-review-file-card__path-main');
     expect(html).not.toContain('desktop-review-file-card__path-button');
     expect(html).toContain('aria-label="Open file in panel"');
+    expect(html).toContain('desktop-review-change-counts__addition">+1</span>');
+    expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
+    expect(html).toContain('aria-label="折叠所有文件改动"');
+    expect(html).toContain('desktop-review-panel__file-expansion-toggle');
+    expect(html).toContain('aria-label="展开 diff 高度"');
+    expect(html).toContain('desktop-review-file-card__height-toggle');
     expect(html).toContain('desktop-review-diff-line--removed');
     expect(html).toContain('desktop-review-diff-line--added');
-    expect(html).toContain('desktop-review-diff-line__prefix">-</span>');
-    expect(html).toContain('desktop-review-diff-line__prefix">+</span>');
+    expect(html).toContain('desktop-review-diff-line__prefix"></span>');
+    expect(html).not.toContain('desktop-review-diff-line__prefix">-</span>');
+    expect(html).not.toContain('desktop-review-diff-line__prefix">+</span>');
+    expect(html).toContain('desktop-review-diff-line--gap');
+    expect(html).toContain('6 unmodified lines');
     expect(html).toContain('hljs-keyword');
   });
 
@@ -65,8 +74,46 @@ describe('DesktopReviewPanel', () => {
 
       expect(html).toContain('desktop-review-branch-compare');
       expect(html).toContain('main');
-      expect(html).toContain('origin/main');
+      expect(html).toContain('title="origin/main"');
     });
+  });
+
+  it('uses raw remote refs for visible branch compare labels', () => {
+    expect(branchCompareDisplayName('origin/master')).toBe('origin/master');
+    expect(branchCompareDisplayName('master')).toBe('master');
+    expect(branchCompareDisplayName('origin/setsuna/temp')).toBe('origin/setsuna/temp');
+  });
+
+  it('deduplicates local and remote branch compare refs with remote refs preferred', () => {
+    expect(branchCompareRefOptions([
+      'origin/master',
+      'master',
+      'origin',
+      'origin/setsuna/temp',
+      'setsuna/temp',
+      'temp',
+    ])).toEqual([
+      { value: 'origin/master', label: 'origin/master' },
+      { value: 'origin/setsuna/temp', label: 'origin/setsuna/temp' },
+      { value: 'temp', label: 'temp' },
+    ]);
+  });
+
+  it('does not restore a stale branch compare preference after the user picks a new base ref', () => {
+    expect(shouldRestoreBranchBaseRefPreference({
+      availableBaseRefs: ['master', 'setsuna/temp', 'temp'],
+      currentBaseRef: 'setsuna/temp',
+      pendingBaseRef: 'setsuna/temp',
+      storedBaseRef: 'master',
+    })).toBe(false);
+  });
+
+  it('restores a branch compare preference before any in-memory selection exists', () => {
+    expect(shouldRestoreBranchBaseRefPreference({
+      availableBaseRefs: ['master', 'setsuna/temp', 'temp'],
+      currentBaseRef: 'setsuna/temp',
+      storedBaseRef: 'master',
+    })).toBe(true);
   });
 
   it('restores the split diff layout for the active project', () => {
@@ -179,6 +226,7 @@ const latestSummary: DesktopDiffSummary = {
       lines: [
         { type: 'removed', lineNumber: 1, oldLine: 66, content: 'const now = new Date()' },
         { type: 'added', lineNumber: 2, newLine: 66, content: 'const today = new Date()' },
+        { type: 'gap', lineNumber: 3, content: '6 unmodified lines' },
       ],
     },
   ],
@@ -195,8 +243,11 @@ const reviewState: DesktopReviewState = {
   workspaceRoot: project.path,
   gitRoot: project.path,
   currentBranch: 'main',
+  currentRemoteRef: 'origin/main',
   baseRef: 'origin/main',
   baseRefs: ['origin/main', 'main'],
+  branches: [{ name: 'main', current: true, remote: false, uncommittedFiles: 1 }],
+  currentRemoteSummary: null,
   branchSummary: null,
   stagedSummary,
   unstagedSummary: latestSummary,

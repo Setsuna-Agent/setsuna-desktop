@@ -131,7 +131,7 @@ export function AppChatSurface({
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
-  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
+  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; skillIds?: string[] }) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
@@ -160,8 +160,9 @@ export function AppChatSurface({
         config={config}
         currentThread={currentThread}
         draft={draft}
+        reviewLoading={reviewLoading}
+        reviewState={reviewState}
         skillSelectionRequest={skillSelectionRequest}
-        sidePanelVisible={sidePanelVisible}
         skills={skills}
         onCancelActiveTurn={onCancelActiveTurn}
         onApprovalPolicyChange={onApprovalPolicyChange}
@@ -177,6 +178,7 @@ export function AppChatSurface({
         onSelectModel={onSelectModel}
         onSearchProjectEntries={onSearchProjectEntries}
         onSend={onSend}
+        onReviewRefresh={onReviewRefresh}
         onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       />
       {sidePanelVisible && sideActivePanel ? (

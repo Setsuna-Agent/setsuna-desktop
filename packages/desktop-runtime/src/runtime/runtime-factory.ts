@@ -77,6 +77,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     configStore,
     eventBus,
     memoryStore,
+    modelClient,
     mcpStore,
     skillRegistry,
     toolHost,

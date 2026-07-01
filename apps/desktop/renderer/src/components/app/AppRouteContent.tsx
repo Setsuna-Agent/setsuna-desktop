@@ -169,7 +169,7 @@ export function AppRouteContent({
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={(filePath) => void projectWorkspace.openProjectFile(filePath)}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
-      onReviewRefresh={(options) => void workspacePanels.loadReviewState(options)}
+      onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
       onSend={(value, options) => void chatActions.sendInput(value, options)}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}

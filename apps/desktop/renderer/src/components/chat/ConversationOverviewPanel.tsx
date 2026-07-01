@@ -1,26 +1,39 @@
 import { CheckCircle2, ChevronsRightLeft, Circle, FileText, FolderOpen, ListChecks } from 'lucide-react';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import type { ConversationOverviewState, ConversationPlanItem, ConversationPlanStatus } from './chatConversationOverview.js';
+import { ConversationGitControls } from './ConversationGitControls.js';
 
 export function ConversationOverviewPanel({
+  activeProject,
   compact,
   contextLabel,
   contextPercent,
   overview,
+  reviewLoading,
+  reviewState,
   onCollapse,
   onExpand,
   onOpenFiles,
   onOpenReview,
+  onReviewRefresh,
 }: {
+  activeProject?: WorkspaceProject;
   compact: boolean;
   contextLabel: string;
   contextPercent: number;
   overview: ConversationOverviewState;
+  reviewLoading: boolean;
+  reviewState: DesktopReviewState | null;
   onCollapse: () => void;
   onExpand: () => void;
   onOpenFiles: () => void;
   onOpenReview?: () => void;
+  onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
 }) {
-  const summary = overview.fileChangeSummary;
+  const summary = reviewState?.isGitRepository
+    ? reviewState.currentRemoteSummary ?? reviewState.branchSummary
+    : overview.fileChangeSummary;
   const additions = summary?.additions ?? 0;
   const deletions = summary?.deletions ?? 0;
   const hasFileChanges = Boolean(summary?.files.length);
@@ -57,6 +70,12 @@ export function ConversationOverviewPanel({
             {hasFileChanges ? <ChangeCountText additions={additions} deletions={deletions} /> : '无变更'}
           </span>
         </button>
+        <ConversationGitControls
+          activeProject={activeProject}
+          reviewLoading={reviewLoading}
+          reviewState={reviewState}
+          onReviewRefresh={onReviewRefresh}
+        />
         <div className="chat-conversation-overview-panel__row chat-conversation-overview-panel__row--static">
           <span className="chat-conversation-overview-panel__icon">
             <ContextProgressIcon percent={contextPercent} />

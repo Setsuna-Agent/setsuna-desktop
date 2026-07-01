@@ -125,6 +125,68 @@ describe('runtime server', () => {
     }
   });
 
+  it('generates git commit messages through the active model', async () => {
+    const modelServer = await createOpenAiCaptureServer('feat: update git controls');
+    try {
+      await configureOpenAiProvider('commit-message', modelServer.baseUrl);
+
+      const result = await runtimeFetch('/v1/git/commit-message/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          branch: 'master',
+          status: ' M src/chat.ts',
+          diff: 'diff --git a/src/chat.ts b/src/chat.ts\n+const changed = true;\n',
+        }),
+      });
+      const requestBody = await modelServer.nextBody;
+
+      expect(JSON.stringify(requestBody)).toContain('src/chat.ts');
+      expect(result).toEqual({ message: 'feat: update git controls' });
+    } finally {
+      await modelServer.close();
+    }
+  });
+
+  it('falls back to a deterministic commit message when the active model returns no text', async () => {
+    const modelServer = await createOpenAiCaptureServer('');
+    try {
+      await configureOpenAiProvider('empty-commit-message', modelServer.baseUrl);
+
+      const result = await runtimeFetch('/v1/git/commit-message/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          branch: 'master',
+          status: ' M src/chat.ts',
+          diff: 'diff --git a/src/chat.ts b/src/chat.ts\n+const changed = true;\n',
+        }),
+      });
+
+      expect(result).toEqual({ message: 'chore: update src/chat.ts' });
+    } finally {
+      await modelServer.close();
+    }
+  });
+
+  it('falls back when the active model returns only invisible commit text', async () => {
+    const modelServer = await createOpenAiCaptureServer('\u200B\u2060');
+    try {
+      await configureOpenAiProvider('invisible-commit-message', modelServer.baseUrl);
+
+      const result = await runtimeFetch('/v1/git/commit-message/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          branch: 'master',
+          status: ' M src/chat.ts',
+          diff: 'diff --git a/src/chat.ts b/src/chat.ts\n+const changed = true;\n',
+        }),
+      });
+
+      expect(result).toEqual({ message: 'chore: update src/chat.ts' });
+    } finally {
+      await modelServer.close();
+    }
+  });
+
   it('lists and updates local skills', async () => {
     const list = await runtimeFetch('/v1/skills');
     expect(list.skills.some((skill: { id: string }) => skill.id === 'presentation-mcp')).toBe(true);
@@ -2405,7 +2467,7 @@ describe('runtime server', () => {
   }
 });
 
-async function createOpenAiCaptureServer(): Promise<{
+async function createOpenAiCaptureServer(responseText = 'Captured.'): Promise<{
   baseUrl: string;
   nextBody: Promise<Record<string, unknown>>;
   close(): Promise<void>;
@@ -2425,7 +2487,7 @@ async function createOpenAiCaptureServer(): Promise<{
       }
       resolveBody(JSON.parse(await readRequestText(request)) as Record<string, unknown>);
       response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
-      response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Captured.' } }] })}\n\n`);
+      if (responseText) response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: responseText } }] })}\n\n`);
       response.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
       response.write('data: [DONE]\n\n');
       response.end();

@@ -929,6 +929,7 @@
 }
 
 .desktop-review-panel__layout-toggle.is-active,
+.desktop-review-panel__file-expansion-toggle.is-collapsed,
 .desktop-review-panel__wrap-toggle.is-active {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text) 7%, transparent);
@@ -1289,6 +1290,16 @@
   justify-content: flex-end;
 }
 
+.desktop-review-file-card__meta .desktop-review-change-counts {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-review-file-card__height-toggle.is-active {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+}
+
 .desktop-review-file-card__path-main {
   height: 28px;
   padding: 0 6px;
@@ -1318,16 +1329,10 @@
   white-space: nowrap;
 }
 
-.desktop-review-file-card__meta span,
-.desktop-review-file-card__meta em {
+.desktop-review-file-card__meta > span {
   color: var(--app-text-muted);
   font-size: 11px;
-  font-style: normal;
   white-space: nowrap;
-}
-
-.desktop-review-file-card__meta em {
-  font-family: var(--app-code-font-family);
 }
 
 .desktop-review-diff {
@@ -1338,6 +1343,10 @@
   font-family: var(--app-code-font-family);
   font-size: 11.5px;
   line-height: 18px;
+}
+
+.desktop-review-diff--expanded {
+  max-height: none;
 }
 
 .desktop-review-diff--split {
@@ -1352,7 +1361,7 @@
 .desktop-review-diff-line,
 .desktop-review-diff-split-cell {
   display: grid;
-  grid-template-columns: 22px 38px minmax(0, 1fr);
+  grid-template-columns: 14px minmax(2ch, max-content) minmax(0, 1fr);
   padding: 0 10px 0 0;
   border: 0;
   color: var(--app-text);
@@ -1406,6 +1415,26 @@
   background: color-mix(in srgb, var(--app-text) 5%, transparent);
 }
 
+.desktop-review-diff-line--gap,
+.desktop-review-diff-line--gap:hover,
+.desktop-review-diff-split-cell--gap,
+.desktop-review-diff-split-cell--gap:hover {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px;
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+  box-shadow: none;
+}
+
+.desktop-review-diff-line--gap .desktop-review-diff-line__prefix,
+.desktop-review-diff-line--gap .desktop-review-diff-line__number,
+.desktop-review-diff-split-cell--gap .desktop-review-diff-line__prefix,
+.desktop-review-diff-split-cell--gap .desktop-review-diff-line__number {
+  display: none;
+}
+
 .desktop-review-diff-line__prefix,
 .desktop-review-diff-line__number {
   display: inline-flex;
@@ -1418,11 +1447,20 @@
 
 .desktop-review-diff-line__number {
   justify-content: flex-end;
+  min-width: 2ch;
+  padding-right: 8px;
 }
 
 .desktop-review-diff-code {
   min-width: 0;
   white-space: pre;
+}
+
+.desktop-review-diff-line--gap .desktop-review-diff-code,
+.desktop-review-diff-split-cell--gap .desktop-review-diff-code {
+  color: var(--app-text-muted);
+  font-family: var(--app-font-family);
+  line-height: 20px;
 }
 
 .desktop-review-diff--split:not(.desktop-review-diff--wrap) .desktop-review-diff-code {
@@ -1447,6 +1485,7 @@
 .desktop-review-diff-line--added,
 .desktop-review-diff-split-cell--added {
   background: color-mix(in srgb, var(--app-success) 8%, transparent);
+  box-shadow: inset 4px 0 0 var(--app-success);
 }
 
 .desktop-review-diff-line--added .desktop-review-diff-line__prefix,
@@ -1459,6 +1498,7 @@
 .desktop-review-diff-line--removed,
 .desktop-review-diff-split-cell--removed {
   background: color-mix(in srgb, var(--app-danger) 8%, transparent);
+  box-shadow: inset 4px 0 0 var(--app-danger);
 }
 
 .desktop-review-diff-line--removed .desktop-review-diff-line__prefix,

@@ -4,7 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { discardUnstagedReviewFiles, getDesktopReviewState, stageReviewFiles, unstageReviewFiles } from './review-state.js';
+import {
+  commitReviewChanges,
+  createAndCheckoutReviewBranch,
+  discardUnstagedReviewFiles,
+  getCommitMessageGenerationSource,
+  getDesktopReviewState,
+  stageReviewFiles,
+  unstageReviewFiles,
+} from './review-state.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,11 +22,40 @@ describe('desktop review state actions', () => {
     await git(repo, ['branch', '-M', 'master']);
     await git(repo, ['update-ref', 'refs/remotes/origin/main', 'HEAD']);
     await git(repo, ['update-ref', 'refs/remotes/origin/master', 'HEAD']);
+    await git(repo, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/master']);
 
     const state = await getDesktopReviewState(repo);
 
     expect(state.currentBranch).toBe('master');
     expect(state.baseRef).toBe('origin/master');
+    expect(state.baseRefs).toContain('master');
+    expect(state.baseRefs).toContain('origin/master');
+    expect(state.baseRefs).not.toContain('origin');
+    expect(state.baseRefs).not.toContain('origin/HEAD');
+  });
+
+  it('prefers the current branch upstream before default main refs', async () => {
+    const repo = await mkGitRepo();
+    await git(repo, ['remote', 'add', 'origin', repo]);
+    await git(repo, ['update-ref', 'refs/remotes/origin/main', 'HEAD']);
+    await git(repo, ['checkout', '-b', 'feature/review']);
+    await git(repo, ['update-ref', 'refs/remotes/origin/feature/review', 'HEAD']);
+    await git(repo, ['config', 'branch.feature/review.remote', 'origin']);
+    await git(repo, ['config', 'branch.feature/review.merge', 'refs/heads/feature/review']);
+
+    await writeFile(path.join(repo, 'tracked.txt'), 'branch committed\n');
+    await git(repo, ['add', 'tracked.txt']);
+    await git(repo, ['commit', '-m', 'feature change']);
+    await writeFile(path.join(repo, 'scratch.txt'), 'scratch\n');
+
+    const state = await getDesktopReviewState(repo);
+    const branchPaths = state.branchSummary?.files.map((file) => file.path).sort();
+
+    expect(state.currentBranch).toBe('feature/review');
+    expect(state.currentRemoteRef).toBe('origin/feature/review');
+    expect(state.baseRef).toBe('origin/feature/review');
+    expect(state.currentRemoteSummary?.files.map((file) => file.path).sort()).toEqual(['scratch.txt', 'tracked.txt']);
+    expect(branchPaths).toEqual(['scratch.txt', 'tracked.txt']);
   });
 
   it('summarizes branch changes from merge base through local worktree changes', async () => {
@@ -40,9 +77,92 @@ describe('desktop review state actions', () => {
     expect(state.currentBranch).toBe('feature/review');
     expect(state.baseRef).toBe('main');
     expect(state.baseRefs).toContain('main');
+    expect(state.branches).toContainEqual({
+      name: 'feature/review',
+      current: true,
+      remote: false,
+      uncommittedFiles: 3,
+    });
     expect(branchPaths).toEqual(['scratch.txt', 'staged.txt', 'tracked.txt']);
     expect(state.stagedSummary?.files.map((file) => file.path)).toEqual(['staged.txt']);
     expect(state.unstagedSummary?.files.map((file) => file.path).sort()).toEqual(['scratch.txt', 'tracked.txt']);
+  });
+
+  it('summarizes separated diff hunks with an omitted-lines gap', async () => {
+    const repo = await mkGitRepo();
+    const trackedPath = path.join(repo, 'tracked.txt');
+    const baselineLines = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`);
+    await writeFile(trackedPath, `${baselineLines.join('\n')}\n`);
+    await git(repo, ['add', 'tracked.txt']);
+    await git(repo, ['commit', '-m', 'expand tracked fixture']);
+
+    const changedLines = [...baselineLines];
+    changedLines[1] = 'line 2 changed';
+    changedLines[29] = 'line 30 changed';
+    await writeFile(trackedPath, `${changedLines.join('\n')}\n`);
+
+    const state = await getDesktopReviewState(repo);
+    const file = state.unstagedSummary?.files.find((item) => item.path === 'tracked.txt');
+
+    expect(file?.lines.some((line) => line.type === 'gap' && line.content.includes('unmodified lines'))).toBe(true);
+    expect(file?.lines.some((line) => line.content.startsWith('@@'))).toBe(false);
+  });
+
+  it('creates a branch and commits included unstaged changes', async () => {
+    const repo = await mkGitRepo();
+    const branched = await createAndCheckoutReviewBranch(repo, 'feature/commit-ui');
+    expect(branched.currentBranch).toBe('feature/commit-ui');
+
+    await writeFile(path.join(repo, 'tracked.txt'), 'changed\n');
+    await writeFile(path.join(repo, 'scratch.txt'), 'scratch\n');
+
+    const source = await getCommitMessageGenerationSource(repo, true);
+    expect(source.branch).toBe('feature/commit-ui');
+    expect(source.status).toContain('tracked.txt');
+    expect(source.status).toContain('scratch.txt');
+    expect(source.diff).toContain('changed');
+
+    const committed = await commitReviewChanges(repo, {
+      includeUnstaged: true,
+      message: 'feat: add commit controls',
+    });
+
+    expect(committed.commitHash).toMatch(/^[0-9a-f]+$/u);
+    expect(committed.state.currentBranch).toBe('feature/commit-ui');
+    expect(committed.state.stagedSummary?.files).toEqual([]);
+    expect(committed.state.unstagedSummary?.files).toEqual([]);
+    await expect(git(repo, ['log', '-1', '--pretty=%s'])).resolves.toBe('feat: add commit controls');
+    await expect(git(repo, ['status', '--short'])).resolves.toBe('');
+  });
+
+  it('rejects commit messages that only contain invisible text', async () => {
+    const repo = await mkGitRepo();
+    await writeFile(path.join(repo, 'tracked.txt'), 'changed\n');
+
+    await expect(commitReviewChanges(repo, {
+      includeUnstaged: true,
+      message: '\u200B\u2060',
+    })).rejects.toThrow('提交信息不能为空');
+  });
+
+  it('requires unstaged changes to be handled before creating and checking out a branch', async () => {
+    const repo = await mkGitRepo();
+    await writeFile(path.join(repo, 'tracked.txt'), 'changed\n');
+
+    await expect(createAndCheckoutReviewBranch(repo, 'feature/blocked')).rejects.toThrow('未暂存更改');
+
+    const dirtyTargetBranch = await createAndCheckoutReviewBranch(repo, 'feature/dirty-target', { allowUnstaged: true });
+    expect(dirtyTargetBranch.currentBranch).toBe('feature/dirty-target');
+
+    await git(repo, ['add', 'tracked.txt']);
+    const branched = await createAndCheckoutReviewBranch(repo, 'feature/staged-ok');
+
+    expect(branched.currentBranch).toBe('feature/staged-ok');
+
+    const untrackedRepo = await mkGitRepo();
+    await writeFile(path.join(untrackedRepo, 'scratch.txt'), 'scratch\n');
+
+    await expect(createAndCheckoutReviewBranch(untrackedRepo, 'feature/untracked-blocked')).rejects.toThrow('未暂存更改');
   });
 
   it('stages, unstages, and discards local git changes', async () => {

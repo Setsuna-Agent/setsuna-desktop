@@ -97,7 +97,7 @@ export type DesktopWorkspaceApp = {
 };
 
 export type DesktopDiffLine = {
-  type: 'context' | 'added' | 'removed';
+  type: 'context' | 'added' | 'removed' | 'gap';
   lineNumber: number;
   oldLine?: number;
   newLine?: number;
@@ -119,13 +119,23 @@ export type DesktopDiffSummary = {
   deletions: number;
 };
 
+export type DesktopReviewBranch = {
+  name: string;
+  current: boolean;
+  remote: boolean;
+  uncommittedFiles: number;
+};
+
 export type DesktopReviewState = {
   isGitRepository: boolean;
   workspaceRoot: string;
   gitRoot: string | null;
   currentBranch: string | null;
+  currentRemoteRef: string | null;
   baseRef: string | null;
   baseRefs: string[];
+  branches: DesktopReviewBranch[];
+  currentRemoteSummary: DesktopDiffSummary | null;
   branchSummary: DesktopDiffSummary | null;
   stagedSummary: DesktopDiffSummary | null;
   unstagedSummary: DesktopDiffSummary | null;

@@ -64,7 +64,7 @@ type DesktopUpdateActionResult = {
 };
 
 type DesktopDiffLine = {
-  type: 'context' | 'added' | 'removed';
+  type: 'context' | 'added' | 'removed' | 'gap';
   lineNumber: number;
   oldLine?: number;
   newLine?: number;
@@ -86,13 +86,23 @@ type DesktopDiffSummary = {
   deletions: number;
 };
 
+type DesktopReviewBranch = {
+  name: string;
+  current: boolean;
+  remote: boolean;
+  uncommittedFiles: number;
+};
+
 type DesktopReviewState = {
   isGitRepository: boolean;
   workspaceRoot: string;
   gitRoot: string | null;
   currentBranch: string | null;
+  currentRemoteRef: string | null;
   baseRef: string | null;
   baseRefs: string[];
+  branches: DesktopReviewBranch[];
+  currentRemoteSummary: DesktopDiffSummary | null;
   branchSummary: DesktopDiffSummary | null;
   stagedSummary: DesktopDiffSummary | null;
   unstagedSummary: DesktopDiffSummary | null;
@@ -102,6 +112,23 @@ type DesktopReviewActionResult = {
   ok: true;
   files: string[];
   state: DesktopReviewState;
+};
+
+type DesktopReviewCommitResult = {
+  ok: true;
+  commitHash: string;
+  pushed: boolean;
+  state: DesktopReviewState;
+};
+
+type DesktopReviewPushResult = {
+  ok: true;
+  pushed: true;
+  state: DesktopReviewState;
+};
+
+type DesktopReviewGeneratedCommitMessage = {
+  message: string;
 };
 
 declare global {
@@ -118,6 +145,11 @@ declare global {
         discardUnstaged(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
         stageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
         unstageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
+        checkoutBranch(workspaceRoot: string, branchName: string): Promise<DesktopReviewState>;
+        createBranch(workspaceRoot: string, branchName: string, options?: { allowUnstaged?: boolean }): Promise<DesktopReviewState>;
+        commit(workspaceRoot: string, input: { includeUnstaged?: boolean; message: string; push?: boolean }): Promise<DesktopReviewCommitResult>;
+        push(workspaceRoot: string): Promise<DesktopReviewPushResult>;
+        generateCommitMessage(workspaceRoot: string, input?: { includeUnstaged?: boolean }): Promise<DesktopReviewGeneratedCommitMessage>;
       };
       links: {
         openExternal(url: string): Promise<boolean>;

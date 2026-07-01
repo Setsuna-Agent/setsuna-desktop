@@ -34,7 +34,7 @@ function desktopDiffFileFromRuntimeChange(file: RuntimeFileChange): DesktopDiffF
 
 function desktopDiffLineFromRuntimeLine(line: RuntimeFileDiffLine, index: number): DesktopDiffLine {
   return {
-    type: line.type === 'added' ? 'added' : line.type === 'removed' ? 'removed' : 'context',
+    type: line.type === 'added' ? 'added' : line.type === 'removed' ? 'removed' : line.type === 'gap' ? 'gap' : 'context',
     lineNumber: line.lineNumber ?? index + 1,
     oldLine: line.oldLine,
     newLine: line.newLine,

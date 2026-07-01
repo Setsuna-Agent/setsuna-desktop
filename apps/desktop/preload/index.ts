@@ -29,6 +29,12 @@ type DesktopUserProfile = {
 
 type DesktopOpenPathResult = { ok: true } | { ok: false; error: string };
 
+type DesktopReviewCommitInput = {
+  includeUnstaged?: boolean;
+  message: string;
+  push?: boolean;
+};
+
 type DesktopUpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
 
 type DesktopUpdaterProgress = {
@@ -127,6 +133,16 @@ const desktopReview = {
     ipcRenderer.invoke('desktop-review:stage-files', { workspaceRoot, filePaths }),
   unstageFiles: (workspaceRoot: string, filePaths: string[]): Promise<unknown> =>
     ipcRenderer.invoke('desktop-review:unstage-files', { workspaceRoot, filePaths }),
+  checkoutBranch: (workspaceRoot: string, branchName: string): Promise<unknown> =>
+    ipcRenderer.invoke('desktop-review:checkout-branch', { workspaceRoot, branchName }),
+  createBranch: (workspaceRoot: string, branchName: string, options?: { allowUnstaged?: boolean }): Promise<unknown> =>
+    ipcRenderer.invoke('desktop-review:create-branch', { workspaceRoot, branchName, allowUnstaged: options?.allowUnstaged ?? false }),
+  commit: (workspaceRoot: string, input: DesktopReviewCommitInput): Promise<unknown> =>
+    ipcRenderer.invoke('desktop-review:commit', { workspaceRoot, ...input }),
+  push: (workspaceRoot: string): Promise<unknown> =>
+    ipcRenderer.invoke('desktop-review:push', { workspaceRoot }),
+  generateCommitMessage: (workspaceRoot: string, input?: { includeUnstaged?: boolean }): Promise<unknown> =>
+    ipcRenderer.invoke('desktop-review:generate-commit-message', { workspaceRoot, includeUnstaged: input?.includeUnstaged ?? true }),
 };
 
 const workspaceApps = {

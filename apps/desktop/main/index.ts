@@ -4,7 +4,17 @@ import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DesktopUpdater } from './desktop-updater.js';
-import { discardUnstagedReviewFiles, getDesktopReviewState, stageReviewFiles, unstageReviewFiles } from './review-state.js';
+import {
+  checkoutReviewBranch,
+  commitReviewChanges,
+  createAndCheckoutReviewBranch,
+  discardUnstagedReviewFiles,
+  getCommitMessageGenerationSource,
+  getDesktopReviewState,
+  pushReviewBranch,
+  stageReviewFiles,
+  unstageReviewFiles,
+} from './review-state.js';
 import { RuntimeHost } from './runtime-host.js';
 import { DesktopTerminalStore } from './terminal-sessions.js';
 import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
@@ -135,6 +145,11 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('desktop-review:discard-unstaged');
   ipcMain.removeHandler('desktop-review:stage-files');
   ipcMain.removeHandler('desktop-review:unstage-files');
+  ipcMain.removeHandler('desktop-review:checkout-branch');
+  ipcMain.removeHandler('desktop-review:create-branch');
+  ipcMain.removeHandler('desktop-review:commit');
+  ipcMain.removeHandler('desktop-review:push');
+  ipcMain.removeHandler('desktop-review:generate-commit-message');
   ipcMain.removeHandler('workspace-apps:list');
   ipcMain.removeHandler('workspace-apps:open');
   ipcMain.removeHandler('terminal:open');
@@ -203,6 +218,33 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.handle('desktop-review:unstage-files', async (_event, input) =>
     unstageReviewFiles(String(input?.workspaceRoot ?? ''), normalizeFilePathList(input?.filePaths)),
   );
+  ipcMain.handle('desktop-review:checkout-branch', async (_event, input) =>
+    checkoutReviewBranch(String(input?.workspaceRoot ?? ''), String(input?.branchName ?? '')),
+  );
+  ipcMain.handle('desktop-review:create-branch', async (_event, input) =>
+    createAndCheckoutReviewBranch(String(input?.workspaceRoot ?? ''), String(input?.branchName ?? ''), {
+      allowUnstaged: Boolean(input?.allowUnstaged),
+    }),
+  );
+  ipcMain.handle('desktop-review:commit', async (_event, input) =>
+    commitReviewChanges(String(input?.workspaceRoot ?? ''), normalizeCommitInput(input)),
+  );
+  ipcMain.handle('desktop-review:push', async (_event, input) =>
+    pushReviewBranch(String(input?.workspaceRoot ?? '')),
+  );
+  ipcMain.handle('desktop-review:generate-commit-message', async (_event, input) => {
+    if (!runtimeHost) throw new Error('Runtime is not ready.');
+    const source = await getCommitMessageGenerationSource(
+      String(input?.workspaceRoot ?? ''),
+      input?.includeUnstaged !== false,
+    );
+    const result = await runtimeHost.request<{ message?: unknown }>({
+      path: '/v1/git/commit-message/generate',
+      method: 'POST',
+      body: source,
+    });
+    return { message: String(result.message ?? '').trim() };
+  });
   ipcMain.handle('workspace-apps:list', async (_event, input) => listWorkspaceApps(String(input?.workspaceRoot ?? '')));
   ipcMain.handle('workspace-apps:open', async (_event, input) => openWorkspaceApp(input ?? {}));
   ipcMain.handle('terminal:open', async (_event, input) => terminal.open(input ?? {}));
@@ -229,6 +271,15 @@ function getDesktopUserProfile(): { username: string; displayName: string; homeD
 function normalizeFilePathList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+function normalizeCommitInput(value: unknown): { includeUnstaged: boolean; message: string; push: boolean } {
+  const input = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    includeUnstaged: input.includeUnstaged !== false,
+    message: String(input.message ?? ''),
+    push: Boolean(input.push),
+  };
 }
 
 app.whenReady().then(createWindow).catch((error) => {
