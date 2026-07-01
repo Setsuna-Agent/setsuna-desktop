@@ -109,18 +109,26 @@
   margin: 0 auto;
 }
 
-/* When the right overview panel is expanded on compact desktop widths, use only spare left gutter for the shift. */
-@container (max-width: 1360px) {
-  .chat-main-conversation--overview-expanded .chat-content-frame,
-  .chat-main-conversation--overview-expanded .chat-action-error,
-  .chat-main-conversation--overview-expanded .chat-delete-bar__inner,
-  .chat-main-conversation--overview-expanded .chat-scroll-bottom,
-  .chat-main-conversation--overview-expanded .chat-sender:not(.chat-sender--starter) .ant-sender,
-  .chat-main-conversation--overview-expanded .chat-sender:not(.chat-sender--starter) .chat-command-menu,
-  .chat-main-conversation--overview-expanded .chat-sender:not(.chat-sender--starter) .chat-image-attachments {
-    --chat-overview-expanded-shift: min(132px, max(0px, calc((100cqw - var(--chat-content-max-width)) / 2 - 28px)));
-    transform: translateX(calc(0px - var(--chat-overview-expanded-shift)));
-  }
+.chat-content-frame,
+.chat-action-error,
+.chat-delete-bar__inner,
+.chat-scroll-bottom,
+.chat-sender:not(.chat-sender--starter) .ant-sender,
+.chat-sender:not(.chat-sender--starter) .chat-command-menu,
+.chat-sender:not(.chat-sender--starter) .chat-image-attachments {
+  transition: transform 260ms cubic-bezier(0.2, 0.82, 0.2, 1);
+}
+
+/* Shift only enough content to keep the floating overview in the available right gutter. */
+.chat-main-conversation--overview-expanded .chat-content-frame,
+.chat-main-conversation--overview-expanded .chat-action-error,
+.chat-main-conversation--overview-expanded .chat-delete-bar__inner,
+.chat-main-conversation--overview-expanded .chat-scroll-bottom,
+.chat-main-conversation--overview-expanded .chat-sender:not(.chat-sender--starter) .ant-sender,
+.chat-main-conversation--overview-expanded .chat-sender:not(.chat-sender--starter) .chat-command-menu,
+.chat-main-conversation--overview-expanded .chat-sender:not(.chat-sender--starter) .chat-image-attachments {
+  --chat-overview-expanded-shift: 152px;
+  transform: translateX(calc(0px - var(--chat-overview-expanded-shift)));
 }
 
 .chat-messages--starter {
@@ -699,6 +707,8 @@
 .chat-conversation-overview-chip,
 .chat-conversation-overview-panel {
   pointer-events: auto;
+  transform-origin: top right;
+  animation: chat-conversation-overview-enter 160ms cubic-bezier(0.2, 0.82, 0.2, 1);
 }
 
 .chat-conversation-overview-chip {
@@ -767,6 +777,35 @@
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.11);
+}
+
+@keyframes chat-conversation-overview-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-content-frame,
+  .chat-action-error,
+  .chat-delete-bar__inner,
+  .chat-scroll-bottom,
+  .chat-sender:not(.chat-sender--starter) .ant-sender,
+  .chat-sender:not(.chat-sender--starter) .chat-command-menu,
+  .chat-sender:not(.chat-sender--starter) .chat-image-attachments {
+    transition: none;
+  }
+
+  .chat-conversation-overview-chip,
+  .chat-conversation-overview-panel {
+    animation: none;
+  }
 }
 
 .chat-conversation-overview-panel__header {

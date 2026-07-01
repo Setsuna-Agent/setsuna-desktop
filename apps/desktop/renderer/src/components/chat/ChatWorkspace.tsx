@@ -10,6 +10,7 @@ import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
+import { canFitConversationOverviewPanel } from './conversationOverviewLayout.js';
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
@@ -22,7 +23,6 @@ import '@ant-design/x-markdown/themes/dark.css';
 const scrollBottomThresholdPx = 96;
 const stickyBottomThresholdPx = 4;
 const pinnedScrollSettleFrameCount = 3;
-const overviewAutoCollapseWidthPx = 620;
 const keyboardScrollIntentKeys = new Set(['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' ']);
 type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
 type WorkHistoryExpandedChangeHandler = (itemId: string, expanded: boolean) => void;
@@ -87,13 +87,14 @@ export function ChatWorkspace({
   const messages = currentThread?.messages ?? [];
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const requestedReviewProjectRef = useRef<string | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread), [currentThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (activeProject ? conversationOverviewFromMessages(messages) : null), [activeProject, messages]);
-  const overviewNarrow = useElementWidthBelow(conversationRef, overviewAutoCollapseWidthPx);
-  const [overviewExpanded, setOverviewExpanded] = useState(false);
-  const overviewCompact = !overviewExpanded || overviewNarrow;
+  const overviewCanExpand = useConversationOverviewAutoExpand(conversationRef, contentRef);
+  const [overviewManuallyCollapsed, setOverviewManuallyCollapsed] = useState(false);
+  const overviewCompact = !overviewCanExpand || overviewManuallyCollapsed;
   const overviewContextLabel = useMemo(
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status),
     [contextUsage, currentThread?.contextCompaction?.status],
@@ -115,9 +116,12 @@ export function ChatWorkspace({
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     setShowFullHistory(false);
-    setOverviewExpanded(false);
+    setOverviewManuallyCollapsed(false);
     setExpandedWorkHistoryItemIds(new Set());
   }, [currentThread?.id]);
+  useEffect(() => {
+    if (!overviewCanExpand) setOverviewManuallyCollapsed(false);
+  }, [overviewCanExpand]);
   useEffect(() => {
     const workspaceRoot = activeProject?.path ?? null;
     if (requestedReviewProjectRef.current !== workspaceRoot) requestedReviewProjectRef.current = null;
@@ -169,7 +173,6 @@ export function ChatWorkspace({
     [activeTurnId, contextCompactionRunning, currentThread?.id, renderWindow],
   );
   const {
-    contentRef,
     handleScroll,
     handleScrollKeyDown,
     handleScrollTouchMove,
@@ -180,6 +183,7 @@ export function ChatWorkspace({
     scrollToBottom,
     showScrollBottom,
   } = usePinnedChatScroll({
+    contentRef,
     scrollSignal,
     showEmptyStarter,
     threadId: currentThread?.id ?? null,
@@ -428,8 +432,8 @@ export function ChatWorkspace({
                 overview={conversationOverview}
                 reviewLoading={reviewLoading}
                 reviewState={reviewState}
-                onCollapse={() => setOverviewExpanded(false)}
-                onExpand={() => setOverviewExpanded(true)}
+                onCollapse={() => setOverviewManuallyCollapsed(true)}
+                onExpand={() => setOverviewManuallyCollapsed(false)}
                 onOpenFiles={onOpenFilesPanel}
                 onOpenReview={onOpenFileReview}
                 onReviewRefresh={onReviewRefresh}
@@ -473,16 +477,17 @@ export function ChatWorkspace({
  * @param threadId 当前线程 ID，切换线程时用于重置滚动状态。
  */
 function usePinnedChatScroll({
+  contentRef,
   scrollSignal,
   showEmptyStarter,
   threadId,
 }: {
+  contentRef: RefObject<HTMLDivElement | null>;
   scrollSignal: string;
   showEmptyStarter: boolean;
   threadId: string | null;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const contentRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   // sticky 状态放在 ref 里，滚动事件高频触发时不需要每次 rerender。
   const shouldStickToBottomRef = useRef(true);
@@ -687,19 +692,23 @@ function usePinnedChatScroll({
   };
 }
 
-/**
- * 直接观察元素宽度；在桌面分栏布局里这比全局 viewport breakpoint 更准确。
- *
- * @param ref 需要观察宽度的元素 ref。
- * @param thresholdPx 判定为窄布局的宽度阈值。
- */
-function useElementWidthBelow(ref: RefObject<HTMLElement>, thresholdPx: number): boolean {
-  const [below, setBelow] = useState(false);
+function useConversationOverviewAutoExpand(
+  conversationRef: RefObject<HTMLElement | null>,
+  contentRef: RefObject<HTMLElement | null>,
+): boolean {
+  const [canExpand, setCanExpand] = useState(false);
 
   useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node || typeof window === 'undefined') return undefined;
-    const sync = () => setBelow(node.getBoundingClientRect().width < thresholdPx);
+    const conversationNode = conversationRef.current;
+    const contentNode = contentRef.current;
+    if (!conversationNode || !contentNode || typeof window === 'undefined') return undefined;
+
+    const sync = () => {
+      const conversationWidth = conversationNode.getBoundingClientRect().width;
+      const contentWidth = contentNode.getBoundingClientRect().width;
+      const nextCanExpand = canFitConversationOverviewPanel({ conversationWidth, contentWidth });
+      setCanExpand((current) => (current === nextCanExpand ? current : nextCanExpand));
+    };
     sync();
 
     if (typeof ResizeObserver === 'undefined') {
@@ -708,11 +717,12 @@ function useElementWidthBelow(ref: RefObject<HTMLElement>, thresholdPx: number):
     }
 
     const observer = new ResizeObserver(sync);
-    observer.observe(node);
+    observer.observe(conversationNode);
+    observer.observe(contentNode);
     return () => observer.disconnect();
-  }, [ref, thresholdPx]);
+  }, [conversationRef, contentRef]);
 
-  return below;
+  return canExpand;
 }
 
 function conversationOverviewContextLabel(
