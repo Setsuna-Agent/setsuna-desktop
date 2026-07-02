@@ -29,6 +29,8 @@ type FileMutationEntry = {
   run: RuntimeToolRun;
 };
 
+const fileDiffContextLines = 3;
+
 const fileMutationToolNames = new Set([
   'workspace_write_file',
   'apply_patch',
@@ -179,8 +181,13 @@ function normalizeFileChange(file: RuntimeFileChange): RuntimeFileChange {
     additions: count(file.additions),
     deletions: count(file.deletions),
     truncated: Boolean(file.truncated),
-    lines: Array.isArray(file.lines) ? file.lines.map(normalizeDiffLine).filter(isRuntimeFileDiffLine) : [],
+    lines: normalizeDiffLines(file.lines),
   };
+}
+
+function normalizeDiffLines(lines: unknown): RuntimeFileDiffLine[] {
+  if (!Array.isArray(lines)) return [];
+  return collapseDenseDiffContext(inferOmittedDiffGaps(lines.map(normalizeDiffLine).filter(isRuntimeFileDiffLine)));
 }
 
 function normalizeDiffLine(value: unknown): RuntimeFileDiffLine | null {
@@ -204,6 +211,90 @@ function normalizeDiffLineType(value: unknown): RuntimeFileDiffLine['type'] {
 
 function isRuntimeFileDiffLine(value: RuntimeFileDiffLine | null): value is RuntimeFileDiffLine {
   return Boolean(value);
+}
+
+function inferOmittedDiffGaps(lines: RuntimeFileDiffLine[]): RuntimeFileDiffLine[] {
+  const nextLines: RuntimeFileDiffLine[] = [];
+  let previousComparableLine: RuntimeFileDiffLine | null = null;
+
+  for (const line of lines) {
+    if (line.type === 'gap') {
+      nextLines.push(line);
+      previousComparableLine = null;
+      continue;
+    }
+    const omittedLineCount = previousComparableLine ? omittedUnmodifiedLineCount(previousComparableLine, line) : 0;
+    if (omittedLineCount > 0) {
+      nextLines.push({
+        type: 'gap',
+        content: formatUnmodifiedLineGap(omittedLineCount),
+      });
+    }
+    nextLines.push(line);
+    previousComparableLine = line;
+  }
+
+  return nextLines;
+}
+
+function omittedUnmodifiedLineCount(previous: RuntimeFileDiffLine, next: RuntimeFileDiffLine): number {
+  return Math.max(
+    omittedLineCountBetween(previous.oldLine, next.oldLine),
+    omittedLineCountBetween(previous.newLine, next.newLine),
+  );
+}
+
+function omittedLineCountBetween(previousLine: number | undefined, nextLine: number | undefined): number {
+  if (!previousLine || !nextLine) return 0;
+  return Math.max(0, nextLine - previousLine - 1);
+}
+
+function formatUnmodifiedLineGap(countValue: number): string {
+  return `${countValue} unmodified ${countValue === 1 ? 'line' : 'lines'}`;
+}
+
+function collapseDenseDiffContext(lines: RuntimeFileDiffLine[]): RuntimeFileDiffLine[] {
+  const nextLines: RuntimeFileDiffLine[] = [];
+
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    if (line.type !== 'context') {
+      nextLines.push(line);
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    while (index < lines.length && lines[index]?.type === 'context') index += 1;
+    const contextRun = lines.slice(start, index);
+    if (!shouldCollapseContextRun(lines, start, index, contextRun.length)) {
+      nextLines.push(...contextRun);
+      continue;
+    }
+
+    const head = contextRun.slice(0, fileDiffContextLines);
+    const tail = contextRun.slice(-fileDiffContextLines);
+    nextLines.push(...head, {
+      type: 'gap',
+      content: formatUnmodifiedLineGap(contextRun.length - head.length - tail.length),
+    }, ...tail);
+  }
+
+  return nextLines;
+}
+
+function shouldCollapseContextRun(
+  lines: RuntimeFileDiffLine[],
+  start: number,
+  end: number,
+  length: number,
+): boolean {
+  if (length <= fileDiffContextLines * 2) return false;
+  return isChangedDiffLine(lines[start - 1]) && isChangedDiffLine(lines[end]);
+}
+
+function isChangedDiffLine(line: RuntimeFileDiffLine | undefined): boolean {
+  return line?.type === 'added' || line?.type === 'removed';
 }
 
 function mergeFileChange(previous: RuntimeFileChange, next: RuntimeFileChange): RuntimeFileChange {

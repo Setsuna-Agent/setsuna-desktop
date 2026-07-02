@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeThread } from '@setsuna-desktop/contracts';
-import { activeTurnIdFromThreadSnapshot, inferActiveTurnIdFromThread } from './useRuntimeClientState.js';
+import type { RuntimeThread, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { activeTurnIdFromThreadSnapshot, inferActiveTurnIdFromThread, selectInitialThreadSummary } from './useRuntimeClientState.js';
 
 describe('inferActiveTurnIdFromThread', () => {
   it('prefers the runtime snapshot active turn id even without streaming evidence', () => {
@@ -83,6 +83,35 @@ describe('inferActiveTurnIdFromThread', () => {
   });
 });
 
+describe('selectInitialThreadSummary', () => {
+  it('restores the persisted thread when it still exists in the current list', () => {
+    const threads = [
+      threadSummary('global_1'),
+      threadSummary('project_1', { projectId: 'project_a' }),
+    ];
+
+    expect(selectInitialThreadSummary(threads, 'project_1')?.id).toBe('project_1');
+  });
+
+  it('keeps the previous global-first fallback when the persisted thread is stale', () => {
+    const threads = [
+      threadSummary('project_1', { projectId: 'project_a' }),
+      threadSummary('global_1'),
+    ];
+
+    expect(selectInitialThreadSummary(threads, 'missing')?.id).toBe('global_1');
+  });
+
+  it('falls back to the first thread when no global thread exists', () => {
+    const threads = [
+      threadSummary('project_1', { projectId: 'project_a' }),
+      threadSummary('project_2', { projectId: 'project_b' }),
+    ];
+
+    expect(selectInitialThreadSummary(threads, null)?.id).toBe('project_1');
+  });
+});
+
 function threadWithMessages(messages: RuntimeThread['messages']): RuntimeThread {
   return {
     id: 'thread_1',
@@ -94,5 +123,18 @@ function threadWithMessages(messages: RuntimeThread['messages']): RuntimeThread 
     lastMessagePreview: '',
     lastSeq: messages.length,
     messages,
+  };
+}
+
+function threadSummary(id: string, patch: Partial<RuntimeThreadSummary> = {}): RuntimeThreadSummary {
+  return {
+    id,
+    title: id,
+    createdAt: '2026-06-29T00:00:00.000Z',
+    updatedAt: '2026-06-29T00:00:00.000Z',
+    archived: false,
+    messageCount: 0,
+    lastMessagePreview: '',
+    ...patch,
   };
 }

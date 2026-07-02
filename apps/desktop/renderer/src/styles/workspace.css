@@ -11,6 +11,22 @@
   overflow: hidden;
 }
 
+@media (max-width: 879px) {
+  .desktop-workspace-panel {
+    grid-column: 2;
+    justify-self: end;
+    width: min(var(--desktop-agent-workspace-width), 100%);
+    box-shadow: -18px 0 42px color-mix(in srgb, #000000 8%, transparent);
+    z-index: 18;
+  }
+}
+
+@media (max-width: 760px) {
+  .desktop-workspace-panel {
+    grid-column: 1;
+  }
+}
+
 .desktop-workspace-panel__resize-handle {
   top: 0;
   left: -5px;
@@ -312,7 +328,7 @@
   min-width: 0;
   max-width: none;
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-panel-bg) 94%, var(--app-text) 6%);
+  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-text) 6%);
   box-shadow: 0 10px 24px rgb(15 23 42 / 16%), 0 1px 3px rgb(15 23 42 / 12%);
   opacity: 0.98;
   pointer-events: none;

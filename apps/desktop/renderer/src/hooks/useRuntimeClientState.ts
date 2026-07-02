@@ -26,6 +26,7 @@ import { createDesktopRuntimeClient } from '../runtime/desktop-runtime-client.js
 import { applyRuntimeEvent, isActivityEvent } from '../utils/runtimeEvents.js';
 
 export type LoadState = 'loading' | 'ready' | 'error';
+const lastActiveThreadStorageKey = 'setsuna-desktop:last-active-thread-id';
 
 type RuntimeClientStateOptions = {
   activeProjectId: string | null;
@@ -91,7 +92,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
     if (!initializedSelectionRef.current) {
       initializedSelectionRef.current = true;
-      const initialThread = threadList.threads.find((thread) => !thread.projectId) ?? threadList.threads[0];
+      const initialThread = selectInitialThreadSummary(threadList.threads, readPersistedActiveThreadId());
       if (initialThread) {
         const thread = await client.getThread(initialThread.id);
         setCurrentThread(thread);
@@ -103,6 +104,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
     setLoadState('ready');
   }, [client, setActiveProjectId]);
+
+  useEffect(() => {
+    if (currentThreadId) persistActiveThreadId(currentThreadId);
+  }, [currentThreadId]);
 
   useEffect(() => {
     refresh().catch((unknownError) => {
@@ -542,6 +547,51 @@ function updateThreadApprovalRun(
 }
 
 export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
+
+export function selectInitialThreadSummary(
+  threads: RuntimeThreadSummary[],
+  persistedThreadId: string | null,
+): RuntimeThreadSummary | undefined {
+  if (persistedThreadId) {
+    const persistedThread = threads.find((thread) => thread.id === persistedThreadId);
+    if (persistedThread) return persistedThread;
+  }
+  return threads.find((thread) => !thread.projectId) ?? threads[0];
+}
+
+function readPersistedActiveThreadId(): string | null {
+  const storage = browserLocalStorage();
+  if (!storage) return null;
+  try {
+    return normalizeStoredThreadId(storage.getItem(lastActiveThreadStorageKey));
+  } catch {
+    return null;
+  }
+}
+
+function persistActiveThreadId(threadId: string): void {
+  const storage = browserLocalStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(lastActiveThreadStorageKey, threadId);
+  } catch {
+    // localStorage can be unavailable in restricted renderer contexts; runtime fallback still works.
+  }
+}
+
+function normalizeStoredThreadId(value: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
+function browserLocalStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 从线程快照中反推仍在运行的 turn。

@@ -19,6 +19,7 @@ type PanelPointerDrag = {
   offsetY: number;
   panel: DesktopPanelTab;
   pointerId: number;
+  scaleInverse: number;
   startX: number;
   startY: number;
   width: number;
@@ -33,6 +34,8 @@ type PanelDragOverlay = {
 };
 
 const PANEL_DRAG_START_DISTANCE = 4;
+const PANEL_LAUNCHER_MENU_WIDTH = 156;
+const PANEL_LAUNCHER_VIEWPORT_INSET = 8;
 
 export function DesktopPanelHeader({
   activePanel,
@@ -84,17 +87,20 @@ export function DesktopPanelHeader({
   const updateLauncherPosition = () => {
     const rect = launcherButtonRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setLauncherPosition({ left: rect.left, top: rect.bottom + 6 });
+    setLauncherPosition(panelLauncherMenuPosition(rect, window.innerWidth, pageScaleInverse()));
+  };
+
+  const suppressFollowingClick = () => {
+    suppressNextClickRef.current = true;
+    window.setTimeout(() => {
+      suppressNextClickRef.current = false;
+    }, 0);
   };
 
   const clearDragState = (suppressClick: boolean) => {
     pointerDragRef.current = null;
     setDragOverlay(null);
-    if (!suppressClick) return;
-    suppressNextClickRef.current = true;
-    window.setTimeout(() => {
-      suppressNextClickRef.current = false;
-    }, 0);
+    if (suppressClick) suppressFollowingClick();
   };
 
   const nextReorderTarget = (clientX: number, panelId: string) => {
@@ -124,11 +130,8 @@ export function DesktopPanelHeader({
     drag.active = true;
     setLauncherOpen(false);
     setDragOverlay({
-      height: drag.height,
-      left: event.clientX - drag.offsetX,
+      ...panelDragPreviewPosition(event, drag),
       panel: drag.panel,
-      top: event.clientY - drag.offsetY,
-      width: drag.width,
     });
   };
 
@@ -166,16 +169,18 @@ export function DesktopPanelHeader({
     if (!sortable || event.button !== 0) return;
     if ((event.target as Element).closest('.chat-file-review-panel__tab-close')) return;
     const rect = event.currentTarget.getBoundingClientRect();
+    const scaleInverse = pageScaleInverse();
     pointerDragRef.current = {
       active: false,
-      height: rect.height,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
+      height: rect.height * scaleInverse,
+      offsetX: (event.clientX - rect.left) * scaleInverse,
+      offsetY: (event.clientY - rect.top) * scaleInverse,
       panel,
       pointerId: event.pointerId,
+      scaleInverse,
       startX: event.clientX,
       startY: event.clientY,
-      width: rect.width,
+      width: rect.width * scaleInverse,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -189,11 +194,8 @@ export function DesktopPanelHeader({
     if (!drag.active) startPanelDrag(drag, event);
 
     setDragOverlay({
-      height: drag.height,
-      left: event.clientX - drag.offsetX,
+      ...panelDragPreviewPosition(event, drag),
       panel: drag.panel,
-      top: event.clientY - drag.offsetY,
-      width: drag.width,
     });
 
     const target = nextReorderTarget(event.clientX, drag.panel.id);
@@ -205,10 +207,17 @@ export function DesktopPanelHeader({
     const drag = pointerDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const suppressClick = drag.active;
+    const shouldActivateTab = !drag.active && event.type === 'pointerup';
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     if (suppressClick) event.preventDefault();
+    if (shouldActivateTab) {
+      // The tab wrapper owns pointer capture for drag-to-reorder. Activate on
+      // pointer-up so a normal click is not lost when the browser skips click.
+      onSelectPanel?.(drag.panel.id);
+      suppressFollowingClick();
+    }
     clearDragState(suppressClick);
   };
 
@@ -374,4 +383,37 @@ export function DesktopPanelHeader({
       ) : null}
     </div>
   );
+}
+
+export function panelLauncherMenuPosition(
+  rect: Pick<DOMRect, 'bottom' | 'left'>,
+  viewportWidth: number,
+  scaleInverse = 1,
+): { left: number; top: number } {
+  const viewportCssWidth = viewportWidth * scaleInverse;
+  const rectLeftCss = rect.left * scaleInverse;
+  const rectBottomCss = rect.bottom * scaleInverse;
+  const maxLeft = Math.max(PANEL_LAUNCHER_VIEWPORT_INSET, viewportCssWidth - PANEL_LAUNCHER_MENU_WIDTH - PANEL_LAUNCHER_VIEWPORT_INSET);
+  const preferredLeft = rectLeftCss;
+  return {
+    left: Math.min(Math.max(PANEL_LAUNCHER_VIEWPORT_INSET, preferredLeft), maxLeft),
+    top: rectBottomCss + 6,
+  };
+}
+
+export function panelDragPreviewPosition(
+  pointer: Pick<PointerEvent | ReactPointerEvent<HTMLElement>, 'clientX' | 'clientY'>,
+  drag: Pick<PanelPointerDrag, 'height' | 'offsetX' | 'offsetY' | 'scaleInverse' | 'width'>,
+): Omit<PanelDragOverlay, 'panel'> {
+  return {
+    height: drag.height,
+    left: pointer.clientX * drag.scaleInverse - drag.offsetX,
+    top: pointer.clientY * drag.scaleInverse - drag.offsetY,
+    width: drag.width,
+  };
+}
+
+function pageScaleInverse(): number {
+  const value = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-page-scale-inverse'));
+  return Number.isFinite(value) && value > 0 ? value : 1;
 }

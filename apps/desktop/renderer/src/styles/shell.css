@@ -12,7 +12,7 @@
   display: grid;
   position: relative;
   z-index: 40;
-  grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(420px, 1fr) var(--desktop-agent-workspace-width);
+  grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(var(--desktop-agent-main-min-width), 1fr) var(--desktop-agent-workspace-width);
   min-width: 0;
   height: var(--app-topbar-height);
   background: var(--app-window-bg);
@@ -148,6 +148,10 @@
   border-left: 1px solid var(--desktop-agent-subtle-divider);
   background: var(--desktop-agent-main-bg);
   overflow: hidden;
+}
+
+.app-topbar__workspace:empty {
+  border-left: 0;
 }
 
 .chat-toolbar-title {
@@ -435,7 +439,7 @@
 .app-workbench {
   display: grid;
   position: relative;
-  grid-template-columns: var(--app-sidebar-width) minmax(420px, 1fr) var(--desktop-agent-workspace-width);
+  grid-template-columns: var(--app-sidebar-width) minmax(var(--desktop-agent-main-min-width), 1fr) var(--desktop-agent-workspace-width);
   grid-template-rows: minmax(0, 1fr) var(--app-bottom-panel-height);
   min-width: 0;
   min-height: 0;
@@ -465,6 +469,20 @@ body.desktop-terminal-resizing .app-workbench {
   overflow: hidden;
   background: var(--app-sidebar-bg);
   color: var(--app-sidebar-text);
+}
+
+.desktop-agent-page--sidebar-overlay .app-sidebar {
+  position: absolute;
+  z-index: 26;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(var(--desktop-agent-sidebar-overlay-width), 100%);
+  box-shadow: 18px 0 42px color-mix(in srgb, #000000 8%, transparent);
+}
+
+.desktop-agent-page--sidebar-overlay .desktop-agent-sidebar__resize-handle {
+  display: none;
 }
 
 .desktop-agent-sidebar__resize-handle,
@@ -521,13 +539,38 @@ body.desktop-terminal-resizing {
   user-select: none;
 }
 
-@media (max-width: 1040px) {
+@media (max-width: 879px) {
   .app-workbench {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: var(--app-sidebar-width) minmax(min(var(--desktop-agent-main-min-width), calc(100vw - var(--app-sidebar-width))), 1fr);
   }
 
   .app-topbar {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(
+        min(var(--desktop-agent-main-min-width), calc(100vw - var(--app-topbar-sidebar-width, var(--app-sidebar-width)))),
+        1fr
+      );
+  }
+
+  .app-topbar__workspace {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(var(--desktop-agent-workspace-width), calc(100vw - var(--app-topbar-sidebar-width, var(--app-sidebar-width))));
+    height: 100%;
+    box-shadow: -16px 0 34px color-mix(in srgb, #000000 7%, transparent);
+  }
+
+  .app-topbar__workspace:empty {
+    width: 0;
+    box-shadow: none;
+  }
+
+  :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
+  :root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
+    grid-column: 2;
+    justify-self: end;
+    width: min(var(--desktop-agent-workspace-width), 100%);
+    box-shadow: -16px 0 34px color-mix(in srgb, #000000 7%, transparent);
   }
 }
 
@@ -549,8 +592,21 @@ body.desktop-terminal-resizing {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .app-topbar__workspace {
+    width: min(var(--desktop-agent-workspace-width), 100vw);
+  }
+
+  :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
+  :root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
+    grid-column: 1;
+  }
+
   .app-sidebar {
     display: none;
+  }
+
+  .desktop-agent-page--sidebar-overlay .app-sidebar {
+    display: flex;
   }
 }
 

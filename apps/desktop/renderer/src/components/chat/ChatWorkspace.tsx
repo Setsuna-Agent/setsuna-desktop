@@ -10,7 +10,7 @@ import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { canFitConversationOverviewPanel } from './conversationOverviewLayout.js';
+import { canFitConversationOverviewPanel, shouldCompactConversationOverview, shouldReserveConversationOverviewSpace } from './conversationOverviewLayout.js';
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
@@ -94,7 +94,16 @@ export function ChatWorkspace({
   const conversationOverview = useMemo(() => (activeProject ? conversationOverviewFromMessages(messages) : null), [activeProject, messages]);
   const overviewCanExpand = useConversationOverviewAutoExpand(conversationRef, contentRef);
   const [overviewManuallyCollapsed, setOverviewManuallyCollapsed] = useState(false);
-  const overviewCompact = !overviewCanExpand || overviewManuallyCollapsed;
+  const [overviewManuallyExpanded, setOverviewManuallyExpanded] = useState(false);
+  const overviewCompact = shouldCompactConversationOverview({
+    canExpand: overviewCanExpand,
+    manuallyCollapsed: overviewManuallyCollapsed,
+    manuallyExpanded: overviewManuallyExpanded,
+  });
+  const overviewReservesSpace = shouldReserveConversationOverviewSpace({
+    canExpand: overviewCanExpand,
+    compact: overviewCompact,
+  });
   const overviewContextLabel = useMemo(
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status),
     [contextUsage, currentThread?.contextCompaction?.status],
@@ -107,7 +116,7 @@ export function ChatWorkspace({
   const conversationClassName = [
     'chat-main-conversation',
     showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender',
-    conversationOverview && !overviewCompact ? 'chat-main-conversation--overview-expanded' : '',
+    conversationOverview && overviewReservesSpace ? 'chat-main-conversation--overview-expanded' : '',
   ].filter(Boolean).join(' ');
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
@@ -117,9 +126,11 @@ export function ChatWorkspace({
   useEffect(() => {
     setShowFullHistory(false);
     setOverviewManuallyCollapsed(false);
+    setOverviewManuallyExpanded(false);
     setExpandedWorkHistoryItemIds(new Set());
-  }, [currentThread?.id]);
+  }, [activeProject?.id, currentThread?.id]);
   useEffect(() => {
+    setOverviewManuallyExpanded(false);
     if (!overviewCanExpand) setOverviewManuallyCollapsed(false);
   }, [overviewCanExpand]);
   useEffect(() => {
@@ -432,8 +443,14 @@ export function ChatWorkspace({
                 overview={conversationOverview}
                 reviewLoading={reviewLoading}
                 reviewState={reviewState}
-                onCollapse={() => setOverviewManuallyCollapsed(true)}
-                onExpand={() => setOverviewManuallyCollapsed(false)}
+                onCollapse={() => {
+                  setOverviewManuallyCollapsed(true);
+                  setOverviewManuallyExpanded(false);
+                }}
+                onExpand={() => {
+                  setOverviewManuallyCollapsed(false);
+                  setOverviewManuallyExpanded(!overviewCanExpand);
+                }}
                 onOpenFiles={onOpenFilesPanel}
                 onOpenReview={onOpenFileReview}
                 onReviewRefresh={onReviewRefresh}

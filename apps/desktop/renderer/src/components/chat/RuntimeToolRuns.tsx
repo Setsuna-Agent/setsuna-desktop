@@ -298,20 +298,14 @@ export function FileChangesSummaryCard({
   const fileCount = summary.files.length;
   const filePaths = useMemo(() => [...new Set(summary.files.map((file) => file.path).filter(Boolean))], [summary.files]);
   const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
-  const knownFilePathsRef = useRef(new Set(filePaths));
-  const [openFilePaths, setOpenFilePaths] = useState(() => new Set(filePaths));
+  const [openFilePaths, setOpenFilePaths] = useState<Set<string>>(() => new Set());
   const canDiscard = Boolean(onDiscardChanges && filePaths.length && !discarded);
   useEffect(() => {
     const nextFilePaths = new Set(filePaths);
-    const previousKnownFilePaths = knownFilePathsRef.current;
     setOpenFilePaths((current) => {
       const next = new Set([...current].filter((path) => nextFilePaths.has(path)));
-      filePaths.forEach((path) => {
-        if (!previousKnownFilePaths.has(path)) next.add(path);
-      });
       return setsEqual(current, next) ? current : next;
     });
-    knownFilePathsRef.current = nextFilePaths;
   }, [filePathKey, filePaths]);
   const discardChanges = async () => {
     if (!canDiscard || discarding || !onDiscardChanges) return;

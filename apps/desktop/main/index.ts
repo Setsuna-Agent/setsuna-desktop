@@ -21,6 +21,7 @@ import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
+const mainWindowMinWidth = 880;
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
@@ -44,7 +45,7 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 860,
-    minWidth: 960,
+    minWidth: mainWindowMinWidth,
     minHeight: 640,
     title: 'Setsuna Desktop',
     frame: !usesCustomFrame,

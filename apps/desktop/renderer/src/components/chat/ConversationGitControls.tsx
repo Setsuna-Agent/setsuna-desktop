@@ -30,6 +30,7 @@ export function ConversationGitControls({
   const [busyAction, setBusyAction] = useState<GitBusyAction>(null);
   const [error, setError] = useState<string | null>(null);
   const workspaceRoot = activeProject?.path ?? '';
+  const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
   const hasGit = Boolean(reviewState?.isGitRepository);
   const currentBranch = reviewState?.currentBranch || 'HEAD';
   const changeStats = useMemo(() => localChangeStats(reviewState), [reviewState]);
@@ -52,6 +53,18 @@ export function ConversationGitControls({
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [branchMenuOpen, commitOpen]);
+
+  useEffect(() => {
+    setBranchMenuOpen(false);
+    setCommitOpen(false);
+    setCommitBranchMenuOpen(false);
+    setBranchQuery('');
+    setCommitMessage('');
+    setIncludeUnstaged(true);
+    setCreatingBranch(false);
+    setBranchDraft('');
+    setError(null);
+  }, [projectStateKey]);
 
   if (!activeProject || (reviewState && !reviewState.isGitRepository)) return null;
 

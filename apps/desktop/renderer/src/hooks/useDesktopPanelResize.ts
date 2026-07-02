@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from 'react';
 
 type CssVariableName = string | readonly string[];
+type DesktopPanelResizeOptions = {
+  bottomPanelVisible?: boolean;
+  workspaceVisible?: boolean;
+};
 
 const SIDEBAR_WIDTH_VARIABLES = ['--app-sidebar-width', '--app-topbar-sidebar-width'] as const;
 const SIDEBAR_MIN_WIDTH = 208;
 const SIDEBAR_MAX_WIDTH = 360;
-const WORKBENCH_MAIN_MIN_WIDTH = 420;
+export const WORKBENCH_MAIN_MIN_WIDTH = 420;
+const WORKBENCH_MAIN_MIN_HEIGHT = 260;
 const WORKSPACE_MIN_WIDTH = 460;
 const WORKSPACE_MAX_WIDTH = 860;
 const TERMINAL_MIN_HEIGHT = 180;
 const TERMINAL_MAX_HEIGHT = 520;
 
-export function useDesktopPanelResize(shellRef: RefObject<HTMLDivElement | null>) {
+export function useDesktopPanelResize(
+  shellRef: RefObject<HTMLDivElement | null>,
+  { bottomPanelVisible = true, workspaceVisible = true }: DesktopPanelResizeOptions = {},
+) {
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [workspaceWidth, setWorkspaceWidth] = useState(560);
   const [terminalHeight, setTerminalHeight] = useState(260);
@@ -55,6 +63,14 @@ export function useDesktopPanelResize(shellRef: RefObject<HTMLDivElement | null>
     [shellRef, sidebarWidth],
   );
 
+  const clampTerminalHeight = useCallback(
+    (value: number) =>
+      clampTerminalHeightForLayout(value, {
+        workbenchHeight: readWorkbenchHeight(shellRef.current),
+      }),
+    [shellRef],
+  );
+
   const handleWorkspaceResizeStart = usePointerResize({
     bodyClassName: 'desktop-agent-workspace-resizing',
     clamp: clampWorkspaceWidth,
@@ -86,7 +102,7 @@ export function useDesktopPanelResize(shellRef: RefObject<HTMLDivElement | null>
   );
   const handleTerminalResizeStep = useCallback(
     (delta: number) => stepResizeValue('--app-bottom-panel-height', clampTerminalHeight, setTerminalHeight, delta),
-    [stepResizeValue],
+    [clampTerminalHeight, stepResizeValue],
   );
 
   useEffect(() => {
@@ -98,18 +114,27 @@ export function useDesktopPanelResize(shellRef: RefObject<HTMLDivElement | null>
         frame = 0;
         setWorkspaceWidth((current) => {
           const nextValue = clampWorkspaceWidth(current);
+          setShellVariables('--desktop-agent-workspace-width', workspaceWidthCssValue(nextValue, workspaceVisible));
           if (nextValue === current) return current;
-          setShellVariables('--desktop-agent-workspace-width', `${nextValue}px`);
+          return nextValue;
+        });
+        setTerminalHeight((current) => {
+          const nextValue = clampTerminalHeight(current);
+          setShellVariables('--app-bottom-panel-height', terminalHeightCssValue(nextValue, bottomPanelVisible));
+          if (nextValue === current) return current;
           return nextValue;
         });
       });
     };
+    syncResponsiveBounds();
     window.addEventListener('resize', syncResponsiveBounds);
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', syncResponsiveBounds);
     };
-  }, [clampWorkspaceWidth, setShellVariables]);
+  }, [bottomPanelVisible, clampTerminalHeight, clampWorkspaceWidth, setShellVariables, workspaceVisible]);
+
+  const terminalMaxHeight = clampTerminalHeight(TERMINAL_MAX_HEIGHT);
 
   return {
     handleSidebarResizeStep,
@@ -121,7 +146,7 @@ export function useDesktopPanelResize(shellRef: RefObject<HTMLDivElement | null>
     sidebarMaxWidth: SIDEBAR_MAX_WIDTH,
     sidebarMinWidth: SIDEBAR_MIN_WIDTH,
     sidebarWidth,
-    terminalMaxHeight: TERMINAL_MAX_HEIGHT,
+    terminalMaxHeight,
     terminalHeight,
     terminalMinHeight: TERMINAL_MIN_HEIGHT,
     workspaceMaxWidth: WORKSPACE_MAX_WIDTH,
@@ -153,14 +178,19 @@ function usePointerResize({
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
-      const startPosition = getPointerPosition(event);
+      const pointerScale = pageScaleInverse();
+      const scaledPointerPosition = (pointerEvent: PointerEvent | ReactPointerEvent<HTMLButtonElement>) =>
+        getPointerPosition(pointerEvent) * pointerScale;
+      const resizeHandle = event.currentTarget;
+      const pointerId = event.pointerId;
+      const startPosition = scaledPointerPosition(event);
       const startValue = value;
       let animationFrame = 0;
       let nextValue = startValue;
 
       const applyResizeFrame = () => setShellVariables(cssVariables, `${nextValue}px`);
       const handlePointerMove = (moveEvent: PointerEvent) => {
-        nextValue = clamp(startValue + (getPointerPosition(moveEvent) - startPosition) * direction);
+        nextValue = clamp(startValue + (scaledPointerPosition(moveEvent) - startPosition) * direction);
         if (animationFrame) return;
         animationFrame = window.requestAnimationFrame(() => {
           animationFrame = 0;
@@ -172,6 +202,9 @@ function usePointerResize({
           window.cancelAnimationFrame(animationFrame);
           animationFrame = 0;
           applyResizeFrame();
+        }
+        if (resizeHandle.hasPointerCapture?.(pointerId)) {
+          resizeHandle.releasePointerCapture?.(pointerId);
         }
         setValue(nextValue);
         document.body.classList.remove(bodyClassName);
@@ -208,8 +241,24 @@ export function clampWorkspaceWidthForLayout(
   return Math.min(maxWidth, Math.max(WORKSPACE_MIN_WIDTH, Math.round(value)));
 }
 
-function clampTerminalHeight(value: number): number {
-  const maxHeight = typeof window === 'undefined' ? TERMINAL_MAX_HEIGHT : Math.max(220, Math.min(TERMINAL_MAX_HEIGHT, window.innerHeight - 260));
+export function workspaceWidthCssValue(value: number, visible: boolean): string {
+  return visible ? `${value}px` : '0px';
+}
+
+export function terminalHeightCssValue(value: number, visible: boolean): string {
+  return visible ? `${value}px` : '0px';
+}
+
+export function clampTerminalHeightForLayout(
+  value: number,
+  {
+    workbenchHeight,
+  }: {
+    workbenchHeight: number;
+  },
+): number {
+  const layoutMaxHeight = workbenchHeight - WORKBENCH_MAIN_MIN_HEIGHT;
+  const maxHeight = Math.max(TERMINAL_MIN_HEIGHT, Math.min(TERMINAL_MAX_HEIGHT, Math.floor(layoutMaxHeight)));
   return Math.min(maxHeight, Math.max(TERMINAL_MIN_HEIGHT, Math.round(value)));
 }
 
@@ -220,5 +269,19 @@ function readShellPixelVariable(shell: HTMLElement | null, name: string, fallbac
 }
 
 function viewportWidth(): number {
-  return typeof window === 'undefined' ? WORKSPACE_MAX_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_MAIN_MIN_WIDTH : window.innerWidth;
+  return typeof window === 'undefined' ? WORKSPACE_MAX_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_MAIN_MIN_WIDTH : window.innerWidth * pageScaleInverse();
+}
+
+function readWorkbenchHeight(shell: HTMLElement | null): number {
+  return shell?.querySelector<HTMLElement>('.app-workbench')?.clientHeight ?? viewportHeight();
+}
+
+function viewportHeight(): number {
+  return typeof window === 'undefined' ? TERMINAL_MAX_HEIGHT + WORKBENCH_MAIN_MIN_HEIGHT : window.innerHeight * pageScaleInverse();
+}
+
+function pageScaleInverse(): number {
+  if (typeof window === 'undefined') return 1;
+  const value = Number.parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--app-page-scale-inverse'));
+  return Number.isFinite(value) && value > 0 ? value : 1;
 }

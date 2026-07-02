@@ -244,6 +244,8 @@ describe('RuntimeToolRuns default expansion', () => {
     }));
 
     expect(html).toContain('hljs-selector-class');
+    expect(html).toContain('<details class="chat-file-changes__item">');
+    expect(html).not.toContain('open=""');
   });
 
   it('renders final file change row prefixes and add/delete classes', () => {
@@ -280,6 +282,76 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(html).toContain('chat-file-review__line--gap');
     expect(html).toContain('6 unmodified lines');
     expect(html).toContain('hljs-keyword');
+  });
+
+  it('infers omitted file change gap rows from skipped diff line numbers', () => {
+    const summary = fileChangeSummaryFromRuns([
+      {
+        id: 'call_edit',
+        name: 'edit_file',
+        status: 'success',
+        resultPreview: JSON.stringify({
+          diff: {
+            path: 'src/theme.css',
+            action: 'Edited',
+            additions: 1,
+            deletions: 0,
+            truncated: false,
+            lines: [
+              { type: 'context', oldLine: 1, newLine: 1, content: '.root {' },
+              { type: 'add', lineNumber: 9, newLine: 9, content: '  color: red;' },
+            ],
+          },
+        }),
+      },
+    ]);
+
+    expect(summary).not.toBeNull();
+    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, { summary: summary! }));
+
+    expect(html).toContain('chat-file-review__line--gap');
+    expect(html).toContain('7 unmodified lines');
+  });
+
+  it('folds dense unchanged context between changed file diff blocks', () => {
+    const summary = fileChangeSummaryFromRuns([
+      {
+        id: 'call_edit',
+        name: 'edit_file',
+        status: 'success',
+        resultPreview: JSON.stringify({
+          diff: {
+            path: 'Book/2048/style/main.css',
+            action: 'Edited',
+            additions: 2,
+            deletions: 1,
+            truncated: false,
+            lines: [
+              { type: 'del', oldLine: 2, content: '  color: old;' },
+              { type: 'add', newLine: 2, content: '  color: new;' },
+              ...Array.from({ length: 15 }, (_, index) => ({
+                type: 'context',
+                oldLine: index + 3,
+                newLine: index + 3,
+                content: `line ${index + 3}`,
+              })),
+              { type: 'add', newLine: 18, content: 'body {' },
+            ],
+          },
+        }),
+      },
+    ]);
+
+    expect(summary).not.toBeNull();
+    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, { summary: summary! }));
+    const text = renderedTextFromHtml(html);
+
+    expect(html).toContain('9 unmodified lines');
+    expect(text).toContain('line 3');
+    expect(text).toContain('line 5');
+    expect(text).not.toContain('line 6');
+    expect(text).toContain('line 15');
+    expect(text).toContain('line 17');
   });
 });
 

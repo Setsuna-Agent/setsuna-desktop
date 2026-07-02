@@ -15,3 +15,26 @@ export function canFitConversationOverviewPanel({
   const requiredGutter = overviewPanelWidthPx + overviewPanelRightInsetPx + overviewPanelContentGapPx;
   return rightGutter + overviewMaxContentShiftPx >= requiredGutter;
 }
+
+export function shouldCompactConversationOverview({
+  canExpand,
+  manuallyCollapsed,
+  manuallyExpanded,
+}: {
+  canExpand: boolean;
+  manuallyCollapsed: boolean;
+  manuallyExpanded: boolean;
+}): boolean {
+  if (manuallyCollapsed) return true;
+  return !canExpand && !manuallyExpanded;
+}
+
+export function shouldReserveConversationOverviewSpace({
+  canExpand,
+  compact,
+}: {
+  canExpand: boolean;
+  compact: boolean;
+}): boolean {
+  return canExpand && !compact;
+}

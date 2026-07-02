@@ -2027,9 +2027,11 @@
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
   min-height: 22px;
+  min-width: 0;
   padding: 0 10px;
   color: var(--app-text-muted);
   background: color-mix(in srgb, var(--app-text) 4%, transparent);
+  box-shadow: none;
 }
 
 .chat-file-review__line--gap .chat-file-review__prefix,

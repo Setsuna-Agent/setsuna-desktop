@@ -1,12 +1,15 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
+  type SetStateAction,
 } from 'react';
 import { useChatTurnActions } from './useChatTurnActions.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { useDesktopPanelResize } from './useDesktopPanelResize.js';
+import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
 import { useDesktopWorkspacePanels } from './useDesktopWorkspacePanels.js';
 import { useDesktopUpdater } from './useDesktopUpdater.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
@@ -19,7 +22,8 @@ export function useDesktopAppController() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [activeView, setActiveView] = useState<MainView>('chat');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarManuallyCollapsed, setSidebarManuallyCollapsed] = useState(false);
+  const [sidebarManuallyExpanded, setSidebarManuallyExpanded] = useState(false);
   const [skillSelectionRequest, setSkillSelectionRequest] = useState<ChatSkillSelectionRequest | null>(null);
   const skillSelectionRequestIdRef = useRef(0);
 
@@ -42,6 +46,21 @@ export function useDesktopAppController() {
 
   const shellRef = useRef<HTMLDivElement | null>(null);
   const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const effectiveProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
+  const effectiveProject = effectiveProjectId ? projects.find((project) => project.id === effectiveProjectId) : undefined;
+
+  const workspacePanels = useDesktopWorkspacePanels({ activeProject: effectiveProject, activeView, setError });
+  const {
+    bottomPanelVisible,
+    closeWorkspaceMenus,
+    openFilePanel,
+    panelLauncherMenuOpen,
+    resetPanelSlots,
+    sidePanelVisible,
+    workspaceAppMenuOpen,
+  } = workspacePanels;
+
   const {
     handleSidebarResizeStep,
     handleSidebarResizeStart,
@@ -58,21 +77,37 @@ export function useDesktopAppController() {
     workspaceMaxWidth,
     workspaceMinWidth,
     workspaceWidth,
-  } = useDesktopPanelResize(shellRef);
-
-  const effectiveProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
-  const effectiveProject = effectiveProjectId ? projects.find((project) => project.id === effectiveProjectId) : undefined;
-
-  const workspacePanels = useDesktopWorkspacePanels({ activeProject: effectiveProject, activeView, setError });
-  const {
+  } = useDesktopPanelResize(shellRef, {
     bottomPanelVisible,
-    closeWorkspaceMenus,
-    openFilePanel,
-    panelLauncherMenuOpen,
-    resetPanelSlots,
-    sidePanelVisible,
-    workspaceAppMenuOpen,
-  } = workspacePanels;
+    workspaceVisible: sidePanelVisible,
+  });
+  const sidebarCanExpand = useDesktopSidebarAutoCollapse({
+    shellRef,
+    sidebarWidth,
+    workspaceVisible: sidePanelVisible,
+    workspaceWidth,
+  });
+  const sidebarCollapsed = shouldCollapseSidebar({
+    canExpand: sidebarCanExpand,
+    manuallyCollapsed: sidebarManuallyCollapsed,
+    manuallyExpanded: sidebarManuallyExpanded,
+  });
+  const sidebarOverlay = activeView !== 'settings' && !sidebarCollapsed && !sidebarCanExpand;
+  const sidebarReservesLayout = activeView !== 'settings' && !sidebarCollapsed && sidebarCanExpand;
+  const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
+    const nextCollapsed = typeof value === 'function' ? value(sidebarCollapsed) : value;
+    if (nextCollapsed) {
+      setSidebarManuallyCollapsed(true);
+      setSidebarManuallyExpanded(false);
+      return;
+    }
+    setSidebarManuallyCollapsed(false);
+    setSidebarManuallyExpanded(!sidebarCanExpand);
+  }, [sidebarCanExpand, sidebarCollapsed]);
+
+  useEffect(() => {
+    setSidebarManuallyExpanded(false);
+  }, [sidebarCanExpand]);
 
   const projectWorkspace = useProjectWorkspace({
     activeProjectId: effectiveProjectId,
@@ -139,8 +174,9 @@ export function useDesktopAppController() {
   }, []);
 
   const shellStyle = {
-    '--app-sidebar-width': activeView === 'settings' || sidebarCollapsed ? '0px' : `${sidebarWidth}px`,
-    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarCollapsed ? '150px' : `${sidebarWidth}px`,
+    '--app-sidebar-width': sidebarReservesLayout ? `${sidebarWidth}px` : '0px',
+    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarReservesLayout ? `${sidebarWidth}px` : '150px',
+    '--desktop-agent-sidebar-overlay-width': `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
     '--desktop-agent-workspace-width': sidePanelVisible ? `${workspaceWidth}px` : '0px',
     '--app-bottom-panel-height': bottomPanelVisible ? `${terminalHeight}px` : '0px',
@@ -150,6 +186,7 @@ export function useDesktopAppController() {
     activeView === 'settings' ? 'desktop-agent-page--settings-open' : '',
     activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
     sidebarCollapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
+    sidebarOverlay ? 'desktop-agent-page--sidebar-overlay' : '',
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
   ].filter(Boolean).join(' ');
 

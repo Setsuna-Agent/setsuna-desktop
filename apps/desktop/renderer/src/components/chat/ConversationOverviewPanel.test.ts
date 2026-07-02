@@ -18,6 +18,7 @@ describe('ConversationOverviewPanel', () => {
     }));
 
     expect(compactHtml).toContain('变更');
+    expect(compactHtml).toContain('aria-label="展开对话环境信息"');
     expect(compactHtml).toContain('+71');
     expect(compactHtml).toContain('-247');
     expect(expandedHtml).toContain('变更');

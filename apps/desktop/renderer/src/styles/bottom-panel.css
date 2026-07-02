@@ -224,6 +224,7 @@ body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
   position: fixed;
   z-index: 1000;
   display: grid;
+  box-sizing: border-box;
   min-width: 156px;
   padding: 6px;
   border: 1px solid var(--app-border);
@@ -466,4 +467,41 @@ body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 16px;
+}
+
+body .chat-file-review-panel__title--sortable {
+  cursor: grab;
+  touch-action: none;
+}
+
+body .chat-file-review-panel__title--sortable:active,
+body .chat-file-review-panel__title.is-dragging {
+  cursor: grabbing;
+}
+
+body .chat-file-review-panel__header.is-reordering-tabs {
+  user-select: none;
+}
+
+body .chat-file-review-panel__title.is-dragging {
+  opacity: 0.24;
+}
+
+body .chat-file-review-panel__title.chat-file-review-panel__title--drag-preview {
+  position: fixed;
+  z-index: 1200;
+  display: inline-flex;
+  min-width: 0;
+  max-width: none;
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-text) 6%);
+  box-shadow: 0 10px 24px rgb(15 23 42 / 16%), 0 1px 3px rgb(15 23 42 / 12%);
+  opacity: 0.98;
+  pointer-events: none;
+  cursor: grabbing;
+}
+
+body .chat-file-review-panel__title--drag-preview .chat-file-review-panel__tab-close {
+  opacity: 1;
+  pointer-events: none;
 }
