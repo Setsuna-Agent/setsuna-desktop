@@ -731,7 +731,9 @@ function sweReasoningEffortDescription(effort: string): string {
 }
 
 function activeProviderConfig(config: RuntimeConfigState): ProviderConfigState | undefined {
-  return config.providers.find((item) => item.id === config.activeProviderId) ?? config.providers[0];
+  return config.providers.find((item) => item.id === config.activeProviderId && item.enabled)
+    ?? config.providers.find((item) => item.enabled)
+    ?? config.providers[0];
 }
 
 function activeProviderModel(provider: ProviderConfigState): ProviderConfigState['models'][number] | null {
@@ -773,7 +775,7 @@ export function appServerApprovalPolicy(value: string | undefined) {
 }
 
 function activeModelConfig(config: RuntimeConfigState): ProviderConfigState['models'][number] | null {
-  const provider = config.providers.find((item) => item.id === config.activeProviderId) ?? config.providers[0];
+  const provider = activeProviderConfig(config);
   return provider?.models.find((model) => model.enabled) ?? provider?.models[0] ?? null;
 }
 
@@ -788,6 +790,6 @@ export function activeModelCode(config: Awaited<ReturnType<RuntimeFactory['confi
 }
 
 export function activeModelProvider(config: Awaited<ReturnType<RuntimeFactory['configStore']['getConfig']>>): string {
-  const provider = config.providers.find((item) => item.id === config.activeProviderId) ?? config.providers[0];
+  const provider = activeProviderConfig(config);
   return provider?.id ?? 'unknown';
 }

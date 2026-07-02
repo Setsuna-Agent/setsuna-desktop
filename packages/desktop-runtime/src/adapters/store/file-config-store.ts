@@ -39,7 +39,7 @@ export class FileConfigStore implements ConfigStore {
     const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
     const secrets = await this.readSecrets();
     const provider =
-      stored.providers.find((item) => item.id === stored.activeProviderId) ??
+      stored.providers.find((item) => item.id === stored.activeProviderId && item.enabled) ??
       stored.providers.find((item) => item.enabled) ??
       stored.providers[0];
     if (!provider) return null;
@@ -55,9 +55,10 @@ export class FileConfigStore implements ConfigStore {
     const previous = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
     const secrets = await this.readSecrets();
     const providers = normalizeProviders(input.providers ?? previous.providers, previous.providers, secrets);
+    const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
 
     const stored: StoredConfig = {
-      activeProviderId: input.activeProviderId ?? previous.activeProviderId ?? providers[0]?.id,
+      activeProviderId,
       globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
       storagePath: normalizeStoragePath(input.storagePath ?? previous.storagePath),
       memoryEnabled: input.memoryEnabled ?? previous.memoryEnabled ?? true,
@@ -149,6 +150,12 @@ function defaultConfig(): StoredConfig {
       },
     ],
   };
+}
+
+function activeProviderIdForSave(activeProviderId: string | undefined, providers: StoredConfig['providers']): string | undefined {
+  return providers.find((provider) => provider.id === activeProviderId && provider.enabled)?.id
+    ?? providers.find((provider) => provider.enabled)?.id
+    ?? providers[0]?.id;
 }
 
 function normalizeProviders(

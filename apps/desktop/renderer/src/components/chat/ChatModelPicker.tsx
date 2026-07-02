@@ -36,7 +36,7 @@ export function ChatModelPicker({
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLSpanElement>(null);
   const options = useMemo(() => modelOptions(config), [config]);
-  const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId) ?? config?.providers[0] ?? null;
+  const activeProvider = activeProviderFromConfig(config);
   const activeModel = activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0] ?? null;
   const activeKey = activeProvider && activeModel ? modelOptionKey(activeProvider.id, activeModel.id) : '';
   const normalizedQuery = query.trim().toLowerCase();
@@ -211,6 +211,14 @@ function modelSearchText(option: ModelOption): string {
 
 function modelProviderSortKey(option: ModelOption): string {
   return (option.provider.name || option.provider.id || '未命名厂商').toLowerCase();
+}
+
+function activeProviderFromConfig(config: RuntimeConfigState | null): ProviderConfigState | null {
+  if (!config) return null;
+  return config.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
+    ?? config.providers.find((provider) => provider.enabled)
+    ?? config.providers[0]
+    ?? null;
 }
 
 function modelNameSortKey(option: ModelOption): string {

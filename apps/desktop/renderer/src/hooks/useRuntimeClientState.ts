@@ -254,7 +254,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
   const saveProviders = useCallback(
     async (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => {
-      const activeProviderId = providers.some((provider) => provider.id === config?.activeProviderId)
+      const activeProviderId = providers.some((provider) => provider.id === config?.activeProviderId && provider.enabled)
         ? config?.activeProviderId
         : providers.find((provider) => provider.enabled)?.id ?? providers[0]?.id;
       const next = await client.saveConfig({

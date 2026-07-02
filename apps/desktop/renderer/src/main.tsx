@@ -25,5 +25,5 @@ applyDesktopPlatformAttribute();
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>,
+  </React.StrictMode>
 );

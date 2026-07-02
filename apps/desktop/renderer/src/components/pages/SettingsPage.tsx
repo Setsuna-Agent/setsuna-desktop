@@ -1,37 +1,22 @@
-import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, KeyRound, Monitor, Moon, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, Sun, Trash2, Type } from 'lucide-react';
-import type {
-  ProviderConfigState,
-  ProviderModelConfig,
-  RuntimeAvailableModel,
-  RuntimeAvailableModelsResponse,
-  RuntimeConfigInput,
-  RuntimeConfigState,
-  RuntimeFetchModelsInput,
-  RuntimeMemoryPreview,
-  RuntimeMemoryPreviewItem,
-  RuntimeUsageResponse,
-} from '@setsuna-desktop/contracts';
+import { Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Pencil, Plus, RefreshCw, SlidersHorizontal, Sun, Trash2, Type, X } from 'lucide-react';
+import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeUsageBucket, RuntimeUsageResponse } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
-import {
-  fontFamilyOptions,
-  fontSizeOptions,
-  getFontFamilyOptionsForPlatform,
-  useAppearancePreferences,
-  type FontFamilyMode,
-} from '../../hooks/useAppearancePreferences.js';
+import { fontFamilyOptions, fontSizeOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode } from '../../hooks/useAppearancePreferences.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 
-type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'runtime' | 'about';
+type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'runtime' | 'about';
 type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>;
 
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
   { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
   { id: 'personalization', label: '个性化', icon: <Pencil size={14} /> },
   { id: 'localLlm', label: '本地模型', icon: <HardDrive size={14} /> },
+  { id: 'usage', label: '用量', icon: <Database size={14} /> },
   { id: 'runtime', label: '运行时', icon: <Cpu size={14} /> },
   { id: 'about', label: '关于', icon: <Info size={14} /> },
 ];
@@ -40,6 +25,7 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
   general: '通用',
   personalization: '个性化',
   localLlm: '本地模型',
+  usage: '用量',
   runtime: '运行时',
   about: '关于',
 };
@@ -92,37 +78,35 @@ export function SettingsPage({
   onResetMemories: () => Promise<void>;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
-  const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId) ?? config?.providers[0];
-  const activeProviderName = activeProvider ? `${activeProvider.name || activeProvider.id} · ${config?.providers.length ?? 0} 厂商` : 'local-test';
-  const headingSubtitle = getSettingsHeadingSubtitle(activeSection, activeProviderName, updater.currentVersion, config?.dataPath);
+  const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
   const content =
     activeSection === 'general' ? (
       <GeneralSettings />
     ) : activeSection === 'localLlm' ? (
       config ? (
-        <LocalModelSettings config={config} usage={usage} onFetchModels={onFetchProviderModels} onSave={onSaveProviders} />
+        <LocalModelSettings config={config} onFetchModels={onFetchProviderModels} onSave={onSaveProviders} onSaveStateChange={setLocalModelSaveState} />
       ) : (
         <EmptyState title="Config unavailable" />
       )
+    ) : activeSection === 'usage' ? (
+      <UsageSettings usage={usage} />
     ) : activeSection === 'personalization' ? (
       config ? (
-        <PersonalizationSettings
-          config={config}
-          memoryPreview={memoryPreview}
-          memoryPreviewLoading={memoryPreviewLoading}
-          onSavePreferences={onSaveRuntimePreferences}
-          onPreview={onPreviewMemories}
-          onDelete={onDeleteMemory}
-          onReset={onResetMemories}
-        />
+        <PersonalizationSettings config={config} memoryPreview={memoryPreview} memoryPreviewLoading={memoryPreviewLoading} onSavePreferences={onSaveRuntimePreferences} onPreview={onPreviewMemories} onDelete={onDeleteMemory} onReset={onResetMemories} />
       ) : (
         <EmptyState title="Config unavailable" />
       )
     ) : activeSection === 'about' ? (
       <AboutSettings updater={updater} />
+    ) : config ? (
+      <RuntimePolicySettings config={config} onSave={onSaveRuntimePreferences} />
     ) : (
-      config ? <RuntimePolicySettings config={config} onSave={onSaveRuntimePreferences} /> : <EmptyState title="Config unavailable" />
+      <EmptyState title="Config unavailable" />
     );
+
+  useEffect(() => {
+    if (activeSection !== 'localLlm') setLocalModelSaveState(idleSaveState());
+  }, [activeSection]);
 
   return (
     <main className="desktop-settings-panel">
@@ -132,22 +116,17 @@ export function SettingsPage({
           <div className="chat-user-settings__title">设置</div>
           <div className="chat-user-settings__tabs">
             {settingsSections.map((section) => (
-              <button
-                key={section.id}
-                className={activeSection === section.id ? 'is-active' : ''}
-                type="button"
-                onClick={() => setActiveSection(section.id)}
-              >
+              <button key={section.id} className={activeSection === section.id ? 'is-active' : ''} type="button" onClick={() => setActiveSection(section.id)}>
                 {section.icon}
                 <span>{section.label}</span>
               </button>
             ))}
           </div>
         </nav>
-        <section className="chat-user-settings__content">
-          <header className={`chat-user-settings__page-heading ${activeSection === 'localLlm' ? 'chat-user-settings__page-heading--wide' : ''}`}>
+        <section className={`chat-user-settings__content ${activeSection === 'localLlm' ? 'chat-user-settings__content--local-llm' : ''} ${activeSection === 'usage' ? 'chat-user-settings__content--usage' : ''}`}>
+          <header className="chat-user-settings__page-heading">
             <h1>{settingsSectionLabels[activeSection]}</h1>
-            {headingSubtitle ? <span>{headingSubtitle}</span> : null}
+            {activeSection === 'localLlm' && localModelSaveState.message ? <AutoSaveStatus state={localModelSaveState} /> : null}
           </header>
           {content}
         </section>
@@ -156,37 +135,13 @@ export function SettingsPage({
   );
 }
 
-function getSettingsHeadingSubtitle(section: SettingsSectionId, activeProviderName: string, currentVersion: string, dataPath?: string): string | null {
-  if (section === 'general') return null;
-  if (section === 'localLlm') return activeProviderName;
-  if (section === 'about') return `v${currentVersion}`;
-  return dataPath ?? 'Local runtime';
-}
-
-function SettingsChoiceGroup<TValue extends string>({
-  ariaLabel,
-  options,
-  value,
-  onChange,
-}: {
-  ariaLabel: string;
-  options: Array<SettingsChoiceOption<TValue>>;
-  value: TValue;
-  onChange: (value: TValue, event: MouseEvent<HTMLButtonElement>) => void;
-}) {
+function SettingsChoiceGroup<TValue extends string>({ ariaLabel, options, value, onChange }: { ariaLabel: string; options: Array<SettingsChoiceOption<TValue>>; value: TValue; onChange: (value: TValue, event: MouseEvent<HTMLButtonElement>) => void }) {
   return (
     <div className="chat-user-settings__option-group" role="radiogroup" aria-label={ariaLabel}>
       {options.map((option) => {
         const selected = value === option.value;
         return (
-          <button
-            key={option.value}
-            className={`chat-user-settings__option-button ${selected ? 'is-active' : ''}`}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={(event) => onChange(option.value, event)}
-          >
+          <button key={option.value} className={`chat-user-settings__option-button ${selected ? 'is-active' : ''}`} type="button" role="radio" aria-checked={selected} onClick={(event) => onChange(option.value, event)}>
             <span className="chat-user-settings__option-icon">{option.icon}</span>
             <span>{option.label}</span>
           </button>
@@ -201,9 +156,7 @@ function GeneralSettings() {
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const availableFontFamilyOptions = getFontFamilyOptionsForPlatform();
   const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
-  const fontFamilySelectOptions = availableFontFamilyOptions.some((item) => item.value === selectedFont.value)
-    ? availableFontFamilyOptions
-    : [selectedFont, ...availableFontFamilyOptions];
+  const fontFamilySelectOptions = availableFontFamilyOptions.some((item) => item.value === selectedFont.value) ? availableFontFamilyOptions : [selectedFont, ...availableFontFamilyOptions];
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
   const scaleMarkMaxIndex = Math.max(fontSizeOptions.length - 1, 1);
   const fontSizeProgress = `${(fontSizeIndex / scaleMarkMaxIndex) * 100}%`;
@@ -222,12 +175,7 @@ function GeneralSettings() {
               <Type size={14} />
               <span>界面字体</span>
             </span>
-            <SelectField
-              className="settings-local-control"
-              value={selectedFont.value}
-              style={{ fontFamily: selectedFont.css }}
-              onChange={(event) => setFontFamily(event.currentTarget.value as FontFamilyMode)}
-            >
+            <SelectField className="settings-local-control" value={selectedFont.value} style={{ fontFamily: selectedFont.css }} onChange={(event) => setFontFamily(event.currentTarget.value as FontFamilyMode)}>
               {fontFamilySelectOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -273,22 +221,10 @@ function GeneralSettings() {
               <span>页面缩放</span>
             </span>
             <div className="chat-user-settings__slider" style={{ '--settings-scale-progress': fontSizeProgress } as CSSProperties}>
-              <input
-                aria-label="页面缩放"
-                type="range"
-                min={0}
-                max={fontSizeOptions.length - 1}
-                step={1}
-                value={fontSizeIndex}
-                onChange={(event) => setFontSize(fontSizeOptions[Number(event.currentTarget.value)] ?? '100')}
-              />
+              <input aria-label="页面缩放" type="range" min={0} max={fontSizeOptions.length - 1} step={1} value={fontSizeIndex} onChange={(event) => setFontSize(fontSizeOptions[Number(event.currentTarget.value)] ?? '100')} />
               <div className="settings-scale-control__marks" aria-hidden="true">
                 {fontSizeOptions.map((option, index) => (
-                  <span
-                    key={option}
-                    className={index <= fontSizeIndex ? 'is-active' : undefined}
-                    style={{ '--settings-scale-mark-left': getScaleMarkLeft(index) } as CSSProperties}
-                  >
+                  <span key={option} className={index <= fontSizeIndex ? 'is-active' : undefined} style={{ '--settings-scale-mark-left': getScaleMarkLeft(index) } as CSSProperties}>
                     {Number(option) % 10 === 0 ? `${option}%` : ''}
                   </span>
                 ))}
@@ -361,12 +297,7 @@ function AboutSettings({ updater }: { updater: DesktopUpdaterStateView }) {
               {updater.updateVersion ? <span>目标版本：v{updater.updateVersion.replace(/^v/u, '')}</span> : null}
               {state?.assetName ? <span>安装包：{state.assetName}</span> : null}
               {releaseUrl ? (
-                <button
-                  className="chat-user-settings__release-link"
-                  type="button"
-                  title={releaseUrl}
-                  onClick={() => void window.setsunaDesktop?.links.openExternal(releaseUrl)}
-                >
+                <button className="chat-user-settings__release-link" type="button" title={releaseUrl} onClick={() => void window.setsunaDesktop?.links.openExternal(releaseUrl)}>
                   更新内容：<span>{releaseUrl}</span>
                 </button>
               ) : null}
@@ -375,22 +306,12 @@ function AboutSettings({ updater }: { updater: DesktopUpdaterStateView }) {
 
           <div className="chat-user-settings__update-actions">
             {showCheckButton ? (
-              <Button
-                className="chat-user-settings__update-action"
-                icon={<RefreshCw size={14} />}
-                disabled={updateBusy || updateUnsupported}
-                onClick={() => void updater.checkForUpdates()}
-              >
+              <Button className="chat-user-settings__update-action" icon={<RefreshCw size={14} />} disabled={updateBusy || updateUnsupported} onClick={() => void updater.checkForUpdates()}>
                 {updateBusy ? '检查中' : '检查更新'}
               </Button>
             ) : null}
             {updater.ready ? (
-              <Button
-                className="chat-user-settings__update-action chat-user-settings__update-action--primary"
-                variant="primary"
-                disabled={updater.installing}
-                onClick={() => void updater.installReadyUpdate()}
-              >
+              <Button className="chat-user-settings__update-action chat-user-settings__update-action--primary" variant="primary" disabled={updater.installing} onClick={() => void updater.installReadyUpdate()}>
                 {updater.installButtonText}
               </Button>
             ) : null}
@@ -418,13 +339,7 @@ function updateBadgeText(state: DesktopUpdaterBridgeState | null): string {
   return '自动';
 }
 
-function RuntimePolicySettings({
-  config,
-  onSave,
-}: {
-  config: RuntimeConfigState;
-  onSave: (input: RuntimePreferenceInput) => Promise<void>;
-}) {
+function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState; onSave: (input: RuntimePreferenceInput) => Promise<void> }) {
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [localPathError, setLocalPathError] = useState<string | null>(null);
 
@@ -465,11 +380,7 @@ function RuntimePolicySettings({
               <SlidersHorizontal size={14} />
               <span>审批策略</span>
             </span>
-            <SelectField
-              className="settings-local-control"
-              value={config.approvalPolicy}
-              onChange={(event) => void onSave({ approvalPolicy: event.currentTarget.value as RuntimeConfigState['approvalPolicy'] })}
-            >
+            <SelectField className="settings-local-control" value={config.approvalPolicy} onChange={(event) => void onSave({ approvalPolicy: event.currentTarget.value as RuntimeConfigState['approvalPolicy'] })}>
               <option value="strict">严格授权</option>
               <option value="on-request">智能授权</option>
               <option value="full">完全授权</option>
@@ -480,11 +391,7 @@ function RuntimePolicySettings({
               <SlidersHorizontal size={14} />
               <span>权限范围</span>
             </span>
-            <SelectField
-              className="settings-local-control"
-              value={config.permissionProfile}
-              onChange={(event) => void onSave({ permissionProfile: event.currentTarget.value as RuntimeConfigState['permissionProfile'] })}
-            >
+            <SelectField className="settings-local-control" value={config.permissionProfile} onChange={(event) => void onSave({ permissionProfile: event.currentTarget.value as RuntimeConfigState['permissionProfile'] })}>
               <option value="read-only">只读</option>
               <option value="workspace-write">工作区写入</option>
               <option value="danger-full-access">完全访问</option>
@@ -503,12 +410,7 @@ function RuntimePolicySettings({
             </span>
             <div className="chat-user-settings__path-control">
               <code title={config.configPath}>{config.configPath}</code>
-              <Button
-                className="chat-user-settings__path-open"
-                icon={<FolderOpen size={14} />}
-                disabled={pathActionDisabled}
-                onClick={() => void openRuntimePath(config.configPath, '配置文件')}
-              >
+              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.configPath, '配置文件')}>
                 {isOpeningConfig ? '打开中' : '打开'}
               </Button>
             </div>
@@ -520,12 +422,7 @@ function RuntimePolicySettings({
             </span>
             <div className="chat-user-settings__path-control">
               <code title={config.dataPath}>{config.dataPath}</code>
-              <Button
-                className="chat-user-settings__path-open"
-                icon={<FolderOpen size={14} />}
-                disabled={pathActionDisabled}
-                onClick={() => void openRuntimePath(config.dataPath, '数据目录')}
-              >
+              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.dataPath, '数据目录')}>
                 {isOpeningData ? '打开中' : '打开'}
               </Button>
             </div>
@@ -643,12 +540,7 @@ function PersonalizationSettings({
           onBack={() => setPersonalizationView('overview')}
           title="记忆预览"
           actions={
-            <Button
-              className="chat-user-settings__tiny-action"
-              icon={<RefreshCw size={14} />}
-              disabled={memoryPreviewLoading || memoryResetting || Boolean(memoryDeletingId)}
-              onClick={() => void loadMemoryPreview()}
-            >
+            <Button className="chat-user-settings__tiny-action" icon={<RefreshCw size={14} />} disabled={memoryPreviewLoading || memoryResetting || Boolean(memoryDeletingId)} onClick={() => void loadMemoryPreview()}>
               {memoryPreviewLoading ? '刷新中' : '刷新'}
             </Button>
           }
@@ -664,25 +556,14 @@ function PersonalizationSettings({
         <div className="chat-user-settings__memory-list" aria-busy={memoryPreviewLoading}>
           {items.length ? (
             items.map((item) => {
-              const meta = [
-                item.origin === 'active' ? '主动沉淀' : '后台沉淀',
-                item.scope === 'global' ? '全局' : '项目范围',
-                item.source,
-                formatMemoryDate(item.updatedAt),
-                `${Number(item.chars || 0).toLocaleString()} 字符`,
-              ].filter(Boolean);
+              const meta = [item.origin === 'active' ? '主动沉淀' : '后台沉淀', item.scope === 'global' ? '全局' : '项目范围', item.source, formatMemoryDate(item.updatedAt), `${Number(item.chars || 0).toLocaleString()} 字符`].filter(Boolean);
 
               return (
                 <div className="chat-user-settings__memory-item" key={item.id}>
                   <div className="chat-user-settings__memory-item-head">
                     <FileText size={14} />
                     <span title={item.workspaceRoot || item.title}>{item.title}</span>
-                    <IconButton
-                      label="删除记忆"
-                      variant="danger"
-                      disabled={memoryResetting || memoryPreviewLoading || memoryDeletingId === item.id}
-                      onClick={() => void deleteMemoryItem(item)}
-                    >
+                    <IconButton label="删除记忆" variant="danger" disabled={memoryResetting || memoryPreviewLoading || memoryDeletingId === item.id} onClick={() => void deleteMemoryItem(item)}>
                       <Trash2 size={14} />
                     </IconButton>
                   </div>
@@ -693,7 +574,9 @@ function PersonalizationSettings({
                   </div>
                   {item.tags?.length ? (
                     <div className="chat-user-settings__memory-tags">
-                      {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                      {item.tags.map((tag) => (
+                        <span key={tag}>{tag}</span>
+                      ))}
                     </div>
                   ) : null}
                   <pre className="chat-user-settings__memory-snippet">{item.preview}</pre>
@@ -718,12 +601,7 @@ function PersonalizationSettings({
               <Pencil size={14} />
               <span>Setsuna 风格</span>
             </span>
-            <SettingsChoiceGroup
-              ariaLabel="Setsuna 风格"
-              options={setsunaStyleOptions}
-              value={config.setsunaStyle}
-              onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })}
-            />
+            <SettingsChoiceGroup ariaLabel="Setsuna 风格" options={setsunaStyleOptions} value={config.setsunaStyle} onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })} />
           </div>
         </div>
       </div>
@@ -750,7 +628,9 @@ function PersonalizationSettings({
                   }}
                   onChange={(event) => setGlobalPromptDraft(event.target.value)}
                 />
-                <span className="chat-user-settings__prompt-count">{globalPromptLength} / {PERSONALIZATION_PROMPT_MAX_LENGTH}</span>
+                <span className="chat-user-settings__prompt-count">
+                  {globalPromptLength} / {PERSONALIZATION_PROMPT_MAX_LENGTH}
+                </span>
               </div>
             </div>
           </div>
@@ -760,9 +640,7 @@ function PersonalizationSettings({
       <div className="chat-user-settings__section-block chat-user-settings__memory-settings-block">
         <div className="chat-user-settings__memory-heading">
           <div className="chat-user-settings__group-title">记忆</div>
-          <p>
-            记忆用于保存你希望长期生效的偏好、项目规则、固定流程和事实信息。开启后，后续对话会按当前项目或全局范围自动召回相关记忆，帮助模型延续你的工作习惯；你可以在预览中查看、删除单条记忆，或在这里重置全部记忆。
-          </p>
+          <p>记忆用于保存你希望长期生效的偏好、项目规则、固定流程和事实信息。开启后，后续对话会按当前项目或全局范围自动召回相关记忆，帮助模型延续你的工作习惯；你可以在预览中查看、删除单条记忆，或在这里重置全部记忆。</p>
         </div>
         {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
@@ -772,11 +650,7 @@ function PersonalizationSettings({
               <span>启用记忆</span>
             </span>
             <label className="sd-check">
-              <input
-                type="checkbox"
-                checked={config.memoryEnabled}
-                onChange={(event) => void onSavePreferences({ memoryEnabled: event.currentTarget.checked })}
-              />
+              <input type="checkbox" checked={config.memoryEnabled} onChange={(event) => void onSavePreferences({ memoryEnabled: event.currentTarget.checked })} />
               <span>开启</span>
             </label>
           </div>
@@ -806,20 +680,8 @@ function PersonalizationSettings({
               <RefreshCw size={14} />
               <span>重置记忆</span>
             </span>
-            <Popconfirm
-              title="重置全部记忆？"
-              description="这会清空所有已保存记忆，无法撤销。"
-              placement="topRight"
-              okText="重置"
-              cancelText="取消"
-              okButtonProps={{ danger: true, loading: memoryResetting }}
-              onConfirm={() => void resetMemoryItems()}
-            >
-              <Button
-                variant="danger"
-                icon={<RefreshCw size={14} />}
-                disabled={memoryPreviewLoading || Boolean(memoryDeletingId) || memoryResetting}
-              >
+            <Popconfirm title="重置全部记忆？" description="这会清空所有已保存记忆，无法撤销。" placement="topRight" okText="重置" cancelText="取消" okButtonProps={{ danger: true, loading: memoryResetting }} onConfirm={() => void resetMemoryItems()}>
+              <Button variant="danger" icon={<RefreshCw size={14} />} disabled={memoryPreviewLoading || Boolean(memoryDeletingId) || memoryResetting}>
                 {memoryResetting ? '重置中' : '重置'}
               </Button>
             </Popconfirm>
@@ -846,50 +708,92 @@ function formatMemoryDate(value?: string): string {
   });
 }
 
-function UsageSummary({ usage }: { usage: RuntimeUsageResponse | null }) {
-  const summary = usage?.summary;
+function LocalModelSettings({
+  config,
+  onFetchModels,
+  onSave,
+  onSaveStateChange,
+}: {
+  config: RuntimeConfigState;
+  onFetchModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
+  onSave: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
+  onSaveStateChange: (state: SaveState) => void;
+}) {
   return (
-    <div className="usage-strip">
-      <div>
-        <span>总计</span>
-        <strong>{formatTokens(summary?.totalTokens ?? 0)}</strong>
-      </div>
-      <div>
-        <span>输入</span>
-        <strong>{formatTokens(summary?.inputTokens ?? 0)}</strong>
-      </div>
-      <div>
-        <span>输出</span>
-        <strong>{formatTokens(summary?.outputTokens ?? 0)}</strong>
-      </div>
-      <div>
-        <span>次数</span>
-        <strong>{summary?.recordCount ?? 0}</strong>
-      </div>
+    <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__local-llm-section">
+      <ProviderSettings config={config} onFetchModels={onFetchModels} onSave={onSave} onSaveStateChange={onSaveStateChange} />
     </div>
   );
 }
 
-function LocalModelSettings({
-  config,
-  onFetchModels,
-  usage,
-  onSave,
-}: {
-  config: RuntimeConfigState;
-  onFetchModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
-  usage: RuntimeUsageResponse | null;
-  onSave: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
-}) {
+function UsageSettings({ usage }: { usage: RuntimeUsageResponse | null }) {
+  const summary = usage?.summary;
+  const records = usage?.records ?? [];
   return (
-    <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__local-llm-section">
-      <div className="settings-callout">
-        <StatusBadge tone="success">本地</StatusBadge>
-        <span>模型调用由本地 runtime 直连已配置的供应商，renderer 不请求远端 Agent API。</span>
+    <div className="chat-user-settings__section chat-user-settings__usage-section">
+      <div className="settings-usage-summary">
+        <UsageMetric label="总计" value={formatTokens(summary?.totalTokens ?? 0)} />
+        <UsageMetric label="输入" value={formatTokens(summary?.inputTokens ?? 0)} />
+        <UsageMetric label="输出" value={formatTokens(summary?.outputTokens ?? 0)} />
+        <UsageMetric label="次数" value={`${summary?.recordCount ?? 0}`} />
       </div>
-      <UsageSummary usage={usage} />
-      <ProviderSettings config={config} onFetchModels={onFetchModels} onSave={onSave} />
+      <div className="settings-usage-breakdowns">
+        <UsageBreakdown title="厂商" buckets={summary?.byProvider ?? []} empty="暂无厂商用量" />
+        <UsageBreakdown title="模型" buckets={summary?.byModel ?? []} empty="暂无模型用量" />
+      </div>
+      <section className="settings-usage-records">
+        <header>
+          <strong>最近调用</strong>
+          <span>{records.length ? `${records.length} 条` : '暂无记录'}</span>
+        </header>
+        {records.length ? (
+          <div className="settings-usage-record-list">
+            {records.slice(0, 12).map((record) => (
+              <div className="settings-usage-record" key={record.id}>
+                <div>
+                  <strong>{record.model || 'unknown model'}</strong>
+                  <span>{record.provider || 'unknown provider'}</span>
+                </div>
+                <code>{formatMemoryDate(record.createdAt)}</code>
+                <span>{formatTokens(record.totalTokens ?? 0)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="暂无用量记录" />
+        )}
+      </section>
     </div>
+  );
+}
+
+function UsageMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="settings-usage-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function UsageBreakdown({ title, buckets, empty }: { title: string; buckets: RuntimeUsageBucket[]; empty: string }) {
+  return (
+    <section className="settings-usage-breakdown">
+      <header>
+        <strong>{title}</strong>
+        <span>{buckets.length ? `${buckets.length} 项` : empty}</span>
+      </header>
+      {buckets.length ? (
+        <div className="settings-usage-breakdown-list">
+          {buckets.slice(0, 8).map((bucket) => (
+            <div className="settings-usage-breakdown-row" key={bucket.key}>
+              <span title={bucket.key}>{bucket.key || 'unknown'}</span>
+              <code>{formatTokens(bucket.totalTokens)}</code>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -897,65 +801,113 @@ function ProviderSettings({
   config,
   onFetchModels,
   onSave,
+  onSaveStateChange,
 }: {
   config: RuntimeConfigState;
   onFetchModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
   onSave: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
+  onSaveStateChange: (state: SaveState) => void;
 }) {
   const [providers, setProviders] = useState<ProviderConfigState[]>(() => normalizeSettingsProviders(config.providers));
   const [selectedProviderId, setSelectedProviderId] = useState(() => selectedProviderIdFromConfig(config));
+  const [editingModel, setEditingModel] = useState<EditingModelState | null>(null);
   const [apiKeysByProviderId, setApiKeysByProviderId] = useState<Record<string, string>>({});
   const [fetchStateByProviderId, setFetchStateByProviderId] = useState<Record<string, ModelFetchState>>({});
-  const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>(() => idleSaveState());
+  const [dirtyRevision, setDirtyRevision] = useState(0);
+  const providersRef = useRef(providers);
+  const apiKeysByProviderIdRef = useRef(apiKeysByProviderId);
+  const latestDirtyRevisionRef = useRef(dirtyRevision);
+  const saveRequestIdRef = useRef(0);
 
   useEffect(() => {
     const nextProviders = normalizeSettingsProviders(config.providers);
     setProviders(nextProviders);
-    setSelectedProviderId((current) => (
-      nextProviders.some((provider) => provider.id === current)
-        ? current
-        : nextProviders.find((provider) => provider.id === config.activeProviderId)?.id ?? nextProviders[0]?.id ?? ''
-    ));
-    setApiKeysByProviderId({});
+    setSelectedProviderId((current) => (nextProviders.some((provider) => provider.id === current) ? current : selectedProviderIdFromProviders(config.activeProviderId, nextProviders)));
+    setApiKeysByProviderId((current) => {
+      const providerIds = new Set(nextProviders.map((provider) => provider.id));
+      return Object.fromEntries(Object.entries(current).filter(([providerId]) => providerIds.has(providerId)));
+    });
+    setEditingModel((current) => {
+      if (!current) return null;
+      const providerExists = nextProviders.some((provider) => provider.id === current.providerId);
+      if (!providerExists) return null;
+      if (current.mode === 'create') return current;
+      return hasProviderModel(nextProviders, current.providerId, current.modelId) ? current : null;
+    });
     setFetchStateByProviderId({});
   }, [config.activeProviderId, config.providers]);
 
+  useEffect(() => {
+    providersRef.current = providers;
+  }, [providers]);
+
+  useEffect(() => {
+    apiKeysByProviderIdRef.current = apiKeysByProviderId;
+  }, [apiKeysByProviderId]);
+
+  useEffect(() => {
+    latestDirtyRevisionRef.current = dirtyRevision;
+  }, [dirtyRevision]);
+
+  useEffect(() => {
+    onSaveStateChange(saveState);
+  }, [onSaveStateChange, saveState]);
+
+  useEffect(() => {
+    if (!dirtyRevision) return undefined;
+    const revision = dirtyRevision;
+    const timeoutId = window.setTimeout(() => {
+      const requestId = saveRequestIdRef.current + 1;
+      saveRequestIdRef.current = requestId;
+      setSaveState({ status: 'saving', message: '生效中' });
+      void onSave(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
+        .then(() => {
+          if (saveRequestIdRef.current === requestId && latestDirtyRevisionRef.current === revision) {
+            setSaveState({ status: 'saved', message: '已生效' });
+          }
+        })
+        .catch((error) => {
+          if (saveRequestIdRef.current === requestId) {
+            setSaveState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+          }
+        });
+    }, SETTINGS_AUTO_SAVE_DELAY_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [dirtyRevision, onSave]);
+
+  const markDirty = () => {
+    setSaveState({ status: 'saving', message: '生效中' });
+    setDirtyRevision((current) => current + 1);
+  };
+
   const updateProvider = (providerId: string, updater: (provider: ProviderConfigState) => ProviderConfigState) => {
-    setSaveState(idleSaveState());
+    markDirty();
     setProviders((current) => current.map((provider) => (provider.id === providerId ? updater(provider) : provider)));
   };
 
-  const updateModel = (providerId: string, modelId: string, updater: (model: ProviderModelConfig) => ProviderModelConfig) => {
-    updateProvider(providerId, (provider) => ({
-      ...provider,
-      models: provider.models.map((model) => (model.id === modelId ? updater(model) : model)),
-    }));
-  };
-
   const setProviderApiKey = (providerId: string, value: string) => {
-    setSaveState(idleSaveState());
+    markDirty();
     setApiKeysByProviderId((current) => ({ ...current, [providerId]: value }));
   };
 
   const addProvider = () => {
     const nextProvider = defaultProviderConfig();
-    setSaveState(idleSaveState());
+    markDirty();
     setProviders((current) => [...current, nextProvider]);
     setSelectedProviderId(nextProvider.id);
   };
 
   const removeProvider = (providerId: string) => {
-    setSaveState(idleSaveState());
+    markDirty();
     setProviders((current) => {
-      const removedIndex = Math.max(0, current.findIndex((provider) => provider.id === providerId));
+      const removedIndex = Math.max(
+        0,
+        current.findIndex((provider) => provider.id === providerId)
+      );
       const next = current.filter((provider) => provider.id !== providerId);
       const normalizedNext = next.length ? next : [defaultProviderConfig()];
-      setSelectedProviderId((selected) => (
-        selected === providerId
-          ? normalizedNext[Math.min(removedIndex, normalizedNext.length - 1)]?.id ?? normalizedNext[0]?.id ?? ''
-          : selected
-      ));
+      setSelectedProviderId((selected) => (selected === providerId ? normalizedNext[Math.min(removedIndex, normalizedNext.length - 1)]?.id ?? normalizedNext[0]?.id ?? '' : selected));
       return normalizedNext;
     });
     setApiKeysByProviderId((current) => {
@@ -966,24 +918,39 @@ function ProviderSettings({
   };
 
   const addModel = (providerId: string) => {
-    updateProvider(providerId, (provider) => ensureProviderActiveModel({
-      ...provider,
-      models: [...provider.models, defaultProviderModel('', provider.models.length === 0)],
-    }));
+    const provider = providers.find((item) => item.id === providerId);
+    setEditingModel({ mode: 'create', providerId, model: defaultProviderModel('', !provider?.models.length) });
   };
 
   const removeModel = (providerId: string, modelId: string) => {
-    updateProvider(providerId, (provider) => ensureProviderActiveModel({
-      ...provider,
-      models: provider.models.filter((model) => model.id !== modelId),
-    }));
+    setEditingModel((current) => (current?.mode === 'edit' && current.providerId === providerId && current.modelId === modelId ? null : current));
+    updateProvider(providerId, (provider) =>
+      ensureProviderActiveModel({
+        ...provider,
+        models: provider.models.filter((model) => model.id !== modelId),
+      })
+    );
   };
 
-  const selectDefaultModel = (providerId: string, modelId: string) => {
-    updateProvider(providerId, (provider) => ({
-      ...provider,
-      models: provider.models.map((model) => ({ ...model, enabled: model.id === modelId })),
-    }));
+  const commitEditingModel = (nextModel: ProviderModelConfig) => {
+    const current = editingModel;
+    if (!current) return;
+    if (current.mode === 'create') {
+      updateProvider(current.providerId, (provider) =>
+        ensureProviderActiveModel({
+          ...provider,
+          models: [...provider.models, normalizeProviderModel(nextModel, provider.models.length === 0)],
+        })
+      );
+    } else {
+      updateProvider(current.providerId, (provider) =>
+        ensureProviderActiveModel({
+          ...provider,
+          models: provider.models.map((model) => (model.id === current.modelId ? normalizeProviderModel({ ...nextModel, id: current.modelId }, model.enabled) : model)),
+        })
+      );
+    }
+    setEditingModel(null);
   };
 
   const fetchModels = (provider: ProviderConfigState) => {
@@ -998,10 +965,10 @@ function ProviderSettings({
       apiKey: apiKeysByProviderId[provider.id] || undefined,
     })
       .then((result) => {
-        updateProvider(provider.id, (currentProvider) => ({
-          ...currentProvider,
-          models: mergeFetchedModels(currentProvider.models, result.models),
-        }));
+        updateProvider(provider.id, (currentProvider) => {
+          const models = mergeFetchedModels(currentProvider.models, result.models);
+          return { ...currentProvider, models };
+        });
         setFetchStateByProviderId((current) => ({
           ...current,
           [provider.id]: { models: result.models, error: '', fetching: false },
@@ -1019,21 +986,12 @@ function ProviderSettings({
       });
   };
 
-  const save = () => {
-    if (saving) return;
-    setSaving(true);
-    setSaveState({ status: 'saving', message: '保存中...' });
-    void onSave(providers.map(prepareProviderForSave), apiKeysByProviderId)
-      .then(() => setSaveState({ status: 'saved', message: '已保存' }))
-      .catch((error) => setSaveState({ status: 'error', message: error instanceof Error ? error.message : String(error) }))
-      .finally(() => setSaving(false));
-  };
-
   const enabledProviderCount = providers.filter((provider) => provider.enabled).length;
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0];
   const selectedProviderIndex = selectedProvider ? providers.findIndex((provider) => provider.id === selectedProvider.id) : -1;
   const selectedFetchState = selectedProvider ? fetchStateByProviderId[selectedProvider.id] ?? emptyModelFetchState() : emptyModelFetchState();
-  const saveStatusMessage = saveState.message || '密钥不会出现在渲染进程响应中。';
+  const editingProvider = editingModel ? providers.find((provider) => provider.id === editingModel.providerId) : undefined;
+  const editingModelConfig = editingModel?.mode === 'create' ? editingModel.model : editingProvider?.models.find((model) => model.id === editingModel?.modelId);
 
   return (
     <div className="chat-user-settings__local-provider-stack">
@@ -1053,22 +1011,13 @@ function ProviderSettings({
               const activeModel = provider.models.find((model) => model.enabled) ?? provider.models[0];
               const selected = provider.id === selectedProvider?.id;
               return (
-                <button
-                  className={`chat-user-settings__local-provider-item ${selected ? 'is-active' : ''}`}
-                  key={provider.id}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => setSelectedProviderId(provider.id)}
-                >
+                <button className={`chat-user-settings__local-provider-item ${selected ? 'is-active' : ''}`} key={provider.id} type="button" role="option" aria-selected={selected} onClick={() => setSelectedProviderId(provider.id)}>
                   <span className="chat-user-settings__local-provider-item-icon">
                     <HardDrive size={13} />
                   </span>
                   <span className="chat-user-settings__local-provider-item-body">
                     <span className="chat-user-settings__local-provider-item-name">{provider.name || `厂商 ${providerIndex + 1}`}</span>
-                    <span className="chat-user-settings__local-provider-item-meta">
-                      {`${provider.enabled ? '启用' : '停用'} · ${providerProtocolLabel(provider.provider)} · ${provider.models.length} 模型${activeModel?.name ? ` · ${activeModel.name}` : ''}`}
-                    </span>
+                    <span className="chat-user-settings__local-provider-item-meta">{`${provider.enabled ? '启用' : '停用'} · ${providerProtocolLabel(provider.provider)} · ${provider.models.length} 模型${activeModel?.name ? ` · ${activeModel.name}` : ''}`}</span>
                   </span>
                 </button>
               );
@@ -1100,9 +1049,6 @@ function ProviderSettings({
                     <Trash2 size={14} />
                   </IconButton>
                 ) : null}
-                <Button variant="primary" icon={<Save size={15} />} disabled={saving} onClick={save}>
-                  {saving ? '保存中' : '保存'}
-                </Button>
               </div>
             </div>
             <div className="chat-user-settings__local-provider-body">
@@ -1156,163 +1102,52 @@ function ProviderSettings({
                   </label>
                   <label className="chat-user-settings__row">
                     <span className="chat-user-settings__row-label">API Key {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
-                    <TextField
-                      className="settings-local-control"
-                      type="password"
-                      value={apiKeysByProviderId[selectedProvider.id] ?? ''}
-                      onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)}
-                      placeholder={providerApiKeyPlaceholder(selectedProvider)}
-                    />
+                    <TextField className="settings-local-control" type="password" value={apiKeysByProviderId[selectedProvider.id] ?? ''} onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)} placeholder={providerApiKeyPlaceholder(selectedProvider)} />
                   </label>
                 </div>
               </section>
               <section className="settings-form-section">
                 <div className="settings-model-list">
-              <div className="settings-model-list__head">
-                <span>模型</span>
-                <div className="settings-model-list__actions">
-                  <Button icon={<RefreshCw size={14} />} disabled={selectedFetchState.fetching} onClick={() => fetchModels(selectedProvider)}>
-                    {selectedFetchState.fetching ? '获取中' : '自动获取'}
-                  </Button>
-                  <Button icon={<Plus size={14} />} onClick={() => addModel(selectedProvider.id)}>添加模型</Button>
-                </div>
-              </div>
-              <div className="settings-model-grid settings-model-grid--head">
-                <span>默认</span>
-                <span>显示名称</span>
-                <span>模型 ID</span>
-                <span>输出</span>
-                <span>能力</span>
-                <span>思考等级</span>
-                <span />
-              </div>
-              {selectedProvider.models.map((model) => {
-                const thinkingEfforts = normalizeThinkingEfforts(model.thinkingEfforts);
-                const defaultThinkingEffort = normalizedDefaultThinkingEffort({ ...model, thinkingEfforts });
-                const thinkingPresetOptions = mergeThinkingPresetOptions(normalizeThinkingEfforts([...thinkingEfforts, defaultThinkingEffort]));
-                return (
-                <div className="settings-model-grid settings-model-row" key={model.id}>
-                  <label className="settings-model-default">
-                    <span>默认</span>
-                    <input
-                      type="radio"
-                      name={`default-model-${selectedProvider.id}`}
-                      checked={model.enabled}
-                      onChange={() => selectDefaultModel(selectedProvider.id, model.id)}
-                    />
-                  </label>
-                  <label className="settings-model-field settings-model-field--name">
-                    <span>显示名称</span>
-                    <TextField
-                      className="settings-local-control"
-                      value={model.name}
-                      placeholder="显示名称"
-                      onChange={(event) => {
-                        const name = event.target.value;
-                        updateModel(selectedProvider.id, model.id, (item) => ({ ...item, name }));
-                      }}
-                    />
-                  </label>
-                  <label className="settings-model-field settings-model-field--code">
-                    <span>模型 ID</span>
-                    <TextField
-                      className="settings-local-control"
-                      value={model.code}
-                      placeholder="llama3.1"
-                      onChange={(event) => {
-                        const code = event.target.value;
-                        updateModel(selectedProvider.id, model.id, (item) => updateModelCode(item, code));
-                      }}
-                    />
-                  </label>
-                  <label className="settings-model-field settings-model-field--output">
-                    <span>输出</span>
-                    <TextField
-                      className="settings-local-control"
-                      type="number"
-                      min={1}
-                      value={model.maxOutputTokens}
-                      onChange={(event) => {
-                        const maxOutputTokens = positiveInt(Number(event.target.value), DEFAULT_MODEL_MAX_OUTPUT_TOKENS);
-                        updateModel(selectedProvider.id, model.id, (item) => ({ ...item, maxOutputTokens }));
-                      }}
-                    />
-                  </label>
-                  <div className="settings-model-group settings-model-capabilities">
-                    <span>能力</span>
-                    <div className="settings-model-inline-checks">
-                      <label className="sd-check settings-model-check">
-                        <input
-                          type="checkbox"
-                          checked={model.thinkingEnabled}
-                          onChange={(event) => {
-                            const thinkingEnabled = event.currentTarget.checked;
-                            updateModel(selectedProvider.id, model.id, (item) => setThinkingEnabled(item, thinkingEnabled));
-                          }}
-                        />
-                        <Brain size={13} />
-                        <span>思考</span>
-                      </label>
-                      <label className="sd-check settings-model-check">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(model.supportsImages)}
-                          onChange={(event) => {
-                            const supportsImages = event.currentTarget.checked;
-                            updateModel(selectedProvider.id, model.id, (item) => ({ ...item, supportsImages }));
-                          }}
-                        />
-                        <ImageIcon size={13} />
-                        <span>图片</span>
-                      </label>
+                  <div className="settings-model-list__head">
+                    <span>模型</span>
+                    <div className="settings-model-list__actions">
+                      <Button icon={<RefreshCw size={14} />} disabled={selectedFetchState.fetching} onClick={() => fetchModels(selectedProvider)}>
+                        {selectedFetchState.fetching ? '获取中' : '自动获取'}
+                      </Button>
+                      <Button icon={<Plus size={14} />} onClick={() => addModel(selectedProvider.id)}>
+                        添加模型
+                      </Button>
                     </div>
                   </div>
-                  <div className="settings-model-group settings-thinking-levels">
-                    <span>思考等级</span>
-                    <div className="settings-thinking-levels__content">
-                      <TextField
-                        aria-label="思考等级"
-                        className="settings-thinking-default"
-                        disabled={!model.thinkingEnabled}
-                        placeholder="自定义，例如 xhigh / max"
-                        value={model.thinkingEnabled ? defaultThinkingEffort ?? '' : ''}
-                        onChange={(event) => {
-                          const effort = event.target.value;
-                          updateModel(selectedProvider.id, model.id, (item) => setDefaultThinkingEffort(item, effort));
-                        }}
-                      />
-                      <div className="settings-thinking-presets" aria-label="常用思考等级">
-                        {thinkingPresetOptions.map((effort) => (
-                          <button
-                            key={effort}
-                            className={`settings-thinking-preset ${defaultThinkingEffort === effort ? 'is-active' : ''}`}
-                            type="button"
-                            disabled={!model.thinkingEnabled}
-                            onClick={() => updateModel(selectedProvider.id, model.id, (item) => setDefaultThinkingEffort(item, effort))}
-                          >
-                            {effort}
-                          </button>
-                        ))}
+                  <div className="settings-model-browser" role="list" aria-label="模型列表">
+                    {selectedProvider.models.map((model) => (
+                      <div className="settings-model-option" key={model.id} role="listitem">
+                        <div className="settings-model-option__body">
+                          <span className="settings-model-option__name">{model.name || model.code || '未命名模型'}</span>
+                          <code>{model.code || '未填写模型 ID'}</code>
+                        </div>
+                        <span className="settings-model-option__meta">
+                          <span>{model.maxOutputTokens}</span>
+                          {model.thinkingEnabled ? <span>思考</span> : null}
+                          {model.supportsImages ? <span>图片</span> : null}
+                        </span>
+                        <div className="settings-model-option__actions">
+                          <IconButton label="编辑模型" onClick={() => setEditingModel({ mode: 'edit', providerId: selectedProvider.id, modelId: model.id })}>
+                            <Pencil size={14} />
+                          </IconButton>
+                          <IconButton label="删除模型" variant="danger" disabled={selectedProvider.models.length <= 1} onClick={() => removeModel(selectedProvider.id, model.id)}>
+                            <Trash2 size={14} />
+                          </IconButton>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                  <IconButton label="删除模型" className="settings-model-delete" variant="danger" disabled={selectedProvider.models.length <= 1} onClick={() => removeModel(selectedProvider.id, model.id)}>
-                    <Trash2 size={14} />
-                  </IconButton>
-                </div>
-                );
-              })}
-              {selectedFetchState.error ? <div className="settings-model-fetch-state settings-model-fetch-state--error">{selectedFetchState.error}</div> : null}
-              {!selectedFetchState.error && selectedFetchState.models.length ? <div className="settings-model-fetch-state">{`已获取 ${selectedFetchState.models.length} 个模型，保存后生效。`}</div> : null}
+                  {selectedFetchState.error ? <div className="settings-model-fetch-state settings-model-fetch-state--error">{selectedFetchState.error}</div> : null}
+                  {!selectedFetchState.error && selectedFetchState.models.length ? <div className="settings-model-fetch-state">{`已获取 ${selectedFetchState.models.length} 个模型，改动会自动生效。`}</div> : null}
                 </div>
               </section>
             </div>
-            <div className="settings-form__footer">
-              <span className={`settings-save-status settings-save-status--${saveState.status}`} aria-live="polite">
-                <KeyRound size={14} />
-                {saveStatusMessage}
-              </span>
-            </div>
+            {editingModel && editingProvider && editingModelConfig ? <ModelSettingsDialog key={`${editingModel.mode}-${editingProvider.id}-${editingModelConfig.id}`} model={editingModelConfig} onClose={() => setEditingModel(null)} onConfirm={commitEditingModel} /> : null}
           </div>
         ) : (
           <div className="chat-user-settings__local-provider-card">
@@ -1326,6 +1161,7 @@ function ProviderSettings({
 
 const DEFAULT_PROVIDER_KIND: ProviderConfigState['provider'] = 'openai-compatible';
 const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 68000;
+const SETTINGS_AUTO_SAVE_DELAY_MS = 300;
 const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const providerProtocolOptions: Array<{ value: ProviderConfigState['provider']; label: string; meta: string; placeholder: string }> = [
   {
@@ -1358,6 +1194,10 @@ type SaveState = {
   message: string;
 };
 
+type EditingModelState = {
+  providerId: string;
+} & ({ mode: 'edit'; modelId: string } | { mode: 'create'; model: ProviderModelConfig });
+
 function emptyModelFetchState(): ModelFetchState {
   return { models: [], error: '', fetching: false };
 }
@@ -1366,8 +1206,167 @@ function idleSaveState(): SaveState {
   return { status: 'idle', message: '' };
 }
 
+function AutoSaveStatus({ state }: { state: SaveState }) {
+  const visible = Boolean(state.message);
+  return (
+    <span className={`settings-auto-save-status settings-auto-save-status--${state.status} ${visible ? 'is-visible' : ''}`} aria-live="polite" title={visible ? state.message : undefined}>
+      {state.message}
+    </span>
+  );
+}
+
+function ModelSettingsDialog({ model, onClose, onConfirm }: { model: ProviderModelConfig; onClose: () => void; onConfirm: (model: ProviderModelConfig) => void }) {
+  const [draftModel, setDraftModel] = useState(model);
+  const thinkingEfforts = normalizeThinkingEfforts([...draftModel.thinkingEfforts, draftModel.defaultThinkingEffort]);
+  const customThinkingEffortsText = draftModel.thinkingEnabled ? customThinkingEfforts(thinkingEfforts).join(', ') : '';
+
+  const updateDraft = (updater: (model: ProviderModelConfig) => ProviderModelConfig) => {
+    setDraftModel((current) => updater(current));
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="desktop-agent-modal-backdrop settings-model-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="desktop-agent-modal settings-model-modal" role="dialog" aria-modal="true" aria-label="编辑模型" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="settings-model-modal__header">
+          <div>
+            <strong>{draftModel.name || draftModel.code || '未命名模型'}</strong>
+            <code>{draftModel.code || '未填写模型 ID'}</code>
+          </div>
+          <IconButton label="关闭" onClick={onClose}>
+            <X size={15} />
+          </IconButton>
+        </header>
+        <div className="settings-model-modal__body">
+          <div className="settings-model-modal__grid">
+            <label className="settings-model-field">
+              <span className="settings-model-label">显示名称</span>
+              <TextField
+                autoFocus
+                className="settings-local-control"
+                value={draftModel.name}
+                placeholder="显示名称"
+                onChange={(event) => {
+                  const name = event.target.value;
+                  updateDraft((item) => ({ ...item, name }));
+                }}
+              />
+            </label>
+            <label className="settings-model-field">
+              <span className="settings-model-label">模型 ID</span>
+              <TextField
+                className="settings-local-control settings-model-code-control"
+                value={draftModel.code}
+                placeholder="llama3.1"
+                onChange={(event) => {
+                  const code = event.target.value;
+                  updateDraft((item) => updateModelCode(item, code));
+                }}
+              />
+            </label>
+            <label className="settings-model-field">
+              <span className="settings-model-label">输出</span>
+              <TextField
+                className="settings-local-control settings-model-output-control"
+                type="number"
+                min={1}
+                value={draftModel.maxOutputTokens}
+                onChange={(event) => {
+                  const maxOutputTokens = positiveInt(Number(event.target.value), DEFAULT_MODEL_MAX_OUTPUT_TOKENS);
+                  updateDraft((item) => ({ ...item, maxOutputTokens }));
+                }}
+              />
+            </label>
+          </div>
+          <div className="settings-model-modal__section">
+            <span className="settings-model-label">能力</span>
+            <div className="settings-model-inline-checks">
+              <label className={`sd-check settings-model-check ${draftModel.thinkingEnabled ? 'is-active' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={draftModel.thinkingEnabled}
+                  onChange={(event) => {
+                    const thinkingEnabled = event.currentTarget.checked;
+                    updateDraft((item) => setThinkingEnabled(item, thinkingEnabled));
+                  }}
+                />
+                <Brain size={13} />
+                <span>思考</span>
+              </label>
+              <label className={`sd-check settings-model-check ${draftModel.supportsImages ? 'is-active' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(draftModel.supportsImages)}
+                  onChange={(event) => {
+                    const supportsImages = event.currentTarget.checked;
+                    updateDraft((item) => ({ ...item, supportsImages }));
+                  }}
+                />
+                <ImageIcon size={13} />
+                <span>图片</span>
+              </label>
+            </div>
+          </div>
+          <div className="settings-model-modal__section">
+            <span className="settings-model-label">思考等级</span>
+            <div className="settings-thinking-levels__content">
+              <div className="settings-thinking-presets" aria-label="常用思考等级">
+                {thinkingPresetOptionsForModel().map((effort) => {
+                  const selected = thinkingEfforts.includes(effort);
+                  return (
+                    <button key={effort} className={`settings-thinking-preset ${selected ? 'is-active' : ''}`} type="button" aria-pressed={selected} disabled={!draftModel.thinkingEnabled} onClick={() => updateDraft((item) => toggleThinkingEffort(item, effort))}>
+                      {effort}
+                    </button>
+                  );
+                })}
+              </div>
+              <TextField
+                aria-label="自定义思考等级"
+                className="settings-thinking-input"
+                disabled={!draftModel.thinkingEnabled}
+                placeholder="自定义档位"
+                value={customThinkingEffortsText}
+                onChange={(event) => {
+                  const efforts = event.target.value;
+                  updateDraft((item) => setCustomThinkingEfforts(item, efforts));
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        <footer className="settings-model-modal__footer">
+          <div className="settings-model-modal__footer-actions">
+            <Button type="button" onClick={onClose}>
+              取消
+            </Button>
+            <Button type="button" variant="primary" onClick={() => onConfirm(draftModel)}>
+              确定
+            </Button>
+          </div>
+        </footer>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
 function selectedProviderIdFromConfig(config: RuntimeConfigState): string {
-  return config.providers.find((provider) => provider.id === config.activeProviderId)?.id ?? config.providers[0]?.id ?? '';
+  return selectedProviderIdFromProviders(config.activeProviderId, config.providers);
+}
+
+function selectedProviderIdFromProviders(activeProviderId: string | undefined, providers: ProviderConfigState[]): string {
+  return providers.find((provider) => provider.id === activeProviderId && provider.enabled)?.id ?? providers.find((provider) => provider.enabled)?.id ?? providers[0]?.id ?? '';
+}
+
+function hasProviderModel(providers: ProviderConfigState[], providerId: string, modelId: string): boolean {
+  return providers.some((provider) => provider.id === providerId && provider.models.some((model) => model.id === modelId));
 }
 
 function normalizeSettingsProviders(providers: ProviderConfigState[]): ProviderConfigState[] {
@@ -1388,7 +1387,7 @@ function normalizeProviderModels(models: ProviderModelConfig[]): ProviderModelCo
 
 function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = false): ProviderModelConfig {
   const code = model.code?.trim() ?? '';
-  const thinkingEfforts = normalizeThinkingEfforts(model.thinkingEfforts);
+  const thinkingEfforts = normalizeThinkingEfforts([...model.thinkingEfforts, model.defaultThinkingEffort]);
   return {
     ...model,
     id: model.id || modelIdFromCode(code),
@@ -1477,23 +1476,21 @@ function mergeFetchedModels(previousModels: ProviderModelConfig[], fetchedModels
   const merged = fetchedModels.map((model) => {
     const previous = previousByCode.get(model.id) ?? previousByName.get(model.name);
     const code = model.id.trim();
-    const thinkingEfforts = normalizeThinkingEfforts([
-      ...(previous?.thinkingEfforts ?? []),
-      ...(model.thinkingEfforts ?? []),
-      previous?.defaultThinkingEffort,
-      model.defaultThinkingEffort,
-    ]);
+    const thinkingEfforts = normalizeThinkingEfforts([...(previous?.thinkingEfforts ?? []), ...(model.thinkingEfforts ?? []), previous?.defaultThinkingEffort, model.defaultThinkingEffort]);
     const defaultThinkingEffort = nonEmptyString(previous?.defaultThinkingEffort) ?? nonEmptyString(model.defaultThinkingEffort);
-    return normalizeProviderModel({
-      ...defaultProviderModel(code, code === activeCode),
-      id: previous?.id || modelIdFromCode(code),
-      name: model.name?.trim() || code,
-      maxOutputTokens: previous?.maxOutputTokens ?? model.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
-      thinkingEnabled: Boolean(previous?.thinkingEnabled || model.thinkingEnabled || thinkingEfforts.length || defaultThinkingEffort),
-      thinkingEfforts,
-      defaultThinkingEffort,
-      supportsImages: Boolean(previous?.supportsImages || model.supportsImages),
-    }, code === activeCode);
+    return normalizeProviderModel(
+      {
+        ...defaultProviderModel(code, code === activeCode),
+        id: previous?.id || modelIdFromCode(code),
+        name: model.name?.trim() || code,
+        maxOutputTokens: previous?.maxOutputTokens ?? model.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+        thinkingEnabled: Boolean(previous?.thinkingEnabled || model.thinkingEnabled || thinkingEfforts.length || defaultThinkingEffort),
+        thinkingEfforts,
+        defaultThinkingEffort,
+        supportsImages: Boolean(previous?.supportsImages || model.supportsImages),
+      },
+      code === activeCode
+    );
   });
   return normalizeProviderModels(merged);
 }
@@ -1508,24 +1505,35 @@ function updateModelCode(model: ProviderModelConfig, code: string): ProviderMode
 }
 
 function setThinkingEnabled(model: ProviderModelConfig, thinkingEnabled: boolean): ProviderModelConfig {
-  const thinkingEfforts = normalizeThinkingEfforts(model.thinkingEfforts);
+  const thinkingEfforts = normalizeThinkingEfforts([...model.thinkingEfforts, model.defaultThinkingEffort]);
   return {
     ...model,
     thinkingEnabled,
     thinkingEfforts,
-    defaultThinkingEffort: normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }),
+    defaultThinkingEffort: thinkingEnabled ? normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }) : undefined,
   };
 }
 
-function setDefaultThinkingEffort(model: ProviderModelConfig, effort: string): ProviderModelConfig {
-  const defaultThinkingEffort = nonEmptyString(effort);
-  const thinkingEfforts = defaultThinkingEffort ? [defaultThinkingEffort] : [];
+function setThinkingEfforts(model: ProviderModelConfig, efforts: unknown): ProviderModelConfig {
+  const thinkingEfforts = normalizeThinkingEfforts(efforts);
   return {
     ...model,
     thinkingEfforts,
-    thinkingEnabled: model.thinkingEnabled,
-    defaultThinkingEffort,
+    defaultThinkingEffort: model.thinkingEnabled ? normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }) : undefined,
   };
+}
+
+function setCustomThinkingEfforts(model: ProviderModelConfig, customEfforts: unknown): ProviderModelConfig {
+  const presetEfforts = normalizeThinkingEfforts([...model.thinkingEfforts, model.defaultThinkingEffort]).filter(isReasoningEffort);
+  return setThinkingEfforts(model, [...presetEfforts, ...normalizeThinkingEfforts(customEfforts)]);
+}
+
+function toggleThinkingEffort(model: ProviderModelConfig, effort: string): ProviderModelConfig {
+  const normalizedEffort = nonEmptyString(effort);
+  if (!normalizedEffort) return model;
+  const currentEfforts = normalizeThinkingEfforts([...model.thinkingEfforts, model.defaultThinkingEffort]);
+  const nextEfforts = currentEfforts.includes(normalizedEffort) ? currentEfforts.filter((item) => item !== normalizedEffort) : [...currentEfforts, normalizedEffort];
+  return setThinkingEfforts(model, nextEfforts);
 }
 
 function normalizedDefaultThinkingEffort(model: ProviderModelConfig): string | undefined {
@@ -1534,15 +1542,14 @@ function normalizedDefaultThinkingEffort(model: ProviderModelConfig): string | u
 }
 
 function normalizeDefaultThinkingEffort(model: Pick<ProviderModelConfig, 'defaultThinkingEffort' | 'thinkingEfforts'>): string | undefined {
-  return nonEmptyString(model.defaultThinkingEffort);
+  const thinkingEfforts = normalizeThinkingEfforts(model.thinkingEfforts);
+  const defaultThinkingEffort = nonEmptyString(model.defaultThinkingEffort);
+  if (defaultThinkingEffort && thinkingEfforts.includes(defaultThinkingEffort)) return defaultThinkingEffort;
+  return thinkingEfforts[0];
 }
 
 function normalizeThinkingEfforts(value: unknown): string[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(/[,，\s]+/)
-      : [];
+  const rawValues = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,，\s]+/) : [];
   const seen = new Set<string>();
   const efforts: string[] = [];
   for (const rawValue of rawValues) {
@@ -1554,8 +1561,16 @@ function normalizeThinkingEfforts(value: unknown): string[] {
   return efforts;
 }
 
-function mergeThinkingPresetOptions(efforts: string[]): string[] {
-  return normalizeThinkingEfforts([...REASONING_EFFORTS, ...efforts]);
+function thinkingPresetOptionsForModel(): string[] {
+  return normalizeThinkingEfforts(REASONING_EFFORTS);
+}
+
+function customThinkingEfforts(efforts: string[]): string[] {
+  return normalizeThinkingEfforts(efforts).filter((effort) => !isReasoningEffort(effort));
+}
+
+function isReasoningEffort(effort: string): boolean {
+  return (REASONING_EFFORTS as readonly string[]).includes(effort);
 }
 
 function nonEmptyString(value: unknown): string | undefined {

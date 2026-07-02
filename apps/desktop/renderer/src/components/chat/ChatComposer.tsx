@@ -646,13 +646,13 @@ function createTextSlot(value: string): SlotConfigType {
 }
 
 function activeModelName(config: RuntimeConfigState | null): string | null {
-  const provider = config?.providers.find((item) => item.id === config.activeProviderId) ?? config?.providers[0];
+  const provider = activeProviderFromConfig(config);
   const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
   return model?.name ?? null;
 }
 
 function activeModelSupportsImages(config: RuntimeConfigState | null): boolean {
-  const provider = config?.providers.find((item) => item.id === config.activeProviderId) ?? config?.providers[0];
+  const provider = activeProviderFromConfig(config);
   const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
   return Boolean(model?.supportsImages);
 }
@@ -663,7 +663,7 @@ function isPlainEnter(event: ReactKeyboardEvent): boolean {
 }
 
 function activeModelThinkingConfig(config: RuntimeConfigState | null): ActiveThinkingConfig {
-  const provider = config?.providers.find((item) => item.id === config.activeProviderId) ?? config?.providers[0];
+  const provider = activeProviderFromConfig(config);
   const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
   const efforts = normalizeThinkingEfforts(model?.thinkingEfforts);
   const defaultEffort = typeof model?.defaultThinkingEffort === 'string' && efforts.includes(model.defaultThinkingEffort.trim())
@@ -674,6 +674,13 @@ function activeModelThinkingConfig(config: RuntimeConfigState | null): ActiveThi
     efforts,
     defaultEffort,
   };
+}
+
+function activeProviderFromConfig(config: RuntimeConfigState | null): RuntimeConfigState['providers'][number] | undefined {
+  if (!config) return undefined;
+  return config.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
+    ?? config.providers.find((provider) => provider.enabled)
+    ?? config.providers[0];
 }
 
 function normalizeThinkingEfforts(value: unknown): string[] {

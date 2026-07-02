@@ -77,11 +77,11 @@ export function AppRouteContent({
 
   if (activeView === 'settings') {
     return (
-      <SettingsPage
-        config={runtime.config}
-        updater={updater}
-        usage={runtime.usage}
-        memoryPreview={runtime.memoryPreview}
+        <SettingsPage
+          config={runtime.config}
+          updater={updater}
+          usage={runtime.usage}
+          memoryPreview={runtime.memoryPreview}
         memoryPreviewLoading={runtime.memoryPreviewLoading}
         onBack={() => setActiveView('chat')}
         onFetchProviderModels={runtime.fetchProviderModels}
