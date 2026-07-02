@@ -105,6 +105,7 @@ const windowControls = {
   toggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window-control:toggle-maximize'),
   close: (): Promise<boolean> => ipcRenderer.invoke('window-control:close'),
   isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window-control:is-maximized'),
+  setTitlebarScale: (scale: number): Promise<boolean> => ipcRenderer.invoke('window-control:set-titlebar-scale', { scale }),
 };
 
 const links = {

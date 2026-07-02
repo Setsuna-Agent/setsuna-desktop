@@ -22,6 +22,9 @@ import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
 const mainWindowMinWidth = 880;
+const macTrafficLightX = 16;
+const macTrafficLightSize = 14;
+const appTopbarHeight = 42;
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
@@ -50,7 +53,7 @@ async function createWindow(): Promise<void> {
     title: 'Setsuna Desktop',
     frame: !usesCustomFrame,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
-    trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 14 } : undefined,
+    trafficLightPosition: process.platform === 'darwin' ? getMacTrafficLightPosition(1) : undefined,
     autoHideMenuBar: usesCustomFrame,
     backgroundColor: '#ffffff',
     icon: desktopIcon,
@@ -112,6 +115,14 @@ function resolveDesktopIconPath(): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+function getMacTrafficLightPosition(pageScale: number): { x: number; y: number } {
+  const normalizedScale = Number.isFinite(pageScale) ? Math.min(Math.max(pageScale, 0.8), 1.2) : 1;
+  return {
+    x: macTrafficLightX,
+    y: Math.round((appTopbarHeight * normalizedScale - macTrafficLightSize) / 2),
+  };
+}
+
 function registerRuntimeIpc(host: RuntimeHost): void {
   ipcMain.removeHandler('runtime:request');
   ipcMain.removeHandler('runtime:subscribe');
@@ -142,6 +153,7 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('window-control:toggle-maximize');
   ipcMain.removeHandler('window-control:close');
   ipcMain.removeHandler('window-control:is-maximized');
+  ipcMain.removeHandler('window-control:set-titlebar-scale');
   ipcMain.removeHandler('desktop-review:get-state');
   ipcMain.removeHandler('desktop-review:discard-unstaged');
   ipcMain.removeHandler('desktop-review:stage-files');
@@ -207,6 +219,13 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
     return true;
   });
   ipcMain.handle('window-control:is-maximized', (event) => Boolean(BrowserWindow.fromWebContents(event.sender)?.isMaximized()));
+  ipcMain.handle('window-control:set-titlebar-scale', (event, input) => {
+    if (process.platform !== 'darwin') return false;
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return false;
+    window.setWindowButtonPosition(getMacTrafficLightPosition(Number(input?.scale ?? 1)));
+    return true;
+  });
   ipcMain.handle('desktop-review:get-state', async (_event, input) =>
     getDesktopReviewState(String(input?.workspaceRoot ?? ''), { baseRef: typeof input?.baseRef === 'string' ? input.baseRef : null }),
   );

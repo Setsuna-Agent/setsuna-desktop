@@ -314,6 +314,15 @@ function applyAppearance(fontSize: FontSizeMode, fontFamily: FontFamilyMode): vo
   document.documentElement.dataset.fontFamily = fontFamily;
   document.documentElement.style.removeProperty('--app-font-size');
   document.documentElement.style.setProperty('--app-font-family', font.css);
+  syncNativeTitlebarScale(Number(fontSize) / 100);
+}
+
+function syncNativeTitlebarScale(pageScale: number): void {
+  if (typeof window === 'undefined') return;
+  const bridge = window.setsunaDesktop;
+  if (!bridge || bridge.desktop.platform !== 'darwin') return;
+  // Native macOS traffic lights do not participate in CSS zoom, so main keeps them aligned with the scaled titlebar.
+  void bridge.windowControls.setTitlebarScale(pageScale).catch(() => undefined);
 }
 
 export function getFontPlatform(): FontPlatform {

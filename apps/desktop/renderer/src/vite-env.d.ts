@@ -179,6 +179,7 @@ declare global {
         toggleMaximize(): Promise<boolean>;
         close(): Promise<boolean>;
         isMaximized(): Promise<boolean>;
+        setTitlebarScale(scale: number): Promise<boolean>;
       };
       workspaceApps: {
         list(workspaceRoot: string): Promise<DesktopWorkspaceApp[]>;
