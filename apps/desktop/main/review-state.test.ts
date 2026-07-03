@@ -15,6 +15,8 @@ import {
 } from './review-state.js';
 
 const execFileAsync = promisify(execFile);
+// These tests spawn real git processes, so CI runners can exceed Vitest's 5s default.
+const GIT_INTEGRATION_TEST_TIMEOUT_MS = 50_000;
 
 describe('desktop review state actions', () => {
   it('prefers the matching master base ref for a master worktree', async () => {
@@ -32,7 +34,7 @@ describe('desktop review state actions', () => {
     expect(state.baseRefs).toContain('origin/master');
     expect(state.baseRefs).not.toContain('origin');
     expect(state.baseRefs).not.toContain('origin/HEAD');
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('prefers the current branch upstream before default main refs', async () => {
     const repo = await mkGitRepo();
@@ -56,7 +58,7 @@ describe('desktop review state actions', () => {
     expect(state.baseRef).toBe('origin/feature/review');
     expect(state.currentRemoteSummary?.files.map((file) => file.path).sort()).toEqual(['scratch.txt', 'tracked.txt']);
     expect(branchPaths).toEqual(['scratch.txt', 'tracked.txt']);
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('summarizes branch changes from merge base through local worktree changes', async () => {
     const repo = await mkGitRepo();
@@ -86,7 +88,7 @@ describe('desktop review state actions', () => {
     expect(branchPaths).toEqual(['scratch.txt', 'staged.txt', 'tracked.txt']);
     expect(state.stagedSummary?.files.map((file) => file.path)).toEqual(['staged.txt']);
     expect(state.unstagedSummary?.files.map((file) => file.path).sort()).toEqual(['scratch.txt', 'tracked.txt']);
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('summarizes separated diff hunks with an omitted-lines gap', async () => {
     const repo = await mkGitRepo();
@@ -106,7 +108,7 @@ describe('desktop review state actions', () => {
 
     expect(file?.lines.some((line) => line.type === 'gap' && line.content.includes('unmodified lines'))).toBe(true);
     expect(file?.lines.some((line) => line.content.startsWith('@@'))).toBe(false);
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('creates a branch and commits included unstaged changes', async () => {
     const repo = await mkGitRepo();
@@ -133,7 +135,7 @@ describe('desktop review state actions', () => {
     expect(committed.state.unstagedSummary?.files).toEqual([]);
     await expect(git(repo, ['log', '-1', '--pretty=%s'])).resolves.toBe('feat: add commit controls');
     await expect(git(repo, ['status', '--short'])).resolves.toBe('');
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('rejects commit messages that only contain invisible text', async () => {
     const repo = await mkGitRepo();
@@ -143,7 +145,7 @@ describe('desktop review state actions', () => {
       includeUnstaged: true,
       message: '\u200B\u2060',
     })).rejects.toThrow('提交信息不能为空');
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('requires unstaged changes to be handled before creating and checking out a branch', async () => {
     const repo = await mkGitRepo();
@@ -163,7 +165,7 @@ describe('desktop review state actions', () => {
     await writeFile(path.join(untrackedRepo, 'scratch.txt'), 'scratch\n');
 
     await expect(createAndCheckoutReviewBranch(untrackedRepo, 'feature/untracked-blocked')).rejects.toThrow('未暂存更改');
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('stages, unstages, and discards local git changes', async () => {
     const repo = await mkGitRepo();
@@ -185,7 +187,7 @@ describe('desktop review state actions', () => {
     expect(discarded.state.unstagedSummary?.files).toEqual([]);
     await expect(readFile(trackedPath, 'utf8')).resolves.toBe('initial\n');
     await expect(readFile(untrackedPath, 'utf8')).rejects.toThrow();
-  });
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 });
 
 async function mkGitRepo(): Promise<string> {
