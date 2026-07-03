@@ -1,5 +1,5 @@
 import type { RuntimeApprovalDecision, RuntimeApprovalRequest } from './approvals.js';
-import type { RuntimeGitInfo, RuntimeMessage, RuntimeThreadGoal } from './threads.js';
+import type { RuntimeGitInfo, RuntimeMessage, RuntimeThreadGoal, RuntimeThreadMemoryMode } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 
 export type RuntimeEventType =
@@ -7,6 +7,7 @@ export type RuntimeEventType =
   | 'thread.updated'
   | 'thread.deleted'
   | 'thread.metadata_updated'
+  | 'thread.memory_mode_updated'
   | 'thread.goal_updated'
   | 'thread.goal_cleared'
   | 'thread.context_cleared'
@@ -43,6 +44,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'thread.updated', { title?: string; archived?: boolean }>
   | RuntimeEventBase<'thread.deleted', Record<string, never>>
   | RuntimeEventBase<'thread.metadata_updated', { gitInfo: RuntimeGitInfo | null }>
+  | RuntimeEventBase<'thread.memory_mode_updated', { mode: RuntimeThreadMemoryMode; reason?: string }>
   | RuntimeEventBase<'thread.goal_updated', { goal: RuntimeThreadGoal }>
   | RuntimeEventBase<'thread.goal_cleared', { cleared: boolean }>
   | RuntimeEventBase<'thread.context_cleared', { clearedMessageCount: number }>
@@ -61,7 +63,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'message.created', { message: RuntimeMessage }>
   | RuntimeEventBase<'message.delta', { messageId: string; text: string }>
   | RuntimeEventBase<'message.updated', { messageId: string; content: string }>
-  | RuntimeEventBase<'message.completed', { messageId: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls'] }>
+  | RuntimeEventBase<'message.completed', { messageId: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls']; memoryCitation?: RuntimeMessage['memoryCitation'] }>
   | RuntimeEventBase<'messages.deleted', { messageIds: string[] }>
   | RuntimeEventBase<'messages.truncated', { messageId: string; includeSelf?: boolean; removedMessageIds: string[] }>
   | RuntimeEventBase<'tool.started', { toolCallId: string; toolName: string; argumentsPreview: string; resultPreview?: string; source?: 'agent' | 'userShell' }>

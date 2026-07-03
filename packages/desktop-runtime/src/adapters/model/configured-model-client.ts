@@ -18,17 +18,19 @@ export class ConfiguredModelClient implements ModelClient {
 
   async *stream(request: ModelRequest) {
     const provider = await this.configStore.getActiveProviderConfig();
-    if (!shouldUseConfiguredProvider(provider)) {
+    const requestProvider = provider ? providerForRequestModel(provider, request.model) : null;
+    if (!shouldUseConfiguredProvider(requestProvider)) {
       yield* this.fallback.stream(request);
       return;
     }
 
-    const client = providerModelClient(provider, this.fetchImpl);
+    const requestModel = requestProvider.activeModel?.code || request.model;
+    const client = providerModelClient(requestProvider, this.fetchImpl);
     yield* client.stream({
       ...request,
-      model: provider.activeModel?.code || request.model,
-      maxOutputTokens: request.maxOutputTokens ?? provider.activeModel?.maxOutputTokens,
-      ...thinkingRequestDefaults(provider, request),
+      model: requestModel,
+      maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
+      ...thinkingRequestDefaults(requestProvider, { ...request, model: requestModel }),
     });
   }
 }
@@ -36,6 +38,14 @@ export class ConfiguredModelClient implements ModelClient {
 function shouldUseConfiguredProvider(provider: RuntimeProviderConfig | null): provider is RuntimeProviderConfig {
   if (!provider?.enabled || !provider.activeModel?.code) return false;
   return Boolean(provider.apiKey || provider.activeModel.code !== 'local-runtime-smoke');
+}
+
+function providerForRequestModel(provider: RuntimeProviderConfig, requestedModel: string): RuntimeProviderConfig {
+  const modelCode = requestedModel.trim();
+  if (!modelCode) return provider;
+  const model = provider.models.find((item) => item.code === modelCode);
+  if (!model || model.id === provider.activeModel?.id) return provider;
+  return { ...provider, activeModel: model };
 }
 
 function providerModelClient(provider: RuntimeProviderConfig, fetchImpl: FetchImpl): ModelClient {

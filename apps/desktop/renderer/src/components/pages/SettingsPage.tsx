@@ -10,7 +10,7 @@ import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../h
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 
 type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'runtime' | 'about';
-type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>;
+type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>;
 
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
   { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
@@ -49,6 +49,13 @@ const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsun
   { value: 'developer', label: '开发', icon: <Cpu size={14} /> },
   { value: 'daily', label: '日常', icon: <Sun size={14} /> },
 ];
+
+type MemorySettingToggleProps = {
+  checked: boolean;
+  description: string;
+  label: string;
+  onChange: (checked: boolean) => void;
+};
 
 export function SettingsPage({
   config,
@@ -147,6 +154,22 @@ function SettingsChoiceGroup<TValue extends string>({ ariaLabel, options, value,
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function MemorySettingToggle({ checked, description, label, onChange }: MemorySettingToggleProps) {
+  return (
+    <div className="chat-user-settings__row chat-user-settings__local-enable-row chat-user-settings__memory-toggle-row">
+      <span className="chat-user-settings__row-label chat-user-settings__memory-toggle-label">
+        <span className="chat-user-settings__memory-toggle-copy">
+          <span>{label}</span>
+          <small>{description}</small>
+        </span>
+      </span>
+      <label className="sd-check" title={label}>
+        <input aria-label={label} type="checkbox" checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />
+      </label>
     </div>
   );
 }
@@ -644,16 +667,11 @@ function PersonalizationSettings({
         </div>
         {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
-          <div className="chat-user-settings__row chat-user-settings__local-enable-row">
-            <span className="chat-user-settings__row-label">
-              <Database size={14} />
-              <span>启用记忆</span>
-            </span>
-            <label className="sd-check">
-              <input type="checkbox" checked={config.memoryEnabled} onChange={(event) => void onSavePreferences({ memoryEnabled: event.currentTarget.checked })} />
-              <span>开启</span>
-            </label>
-          </div>
+          <MemorySettingToggle checked={config.memory.useMemories} description="允许对话开始时读取本地记忆，并把相关偏好、项目规则和历史经验放进模型上下文。" label="使用记忆" onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
+          <MemorySettingToggle checked={config.memory.generateMemories} description="允许运行时在对话结束后提炼新的长期记忆；关闭后只会读取已有记忆，不再自动新增。" label="生成记忆" onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
+          <MemoryExtractModelField config={config} onSavePreferences={onSavePreferences} />
+          <MemorySettingToggle checked={config.memory.disableOnExternalContext} description="当本轮内容包含网页、MCP、外部工具等临时资料时，禁止把这类上下文沉淀成长期记忆。" label="外部上下文禁写" onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
+          <MemorySettingToggle checked={config.memory.dedicatedTools} description="把读取、搜索和写入记忆的专用工具暴露给模型；适合需要模型主动管理记忆时开启。" label="专用记忆工具" onChange={(checked) => void onSavePreferences({ memory: { dedicatedTools: checked } })} />
           <div className="chat-user-settings__row chat-user-settings__local-field">
             <span className="chat-user-settings__row-label">
               <FolderOpen size={14} />
@@ -689,6 +707,45 @@ function PersonalizationSettings({
         </div>
       </div>
     </div>
+  );
+}
+
+function MemoryExtractModelField({ config, onSavePreferences }: { config: RuntimeConfigState; onSavePreferences: (input: RuntimePreferenceInput) => Promise<void> }) {
+  if (!config.memory.generateMemories) return null;
+
+  const options = memoryExtractModelOptions(config);
+  const value = config.memory.extractModel?.trim() ?? '';
+  const currentOptionExists = !value || options.some((option) => option.value === value);
+
+  return (
+    <label className="chat-user-settings__row chat-user-settings__memory-model-row">
+      <span className="chat-user-settings__row-label chat-user-settings__memory-model-label">
+        <span className="chat-user-settings__memory-toggle-copy">
+          <span>提取模型</span>
+          <small>用于对话后的记忆提炼，不影响当前回答；留空跟随当前模型。</small>
+        </span>
+      </span>
+      <SelectField
+        className="settings-local-control chat-user-settings__memory-model-select"
+        value={value}
+        onChange={(event) => {
+          const extractModel = event.currentTarget.value.trim() || undefined;
+          void onSavePreferences({ memory: { extractModel } });
+        }}
+      >
+        <option value="">跟随当前对话模型</option>
+        {!currentOptionExists ? (
+          <option value={value} disabled>
+            {`${value}（当前厂商未配置）`}
+          </option>
+        ) : null}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </SelectField>
+    </label>
   );
 }
 
@@ -1359,6 +1416,27 @@ function ModelSettingsDialog({ model, onClose, onConfirm }: { model: ProviderMod
 
 function selectedProviderIdFromConfig(config: RuntimeConfigState): string {
   return selectedProviderIdFromProviders(config.activeProviderId, config.providers);
+}
+
+function activeSettingsProvider(config: RuntimeConfigState): ProviderConfigState | undefined {
+  const providerId = selectedProviderIdFromConfig(config);
+  return config.providers.find((provider) => provider.id === providerId);
+}
+
+function memoryExtractModelOptions(config: RuntimeConfigState): Array<{ value: string; label: string }> {
+  const provider = activeSettingsProvider(config);
+  if (!provider?.enabled) return [];
+  const seen = new Set<string>();
+  return provider.models.reduce<Array<{ value: string; label: string }>>((options, model) => {
+    const code = model.code.trim();
+    if (!code || seen.has(code)) return options;
+    seen.add(code);
+    options.push({
+      value: code,
+      label: model.name && model.name !== code ? `${model.name} (${code})` : code,
+    });
+    return options;
+  }, []);
 }
 
 function selectedProviderIdFromProviders(activeProviderId: string | undefined, providers: ProviderConfigState[]): string {

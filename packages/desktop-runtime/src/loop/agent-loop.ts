@@ -1,4 +1,4 @@
-import type { ModelRequest, RuntimeApprovalDecision, RuntimeConfigState, RuntimeMemoryScope, RuntimeMessage, RuntimeThread, RuntimeToolCall, RuntimeToolCallDelta, RuntimeToolDefinition, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
+import type { ModelRequest, RuntimeApprovalDecision, RuntimeConfigState, RuntimeMemoryCitation, RuntimeMemoryKind, RuntimeMemoryRecord, RuntimeMemoryScope, RuntimeMemorySourceLocation, RuntimeMemoryStage1Status, RuntimeMessage, RuntimeThread, RuntimeThreadSummary, RuntimeToolCall, RuntimeToolCallDelta, RuntimeToolDefinition, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
@@ -8,9 +8,11 @@ import type { MemoryStore } from '../ports/memory-store.js';
 import type { ModelClient } from '../ports/model-client.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
-import type { ToolExecutionContext, ToolHost, ToolOutputDelta } from '../ports/tool-host.js';
+import type { ToolExecutionContext, ToolExecutionResult, ToolHost, ToolOutputDelta } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import { CONTEXT_COMPACTION_MAX_TOKENS_K, createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction, type RuntimeContextCompactionCandidate, runtimeContextTokenUsageForMessages } from './context-compaction.js';
+import { runMemoryConsolidationAgent } from './memory-consolidation-agent.js';
+import { MemoryCitationStreamParser, parseMemoryCitationBodies } from './memory-citation.js';
 
 export type AgentLoopOptions = {
   threadStore: ThreadStore;
@@ -36,11 +38,25 @@ const MAX_INSPECTION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_FILE_MUTATION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE = 8;
 // 单轮模型响应里最多先执行一批查看类工具，避免模型一次性长链路查看导致界面无文字反馈。
-const MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND = 20;
+const MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND = MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE;
 const INSPECTION_PROGRESS_NOTE = '我先查看项目结构和第一批关键文件，读完后再继续收敛。\n\n';
 const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
 const PASSIVE_MEMORY_MAX_ITEMS = 5;
 const PASSIVE_MEMORY_MAX_OUTPUT_TOKENS = 900;
+const PASSIVE_MEMORY_STAGE1_RAW_MAX_CHARS = 60_000;
+const PASSIVE_MEMORY_STAGE1_SUMMARY_MAX_CHARS = 4_000;
+const PASSIVE_MEMORY_STAGE1_SLUG_MAX_CHARS = 80;
+const MEMORY_SUMMARY_PROMPT_MAX_CHARS = 12000;
+const DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP = 2;
+const DEFAULT_MEMORIES_MAX_ROLLOUT_AGE_DAYS = 10;
+const DEFAULT_MEMORIES_MIN_ROLLOUT_IDLE_HOURS = 6;
+const MAX_MEMORIES_MAX_ROLLOUTS_PER_STARTUP = 128;
+const MAX_MEMORIES_MAX_ROLLOUT_AGE_DAYS = 90;
+const MAX_MEMORIES_MIN_ROLLOUT_IDLE_HOURS = 48;
+const MEMORY_PHASE2_JOB_LEASE_SECONDS = 3_600;
+const MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS = 3_600;
+const HOURS_TO_MS = 60 * 60 * 1000;
+const DAYS_TO_MS = 24 * HOURS_TO_MS;
 const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
 const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
@@ -49,6 +65,17 @@ const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_f
 const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
+type PassiveMemoryStage1Result = {
+  status: RuntimeMemoryStage1Status;
+  rawMemory?: string;
+  rolloutSummary?: string;
+  rolloutSlug?: string;
+  failureReason?: string;
+};
+type PassiveMemoryExtraction = {
+  candidates: PassiveMemoryCandidate[];
+  stage1: PassiveMemoryStage1Result | null;
+};
 type RuntimeToolCallDeltaLike = Pick<RuntimeToolCallDelta, 'id' | 'name' | 'argumentsDelta'>;
 type ToolBudget = {
   readFileCallCount: number;
@@ -62,6 +89,7 @@ type ToolBudgetBlock = {
 type PassiveMemoryCandidate = {
   content: string;
   scope: RuntimeMemoryScope;
+  kind?: RuntimeMemoryKind;
   title?: string;
   tags?: string[];
 };
@@ -102,6 +130,56 @@ export class AgentLoop {
   private readonly activeTurnByThread = new Map<string, ActiveTurnState>();
 
   constructor(private readonly options: AgentLoopOptions) {}
+
+  /**
+   * 启动时回扫近期 idle 线程，补抽历史对话的长期记忆候选。
+   * 这是本地 runtime 对 Codex memory startup phase-1 的轻量对应：负责候选选择和提取，
+   * 真正的全局 stage1/phase2 状态机仍由后续 storage/consolidation 层承接。
+   */
+  async runMemoryStartupExtraction(): Promise<{ claimed: number; extracted: number }> {
+    if (!this.options.memoryStore) return { claimed: 0, extracted: 0 };
+    const config = await this.options.configStore?.getConfig().catch(() => null);
+    if (!canGenerateMemories(config)) return { claimed: 0, extracted: 0 };
+
+    const now = this.options.clock.now();
+    const summaries = await this.options.threadStore.listThreads({ includeArchived: true });
+    const existing = await this.options.memoryStore.listMemories({ limit: 500 }).catch(() => ({ memories: [] }));
+    const existingStage1 = await this.options.memoryStore.listStage1Outputs().catch(() => ({ outputs: [] }));
+    const extractedKeys = new Set(existing.memories.map((memory) => memorySourceKey(memory.sourceThreadId, memory.sourceTurnId)).filter(Boolean));
+    for (const output of existingStage1.outputs) {
+      if (output.status === 'failed') continue;
+      const key = memorySourceKey(output.threadId, output.turnId);
+      if (key) extractedKeys.add(key);
+    }
+    const candidates = summaries
+      .filter((summary) => memoryStartupThreadEligible(summary, config, now))
+      .slice(0, memoryMaxRolloutsPerStartup(config));
+
+    let claimed = 0;
+    let extracted = 0;
+    for (const summary of candidates) {
+      const thread = await this.options.threadStore.getThread(summary.id);
+      if (!thread || !threadAllowsMemoryGeneration(thread)) continue;
+      const messages = startupMemorySourceMessages(thread.messages);
+      if (!messages.length) continue;
+      const sourceTurnId = startupMemorySourceTurnId(messages);
+      const key = memorySourceKey(thread.id, sourceTurnId);
+      if (key && extractedKeys.has(key)) continue;
+      claimed += 1;
+      const saved = await this.extractPassiveMemoriesFromMessages({
+        config,
+        sourceLabel: '历史线程内容：',
+        sourceTurnId,
+        thread,
+        messages,
+      }).catch(() => 0);
+      if (saved > 0) {
+        extracted += 1;
+        if (key) extractedKeys.add(key);
+      }
+    }
+    return { claimed, extracted };
+  }
 
   /**
    * 启动一轮异步对话，立即返回 turnId，实际执行在后台继续。
@@ -573,13 +651,8 @@ export class AgentLoop {
         let toolCalls: RuntimeToolCall[] = [];
         const partialToolCalls = new Map<string, RuntimeToolCall>();
         const announcedToolPreviews = new Map<string, string>();
-        let roundText = '';
+        const roundOutput = createAssistantOutputAccumulator((delta) => this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta));
         let reasoningOpen = false;
-        const appendRoundText = async (delta: string) => {
-          if (!delta) return;
-          roundText += delta;
-          await this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
-        };
         // reasoning_delta 统一包进 <think>，renderer 后续只需要解析一种思考标记。
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
@@ -591,15 +664,15 @@ export class AgentLoop {
         })) {
           throwIfAborted(signal);
           if (item.type === 'reasoning_delta') {
-            await appendRoundText(`${reasoningOpen ? '' : '<think>'}${item.text}`);
+            await roundOutput.append(`${reasoningOpen ? '' : '<think>'}${item.text}`);
             reasoningOpen = true;
           }
           if (item.type === 'text_delta') {
             if (reasoningOpen) {
-              await appendRoundText('</think>');
+              await roundOutput.append('</think>');
               reasoningOpen = false;
             }
-            await appendRoundText(item.text);
+            await roundOutput.append(item.text);
           }
           if (item.type === 'tool_call_delta') {
             await this.publishToolCallDeltaPreview({
@@ -615,25 +688,29 @@ export class AgentLoop {
           if (item.type === 'usage') usage = item.usage;
         }
         if (reasoningOpen) {
-          await appendRoundText('</think>');
+          await roundOutput.append('</think>');
           reasoningOpen = false;
         }
+        const roundMemoryCitation = await roundOutput.finish();
+        let roundText = roundOutput.text();
 
         if (toolCalls.length) {
           throwIfAborted(signal);
           if (shouldPublishInspectionProgressNote(roundText, toolCalls)) {
-            await appendRoundText(INSPECTION_PROGRESS_NOTE);
+            roundText += INSPECTION_PROGRESS_NOTE;
+            await this.publishAssistantDelta(threadId, turnId, assistantMessageId, INSPECTION_PROGRESS_NOTE);
           }
           // 先把 toolCalls 挂到 assistant 消息上，再执行工具，UI 才能把后续 toolRuns 归到正确气泡。
-          await this.completeMessage(threadId, turnId, assistantMessageId, { toolCalls });
+          await this.completeMessage(threadId, turnId, assistantMessageId, { toolCalls, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
           modelMessages.push({
             ...assistantMessage,
             content: roundText,
+            memoryCitation: roundMemoryCitation,
             toolCalls,
             status: 'complete',
           });
-          const toolMessages = await this.runToolCalls(toolCalls, toolContext, toolBudget, runtimeConfig?.approvalPolicy ?? 'on-request', new Set(announcedToolPreviews.keys()));
+          const toolMessages = await this.runToolCalls(toolCalls, toolContext, toolBudget, runtimeConfig?.approvalPolicy ?? 'on-request', runtimeConfig, new Set(announcedToolPreviews.keys()));
           if (toolMessages.some(isSuccessfulRememberMemoryMessage)) memorySavedByTool = true;
           modelMessages.push(...toolMessages);
           continue;
@@ -641,11 +718,12 @@ export class AgentLoop {
 
         const pendingSteers = await this.drainPendingSteers(threadId, turnId);
         if (pendingSteers.length) {
-          await this.completeMessage(threadId, turnId, assistantMessageId, { usage });
+          await this.completeMessage(threadId, turnId, assistantMessageId, { usage, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
           modelMessages.push({
             ...assistantMessage,
             content: roundText,
+            memoryCitation: roundMemoryCitation,
             status: 'complete',
           });
           appendSteerMessagesToModel(pendingSteers);
@@ -661,6 +739,7 @@ export class AgentLoop {
             projectId: thread.projectId,
             userContent: explicitMemoryUserContent,
           },
+          memoryCitation: roundMemoryCitation,
           review: options.review ? roundText : undefined,
         });
         activeAssistantMessageId = null;
@@ -684,13 +763,8 @@ export class AgentLoop {
           status: 'streaming',
         });
 
-        let finalText = '';
+        const finalOutput = createAssistantOutputAccumulator((delta) => this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta));
         let finalReasoningOpen = false;
-        const appendFinalText = async (delta: string) => {
-          if (!delta) return;
-          finalText += delta;
-          await this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
-        };
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
           messages: modelRequestMessages(modelMessages),
@@ -700,22 +774,24 @@ export class AgentLoop {
         })) {
           throwIfAborted(signal);
           if (item.type === 'reasoning_delta') {
-            await appendFinalText(`${finalReasoningOpen ? '' : '<think>'}${item.text}`);
+            await finalOutput.append(`${finalReasoningOpen ? '' : '<think>'}${item.text}`);
             finalReasoningOpen = true;
           }
           if (item.type === 'text_delta') {
             if (finalReasoningOpen) {
-              await appendFinalText('</think>');
+              await finalOutput.append('</think>');
               finalReasoningOpen = false;
             }
-            await appendFinalText(item.text);
+            await finalOutput.append(item.text);
           }
           if (item.type === 'usage') usage = item.usage;
         }
         if (finalReasoningOpen) {
-          await appendFinalText('</think>');
+          await finalOutput.append('</think>');
           finalReasoningOpen = false;
         }
+        const finalMemoryCitation = await finalOutput.finish();
+        let finalText = finalOutput.text();
 
         if (!finalText.trim()) {
           const fallbackText = `已经连续执行了 ${maxToolRounds} 轮工具调用，我先停止继续调用工具并保留当前结果。可以继续让我接着处理剩余部分。`;
@@ -737,6 +813,7 @@ export class AgentLoop {
             projectId: thread.projectId,
             userContent: explicitMemoryUserContent,
           },
+          memoryCitation: finalMemoryCitation,
           review: options.review ? finalText : undefined,
         });
         activeAssistantMessageId = null;
@@ -828,7 +905,7 @@ export class AgentLoop {
    * @param messageId 要完成的消息 ID。
    * @param payload 可选的 usage 和 toolCalls 补充数据。
    */
-  private async completeMessage(threadId: string, turnId: string, messageId: string, payload: { usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[] } = {}): Promise<void> {
+  private async completeMessage(threadId: string, turnId: string, messageId: string, payload: { usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation } = {}): Promise<void> {
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -837,6 +914,12 @@ export class AgentLoop {
       createdAt: this.options.clock.now().toISOString(),
       payload: { messageId, ...payload },
     });
+    await this.recordMemoryCitationUsage(payload.memoryCitation);
+  }
+
+  private async recordMemoryCitationUsage(citation: RuntimeMemoryCitation | undefined): Promise<void> {
+    if (!citation) return;
+    await this.options.memoryStore?.recordMemoryCitationUsage(citation).catch(() => undefined);
   }
 
   /**
@@ -860,6 +943,7 @@ export class AgentLoop {
         projectId?: string;
         userContent: string;
       };
+      memoryCitation?: RuntimeMemoryCitation;
       review?: string;
     } = {}
   ): Promise<void> {
@@ -872,7 +956,7 @@ export class AgentLoop {
         ...usage,
       });
     }
-    await this.completeMessage(threadId, turnId, messageId, { usage });
+    await this.completeMessage(threadId, turnId, messageId, { usage, memoryCitation: options.memoryCitation });
     if (options.review !== undefined) {
       await this.publishReviewModeMessage(threadId, turnId, 'exited', options.review.trim() || 'Review completed.');
     }
@@ -898,20 +982,46 @@ export class AgentLoop {
   private async extractPassiveMemoriesForTurn(threadId: string, turnId: string): Promise<void> {
     if (!this.options.memoryStore) return;
     const config = await this.options.configStore?.getConfig().catch(() => null);
-    if (config?.memoryEnabled === false) return;
+    if (!canGenerateMemories(config)) return;
 
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) return;
+    if (!threadAllowsMemoryGeneration(thread)) return;
     if (turnAlreadySavedMemory(thread.messages, turnId)) return;
     const turnMessages = passiveMemorySourceMessages(thread.messages, turnId);
     if (!turnMessages.length) return;
 
+    await this.extractPassiveMemoriesFromMessages({
+      config,
+      sourceLabel: '当前完成的一轮对话：',
+      sourceTurnId: turnId,
+      thread,
+      messages: turnMessages,
+    });
+  }
+
+  private async extractPassiveMemoriesFromMessages({
+    config,
+    sourceLabel,
+    sourceTurnId,
+    thread,
+    messages,
+  }: {
+    config: RuntimeConfigState | null | undefined;
+    sourceLabel: string;
+    sourceTurnId?: string;
+    thread: RuntimeThread;
+    messages: RuntimeMessage[];
+  }): Promise<number> {
+    if (!this.options.memoryStore || !messages.length) return 0;
+    // Codex prepares the memory workspace baseline before syncing phase-1 outputs into it.
+    await this.options.memoryStore.preparePhase2Workspace().catch(() => undefined);
     let text = '';
     let usage: RuntimeUsage | undefined;
-    // 被动记忆使用独立模型名和禁用工具，避免抽取过程再次触发 agent loop。
+    // 被动记忆默认走内部模型路由，可由设置页覆盖为当前 provider 下的指定模型。
     for await (const item of this.options.modelClient.stream({
-      model: PASSIVE_MEMORY_MODEL,
-      messages: this.passiveMemoryPromptMessages(thread, turnMessages),
+      model: memoryExtractModel(config),
+      messages: this.passiveMemoryPromptMessages(thread, messages, sourceLabel),
       maxOutputTokens: PASSIVE_MEMORY_MAX_OUTPUT_TOKENS,
       temperature: 0,
       toolChoice: 'none',
@@ -921,18 +1031,40 @@ export class AgentLoop {
     }
     if (usage) {
       await this.options.usageStore?.recordUsage({
-        threadId,
-        turnId,
+        threadId: thread.id,
+        turnId: sourceTurnId ?? 'memory_startup',
         createdAt: this.options.clock.now().toISOString(),
         ...usage,
       });
     }
 
-    const candidates = passiveMemoryCandidatesFromModelText(text, thread.projectId);
-    if (!candidates.length) return;
+    const extraction = passiveMemoryExtractionFromModelText(text, thread.projectId);
+    const candidates = extraction.candidates;
+    const stage1 = extraction.stage1 ?? (candidates.length
+      ? {
+          status: 'succeeded' as const,
+          rawMemory: messagesAsPassiveMemorySource(messages),
+          rolloutSummary: stage1RolloutSummaryFromCandidates(candidates),
+          rolloutSlug: thread.title,
+        }
+      : null);
+    if (stage1) await this.options.memoryStore.recordStage1Output({
+      threadId: thread.id,
+      turnId: sourceTurnId,
+      status: stage1.status,
+      sourceUpdatedAt: stage1SourceUpdatedAt(messages),
+      rawMemory: stage1.rawMemory,
+      rolloutSummary: stage1.rolloutSummary,
+      rolloutSlug: stage1.rolloutSlug,
+      failureReason: stage1.failureReason,
+      projectId: thread.projectId,
+    }).catch(() => undefined);
+    if (stage1) await this.runMemoryPhase2Dispatch(thread.id).catch(() => undefined);
+    if (!candidates.length) return 0;
 
     const existing = await this.options.memoryStore.listMemories(thread.projectId ? { projectId: thread.projectId, limit: 500 } : { limit: 500 }).catch(() => ({ memories: [] }));
     const seen = new Set(existing.memories.map((memory) => memoryDedupeText(memory.content)));
+    let saved = 0;
     for (const candidate of candidates) {
       const key = memoryDedupeText(candidate.content);
       if (!key || seen.has(key)) continue;
@@ -943,11 +1075,70 @@ export class AgentLoop {
         projectId: candidate.scope === 'project' ? thread.projectId : undefined,
         origin: 'passive',
         source: thread.title,
-        sourceThreadId: threadId,
-        sourceTurnId: turnId,
+        sourceThreadId: thread.id,
+        sourceTurnId,
+        kind: candidate.kind,
         title: candidate.title,
         tags: candidate.tags,
       });
+      saved += 1;
+    }
+    return saved;
+  }
+
+  private async runMemoryPhase2Dispatch(ownerId: string): Promise<void> {
+    const memoryStore = this.options.memoryStore;
+    if (!memoryStore) return;
+    const claim = await memoryStore.claimPhase2Job({
+      ownerId,
+      leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
+      retryDelaySeconds: MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS,
+    });
+    if (claim.status !== 'claimed' || !claim.ownershipToken) return;
+
+    try {
+      const workspace = await memoryStore.syncPhase2Workspace();
+      if (!workspace.hasChanges) {
+        await memoryStore.markPhase2JobSucceeded({
+          ownershipToken: claim.ownershipToken,
+          completionWatermark: claim.inputWatermark ?? 0,
+        });
+        return;
+      }
+      const activeProvider = await this.options.configStore?.getActiveProviderConfig().catch(() => null);
+      if (!activeProvider?.activeModel) {
+        await memoryStore.markPhase2JobFailed({
+          ownershipToken: claim.ownershipToken,
+          reason: 'consolidation_agent_unavailable',
+          retryDelaySeconds: MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS,
+        });
+        return;
+      }
+      await runMemoryConsolidationAgent({
+        modelClient: this.options.modelClient,
+        root: workspace.root,
+        now: () => this.options.clock.now(),
+        heartbeat: () => memoryStore.heartbeatPhase2Job({
+          ownershipToken: claim.ownershipToken!,
+          leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
+        }),
+      });
+      const stillOwnsLock = await memoryStore.heartbeatPhase2Job({
+        ownershipToken: claim.ownershipToken,
+        leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
+      });
+      if (!stillOwnsLock) throw new Error('lost memory phase-2 ownership before baseline reset');
+      await memoryStore.resetPhase2WorkspaceBaseline();
+      await memoryStore.markPhase2JobSucceeded({
+        ownershipToken: claim.ownershipToken,
+        completionWatermark: claim.inputWatermark ?? 0,
+      });
+    } catch (error) {
+      await memoryStore.markPhase2JobFailed({
+        ownershipToken: claim.ownershipToken,
+        reason: `phase2_workspace_error:${error instanceof Error ? error.message : String(error)}`,
+        retryDelaySeconds: MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS,
+      }).catch(() => undefined);
     }
   }
 
@@ -957,7 +1148,7 @@ export class AgentLoop {
    * @param thread 当前线程快照，用于提供标题和项目范围。
    * @param messages 当前 turn 内可作为记忆来源的用户/助手消息。
    */
-  private passiveMemoryPromptMessages(thread: RuntimeThread, messages: RuntimeMessage[]): RuntimeMessage[] {
+  private passiveMemoryPromptMessages(thread: RuntimeThread, messages: RuntimeMessage[], sourceLabel: string): RuntimeMessage[] {
     const now = this.options.clock.now().toISOString();
     return [
       {
@@ -965,11 +1156,12 @@ export class AgentLoop {
         role: 'system',
         content: [
           '你是 Setsuna Desktop 的被动记忆抽取器。',
+          '这是 Codex memory phase-1 的本地对应：把当前 rollout 转为 raw_memory、rollout_summary、rollout_slug，并额外给桌面端一份 memories 索引用于未接入 phase-2 前的直接召回。',
           '只从当前刚完成的一轮对话里提取未来长期有用的信息：用户稳定偏好、项目规则、事实、决策或可复用流程。',
           '不要保存一次性问题、普通寒暄、临时调试输出、文件内容、命令输出、密钥、账号、隐私数据或不确定推断。',
-          '没有值得长期保留的信息时返回 {"memories":[]}。',
+          '没有值得长期保留的信息时返回 {"rollout_summary":"","rollout_slug":"","raw_memory":"","memories":[]}。',
           `最多输出 ${PASSIVE_MEMORY_MAX_ITEMS} 条。输出严格 JSON，不要 Markdown，不要解释。`,
-          'JSON 结构：{"memories":[{"content":"自包含记忆内容","title":"短标题","scope":"global|project","tags":["可选标签"]}]}。',
+          'JSON 结构：{"rollout_summary":"简短索引摘要","rollout_slug":"filesystem-safe slug","raw_memory":"详细 markdown raw memory","memories":[{"content":"自包含记忆内容","title":"短标题","scope":"global|project","kind":"preference|project_rule|fact|workflow|decision|note","tags":["可选标签"]}]}。',
         ].join('\n'),
         createdAt: now,
         status: 'complete',
@@ -977,7 +1169,7 @@ export class AgentLoop {
       {
         id: 'passive_memory_user',
         role: 'user',
-        content: [`线程标题：${thread.title}`, `项目 ID：${thread.projectId || '(none)'}`, thread.projectId ? '如果记忆只适用于该项目，scope 使用 project；否则使用 global。' : '当前没有项目 ID，scope 只能使用 global。', '', '当前完成的一轮对话：', messagesAsPassiveMemorySource(messages)].join('\n'),
+        content: [`线程标题：${thread.title}`, `项目 ID：${thread.projectId || '(none)'}`, thread.projectId ? '如果记忆只适用于该项目，scope 使用 project；否则使用 global。' : '当前没有项目 ID，scope 只能使用 global。', '', sourceLabel, messagesAsPassiveMemorySource(messages)].join('\n'),
         createdAt: now,
         status: 'complete',
       },
@@ -1001,7 +1193,9 @@ export class AgentLoop {
       userContent: string;
     }
   ): Promise<void> {
-    if (!input || input.alreadySaved || input.config?.memoryEnabled === false || !this.options.memoryStore) return;
+    if (!input || input.alreadySaved || !canGenerateMemories(input.config) || !this.options.memoryStore) return;
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (thread && !threadAllowsMemoryGeneration(thread)) return;
     const content = explicitMemoryContentFromUserText(input.userContent);
     if (!content) return;
     try {
@@ -1262,15 +1456,24 @@ export class AgentLoop {
    * @param config 当前 runtime 配置，用于判断 memory 是否启用。
    */
   private async memoryContextMessages(projectId: string | undefined, config: RuntimeConfigState | null | undefined) {
-    if (config?.memoryEnabled === false) return [];
+    if (!canUseMemories(config)) return [];
     const memories = await this.options.memoryStore?.listMemories(projectId ? { projectId, limit: 8 } : { scope: 'global', limit: 8 });
     if (!memories?.memories.length) return [];
+    const memorySummary = await this.options.memoryStore?.readMemoryFile({ path: 'memory_summary.md' })
+      .then((file) => truncateMemorySummary(file.content))
+      .catch(() => '');
     // 只取少量高相关 memory 注入系统消息，避免长期记忆把用户当前上下文挤出窗口。
     return [
       {
         id: 'memory_context',
         role: 'system' as const,
-        content: `<memory_context>\n${memories.memories.map((memory) => `<memory id="${escapeSkillAttribute(memory.id)}" scope="${memory.scope}">${neutralizeMemoryTags(memory.content)}</memory>`).join('\n')}\n</memory_context>`,
+        content: [
+          '<memory_context>',
+          ...memories.memories.map(memoryContextItem),
+          '</memory_context>',
+          '',
+          ...memoryReadPathInstructions(memorySummary),
+        ].join('\n'),
         createdAt: this.options.clock.now().toISOString(),
         status: 'complete' as const,
       },
@@ -1286,7 +1489,7 @@ export class AgentLoop {
    * @param approvalPolicy 当前审批策略。
    * @param previewedToolCallIds 已通过 delta 预览发布过的工具调用 ID。
    */
-  private async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], previewedToolCallIds: ReadonlySet<string> = new Set()): Promise<RuntimeMessage[]> {
+  private async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, previewedToolCallIds: ReadonlySet<string> = new Set()): Promise<RuntimeMessage[]> {
     if (!this.options.toolHost) return [];
     const messages: RuntimeMessage[] = [];
     let inspectionCallsExecutedThisRound = 0;
@@ -1302,7 +1505,7 @@ export class AgentLoop {
       const parallelBatch = await this.collectParallelToolBatch(toolCalls, index, context, toolBudget, approvalPolicy);
       if (parallelBatch.length > 1) {
         // 批量执行只读工具时统一跳过审批和预算二次检查，预算已在 collect 阶段模拟预留。
-        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, { checkBudget: false, skipApproval: true })));
+        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig, { checkBudget: false, skipApproval: true })));
         for (let batchIndex = 0; batchIndex < parallelBatch.length; batchIndex += 1) {
           if (executions[batchIndex].processed) {
             markToolBudgetProcessed(toolBudget, parallelBatch[batchIndex]);
@@ -1315,7 +1518,7 @@ export class AgentLoop {
       }
 
       const toolCall = toolCalls[index];
-      const execution = await this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy);
+      const execution = await this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig);
       if (execution.processed) {
         markToolBudgetProcessed(toolBudget, toolCall);
         if (isInspectionToolCall(toolCall)) inspectionCallsExecutedThisRound += 1;
@@ -1381,7 +1584,7 @@ export class AgentLoop {
    * @param approvalPolicy 当前审批策略。
    * @param options 批处理场景下可跳过预算或审批的内部选项。
    */
-  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], options: { checkBudget?: boolean; skipApproval?: boolean } = {}): Promise<ToolCallExecution> {
+  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, options: { checkBudget?: boolean; skipApproval?: boolean } = {}): Promise<ToolCallExecution> {
     let content = '';
     let processed = false;
     let parsedArguments: unknown;
@@ -1391,6 +1594,15 @@ export class AgentLoop {
     try {
       throwIfAborted(context.signal);
       parsedArguments = parseToolArguments(toolCall.arguments);
+      const memoryBlock = await this.memoryToolBlockForCall(toolCall, context.threadId, runtimeConfig);
+      if (memoryBlock) {
+        content = memoryBlock;
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
+          processed,
+        };
+      }
       const budgetBlock = options.checkBudget === false ? null : toolBudgetBlockForCall(toolCall, toolBudget);
       if (budgetBlock) {
         content = budgetBlock.content;
@@ -1437,6 +1649,7 @@ export class AgentLoop {
         resultPreview: result.preview,
         startedAtMs,
       });
+      await this.markMemoryPollutedByExternalContext(context.threadId, context.turnId, toolCall, result, runtimeConfig);
     } catch (error) {
       if (isAbortError(error)) throw error;
       processed = true;
@@ -1451,6 +1664,39 @@ export class AgentLoop {
       message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
       processed,
     };
+  }
+
+  /**
+   * 记忆生成关闭或线程已污染时，阻止模型通过 remember_memory 绕过线程级门禁。
+   */
+  private async memoryToolBlockForCall(toolCall: RuntimeToolCall, threadId: string, runtimeConfig: RuntimeConfigState | null | undefined): Promise<string | null> {
+    if (toolCall.name !== REMEMBER_MEMORY_TOOL_NAME) return null;
+    if (!canGenerateMemories(runtimeConfig)) return 'Memory generation is disabled for this runtime.';
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (thread && !threadAllowsMemoryGeneration(thread)) {
+      return `Memory generation is disabled for this thread (${thread.memoryMode}).`;
+    }
+    return null;
+  }
+
+  /**
+   * MCP 等外部上下文工具成功返回后，禁止本线程后续被动/主动写入长期记忆。
+   */
+  private async markMemoryPollutedByExternalContext(threadId: string, turnId: string, toolCall: RuntimeToolCall, result: ToolExecutionResult, runtimeConfig: RuntimeConfigState | null | undefined): Promise<void> {
+    if (!shouldDisableMemoryOnExternalContext(runtimeConfig) || !toolCallPollutesMemory(toolCall, result)) return;
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread || !threadAllowsMemoryGeneration(thread)) return;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'thread.memory_mode_updated',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: {
+        mode: 'polluted',
+        reason: `external_context:${toolCall.name}`,
+      },
+    });
   }
 
   /**
@@ -1795,6 +2041,39 @@ function normalizedMaxToolRounds(value: number | undefined): number {
   return Math.max(1, Math.floor(value));
 }
 
+function createAssistantOutputAccumulator(publishVisibleDelta: (delta: string) => Promise<void>): {
+  append(delta: string): Promise<void>;
+  finish(): Promise<RuntimeMemoryCitation | undefined>;
+  text(): string;
+} {
+  const parser = new MemoryCitationStreamParser();
+  const citationBodies: string[] = [];
+  let visibleText = '';
+  let memoryCitation: RuntimeMemoryCitation | undefined;
+
+  const appendParsed = async (chunk: { visibleText: string; citations: string[] }) => {
+    citationBodies.push(...chunk.citations);
+    if (!chunk.visibleText) return;
+    visibleText += chunk.visibleText;
+    await publishVisibleDelta(chunk.visibleText);
+  };
+
+  return {
+    async append(delta: string) {
+      if (!delta) return;
+      await appendParsed(parser.push(delta));
+    },
+    async finish() {
+      await appendParsed(parser.finish());
+      memoryCitation = parseMemoryCitationBodies(citationBodies);
+      return memoryCitation;
+    },
+    text() {
+      return visibleText;
+    },
+  };
+}
+
 function markToolBudgetProcessed(budget: ToolBudget, toolCall: RuntimeToolCall): void {
   reserveToolBudgetForCall(budget, toolCall);
 }
@@ -1833,7 +2112,122 @@ function activeTurnKey(threadId: string, turnId: string): string {
 }
 
 function isSuccessfulRememberMemoryMessage(message: RuntimeMessage): boolean {
-  return message.role === 'tool' && message.toolName === 'remember_memory' && !message.content.startsWith('Tool remember_memory failed:') && !message.content.includes('was rejected');
+  return message.role === 'tool' && message.toolName === 'remember_memory' && message.content.startsWith('Saved memory ');
+}
+
+function canUseMemories(config: RuntimeConfigState | null | undefined): boolean {
+  return config?.memory?.useMemories ?? config?.memoryEnabled ?? true;
+}
+
+function memoryReadPathInstructions(memorySummary: string | undefined): string[] {
+  return [
+    '## Memory',
+    '',
+    'You have access to a local memory folder with guidance from prior runs. Use it whenever it is likely to help with workspace history, prior decisions, durable preferences, or project conventions.',
+    '',
+    'Memory layout (relative to the local memory store):',
+    '- memory_summary.md (already provided below; do not read it again unless you need line-specific evidence)',
+    '- MEMORY.md (searchable registry; primary file to query)',
+    '- raw_memories.md (raw extracted memories)',
+    '- rollout_summaries/ (per-thread memory evidence summaries)',
+    '',
+    'Quick memory pass:',
+    '1. Skim MEMORY_SUMMARY below and extract task-relevant keywords.',
+    '2. Search MEMORY.md with those keywords.',
+    '3. Open the most relevant rollout_summaries entries only when MEMORY.md points to them or exact evidence is needed.',
+    '4. Keep the pass lightweight; stop if no relevant hits appear.',
+    '',
+    'If the final assistant answer relies on memory content, append exactly one hidden citation block as the very last content using this structure:',
+    '<oai-mem-citation>',
+    '<citation_entries>',
+    'MEMORY.md:line_start-line_end|note=[short note]',
+    'rollout_summaries/example.md:line_start-line_end|note=[short note]',
+    '</citation_entries>',
+    '<rollout_ids>',
+    'thread_or_rollout_id',
+    '</rollout_ids>',
+    '</oai-mem-citation>',
+    'The hidden citation block is for the runtime only; do not mention it in the visible answer.',
+    '',
+    '========= MEMORY_SUMMARY BEGINS =========',
+    memorySummary?.trim() || 'No memory summary available.',
+    '========= MEMORY_SUMMARY ENDS =========',
+  ];
+}
+
+function truncateMemorySummary(value: string): string {
+  const text = value.trim();
+  if (text.length <= MEMORY_SUMMARY_PROMPT_MAX_CHARS) return text;
+  return `${text.slice(0, MEMORY_SUMMARY_PROMPT_MAX_CHARS)}\n[Memory summary truncated]`;
+}
+
+function memoryContextItem(memory: RuntimeMemoryRecord): string {
+  const attributes = [
+    `id="${escapeSkillAttribute(memory.id)}"`,
+    `scope="${memory.scope}"`,
+    `kind="${escapeSkillAttribute(memory.kind ?? 'note')}"`,
+  ];
+  if (memory.sourceLocation) {
+    attributes.push(`source="${escapeSkillAttribute(memorySourceLocationText(memory.sourceLocation))}"`);
+    attributes.push(`source_note="${escapeSkillAttribute(memory.sourceLocation.note)}"`);
+  }
+  return `<memory ${attributes.join(' ')}>${neutralizeMemoryTags(memory.content)}</memory>`;
+}
+
+function memorySourceLocationText(location: RuntimeMemorySourceLocation): string {
+  return `${location.path}:${location.lineStart}-${location.lineEnd}`;
+}
+
+function memorySourceKey(threadId: string | undefined, turnId: string | undefined): string {
+  if (!threadId || !turnId) return '';
+  return `${threadId}\0${turnId}`;
+}
+
+function canGenerateMemories(config: RuntimeConfigState | null | undefined): boolean {
+  return config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
+}
+
+function shouldDisableMemoryOnExternalContext(config: RuntimeConfigState | null | undefined): boolean {
+  if (!config) return false;
+  return config.memory?.disableOnExternalContext ?? true;
+}
+
+function threadAllowsMemoryGeneration(thread: RuntimeThread): boolean {
+  return (thread.memoryMode ?? 'enabled') === 'enabled';
+}
+
+function memoryExtractModel(config: RuntimeConfigState | null | undefined): string {
+  return config?.memory?.extractModel?.trim() || PASSIVE_MEMORY_MODEL;
+}
+
+function memoryMaxRolloutsPerStartup(config: RuntimeConfigState | null | undefined): number {
+  return clampInteger(config?.memory?.maxRolloutsPerStartup, DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP, 1, MAX_MEMORIES_MAX_ROLLOUTS_PER_STARTUP);
+}
+
+function memoryMaxRolloutAgeDays(config: RuntimeConfigState | null | undefined): number {
+  return clampInteger(config?.memory?.maxRolloutAgeDays, DEFAULT_MEMORIES_MAX_ROLLOUT_AGE_DAYS, 0, MAX_MEMORIES_MAX_ROLLOUT_AGE_DAYS);
+}
+
+function memoryMinRolloutIdleHours(config: RuntimeConfigState | null | undefined): number {
+  return clampInteger(config?.memory?.minRolloutIdleHours, DEFAULT_MEMORIES_MIN_ROLLOUT_IDLE_HOURS, 1, MAX_MEMORIES_MIN_ROLLOUT_IDLE_HOURS);
+}
+
+function memoryStartupThreadEligible(thread: RuntimeThreadSummary, config: RuntimeConfigState | null | undefined, now: Date): boolean {
+  const updatedAt = Date.parse(thread.updatedAt);
+  if (!Number.isFinite(updatedAt)) return false;
+  const ageMs = now.getTime() - updatedAt;
+  if (ageMs < 0) return false;
+  return ageMs >= memoryMinRolloutIdleHours(config) * HOURS_TO_MS
+    && ageMs <= memoryMaxRolloutAgeDays(config) * DAYS_TO_MS;
+}
+
+function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : fallback;
+  return Math.max(min, Math.min(max, numeric));
+}
+
+function toolCallPollutesMemory(toolCall: RuntimeToolCall, result: ToolExecutionResult): boolean {
+  return result.containsExternalContext === true || toolCall.name.startsWith('mcp__');
 }
 
 /**
@@ -1964,10 +2358,44 @@ function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
  * @param turnId 需要抽取的 turn ID。
  */
 function passiveMemorySourceMessages(messages: RuntimeMessage[], turnId: string): RuntimeMessage[] {
-  const scoped = messages.filter((message) => message.turnId === turnId && message.visibility !== 'transcript' && (message.role === 'user' || message.role === 'assistant') && Boolean(message.content.trim()));
+  const scoped = messages.filter((message) => message.turnId === turnId && message.visibility !== 'transcript' && (message.role === 'user' || message.role === 'assistant') && Boolean(message.content.trim()) && !isPassiveMemoryExcludedMessage(message));
   const hasUser = scoped.some((message) => message.role === 'user');
   const hasAssistant = scoped.some((message) => message.role === 'assistant');
   return hasUser && hasAssistant ? scoped : [];
+}
+
+function startupMemorySourceMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
+  const scoped = messages.filter((message) => message.visibility !== 'transcript' && (message.role === 'user' || message.role === 'assistant') && Boolean(message.content.trim()) && !isPassiveMemoryExcludedMessage(message));
+  const hasUser = scoped.some((message) => message.role === 'user');
+  const hasAssistant = scoped.some((message) => message.role === 'assistant');
+  return hasUser && hasAssistant ? scoped : [];
+}
+
+function startupMemorySourceTurnId(messages: RuntimeMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.turnId) return message.turnId;
+    if (message.id) return `message:${message.id}`;
+  }
+  return undefined;
+}
+
+function isPassiveMemoryExcludedMessage(message: RuntimeMessage): boolean {
+  return message.role === 'user' && isMemoryExcludedContextualUserFragment(message.content);
+}
+
+function isMemoryExcludedContextualUserFragment(text: string): boolean {
+  return matchesMarkedFragment(text, '# AGENTS.md instructions', '</INSTRUCTIONS>')
+    || matchesMarkedFragment(text, '<skill>', '</skill>');
+}
+
+function matchesMarkedFragment(text: string, startMarker: string, endMarker: string): boolean {
+  const trimmedStart = text.trimStart();
+  const startsWithMarker = trimmedStart
+    .slice(0, startMarker.length)
+    .toLowerCase() === startMarker.toLowerCase();
+  const trimmed = trimmedStart.trimEnd();
+  return startsWithMarker && trimmed.toLowerCase().endsWith(endMarker.toLowerCase());
 }
 
 /**
@@ -1991,13 +2419,25 @@ function messagesAsPassiveMemorySource(messages: RuntimeMessage[]): string {
     .join('\n\n');
 }
 
-/**
- * 从模型输出中解析并去重被动记忆候选。
- *
- * @param value 模型原始输出文本。
- * @param projectId 当前线程项目 ID，用于校正 project scope。
- */
-function passiveMemoryCandidatesFromModelText(value: string, projectId: string | undefined): PassiveMemoryCandidate[] {
+function stage1SourceUpdatedAt(messages: RuntimeMessage[]): string {
+  const latest = messages
+    .map((message) => Date.parse(message.completedAt ?? message.createdAt))
+    .filter(Number.isFinite)
+    .sort((left, right) => right - left)[0];
+  return latest ? new Date(latest).toISOString() : new Date(0).toISOString();
+}
+
+function stage1RolloutSummaryFromCandidates(candidates: PassiveMemoryCandidate[]): string {
+  return candidates
+    .map((candidate) => {
+      const kind = candidate.kind ?? 'note';
+      const scope = candidate.scope === 'project' ? 'project' : 'global';
+      return `- [${scope}/${kind}] ${candidate.content}`;
+    })
+    .join('\n');
+}
+
+function passiveMemoryExtractionFromModelText(value: string, projectId: string | undefined): PassiveMemoryExtraction {
   const parsed = parseJsonObjectFromText(value);
   const rawMemories = Array.isArray(parsed?.memories) ? parsed.memories : parseJsonArrayFromText(value);
   const candidates: PassiveMemoryCandidate[] = [];
@@ -2011,7 +2451,63 @@ function passiveMemoryCandidatesFromModelText(value: string, projectId: string |
     candidates.push(candidate);
     if (candidates.length >= PASSIVE_MEMORY_MAX_ITEMS) break;
   }
-  return candidates;
+  return {
+    candidates,
+    stage1: passiveMemoryStage1FromModelText(value, parsed, candidates),
+  };
+}
+
+/**
+ * 从模型输出中解析并去重被动记忆候选。
+ *
+ * @param value 模型原始输出文本。
+ * @param projectId 当前线程项目 ID，用于校正 project scope。
+ */
+function passiveMemoryCandidatesFromModelText(value: string, projectId: string | undefined): PassiveMemoryCandidate[] {
+  return passiveMemoryExtractionFromModelText(value, projectId).candidates;
+}
+
+function passiveMemoryStage1FromModelText(value: string, parsed: Record<string, unknown> | null, candidates: PassiveMemoryCandidate[]): PassiveMemoryStage1Result | null {
+  const text = stripMarkdownFence(value).trim();
+  if (!text) return { status: 'succeeded_no_output' };
+  if (parsed && hasStage1OutputFields(parsed)) {
+    const rawMemory = normalizeStage1ModelText(parsed.raw_memory, PASSIVE_MEMORY_STAGE1_RAW_MAX_CHARS);
+    const rolloutSummary = normalizeStage1ModelText(parsed.rollout_summary, PASSIVE_MEMORY_STAGE1_SUMMARY_MAX_CHARS);
+    const rolloutSlug = normalizeStage1Slug(parsed.rollout_slug);
+    if (!rawMemory || !rolloutSummary) return { status: 'succeeded_no_output' };
+    return {
+      status: 'succeeded',
+      rawMemory,
+      rolloutSummary,
+      rolloutSlug,
+    };
+  }
+  if (parsed || candidates.length || parseJsonArrayFromText(value).length) {
+    return candidates.length ? null : { status: 'succeeded_no_output' };
+  }
+  return {
+    status: 'failed',
+    failureReason: 'Model returned non-JSON memory extraction output.',
+  };
+}
+
+function hasStage1OutputFields(value: Record<string, unknown>): boolean {
+  return Object.hasOwn(value, 'raw_memory')
+    || Object.hasOwn(value, 'rollout_summary')
+    || Object.hasOwn(value, 'rollout_slug');
+}
+
+function normalizeStage1ModelText(value: unknown, maxChars: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.replace(/\r\n/g, '\n').trim();
+  if (!text) return undefined;
+  return Array.from(text).slice(0, maxChars).join('').trimEnd();
+}
+
+function normalizeStage1Slug(value: unknown): string | undefined {
+  const text = normalizeStage1ModelText(value, PASSIVE_MEMORY_STAGE1_SLUG_MAX_CHARS);
+  if (!text) return undefined;
+  return text.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || undefined;
 }
 
 function normalizePassiveMemoryCandidate(value: unknown, projectId: string | undefined): PassiveMemoryCandidate | null {
@@ -2022,6 +2518,7 @@ function normalizePassiveMemoryCandidate(value: unknown, projectId: string | und
   return {
     content,
     scope: passiveMemoryScope(record.scope, projectId),
+    kind: passiveMemoryKind(record.kind),
     title: normalizePassiveMemoryText(record.title, 80),
     tags: passiveMemoryTags(record.tags),
   };
@@ -2030,6 +2527,11 @@ function normalizePassiveMemoryCandidate(value: unknown, projectId: string | und
 function passiveMemoryScope(value: unknown, projectId: string | undefined): RuntimeMemoryScope {
   if (value === 'project' && projectId) return 'project';
   return 'global';
+}
+
+function passiveMemoryKind(value: unknown): RuntimeMemoryKind | undefined {
+  if (value === 'preference' || value === 'project_rule' || value === 'fact' || value === 'workflow' || value === 'decision' || value === 'note') return value;
+  return undefined;
 }
 
 function passiveMemoryTags(value: unknown): string[] | undefined {

@@ -7,6 +7,7 @@ import type {
   RuntimeEvent,
   RuntimeMessage,
   RuntimeThread,
+  RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   ThreadPatch,
   ThreadQuery,
@@ -20,6 +21,8 @@ import { parseJsonLine, readJsonFile, writeJsonFile } from './json-file.js';
 type ThreadIndex = {
   threads: RuntimeThreadSummary[];
 };
+
+const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
 
 export class JsonThreadStore implements ThreadStore {
   private readonly threadsDir: string;
@@ -40,6 +43,7 @@ export class JsonThreadStore implements ThreadStore {
     const index = await this.readIndex();
     const search = query.search?.trim().toLowerCase();
     return index.threads
+      .map(normalizeThreadSummary)
       .filter((thread) => query.includeArchived || !thread.archived)
       .filter((thread) => {
         if (query.projectId) return thread.projectId === query.projectId;
@@ -54,7 +58,7 @@ export class JsonThreadStore implements ThreadStore {
   async getThread(threadId: string): Promise<RuntimeThread | null> {
     const snapshot = await readJsonFile<RuntimeThread | null>(this.snapshotPath(threadId), null);
     if (!snapshot) return null;
-    return this.hydrateMessageCompletionTimes(threadId, snapshot);
+    return this.hydrateMessageCompletionTimes(threadId, normalizeThreadSnapshot(snapshot));
   }
 
   async createThread(input: CreateThreadInput = {}): Promise<RuntimeThread> {
@@ -68,6 +72,7 @@ export class JsonThreadStore implements ThreadStore {
       createdAt: now,
       updatedAt: now,
       archived: false,
+      memoryMode: normalizeThreadMemoryMode(input.memoryMode),
       messageCount: 0,
       lastMessagePreview: '',
       messages: [],
@@ -104,6 +109,24 @@ export class JsonThreadStore implements ThreadStore {
         payload: {
           title: patch.title?.trim() || undefined,
           archived: patch.archived,
+        },
+      });
+      const next = await this.getThread(threadId);
+      if (!next) throw new Error(`Thread not found: ${threadId}`);
+      return next;
+    });
+  }
+
+  async updateThreadMemoryMode(threadId: string, mode: RuntimeThreadMemoryMode, reason?: string): Promise<RuntimeThread> {
+    return this.enqueueThreadWrite(threadId, async () => {
+      await this.appendEventUnlocked(threadId, {
+        id: this.ids.id('event'),
+        threadId,
+        type: 'thread.memory_mode_updated',
+        createdAt: this.clock.now().toISOString(),
+        payload: {
+          mode: normalizeThreadMemoryMode(mode),
+          reason: reason?.trim() || undefined,
         },
       });
       const next = await this.getThread(threadId);
@@ -288,17 +311,38 @@ export class JsonThreadStore implements ThreadStore {
 function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
   return {
     id: thread.id,
+    activeTurnId: thread.activeTurnId,
     forkedFromId: thread.forkedFromId,
     projectId: thread.projectId,
     title: thread.title,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     archived: thread.archived,
+    memoryMode: normalizeThreadMemoryMode(thread.memoryMode),
     gitInfo: thread.gitInfo ? { ...thread.gitInfo } : thread.gitInfo,
     goal: thread.goal ? { ...thread.goal } : undefined,
     messageCount: thread.messageCount,
     lastMessagePreview: thread.lastMessagePreview,
   };
+}
+
+function normalizeThreadSnapshot(thread: RuntimeThread): RuntimeThread {
+  return {
+    ...thread,
+    memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
+  };
+}
+
+function normalizeThreadSummary(thread: RuntimeThreadSummary): RuntimeThreadSummary {
+  return {
+    ...thread,
+    memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
+  };
+}
+
+function normalizeThreadMemoryMode(mode: unknown): RuntimeThreadMemoryMode {
+  if (mode === 'enabled' || mode === 'disabled' || mode === 'polluted') return mode;
+  return DEFAULT_THREAD_MEMORY_MODE;
 }
 
 export function createMessage(input: Omit<RuntimeMessage, 'createdAt'> & { createdAt?: string }): RuntimeMessage {

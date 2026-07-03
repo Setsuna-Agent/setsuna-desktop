@@ -20,6 +20,7 @@ export type ToolExecutionResult = {
   content: string;
   preview?: string;
   data?: unknown;
+  containsExternalContext?: boolean;
 };
 
 export type ToolExecutionPreview = {

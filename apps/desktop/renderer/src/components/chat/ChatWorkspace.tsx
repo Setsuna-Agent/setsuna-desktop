@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { Actions, Bubble, CodeHighlighter } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
 import { ArrowDown, ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
-import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
 import { FileChangesSummaryCard, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
@@ -42,6 +42,7 @@ export function ChatWorkspace({
   onAnswerApproval,
   onCompactContext,
   onClearContext,
+  onThreadMemoryModeChange,
   onDeleteMessages,
   onDiscardFileChanges,
   onDraftChange,
@@ -70,6 +71,7 @@ export function ChatWorkspace({
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
+  onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onDraftChange: (value: string) => void;
@@ -332,6 +334,7 @@ export function ChatWorkspace({
       skillSelectionRequest={skillSelectionRequest}
       skills={skills}
       starter={starter}
+      threadMemoryMode={currentThread?.memoryMode}
       onCancelActiveTurn={onCancelActiveTurn}
       onApprovalPolicyChange={onApprovalPolicyChange}
       onCompactContext={onCompactContext}
@@ -340,6 +343,7 @@ export function ChatWorkspace({
       onSelectModel={onSelectModel}
       onSearchProjectEntries={onSearchProjectEntries}
       onSend={onSend}
+      onThreadMemoryModeChange={onThreadMemoryModeChange}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
     />
   );

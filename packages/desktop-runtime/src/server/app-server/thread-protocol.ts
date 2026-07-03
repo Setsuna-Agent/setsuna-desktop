@@ -4,6 +4,7 @@ import type {
   RuntimeThread,
   RuntimeThreadGoal,
   RuntimeThreadGoalStatus,
+  RuntimeThreadMemoryMode,
   SweTurn,
 } from '@setsuna-desktop/contracts';
 import { runtimeThreadToSweTurns } from '@setsuna-desktop/contracts';
@@ -73,6 +74,21 @@ export function sweThreadSessionResponse(
     sandbox: sweSandboxPolicy(config.permissionProfile, cwd),
     reasoningEffort: null,
   };
+}
+
+type AppServerSettableThreadMemoryMode = Extract<RuntimeThreadMemoryMode, 'enabled' | 'disabled'>;
+
+export function sweThreadMemoryModeSetInput(value: unknown): { threadId: string; mode: AppServerSettableThreadMemoryMode } {
+  const input = recordInput(value);
+  return {
+    threadId: requiredString(input.threadId ?? input.thread_id, 'threadId'),
+    mode: sweSettableThreadMemoryMode(input.mode),
+  };
+}
+
+function sweSettableThreadMemoryMode(value: unknown): AppServerSettableThreadMemoryMode {
+  if (value === 'enabled' || value === 'disabled') return value;
+  throw new AppServerRpcError(-32602, 'mode must be enabled or disabled');
 }
 
 type AppServerSortDirection = 'asc' | 'desc';

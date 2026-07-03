@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -63,6 +63,57 @@ describe('runtime server', () => {
     expect(archived).toMatchObject({ id: created.id, archived: true });
     expect(defaultList.threads).toEqual([]);
     expect(archivedList.threads).toMatchObject([{ id: created.id, title: 'Renamed title', archived: true }]);
+  });
+
+  it('updates thread memory mode through the runtime API', async () => {
+    const created = await runtimeFetch('/v1/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Memory mode' }),
+    });
+
+    expect(created).toMatchObject({ title: 'Memory mode', memoryMode: 'enabled' });
+
+    const updated = await runtimeFetch(`/v1/threads/${encodeURIComponent(created.id)}/memory-mode`, {
+      method: 'PATCH',
+      body: JSON.stringify({ mode: 'enabled' }),
+    });
+    const list = await runtimeFetch('/v1/threads');
+
+    expect(updated).toMatchObject({ id: created.id, memoryMode: 'enabled' });
+    expect(list.threads).toMatchObject([{ id: created.id, memoryMode: 'enabled' }]);
+  });
+
+  it('updates thread memory mode through the AppServer RPC', async () => {
+    const started = await appServerRpc('thread/start', { name: 'AppServer memory mode', cwd: process.cwd() });
+
+    await expect(appServerRpc('thread/memoryMode/set', {
+      threadId: started.thread.id,
+      mode: 'disabled',
+    })).resolves.toEqual({});
+
+    await expect(runtimeFetch(`/v1/threads/${encodeURIComponent(started.thread.id)}`)).resolves.toMatchObject({
+      id: started.thread.id,
+      memoryMode: 'disabled',
+    });
+
+    await expect(appServerRpc('thread/memoryMode/set', {
+      thread_id: started.thread.id,
+      mode: 'enabled',
+    })).resolves.toEqual({});
+
+    await expect(runtimeFetch(`/v1/threads/${encodeURIComponent(started.thread.id)}`)).resolves.toMatchObject({
+      id: started.thread.id,
+      memoryMode: 'enabled',
+    });
+
+    await expect(appServerRpcEnvelope({
+      id: 'invalid_memory_mode',
+      method: 'thread/memoryMode/set',
+      params: { threadId: started.thread.id, mode: 'polluted' },
+    })).resolves.toMatchObject({
+      id: 'invalid_memory_mode',
+      error: { code: -32602, message: 'mode must be enabled or disabled' },
+    });
   });
 
   it('returns masked config without leaking API keys', async () => {
@@ -800,6 +851,11 @@ describe('runtime server', () => {
         setsuna_style: 'daily',
         memory_enabled: false,
       },
+      memories: {
+        disable_on_external_context: false,
+        generate_memories: false,
+        use_memories: false,
+      },
     });
     expect(response.config.sandbox_workspace_write).toMatchObject({
       writable_roots: [process.cwd()],
@@ -814,6 +870,10 @@ describe('runtime server', () => {
         file: expect.stringContaining('config.json'),
         profile: null,
       },
+    });
+    expect(response.origins['memories.use_memories']).toMatchObject({
+      version: '1',
+      name: { type: 'user' },
     });
     expect(response.layers).toHaveLength(1);
     expect(response.layers[0]).toMatchObject({
@@ -902,7 +962,42 @@ describe('runtime server', () => {
       },
       desktop: {
         'selected-avatar-id': 'swe',
-        memory_enabled: false,
+        memory_enabled: true,
+      },
+    });
+  });
+
+  it('writes AppServer memory settings without collapsing read and generate', async () => {
+    await expect(appServerRpc('config/batchWrite', {
+      edits: [
+        {
+          keyPath: 'memories',
+          value: {
+            disable_on_external_context: false,
+            generate_memories: false,
+            min_rate_limit_remaining_percent: 0,
+            max_rollouts_per_startup: 3,
+          },
+          mergeStrategy: 'replace',
+        },
+        { keyPath: 'memories.use_memories', value: true, mergeStrategy: 'replace' },
+      ],
+    })).resolves.toMatchObject({ status: 'ok', version: '1' });
+
+    const read = await appServerRpc('config/read', {});
+    expect(read.config).toMatchObject({
+      desktop: {
+        memory_enabled: true,
+      },
+      features: {
+        memories: false,
+      },
+      memories: {
+        disable_on_external_context: false,
+        generate_memories: false,
+        use_memories: true,
+        min_rate_limit_remaining_percent: 0,
+        max_rollouts_per_startup: 3,
       },
     });
   });
@@ -974,7 +1069,7 @@ describe('runtime server', () => {
         name: 'memories',
         stage: 'beta',
         displayName: 'Memories',
-        enabled: true,
+        enabled: false,
         defaultEnabled: false,
       }),
       expect.objectContaining({
@@ -2181,6 +2276,33 @@ describe('runtime server', () => {
     await expect(runtimeFetch('/v1/memories')).resolves.toMatchObject({ memories: [] });
   });
 
+  it('resets AppServer memory files without changing thread memory mode', async () => {
+    const storagePath = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-memory-reset-test-'));
+    await runtimeFetch('/v1/config', {
+      method: 'PUT',
+      body: JSON.stringify({ storagePath }),
+    });
+    const thread = await runtimeFetch('/v1/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Memory reset', memoryMode: 'disabled' }),
+    });
+    await runtimeFetch('/v1/memories', {
+      method: 'POST',
+      body: JSON.stringify({ content: 'Reset this memory.', scope: 'global' }),
+    });
+    await mkdir(path.join(storagePath, 'rollout_summaries'), { recursive: true });
+    await writeFile(path.join(storagePath, 'rollout_summaries', 'stale.md'), 'stale rollout\n', 'utf8');
+
+    await expect(appServerRpc('memory/reset', {})).resolves.toEqual({});
+
+    await expect(directoryEntries(storagePath)).resolves.toEqual([]);
+    await expect(runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`)).resolves.toMatchObject({
+      id: thread.id,
+      memoryMode: 'disabled',
+    });
+    await expect(runtimeFetch('/v1/memories')).resolves.toMatchObject({ memories: [] });
+  });
+
   it('previews local memories from the configured storage path', async () => {
     const storagePath = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-memory-preview-test-'));
     const config = await runtimeFetch('/v1/config', {
@@ -2359,6 +2481,10 @@ describe('runtime server', () => {
     });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
+  }
+
+  async function directoryEntries(dir: string): Promise<string[]> {
+    return (await readdir(dir)).sort();
   }
 
   async function configureOpenAiProvider(id: string, providerBaseUrl: string) {

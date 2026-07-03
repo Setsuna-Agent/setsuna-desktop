@@ -14,6 +14,7 @@ import type {
   SendTurnResponse,
   SteerTurnInput,
   ThreadList,
+  ThreadMemoryModePatch,
   ThreadPatch,
   ThreadQuery,
 } from './threads.js';
@@ -48,6 +49,7 @@ export type DesktopRuntimeClient = {
   getThread(threadId: string): Promise<RuntimeThread>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
+  updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch): Promise<RuntimeThread>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
   sendTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse>;

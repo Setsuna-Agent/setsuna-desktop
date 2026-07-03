@@ -3,7 +3,7 @@ import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import { Button, Dropdown } from 'antd';
 import { ArrowUp, Boxes, Check, Paperclip, Sparkles, Square, X } from 'lucide-react';
-import type { RuntimeConfigState, RuntimeMessageAttachment, RuntimeSkillSummary, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeMessageAttachment, RuntimeSkillSummary, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
@@ -39,7 +39,9 @@ export function ChatComposer({
   onSelectModel,
   onSearchProjectEntries,
   onSend,
+  onThreadMemoryModeChange,
   onSkillSelectionRequestConsumed,
+  threadMemoryMode,
 }: {
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
@@ -51,6 +53,7 @@ export function ChatComposer({
   skillSelectionRequest?: ChatSkillSelectionRequest | null;
   skills: RuntimeSkillSummary[];
   starter?: boolean;
+  threadMemoryMode?: RuntimeThreadMemoryMode;
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
   onCompactContext: () => void;
@@ -59,6 +62,7 @@ export function ChatComposer({
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -75,12 +79,14 @@ export function ChatComposer({
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [thinkingEffort, setThinkingEffort] = useState('');
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
+  const [cursorOffset, setCursorOffset] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
-  const mentionCommand = useMemo(() => parseMentionCommand(draft), [draft]);
-  const slashCommand = useMemo(() => parseSlashCommand(draft), [draft]);
+  const commandCursorOffset = cursorOffset ?? draft.length;
+  const mentionCommand = useMemo(() => parseMentionCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
+  const slashCommand = useMemo(() => parseSlashCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
   const mentionQuery = mentionCommand?.query ?? '';
   const commandOpen = Boolean(focused && mentionCommand && dismissedCommandValue !== draft);
   const skillCommandOpen = Boolean(!activeTurnId && focused && slashCommand && dismissedSlashValue !== draft && !commandOpen);
@@ -91,6 +97,8 @@ export function ChatComposer({
   const attachmentOnlyReady = imageAttachments.length > 0 && !draft.trim();
   const activeSteerReady = Boolean(activeTurnId && (draft.trim() || imageAttachments.length));
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
+  const memoryMode = threadMemoryMode ?? 'enabled';
+  const memoryGenerationEnabled = config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
   const slashEntries = useMemo(() => {
     const actions: SlashQuickAction[] = [
       {
@@ -99,6 +107,16 @@ export function ChatComposer({
         title: '模型',
         description: activeModelName(config) ?? '选择本地配置模型',
         scope: '本地',
+      },
+      {
+        key: 'memory-mode',
+        kind: 'action',
+        type: 'memory-mode',
+        title: '记忆',
+        description: threadMemoryModeDescription(memoryMode, memoryGenerationEnabled),
+        disabled: !memoryGenerationEnabled,
+        checked: memoryGenerationEnabled && memoryMode === 'enabled',
+        scope: threadMemoryModeScope(memoryMode, memoryGenerationEnabled),
       },
       {
         key: 'compact-context',
@@ -138,7 +156,7 @@ export function ChatComposer({
       .slice(0, Math.max(0, 8 - visibleActions.length))
       .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
     return [...visibleActions, ...visibleSkills];
-  }, [canClearContext, config, contextCompactPercent, contextCompacting, selectedSkillIds, skillQuery, skills]);
+  }, [canClearContext, config, contextCompactPercent, contextCompacting, memoryGenerationEnabled, memoryMode, selectedSkillIds, skillQuery, skills]);
 
   useEffect(() => {
     if (!commandOpen || !activeProject) {
@@ -170,6 +188,16 @@ export function ChatComposer({
       cancelled = true;
     };
   }, [commandOpen, mentionQuery, onSearchProjectEntries]);
+
+  useEffect(() => {
+    if (!focused) return undefined;
+    const updateCursorOffset = () => {
+      setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
+    };
+    updateCursorOffset();
+    document.addEventListener('selectionchange', updateCursorOffset);
+    return () => document.removeEventListener('selectionchange', updateCursorOffset);
+  }, [focused]);
 
   useEffect(() => {
     setActiveSkillIndex(0);
@@ -206,7 +234,7 @@ export function ChatComposer({
   }, [thinkingConfig.defaultEffort, thinkingConfig.efforts, thinkingConfig.supported, thinkingEffort]);
 
   const selectEntry = (entry?: WorkspaceEntrySearchItem) => {
-    const command = parseMentionCommand(draft);
+    const command = mentionCommand ?? parseMentionCommand(draft, commandCursorOffset);
     if (!command || !entry) return;
     senderRef.current?.insert?.(
       [createWorkspaceMentionSlot(entry), createTextSlot(' ')],
@@ -219,7 +247,7 @@ export function ChatComposer({
   };
 
   const selectSkill = (skill?: RuntimeSkillSummary) => {
-    const command = parseSlashCommand(draft);
+    const command = slashCommand ?? parseSlashCommand(draft, commandCursorOffset);
     if (!command || !skill) return;
     senderRef.current?.insert?.(
       [createSelectedSkillSlot(skill), createTextSlot(' ')],
@@ -234,6 +262,7 @@ export function ChatComposer({
   const handleChange = (value: string, _event?: unknown, slotConfig?: SlotConfigType[]) => {
     if (dismissedCommandValue && dismissedCommandValue !== value) setDismissedCommandValue('');
     if (dismissedSlashValue && dismissedSlashValue !== value) setDismissedSlashValue('');
+    setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
     syncSelectedSkillsFromSlots(slotConfig);
     onDraftChange(value);
   };
@@ -306,7 +335,12 @@ export function ChatComposer({
       selectSkill(item.skill);
       return;
     }
-    const command = parseSlashCommand(draft);
+    if (item.kind === 'action' && item.type === 'memory-mode') {
+      if (!item.disabled) void onThreadMemoryModeChange(nextThreadMemoryMode(memoryMode));
+      setFocused(true);
+      return;
+    }
+    const command = slashCommand ?? parseSlashCommand(draft, commandCursorOffset);
     const nextDraft = command ? `${draft.slice(0, command.start)}${draft.slice(command.end)}`.trimStart() : draft;
     setDismissedSlashValue('');
     if (command) {
@@ -428,8 +462,12 @@ export function ChatComposer({
         suffix={false}
         onBlur={() => setFocused(false)}
         onChange={handleChange}
-        onFocus={() => setFocused(true)}
+        onFocus={() => {
+          setFocused(true);
+          setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
+        }}
         onKeyDown={handleKeyDown}
+        onKeyUp={() => setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null))}
         onPasteFile={(files) => {
           void addImageFiles(Array.from(files));
         }}
@@ -500,6 +538,21 @@ export function ChatComposer({
       />
     </div>
   );
+}
+
+function nextThreadMemoryMode(mode: RuntimeThreadMemoryMode): RuntimeThreadMemoryMode {
+  return mode === 'enabled' ? 'disabled' : 'enabled';
+}
+
+function threadMemoryModeDescription(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean): string {
+  if (!globalGenerationEnabled) return '全局记忆生成已关闭';
+  if (mode === 'polluted') return '已因外部上下文暂停，选择后重新启用';
+  return mode === 'enabled' ? '对话结束后允许提炼长期记忆' : '当前对话不会写入新的长期记忆';
+}
+
+function threadMemoryModeScope(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean): string {
+  if (!globalGenerationEnabled) return '全局关闭';
+  return mode === 'enabled' ? '已开启' : '已暂停';
 }
 
 function ChatThinkingMenu({
@@ -643,6 +696,24 @@ function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigType {
 
 function createTextSlot(value: string): SlotConfigType {
   return { type: 'text', value };
+}
+
+function readComposerCursorOffset(inputElement?: HTMLElement | null): number | null {
+  if (!inputElement) return null;
+  const ownerWindow = inputElement.ownerDocument.defaultView;
+  if (
+    ownerWindow
+    && (inputElement instanceof ownerWindow.HTMLTextAreaElement || inputElement instanceof ownerWindow.HTMLInputElement)
+  ) {
+    return inputElement.selectionStart ?? null;
+  }
+
+  const selection = inputElement.ownerDocument.getSelection();
+  if (!selection?.focusNode || selection.rangeCount === 0 || !inputElement.contains(selection.focusNode)) return null;
+  const range = inputElement.ownerDocument.createRange();
+  range.selectNodeContents(inputElement);
+  range.setEnd(selection.focusNode, selection.focusOffset);
+  return range.toString().length;
 }
 
 function activeModelName(config: RuntimeConfigState | null): string | null {

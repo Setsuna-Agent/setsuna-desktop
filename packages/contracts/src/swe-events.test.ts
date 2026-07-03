@@ -458,6 +458,75 @@ describe('runtime AppServer SWE event mapping', () => {
     ]);
   });
 
+  it('maps streaming agent message memory citations onto the completed item', () => {
+    const mapEvent = createSweNotificationMapper();
+    const created: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt: '2026-06-27T00:00:00.000Z',
+      payload: {
+        message: {
+          id: 'msg_1',
+          turnId: 'turn_1',
+          role: 'assistant',
+          content: '',
+          createdAt: '2026-06-27T00:00:00.000Z',
+          status: 'streaming',
+        },
+      },
+    };
+    const delta: RuntimeEvent = {
+      id: 'event_2',
+      seq: 2,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'message.delta',
+      createdAt: '2026-06-27T00:00:01.000Z',
+      payload: { messageId: 'msg_1', text: 'answer' },
+    };
+    const completed: RuntimeEvent = {
+      id: 'event_3',
+      seq: 3,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt: '2026-06-27T00:00:02.000Z',
+      payload: {
+        messageId: 'msg_1',
+        memoryCitation: {
+          entries: [{ path: 'MEMORY.md', lineStart: 1, lineEnd: 2, note: 'summary' }],
+          rolloutIds: ['thread_a'],
+        },
+      },
+    };
+
+    expect(mapEvent(created)).toEqual([]);
+    expect(mapEvent(delta)).toHaveLength(2);
+    expect(mapEvent(completed)).toEqual([
+      {
+        method: 'item/completed',
+        params: {
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          item: {
+            type: 'agentMessage',
+            id: 'msg_1',
+            text: 'answer',
+            phase: null,
+            memoryCitation: {
+              entries: [{ path: 'MEMORY.md', lineStart: 1, lineEnd: 2, note: 'summary' }],
+              rolloutIds: ['thread_a'],
+            },
+          },
+          completedAtMs: Date.parse('2026-06-27T00:00:02.000Z'),
+        },
+      },
+    ]);
+  });
+
   it('completes streaming agent messages that start with initial text', () => {
     const mapEvent = createSweNotificationMapper();
     const created: RuntimeEvent = {

@@ -12,11 +12,13 @@ import type {
   RuntimeMcpServerPatch,
   RuntimeMemoryQuery,
   RuntimeMessage,
+  RuntimeConfigState,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeUsageQuery,
   SendTurnInput,
   SteerTurnInput,
+  ThreadMemoryModePatch,
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
@@ -273,7 +275,12 @@ export async function handleRuntimeRestRequest(
   }
 
   if (request.method === 'POST' && url.pathname === '/v1/threads') {
-    const thread = await runtime.threadStore.createThread(await readBody<CreateThreadInput>(request, {}));
+    const input = await readBody<CreateThreadInput>(request, {});
+    const config = await runtime.configStore.getConfig().catch(() => null);
+    const thread = await runtime.threadStore.createThread({
+      ...input,
+      memoryMode: input.memoryMode ?? newThreadMemoryMode(config),
+    });
     sendJson(response, 201, thread);
     return true;
   }
@@ -293,6 +300,18 @@ export async function handleRuntimeRestRequest(
     const thread = await runtime.threadStore.updateThread(
       decodeURIComponent(threadMatch[1]),
       await readBody<ThreadPatch>(request),
+    );
+    sendJson(response, 200, withActiveTurn(runtime, thread));
+    return true;
+  }
+
+  const threadMemoryModeMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/memory-mode$/);
+  if (threadMemoryModeMatch && request.method === 'PATCH') {
+    const input = await readBody<ThreadMemoryModePatch>(request);
+    const thread = await runtime.threadStore.updateThreadMemoryMode(
+      decodeURIComponent(threadMemoryModeMatch[1]),
+      threadMemoryModeFromInput(input.mode),
+      'user_request',
     );
     sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
@@ -528,6 +547,16 @@ function statusPathFromLine(line: string): string {
 
 function truncateCommitSubject(value: string): string {
   return value.length <= 72 ? value : `${value.slice(0, 69).trimEnd()}...`;
+}
+
+function newThreadMemoryMode(config: RuntimeConfigState | null): CreateThreadInput['memoryMode'] {
+  if (!config) return 'enabled';
+  return (config.memory?.generateMemories ?? config.memoryEnabled) ? 'enabled' : 'disabled';
+}
+
+function threadMemoryModeFromInput(value: unknown): ThreadMemoryModePatch['mode'] {
+  if (value === 'enabled' || value === 'disabled' || value === 'polluted') return value;
+  throw new Error('Invalid thread memory mode.');
 }
 
 function withActiveTurn<TThread extends RuntimeThread | RuntimeThreadSummary>(

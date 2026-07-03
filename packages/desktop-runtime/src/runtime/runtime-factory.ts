@@ -54,7 +54,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpRuntimeToolHost(mcpStore),
     new PcLocalToolHost(workspaceProjects),
     new SkillManagementToolHost(skillRegistry),
-    new MemoryToolHost(memoryStore),
+    new MemoryToolHost(memoryStore, configStore),
   ]);
   const modelClient = new ConfiguredModelClient(configStore);
   const agentLoop = new AgentLoop({
@@ -70,6 +70,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     usageStore,
     memoryStore,
   });
+  // Codex 会在 root session 启动时触发 memories startup；桌面端这里做一次轻量历史抽取。
+  const memoryStartup = agentLoop.runMemoryStartupExtraction().catch(() => ({ claimed: 0, extracted: 0 }));
 
   return {
     agentLoop,
@@ -77,6 +79,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     configStore,
     eventBus,
     memoryStore,
+    memoryStartup,
     modelClient,
     mcpStore,
     skillRegistry,

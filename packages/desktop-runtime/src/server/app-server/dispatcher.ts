@@ -39,6 +39,7 @@ import {
   sweThreadFromRuntimeSummary,
   sweThreadFromRuntimeThread,
   sweThreadItemsListResponse,
+  sweThreadMemoryModeSetInput,
   sweThreadSessionResponse,
   sweThreadTurnsListResponse,
   sweTurn,
@@ -285,6 +286,18 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId, 'threadId');
     const thread = await requireRuntimeThread(runtime, threadId);
     return { goal: thread.goal ? { ...thread.goal } : null };
+  }
+
+  if (method === 'thread/memoryMode/set') {
+    const input = sweThreadMemoryModeSetInput(params);
+    await requireRuntimeThread(runtime, input.threadId);
+    await runtime.threadStore.updateThreadMemoryMode(input.threadId, input.mode, 'user_request');
+    return {};
+  }
+
+  if (method === 'memory/reset') {
+    await runtime.memoryStore.clearMemories();
+    return {};
   }
 
   if (method === 'thread/goal/clear') {

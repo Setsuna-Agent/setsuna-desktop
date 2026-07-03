@@ -23,6 +23,7 @@ describe('json thread store', () => {
     expect(globalOnly).toMatchObject([{ id: global.id }]);
     expect(projectOnly).toMatchObject([{ id: project.id, projectId: 'project_1' }]);
     expect(anyProject).toMatchObject([{ id: project.id, projectId: 'project_1' }]);
+    expect(global.memoryMode).toBe('enabled');
   });
 
   it('keeps the thread index complete across concurrent thread writes', async () => {
@@ -66,6 +67,21 @@ describe('json thread store', () => {
     expect((await store.listEvents(thread.id)).at(-1)).toMatchObject({
       type: 'thread.updated',
       payload: { title: 'Renamed', archived: true },
+    });
+  });
+
+  it('updates thread memory mode through the serialized event log', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Memory mode' });
+
+    const updated = await store.updateThreadMemoryMode(thread.id, 'polluted', 'external_context:mcp__search__fetch');
+    const listed = await store.listThreads({ includeArchived: true });
+
+    expect(updated).toMatchObject({ memoryMode: 'polluted', lastSeq: thread.lastSeq + 1 });
+    expect(listed.find((item) => item.id === thread.id)).toMatchObject({ memoryMode: 'polluted' });
+    expect((await store.listEvents(thread.id)).at(-1)).toMatchObject({
+      type: 'thread.memory_mode_updated',
+      payload: { mode: 'polluted', reason: 'external_context:mcp__search__fetch' },
     });
   });
 

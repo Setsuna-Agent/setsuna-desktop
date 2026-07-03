@@ -35,6 +35,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
+  if (event.type === 'thread.memory_mode_updated') {
+    next.memoryMode = event.payload.mode;
+    return next;
+  }
+
   if (event.type === 'thread.goal_updated') {
     next.goal = { ...event.payload.goal };
     return next;
@@ -127,6 +132,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       message.status = 'complete';
       message.completedAt = event.createdAt;
       if (event.payload.toolCalls?.length) message.toolCalls = event.payload.toolCalls.map((toolCall) => ({ ...toolCall }));
+      if (event.payload.memoryCitation) message.memoryCitation = cloneMemoryCitation(event.payload.memoryCitation);
       if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
     }
     return next;
@@ -275,9 +281,17 @@ function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),
+  };
+}
+
+function cloneMemoryCitation(citation: NonNullable<RuntimeMessage['memoryCitation']>): NonNullable<RuntimeMessage['memoryCitation']> {
+  return {
+    entries: citation.entries.map((entry) => ({ ...entry })),
+    rolloutIds: [...citation.rolloutIds],
   };
 }
 

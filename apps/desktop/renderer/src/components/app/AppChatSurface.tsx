@@ -4,6 +4,7 @@ import type {
   RuntimeThread,
   RuntimeConfigState,
   RuntimeSkillSummary,
+  RuntimeThreadMemoryMode,
   WorkspaceEntry,
   WorkspaceEntrySearchItem,
   WorkspaceFileRead,
@@ -54,6 +55,7 @@ export function AppChatSurface({
   onAnswerApproval,
   onCompactContext,
   onClearContext,
+  onThreadMemoryModeChange,
   onDeleteMessages,
   onDiscardFileChanges,
   onCloseBottomPanel,
@@ -113,6 +115,7 @@ export function AppChatSurface({
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
+  onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onCloseBottomPanel: (panelId: string) => void;
@@ -169,6 +172,7 @@ export function AppChatSurface({
         onAnswerApproval={onAnswerApproval}
         onCompactContext={onCompactContext}
         onClearContext={onClearContext}
+        onThreadMemoryModeChange={onThreadMemoryModeChange}
         onDeleteMessages={onDeleteMessages}
         onDiscardFileChanges={onDiscardFileChanges}
         onDraftChange={onDraftChange}

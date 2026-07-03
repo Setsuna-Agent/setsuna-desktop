@@ -5,6 +5,7 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
@@ -12,7 +13,9 @@ import { readJsonFile, writeJsonFile } from './json-file.js';
 const DEFAULT_MAX_OUTPUT_TOKENS = 68000;
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
 
-type StoredConfig = Omit<RuntimeConfigState, 'configPath' | 'dataPath' | 'providers'> & {
+type StoredConfig = Omit<RuntimeConfigState, 'configPath' | 'dataPath' | 'providers' | 'memory' | 'memoryEnabled'> & {
+  memory?: Partial<RuntimeMemorySettings>;
+  memoryEnabled?: boolean;
   providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
 };
 
@@ -56,12 +59,14 @@ export class FileConfigStore implements ConfigStore {
     const secrets = await this.readSecrets();
     const providers = normalizeProviders(input.providers ?? previous.providers, previous.providers, secrets);
     const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
+    const memory = memorySettingsForSave(input, previous);
 
     const stored: StoredConfig = {
       activeProviderId,
       globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
       storagePath: normalizeStoragePath(input.storagePath ?? previous.storagePath),
-      memoryEnabled: input.memoryEnabled ?? previous.memoryEnabled ?? true,
+      memory,
+      memoryEnabled: memory.useMemories || memory.generateMemories,
       setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
       permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
@@ -91,13 +96,15 @@ export class FileConfigStore implements ConfigStore {
   }
 
   private toState(stored: StoredConfig, secrets: StoredSecrets): RuntimeConfigState {
+    const memory = normalizeMemorySettings(stored.memory, stored.memoryEnabled);
     return {
       configPath: this.configPath,
       dataPath: this.dataDir,
       storagePath: normalizeStoragePath(stored.storagePath),
       activeProviderId: stored.activeProviderId,
       globalPrompt: normalizeGlobalPrompt(stored.globalPrompt),
-      memoryEnabled: stored.memoryEnabled ?? true,
+      memory,
+      memoryEnabled: memory.useMemories || memory.generateMemories,
       setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
@@ -121,6 +128,7 @@ function defaultConfig(): StoredConfig {
     activeProviderId: 'local-test',
     globalPrompt: '',
     storagePath: '',
+    memory: defaultMemorySettings(),
     memoryEnabled: true,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
@@ -245,6 +253,66 @@ function normalizeGlobalPrompt(value: unknown): string {
 
 function normalizeStoragePath(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function defaultMemorySettings(): RuntimeMemorySettings {
+  return {
+    useMemories: true,
+    generateMemories: true,
+    dedicatedTools: false,
+    disableOnExternalContext: false,
+  };
+}
+
+function memorySettingsForSave(input: RuntimeConfigInput, previous: StoredConfig): RuntimeMemorySettings {
+  const previousMemory = normalizeMemorySettings(previous.memory, previous.memoryEnabled);
+  const base = typeof input.memoryEnabled === 'boolean'
+    ? {
+        ...previousMemory,
+        useMemories: input.memoryEnabled,
+        generateMemories: input.memoryEnabled,
+      }
+    : previousMemory;
+  return normalizeMemorySettings(input.memory ? { ...base, ...input.memory } : base);
+}
+
+function normalizeMemorySettings(value: unknown, legacyMemoryEnabled?: unknown): RuntimeMemorySettings {
+  const legacyEnabled = typeof legacyMemoryEnabled === 'boolean' ? legacyMemoryEnabled : undefined;
+  const fallback = legacyEnabled === undefined
+    ? defaultMemorySettings()
+    : {
+        ...defaultMemorySettings(),
+        useMemories: legacyEnabled,
+        generateMemories: legacyEnabled,
+      };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
+  const record = value as Record<string, unknown>;
+  return {
+    useMemories: booleanValue(record.useMemories, fallback.useMemories),
+    generateMemories: booleanValue(record.generateMemories, fallback.generateMemories),
+    dedicatedTools: booleanValue(record.dedicatedTools, fallback.dedicatedTools),
+    disableOnExternalContext: booleanValue(record.disableOnExternalContext, fallback.disableOnExternalContext),
+    extractModel: nonEmpty(record.extractModel),
+    consolidationModel: nonEmpty(record.consolidationModel),
+    minRateLimitRemainingPercent: percentOptionalInt(record.minRateLimitRemainingPercent),
+    maxRolloutsPerStartup: positiveOptionalInt(record.maxRolloutsPerStartup),
+    maxRolloutAgeDays: positiveOptionalInt(record.maxRolloutAgeDays),
+    minRolloutIdleHours: positiveOptionalInt(record.minRolloutIdleHours),
+    maxUnusedDays: positiveOptionalInt(record.maxUnusedDays),
+    maxRawMemoriesForConsolidation: positiveOptionalInt(record.maxRawMemoriesForConsolidation),
+  };
+}
+
+function booleanValue(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function positiveOptionalInt(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+}
+
+function percentOptionalInt(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? Math.floor(value) : undefined;
 }
 
 function normalizeSetsunaStyle(value: unknown): RuntimeConfigState['setsunaStyle'] {

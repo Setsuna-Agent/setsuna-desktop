@@ -558,6 +558,38 @@ describe('provider model adapters', () => {
     expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Configured' });
   });
 
+  it('uses a requested model when it exists on the active provider', async () => {
+    const captured: CapturedRequest = {};
+    const memoryModel = {
+      ...model,
+      id: 'memory-model',
+      name: 'Memory model',
+      code: 'memory-extract-model',
+      maxOutputTokens: 456,
+      enabled: false,
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => ({
+          ...provider('openai-compatible', 'https://llm.example/v1'),
+          models: [model, memoryModel],
+        }),
+      },
+      fakeFetch('data: {"choices":[{"delta":{"content":"Memory"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client, { model: 'memory-extract-model' });
+
+    expect(expectBody(captured).model).toBe('memory-extract-model');
+    expect(expectBody(captured).max_tokens).toBe(456);
+  });
+
   it('uses configured default thinking effort only when the turn enables thinking', async () => {
     const captured: CapturedRequest = {};
     const thinkingModel = {

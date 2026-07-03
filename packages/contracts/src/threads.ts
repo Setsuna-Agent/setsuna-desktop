@@ -1,4 +1,5 @@
 import type { RuntimeToolCall } from './provider.js';
+import type { RuntimeMemoryCitation } from './memory.js';
 
 export type RuntimeMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -16,6 +17,7 @@ export type RuntimeMessage = {
   attachments?: RuntimeMessageAttachment[];
   contextCompaction?: RuntimeContextCompactionNotice;
   reviewMode?: RuntimeReviewModeNotice;
+  memoryCitation?: RuntimeMemoryCitation;
   toolCallId?: string;
   toolName?: string;
   toolCalls?: RuntimeToolCall[];
@@ -86,6 +88,8 @@ export type RuntimeGitInfo = {
   originUrl: string | null;
 };
 
+export type RuntimeThreadMemoryMode = 'enabled' | 'disabled' | 'polluted';
+
 export type RuntimeToolRunStatus = 'pending_approval' | 'running' | 'success' | 'error' | 'rejected';
 
 export type RuntimeToolRun = {
@@ -114,6 +118,7 @@ export type RuntimeThreadSummary = {
   createdAt: string;
   updatedAt: string;
   archived: boolean;
+  memoryMode?: RuntimeThreadMemoryMode;
   gitInfo?: RuntimeGitInfo | null;
   goal?: RuntimeThreadGoal;
   messageCount: number;
@@ -141,11 +146,16 @@ export type CreateThreadInput = {
   title?: string;
   projectId?: string;
   forkedFromId?: string;
+  memoryMode?: RuntimeThreadMemoryMode;
 };
 
 export type ThreadPatch = {
   title?: string;
   archived?: boolean;
+};
+
+export type ThreadMemoryModePatch = {
+  mode: RuntimeThreadMemoryMode;
 };
 
 export type SendTurnInput = {

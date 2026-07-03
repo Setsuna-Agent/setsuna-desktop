@@ -25,6 +25,21 @@ export type ProviderModelConfig = {
 
 export type RuntimeSetsunaStyle = 'developer' | 'daily';
 
+export type RuntimeMemorySettings = {
+  useMemories: boolean;
+  generateMemories: boolean;
+  dedicatedTools: boolean;
+  disableOnExternalContext: boolean;
+  extractModel?: string;
+  consolidationModel?: string;
+  minRateLimitRemainingPercent?: number;
+  maxRolloutsPerStartup?: number;
+  maxRolloutAgeDays?: number;
+  minRolloutIdleHours?: number;
+  maxUnusedDays?: number;
+  maxRawMemoriesForConsolidation?: number;
+};
+
 export type RuntimeConfigState = {
   configPath: string;
   dataPath: string;
@@ -32,6 +47,7 @@ export type RuntimeConfigState = {
   activeProviderId?: string;
   providers: ProviderConfigState[];
   globalPrompt: string;
+  memory: RuntimeMemorySettings;
   memoryEnabled: boolean;
   setsunaStyle: RuntimeSetsunaStyle;
   approvalPolicy: 'strict' | 'on-request' | 'full';
@@ -86,6 +102,7 @@ export type RuntimeConfigInput = {
   activeProviderId?: string;
   globalPrompt?: string;
   storagePath?: string;
+  memory?: Partial<RuntimeMemorySettings>;
   memoryEnabled?: boolean;
   setsunaStyle?: RuntimeSetsunaStyle | string;
   approvalPolicy?: RuntimeConfigState['approvalPolicy'];

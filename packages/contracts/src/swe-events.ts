@@ -33,7 +33,7 @@ export type SweThreadItem =
       id: string;
       text: string;
       phase: null;
-      memoryCitation: null;
+      memoryCitation: RuntimeMessage['memoryCitation'] | null;
     }
   | {
       type: 'reasoning';
@@ -512,7 +512,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     if (message.status === 'streaming') {
       return startAssistantMessageStream(state, event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt));
     }
-    return completedAssistantContentNotifications(event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt));
+    return completedAssistantContentNotifications(event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt), message.memoryCitation ?? null);
   }
 
   if (event.type === 'message.delta') {
@@ -525,7 +525,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     const stream = assistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
     if (!stream) return [];
     clearAssistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
-    return completedAssistantContentNotifications(event.threadId, turnId, event.payload.messageId, stream.text, toEpochMs(event.createdAt));
+    return completedAssistantContentNotifications(event.threadId, turnId, event.payload.messageId, stream.text, toEpochMs(event.createdAt), event.payload.memoryCitation ?? null);
   }
 
   if (event.type === 'tool.started') {
@@ -765,7 +765,7 @@ function runtimeMessageToSweItems(message: RuntimeMessage): SweThreadItem[] {
     items.push({ type: 'userMessage', id: message.id, clientId: message.clientId ?? null, content: [{ type: 'text', text: message.content }] });
   }
   if (message.role === 'assistant' && message.content.trim()) {
-    items.push(...assistantContentItems(message.id, message.content));
+    items.push(...assistantContentItems(message.id, message.content, message.memoryCitation ?? null));
   }
   for (const run of message.toolRuns ?? []) {
     items.push(runtimeToolRunToSweItem(run));
@@ -848,8 +848,8 @@ function dynamicToolItem(
   };
 }
 
-function agentMessageItem(id: string, text: string): SweThreadItem {
-  return { type: 'agentMessage', id, text, phase: null, memoryCitation: null };
+function agentMessageItem(id: string, text: string, memoryCitation: RuntimeMessage['memoryCitation'] | null = null): SweThreadItem {
+  return { type: 'agentMessage', id, text, phase: null, memoryCitation };
 }
 
 function reasoningItem(id: string, summary: string[] = [], content: string[] = []): SweThreadItem {
@@ -872,14 +872,15 @@ function contextCompactionItemId(turnId: string): string {
   return `${turnId}:context_compaction`;
 }
 
-function assistantContentItems(messageId: string, text: string): SweThreadItem[] {
+function assistantContentItems(messageId: string, text: string, memoryCitation: RuntimeMessage['memoryCitation'] | null = null): SweThreadItem[] {
   if (!text.trim()) return [];
   const segments = assistantContentSegments(text);
-  if (!segments.some((segment) => segment.type === 'think')) return [agentMessageItem(messageId, text)];
+  if (!segments.some((segment) => segment.type === 'think')) return [agentMessageItem(messageId, text, memoryCitation)];
 
   const items: SweThreadItem[] = [];
   let agentSegmentIndex = 0;
   let reasoningSegmentIndex = 0;
+  let citationPending = memoryCitation;
   for (const segment of segments) {
     if (!segment.content.trim()) continue;
     if (segment.type === 'think') {
@@ -887,7 +888,8 @@ function assistantContentItems(messageId: string, text: string): SweThreadItem[]
       reasoningSegmentIndex += 1;
       continue;
     }
-    items.push(agentMessageItem(agentMessageItemId(messageId, agentSegmentIndex), segment.content));
+    items.push(agentMessageItem(agentMessageItemId(messageId, agentSegmentIndex), segment.content, citationPending));
+    citationPending = null;
     agentSegmentIndex += 1;
   }
   return items;
@@ -899,8 +901,9 @@ function completedAssistantContentNotifications(
   messageId: string,
   text: string,
   completedAtMs: number,
+  memoryCitation: RuntimeMessage['memoryCitation'] | null = null,
 ): SweNotification[] {
-  return assistantContentItems(messageId, text).map((item) => ({
+  return assistantContentItems(messageId, text, memoryCitation).map((item) => ({
     method: 'item/completed',
     params: { threadId, turnId, item, completedAtMs },
   }));

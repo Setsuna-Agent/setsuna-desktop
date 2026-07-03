@@ -3,11 +3,12 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeMemorySettings,
   RuntimeMcpServer,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeFactory } from '../types.js';
 import { AppServerRpcError } from './errors.js';
-import { hasOwn, numericInput, recordInput, requiredRawString, requiredString, stringInput } from './input.js';
+import { hasOwn, numericInput, recordInput, requiredPositiveInteger, requiredRawString, requiredString, stringInput } from './input.js';
 
 type AppServerModelCatalogItem = {
   id: string;
@@ -245,6 +246,7 @@ function sweEffectiveConfig(config: RuntimeConfigState, cwd: string): Record<str
       setsuna_style: config.setsunaStyle,
       memory_enabled: config.memoryEnabled,
     },
+    memories: appServerMemoryConfig(config.memory),
     features: appServerConfigFeatureEnablement(config),
   };
 }
@@ -269,6 +271,10 @@ function appServerConfigOrigins(
     origins['sandbox_workspace_write.exclude_tmpdir_env_var'] = metadata;
   }
   if (hasOwn(sandbox, 'exclude_slash_tmp')) origins['sandbox_workspace_write.exclude_slash_tmp'] = metadata;
+  const memories = recordInput(configValue.memories);
+  for (const key of Object.keys(memories)) {
+    origins[`memories.${key}`] = metadata;
+  }
   return origins;
 }
 
@@ -373,7 +379,9 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         break;
       case 'features':
         next.features = sweMergeObject(next.features ?? {}, sweBooleanRecord(edit.value, 'features'), edit.mergeStrategy);
-        next.memoryEnabled = next.features.memories ?? config.memoryEnabled;
+        break;
+      case 'memories':
+        next.memory = appServerMemorySettingsInput(edit.value);
         break;
       case 'desktop':
         next.desktopSettings = sweMergeObject(next.desktopSettings ?? {}, recordInput(edit.value), edit.mergeStrategy);
@@ -384,13 +392,20 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
           const name = edit.keyPath.slice('features.'.length);
           if (typeof edit.value !== 'boolean') throw new AppServerRpcError(-32602, `${edit.keyPath} must be a boolean`);
           next.features = { ...(next.features ?? {}), [name]: edit.value };
-          if (name === 'memories') next.memoryEnabled = edit.value;
           break;
         }
         if (edit.keyPath.startsWith('desktop.')) {
           const key = edit.keyPath.slice('desktop.'.length);
           next.desktopSettings = { ...(next.desktopSettings ?? {}), [key]: edit.value };
           sweApplyDesktopSettings(next, { [key]: edit.value });
+          break;
+        }
+        if (edit.keyPath.startsWith('memories.')) {
+          const key = edit.keyPath.slice('memories.'.length);
+          next.memory = {
+            ...(next.memory ?? config.memory),
+            ...appServerMemorySettingInput(key, edit.value),
+          };
           break;
         }
         throw appServerConfigWriteError('configValidationError', `Unsupported config key path: ${edit.keyPath}`);
@@ -510,6 +525,132 @@ function sweApplyDesktopSettings(input: RuntimeConfigInput, settings: Record<str
   }
 }
 
+function appServerMemoryConfig(memory: RuntimeMemorySettings): Record<string, unknown> {
+  return {
+    disable_on_external_context: memory.disableOnExternalContext,
+    dedicated_tools: memory.dedicatedTools,
+    generate_memories: memory.generateMemories,
+    use_memories: memory.useMemories,
+    ...(memory.extractModel ? { extract_model: memory.extractModel } : {}),
+    ...(memory.consolidationModel ? { consolidation_model: memory.consolidationModel } : {}),
+    ...(memory.minRateLimitRemainingPercent !== undefined ? { min_rate_limit_remaining_percent: memory.minRateLimitRemainingPercent } : {}),
+    ...(memory.maxRolloutsPerStartup ? { max_rollouts_per_startup: memory.maxRolloutsPerStartup } : {}),
+    ...(memory.maxRolloutAgeDays ? { max_rollout_age_days: memory.maxRolloutAgeDays } : {}),
+    ...(memory.minRolloutIdleHours ? { min_rollout_idle_hours: memory.minRolloutIdleHours } : {}),
+    ...(memory.maxUnusedDays ? { max_unused_days: memory.maxUnusedDays } : {}),
+    ...(memory.maxRawMemoriesForConsolidation ? { max_raw_memories_for_consolidation: memory.maxRawMemoriesForConsolidation } : {}),
+  };
+}
+
+function appServerMemorySettingsInput(value: unknown): Partial<RuntimeMemorySettings> {
+  const input = recordInput(value);
+  return {
+    ...optionalMemoryBoolean(input, ['disable_on_external_context', 'no_memories_if_mcp_or_web_search', 'disableOnExternalContext'], 'disableOnExternalContext'),
+    ...optionalMemoryBoolean(input, ['dedicated_tools', 'dedicatedTools'], 'dedicatedTools'),
+    ...optionalMemoryBoolean(input, ['generate_memories', 'generateMemories'], 'generateMemories'),
+    ...optionalMemoryBoolean(input, ['use_memories', 'useMemories'], 'useMemories'),
+    ...optionalMemoryString(input, ['extract_model', 'extractModel'], 'extractModel'),
+    ...optionalMemoryString(input, ['consolidation_model', 'consolidationModel'], 'consolidationModel'),
+    ...optionalMemoryPercent(input, ['min_rate_limit_remaining_percent', 'minRateLimitRemainingPercent'], 'minRateLimitRemainingPercent'),
+    ...optionalMemoryPositiveInteger(input, ['max_rollouts_per_startup', 'maxRolloutsPerStartup'], 'maxRolloutsPerStartup'),
+    ...optionalMemoryPositiveInteger(input, ['max_rollout_age_days', 'maxRolloutAgeDays'], 'maxRolloutAgeDays'),
+    ...optionalMemoryPositiveInteger(input, ['min_rollout_idle_hours', 'minRolloutIdleHours'], 'minRolloutIdleHours'),
+    ...optionalMemoryPositiveInteger(input, ['max_unused_days', 'maxUnusedDays'], 'maxUnusedDays'),
+    ...optionalMemoryPositiveInteger(input, ['max_raw_memories_for_consolidation', 'maxRawMemoriesForConsolidation'], 'maxRawMemoriesForConsolidation'),
+  };
+}
+
+function appServerMemorySettingInput(key: string, value: unknown): Partial<RuntimeMemorySettings> {
+  switch (key) {
+    case 'disable_on_external_context':
+    case 'no_memories_if_mcp_or_web_search':
+    case 'disableOnExternalContext':
+      return { disableOnExternalContext: requiredMemoryBoolean(value, key) };
+    case 'dedicated_tools':
+    case 'dedicatedTools':
+      return { dedicatedTools: requiredMemoryBoolean(value, key) };
+    case 'generate_memories':
+    case 'generateMemories':
+      return { generateMemories: requiredMemoryBoolean(value, key) };
+    case 'use_memories':
+    case 'useMemories':
+      return { useMemories: requiredMemoryBoolean(value, key) };
+    case 'extract_model':
+    case 'extractModel':
+      return { extractModel: memoryStringValue(value, key) };
+    case 'consolidation_model':
+    case 'consolidationModel':
+      return { consolidationModel: memoryStringValue(value, key) };
+    case 'min_rate_limit_remaining_percent':
+    case 'minRateLimitRemainingPercent':
+      return { minRateLimitRemainingPercent: requiredMemoryPercent(value, key) };
+    case 'max_rollouts_per_startup':
+    case 'maxRolloutsPerStartup':
+      return { maxRolloutsPerStartup: requiredPositiveInteger(value, key) };
+    case 'max_rollout_age_days':
+    case 'maxRolloutAgeDays':
+      return { maxRolloutAgeDays: requiredPositiveInteger(value, key) };
+    case 'min_rollout_idle_hours':
+    case 'minRolloutIdleHours':
+      return { minRolloutIdleHours: requiredPositiveInteger(value, key) };
+    case 'max_unused_days':
+    case 'maxUnusedDays':
+      return { maxUnusedDays: requiredPositiveInteger(value, key) };
+    case 'max_raw_memories_for_consolidation':
+    case 'maxRawMemoriesForConsolidation':
+      return { maxRawMemoriesForConsolidation: requiredPositiveInteger(value, key) };
+    default:
+      throw appServerConfigWriteError('configValidationError', `Unsupported config key path: memories.${key}`);
+  }
+}
+
+function optionalMemoryBoolean(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
+  for (const key of keys) {
+    if (hasOwn(input, key)) return { [field]: requiredMemoryBoolean(input[key], key) };
+  }
+  return {};
+}
+
+function optionalMemoryString(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
+  for (const key of keys) {
+    if (hasOwn(input, key)) return { [field]: memoryStringValue(input[key], key) };
+  }
+  return {};
+}
+
+function optionalMemoryPositiveInteger(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
+  for (const key of keys) {
+    if (hasOwn(input, key)) return { [field]: requiredPositiveInteger(input[key], key) };
+  }
+  return {};
+}
+
+function optionalMemoryPercent(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
+  for (const key of keys) {
+    if (hasOwn(input, key)) return { [field]: requiredMemoryPercent(input[key], key) };
+  }
+  return {};
+}
+
+function requiredMemoryBoolean(value: unknown, name: string): boolean {
+  if (typeof value === 'boolean') return value;
+  throw new AppServerRpcError(-32602, `memories.${name} must be a boolean`);
+}
+
+function memoryStringValue(value: unknown, name: string): string | undefined {
+  if (value === null) return undefined;
+  if (typeof value === 'string') return stringInput(value);
+  throw new AppServerRpcError(-32602, `memories.${name} must be a string or null`);
+}
+
+function requiredMemoryPercent(value: unknown, name: string): number {
+  const numeric = numericInput(value);
+  if (numeric === undefined || numeric < 0 || numeric > 100 || !Number.isInteger(numeric)) {
+    throw new AppServerRpcError(-32602, `memories.${name} must be between 0 and 100`);
+  }
+  return numeric;
+}
+
 export function sweSupportedFeatureEnablement(requested: Record<string, unknown>): Record<string, boolean> {
   const enabled: Record<string, boolean> = {};
   for (const [name, value] of Object.entries(requested)) {
@@ -522,12 +663,11 @@ export function sweSupportedFeatureEnablement(requested: Record<string, unknown>
 }
 
 export function sweFeatureEnablementRuntimeInput(
-  config: RuntimeConfigState,
+  _config: RuntimeConfigState,
   enablement: Record<string, boolean>,
 ): RuntimeConfigInput {
   return {
-    features: { ...(config.features ?? {}), ...enablement },
-    memoryEnabled: enablement.memories ?? config.memoryEnabled,
+    features: { ...(_config.features ?? {}), ...enablement },
   };
 }
 
@@ -548,8 +688,6 @@ function sweFeatureEnabledByName(name: string, config: RuntimeConfigState, fallb
   const configured = config.features?.[name];
   if (typeof configured === 'boolean') return configured;
   switch (name) {
-    case 'memories':
-      return config.memoryEnabled;
     case 'auth_elicitation':
     case 'remote_control':
     case 'remote_plugin':

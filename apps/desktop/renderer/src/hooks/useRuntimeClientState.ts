@@ -17,6 +17,7 @@ import type {
   RuntimeSkillInput,
   RuntimeSkillSummary,
   RuntimeThread,
+  RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   RuntimeToolRun,
   RuntimeUsageResponse,
@@ -275,7 +276,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   );
 
   const saveRuntimePreferences = useCallback(
-    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>) => {
+    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>) => {
       const next = await client.saveConfig(input);
       setConfig(next);
       if (Object.hasOwn(input, 'storagePath')) {
@@ -321,6 +322,17 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       setContextCompacting(false);
     }
   }, [client, contextCompacting, currentThread, reloadThreads]);
+
+  const updateCurrentThreadMemoryMode = useCallback(
+    async (mode: RuntimeThreadMemoryMode) => {
+      if (!currentThread) return null;
+      const updated = await client.updateThreadMemoryMode(currentThread.id, { mode });
+      setCurrentThread(updated);
+      await reloadThreads();
+      return updated;
+    },
+    [client, currentThread, reloadThreads],
+  );
 
   const selectProviderModel = useCallback(
     async (providerId: string, modelId: string) => {
@@ -502,6 +514,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     skills,
     terminalTurnIdsRef,
     threads,
+    updateCurrentThreadMemoryMode,
     updateMcpServer,
     updateSkill,
     usage,

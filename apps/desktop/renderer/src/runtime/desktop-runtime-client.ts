@@ -31,6 +31,7 @@ import type {
   SendTurnResponse,
   SteerTurnInput,
   ThreadList,
+  ThreadMemoryModePatch,
   ThreadPatch,
   ThreadQuery,
   AddWorkspaceProjectInput,
@@ -73,6 +74,13 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     updateThread(threadId: string, patch: ThreadPatch) {
       return request<RuntimeThread>({
         path: `/v1/threads/${encodeURIComponent(threadId)}`,
+        method: 'PATCH',
+        body: patch,
+      });
+    },
+    updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch) {
+      return request<RuntimeThread>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/memory-mode`,
         method: 'PATCH',
         body: patch,
       });

@@ -231,6 +231,50 @@ describe('applyRuntimeEventToThread context compaction', () => {
     });
   });
 
+  it('records assistant memory citations from message.completed events', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [
+        {
+          id: 'msg_1',
+          role: 'assistant',
+          content: 'answer',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          status: 'streaming',
+        },
+      ],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: {
+        messageId: 'msg_1',
+        memoryCitation: {
+          entries: [{ path: 'MEMORY.md', lineStart: 1, lineEnd: 2, note: 'summary' }],
+          rolloutIds: ['thread_a'],
+        },
+      },
+    };
+
+    const completed = applyRuntimeEventToThread(thread, event);
+
+    expect(completed.messages[0].memoryCitation).toEqual({
+      entries: [{ path: 'MEMORY.md', lineStart: 1, lineEnd: 2, note: 'summary' }],
+      rolloutIds: ['thread_a'],
+    });
+  });
+
   it('terminalizes active messages and tool runs when a turn is cancelled', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',
@@ -442,6 +486,37 @@ describe('applyRuntimeEventToThread context compaction', () => {
 
     expect(withMetadata.gitInfo).toEqual(updatedEvent.payload.gitInfo);
     expect(cleared.gitInfo).toBeNull();
+  });
+
+  it('stores thread memory mode from memory mode events', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      memoryMode: 'enabled',
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_memory_mode_1',
+      seq: 1,
+      threadId: 'thread_1',
+      type: 'thread.memory_mode_updated',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        mode: 'polluted',
+        reason: 'external_context:mcp__search__fetch',
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, event);
+
+    expect(updated.memoryMode).toBe('polluted');
+    expect(updated.lastSeq).toBe(1);
   });
 
   it('tracks context compaction running and completed states', () => {

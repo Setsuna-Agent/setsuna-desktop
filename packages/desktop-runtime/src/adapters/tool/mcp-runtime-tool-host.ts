@@ -94,6 +94,7 @@ export class McpRuntimeToolHost implements ToolHost {
     return {
       content: result.content,
       preview: result.content.slice(0, 2000),
+      containsExternalContext: true,
       data: {
         serverKey: mapping.server.key,
         toolName: mapping.tool.name,

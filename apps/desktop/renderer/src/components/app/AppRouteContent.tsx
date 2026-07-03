@@ -143,6 +143,7 @@ export function AppRouteContent({
       onAnswerApproval={(approvalId, decision) => runtime.answerApproval(approvalId, { decision })}
       onCompactContext={() => void runtime.compactCurrentThreadContext()}
       onClearContext={() => void runtime.clearCurrentThreadContext()}
+      onThreadMemoryModeChange={(mode) => void runtime.updateCurrentThreadMemoryMode(mode)}
       onDeleteMessages={(messageIds) => chatActions.deleteMessages(messageIds)}
       onDiscardFileChanges={discardFileChanges}
       onCloseBottomPanel={(panelId) => workspacePanels.closeDesktopPanelItem('bottom', panelId)}

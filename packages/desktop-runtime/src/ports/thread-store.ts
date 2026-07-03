@@ -4,6 +4,7 @@ import type {
   MessagePatch,
   RuntimeEvent,
   RuntimeThread,
+  RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   ThreadPatch,
   ThreadQuery,
@@ -15,6 +16,7 @@ export type ThreadStore = {
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
+  updateThreadMemoryMode(threadId: string, mode: RuntimeThreadMemoryMode, reason?: string): Promise<RuntimeThread>;
   updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread>;
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   truncateMessagesAfter(threadId: string, messageId: string, includeSelf?: boolean): Promise<RuntimeThread>;

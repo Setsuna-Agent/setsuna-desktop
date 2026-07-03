@@ -5,6 +5,7 @@ import type {
   MessagePatch,
   ModelRequest,
   ModelStreamEvent,
+  RuntimeConfigState,
   RuntimeEvent,
   RuntimeThread,
   RuntimeThreadSummary,
@@ -21,7 +22,7 @@ import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
 import type { ModelClient } from '../ports/model-client.js';
-import { systemClock } from '../ports/clock.js';
+import { systemClock, type Clock } from '../ports/clock.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
@@ -401,6 +402,52 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[0].messages[0]).toMatchObject({ role: 'system' });
     expect(modelClient.requests[0].messages[0].content).toContain('<memory_context>');
     expect(modelClient.requests[0].messages[0].content).toContain('local-only runtime answers');
+    expect(modelClient.requests[0].messages[0].content).toContain('source="MEMORY.md:');
+    expect(modelClient.requests[0].messages[0].content).toContain('<oai-mem-citation>');
+    expect(modelClient.requests[0].messages[0].content).toContain('========= MEMORY_SUMMARY BEGINS =========');
+    expect(modelClient.requests[0].messages[0].content).toContain('<rollout_ids>');
+  });
+
+  it('strips hidden memory citations from assistant output and stores citation metadata', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const citedMemory = await memoryStore.rememberMemory({ content: 'Cited local memory.', sourceThreadId: 'thread_a' });
+    const thread = await threadStore.createThread({ title: 'Memory citation' });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new MemoryCitationModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'answer with citation' });
+
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const assistant = saved?.messages.find((message) => message.role === 'assistant');
+    expect(assistant?.content).toBe('Answer  done.');
+    expect(assistant?.memoryCitation).toEqual({
+      entries: [{ path: 'MEMORY.md', lineStart: 1, lineEnd: 2, note: 'summary' }],
+      rolloutIds: ['thread_a', 'thread_b'],
+    });
+    expect(events.filter((event) => event.type === 'message.delta').map((event) => event.payload.text).join('')).toBe('Answer  done.');
+    expect(events.find((event) => event.type === 'message.completed')).toMatchObject({
+      payload: {
+        memoryCitation: {
+          entries: [{ path: 'MEMORY.md', lineStart: 1, lineEnd: 2, note: 'summary' }],
+          rolloutIds: ['thread_a', 'thread_b'],
+        },
+      },
+    });
+    await expect(memoryStore.listMemories()).resolves.toMatchObject({
+      memories: expect.arrayContaining([
+        expect.objectContaining({ id: citedMemory.id, usageCount: 1, lastUsedAt: expect.any(String) }),
+      ]),
+    });
   });
 
   it('stores explicit user memory requests even when the model does not call the memory tool', async () => {
@@ -528,6 +575,316 @@ describe('agent loop tools', () => {
     ]);
     expect(preview.items[0].preview).toContain('记忆生成模型要跟随当前切换的模型');
     expect(usageStore.records).toMatchObject([{ provider: 'test-provider', model: 'selected-model' }]);
+    await expect(memoryStore.listStage1Outputs()).resolves.toMatchObject({
+      outputs: [
+        expect.objectContaining({
+          threadId: thread.id,
+          turnId: expect.any(String),
+          projectId: 'project_1',
+          rawMemory: expect.stringContaining('以后记忆生成模型要跟随当前切换的模型。'),
+          rolloutSummary: expect.stringContaining('用户要求记忆生成模型要跟随当前切换的模型。'),
+        }),
+      ],
+    });
+  });
+
+  it('uses the configured model for passive memory extraction', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Memory extraction model', projectId: 'project_1' });
+    const modelClient = new PassiveMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      configStore: new MemorySettingsConfigStore({
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: false,
+        extractModel: 'memory-extract-model',
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: '以后记忆生成模型要用单独配置的模型。' });
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'memory-extract-model']);
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 1 });
+  });
+
+  it('prefers Codex stage-1 fields from passive memory extraction output', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Codex stage one', projectId: 'project_1' });
+    const modelClient = new CodexStage1MemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+    });
+
+    await loop.sendTurn(thread.id, { input: '以后记忆生成模型要跟随当前切换的模型。' });
+
+    expect(modelClient.requests[1].messages[0].content).toContain('raw_memory');
+    await expect(memoryStore.listStage1Outputs()).resolves.toMatchObject({
+      outputs: [
+        expect.objectContaining({
+          threadId: thread.id,
+          status: 'succeeded',
+          rawMemory: '## Durable Preference\nUser wants passive memory extraction to follow the currently selected model.',
+          rolloutSummary: 'User prefers passive memory extraction to follow the selected model.',
+          rolloutSlug: 'memory-model-routing',
+        }),
+      ],
+    });
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          preview: expect.stringContaining('记忆生成模型要跟随当前切换的模型'),
+        }),
+      ],
+    });
+    await expect(memoryStore.syncPhase2Workspace()).resolves.toMatchObject({
+      hasChanges: true,
+      diffPath: 'phase2_workspace_diff.md',
+      changes: expect.arrayContaining([
+        expect.objectContaining({ path: 'raw_memories.md' }),
+      ]),
+    });
+  });
+
+  it('runs phase-2 consolidation with a locked-down internal memory agent', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Codex phase two', projectId: 'project_1' });
+    const modelClient = new ConsolidatingCodexMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      configStore: new ActiveMemorySettingsConfigStore({
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: false,
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: '以后记忆生成模型要跟随当前切换的模型。' });
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual([
+      'local-runtime-smoke',
+      'passive-memory-extraction',
+      'memory-consolidation',
+      'memory-consolidation',
+    ]);
+    expect(modelClient.requests[2].tools?.map((tool) => tool.name)).toEqual([
+      'list_directory',
+      'read_file',
+      'search_text',
+      'write_file',
+      'delete_file',
+    ]);
+    await expect(memoryStore.readMemoryFile({ path: 'memory_summary.md' })).resolves.toMatchObject({
+      content: expect.stringMatching(/^v1\n/),
+    });
+    await expect(memoryStore.readMemoryFile({ path: 'MEMORY.md' })).resolves.toMatchObject({
+      content: expect.stringContaining('# Task Group: Memory model routing'),
+    });
+    await expect(memoryStore.syncPhase2Workspace()).resolves.toMatchObject({
+      hasChanges: false,
+      changes: [],
+    });
+    await expect(memoryStore.claimPhase2Job({ ownerId: 'after_success', leaseSeconds: 60, retryDelaySeconds: 60 })).resolves.toMatchObject({
+      status: 'skipped_no_input',
+    });
+  });
+
+  it('records startup stage-1 no-output results and skips the same rollout later', async () => {
+    const ids = new RandomIdGenerator();
+    const clock = new MutableClock('2026-01-01T00:00:00.000Z');
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, clock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, clock, ids);
+    const thread = await threadStore.createThread({ title: 'No durable memory', projectId: 'project_1' });
+    await appendCompletedExchange(threadStore, ids, clock, thread.id, 'turn_empty', '今天随便问一句天气。', '这类实时信息下次应重新查询。');
+    clock.set('2026-01-01T08:00:00.000Z');
+    const modelClient = new NoOutputStage1MemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock,
+      ids,
+      memoryStore,
+      configStore: new MemorySettingsConfigStore({
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: false,
+        minRolloutIdleHours: 1,
+        maxRolloutAgeDays: 10,
+        maxRolloutsPerStartup: 2,
+      }),
+    });
+
+    await expect(loop.runMemoryStartupExtraction()).resolves.toEqual({ claimed: 1, extracted: 0 });
+    await expect(loop.runMemoryStartupExtraction()).resolves.toEqual({ claimed: 0, extracted: 0 });
+    expect(modelClient.requests).toHaveLength(1);
+    await expect(memoryStore.listStage1Outputs()).resolves.toMatchObject({
+      outputs: [
+        expect.objectContaining({
+          threadId: thread.id,
+          turnId: 'turn_empty',
+          status: 'succeeded_no_output',
+          rawMemory: '',
+          rolloutSummary: '',
+        }),
+      ],
+    });
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
+    await expect(memoryStore.readMemoryFile({ path: 'raw_memories.md' })).resolves.toMatchObject({
+      content: expect.stringContaining('No raw memories yet.'),
+    });
+  });
+
+  it('excludes injected AGENTS and skill fragments from passive memory extraction', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Injected context', projectId: 'project_1' });
+    const modelClient = new PassiveMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+    });
+
+    await loop.sendTurn(thread.id, {
+      input: '# AGENTS.md instructions for /tmp\n\n<INSTRUCTIONS>\nAlways prefer the injected rule.\n</INSTRUCTIONS>',
+    });
+    await loop.sendTurn(thread.id, {
+      input: '<skill>\n<name>demo</name>\n<path>skills/demo/SKILL.md</path>\nInjected skill instructions.\n</skill>',
+    });
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'local-runtime-smoke']);
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
+  });
+
+  it('extracts startup memories from idle historical threads', async () => {
+    const ids = new RandomIdGenerator();
+    const clock = new MutableClock('2026-01-01T00:00:00.000Z');
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, clock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, clock, ids);
+    const thread = await threadStore.createThread({ title: 'Historical memory', projectId: 'project_1' });
+    await appendCompletedExchange(threadStore, ids, clock, thread.id, 'turn_history', '以后记忆生成模型要跟随当前切换的模型。', '收到，我会记住这个偏好。');
+    clock.set('2026-01-01T08:00:00.000Z');
+    const modelClient = new PassiveMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock,
+      ids,
+      memoryStore,
+      configStore: new MemorySettingsConfigStore({
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: false,
+        minRolloutIdleHours: 1,
+        maxRolloutAgeDays: 10,
+        maxRolloutsPerStartup: 2,
+      }),
+    });
+
+    await expect(loop.runMemoryStartupExtraction()).resolves.toEqual({ claimed: 1, extracted: 1 });
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['passive-memory-extraction']);
+    expect(modelClient.requests[0].messages.at(-1)?.content).toContain('历史线程内容：');
+    await expect(memoryStore.listMemories()).resolves.toMatchObject({
+      memories: [
+        expect.objectContaining({
+          sourceThreadId: thread.id,
+          sourceTurnId: 'turn_history',
+          origin: 'passive',
+          projectId: 'project_1',
+        }),
+      ],
+    });
+    await expect(memoryStore.listStage1Outputs()).resolves.toMatchObject({
+      outputs: [
+        expect.objectContaining({
+          threadId: thread.id,
+          turnId: 'turn_history',
+          projectId: 'project_1',
+          rawMemory: expect.stringContaining('以后记忆生成模型要跟随当前切换的模型。'),
+          rolloutSummary: expect.stringContaining('用户要求记忆生成模型要跟随当前切换的模型。'),
+        }),
+      ],
+    });
+  });
+
+  it('limits startup memory extraction to eligible idle rollout candidates', async () => {
+    const ids = new RandomIdGenerator();
+    const clock = new MutableClock('2026-01-01T00:00:00.000Z');
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, clock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, clock, ids);
+    const oldThreadA = await threadStore.createThread({ title: 'Old A' });
+    await appendCompletedExchange(threadStore, ids, clock, oldThreadA.id, 'turn_old_a', '请记住 A 偏好。', '好的。');
+    clock.set('2026-01-01T01:00:00.000Z');
+    const oldThreadB = await threadStore.createThread({ title: 'Old B' });
+    await appendCompletedExchange(threadStore, ids, clock, oldThreadB.id, 'turn_old_b', '请记住 B 偏好。', '好的。');
+    clock.set('2026-01-01T07:30:00.000Z');
+    const freshThread = await threadStore.createThread({ title: 'Fresh' });
+    await appendCompletedExchange(threadStore, ids, clock, freshThread.id, 'turn_fresh', '这条太新，不应启动抽取。', '好的。');
+    clock.set('2026-01-01T08:00:00.000Z');
+    const modelClient = new PassiveMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock,
+      ids,
+      memoryStore,
+      configStore: new MemorySettingsConfigStore({
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: false,
+        minRolloutIdleHours: 1,
+        maxRolloutAgeDays: 10,
+        maxRolloutsPerStartup: 1,
+      }),
+    });
+
+    await expect(loop.runMemoryStartupExtraction()).resolves.toEqual({ claimed: 1, extracted: 1 });
+
+    expect(modelClient.requests).toHaveLength(1);
+    const memories = await memoryStore.listMemories();
+    expect(memories.memories).toHaveLength(1);
+    expect(memories.memories[0].sourceThreadId).not.toBe(freshThread.id);
   });
 
   it('skips passive memory extraction when the same turn already saved an active memory', async () => {
@@ -583,6 +940,154 @@ describe('agent loop tools', () => {
 
     await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
     expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke']);
+  });
+
+  it('does not expose memory tools to the model when memory is disabled', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const configStore = new MemorySettingsConfigStore({
+      useMemories: false,
+      generateMemories: false,
+      dedicatedTools: true,
+      disableOnExternalContext: true,
+    });
+    const thread = await threadStore.createThread({ title: 'Disabled memory tools' });
+    await memoryStore.rememberMemory({ content: 'This memory should not be model-visible.' });
+    const modelClient = new MemoryCapturingModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      configStore,
+      toolHost: new MemoryToolHost(memoryStore, configStore),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'do not use memory tools' });
+
+    const toolNames = (modelClient.requests[0].tools ?? []).map((tool) => tool.name);
+    expect(toolNames).not.toEqual(expect.arrayContaining(['remember_memory', 'recall_memory', 'list_memory_files', 'read_memory_file', 'search_memory_files']));
+    expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).not.toContain('Memory tools read');
+    expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).not.toContain('This memory should not be model-visible.');
+  });
+
+  it('can use memories without generating new memories', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Read-only memory' });
+    await memoryStore.rememberMemory({ content: 'The user wants concise verification notes.' });
+    const modelClient = new PassiveMemoryModelClient();
+    const configStore = new MemorySettingsConfigStore({
+      useMemories: true,
+      generateMemories: false,
+      dedicatedTools: true,
+      disableOnExternalContext: true,
+    });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      configStore,
+      toolHost: new MemoryToolHost(memoryStore, configStore),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'answer using memory but do not extract' });
+
+    expect(modelClient.requests).toHaveLength(1);
+    expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).toContain('concise verification notes');
+    expect((modelClient.requests[0].tools ?? []).map((tool) => tool.name)).toEqual(expect.arrayContaining(['recall_memory', 'list_memory_files', 'read_memory_file', 'search_memory_files']));
+    expect((modelClient.requests[0].tools ?? []).map((tool) => tool.name)).not.toContain('remember_memory');
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 1 });
+  });
+
+  it('marks threads polluted after successful MCP tools and skips passive memory extraction', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'External context', memoryMode: 'enabled' });
+    const modelClient = new ExternalContextMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      toolHost: new ExternalContextToolHost(),
+      configStore: new MemorySettingsConfigStore({
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'search external context' });
+
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id);
+    expect(saved?.memoryMode).toBe('polluted');
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'thread.memory_mode_updated',
+        payload: {
+          mode: 'polluted',
+          reason: 'external_context:mcp__search__fetch',
+        },
+      }),
+    ]));
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'local-runtime-smoke']);
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
+  });
+
+  it('marks threads polluted when tool output contains external context', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'External output marker', memoryMode: 'enabled' });
+    const modelClient = new ExternalContextMemoryModelClient('external_search');
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+      toolHost: new ExternalContextToolHost('external_search', true),
+      configStore: new MemorySettingsConfigStore({
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'search external context' });
+
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id);
+    expect(saved?.memoryMode).toBe('polluted');
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'thread.memory_mode_updated',
+        payload: {
+          mode: 'polluted',
+          reason: 'external_context:external_search',
+        },
+      }),
+    ]));
+    await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
   });
 
   it('passes per-turn thinking options and stores reasoning deltas', async () => {
@@ -1206,6 +1711,31 @@ class CapturingToolHost implements ToolHost {
   }
 }
 
+class ExternalContextToolHost implements ToolHost {
+  constructor(
+    private readonly toolName = 'mcp__search__fetch',
+    private readonly containsExternalContext = false,
+  ) {}
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: this.toolName,
+        description: 'Fetch external search context',
+        inputSchema: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      },
+    ];
+  }
+
+  async runTool() {
+    return { content: 'external search result', containsExternalContext: this.containsExternalContext };
+  }
+}
+
 class BlockingToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown; projectId?: string }> = [];
   private markStarted: () => void = () => undefined;
@@ -1276,6 +1806,10 @@ class DelayedSteerAppendThreadStore implements ThreadStore {
 
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread> {
     return this.inner.updateThread(threadId, patch);
+  }
+
+  updateThreadMemoryMode(threadId: string, mode: NonNullable<RuntimeThread['memoryMode']>, reason?: string): Promise<RuntimeThread> {
+    return this.inner.updateThreadMemoryMode(threadId, mode, reason);
   }
 
   updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread> {
@@ -1494,6 +2028,29 @@ class MemoryCapturingModelClient implements ModelClient {
   }
 }
 
+class MemoryCitationModelClient implements ModelClient {
+  async *stream(_request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    yield { type: 'text_delta', text: 'Answer <oai-mem-' };
+    yield {
+      type: 'text_delta',
+      text: [
+        'citation>',
+        '<citation_entries>',
+        'MEMORY.md:1-2|note=[summary]',
+        '</citation_entries>',
+        '<rollout_ids>',
+        'thread_a',
+        'thread_b',
+        'thread_a',
+        '</rollout_ids>',
+        '</oai-mem-',
+      ].join('\n'),
+    };
+    yield { type: 'text_delta', text: 'citation> done.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class RememberMemoryToolModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -1523,7 +2080,7 @@ class PassiveMemoryModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.model === 'passive-memory-extraction') {
+    if (request.model === 'passive-memory-extraction' || request.model === 'memory-extract-model') {
       yield {
         type: 'text_delta',
         text: JSON.stringify({
@@ -1551,6 +2108,200 @@ class PassiveMemoryModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'Done.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class CodexStage1MemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          raw_memory: '## Durable Preference\nUser wants passive memory extraction to follow the currently selected model.',
+          rollout_summary: 'User prefers passive memory extraction to follow the selected model.',
+          rollout_slug: 'memory-model-routing',
+          memories: [
+            {
+              content: '用户要求记忆生成模型要跟随当前切换的模型。',
+              title: '记忆模型',
+              scope: 'project',
+              kind: 'preference',
+              tags: ['memory', 'model'],
+            },
+          ],
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Done.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ConsolidatingCodexMemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private consolidationRounds = 0;
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          raw_memory: '## Durable Preference\nUser wants passive memory extraction to follow the currently selected model.',
+          rollout_summary: 'User prefers passive memory extraction to follow the selected model.',
+          rollout_slug: 'memory-model-routing',
+          memories: [
+            {
+              content: '用户要求记忆生成模型要跟随当前切换的模型。',
+              title: '记忆模型',
+              scope: 'project',
+              kind: 'preference',
+              tags: ['memory', 'model'],
+            },
+          ],
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (request.model === 'memory-consolidation') {
+      this.consolidationRounds += 1;
+      if (this.consolidationRounds === 1) {
+        yield {
+          type: 'tool_calls',
+          toolCalls: [
+            { id: 'phase2_read_diff', name: 'read_file', arguments: JSON.stringify({ path: 'phase2_workspace_diff.md' }) },
+            {
+              id: 'phase2_write_memory',
+              name: 'write_file',
+              arguments: JSON.stringify({
+                path: 'MEMORY.md',
+                content: [
+                  '# Task Group: Memory model routing',
+                  'scope: passive memory extraction model routing in the desktop runtime',
+                  'applies_to: cwd=/Users/zy/Documents/setsuna-desktop; reuse_rule=use for memory extraction alignment work',
+                  '',
+                  '## Task 1: Align passive memory extraction with the selected model',
+                  '',
+                  '### rollout_summary_files',
+                  '',
+                  '- rollout_summaries/2026-01-01T00-00-00-demo-memory_model_routing.md (cwd=/Users/zy/Documents/setsuna-desktop, rollout_path=memory, updated_at=2026-01-01T00:00:00.000Z, thread_id=thread)',
+                  '',
+                  '### keywords',
+                  '',
+                  '- passive-memory-extraction, memory-consolidation, selected model',
+                  '',
+                  '## User preferences',
+                  '',
+                  '- when memory extraction model routing is in scope, preserve the selected-model behavior. [Task 1]',
+                  '',
+                  '## Reusable knowledge',
+                  '',
+                  '- Stage-1 output uses raw_memory, rollout_summary, and rollout_slug before phase-2 consolidation. [Task 1]',
+                  '',
+                ].join('\n'),
+              }),
+            },
+            {
+              id: 'phase2_write_summary',
+              name: 'write_file',
+              arguments: JSON.stringify({
+                path: 'memory_summary.md',
+                content: [
+                  'v1',
+                  '',
+                  '## User Profile',
+                  '',
+                  'The user works on Setsuna Desktop memory alignment.',
+                  '',
+                  '## User preferences',
+                  '',
+                  '- Preserve selected-model behavior for passive memory extraction work.',
+                  '',
+                  '## General Tips',
+                  '',
+                  '- Search MEMORY.md for passive-memory-extraction when memory routing is relevant.',
+                  '',
+                  "## What's in Memory",
+                  '',
+                  '### /Users/zy/Documents/setsuna-desktop',
+                  '',
+                  '#### 2026-01-01',
+                  '',
+                  '- Memory model routing: keywords=passive-memory-extraction, memory-consolidation; stage-1 to phase-2 alignment notes.',
+                  '',
+                ].join('\n'),
+              }),
+            },
+          ],
+        };
+        yield { type: 'done', finishReason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'text_delta', text: 'Consolidation complete.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Done.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class NoOutputStage1MemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          raw_memory: '',
+          rollout_summary: '',
+          rollout_slug: '',
+          memories: [],
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Done.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ExternalContextMemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  constructor(private readonly toolName = 'mcp__search__fetch') {}
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          memories: [{ content: '这条外部搜索结果不应该被长期记忆。', scope: 'global' }],
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_external', name: this.toolName, arguments: '{"query":"setsuna"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Used external context.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -1746,6 +2497,78 @@ class CapturingUsageStore implements UsageStore {
   }
 }
 
+class MutableClock implements Clock {
+  private value: Date;
+
+  constructor(iso: string) {
+    this.value = new Date(iso);
+  }
+
+  now(): Date {
+    return new Date(this.value);
+  }
+
+  set(iso: string): void {
+    this.value = new Date(iso);
+  }
+}
+
+async function appendCompletedExchange(
+  threadStore: ThreadStore,
+  ids: RandomIdGenerator,
+  clock: Clock,
+  threadId: string,
+  turnId: string,
+  userContent: string,
+  assistantContent: string,
+): Promise<void> {
+  const userCreatedAt = clock.now().toISOString();
+  await threadStore.appendEvent(threadId, {
+    id: ids.id('event'),
+    threadId,
+    turnId,
+    type: 'message.created',
+    createdAt: userCreatedAt,
+    payload: {
+      message: {
+        id: ids.id('msg'),
+        turnId,
+        role: 'user',
+        content: userContent,
+        createdAt: userCreatedAt,
+        status: 'complete',
+      },
+    },
+  });
+  const assistantCreatedAt = clock.now().toISOString();
+  const assistantMessageId = ids.id('msg');
+  await threadStore.appendEvent(threadId, {
+    id: ids.id('event'),
+    threadId,
+    turnId,
+    type: 'message.created',
+    createdAt: assistantCreatedAt,
+    payload: {
+      message: {
+        id: assistantMessageId,
+        turnId,
+        role: 'assistant',
+        content: assistantContent,
+        createdAt: assistantCreatedAt,
+        status: 'complete',
+      },
+    },
+  });
+  await threadStore.appendEvent(threadId, {
+    id: ids.id('event'),
+    threadId,
+    turnId,
+    type: 'message.completed',
+    createdAt: assistantCreatedAt,
+    payload: { messageId: assistantMessageId },
+  });
+}
+
 class PersonalizationConfigStore implements ConfigStore {
   async getConfig() {
     return {
@@ -1755,6 +2578,12 @@ class PersonalizationConfigStore implements ConfigStore {
       activeProviderId: 'test',
       providers: [],
       globalPrompt: 'Prefer crisp context before the answer.',
+      memory: {
+        useMemories: false,
+        generateMemories: false,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
       memoryEnabled: false,
       setsunaStyle: 'daily' as const,
       approvalPolicy: 'on-request' as const,
@@ -1771,6 +2600,59 @@ class PersonalizationConfigStore implements ConfigStore {
   }
 }
 
+class MemorySettingsConfigStore implements ConfigStore {
+  constructor(private readonly memory: RuntimeConfigState['memory']) {}
+
+  async getConfig() {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [],
+      globalPrompt: '',
+      memory: this.memory,
+      memoryEnabled: this.memory.useMemories || this.memory.generateMemories,
+      setsunaStyle: 'developer' as const,
+      approvalPolicy: 'on-request' as const,
+      permissionProfile: 'workspace-write' as const,
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
+class ActiveMemorySettingsConfigStore extends MemorySettingsConfigStore {
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    const model = {
+      id: 'memory-model',
+      name: 'Memory model',
+      code: 'memory-model',
+      enabled: true,
+      maxOutputTokens: 2000,
+      thinkingEnabled: true,
+      thinkingEfforts: ['medium'],
+      defaultThinkingEffort: 'medium',
+    };
+    return {
+      id: 'memory-provider',
+      name: 'Memory provider',
+      provider: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      enabled: true,
+      apiKey: '',
+      models: [model],
+      activeModel: model,
+    };
+  }
+}
+
 class StrictApprovalConfigStore implements ConfigStore {
   async getConfig() {
     return {
@@ -1780,6 +2662,12 @@ class StrictApprovalConfigStore implements ConfigStore {
       activeProviderId: 'test',
       providers: [],
       globalPrompt: '',
+      memory: {
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
       memoryEnabled: true,
       setsunaStyle: 'developer' as const,
       approvalPolicy: 'strict' as const,
@@ -1805,6 +2693,12 @@ class FullApprovalConfigStore implements ConfigStore {
       activeProviderId: 'test',
       providers: [],
       globalPrompt: '',
+      memory: {
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
       memoryEnabled: true,
       setsunaStyle: 'developer' as const,
       approvalPolicy: 'full' as const,
@@ -1832,6 +2726,12 @@ class ImageCapabilityConfigStore implements ConfigStore {
       activeProviderId: 'vision-provider',
       providers: [],
       globalPrompt: '',
+      memory: {
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
       memoryEnabled: true,
       setsunaStyle: 'developer' as const,
       approvalPolicy: 'on-request' as const,

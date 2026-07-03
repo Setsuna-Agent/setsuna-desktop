@@ -1,5 +1,5 @@
 import { Progress } from 'antd';
-import { Boxes, CheckSquare, Trash2, Zap } from 'lucide-react';
+import { Boxes, CheckSquare, Database, Trash2, Zap } from 'lucide-react';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 
 export type SlashCommandMenuItem =
@@ -12,7 +12,8 @@ export type SlashCommandMenuItem =
       progressPercent?: number;
       scope?: string;
       title: string;
-      type: 'clear-context' | 'compact-context';
+      type: 'clear-context' | 'compact-context' | 'memory-mode';
+      checked?: boolean;
     }
   | {
       description?: string;
@@ -50,8 +51,10 @@ export function ChatSlashCommandMenu({
             disabled={item.kind === 'action' && item.disabled}
             role="option"
             aria-selected={index === activeIndex}
+            aria-pressed={item.kind === 'action' && item.type === 'memory-mode' ? Boolean(item.checked) : undefined}
             onMouseDown={(event) => {
               event.preventDefault();
+              event.stopPropagation();
               onSelect(item);
             }}
             onMouseMove={() => onHover(index)}
@@ -65,9 +68,13 @@ export function ChatSlashCommandMenu({
                 <span className="chat-command-menu__item-desc">{item.description}</span>
               ) : null}
             </span>
-            <span className="chat-command-menu__item-scope">
-              {item.kind === 'skill' ? (item.skill.kind === 'user' ? '个人' : '内置') : item.scope}
-            </span>
+            {item.kind === 'action' && item.type === 'memory-mode' ? (
+              <MemoryCommandSwitch checked={Boolean(item.checked)} disabled={Boolean(item.disabled)} />
+            ) : (
+              <span className="chat-command-menu__item-scope">
+                {item.kind === 'skill' ? (item.skill.kind === 'user' ? '个人' : '内置') : item.scope}
+              </span>
+            )}
           </button>
         ))
       ) : (
@@ -80,6 +87,7 @@ export function ChatSlashCommandMenu({
 function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.kind === 'skill') return <Boxes className="chat-command-menu__item-icon" size={15} />;
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
+  if (item.type === 'memory-mode') return <Database className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'compact-context') {
     return (
       <Progress
@@ -97,9 +105,18 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   return <CheckSquare className="chat-command-menu__item-icon" size={15} />;
 }
 
+function MemoryCommandSwitch({ checked, disabled }: { checked: boolean; disabled: boolean }) {
+  return (
+    <span className={`chat-command-menu__item-switch ${checked ? 'is-on' : ''} ${disabled ? 'is-disabled' : ''}`} aria-hidden="true">
+      <span />
+    </span>
+  );
+}
+
 function menuTitle(item?: SlashCommandMenuItem): string {
   if (!item) return '命令';
   if (item.kind === 'skill') return '技能';
   if (item.kind === 'model') return '模型选择';
+  if (item.type === 'memory-mode') return '记忆';
   return '命令';
 }
