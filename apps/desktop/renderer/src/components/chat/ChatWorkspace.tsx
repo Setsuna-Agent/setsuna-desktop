@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { Actions, Bubble, CodeHighlighter } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
-import { ArrowDown, ChevronDown, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
 import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
@@ -1634,9 +1634,6 @@ function WorkHistoryPanel({
     <>
       <span className="chat-work-history__title">{title}</span>
       {durationLabel ? <span className="chat-work-history__duration">{durationLabel}</span> : null}
-      {canToggle ? (
-        expanded ? <ChevronDown className="chat-work-history__toggle-icon" size={13} /> : <ChevronRight className="chat-work-history__toggle-icon" size={13} />
-      ) : null}
     </>
   );
   const toggleExpanded = () => {
@@ -1704,7 +1701,11 @@ function MessageFooter({
       setCopied(false);
     }
   };
-  const timeNode = <time>{formatTime(message.createdAt)}</time>;
+  const timeNode = (
+    <time className="chat-message-footer__time" dateTime={message.createdAt} title={formatTime(message.createdAt)}>
+      {formatTime(message.createdAt)}
+    </time>
+  );
   const actionNodes = (
     <>
       <button

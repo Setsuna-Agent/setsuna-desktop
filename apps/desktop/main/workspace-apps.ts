@@ -16,6 +16,7 @@ type WorkspaceAppDefinition = DesktopWorkspaceApp & {
   macAlways?: boolean;
   linuxCommands?: string[];
   windowsCommands?: string[];
+  windowsPaths?: Array<[string, string]>;
   windowsAlways?: boolean;
 };
 
@@ -26,6 +27,9 @@ type WorkspaceAppOpenInput = {
   line?: number | null;
 };
 
+type WorkspaceAppLaunchSpec = { program: string; args: string[]; windowsHide?: boolean };
+type WorkspaceAppSpawnSpec = WorkspaceAppLaunchSpec & { windowsVerbatimArguments?: boolean };
+
 const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
   {
     id: 'vscode',
@@ -34,7 +38,12 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     macAppName: 'Visual Studio Code',
     macPaths: ['/Applications/Visual Studio Code.app', '${HOME}/Applications/Visual Studio Code.app'],
     linuxCommands: ['code'],
-    windowsCommands: ['code.cmd', 'Code.exe'],
+    windowsCommands: ['code', 'Code.exe', 'code.cmd'],
+    windowsPaths: [
+      ['LOCALAPPDATA', 'Programs\\Microsoft VS Code\\Code.exe'],
+      ['ProgramFiles', 'Microsoft VS Code\\Code.exe'],
+      ['ProgramFiles(x86)', 'Microsoft VS Code\\Code.exe'],
+    ],
   },
   {
     id: 'cursor',
@@ -43,7 +52,12 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     macAppName: 'Cursor',
     macPaths: ['/Applications/Cursor.app', '${HOME}/Applications/Cursor.app'],
     linuxCommands: ['cursor'],
-    windowsCommands: ['cursor.cmd', 'Cursor.exe'],
+    windowsCommands: ['cursor', 'Cursor.exe'],
+    windowsPaths: [
+      ['LOCALAPPDATA', 'Programs\\Cursor\\Cursor.exe'],
+      ['LOCALAPPDATA', 'Programs\\cursor\\Cursor.exe'],
+      ['ProgramFiles', 'Cursor\\Cursor.exe'],
+    ],
   },
   {
     id: 'finder',
@@ -109,9 +123,29 @@ export async function openWorkspaceApp(input: WorkspaceAppOpenInput): Promise<bo
   if (!definition) throw new Error('应用不存在。');
 
   const target = await workspaceAppFileTarget(workspaceRoot, input.filePath);
+  if (process.platform === 'win32' && definition.id === 'explorer') {
+    await openWindowsExplorer(workspaceRoot, target);
+    return true;
+  }
+
   const spec = workspaceAppLaunchSpec(definition, workspaceRoot, target, input.line ?? undefined);
-  spawn(spec.program, spec.args, { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  spawnWorkspaceApp(spec);
   return true;
+}
+
+function spawnWorkspaceApp(spec: WorkspaceAppLaunchSpec): void {
+  const spawnSpec = workspaceAppSpawnSpec(spec);
+  const child = spawn(spawnSpec.program, spawnSpec.args, {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: spawnSpec.windowsHide ?? true,
+    windowsVerbatimArguments: spawnSpec.windowsVerbatimArguments,
+  });
+  child.on('error', (error) => console.error(`[workspace-apps] failed to open ${spawnSpec.program}:`, error));
+  child.on('exit', (code, signal) => {
+    if (code && code !== 0) console.error(`[workspace-apps] ${spawnSpec.program} exited with code=${code} signal=${signal ?? 'null'}`);
+  });
+  child.unref();
 }
 
 async function resolveWorkspaceDirectory(value: string): Promise<string> {
@@ -152,7 +186,7 @@ function workspaceAppLaunchSpec(
   workspaceRoot: string,
   filePath: string | null,
   line?: number,
-): { program: string; args: string[] } {
+): WorkspaceAppLaunchSpec {
   if (process.platform === 'darwin') {
     return macWorkspaceAppLaunchSpec(definition, workspaceRoot, filePath, line);
   }
@@ -167,7 +201,7 @@ function macWorkspaceAppLaunchSpec(
   workspaceRoot: string,
   filePath: string | null,
   line?: number,
-): { program: string; args: string[] } {
+): WorkspaceAppLaunchSpec {
   if (filePath) {
     const scheme = workspaceAppFileUriScheme(definition.id);
     if (scheme) return { program: 'open', args: [workspaceAppFileUri(scheme, filePath, line)] };
@@ -184,17 +218,16 @@ function windowsWorkspaceAppLaunchSpec(
   workspaceRoot: string,
   filePath: string | null,
   line?: number,
-): { program: string; args: string[] } {
+): WorkspaceAppLaunchSpec {
   if (definition.id === 'explorer') {
     return filePath
       ? { program: 'explorer.exe', args: [`/select,${filePath}`] }
       : { program: 'explorer.exe', args: [workspaceRoot] };
   }
   if (definition.id === 'terminal') {
-    const wt = findCommandInPath('wt.exe');
-    return wt ? { program: wt, args: ['-d', workspaceRoot] } : { program: 'cmd.exe', args: ['/K', 'cd', '/d', workspaceRoot] };
+    return windowsTerminalLaunchSpec(workspaceRoot, findCommandInPath('wt.exe'));
   }
-  const program = definition.windowsCommands?.map(findCommandInPath).find(Boolean);
+  const program = resolveWindowsWorkspaceAppProgram(definition);
   if (!program) throw new Error('当前系统不支持此应用。');
   return { program, args: filePath ? workspaceAppFileArgs(definition.id, filePath, line) : [workspaceRoot] };
 }
@@ -204,7 +237,7 @@ function linuxWorkspaceAppLaunchSpec(
   workspaceRoot: string,
   filePath: string | null,
   line?: number,
-): { program: string; args: string[] } {
+): WorkspaceAppLaunchSpec {
   const program = definition.linuxCommands?.map(findCommandInPath).find(Boolean);
   if (!program) throw new Error('当前系统不支持此应用。');
   if (definition.id === 'terminal') return { program, args: ['--working-directory', workspaceRoot] };
@@ -247,14 +280,121 @@ function percentEncodePath(filePath: string): string {
     .join('');
 }
 
+async function openWindowsExplorer(workspaceRoot: string, filePath: string | null): Promise<void> {
+  const { shell } = await import('electron');
+  if (filePath) {
+    shell.showItemInFolder(filePath);
+    return;
+  }
+
+  const errorMessage = await shell.openPath(workspaceRoot);
+  if (errorMessage) throw new Error(`打开文件夹失败：${errorMessage}`);
+}
+
+export function workspaceAppSpawnSpec(
+  spec: WorkspaceAppLaunchSpec,
+  platform: NodeJS.Platform = process.platform,
+): WorkspaceAppSpawnSpec {
+  if (platform !== 'win32' || !isWindowsBatchCommand(spec.program)) return spec;
+
+  // Windows cannot CreateProcess a .cmd/.bat shim directly; cmd.exe needs verbatim quotes from Node.
+  const command = ['call', windowsCmdQuoteArg(spec.program), ...spec.args.map(windowsCmdQuoteArg)].join(' ');
+  return {
+    program: 'cmd.exe',
+    args: ['/d', '/c', command],
+    windowsVerbatimArguments: true,
+  };
+}
+
+function isWindowsBatchCommand(program: string): boolean {
+  const extension = path.extname(program).toLowerCase();
+  return extension === '.cmd' || extension === '.bat';
+}
+
+function windowsCmdQuoteArg(value: string): string {
+  if (value.includes('"')) throw new Error('Windows 命令参数不能包含双引号。');
+  return `"${value}"`;
+}
+
+export function windowsTerminalLaunchSpec(workspaceRoot: string, wtPath: string | null): WorkspaceAppSpawnSpec {
+  if (!wtPath) return windowsPowerShellLaunchSpec(workspaceRoot);
+
+  const command = [
+    'start',
+    '""',
+    windowsCmdQuoteArg(wtPath),
+    '-p',
+    windowsCmdQuoteArg('Windows PowerShell'),
+    '-d',
+    windowsCmdQuoteArg(workspaceRoot),
+  ].join(' ');
+  return {
+    program: 'cmd.exe',
+    args: ['/d', '/c', command],
+    windowsHide: false,
+    windowsVerbatimArguments: true,
+  };
+}
+
+function windowsPowerShellLaunchSpec(workspaceRoot: string): WorkspaceAppSpawnSpec {
+  const command = [
+    'start',
+    '""',
+    'powershell.exe',
+    '-NoExit',
+    '-Command',
+    windowsCmdQuoteArg(`Set-Location -LiteralPath '${workspaceRoot.replace(/'/g, "''")}'`),
+  ].join(' ');
+  return {
+    program: 'cmd.exe',
+    args: ['/d', '/c', command],
+    windowsHide: false,
+    windowsVerbatimArguments: true,
+  };
+}
+
+function resolveWindowsWorkspaceAppProgram(definition: WorkspaceAppDefinition): string | null {
+  return definition.windowsCommands?.map(findCommandInPath).find(Boolean) ?? windowsKnownPaths(definition).find((item) => existsSync(item)) ?? null;
+}
+
+function windowsKnownPaths(definition: WorkspaceAppDefinition): string[] {
+  return (definition.windowsPaths ?? []).flatMap(([key, suffix]) => {
+    const base = process.env[key];
+    return base ? [path.win32.join(base, suffix)] : [];
+  });
+}
+
 function findCommandInPath(command: string): string | null {
-  const pathValue = process.env.PATH;
+  const pathValue = windowsPathValue();
   if (!pathValue) return null;
-  for (const directory of pathValue.split(path.delimiter)) {
-    const candidate = path.join(directory, command);
-    if (existsSync(candidate)) return candidate;
+  return findCommandInPathVar(command, pathValue);
+}
+
+export function findCommandInPathVar(
+  command: string,
+  pathValue: string,
+  fileExists: (value: string) => boolean = existsSync,
+  platform: NodeJS.Platform = process.platform,
+): string | null {
+  const delimiter = platform === 'win32' ? ';' : path.delimiter;
+  const pathApi = platform === 'win32' ? path.win32 : path;
+  for (const directory of pathValue.split(delimiter)) {
+    if (!directory) continue;
+    if (platform === 'win32' && path.win32.extname(command) === '') {
+      for (const extension of ['.exe', '.cmd', '.bat']) {
+        const candidate = pathApi.join(directory, `${command}${extension}`);
+        if (fileExists(candidate)) return candidate;
+      }
+    }
+
+    const candidate = pathApi.join(directory, command);
+    if (fileExists(candidate)) return candidate;
   }
   return null;
+}
+
+function windowsPathValue(): string | undefined {
+  return process.env.PATH ?? process.env.Path ?? Object.entries(process.env).find(([key]) => key.toLowerCase() === 'path')?.[1];
 }
 
 function expandHome(value: string): string {
