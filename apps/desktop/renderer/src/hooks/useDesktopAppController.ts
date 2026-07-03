@@ -68,12 +68,14 @@ export function useDesktopAppController() {
     handleTerminalResizeStart,
     handleWorkspaceResizeStep,
     handleWorkspaceResizeStart,
+    fitWorkspaceForExpandedSidebar,
     sidebarMaxWidth,
     sidebarMinWidth,
     sidebarWidth,
     terminalMaxHeight,
     terminalHeight,
     terminalMinHeight,
+    workspaceLayoutWidth,
     workspaceMaxWidth,
     workspaceMinWidth,
     workspaceWidth,
@@ -85,15 +87,14 @@ export function useDesktopAppController() {
     shellRef,
     sidebarWidth,
     workspaceVisible: sidePanelVisible,
-    workspaceWidth,
+    workspaceWidth: workspaceLayoutWidth,
   });
   const sidebarCollapsed = shouldCollapseSidebar({
     canExpand: sidebarCanExpand,
     manuallyCollapsed: sidebarManuallyCollapsed,
     manuallyExpanded: sidebarManuallyExpanded,
   });
-  const sidebarOverlay = activeView !== 'settings' && !sidebarCollapsed && !sidebarCanExpand;
-  const sidebarReservesLayout = activeView !== 'settings' && !sidebarCollapsed && sidebarCanExpand;
+  const sidebarReservesLayout = activeView !== 'settings' && !sidebarCollapsed;
   const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
     const nextCollapsed = typeof value === 'function' ? value(sidebarCollapsed) : value;
     if (nextCollapsed) {
@@ -101,9 +102,10 @@ export function useDesktopAppController() {
       setSidebarManuallyExpanded(false);
       return;
     }
+    fitWorkspaceForExpandedSidebar();
     setSidebarManuallyCollapsed(false);
-    setSidebarManuallyExpanded(!sidebarCanExpand);
-  }, [sidebarCanExpand, sidebarCollapsed]);
+    setSidebarManuallyExpanded(true);
+  }, [fitWorkspaceForExpandedSidebar, sidebarCollapsed]);
 
   useEffect(() => {
     setSidebarManuallyExpanded(false);
@@ -176,9 +178,9 @@ export function useDesktopAppController() {
   const shellStyle = {
     '--app-sidebar-width': sidebarReservesLayout ? `${sidebarWidth}px` : '0px',
     '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarReservesLayout ? `${sidebarWidth}px` : '150px',
-    '--desktop-agent-sidebar-overlay-width': `${sidebarWidth}px`,
+    '--desktop-agent-sidebar-visual-width': `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
-    '--desktop-agent-workspace-width': sidePanelVisible ? `${workspaceWidth}px` : '0px',
+    '--desktop-agent-workspace-width': sidePanelVisible ? `${workspaceLayoutWidth}px` : '0px',
     '--app-bottom-panel-height': bottomPanelVisible ? `${terminalHeight}px` : '0px',
   } as CSSProperties;
 
@@ -186,7 +188,6 @@ export function useDesktopAppController() {
     activeView === 'settings' ? 'desktop-agent-page--settings-open' : '',
     activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
     sidebarCollapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
-    sidebarOverlay ? 'desktop-agent-page--sidebar-overlay' : '',
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
   ].filter(Boolean).join(' ');
 

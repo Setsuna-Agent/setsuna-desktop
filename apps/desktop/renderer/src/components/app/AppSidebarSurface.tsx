@@ -43,12 +43,13 @@ export function AppSidebarSurface({
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
-  if (activeView === 'settings' || sidebarCollapsed) return null;
+  if (activeView === 'settings') return null;
 
   return (
     <AgentSidebar
       activeProjectId={activeProjectId}
       activeThreadId={activeThreadId}
+      collapsed={sidebarCollapsed}
       runningThreadId={runningThreadId}
       activeView={activeView === 'capabilities' ? 'capabilities' : 'chat'}
       collapsedProjectIds={navigation.collapsedProjectIds}

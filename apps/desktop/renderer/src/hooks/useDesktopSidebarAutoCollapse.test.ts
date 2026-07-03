@@ -11,6 +11,15 @@ describe('desktop sidebar auto collapse', () => {
     })).toBe(true);
   });
 
+  it('auto-collapses the sidebar when a wide workspace leaves the main content cramped', () => {
+    expect(canFitDesktopSidebar({
+      sidebarWidth: 240,
+      viewportWidth: 1920,
+      workspaceVisible: true,
+      workspaceWidth: 1200,
+    })).toBe(false);
+  });
+
   it('auto-collapses the sidebar when an open workspace panel would squeeze the main content', () => {
     expect(canFitDesktopSidebar({
       sidebarWidth: 240,
@@ -20,16 +29,16 @@ describe('desktop sidebar auto collapse', () => {
     })).toBe(false);
   });
 
-  it('auto-collapses before the collapsed-sidebar minimum window width is reached', () => {
+  it('auto-collapses before the expanded sidebar leaves only the hard layout minimum', () => {
     expect(canFitDesktopSidebar({
       sidebarWidth: 240,
-      viewportWidth: 1119,
+      viewportWidth: 1219,
       workspaceVisible: true,
       workspaceWidth: 460,
     })).toBe(false);
     expect(canFitDesktopSidebar({
       sidebarWidth: 240,
-      viewportWidth: 1120,
+      viewportWidth: 1220,
       workspaceVisible: true,
       workspaceWidth: 460,
     })).toBe(true);

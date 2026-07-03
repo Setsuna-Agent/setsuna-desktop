@@ -11,6 +11,7 @@ const isProjectActionTarget = (target: EventTarget | null) =>
 export function AgentSidebar({
   activeProjectId,
   activeThreadId,
+  collapsed = false,
   runningThreadId,
   activeView,
   collapsedProjectIds,
@@ -50,6 +51,7 @@ export function AgentSidebar({
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
+  collapsed?: boolean;
   runningThreadId?: string | null;
   activeView: 'chat' | 'capabilities';
   collapsedProjectIds: Set<string>;
@@ -88,7 +90,7 @@ export function AgentSidebar({
   onRenameThread: (thread: RuntimeThreadSummary) => void;
 }) {
   return (
-    <aside className="app-sidebar desktop-agent-sidebar">
+    <aside className="app-sidebar desktop-agent-sidebar" aria-hidden={collapsed || undefined}>
       <div className="desktop-agent-sidebar__top-actions">
         <button className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>
           <Plus className="desktop-agent-command__icon" size={15} />

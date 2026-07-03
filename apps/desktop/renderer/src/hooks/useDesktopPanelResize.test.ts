@@ -1,17 +1,46 @@
 import { describe, expect, it } from 'vitest';
-import { clampTerminalHeightForLayout, clampWorkspaceWidthForLayout, terminalHeightCssValue, workspaceWidthCssValue } from './useDesktopPanelResize.js';
+import {
+  canWorkspaceWidthKeepExpandedSidebar,
+  clampTerminalHeightForLayout,
+  clampWorkspaceWidthForLayout,
+  terminalHeightCssValue,
+  workspaceMaxWidthForExpandedSidebar,
+  workspaceWidthCssValue,
+} from './useDesktopPanelResize.js';
 
 describe('desktop panel resize', () => {
-  it('clamps the side workspace width to the restored window layout', () => {
-    expect(clampWorkspaceWidthForLayout(860, { sidebarWidth: 240, viewportWidth: 1320 })).toBe(660);
+  it('lets the workspace panel cross the expanded-sidebar limit so the sidebar can auto-collapse', () => {
+    expect(clampWorkspaceWidthForLayout(860, { sidebarWidth: 240, viewportWidth: 1320 })).toBe(860);
   });
 
-  it('keeps the workspace panel within its configured max on wide windows', () => {
-    expect(clampWorkspaceWidthForLayout(960, { sidebarWidth: 240, viewportWidth: 1800 })).toBe(860);
+  it('lets the workspace panel use wide windows while preserving the main column', () => {
+    expect(clampWorkspaceWidthForLayout(960, { sidebarWidth: 240, viewportWidth: 1800 })).toBe(960);
+    expect(clampWorkspaceWidthForLayout(1320, { sidebarWidth: 240, viewportWidth: 1800 })).toBe(1320);
+    expect(clampWorkspaceWidthForLayout(1500, { sidebarWidth: 240, viewportWidth: 1800 })).toBe(1380);
   });
 
   it('keeps the workspace panel usable when the window is very narrow', () => {
-    expect(clampWorkspaceWidthForLayout(860, { sidebarWidth: 240, viewportWidth: 900 })).toBe(460);
+    expect(clampWorkspaceWidthForLayout(860, { sidebarWidth: 240, viewportWidth: 900 })).toBe(480);
+  });
+
+  it('detects when a live workspace resize should collapse the expanded sidebar', () => {
+    expect(canWorkspaceWidthKeepExpandedSidebar({
+      sidebarWidth: 240,
+      viewportWidth: 1920,
+      workspaceWidth: 1160,
+    })).toBe(true);
+    expect(canWorkspaceWidthKeepExpandedSidebar({
+      sidebarWidth: 240,
+      viewportWidth: 1920,
+      workspaceWidth: 1200,
+    })).toBe(false);
+  });
+
+  it('calculates the workspace width that lets the expanded sidebar reserve layout', () => {
+    expect(workspaceMaxWidthForExpandedSidebar({
+      sidebarWidth: 240,
+      viewportWidth: 1920,
+    })).toBe(1160);
   });
 
   it('does not reserve workspace layout width while the side panel is closed', () => {

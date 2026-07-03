@@ -10,7 +10,7 @@ import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { canFitConversationOverviewPanel, shouldCompactConversationOverview, shouldReserveConversationOverviewSpace } from './conversationOverviewLayout.js';
+import { canFitConversationOverviewPanel, needsConversationOverviewContentShift, shouldCompactConversationOverview, shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments, splitThinkingContent } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
@@ -94,7 +94,8 @@ export function ChatWorkspace({
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread), [currentThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (activeProject ? conversationOverviewFromMessages(messages) : null), [activeProject, messages]);
-  const overviewCanExpand = useConversationOverviewAutoExpand(conversationRef, contentRef);
+  const overviewLayout = useConversationOverviewAutoExpand(conversationRef, contentRef);
+  const overviewCanExpand = overviewLayout.canExpand;
   const [overviewManuallyCollapsed, setOverviewManuallyCollapsed] = useState(false);
   const [overviewManuallyExpanded, setOverviewManuallyExpanded] = useState(false);
   const overviewCompact = shouldCompactConversationOverview({
@@ -102,9 +103,10 @@ export function ChatWorkspace({
     manuallyCollapsed: overviewManuallyCollapsed,
     manuallyExpanded: overviewManuallyExpanded,
   });
-  const overviewReservesSpace = shouldReserveConversationOverviewSpace({
+  const overviewShiftsContent = shouldShiftConversationOverviewContent({
     canExpand: overviewCanExpand,
     compact: overviewCompact,
+    needsShift: overviewLayout.needsContentShift,
   });
   const overviewContextLabel = useMemo(
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status),
@@ -118,7 +120,7 @@ export function ChatWorkspace({
   const conversationClassName = [
     'chat-main-conversation',
     showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender',
-    conversationOverview && overviewReservesSpace ? 'chat-main-conversation--overview-expanded' : '',
+    conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : '',
   ].filter(Boolean).join(' ');
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
@@ -716,8 +718,8 @@ function usePinnedChatScroll({
 function useConversationOverviewAutoExpand(
   conversationRef: RefObject<HTMLElement | null>,
   contentRef: RefObject<HTMLElement | null>,
-): boolean {
-  const [canExpand, setCanExpand] = useState(false);
+): { canExpand: boolean; needsContentShift: boolean } {
+  const [layout, setLayout] = useState(() => ({ canExpand: false, needsContentShift: false }));
 
   useLayoutEffect(() => {
     const conversationNode = conversationRef.current;
@@ -727,8 +729,15 @@ function useConversationOverviewAutoExpand(
     const sync = () => {
       const conversationWidth = conversationNode.getBoundingClientRect().width;
       const contentWidth = contentNode.getBoundingClientRect().width;
-      const nextCanExpand = canFitConversationOverviewPanel({ conversationWidth, contentWidth });
-      setCanExpand((current) => (current === nextCanExpand ? current : nextCanExpand));
+      const nextLayout = {
+        canExpand: canFitConversationOverviewPanel({ conversationWidth, contentWidth }),
+        needsContentShift: needsConversationOverviewContentShift({ conversationWidth, contentWidth }),
+      };
+      setLayout((current) =>
+        current.canExpand === nextLayout.canExpand && current.needsContentShift === nextLayout.needsContentShift
+          ? current
+          : nextLayout,
+      );
     };
     sync();
 
@@ -743,7 +752,7 @@ function useConversationOverviewAutoExpand(
     return () => observer.disconnect();
   }, [conversationRef, contentRef]);
 
-  return canExpand;
+  return layout;
 }
 
 function conversationOverviewContextLabel(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject, type UIEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import { Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, Maximize2, Minimize2, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
@@ -26,7 +26,6 @@ type ReviewLineContextMenuState = {
 type HighlightedReviewDiffLine = {
   key: string;
   line: DesktopDiffFile['lines'][number];
-  highlighted?: string;
 };
 
 type SplitReviewDiffRow = {
@@ -78,6 +77,11 @@ const reviewSourceOptions: Array<{ key: DesktopReviewSource; label: string }> = 
   { key: 'latest', label: '上轮对话' },
 ];
 const REVIEW_REFRESH_FEEDBACK_MS = 650;
+const REVIEW_DIFF_VIRTUALIZE_THRESHOLD = 80;
+const REVIEW_DIFF_ROW_OVERSCAN = 12;
+const REVIEW_DIFF_LINE_HEIGHT_PX = 18;
+const REVIEW_DIFF_GAP_HEIGHT_PX = 22;
+const useReviewLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 function ReviewActionTip({ children, title }: { children: ReactNode; title: string }) {
   return (
@@ -796,19 +800,19 @@ function ReviewFileCard({
   const lineContextMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
   const canOpenFile = Boolean(workspaceFilePath);
-  const visibleLines = useMemo(() => file.lines.slice(0, 36), [file.lines]);
+  const visibleLines = file.lines;
   const language = fileLanguage(file.path);
-  const highlightableSource = useMemo(() => visibleLines.map((line) => (line.type === 'gap' ? '' : line.content)).join('\n'), [visibleLines]);
-  const highlightedLines = useMemo(() => highlightedCodeLinesHtml(highlightableSource, language), [highlightableSource, language]);
   const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
     () => visibleLines.map((line, index) => ({
-      highlighted: line.type === 'gap' ? undefined : highlightedLines[index],
       key: `${file.path}:${line.lineNumber}:${index}`,
       line,
     })),
-    [file.path, highlightedLines, visibleLines],
+    [file.path, visibleLines],
   );
   const splitRows = useMemo(() => splitReviewDiffRows(highlightedVisibleLines), [highlightedVisibleLines]);
+  const diffRowEstimate = useCallback((index: number) => diffLayout === 'split'
+    ? estimatedSplitDiffRowHeight(splitRows[index])
+    : estimatedUnifiedDiffLineHeight(highlightedVisibleLines[index]), [diffLayout, highlightedVisibleLines, splitRows]);
 
   useEffect(() => {
     setExpanded(fileExpansionRequest.expanded);
@@ -898,27 +902,25 @@ function ReviewFileCard({
           </div>
         </header>
         {expanded && visibleLines.length ? (
-          <div className={`desktop-review-diff desktop-review-diff--${diffLayout} ${lineWrap ? 'desktop-review-diff--wrap' : ''} ${diffHeightExpanded ? 'desktop-review-diff--expanded' : ''}`}>
-            {diffLayout === 'split' ? (
-              <ReviewSplitDiff
-                canOpenLine={Boolean(workspaceApp && canOpenFile)}
-                language={language}
-                lineWrap={lineWrap}
-                rows={splitRows}
-                onLineContextMenu={openDiffLineContextMenu}
-                onOpenLine={openDiffLine}
-              />
-            ) : (
-              <ReviewUnifiedDiff
-                canOpenLine={Boolean(workspaceApp && canOpenFile)}
-                language={language}
-                lines={highlightedVisibleLines}
-                onLineContextMenu={openDiffLineContextMenu}
-                onOpenLine={openDiffLine}
-              />
-            )}
+          <ReviewDiffContent
+            canOpenLine={Boolean(workspaceApp && canOpenFile)}
+            className={[
+              'desktop-review-diff',
+              `desktop-review-diff--${diffLayout}`,
+              lineWrap ? 'desktop-review-diff--wrap' : '',
+              diffHeightExpanded ? 'desktop-review-diff--expanded' : '',
+            ].filter(Boolean).join(' ')}
+            diffLayout={diffLayout}
+            highlightedLines={highlightedVisibleLines}
+            language={language}
+            lineWrap={lineWrap}
+            rowEstimate={diffRowEstimate}
+            splitRows={splitRows}
+            onLineContextMenu={openDiffLineContextMenu}
+            onOpenLine={openDiffLine}
+          >
             {file.truncated ? <div className="desktop-review-truncated">diff 过大，已截断展示。</div> : null}
-          </div>
+          </ReviewDiffContent>
         ) : null}
       </article>
       <ReviewDiffLineContextMenu
@@ -936,48 +938,424 @@ function ReviewFileCard({
   );
 }
 
+function ReviewDiffContent({
+  canOpenLine,
+  children,
+  className,
+  diffLayout,
+  highlightedLines,
+  language,
+  lineWrap,
+  rowEstimate,
+  splitRows,
+  onLineContextMenu,
+  onOpenLine,
+}: {
+  canOpenLine: boolean;
+  children?: ReactNode;
+  className: string;
+  diffLayout: DesktopReviewDiffLayout;
+  highlightedLines: HighlightedReviewDiffLine[];
+  language: string;
+  lineWrap: boolean;
+  rowEstimate: (index: number) => number;
+  splitRows: SplitReviewDiffRow[];
+  onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+}) {
+  const itemCount = diffLayout === 'split' ? splitRows.length : highlightedLines.length;
+  const shouldVirtualize = canVirtualizeReviewDiff(itemCount);
+
+  if (diffLayout === 'split') {
+    if (shouldVirtualize && !lineWrap) {
+      return (
+        <ReviewSplitVirtualDiffViewport
+          canOpenLine={canOpenLine}
+          className={className}
+          language={language}
+          rows={splitRows}
+          rowEstimate={rowEstimate}
+          onLineContextMenu={onLineContextMenu}
+          onOpenLine={onOpenLine}
+        >
+          {children}
+        </ReviewSplitVirtualDiffViewport>
+      );
+    }
+    if (shouldVirtualize) {
+      return (
+        <VirtualReviewDiffViewport
+          className={className}
+          itemCount={itemCount}
+          renderItem={(index) => (
+            <ReviewSplitDiffRow
+              canOpenLine={canOpenLine}
+              language={language}
+              lineWrap={lineWrap}
+              row={splitRows[index]}
+              onLineContextMenu={onLineContextMenu}
+              onOpenLine={onOpenLine}
+            />
+          )}
+          rowEstimate={rowEstimate}
+          virtualizationKey={`split:${lineWrap ? 'wrap' : 'nowrap'}`}
+        >
+          {children}
+        </VirtualReviewDiffViewport>
+      );
+    }
+    return (
+      <div className={className}>
+        <ReviewSplitDiff
+          canOpenLine={canOpenLine}
+          language={language}
+          lineWrap={lineWrap}
+          rows={splitRows}
+          onLineContextMenu={onLineContextMenu}
+          onOpenLine={onOpenLine}
+        />
+        {children}
+      </div>
+    );
+  }
+
+  if (!shouldVirtualize) {
+    return (
+      <div className={className}>
+        <ReviewUnifiedDiff
+          canOpenLine={canOpenLine}
+          language={language}
+          lineWrap={lineWrap}
+          lines={highlightedLines}
+          onLineContextMenu={onLineContextMenu}
+          onOpenLine={onOpenLine}
+        />
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <VirtualReviewDiffViewport
+      className={className}
+      itemCount={itemCount}
+      renderItem={(index) => (
+        <ReviewUnifiedDiffLine
+          canOpenLine={canOpenLine}
+          item={highlightedLines[index]}
+          language={language}
+          lineWrap={lineWrap}
+          onLineContextMenu={onLineContextMenu}
+          onOpenLine={onOpenLine}
+        />
+      )}
+      rowEstimate={rowEstimate}
+      virtualizationKey={`unified:${lineWrap ? 'wrap' : 'nowrap'}`}
+    >
+      {children}
+    </VirtualReviewDiffViewport>
+  );
+}
+
+function ReviewSplitVirtualDiffViewport({
+  canOpenLine,
+  children,
+  className,
+  language,
+  rows,
+  rowEstimate,
+  onLineContextMenu,
+  onOpenLine,
+}: {
+  canOpenLine: boolean;
+  children?: ReactNode;
+  className: string;
+  language: string;
+  rows: SplitReviewDiffRow[];
+  rowEstimate: (index: number) => number;
+  onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+}) {
+  const oldPaneRef = useRef<HTMLDivElement | null>(null);
+  const newPaneRef = useRef<HTMLDivElement | null>(null);
+  const splitMeasuredHeightsRef = useRef<Map<number, { new?: number; old?: number }>>(new Map());
+  const previousRowsRef = useRef(rows);
+  if (previousRowsRef.current !== rows) {
+    previousRowsRef.current = rows;
+    splitMeasuredHeightsRef.current.clear();
+  }
+  const {
+    measureItem,
+    onScroll,
+    setVirtualScrollTop,
+    setViewportElement,
+    totalHeight,
+    virtualItems,
+  } = useReviewDiffVirtualizer({ itemCount: rows.length, rowEstimate });
+  const measureSplitItem = useCallback((side: 'new' | 'old', index: number, height: number) => {
+    const previous = splitMeasuredHeightsRef.current.get(index) ?? {};
+    const next = { ...previous, [side]: height };
+    splitMeasuredHeightsRef.current.set(index, next);
+    measureItem(index, Math.max(next.old ?? 0, next.new ?? 0));
+  }, [measureItem]);
+  const measureOldItem = useCallback((index: number, height: number) => {
+    measureSplitItem('old', index, height);
+  }, [measureSplitItem]);
+  const measureNewItem = useCallback((index: number, height: number) => {
+    measureSplitItem('new', index, height);
+  }, [measureSplitItem]);
+  const syncPaneScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const nextScrollTop = event.currentTarget.scrollTop;
+    const targetPane = event.currentTarget === oldPaneRef.current ? newPaneRef.current : oldPaneRef.current;
+    if (targetPane && Math.abs(targetPane.scrollTop - nextScrollTop) > 1) targetPane.scrollTop = nextScrollTop;
+    onScroll(event);
+  }, [onScroll]);
+  const scrollOldPaneVertically = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!event.deltaY || !newPaneRef.current) return;
+    event.preventDefault();
+    const pane = newPaneRef.current;
+    const maxScrollTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
+    const nextScrollTop = Math.min(maxScrollTop, Math.max(0, pane.scrollTop + event.deltaY));
+    pane.scrollTop = nextScrollTop;
+    if (oldPaneRef.current) oldPaneRef.current.scrollTop = nextScrollTop;
+    setVirtualScrollTop(nextScrollTop);
+  }, [setVirtualScrollTop]);
+
+  useEffect(() => {
+    if (oldPaneRef.current) oldPaneRef.current.scrollTop = 0;
+    if (newPaneRef.current) newPaneRef.current.scrollTop = 0;
+  }, [rows]);
+
+  return (
+    <div className={`${className} desktop-review-diff--virtual desktop-review-diff--split-independent`}>
+      <div
+        className="desktop-review-diff-split-virtual-pane desktop-review-diff-split-virtual-pane--old"
+        ref={oldPaneRef}
+        onScroll={syncPaneScroll}
+        onWheel={scrollOldPaneVertically}
+      >
+        <div className="desktop-review-diff-virtual-spacer" style={{ height: totalHeight }}>
+          <ReviewVirtualStack top={virtualItems[0]?.top ?? 0}>
+            {virtualItems.map((item) => (
+              <ReviewVirtualStackRow
+                index={item.index}
+                key={item.index}
+                minHeight={item.height}
+                onMeasure={measureOldItem}
+              >
+                <ReviewSplitDiffCell
+                  canOpenLine={canOpenLine}
+                  item={rows[item.index]?.oldLine ?? null}
+                  language={language}
+                  lineWrap={false}
+                  side="old"
+                  onLineContextMenu={onLineContextMenu}
+                  onOpenLine={onOpenLine}
+                />
+              </ReviewVirtualStackRow>
+            ))}
+          </ReviewVirtualStack>
+        </div>
+      </div>
+      <div
+        className="desktop-review-diff-split-virtual-pane desktop-review-diff-split-virtual-pane--new"
+        ref={(element) => {
+          newPaneRef.current = element;
+          setViewportElement(element);
+        }}
+        onScroll={syncPaneScroll}
+      >
+        <div className="desktop-review-diff-virtual-spacer" style={{ height: totalHeight }}>
+          <ReviewVirtualStack top={virtualItems[0]?.top ?? 0}>
+            {virtualItems.map((item) => (
+              <ReviewVirtualStackRow
+                index={item.index}
+                key={item.index}
+                minHeight={item.height}
+                onMeasure={measureNewItem}
+              >
+                <ReviewSplitDiffCell
+                  canOpenLine={canOpenLine}
+                  item={rows[item.index]?.newLine ?? null}
+                  language={language}
+                  lineWrap={false}
+                  side="new"
+                  onLineContextMenu={onLineContextMenu}
+                  onOpenLine={onOpenLine}
+                />
+              </ReviewVirtualStackRow>
+            ))}
+          </ReviewVirtualStack>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function VirtualReviewDiffViewport({
+  children,
+  className,
+  itemCount,
+  renderItem,
+  rowEstimate,
+  virtualizationKey,
+}: {
+  children?: ReactNode;
+  className: string;
+  itemCount: number;
+  renderItem: (index: number) => ReactNode;
+  rowEstimate: (index: number) => number;
+  virtualizationKey: string;
+}) {
+  const {
+    containerRef,
+    measureItem,
+    onScroll,
+    totalHeight,
+    virtualItems,
+  } = useReviewDiffVirtualizer({ itemCount, rowEstimate, virtualizationKey });
+
+  return (
+    <div
+      className={`${className} desktop-review-diff--virtual`}
+      ref={containerRef}
+      onScroll={onScroll}
+    >
+      <div className="desktop-review-diff-virtual-spacer" style={{ height: totalHeight }}>
+        <ReviewVirtualStack top={virtualItems[0]?.top ?? 0}>
+          {virtualItems.map((item) => (
+            <ReviewVirtualStackRow
+              index={item.index}
+              key={item.index}
+              minHeight={item.height}
+              onMeasure={measureItem}
+            >
+              {renderItem(item.index)}
+            </ReviewVirtualStackRow>
+          ))}
+        </ReviewVirtualStack>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ReviewVirtualStack({ children, top }: { children: ReactNode; top: number }) {
+  return (
+    <div
+      className="desktop-review-diff-virtual-stack"
+      style={{ transform: `translateY(${top}px)` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ReviewVirtualStackRow({
+  children,
+  index,
+  minHeight,
+  onMeasure,
+}: {
+  children: ReactNode;
+  index: number;
+  minHeight: number;
+  onMeasure: (index: number, height: number) => void;
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  useReviewLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row) return undefined;
+    const measure = () => onMeasure(index, row.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [index, onMeasure]);
+
+  return (
+    <div
+      className="desktop-review-diff-virtual-stack-row"
+      ref={rowRef}
+      style={{ minHeight }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function ReviewUnifiedDiff({
   canOpenLine,
   language,
+  lineWrap,
   lines,
   onLineContextMenu,
   onOpenLine,
 }: {
   canOpenLine: boolean;
   language: string;
+  lineWrap: boolean;
   lines: HighlightedReviewDiffLine[];
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
   onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   return (
     <>
-      {lines.map((item) => {
-        if (item.line.type === 'gap') {
-          return (
-            <div className="desktop-review-diff-line desktop-review-diff-line--gap" key={item.key}>
-              <span className="desktop-review-diff-line__prefix" />
-              <span className="desktop-review-diff-line__number" />
-              <ReviewDiffCode content={item.line.content} language={language} />
-            </div>
-          );
-        }
-        const targetLine = item.line.newLine ?? item.line.oldLine;
-        return (
-          <button
-            className={`desktop-review-diff-line desktop-review-diff-line--${item.line.type}`}
-            disabled={!canOpenLine}
-            key={item.key}
-            type="button"
-            onClick={() => onOpenLine(item.line, targetLine)}
-            onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
-          >
-            <span className="desktop-review-diff-line__prefix">{diffLinePrefix(item.line)}</span>
-            <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
-            <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} />
-          </button>
-        );
-      })}
+      {lines.map((item) => (
+        <ReviewUnifiedDiffLine
+          canOpenLine={canOpenLine}
+          item={item}
+          key={item.key}
+          language={language}
+          lineWrap={lineWrap}
+          onLineContextMenu={onLineContextMenu}
+          onOpenLine={onOpenLine}
+        />
+      ))}
     </>
+  );
+}
+
+function ReviewUnifiedDiffLine({
+  canOpenLine,
+  item,
+  language,
+  lineWrap,
+  onLineContextMenu,
+  onOpenLine,
+}: {
+  canOpenLine: boolean;
+  item: HighlightedReviewDiffLine;
+  language: string;
+  lineWrap: boolean;
+  onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+}) {
+  const highlighted = useHighlightedDiffLine(item.line.type === 'gap' ? '' : item.line.content, language);
+  if (item.line.type === 'gap') {
+    return (
+      <div className={`desktop-review-diff-line desktop-review-diff-line--gap ${lineWrap ? 'desktop-review-diff-line--wrap' : ''}`}>
+        <span className="desktop-review-diff-line__prefix" />
+        <span className="desktop-review-diff-line__number" />
+        <ReviewDiffCode content={item.line.content} language={language} lineWrap={lineWrap} />
+      </div>
+    );
+  }
+  const targetLine = item.line.newLine ?? item.line.oldLine;
+  return (
+    <button
+      className={`desktop-review-diff-line desktop-review-diff-line--${item.line.type} ${lineWrap ? 'desktop-review-diff-line--wrap' : ''}`}
+      disabled={!canOpenLine}
+      type="button"
+      onClick={() => onOpenLine(item.line, targetLine)}
+      onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
+    >
+      <span className="desktop-review-diff-line__prefix">{diffLinePrefix(item.line)}</span>
+      <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
+      <ReviewDiffCode content={item.line.content} highlighted={highlighted} language={language} lineWrap={lineWrap} />
+    </button>
   );
 }
 
@@ -1006,6 +1384,7 @@ function ReviewSplitDiff({
               item={row.oldLine}
               key={`${row.key}:old`}
               language={language}
+              lineWrap={false}
               side="old"
               onLineContextMenu={onLineContextMenu}
               onOpenLine={onOpenLine}
@@ -1019,6 +1398,7 @@ function ReviewSplitDiff({
               item={row.newLine}
               key={`${row.key}:new`}
               language={language}
+              lineWrap={false}
               side="new"
               onLineContextMenu={onLineContextMenu}
               onOpenLine={onOpenLine}
@@ -1032,26 +1412,59 @@ function ReviewSplitDiff({
   return (
     <>
       {rows.map((row) => (
-        <div className="desktop-review-diff-split-row" key={row.key}>
-          <ReviewSplitDiffCell
-            canOpenLine={canOpenLine}
-            item={row.oldLine}
-            language={language}
-            side="old"
-            onLineContextMenu={onLineContextMenu}
-            onOpenLine={onOpenLine}
-          />
-          <ReviewSplitDiffCell
-            canOpenLine={canOpenLine}
-            item={row.newLine}
-            language={language}
-            side="new"
-            onLineContextMenu={onLineContextMenu}
-            onOpenLine={onOpenLine}
-          />
-        </div>
+        <ReviewSplitDiffRow
+          canOpenLine={canOpenLine}
+          key={row.key}
+          language={language}
+          lineWrap={lineWrap}
+          row={row}
+          onLineContextMenu={onLineContextMenu}
+          onOpenLine={onOpenLine}
+        />
       ))}
     </>
+  );
+}
+
+function ReviewSplitDiffRow({
+  canOpenLine,
+  language,
+  lineWrap,
+  row,
+  onLineContextMenu,
+  onOpenLine,
+}: {
+  canOpenLine: boolean;
+  language: string;
+  lineWrap: boolean;
+  row: SplitReviewDiffRow;
+  onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
+}) {
+  const isGapRow = row.oldLine?.line.type === 'gap' && !row.newLine;
+  return (
+    <div className={`desktop-review-diff-split-row ${isGapRow ? 'desktop-review-diff-split-row--gap' : ''}`}>
+      <ReviewSplitDiffCell
+        canOpenLine={canOpenLine}
+        item={row.oldLine}
+        language={language}
+        lineWrap={lineWrap}
+        side="old"
+        onLineContextMenu={onLineContextMenu}
+        onOpenLine={onOpenLine}
+      />
+      {isGapRow ? null : (
+        <ReviewSplitDiffCell
+          canOpenLine={canOpenLine}
+          item={row.newLine}
+          language={language}
+          lineWrap={lineWrap}
+          side="new"
+          onLineContextMenu={onLineContextMenu}
+          onOpenLine={onOpenLine}
+        />
+      )}
+    </div>
   );
 }
 
@@ -1059,6 +1472,7 @@ function ReviewSplitDiffCell({
   canOpenLine,
   item,
   language,
+  lineWrap,
   side,
   onLineContextMenu,
   onOpenLine,
@@ -1066,26 +1480,28 @@ function ReviewSplitDiffCell({
   canOpenLine: boolean;
   item: HighlightedReviewDiffLine | null;
   language: string;
+  lineWrap: boolean;
   side: 'old' | 'new';
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
   onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
+  const highlighted = useHighlightedDiffLine(item?.line.type === 'gap' ? '' : item?.line.content ?? '', language);
   if (!item) {
-    return <span aria-hidden="true" className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--empty`} />;
+    return <span aria-hidden="true" className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--empty ${lineWrap ? 'desktop-review-diff-split-cell--wrap' : ''}`} />;
   }
   if (item.line.type === 'gap') {
     return (
-      <span className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--gap`}>
+      <span className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--gap ${lineWrap ? 'desktop-review-diff-split-cell--wrap' : ''}`}>
         <span className="desktop-review-diff-line__prefix" />
         <span className="desktop-review-diff-line__number" />
-        <ReviewDiffCode content={item.line.content} language={language} />
+        <ReviewDiffCode content={item.line.content} language={language} lineWrap={lineWrap} />
       </span>
     );
   }
   const targetLine = side === 'old' ? item.line.oldLine ?? item.line.newLine : item.line.newLine ?? item.line.oldLine;
   return (
     <button
-      className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--${item.line.type}`}
+      className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--${item.line.type} ${lineWrap ? 'desktop-review-diff-split-cell--wrap' : ''}`}
       disabled={!canOpenLine}
       type="button"
       onClick={() => onOpenLine(item.line, targetLine)}
@@ -1093,16 +1509,21 @@ function ReviewSplitDiffCell({
     >
       <span className="desktop-review-diff-line__prefix">{diffLinePrefix(item.line)}</span>
       <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
-      <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} />
+      <ReviewDiffCode content={item.line.content} highlighted={highlighted} language={language} lineWrap={lineWrap} />
     </button>
   );
 }
 
-function ReviewDiffCode({ content, highlighted, language }: { content: string; highlighted?: string; language: string }) {
+function useHighlightedDiffLine(content: string, language: string): string | undefined {
+  return useMemo(() => highlightedCodeLinesHtml(content, language)[0], [content, language]);
+}
+
+function ReviewDiffCode({ content, highlighted, language, lineWrap }: { content: string; highlighted?: string; language: string; lineWrap: boolean }) {
+  const className = `desktop-review-diff-code ${lineWrap ? 'desktop-review-diff-code--wrap' : ''}`;
   if (highlighted !== undefined) {
-    return <code className={`desktop-review-diff-code language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />;
+    return <code className={`${className} language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />;
   }
-  return <code className="desktop-review-diff-code">{content || ' '}</code>;
+  return <code className={className}>{content || ' '}</code>;
 }
 
 function splitReviewDiffRows(lines: HighlightedReviewDiffLine[]): SplitReviewDiffRow[] {
@@ -1140,6 +1561,166 @@ function splitReviewDiffRows(lines: HighlightedReviewDiffLine[]): SplitReviewDif
   }
   flushChangedLines();
   return rows;
+}
+
+type ReviewVirtualItem = {
+  height: number;
+  index: number;
+  top: number;
+};
+
+function useReviewDiffVirtualizer({
+  itemCount,
+  rowEstimate,
+  virtualizationKey = 'default',
+}: {
+  itemCount: number;
+  rowEstimate: (index: number) => number;
+  virtualizationKey?: string;
+}): {
+  containerRef: (element: HTMLDivElement | null) => void;
+  measureItem: (index: number, height: number) => void;
+  onScroll: (event: UIEvent<HTMLDivElement>) => void;
+  setVirtualScrollTop: (scrollTop: number) => void;
+  setViewportElement: (element: HTMLDivElement | null) => void;
+  totalHeight: number;
+  virtualItems: ReviewVirtualItem[];
+} {
+  const containerElementRef = useRef<HTMLDivElement | null>(null);
+  const measuredHeightsRef = useRef<Map<number, number>>(new Map());
+  const [measuredVersion, setMeasuredVersion] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportElement, setViewportElementState] = useState<HTMLDivElement | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const setViewportElement = useCallback((element: HTMLDivElement | null) => {
+    containerElementRef.current = element;
+    setViewportElementState(element);
+  }, []);
+
+  useEffect(() => {
+    measuredHeightsRef.current = new Map();
+    setMeasuredVersion((version) => version + 1);
+    setScrollTop(0);
+    if (containerElementRef.current) containerElementRef.current.scrollTop = 0;
+  }, [itemCount, rowEstimate, virtualizationKey]);
+
+  useReviewLayoutEffect(() => {
+    const container = viewportElement;
+    if (!container) return undefined;
+    const updateViewportSize = () => {
+      const nextHeight = container.clientHeight;
+      const nextWidth = container.clientWidth;
+      setViewportHeight(nextHeight);
+      setViewportWidth((previousWidth) => {
+        if (previousWidth === nextWidth) return previousWidth;
+        measuredHeightsRef.current = new Map();
+        setMeasuredVersion((version) => version + 1);
+        return nextWidth;
+      });
+    };
+    updateViewportSize();
+    const observer = new ResizeObserver(updateViewportSize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [viewportElement]);
+
+  const offsets = useMemo(() => {
+    const nextOffsets = new Array<number>(itemCount + 1);
+    nextOffsets[0] = 0;
+    for (let index = 0; index < itemCount; index += 1) {
+      const measuredHeight = measuredHeightsRef.current.get(index);
+      nextOffsets[index + 1] = nextOffsets[index] + (measuredHeight ?? rowEstimate(index));
+    }
+    return nextOffsets;
+  }, [itemCount, measuredVersion, rowEstimate]);
+
+  const visibleRange = useMemo(
+    () => reviewVirtualRange(offsets, scrollTop, viewportHeight),
+    [offsets, scrollTop, viewportHeight, viewportWidth],
+  );
+
+  const virtualItems = useMemo(() => {
+    const items: ReviewVirtualItem[] = [];
+    for (let index = visibleRange.start; index < visibleRange.end; index += 1) {
+      const top = offsets[index] ?? 0;
+      items.push({ height: Math.max(REVIEW_DIFF_LINE_HEIGHT_PX, (offsets[index + 1] ?? top) - top), index, top });
+    }
+    return items;
+  }, [offsets, visibleRange.end, visibleRange.start]);
+
+  const measureItem = useCallback((index: number, height: number) => {
+    if (!Number.isFinite(height) || height <= 0) return;
+    const roundedHeight = Math.ceil(height);
+    const previousHeight = measuredHeightsRef.current.get(index);
+    if (previousHeight === roundedHeight) return;
+    measuredHeightsRef.current.set(index, roundedHeight);
+    setMeasuredVersion((version) => version + 1);
+  }, []);
+
+  const setVirtualScrollTop = useCallback((nextScrollTop: number) => {
+    setScrollTop(nextScrollTop);
+  }, []);
+
+  const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    setVirtualScrollTop(event.currentTarget.scrollTop);
+  }, [setVirtualScrollTop]);
+
+  return {
+    containerRef: setViewportElement,
+    measureItem,
+    onScroll,
+    setVirtualScrollTop,
+    setViewportElement,
+    totalHeight: offsets[itemCount] ?? 0,
+    virtualItems,
+  };
+}
+
+export function reviewVirtualRange(
+  offsets: number[],
+  scrollTop: number,
+  viewportHeight: number,
+  overscan: number = REVIEW_DIFF_ROW_OVERSCAN,
+): { end: number; start: number } {
+  const itemCount = Math.max(0, offsets.length - 1);
+  if (!itemCount) return { start: 0, end: 0 };
+  const safeScrollTop = Math.max(0, scrollTop);
+  const safeViewportHeight = Math.max(REVIEW_DIFF_LINE_HEIGHT_PX, viewportHeight);
+  const start = Math.max(0, offsetIndexForPosition(offsets, safeScrollTop) - overscan);
+  const end = Math.min(itemCount, offsetIndexForPosition(offsets, safeScrollTop + safeViewportHeight) + overscan + 1);
+  return { start, end: Math.max(start, end) };
+}
+
+function offsetIndexForPosition(offsets: number[], position: number): number {
+  let low = 0;
+  let high = Math.max(0, offsets.length - 2);
+  while (low < high) {
+    const middle = Math.floor((low + high + 1) / 2);
+    if ((offsets[middle + 1] ?? 0) <= position) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low;
+}
+
+function canVirtualizeReviewDiff(itemCount: number): boolean {
+  return itemCount > REVIEW_DIFF_VIRTUALIZE_THRESHOLD
+    && typeof window !== 'undefined'
+    && typeof document !== 'undefined'
+    && typeof ResizeObserver !== 'undefined';
+}
+
+function estimatedUnifiedDiffLineHeight(item?: HighlightedReviewDiffLine | null): number {
+  return item?.line.type === 'gap' ? REVIEW_DIFF_GAP_HEIGHT_PX : REVIEW_DIFF_LINE_HEIGHT_PX;
+}
+
+function estimatedSplitDiffRowHeight(row?: SplitReviewDiffRow | null): number {
+  const oldHeight = estimatedUnifiedDiffLineHeight(row?.oldLine);
+  const newHeight = estimatedUnifiedDiffLineHeight(row?.newLine);
+  return Math.max(oldHeight, newHeight);
 }
 
 function ReviewDiffLineContextMenu({

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from 'react';
 
 type CssVariableName = string | readonly string[];
 type DesktopPanelResizeOptions = {
@@ -10,9 +10,9 @@ const SIDEBAR_WIDTH_VARIABLES = ['--app-sidebar-width', '--app-topbar-sidebar-wi
 const SIDEBAR_MIN_WIDTH = 208;
 const SIDEBAR_MAX_WIDTH = 360;
 export const WORKBENCH_MAIN_MIN_WIDTH = 420;
+export const WORKBENCH_EXPANDED_SIDEBAR_MAIN_MIN_WIDTH = 520;
 const WORKBENCH_MAIN_MIN_HEIGHT = 260;
 const WORKSPACE_MIN_WIDTH = 460;
-const WORKSPACE_MAX_WIDTH = 860;
 const TERMINAL_MIN_HEIGHT = 180;
 const TERMINAL_MAX_HEIGHT = 520;
 
@@ -22,7 +22,9 @@ export function useDesktopPanelResize(
 ) {
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [workspaceWidth, setWorkspaceWidth] = useState(560);
+  const [workspacePreviewWidth, setWorkspacePreviewWidth] = useState<number | null>(null);
   const [terminalHeight, setTerminalHeight] = useState(260);
+  const workspacePreviewCanFitSidebarRef = useRef<boolean | null>(null);
   const setShellVariables = useCallback(
     (names: CssVariableName, value: string) => {
       const shell = shellRef.current;
@@ -70,6 +72,35 @@ export function useDesktopPanelResize(
       }),
     [shellRef],
   );
+  const canWorkspaceKeepSidebarExpanded = useCallback(
+    (value: number) =>
+      canWorkspaceWidthKeepExpandedSidebar({
+        sidebarWidth,
+        viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
+        workspaceWidth: value,
+      }),
+    [shellRef, sidebarWidth],
+  );
+  const beginWorkspacePreviewResize = useCallback(
+    (value: number) => {
+      workspacePreviewCanFitSidebarRef.current = canWorkspaceKeepSidebarExpanded(value);
+      setWorkspacePreviewWidth(null);
+    },
+    [canWorkspaceKeepSidebarExpanded],
+  );
+  const updateWorkspacePreviewResize = useCallback(
+    (value: number) => {
+      const nextCanFitSidebar = canWorkspaceKeepSidebarExpanded(value);
+      if (workspacePreviewCanFitSidebarRef.current === nextCanFitSidebar) return;
+      workspacePreviewCanFitSidebarRef.current = nextCanFitSidebar;
+      setWorkspacePreviewWidth(value);
+    },
+    [canWorkspaceKeepSidebarExpanded],
+  );
+  const endWorkspacePreviewResize = useCallback(() => {
+    workspacePreviewCanFitSidebarRef.current = null;
+    setWorkspacePreviewWidth(null);
+  }, []);
 
   const handleWorkspaceResizeStart = usePointerResize({
     bodyClassName: 'desktop-agent-workspace-resizing',
@@ -77,6 +108,9 @@ export function useDesktopPanelResize(
     cssVariables: '--desktop-agent-workspace-width',
     direction: -1,
     getPointerPosition: (event) => event.clientX,
+    onPreviewEnd: endWorkspacePreviewResize,
+    onPreviewStart: beginWorkspacePreviewResize,
+    onPreviewValue: updateWorkspacePreviewResize,
     setShellVariables,
     setValue: setWorkspaceWidth,
     value: workspaceWidth,
@@ -100,6 +134,20 @@ export function useDesktopPanelResize(
     (delta: number) => stepResizeValue('--desktop-agent-workspace-width', clampWorkspaceWidth, setWorkspaceWidth, delta),
     [clampWorkspaceWidth, stepResizeValue],
   );
+  const fitWorkspaceForExpandedSidebar = useCallback(() => {
+    const maxExpandedWorkspaceWidth = workspaceMaxWidthForExpandedSidebar({
+      sidebarWidth,
+      viewportWidth: shellRef.current?.clientWidth ?? viewportWidth(),
+    });
+    workspacePreviewCanFitSidebarRef.current = null;
+    setWorkspacePreviewWidth(null);
+    setWorkspaceWidth((current) => {
+      const nextValue = Math.min(current, maxExpandedWorkspaceWidth);
+      setShellVariables('--desktop-agent-workspace-width', workspaceWidthCssValue(nextValue, workspaceVisible));
+      if (nextValue === current) return current;
+      return nextValue;
+    });
+  }, [setShellVariables, shellRef, sidebarWidth, workspaceVisible]);
   const handleTerminalResizeStep = useCallback(
     (delta: number) => stepResizeValue('--app-bottom-panel-height', clampTerminalHeight, setTerminalHeight, delta),
     [clampTerminalHeight, stepResizeValue],
@@ -135,6 +183,8 @@ export function useDesktopPanelResize(
   }, [bottomPanelVisible, clampTerminalHeight, clampWorkspaceWidth, setShellVariables, workspaceVisible]);
 
   const terminalMaxHeight = clampTerminalHeight(TERMINAL_MAX_HEIGHT);
+  const workspaceMaxWidth = clampWorkspaceWidth(Number.POSITIVE_INFINITY);
+  const workspaceLayoutWidth = workspacePreviewWidth ?? workspaceWidth;
 
   return {
     handleSidebarResizeStep,
@@ -143,14 +193,16 @@ export function useDesktopPanelResize(
     handleTerminalResizeStart,
     handleWorkspaceResizeStep,
     handleWorkspaceResizeStart,
+    fitWorkspaceForExpandedSidebar,
     sidebarMaxWidth: SIDEBAR_MAX_WIDTH,
     sidebarMinWidth: SIDEBAR_MIN_WIDTH,
     sidebarWidth,
     terminalMaxHeight,
     terminalHeight,
     terminalMinHeight: TERMINAL_MIN_HEIGHT,
-    workspaceMaxWidth: WORKSPACE_MAX_WIDTH,
+    workspaceMaxWidth,
     workspaceMinWidth: WORKSPACE_MIN_WIDTH,
+    workspaceLayoutWidth,
     workspaceWidth,
   };
 }
@@ -161,6 +213,9 @@ function usePointerResize({
   cssVariables,
   direction,
   getPointerPosition,
+  onPreviewEnd,
+  onPreviewStart,
+  onPreviewValue,
   setShellVariables,
   setValue,
   value,
@@ -170,6 +225,9 @@ function usePointerResize({
   cssVariables: CssVariableName;
   direction: 1 | -1;
   getPointerPosition: (event: PointerEvent | ReactPointerEvent<HTMLButtonElement>) => number;
+  onPreviewEnd?: (value: number) => void;
+  onPreviewStart?: (value: number) => void;
+  onPreviewValue?: (value: number) => void;
   setShellVariables: (names: CssVariableName, value: string) => void;
   setValue: Dispatch<SetStateAction<number>>;
   value: number;
@@ -188,7 +246,11 @@ function usePointerResize({
       let animationFrame = 0;
       let nextValue = startValue;
 
-      const applyResizeFrame = () => setShellVariables(cssVariables, `${nextValue}px`);
+      onPreviewStart?.(startValue);
+      const applyResizeFrame = () => {
+        setShellVariables(cssVariables, `${nextValue}px`);
+        onPreviewValue?.(nextValue);
+      };
       const handlePointerMove = (moveEvent: PointerEvent) => {
         nextValue = clamp(startValue + (scaledPointerPosition(moveEvent) - startPosition) * direction);
         if (animationFrame) return;
@@ -207,6 +269,7 @@ function usePointerResize({
           resizeHandle.releasePointerCapture?.(pointerId);
         }
         setValue(nextValue);
+        onPreviewEnd?.(nextValue);
         document.body.classList.remove(bodyClassName);
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerEnd);
@@ -218,7 +281,7 @@ function usePointerResize({
       window.addEventListener('pointerup', handlePointerEnd);
       window.addEventListener('pointercancel', handlePointerEnd);
     },
-    [bodyClassName, clamp, cssVariables, direction, getPointerPosition, setShellVariables, setValue, value],
+    [bodyClassName, clamp, cssVariables, direction, getPointerPosition, onPreviewEnd, onPreviewStart, onPreviewValue, setShellVariables, setValue, value],
   );
 }
 
@@ -236,9 +299,46 @@ export function clampWorkspaceWidthForLayout(
     viewportWidth: number;
   },
 ): number {
-  const layoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_MAIN_MIN_WIDTH;
-  const maxWidth = Math.max(WORKSPACE_MIN_WIDTH, Math.min(WORKSPACE_MAX_WIDTH, Math.floor(layoutMaxWidth)));
+  const maxWidth = workspaceMaxWidthForLayout({ sidebarWidth, viewportWidth: availableViewportWidth });
   return Math.min(maxWidth, Math.max(WORKSPACE_MIN_WIDTH, Math.round(value)));
+}
+
+export function workspaceMaxWidthForLayout({
+  sidebarWidth,
+  viewportWidth: availableViewportWidth,
+}: {
+  sidebarWidth: number;
+  viewportWidth: number;
+}): number {
+  const expandedLayoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_MAIN_MIN_WIDTH;
+  const collapsedLayoutMaxWidth = availableViewportWidth - WORKBENCH_MAIN_MIN_WIDTH;
+  // The left sidebar can auto-collapse, so the workspace drag range should be
+  // allowed to cross the expanded-layout limit and settle in the collapsed layout.
+  const layoutMaxWidth = Math.max(expandedLayoutMaxWidth, collapsedLayoutMaxWidth);
+  return Math.max(WORKSPACE_MIN_WIDTH, Math.floor(layoutMaxWidth));
+}
+
+export function workspaceMaxWidthForExpandedSidebar({
+  sidebarWidth,
+  viewportWidth: availableViewportWidth,
+}: {
+  sidebarWidth: number;
+  viewportWidth: number;
+}): number {
+  const layoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_EXPANDED_SIDEBAR_MAIN_MIN_WIDTH;
+  return Math.max(WORKSPACE_MIN_WIDTH, Math.floor(layoutMaxWidth));
+}
+
+export function canWorkspaceWidthKeepExpandedSidebar({
+  sidebarWidth,
+  viewportWidth: availableViewportWidth,
+  workspaceWidth,
+}: {
+  sidebarWidth: number;
+  viewportWidth: number;
+  workspaceWidth: number;
+}): boolean {
+  return workspaceWidth <= workspaceMaxWidthForExpandedSidebar({ sidebarWidth, viewportWidth: availableViewportWidth });
 }
 
 export function workspaceWidthCssValue(value: number, visible: boolean): string {
@@ -269,7 +369,7 @@ function readShellPixelVariable(shell: HTMLElement | null, name: string, fallbac
 }
 
 function viewportWidth(): number {
-  return typeof window === 'undefined' ? WORKSPACE_MAX_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_MAIN_MIN_WIDTH : window.innerWidth * pageScaleInverse();
+  return typeof window === 'undefined' ? WORKSPACE_MIN_WIDTH + SIDEBAR_MAX_WIDTH + WORKBENCH_MAIN_MIN_WIDTH : window.innerWidth * pageScaleInverse();
 }
 
 function readWorkbenchHeight(shell: HTMLElement | null): number {

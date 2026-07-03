@@ -10,10 +10,19 @@ export function canFitConversationOverviewPanel({
   conversationWidth: number;
   contentWidth: number;
 }): boolean {
-  if (conversationWidth <= 0 || contentWidth <= 0) return false;
-  const rightGutter = Math.max(0, (conversationWidth - contentWidth) / 2);
-  const requiredGutter = overviewPanelWidthPx + overviewPanelRightInsetPx + overviewPanelContentGapPx;
-  return rightGutter + overviewMaxContentShiftPx >= requiredGutter;
+  const metrics = conversationOverviewGutterMetrics({ conversationWidth, contentWidth });
+  return metrics ? metrics.rightGutter + overviewMaxContentShiftPx >= metrics.requiredGutter : false;
+}
+
+export function needsConversationOverviewContentShift({
+  conversationWidth,
+  contentWidth,
+}: {
+  conversationWidth: number;
+  contentWidth: number;
+}): boolean {
+  const metrics = conversationOverviewGutterMetrics({ conversationWidth, contentWidth });
+  return metrics ? metrics.rightGutter < metrics.requiredGutter : false;
 }
 
 export function shouldCompactConversationOverview({
@@ -29,12 +38,28 @@ export function shouldCompactConversationOverview({
   return !canExpand && !manuallyExpanded;
 }
 
-export function shouldReserveConversationOverviewSpace({
+export function shouldShiftConversationOverviewContent({
   canExpand,
   compact,
+  needsShift,
 }: {
   canExpand: boolean;
   compact: boolean;
+  needsShift: boolean;
 }): boolean {
-  return canExpand && !compact;
+  return canExpand && !compact && needsShift;
+}
+
+function conversationOverviewGutterMetrics({
+  conversationWidth,
+  contentWidth,
+}: {
+  conversationWidth: number;
+  contentWidth: number;
+}): { requiredGutter: number; rightGutter: number } | null {
+  if (conversationWidth <= 0 || contentWidth <= 0) return null;
+  return {
+    requiredGutter: overviewPanelWidthPx + overviewPanelRightInsetPx + overviewPanelContentGapPx,
+    rightGutter: Math.max(0, (conversationWidth - contentWidth) / 2),
+  };
 }
