@@ -2,11 +2,13 @@ import http from 'node:http';
 import { URL } from 'node:url';
 import type { RuntimeHealth } from '@setsuna-desktop/contracts';
 import { createRuntimeFactory } from '../runtime/runtime-factory.js';
-import { createAppServerCommandExecManager } from './app-server/command-exec.js';
+import { APP_SERVER_DEFAULT_CONNECTION_ID, createAppServerCommandExecManager } from './app-server/command-exec.js';
+import { createAppServerFsManager } from './app-server/fs-protocol.js';
 import { handleAppServerRpcRequest } from './app-server/rpc.js';
 import type { AppServerRpcRequest } from './app-server/rpc-types.js';
 import { isAuthorized, readBody, sendJson } from './http-utils.js';
 import { handleRuntimeRestRequest } from './runtime-rest-routes.js';
+import { handleAppServerNotificationSse, runtimeEventStreamExperimentalApi } from './sse.js';
 import { settleStaleRuntimeTurns } from './runtime-thread-events.js';
 import type { RuntimeServer, RuntimeServerOptions } from './types.js';
 
@@ -25,7 +27,11 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   });
   // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
   await settleStaleRuntimeTurns(runtime);
-  const commandExecManager = createAppServerCommandExecManager();
+  const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus);
+  const fsManager = createAppServerFsManager(runtime.appServerNotificationBus);
+  const unsubscribeSkillChanges = runtime.skillRegistry.subscribeChanges(() => {
+    runtime.appServerNotificationBus.publish({ method: 'skills/changed', params: {} });
+  });
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -44,10 +50,35 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         return;
       }
 
+      if (request.method === 'GET' && url.pathname === '/v1/swe/app-server/events') {
+        const explicitConnectionId = appServerConnectionId(request, url);
+        const connectionId = explicitConnectionId ?? APP_SERVER_DEFAULT_CONNECTION_ID;
+        handleAppServerNotificationSse({
+          connectionId,
+          experimentalApi: runtimeEventStreamExperimentalApi(
+            url.searchParams.get('experimentalApi') ?? url.searchParams.get('experimental_api'),
+          ),
+          onClose: () => {
+            fsManager.terminateConnection(connectionId);
+            if (explicitConnectionId) commandExecManager.terminateConnection(connectionId);
+          },
+          response,
+          runtime,
+        });
+        return;
+      }
+
       // app-server RPC 承载 Codex/SWE bridge 命令，和普通 runtime REST 路由分开处理。
       if (request.method === 'POST' && url.pathname === '/v1/swe/app-server') {
         const message = await readBody<AppServerRpcRequest>(request);
-        const responseMessage = await handleAppServerRpcRequest(runtime, message, options, commandExecManager);
+        const responseMessage = await handleAppServerRpcRequest(
+          runtime,
+          message,
+          options,
+          commandExecManager,
+          fsManager,
+          appServerConnectionId(request, url) ?? APP_SERVER_DEFAULT_CONNECTION_ID,
+        );
         if (!responseMessage) {
           response.writeHead(204);
           response.end();
@@ -71,9 +102,29 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     listen: (port) => new Promise((resolve) => server.listen(port, '127.0.0.1', resolve)),
     close: async () => {
       // server 关闭时必须先停掉 shell/命令执行器，避免子进程脱离 runtime 生命周期。
+      unsubscribeSkillChanges();
       commandExecManager.terminateAll();
+      fsManager.terminateAll();
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     },
     address: () => server.address(),
   };
+}
+
+function appServerConnectionId(request: http.IncomingMessage, url: URL): string | undefined {
+  const rawHeader = firstHeaderValue(
+    request.headers['x-setsuna-app-server-connection-id']
+    ?? request.headers['x-setsuna-app-server-session']
+    ?? request.headers['x-codex-app-server-connection-id'],
+  );
+  const rawQuery = url.searchParams.get('connectionId')
+    ?? url.searchParams.get('connection_id')
+    ?? url.searchParams.get('sessionId')
+    ?? url.searchParams.get('session_id');
+  const normalized = (rawHeader ?? rawQuery ?? '').trim();
+  return normalized || undefined;
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }

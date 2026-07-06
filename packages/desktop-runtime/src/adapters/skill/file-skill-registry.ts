@@ -1,4 +1,5 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { watch, type FSWatcher } from 'node:fs';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillKind, RuntimeSkillList, RuntimeSkillPatch, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import type { SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
@@ -19,9 +20,15 @@ type ParsedSkill = {
   references: string[];
 };
 
+const SKILL_CHANGE_DEBOUNCE_MS = 200;
+
 export class FileSkillRegistry implements SkillRegistry {
+  private changeTimer: NodeJS.Timeout | undefined;
+  private readonly changeSubscribers = new Set<() => void>();
+  private extraSkillRoots: string[] = [];
   private readonly statePath: string;
   private readonly userSkillsDir: string;
+  private readonly watchers = new Map<string, FSWatcher>();
 
   constructor(
     private readonly builtinSkillsDir: string,
@@ -51,6 +58,7 @@ export class FileSkillRegistry implements SkillRegistry {
     };
     await this.writeState(state);
     const content = await readFile(skillPath, 'utf8');
+    this.queueChangeNotification();
     return toDetail(parseSkill(id, 'user', skillPath, content), state);
   }
 
@@ -74,7 +82,10 @@ export class FileSkillRegistry implements SkillRegistry {
       selected: patch.selected ?? state.states[skillId]?.selected,
     };
     await this.writeState(state);
-    if (!contentPatch) return toDetail(skill, state);
+    if (!contentPatch) {
+      this.queueChangeNotification();
+      return toDetail(skill, state);
+    }
 
     const nextInput: RuntimeSkillInput = {
       name: patch.name ?? skill.name,
@@ -85,6 +96,7 @@ export class FileSkillRegistry implements SkillRegistry {
     };
     const skillPath = await this.writeUserSkill(skillId, nextInput);
     const content = await readFile(skillPath, 'utf8');
+    this.queueChangeNotification();
     return toDetail(parseSkill(skillId, 'user', skillPath, content), state);
   }
 
@@ -97,6 +109,7 @@ export class FileSkillRegistry implements SkillRegistry {
     const state = await this.readState();
     delete state.states[skillId];
     await this.writeState(state);
+    this.queueChangeNotification();
   }
 
   async selectedSkillInjections(skillIds: string[] = []): Promise<SkillInjection[]> {
@@ -112,12 +125,28 @@ export class FileSkillRegistry implements SkillRegistry {
       }));
   }
 
+  async setExtraRoots(extraRoots: string[]): Promise<void> {
+    this.extraSkillRoots = [...extraRoots];
+    await this.refreshChangeWatchers();
+    this.queueChangeNotification();
+  }
+
+  subscribeChanges(listener: () => void): () => void {
+    this.changeSubscribers.add(listener);
+    void this.refreshChangeWatchers();
+    return () => {
+      this.changeSubscribers.delete(listener);
+      if (this.changeSubscribers.size === 0) this.closeChangeWatchers();
+    };
+  }
+
   private async readSkills(): Promise<ParsedSkill[]> {
-    const [builtinSkills, userSkills] = await Promise.all([
+    const [builtinSkills, userSkills, extraSkills] = await Promise.all([
       this.readSkillDirectory(this.builtinSkillsDir, 'builtin'),
       this.readSkillDirectory(this.userSkillsDir, 'user'),
+      Promise.all(this.extraSkillRoots.map((root) => this.readSkillDirectory(root, 'user'))).then((groups) => groups.flat()),
     ]);
-    return [...builtinSkills, ...userSkills].sort((a, b) => a.name.localeCompare(b.name));
+    return [...builtinSkills, ...userSkills, ...extraSkills].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   private async readSkillDirectory(directory: string, kind: RuntimeSkillKind): Promise<ParsedSkill[]> {
@@ -149,6 +178,67 @@ export class FileSkillRegistry implements SkillRegistry {
     await writeFile(skillPath, formatSkillMarkdown(input), 'utf8');
     return skillPath;
   }
+
+  private queueChangeNotification(): void {
+    if (!this.changeSubscribers.size || this.changeTimer) return;
+    this.changeTimer = setTimeout(() => {
+      this.changeTimer = undefined;
+      void this.refreshChangeWatchers();
+      for (const subscriber of this.changeSubscribers) subscriber();
+    }, SKILL_CHANGE_DEBOUNCE_MS);
+    this.changeTimer.unref();
+  }
+
+  private async refreshChangeWatchers(): Promise<void> {
+    if (!this.changeSubscribers.size) return;
+    await mkdir(this.userSkillsDir, { recursive: true }).catch(() => undefined);
+    const directories = new Set(await this.watchDirectories());
+    for (const [directory, watcher] of this.watchers.entries()) {
+      if (directories.has(directory)) continue;
+      watcher.close();
+      this.watchers.delete(directory);
+    }
+    for (const directory of directories) {
+      if (this.watchers.has(directory)) continue;
+      try {
+        const watcher = watch(directory, { persistent: false }, () => this.queueChangeNotification());
+        watcher.on('error', () => {
+          watcher.close();
+          this.watchers.delete(directory);
+        });
+        this.watchers.set(directory, watcher);
+      } catch {
+        // Missing or transiently inaccessible skill roots are accepted; the next explicit refresh can pick them up.
+      }
+    }
+  }
+
+  private async watchDirectories(): Promise<string[]> {
+    const roots = [this.builtinSkillsDir, this.userSkillsDir, ...this.extraSkillRoots].map((root) => path.resolve(root));
+    const directories = new Set<string>();
+    await Promise.all(roots.map(async (root) => {
+      if (!await isDirectory(root)) return;
+      directories.add(root);
+      const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (entry.isDirectory()) directories.add(path.join(root, entry.name));
+      }
+    }));
+    return [...directories];
+  }
+
+  private closeChangeWatchers(): void {
+    if (this.changeTimer) {
+      clearTimeout(this.changeTimer);
+      this.changeTimer = undefined;
+    }
+    for (const watcher of this.watchers.values()) watcher.close();
+    this.watchers.clear();
+  }
+}
+
+async function isDirectory(directory: string): Promise<boolean> {
+  return stat(directory).then((stats) => stats.isDirectory(), () => false);
 }
 
 function parseSkill(id: string, kind: RuntimeSkillKind, skillPath: string, rawContent: string): ParsedSkill {

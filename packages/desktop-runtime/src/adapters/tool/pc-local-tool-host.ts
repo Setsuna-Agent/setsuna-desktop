@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
-import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
+import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost } from '../../ports/tool-host.js';
+import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import * as pcTools from './pc-local-tools.js';
 
@@ -17,6 +18,7 @@ type ProjectToolState = {
   toolState: PcToolState;
   // plan_file_changes 产出的队列，把多文件变更拆成可审计的单文件步骤。
   fileChangePlanQueue: FileChangeEntry[];
+  baseShellPolicyRules: unknown[];
   // begin_file_change 后当前唯一允许写入的文件。
   activeFileChange: FileChangeEntry | null;
 };
@@ -24,8 +26,120 @@ type ProjectToolState = {
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
 const FILE_CHANGE_PLAN_TOOL_NAME = 'plan_file_changes';
 const FILE_CHANGE_BEGIN_TOOL_NAME = 'begin_file_change';
+const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 const ACTUAL_FILE_MUTATION_TOOLS = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_MUTATION_TOOLS = new Set([FILE_CHANGE_PLAN_TOOL_NAME, FILE_CHANGE_BEGIN_TOOL_NAME, ...ACTUAL_FILE_MUTATION_TOOLS]);
+const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
+  {
+    name: 'request_permissions',
+    description: 'Request additional sandbox permissions for later tool calls in this turn or session.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        environment_id: { type: 'string', description: 'Optional active environment id. The desktop runtime currently supports the active local environment only.' },
+        environmentId: { type: 'string', description: 'Camel-case alias for environment_id.' },
+        reason: { type: 'string', description: 'User-facing reason for requesting broader permissions.' },
+        permissions: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            network: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                enabled: { type: 'boolean', description: 'True requests network access.' },
+              },
+            },
+            file_system: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                write: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant write access.' },
+                read: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant read access.' },
+                entries: {
+                  type: 'array',
+                  description: 'Codex canonical filesystem permission entries.',
+                  items: {
+                    type: 'object',
+                    additionalProperties: true,
+                    properties: {
+                      access: { type: 'string', enum: ['read', 'write', 'deny'] },
+                      path: {},
+                    },
+                  },
+                },
+              },
+            },
+            fileSystem: {
+              type: 'object',
+              description: 'Camel-case alias for file_system.',
+              additionalProperties: true,
+            },
+          },
+        },
+      },
+      required: ['permissions'],
+    },
+  },
+  {
+    name: 'exec_command',
+    description: 'Run a shell command in the active local project using Codex-compatible arguments.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        shell: { type: 'string', description: 'Optional shell path. Accepted for Codex compatibility; execution uses the platform shell.' },
+        cmd: { type: 'string', description: 'The shell command to run.' },
+        cwd: { type: 'string', description: 'Optional working directory, absolute or relative to the project root.' },
+        yield_time_ms: { type: 'integer', description: 'Milliseconds to wait before returning while the command keeps running.', minimum: 0, maximum: 30000 },
+        timeout_ms: { type: 'integer', description: 'Optional timeout in milliseconds.', minimum: 1, maximum: 600000 },
+        max_output_tokens: { type: 'integer', description: 'Accepted for Codex compatibility; output truncation is handled by the runtime.' },
+        sandbox_permissions: { type: 'string', enum: ['use_default', 'with_additional_permissions', 'require_escalated'], description: 'Per-command sandbox override. with_additional_permissions uses additional_permissions after approval; require_escalated asks for unsandboxed execution.' },
+        additional_permissions: {
+          type: 'object',
+          description: 'Additional sandboxed filesystem or network access for this command. Only used with sandbox_permissions set to with_additional_permissions.',
+          additionalProperties: false,
+          properties: {
+            network: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                enabled: { type: 'boolean', description: 'True requests network access for this command.' },
+              },
+            },
+            file_system: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                write: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant write access for this command.' },
+                read: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant read access for this command.' },
+              },
+            },
+          },
+        },
+        justification: { type: 'string', description: 'User-facing approval reason for require_escalated.' },
+        prefix_rule: { type: 'array', items: { type: 'string' }, description: 'Reusable approval prefix accepted for Codex compatibility.' },
+      },
+      required: ['cmd'],
+    },
+  },
+  {
+    name: 'write_stdin',
+    description: 'Write characters to an existing Codex-compatible shell session. Empty input polls the session.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        session_id: { type: ['string', 'number'], description: 'Session identifier returned by exec_command.' },
+        chars: { type: 'string', description: 'Characters to write to stdin. Empty string polls for output.' },
+        yield_time_ms: { type: 'integer', description: 'Milliseconds to wait for output after polling.', minimum: 0, maximum: 30000 },
+        max_output_tokens: { type: 'integer', description: 'Accepted for Codex compatibility; output truncation is handled by the runtime.' },
+      },
+      required: ['session_id'],
+    },
+  },
+];
 
 const TOOL_ALIASES: Record<string, { name: string; args: (input: Record<string, unknown>) => Record<string, unknown> }> = {
   // workspace_* 名称兼容上层调用习惯，真正执行仍落到 PC local tools 的原始工具名。
@@ -33,6 +147,26 @@ const TOOL_ALIASES: Record<string, { name: string; args: (input: Record<string, 
   workspace_read_file: { name: 'read_file', args: (input) => ({ ...input, file_path: input.file_path ?? input.path }) },
   workspace_search_text: { name: 'search_text', args: (input) => input },
   workspace_write_file: { name: 'write_file', args: (input) => ({ ...input, file_path: input.file_path ?? input.path }) },
+  exec_command: {
+    name: 'run_shell_command',
+    args: (input) => ({
+      ...input,
+      command: input.command ?? input.cmd,
+      directory: input.directory ?? input.cwd,
+      timeout: input.timeout ?? input.timeout_ms,
+      risk_level: input.risk_level ?? input.riskLevel ?? (input.sandbox_permissions === 'require_escalated' || input.sandbox_permissions === 'with_additional_permissions' ? 'high' : 'low'),
+      risk_reason: input.risk_reason ?? input.riskReason ?? input.justification,
+    }),
+  },
+  write_stdin: {
+    name: 'write_shell_process',
+    args: (input) => ({
+      ...input,
+      process_id: input.process_id ?? input.processId ?? input.session_id,
+      input: input.input ?? input.chars ?? '',
+      wait_ms: input.wait_ms ?? input.yield_time_ms,
+    }),
+  },
 };
 
 /**
@@ -44,17 +178,33 @@ export class PcLocalToolHost implements ToolHost {
   // shell process store 跨项目状态复用，但执行目录和权限仍由每个 toolState 控制。
   private readonly shellProcessStore = pcTools.createShellProcessStore();
 
-  constructor(private readonly projects: WorkspaceProjectStore) {}
+  constructor(
+    private readonly projects: WorkspaceProjectStore,
+    private readonly policyAmendmentStore?: PolicyAmendmentStore,
+  ) {}
 
   /**
    * 暴露 PC local tools 中允许模型调用的工具定义。
    *
    * @param _context ToolHost 协议参数；列工具阶段不依赖上下文。
    */
-  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return pcTools.LOCAL_TOOL_DEFINITIONS
+  async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    const localTools = pcTools.LOCAL_TOOL_DEFINITIONS
       .map(toRuntimeToolDefinition)
       .filter((tool): tool is RuntimeToolDefinition => Boolean(tool && !EXCLUDED_PC_TOOLS.has(tool.name)));
+    const names = new Set(localTools.map((tool) => tool.name));
+    return [
+      ...localTools,
+      ...CODEX_COMPAT_TOOL_DEFINITIONS.filter((tool) => !names.has(tool.name) && toolEnabledForContext(tool.name, context)),
+    ];
+  }
+
+  async environmentForToolContext(context: ToolExecutionContext) {
+    const project = await this.projectFor(context.projectId);
+    return {
+      id: project.id,
+      cwd: path.resolve(project.path),
+    };
   }
 
   /**
@@ -164,11 +314,21 @@ export class PcLocalToolHost implements ToolHost {
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
     const projectState = await this.projectStateFor(context);
     projectState.toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
+    projectState.toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
 
     const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
     // 真正执行前再次校验文件变更顺序，避免模型绕过 preview 阶段的约束。
     this.validateFileChangeSequence(projectState, normalized.name, normalized.args, preview);
 
+    const previousOsSandbox = Boolean(projectState.toolState.osSandbox);
+    const previousSandboxWorkspaceWrite = projectState.toolState.sandboxWorkspaceWrite ?? {};
+    if (context.sandbox?.mode === 'bypass') projectState.toolState.osSandbox = false;
+    if (context.sandbox?.networkAccess === 'enabled') {
+      projectState.toolState.sandboxWorkspaceWrite = {
+        ...previousSandboxWorkspaceWrite,
+        networkAccess: true,
+      };
+    }
     const result = await pcTools.executeLocalTool(normalized.name, normalized.args, projectState.toolState, {
       signal: context.signal,
       onProgress: context.onToolOutputDelta
@@ -180,9 +340,16 @@ export class PcLocalToolHost implements ToolHost {
             if (stderrDelta) context.onToolOutputDelta?.({ delta: stderrDelta, stream: 'stderr', processId });
           }
         : undefined,
+    }).finally(() => {
+      projectState.toolState.osSandbox = previousOsSandbox;
+      projectState.toolState.sandboxWorkspaceWrite = previousSandboxWorkspaceWrite;
     }) as Record<string, unknown>;
     if (!result?.ok) {
-      throw new Error(stringArg(result?.display || result?.content || `Local tool failed: ${normalized.name}`));
+      throw new ToolExecutionError(stringArg(result?.display || result?.content || `Local tool failed: ${normalized.name}`), {
+        data: result,
+        failureKind: stringArg(result.failure_kind),
+        failureStage: stringArg(result.failure_stage),
+      });
     }
 
     this.recordFileChangeProgress(projectState, normalized.name, normalized.args, result, preview);
@@ -203,14 +370,47 @@ export class PcLocalToolHost implements ToolHost {
     const root = path.resolve(project.path);
     const existing = this.projectStates.get(root);
     if (existing) {
+      existing.toolState.environmentId = project.id;
       existing.toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
+      existing.toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
+      await this.refreshPolicyAmendments(existing);
       return existing;
     }
-    const toolState = pcTools.createLocalToolState(root, { shellProcessStore: this.shellProcessStore });
+    const toolState = pcTools.createLocalToolState(root, { environmentId: project.id, shellProcessStore: this.shellProcessStore });
     toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
-    const created = { root, toolState, fileChangePlanQueue: [], activeFileChange: null };
+    toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
+    const created = {
+      root,
+      toolState,
+      baseShellPolicyRules: [...(Array.isArray(toolState.shellPolicyRules) ? toolState.shellPolicyRules : [])],
+      fileChangePlanQueue: [],
+      activeFileChange: null,
+    };
+    await this.refreshPolicyAmendments(created);
     this.projectStates.set(root, created);
     return created;
+  }
+
+  private async refreshPolicyAmendments(projectState: ProjectToolState): Promise<void> {
+    const amendments = await this.policyAmendmentStore?.listPolicyAmendments().catch(() => null);
+    if (!amendments) return;
+    const toolState = projectState.toolState as unknown as {
+      shellPolicyRules: unknown[];
+      networkPolicyAmendments: unknown[];
+    };
+    toolState.shellPolicyRules = [
+      ...projectState.baseShellPolicyRules,
+      ...amendments.execPolicyAmendments.map((amendment) => ({
+        action: 'allow',
+        command: '',
+        pattern: '',
+        prefixWords: amendment,
+        label: amendment.join(' '),
+        sourcePath: 'runtime-policy-amendments',
+        reason: `命令匹配持久 exec policy amendment：${amendment.join(' ')}`,
+      })),
+    ];
+    toolState.networkPolicyAmendments = amendments.networkPolicyAmendments;
   }
 
   /**
@@ -236,6 +436,16 @@ export class PcLocalToolHost implements ToolHost {
    */
   private normalizeToolCall(name: string, input: unknown): { name: string; args: Record<string, unknown> } {
     const args = recordInput(input);
+    if (name === 'write_stdin' && !stringArg(args.input ?? args.chars)) {
+      return {
+        name: 'read_shell_process',
+        args: {
+          ...args,
+          process_id: args.process_id ?? args.processId ?? args.session_id,
+          wait_ms: args.wait_ms ?? args.yield_time_ms,
+        },
+      };
+    }
     const alias = TOOL_ALIASES[name];
     if (!alias) return { name, args };
     return { name: alias.name, args: alias.args(args) };
@@ -473,6 +683,11 @@ function fileMutationToolMatchesAction(name: string, action: string): boolean {
   if (action === 'append') return name === 'append_file';
   if (action === 'delete') return name === 'delete_file';
   return name === 'edit' || name === 'edit_file' || name === 'write_file';
+}
+
+function toolEnabledForContext(name: string, context: ToolExecutionContext): boolean {
+  if (name === REQUEST_PERMISSIONS_TOOL_NAME) return context.features?.request_permissions_tool !== false;
+  return true;
 }
 
 function shortSingleLine(value: unknown): string {

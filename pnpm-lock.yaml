@@ -81,10 +81,12 @@ importers:
       '@ai-sdk/openai-compatible': ^3.0.0
       '@setsuna-desktop/contracts': workspace:*
       ai: ^7.0.0
+      node-pty: ^1.1.0
     dependencies:
       '@ai-sdk/openai-compatible': 3.0.0_zod@4.4.3
       '@setsuna-desktop/contracts': link:../contracts
       ai: 7.0.2_zod@4.4.3
+      node-pty: 1.1.0
 
 packages:
 

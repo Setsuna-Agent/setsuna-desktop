@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
+  AnswerRuntimeApprovalInput,
   ProviderConfigState,
   RuntimeAvailableModelsResponse,
   RuntimeApprovalRequest,
@@ -7,6 +8,9 @@ import type {
   RuntimeConfigState,
   RuntimeEvent,
   RuntimeFetchModelsInput,
+  RuntimeHookInput,
+  RuntimeHookListResponse,
+  RuntimeHookMetadata,
   RuntimeMemoryPreview,
   RuntimeMemoryRecord,
   RuntimeMcpServer,
@@ -24,6 +28,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { createDesktopRuntimeClient } from '../runtime/desktop-runtime-client.js';
+import { deleteHookFromConfig, hookConfigLocation, hookInputToMatcherGroup, updateHookInConfig } from '../utils/runtimeHookConfig.js';
 import { applyRuntimeEvent, isActivityEvent } from '../utils/runtimeEvents.js';
 
 export type LoadState = 'loading' | 'ready' | 'error';
@@ -56,6 +61,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [memoryPreviewLoading, setMemoryPreviewLoading] = useState(false);
   const [skills, setSkills] = useState<RuntimeSkillSummary[]>([]);
   const [mcpState, setMcpState] = useState<RuntimeMcpServerList | null>(null);
+  const [hookState, setHookState] = useState<RuntimeHookListResponse | null>(null);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const initializedSelectionRef = useRef(false);
@@ -67,16 +73,19 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadId = currentThread?.id ?? null;
   const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
+  const activeProject = activeProjectId ? projects.find((project) => project.id === activeProjectId) ?? null : null;
+  const activeHookCwds = useMemo(() => (activeProject?.path ? [activeProject.path] : []), [activeProject?.path]);
   currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
 
   const refresh = useCallback(async () => {
     setError(null);
     // 首屏需要多个 runtime 域的数据；并行拉取能避免设置页/侧栏/对话区分批闪烁。
-    const [nextConfig, threadList, skillList, mcpList, projectList, usageSummary, memoryList, approvalList] = await Promise.all([
+    const [nextConfig, threadList, skillList, mcpList, hookList, projectList, usageSummary, memoryList, approvalList] = await Promise.all([
       client.getConfig(),
       client.listThreads(),
       client.listSkills(),
       client.listMcpServers(),
+      client.listHooks(activeHookCwds),
       client.listProjects(),
       client.getUsage(),
       client.listMemories({ limit: 20 }),
@@ -86,6 +95,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setThreads(threadList.threads);
     setSkills(skillList.skills);
     setMcpState(mcpList);
+    setHookState(hookList);
     setProjects(projectList.projects);
     setUsage(usageSummary);
     setMemories(memoryList.memories);
@@ -104,7 +114,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     }
 
     setLoadState('ready');
-  }, [client, setActiveProjectId]);
+  }, [activeHookCwds, client, setActiveProjectId]);
 
   useEffect(() => {
     if (currentThreadId) persistActiveThreadId(currentThreadId);
@@ -130,13 +140,20 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [client]);
 
   const refreshCapabilities = useCallback(() => {
-    void Promise.all([client.listSkills(), client.listMcpServers()])
-      .then(([skillList, mcpList]) => {
+    void Promise.all([client.listSkills(), client.listMcpServers(), client.listHooks(activeHookCwds)])
+      .then(([skillList, mcpList, hookList]) => {
         setSkills(skillList.skills);
         setMcpState(mcpList);
+        setHookState(hookList);
       })
       .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
-  }, [client]);
+  }, [activeHookCwds, client]);
+
+  const refreshHooks = useCallback(async () => {
+    const hookList = await client.listHooks(activeHookCwds);
+    setHookState(hookList);
+    return hookList;
+  }, [activeHookCwds, client]);
 
   useEffect(() => () => {
     if (threadListRefreshTimerRef.current !== null) {
@@ -183,7 +200,8 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
             item.id === event.payload.approvalId
               ? {
                   ...item,
-                  status: event.payload.decision === 'approve' ? 'approved' : 'rejected',
+                  status: event.payload.decision === 'reject' || event.payload.decision === 'cancel' ? 'rejected' : 'approved',
+                  decision: event.payload.decision,
                   message: event.payload.message,
                 }
               : item,
@@ -246,6 +264,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       .then((result) => setMemories(result.memories))
       .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
   }, [activeProjectId, client]);
+
+  useEffect(() => {
+    refreshHooks().catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
+  }, [refreshHooks]);
 
   const reloadThreads = useCallback(async () => {
     const list = await client.listThreads();
@@ -408,6 +430,92 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     [client],
   );
 
+  const updateHookState = useCallback(
+    async (hook: RuntimeHookMetadata, patch: { enabled?: boolean; trustedHash?: string }) => {
+      if (!config) return;
+      const currentHooks = config.hooks ?? {};
+      const currentState = currentHooks.state ?? {};
+      const currentHookState = currentState[hook.key] ?? {};
+      const next = await client.saveConfig({
+        hooks: {
+          ...currentHooks,
+          state: {
+            ...currentState,
+            [hook.key]: {
+              ...currentHookState,
+              ...patch,
+            },
+          },
+        },
+      });
+      setConfig(next);
+      await refreshHooks();
+    },
+    [client, config, refreshHooks],
+  );
+
+  const trustHook = useCallback(
+    async (hook: RuntimeHookMetadata) => updateHookState(hook, { trustedHash: hook.currentHash }),
+    [updateHookState],
+  );
+
+  const updateHookEnabled = useCallback(
+    async (hook: RuntimeHookMetadata, enabled: boolean) => updateHookState(hook, { enabled }),
+    [updateHookState],
+  );
+
+  const createHook = useCallback(
+    async (input: RuntimeHookInput) => {
+      if (!config) throw new Error('Runtime config is not loaded.');
+      const command = input.command.trim();
+      if (!command) throw new Error('Hook command is required.');
+      const currentHooks = config.hooks ?? {};
+      const groups = currentHooks[input.eventName] ?? [];
+      const next = await client.saveConfig({
+        hooks: {
+          ...currentHooks,
+          [input.eventName]: [
+            ...groups,
+            hookInputToMatcherGroup({ ...input, command }),
+          ],
+        },
+      });
+      setConfig(next);
+      await refreshHooks();
+    },
+    [client, config, refreshHooks],
+  );
+
+  const updateHook = useCallback(
+    async (hook: RuntimeHookMetadata, input: RuntimeHookInput) => {
+      if (!config) throw new Error('Runtime config is not loaded.');
+      const command = input.command.trim();
+      if (!command) throw new Error('Hook command is required.');
+      const currentHooks = config.hooks ?? {};
+      const location = hookConfigLocation(hook);
+      if (!location) throw new Error('Hook location is invalid.');
+      const nextHooks = updateHookInConfig(currentHooks, location, { ...input, command });
+      const next = await client.saveConfig({ hooks: nextHooks });
+      setConfig(next);
+      await refreshHooks();
+    },
+    [client, config, refreshHooks],
+  );
+
+  const deleteHook = useCallback(
+    async (hook: RuntimeHookMetadata) => {
+      if (!config) throw new Error('Runtime config is not loaded.');
+      const currentHooks = config.hooks ?? {};
+      const location = hookConfigLocation(hook);
+      if (!location) throw new Error('Hook location is invalid.');
+      const nextHooks = deleteHookFromConfig(currentHooks, location);
+      const next = await client.saveConfig({ hooks: nextHooks });
+      setConfig(next);
+      await refreshHooks();
+    },
+    [client, config, refreshHooks],
+  );
+
   const deleteMcpServer = useCallback(
     async (server: RuntimeMcpServer) => {
       await client.deleteMcpServer(server.key);
@@ -447,7 +555,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [client]);
 
   const answerApproval = useCallback(
-    async (approvalId: string, input: { decision: 'approve' | 'reject'; message?: string }) => {
+    async (approvalId: string, input: AnswerRuntimeApprovalInput) => {
       await client.answerApproval(approvalId, input);
       const resolvedAt = new Date().toISOString();
       // 先乐观更新审批列表和当前线程 toolRun，再异步拉一次线程快照校正 seq。
@@ -456,7 +564,8 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
           item.id === approvalId
             ? {
                 ...item,
-                status: input.decision === 'approve' ? 'approved' : 'rejected',
+                status: input.decision === 'reject' || input.decision === 'cancel' ? 'rejected' : 'approved',
+                decision: input.decision,
                 message: input.message,
                 resolvedAt,
               }
@@ -485,8 +594,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     contextCompacting,
     clearCurrentThreadContext,
     clearMemories,
+    createHook,
     createSkill,
     currentThread,
+    deleteHook,
     deleteMcpServer,
     deleteMemory,
     deleteSkill,
@@ -494,6 +605,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     fetchProviderModels,
     fetchMcpServerTools,
     getSkillDetail,
+    hookState,
     loadState,
     mcpState,
     memories,
@@ -502,6 +614,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     previewMemories,
     projects,
     refresh,
+    refreshHooks,
     reloadThreads,
     saveMcpServer,
     saveProviders,
@@ -516,6 +629,9 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     threads,
     updateCurrentThreadMemoryMode,
     updateMcpServer,
+    trustHook,
+    updateHook,
+    updateHookEnabled,
     updateSkill,
     usage,
   };
@@ -532,7 +648,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 function updateThreadApprovalRun(
   thread: RuntimeThread | null,
   approvalId: string,
-  input: { decision: 'approve' | 'reject'; message?: string },
+  input: AnswerRuntimeApprovalInput,
   resolvedAt: string,
 ): RuntimeThread | null {
   if (!thread) return thread;
@@ -544,13 +660,14 @@ function updateThreadApprovalRun(
       ...message,
       toolRuns: message.toolRuns.map((run) => {
         if (run.approvalId !== approvalId) return run;
+        const rejected = input.decision === 'reject' || input.decision === 'cancel';
         const nextRun: RuntimeToolRun = {
           ...run,
-          approvalStatus: input.decision === 'approve' ? 'approved' : 'rejected',
+          approvalStatus: rejected ? 'rejected' : 'approved',
           approvalMessage: input.message,
-          status: input.decision === 'approve' ? 'running' : 'rejected',
-          completedAt: input.decision === 'reject' ? resolvedAt : run.completedAt,
-          resultPreview: input.decision === 'reject' ? input.message || 'Tool call rejected.' : run.resultPreview,
+          status: rejected ? 'rejected' : 'running',
+          completedAt: rejected ? resolvedAt : run.completedAt,
+          resultPreview: rejected ? input.message || 'Tool call rejected.' : run.resultPreview,
         };
         return nextRun;
       }),

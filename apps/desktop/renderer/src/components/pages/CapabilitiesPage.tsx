@@ -1,9 +1,10 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { BookOpen, Boxes, FilePlus2, Info, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Search, Trash2 } from 'lucide-react';
-import type { RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { BookOpen, Boxes, FilePlus2, Info, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
+import { hookPresets, type HookPreset } from './hookPresets.js';
 
 type McpDraft = {
   key: string;
@@ -27,6 +28,15 @@ type McpDraft = {
   tools: RuntimeMcpToolInfo[];
 };
 
+type HookDraft = {
+  eventName: RuntimeHookEventName;
+  matcher: string;
+  command: string;
+  commandWindows: string;
+  timeoutSec: string;
+  statusMessage: string;
+};
+
 const emptyMcpDraft: McpDraft = {
   key: '',
   label: '',
@@ -40,7 +50,7 @@ const emptyMcpDraft: McpDraft = {
   headers: '',
   enabled: true,
   required: false,
-  requireApproval: 'always',
+  requireApproval: 'auto',
   timeoutMs: '',
   startupTimeoutMs: '',
   toolTimeoutMs: '',
@@ -48,6 +58,28 @@ const emptyMcpDraft: McpDraft = {
   disabledTools: '',
   tools: [],
 };
+
+const emptyHookDraft: HookDraft = {
+  eventName: 'PreToolUse',
+  matcher: '',
+  command: '',
+  commandWindows: '',
+  timeoutSec: '600',
+  statusMessage: '',
+};
+
+const hookEventOptions: Array<{ value: RuntimeHookEventName; label: string; matcher: boolean }> = [
+  { value: 'PreToolUse', label: 'PreToolUse · 工具执行前', matcher: true },
+  { value: 'PermissionRequest', label: 'PermissionRequest · 权限请求时', matcher: true },
+  { value: 'PostToolUse', label: 'PostToolUse · 工具成功后', matcher: true },
+  { value: 'PreCompact', label: 'PreCompact · 压缩前', matcher: true },
+  { value: 'PostCompact', label: 'PostCompact · 压缩后', matcher: true },
+  { value: 'SessionStart', label: 'SessionStart · 会话开始', matcher: true },
+  { value: 'UserPromptSubmit', label: 'UserPromptSubmit · 用户提交消息', matcher: false },
+  { value: 'SubagentStart', label: 'SubagentStart · 子任务开始', matcher: true },
+  { value: 'SubagentStop', label: 'SubagentStop · 子任务结束', matcher: true },
+  { value: 'Stop', label: 'Stop · 回合结束', matcher: false },
+];
 
 const chatCreateSkillIds = {
   mcp: 'create-mcp-in-chat',
@@ -58,6 +90,8 @@ export function CapabilitiesPage({
   skills,
   selectedSkillCount,
   mcpState,
+  hookState,
+  onCreateHook,
   onCreateSkill,
   onDeleteSkill,
   onGetSkillDetail,
@@ -65,13 +99,20 @@ export function CapabilitiesPage({
   onRefresh,
   onUpdateSkill,
   onFetchMcpTools,
+  onRefreshHooks,
   onSaveMcpServer,
+  onTrustHook,
+  onUpdateHook,
+  onUpdateHookEnabled,
+  onDeleteHook,
   onUpdateMcpServer,
   onDeleteMcpServer,
 }: {
   skills: RuntimeSkillSummary[];
   selectedSkillCount: number;
   mcpState: RuntimeMcpServerList | null;
+  hookState: RuntimeHookListResponse | null;
+  onCreateHook: (input: RuntimeHookInput) => Promise<void>;
   onCreateSkill: (input: RuntimeSkillInput) => Promise<RuntimeSkillDetail>;
   onDeleteSkill: (skill: RuntimeSkillSummary) => Promise<void>;
   onGetSkillDetail: (skillId: string) => Promise<RuntimeSkillDetail>;
@@ -79,15 +120,25 @@ export function CapabilitiesPage({
   onRefresh: () => Promise<void>;
   onUpdateSkill: (skill: RuntimeSkillSummary, patch: Partial<RuntimeSkillInput>) => Promise<RuntimeSkillDetail>;
   onFetchMcpTools: (input: RuntimeMcpServerInput) => Promise<{ tools: RuntimeMcpToolInfo[]; errors: string[] }>;
+  onRefreshHooks: () => Promise<RuntimeHookListResponse>;
   onSaveMcpServer: (input: RuntimeMcpServerInput) => Promise<void>;
+  onTrustHook: (hook: RuntimeHookMetadata) => Promise<void>;
+  onUpdateHook: (hook: RuntimeHookMetadata, input: RuntimeHookInput) => Promise<void>;
+  onUpdateHookEnabled: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
+  onDeleteHook: (hook: RuntimeHookMetadata) => Promise<void>;
   onUpdateMcpServer: (server: RuntimeMcpServer, patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>) => Promise<void>;
   onDeleteMcpServer: (server: RuntimeMcpServer) => void;
 }) {
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
+  const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
   const [saving, setSaving] = useState(false);
-  const [capabilityFilter, setCapabilityFilter] = useState<'mcp' | 'skills'>('mcp');
+  const [hookSaving, setHookSaving] = useState(false);
+  const [capabilityFilter, setCapabilityFilter] = useState<'mcp' | 'skills' | 'hooks'>('mcp');
   const [capabilityQuery, setCapabilityQuery] = useState('');
+  const [updatingHookKeys, setUpdatingHookKeys] = useState<Set<string>>(new Set());
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
+  const [hookEditorOpen, setHookEditorOpen] = useState(false);
+  const [editingHook, setEditingHook] = useState<RuntimeHookMetadata | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<RuntimeMcpServer | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [skillPageMode, setSkillPageMode] = useState<'view' | 'edit' | 'create' | null>(null);
@@ -97,7 +148,12 @@ export function CapabilitiesPage({
   const [skillDetailError, setSkillDetailError] = useState<string | null>(null);
   const [skillSaving, setSkillSaving] = useState(false);
   const servers = mcpState?.servers ?? [];
+  const hookEntries = hookState?.data ?? [];
+  const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
+  const hookWarnings = hookEntries.flatMap((entry) => entry.warnings);
+  const hookErrors = hookEntries.flatMap((entry) => entry.errors.map((error) => error.message));
   const enabledSkillCount = skills.filter((skill) => skill.enabled).length;
+  const executableHookCount = hooks.filter((hook) => hook.enabled && (hook.trustStatus === 'trusted' || hook.trustStatus === 'managed')).length;
   const normalizedCapabilityQuery = capabilityQuery.trim().toLowerCase();
   const visibleServers = servers.filter((server) =>
     !normalizedCapabilityQuery ||
@@ -107,6 +163,15 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${skill.name} ${skill.description} ${skill.id}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
+  const visibleHooks = hooks.filter((hook) =>
+    !normalizedCapabilityQuery ||
+    `${hook.key} ${hook.eventName} ${hook.matcher ?? ''} ${hook.command ?? ''} ${hook.sourcePath}`.toLowerCase().includes(normalizedCapabilityQuery),
+  );
+  const visibleHookPresets = hookPresets.filter((preset) =>
+    !normalizedCapabilityQuery ||
+    `${preset.name} ${preset.description} ${preset.eventName} ${preset.matcher} ${preset.command}`.toLowerCase().includes(normalizedCapabilityQuery),
+  );
+  const createCapabilityKind: 'mcp' | 'skills' = capabilityFilter === 'skills' ? 'skills' : 'mcp';
 
   function resetMcpDraft() {
     setEditingMcpServer(null);
@@ -135,6 +200,28 @@ export function CapabilitiesPage({
     setSkillDetailSummary(null);
     setSkillDetail(null);
     setSkillDetailError(null);
+  }
+
+  function openHookFormCreate() {
+    setCreateMenuOpen(false);
+    setCapabilityFilter('hooks');
+    setEditingHook(null);
+    setHookDraft(emptyHookDraft);
+    setHookEditorOpen(true);
+  }
+
+  function openHookEdit(hook: RuntimeHookMetadata) {
+    setCapabilityFilter('hooks');
+    setEditingHook(hook);
+    setHookDraft({
+      eventName: hookConfigEventName(hook),
+      matcher: hook.matcher ?? '',
+      command: hook.command ?? '',
+      commandWindows: '',
+      timeoutSec: String(hook.timeoutSec || 600),
+      statusMessage: hook.statusMessage ?? '',
+    });
+    setHookEditorOpen(true);
   }
 
   function editMcpServer(server: RuntimeMcpServer) {
@@ -234,6 +321,37 @@ export function CapabilitiesPage({
     }
   }
 
+  async function submitHook() {
+    const command = hookDraft.command.trim();
+    if (!command) return;
+    setHookSaving(true);
+    try {
+      const input = hookDraftToInput(hookDraft);
+      if (editingHook) await onUpdateHook(editingHook, input);
+      else await onCreateHook(input);
+      setHookDraft(emptyHookDraft);
+      setEditingHook(null);
+      setHookEditorOpen(false);
+    } finally {
+      setHookSaving(false);
+    }
+  }
+
+  async function installHookPreset(preset: HookPreset) {
+    setHookSaving(true);
+    try {
+      await onCreateHook(presetToHookInput(preset));
+    } finally {
+      setHookSaving(false);
+    }
+  }
+
+  async function deleteHook(hook: RuntimeHookMetadata) {
+    const confirmed = window.confirm(`确认删除这个 ${hookConfigEventName(hook)} Hook？`);
+    if (!confirmed) return;
+    await updateHook(hook, () => onDeleteHook(hook));
+  }
+
   if (mcpEditorOpen) {
     return (
       <main className="capabilities-page desktop-capabilities-panel">
@@ -247,6 +365,100 @@ export function CapabilitiesPage({
             onFetchTools={onFetchMcpTools}
             onSave={submitMcpServer}
           />
+        </section>
+      </main>
+    );
+  }
+
+  if (hookEditorOpen) {
+    const selectedEvent = hookEventOptions.find((item) => item.value === hookDraft.eventName) ?? hookEventOptions[0];
+    return (
+      <main className="capabilities-page desktop-capabilities-panel">
+        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
+          <div className="desktop-capabilities-detail desktop-capabilities-hook-editor">
+            <PageHeader
+              title={editingHook ? '编辑 Hook' : '创建 Hook'}
+              subtitle={editingHook ? '保存修改后会重新计算 hash；命令发生变化时需要重新信任。' : 'Hook 保存后会出现在列表里。新建或改动后的命令默认不会执行，需要在列表中信任当前 hash。'}
+              onBack={() => {
+                setEditingHook(null);
+                setHookEditorOpen(false);
+              }}
+              actions={
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingHook(null);
+                      setHookEditorOpen(false);
+                    }}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    icon={hookSaving ? <Loader2 size={14} className="is-spinning" /> : <Save size={14} />}
+                    disabled={hookSaving || !hookDraft.command.trim()}
+                    onClick={() => void submitHook()}
+                  >
+                    {editingHook ? '保存修改' : '保存 Hook'}
+                  </Button>
+                </>
+              }
+            />
+            <div className="desktop-capabilities-hook-form">
+              <McpFormField className="desktop-capabilities-hook-form__full" label="触发时机">
+                <SelectField
+                  value={hookDraft.eventName}
+                  onChange={(event) => setHookDraftField(setHookDraft, 'eventName', event.currentTarget.value as RuntimeHookEventName)}
+                >
+                  {hookEventOptions.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
+                </SelectField>
+              </McpFormField>
+              <McpFormField className="desktop-capabilities-hook-form__full" label="Matcher" help={selectedEvent.matcher ? '正则匹配工具名或事件目标；留空表示全部匹配。' : '这个触发时机不使用 matcher，保存时会忽略。'}>
+                <TextField
+                  value={hookDraft.matcher}
+                  disabled={!selectedEvent.matcher}
+                  placeholder={selectedEvent.matcher ? '例如 Bash|apply_patch' : '不适用'}
+                  onChange={(event) => setHookDraftField(setHookDraft, 'matcher', event.currentTarget.value)}
+                />
+              </McpFormField>
+              <McpFormField className="desktop-capabilities-skill-form__full" label="macOS / Linux 命令">
+                <TextArea
+                  rows={3}
+                  value={hookDraft.command}
+                  placeholder="例如 node .codex/hooks/pre-tool-use.js"
+                  onChange={(event) => setHookDraftField(setHookDraft, 'command', event.currentTarget.value)}
+                />
+              </McpFormField>
+              <McpFormField className="desktop-capabilities-skill-form__full" label="Windows 命令" help="留空时 Windows 也使用上面的命令。">
+                <TextArea
+                  rows={2}
+                  value={hookDraft.commandWindows}
+                  placeholder="例如 powershell -File .codex/hooks/pre-tool-use.ps1"
+                  onChange={(event) => setHookDraftField(setHookDraft, 'commandWindows', event.currentTarget.value)}
+                />
+              </McpFormField>
+              <McpFormField label="超时秒数">
+                <TextField
+                  type="number"
+                  min="1"
+                  value={hookDraft.timeoutSec}
+                  onChange={(event) => setHookDraftField(setHookDraft, 'timeoutSec', event.currentTarget.value)}
+                />
+              </McpFormField>
+              <McpFormField label="状态文案">
+                <TextField
+                  value={hookDraft.statusMessage}
+                  placeholder="运行 hook 时显示"
+                  onChange={(event) => setHookDraftField(setHookDraft, 'statusMessage', event.currentTarget.value)}
+                />
+              </McpFormField>
+            </div>
+          </div>
         </section>
       </main>
     );
@@ -298,16 +510,29 @@ export function CapabilitiesPage({
     );
   }
 
-  const createConversationTitle = capabilityFilter === 'mcp' ? '用对话安装 MCP' : '用对话创建技能';
-  const createConversationDescription = capabilityFilter === 'mcp'
+  const createConversationTitle = createCapabilityKind === 'mcp' ? '用对话安装 MCP' : '用对话创建技能';
+  const createConversationDescription = createCapabilityKind === 'mcp'
     ? '打开对话并选中 MCP 创建向导。'
     : '打开对话并选中 Skill 创建向导。';
-  const createFormTitle = capabilityFilter === 'mcp' ? '手动配置 MCP' : '手动编写技能';
-  const createFormDescription = capabilityFilter === 'mcp'
+  const createFormTitle = createCapabilityKind === 'mcp' ? '手动配置 MCP' : '手动编写技能';
+  const createFormDescription = createCapabilityKind === 'mcp'
     ? '直接填写命令、参数和环境变量。'
     : '直接填写名称、简介和 SKILL.md。';
-  const createFormIcon = capabilityFilter === 'mcp' ? <Plug size={14} /> : <FilePlus2 size={14} />;
-  const openFormCreate = capabilityFilter === 'mcp' ? openMcpFormCreate : openSkillFormCreate;
+  const createFormIcon = createCapabilityKind === 'mcp' ? <Plug size={14} /> : <FilePlus2 size={14} />;
+  const openFormCreate = createCapabilityKind === 'mcp' ? openMcpFormCreate : openSkillFormCreate;
+
+  async function updateHook(hook: RuntimeHookMetadata, action: () => Promise<void>) {
+    setUpdatingHookKeys((items) => new Set([...items, hook.key]));
+    try {
+      await action();
+    } finally {
+      setUpdatingHookKeys((items) => {
+        const next = new Set(items);
+        next.delete(hook.key);
+        return next;
+      });
+    }
+  }
 
   return (
     <main className="capabilities-page desktop-capabilities-panel">
@@ -315,23 +540,27 @@ export function CapabilitiesPage({
         <header className="desktop-capabilities-header">
           <div className="desktop-capabilities-title">
             <h2>能力</h2>
-            <span>{mcpState?.configPath ?? 'Local runtime'}</span>
           </div>
           <div className="desktop-capabilities-actions">
             <div className="desktop-capabilities-search">
               <Search size={14} />
               <input value={capabilityQuery} onChange={(event) => setCapabilityQuery(event.target.value)} placeholder="搜索能力..." />
             </div>
-            <IconButton label="Refresh capabilities" onClick={() => void onRefresh()}>
+            <IconButton label="Refresh capabilities" onClick={() => void (capabilityFilter === 'hooks' ? onRefreshHooks() : onRefresh())}>
               <RefreshCw size={15} />
             </IconButton>
+            {capabilityFilter === 'hooks' ? (
+              <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={openHookFormCreate}>
+                创建
+              </Button>
+            ) : (
             <div className="desktop-capabilities-create">
               <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={() => setCreateMenuOpen((value) => !value)}>
                 创建
               </Button>
               {createMenuOpen ? (
                 <div className="desktop-capabilities-create-menu">
-                  <button className="desktop-capabilities-create-menu__item" type="button" onClick={() => openConversationCreate(capabilityFilter)}>
+                  <button className="desktop-capabilities-create-menu__item" type="button" onClick={() => openConversationCreate(createCapabilityKind)}>
                     <span className="desktop-capabilities-create-menu__icon"><MessageSquare size={14} /></span>
                     <span className="desktop-capabilities-create-menu__content">
                       <strong>{createConversationTitle}</strong>
@@ -348,6 +577,7 @@ export function CapabilitiesPage({
                 </div>
               ) : null}
             </div>
+            )}
           </div>
         </header>
 
@@ -358,7 +588,10 @@ export function CapabilitiesPage({
           <button className={capabilityFilter === 'skills' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('skills')}>
             技能
           </button>
-          <span>{servers.length} MCP · {enabledSkillCount}/{skills.length} 启用 · {selectedSkillCount} 默认使用</span>
+          <button className={capabilityFilter === 'hooks' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('hooks')}>
+            Hooks
+          </button>
+          <span>{servers.length} MCP · {enabledSkillCount}/{skills.length} 技能启用 · {selectedSkillCount} 默认 · {executableHookCount}/{hooks.length} Hooks 可执行</span>
         </div>
 
         <div className={`desktop-capabilities-usage-note desktop-capabilities-usage-note--${capabilityFilter}`}>
@@ -366,11 +599,40 @@ export function CapabilitiesPage({
           <span>
             {capabilityFilter === 'mcp'
               ? '启用表示运行时会加载这个 MCP；必需是关键依赖标记，一般服务不建议开启。授权策略控制调用 MCP 工具前是否确认；可用工具和禁用工具在表单里配置。'
-              : '启用表示可在对话中选择；默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文。输入框里的 Skill 词槽只影响当前这次发送。'}
+              : capabilityFilter === 'skills'
+                ? '启用表示可在对话中选择；默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文。输入框里的 Skill 词槽只影响当前这次发送。'
+                : 'Hook 是本地命令触发器，会在工具调用前后运行，可用于阻止危险命令、补充上下文或审计操作。可以从推荐模板开始，也可以手动创建；保存后需要信任当前 hash 才会执行。'}
           </span>
         </div>
 
         <div className="desktop-capabilities-grid">
+          {capabilityFilter === 'hooks'
+            ? visibleHookPresets.map((preset) => (
+              <article className="desktop-capability-card desktop-capability-card--hook-preset" key={`hook-preset:${preset.id}`}>
+                <div className="desktop-capability-card__head">
+                  <span className="desktop-capability-card__head-main">
+                    <span className="desktop-capability-card__icon"><FilePlus2 size={14} /></span>
+                    <span className="desktop-capability-card__status">{preset.categoryLabel}</span>
+                  </span>
+                  <span className="desktop-capability-card__head-actions">
+                    <IconButton label={`添加 Hook 模板：${preset.name}`} variant="ghost" disabled={hookSaving} onClick={() => void installHookPreset(preset)}>
+                      <Plus size={14} />
+                    </IconButton>
+                  </span>
+                </div>
+                <h2>{preset.name}</h2>
+                <p>{preset.description}</p>
+                <div className="desktop-capability-card__meta">
+                  <span>{preset.eventName}</span>
+                  <span>{preset.matcher || '无 matcher'}</span>
+                </div>
+                <div className="desktop-capability-card__tool-policy">
+                  <span>{preset.outcome}</span>
+                  <span>{preset.recommendedFor}</span>
+                </div>
+              </article>
+            ))
+            : null}
           {capabilityFilter === 'mcp'
             ? visibleServers.map((server) => {
                 const endpoint = server.transport === 'stdio' ? [server.command, ...server.args].filter(Boolean).join(' ') : server.url;
@@ -415,8 +677,9 @@ export function CapabilitiesPage({
                         disabled={server.readOnly}
                         onChange={(event) => void onUpdateMcpServer(server, { requireApproval: event.currentTarget.value as RuntimeMcpRequireApproval })}
                       >
-                        <option value="always">总是确认</option>
-                        <option value="never">无需确认</option>
+                        <option value="auto">自动判断</option>
+                        <option value="prompt">每次确认</option>
+                        <option value="approve">无需确认</option>
                       </SelectField>
                     </div>
                   </article>
@@ -466,12 +729,74 @@ export function CapabilitiesPage({
                 );
               })
             : null}
-          {((capabilityFilter === 'mcp' && visibleServers.length) || (capabilityFilter === 'skills' && visibleSkills.length)) ? null : (
+          {capabilityFilter === 'hooks'
+            ? visibleHooks.map((hook) => {
+                const canRun = hook.enabled && (hook.trustStatus === 'trusted' || hook.trustStatus === 'managed');
+                const updating = updatingHookKeys.has(hook.key);
+                const editable = !hook.isManaged;
+                return (
+                  <article className="desktop-capability-card desktop-capability-card--hook" key={`hook:${hook.key}`}>
+                    <div className="desktop-capability-card__head">
+                      <span className="desktop-capability-card__head-main">
+                        <span className="desktop-capability-card__icon">{canRun ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}</span>
+                        <span className={`desktop-capability-card__status ${canRun ? 'is-on' : ''}`}>
+                          {canRun ? '可执行' : hook.enabled ? trustStatusLabel(hook.trustStatus) : '已停用'}
+                        </span>
+                      </span>
+                      <span className="desktop-capability-card__head-actions">
+                        <IconButton label="Edit Hook" variant="ghost" disabled={updating || !editable} onClick={() => openHookEdit(hook)}>
+                          <Pencil size={14} />
+                        </IconButton>
+                        <IconButton label="Delete Hook" variant="danger" disabled={updating || !editable} onClick={() => void deleteHook(hook)}>
+                          <Trash2 size={14} />
+                        </IconButton>
+                      </span>
+                    </div>
+                    <h2>{hook.eventName}</h2>
+                    <p className="desktop-capability-card__command" title={hook.command ?? undefined}>{hook.command || '未配置命令'}</p>
+                    <div className="desktop-capability-card__meta">
+                      <span>{hook.matcher ? `matcher: ${hook.matcher}` : '所有匹配'}</span>
+                      <span>{hook.source}</span>
+                      <span>{hook.timeoutSec}s</span>
+                    </div>
+                    <div className="desktop-capability-card__actions">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        icon={<ShieldCheck size={14} />}
+                        disabled={updating || hook.trustStatus === 'trusted' || hook.trustStatus === 'managed'}
+                        onClick={() => void updateHook(hook, () => onTrustHook(hook))}
+                      >
+                        信任
+                      </Button>
+                      <label className="sd-check" title="停用后这个 Hook 不会参与工具调用">
+                        <input
+                          type="checkbox"
+                          checked={hook.enabled}
+                          disabled={updating}
+                          onChange={(event) => void updateHook(hook, () => onUpdateHookEnabled(hook, event.currentTarget.checked))}
+                        />
+                        <span>启用</span>
+                      </label>
+                    </div>
+                  </article>
+                );
+              })
+            : null}
+          {((capabilityFilter === 'mcp' && visibleServers.length) || (capabilityFilter === 'skills' && visibleSkills.length) || (capabilityFilter === 'hooks' && (visibleHookPresets.length || visibleHooks.length))) ? null : (
             <div className="desktop-capabilities-empty">暂无匹配能力</div>
           )}
         </div>
 
-        {mcpState?.errors.length ? (
+        {capabilityFilter === 'hooks' && (hookWarnings.length || hookErrors.length) ? (
+          <div className="desktop-capabilities-errors">
+            {[...hookWarnings, ...hookErrors].map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        ) : null}
+
+        {capabilityFilter === 'mcp' && mcpState?.errors.length ? (
           <div className="desktop-capabilities-errors">
             {mcpState.errors.map((item) => (
               <span key={item}>{item}</span>
@@ -482,6 +807,20 @@ export function CapabilitiesPage({
       </section>
     </main>
   );
+}
+
+function trustStatusLabel(status: RuntimeHookMetadata['trustStatus']): string {
+  switch (status) {
+    case 'managed':
+      return '受管';
+    case 'trusted':
+      return '已信任';
+    case 'modified':
+      return '已变更';
+    case 'untrusted':
+    default:
+      return '待信任';
+  }
 }
 
 function CapabilitiesMcpEditor({
@@ -587,13 +926,14 @@ function CapabilitiesMcpEditor({
             <option value="streamableHttp">streamable HTTP</option>
           </SelectField>
         </McpFormField>
-        <McpFormField label="授权策略" help="总是确认会在每次 MCP 调用前请求确认；无需确认会直接调用。">
+        <McpFormField label="授权策略" help="自动判断会根据 MCP 工具注解判断；每次确认会在每次调用前请求确认；无需确认会直接调用。">
           <SelectField
             value={draft.requireApproval}
             onChange={(event) => setDraftField(setDraft, 'requireApproval', event.currentTarget.value as RuntimeMcpRequireApproval)}
           >
-            <option value="always">总是确认</option>
-            <option value="never">无需确认</option>
+            <option value="auto">自动判断</option>
+            <option value="prompt">每次确认</option>
+            <option value="approve">无需确认</option>
           </SelectField>
         </McpFormField>
         <McpFormField className="desktop-capabilities-mcp-form__full" label="描述">
@@ -714,6 +1054,62 @@ function setDraftField<TKey extends keyof McpDraft>(
   setDraft((draft) => ({ ...draft, [key]: value }));
 }
 
+function setHookDraftField<TKey extends keyof HookDraft>(
+  setDraft: Dispatch<SetStateAction<HookDraft>>,
+  key: TKey,
+  value: HookDraft[TKey],
+): void {
+  setDraft((draft) => ({ ...draft, [key]: value }));
+}
+
+function hookDraftToInput(draft: HookDraft): RuntimeHookInput {
+  const eventOption = hookEventOptions.find((item) => item.value === draft.eventName);
+  return {
+    eventName: draft.eventName,
+    command: draft.command.trim(),
+    ...(eventOption?.matcher !== false && draft.matcher.trim() ? { matcher: draft.matcher.trim() } : {}),
+    ...(draft.commandWindows.trim() ? { commandWindows: draft.commandWindows.trim() } : {}),
+    ...(optionalNumber(draft.timeoutSec) ? { timeoutSec: optionalNumber(draft.timeoutSec) } : {}),
+    ...(draft.statusMessage.trim() ? { statusMessage: draft.statusMessage.trim() } : {}),
+  };
+}
+
+function presetToHookInput(preset: HookPreset): RuntimeHookInput {
+  return {
+    eventName: preset.eventName,
+    command: preset.command.trim(),
+    ...(preset.matcher?.trim() ? { matcher: preset.matcher.trim() } : {}),
+    ...(preset.commandWindows?.trim() ? { commandWindows: preset.commandWindows.trim() } : {}),
+    ...(typeof preset.timeoutSec === 'number' ? { timeoutSec: preset.timeoutSec } : {}),
+    ...(preset.statusMessage?.trim() ? { statusMessage: preset.statusMessage.trim() } : {}),
+  };
+}
+
+function hookConfigEventName(hook: RuntimeHookMetadata): RuntimeHookEventName {
+  switch (hook.eventName) {
+    case 'preToolUse':
+      return 'PreToolUse';
+    case 'permissionRequest':
+      return 'PermissionRequest';
+    case 'postToolUse':
+      return 'PostToolUse';
+    case 'preCompact':
+      return 'PreCompact';
+    case 'postCompact':
+      return 'PostCompact';
+    case 'sessionStart':
+      return 'SessionStart';
+    case 'userPromptSubmit':
+      return 'UserPromptSubmit';
+    case 'subagentStart':
+      return 'SubagentStart';
+    case 'subagentStop':
+      return 'SubagentStop';
+    case 'stop':
+      return 'Stop';
+  }
+}
+
 function mcpDraftToInput(draft: McpDraft, key: string): RuntimeMcpServerInput {
   return {
     key,
@@ -767,7 +1163,9 @@ function optionalNumber(value: string): number | undefined {
 }
 
 function approvalLabel(value: RuntimeMcpRequireApproval): string {
-  return value === 'never' ? '无需确认' : '总是确认';
+  if (value === 'approve' || value === 'never') return '无需确认';
+  if (value === 'prompt' || value === 'always') return '每次确认';
+  return '自动判断';
 }
 
 function mcpToolStats(tools: RuntimeMcpToolInfo[], allowedTools: string[], disabledTools: string[]): { enabled: number; total: number } {

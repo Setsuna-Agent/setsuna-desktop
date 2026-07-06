@@ -1,5 +1,6 @@
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
 import type { AppServerCommandExecManager } from './command-exec.js';
+import type { AppServerFsManager } from './fs-protocol.js';
 import { AppServerRpcError, appServerRpcError } from './errors.js';
 import { appServerApprovalAnswerFromResponse } from './protocol.js';
 import { dispatchAppServerRpcRequest } from './dispatcher.js';
@@ -10,6 +11,8 @@ export async function handleAppServerRpcRequest(
   request: unknown,
   options: RuntimeServerOptions,
   commandExecManager: AppServerCommandExecManager,
+  fsManager: AppServerFsManager,
+  connectionId?: string,
 ): Promise<AppServerRpcResponse | null> {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     return appServerRpcError(null, -32600, 'Invalid Request');
@@ -32,7 +35,15 @@ export async function handleAppServerRpcRequest(
   }
 
   try {
-    const result = await dispatchAppServerRpcRequest(runtime, message.method, message.params, options, commandExecManager);
+    const result = await dispatchAppServerRpcRequest(
+      runtime,
+      message.method,
+      message.params,
+      options,
+      commandExecManager,
+      fsManager,
+      connectionId,
+    );
     return { id, result };
   } catch (error) {
     if (error instanceof AppServerRpcError) return appServerRpcError(id, error.code, error.message, error.data);

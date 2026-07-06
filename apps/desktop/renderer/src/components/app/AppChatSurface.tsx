@@ -1,6 +1,6 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import type {
-  RuntimeApprovalDecision,
+  AnswerRuntimeApprovalInput,
   RuntimeThread,
   RuntimeConfigState,
   RuntimeSkillSummary,
@@ -25,7 +25,7 @@ import type {
 } from '../workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../workspace/runtimeReviewSummary.js';
 
-type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
+type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 
 export function AppChatSurface({
   activeProject,

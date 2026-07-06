@@ -15,7 +15,7 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import type { RuntimeApprovalDecision, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import type { AnswerRuntimeApprovalInput, RuntimeApprovalAvailableDecision, RuntimeHookRun, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { fileLanguage, highlightedCodeLinesHtml } from '../workspace/codeHighlight.js';
 import {
   fileChangeFromToolRun,
@@ -37,7 +37,7 @@ type ToolRunDisplayGroup =
 
 export type ToolRunGroupKind = 'inspection' | 'search' | 'shell' | 'fileMutation' | 'generic';
 export type ToolRunSummaryMode = 'aggregate' | 'latest';
-type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
+type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 
 export function RuntimeToolRuns({
   runs,
@@ -58,17 +58,30 @@ export function RuntimeToolRuns({
   );
 }
 
+export function RuntimeHookRuns({ runs }: { runs?: RuntimeHookRun[] }) {
+  if (!runs?.length) return null;
+  return (
+    <div className="chat-hook-runs">
+      <HookRunList runs={runs} />
+    </div>
+  );
+}
+
 export function isDisplayableRuntimeToolRun(run: RuntimeToolRun): boolean {
   if (run.status === 'error') return false;
   return Boolean(run.name || run.status || run.argumentsPreview || run.resultPreview);
 }
 
+function hasHookRuns(run: RuntimeToolRun): boolean {
+  return Boolean(run.hookRuns?.length);
+}
+
 function renderToolRunDisplayGroup(group: ToolRunDisplayGroup, onAnswerApproval: AnswerApprovalHandler): JSX.Element {
   if (group.type === 'mixed') return <MixedToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />;
-  if (group.type === 'single' && isFileOperationRun(group.run)) {
+  if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
     return <FileMutationRunRow key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />;
   }
-  if (group.type === 'single' && isFlatInspectionRun(group.run)) return <FlatToolRunRow key={group.run.id} run={group.run} />;
+  if (group.type === 'single' && isFlatInspectionRun(group.run) && !hasHookRuns(group.run)) return <FlatToolRunRow key={group.run.id} run={group.run} />;
   if (group.type === 'single') return <ToolRunPanel key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />;
   return <ToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />;
 }
@@ -145,9 +158,15 @@ function ToolRunGroupPanel({
         }`}
       >
         {group.kind === 'inspection' ? (
-          <InspectionTargetList runs={visibleRuns} />
+          <>
+            <InspectionTargetList runs={visibleRuns} />
+            <GroupedHookRunList runs={visibleRuns} />
+          </>
         ) : fileOperationGroup ? (
-          <FileOperationTargetList runs={visibleRuns} />
+          <>
+            <FileOperationTargetList runs={visibleRuns} />
+            <GroupedHookRunList runs={visibleRuns} />
+          </>
         ) : shellGroup ? (
           visibleRuns.map((run) => <ToolRunPanel key={run.id} run={run} onAnswerApproval={onAnswerApproval} />)
         ) : (
@@ -213,7 +232,14 @@ function MixedToolRunGroupPanel({
 function renderMixedToolRunChildGroup(group: ToolRunGroup, onAnswerApproval: AnswerApprovalHandler): JSX.Element | null {
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
-  if (kind === 'fileMutation') return <FileOperationTargetList key={toolRunGroupId(group)} runs={runs} />;
+  if (kind === 'fileMutation') {
+    return (
+      <div className="chat-tool-run__mixed-file-operation" key={toolRunGroupId(group)}>
+        <FileOperationTargetList runs={runs} />
+        <GroupedHookRunList runs={runs} />
+      </div>
+    );
+  }
   return renderToolRunDisplayGroup(group, onAnswerApproval);
 }
 
@@ -277,8 +303,9 @@ function FileMutationRunRow({
         </span>
         <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={run.status === 'running'} />
       </div>
-      {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} onAnswerApproval={onAnswerApproval} /> : null}
+      {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
       {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
+      <HookRunList runs={run.hookRuns} />
     </div>
   );
 }
@@ -627,11 +654,19 @@ function ToolRunDetails({
   onAnswerApproval: AnswerApprovalHandler;
   pendingApprovalId?: string;
 }) {
+  const execPolicySummary = execPolicyApprovalSummary(run);
+  const permissionSummary = permissionApprovalSummary(run);
+  const networkSummary = networkApprovalSummary(run);
+  const hookRuns = <HookRunList runs={run.hookRuns} />;
   if (isShellRun(run)) {
     return (
       <>
         <ShellTerminalResult run={run} />
-        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} onAnswerApproval={onAnswerApproval} /> : null}
+        {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
+        {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
+        {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
+        {hookRuns}
+        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
       </>
     );
   }
@@ -639,7 +674,11 @@ function ToolRunDetails({
     return (
       <>
         <InspectionTargetList runs={[run]} />
-        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} onAnswerApproval={onAnswerApproval} /> : null}
+        {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
+        {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
+        {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
+        {hookRuns}
+        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
       </>
     );
   }
@@ -647,58 +686,265 @@ function ToolRunDetails({
     return (
       <>
         {run.status === 'error' && run.resultPreview ? <div className="chat-tool-run__file-error">{formatPreview(run.resultPreview)}</div> : null}
-        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} onAnswerApproval={onAnswerApproval} /> : null}
+        {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
+        {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
+        {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
+        {hookRuns}
+        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
       </>
     );
   }
   const diagnostic = genericToolRunDiagnostic(run);
   return (
     <>
+      {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
+      {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
+      {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
       {diagnostic ? <ToolPreview label={run.status === 'rejected' ? '已拒绝' : '错误'} value={diagnostic} /> : null}
-      {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} onAnswerApproval={onAnswerApproval} /> : null}
+      {hookRuns}
+      {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
     </>
   );
+}
+
+function GroupedHookRunList({ runs }: { runs: RuntimeToolRun[] }) {
+  const runsWithHooks = runs.filter(hasHookRuns);
+  if (!runsWithHooks.length) return null;
+  return (
+    <div className="chat-tool-run__hook-groups">
+      {runsWithHooks.map((run) => {
+        const summary = toolRunSummary(run);
+        return (
+          <div className="chat-tool-run__hook-group" key={`${run.id}:hooks`}>
+            <div className="chat-tool-run__hook-group-title">
+              <span>{summary.title}</span>
+              {summary.target ? <code>{summary.target}</code> : null}
+            </div>
+            <HookRunList runs={run.hookRuns} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HookRunList({ runs }: { runs?: RuntimeHookRun[] }) {
+  if (!runs?.length) return null;
+  return (
+    <div className="chat-tool-run__hooks">
+      {runs.map((run) => (
+        <div className={`chat-tool-run__hook chat-tool-run__hook--${run.status}`} key={run.id}>
+          <span className="chat-tool-run__hook-dot" />
+          <span className="chat-tool-run__hook-main">
+            <span className="chat-tool-run__hook-title">{hookRunTitle(run)}</span>
+            {run.message ? <span className="chat-tool-run__hook-message">{run.message}</span> : null}
+            <HookOutputEntryList entries={run.entries} />
+          </span>
+          {hookRunStatusText(run.status) ? <span className="chat-tool-run__hook-status">{hookRunStatusText(run.status)}</span> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HookOutputEntryList({ entries }: { entries?: RuntimeHookRun['entries'] }) {
+  if (!entries?.length) return null;
+  return (
+    <span className="chat-tool-run__hook-entries">
+      {entries.map((entry, index) => (
+        <span className={`chat-tool-run__hook-entry chat-tool-run__hook-entry--${entry.kind}`} key={`${entry.kind}:${index}`}>
+          {hookOutputEntryLabel(entry.kind)} {entry.text}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function hookOutputEntryLabel(kind: NonNullable<RuntimeHookRun['entries']>[number]['kind']): string {
+  if (kind === 'warning') return '警告';
+  if (kind === 'stop') return '停止';
+  if (kind === 'feedback') return '反馈';
+  if (kind === 'context') return '上下文';
+  return '错误';
+}
+
+function hookRunTitle(run: RuntimeHookRun): string {
+  const label = hookEventLabel(run.eventName);
+  if (run.statusMessage) return `${label}：${run.statusMessage}`;
+  if (run.matcher) return `${label} · ${run.matcher}`;
+  return label;
+}
+
+function hookEventLabel(eventName: RuntimeHookRun['eventName']): string {
+  if (eventName === 'PreToolUse') return '执行前 hook';
+  if (eventName === 'PermissionRequest') return '授权 hook';
+  if (eventName === 'PostToolUse') return '执行后 hook';
+  if (eventName === 'PreCompact') return '压缩前 hook';
+  if (eventName === 'PostCompact') return '压缩后 hook';
+  if (eventName === 'SessionStart') return '会话开始 hook';
+  if (eventName === 'SubagentStart') return '子任务开始 hook';
+  if (eventName === 'UserPromptSubmit') return '消息提交 hook';
+  if (eventName === 'SubagentStop') return '子任务结束 hook';
+  if (eventName === 'Stop') return '结束 hook';
+  return 'hook';
+}
+
+function hookRunStatusText(status: RuntimeHookRun['status']): string {
+  if (status === 'running') return '运行中';
+  if (status === 'blocked') return '已拦截';
+  if (status === 'stopped') return '已停止';
+  if (status === 'failed') return '失败';
+  return '';
 }
 
 function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boolean {
   if (isShellRun(run) || toolRunGroupKind(run) === 'inspection' || isFileOperationRun(run)) return true;
   if (pendingApprovalId) return true;
+  if (run.proposedExecPolicyAmendment?.length) return true;
+  if (run.networkApprovalContext) return true;
+  if (run.permissionApprovalContext) return true;
+  if (run.hookRuns?.length) return true;
   return Boolean(genericToolRunDiagnostic(run));
+}
+
+function execPolicyApprovalSummary(run: RuntimeToolRun): string {
+  const prefix = run.proposedExecPolicyAmendment?.filter(Boolean) ?? [];
+  return prefix.length ? `allow prefix: ${prefix.join(' ')}` : '';
+}
+
+function networkApprovalSummary(run: RuntimeToolRun): string {
+  const context = run.networkApprovalContext;
+  if (!context) return '';
+  const allowAmendments = run.proposedNetworkPolicyAmendments
+    ?.filter((item) => item.action === 'allow' && item.host)
+    .map((item) => item.host);
+  const denyAmendments = run.proposedNetworkPolicyAmendments
+    ?.filter((item) => item.action === 'deny' && item.host)
+    .map((item) => item.host);
+  return [
+    `target: ${context.target}`,
+    `protocol: ${context.protocol}`,
+    allowAmendments?.length ? `policy allow: ${[...new Set(allowAmendments)].join(', ')}` : '',
+    denyAmendments?.length ? `policy deny: ${[...new Set(denyAmendments)].join(', ')}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function permissionApprovalSummary(run: RuntimeToolRun): string {
+  const context = run.permissionApprovalContext;
+  if (!context) return '';
+  const granted = isRecord(context.grantedPermissions) ? context.grantedPermissions : {};
+  const network = isRecord(granted.network) && granted.network.enabled === true;
+  const readRoots = permissionFileRoots(granted.file_system ?? granted.fileSystem, 'read');
+  const writeRoots = permissionWriteRoots(granted.file_system ?? granted.fileSystem);
+  const lines = [
+    context.cwd ? `cwd: ${context.cwd}` : '',
+    network ? 'network: enabled' : '',
+    readRoots.length ? `read: ${readRoots.slice(0, 5).join(', ')}${readRoots.length > 5 ? ` +${readRoots.length - 5}` : ''}` : '',
+    writeRoots.length ? `write: ${writeRoots.slice(0, 5).join(', ')}${writeRoots.length > 5 ? ` +${writeRoots.length - 5}` : ''}` : '',
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+function permissionWriteRoots(value: unknown): string[] {
+  return permissionFileRoots(value, 'write');
+}
+
+function permissionFileRoots(value: unknown, access: 'read' | 'write'): string[] {
+  const fileSystem = isRecord(value) ? value : {};
+  const roots = new Set<string>();
+  const legacyRoots = access === 'write' ? fileSystem.write : fileSystem.read;
+  if (Array.isArray(legacyRoots)) {
+    for (const item of legacyRoots) {
+      const root = stringField(item);
+      if (root) roots.add(root);
+    }
+  }
+  if (Array.isArray(fileSystem.entries)) {
+    for (const item of fileSystem.entries) {
+      if (!isRecord(item) || item.access !== access) continue;
+      const pathValue = isRecord(item.path) ? stringField(item.path.path) : stringField(item.path);
+      if (pathValue) roots.add(pathValue);
+    }
+  }
+  return [...roots];
 }
 
 function ApprovalActions({
   approvalId,
+  availableDecisions,
   onAnswerApproval,
 }: {
   approvalId: string;
+  availableDecisions?: RuntimeApprovalAvailableDecision[];
   onAnswerApproval: AnswerApprovalHandler;
 }) {
-  const [submittingDecision, setSubmittingDecision] = useState<RuntimeApprovalDecision | null>(null);
+  const [submittingDecisionKey, setSubmittingDecisionKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const submit = async (decision: RuntimeApprovalDecision) => {
-    if (submittingDecision) return;
-    setSubmittingDecision(decision);
+  const submit = async (decision: RuntimeApprovalAvailableDecision) => {
+    if (submittingDecisionKey) return;
+    const decisionKey = approvalDecisionKey(decision);
+    setSubmittingDecisionKey(decisionKey);
     setError(null);
     try {
-      await onAnswerApproval(approvalId, decision);
+      await onAnswerApproval(approvalId, approvalInputFromDecision(decision));
     } catch (unknownError) {
       setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-      setSubmittingDecision(null);
+      setSubmittingDecisionKey(null);
     }
   };
+  const decisions = availableDecisions?.length ? availableDecisions : defaultApprovalDecisions();
   return (
     <div className="chat-tool-run__approval">
       <div className="chat-tool-run__actions">
-        <button type="button" disabled={Boolean(submittingDecision)} onClick={() => void submit('approve')}>
-          {submittingDecision === 'approve' ? '允许中' : '允许'}
-        </button>
-        <button type="button" disabled={Boolean(submittingDecision)} onClick={() => void submit('reject')}>
-          {submittingDecision === 'reject' ? '拒绝中' : '拒绝'}
-        </button>
+        {decisions.map((decision) => (
+          <button
+            key={approvalDecisionKey(decision)}
+            type="button"
+            disabled={Boolean(submittingDecisionKey)}
+            onClick={() => void submit(decision)}
+          >
+            {submittingDecisionKey === approvalDecisionKey(decision) ? `${approvalDecisionLabel(decision)}中` : approvalDecisionLabel(decision)}
+          </button>
+        ))}
       </div>
       {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
     </div>
   );
+}
+
+function defaultApprovalDecisions(): RuntimeApprovalAvailableDecision[] {
+  return [
+    { type: 'approve' },
+    { type: 'approve_for_session' },
+    { type: 'reject' },
+  ];
+}
+
+function approvalDecisionKey(decision: RuntimeApprovalAvailableDecision): string {
+  if (decision.type === 'approve_exec_policy_amendment') return `${decision.type}:${decision.proposedExecPolicyAmendment.join(' ')}`;
+  if (decision.type === 'approve_network_policy_amendment') return `${decision.type}:${decision.networkPolicyAmendment.host}:${decision.networkPolicyAmendment.action}`;
+  return decision.type;
+}
+
+function approvalDecisionLabel(decision: RuntimeApprovalAvailableDecision): string {
+  if (decision.type === 'approve') return '允许';
+  if (decision.type === 'approve_for_turn_with_strict_auto_review') return '本轮允许并严格复核';
+  if (decision.type === 'approve_for_session') return '本会话允许';
+  if (decision.type === 'approve_persistently') return '永久允许';
+  if (decision.type === 'approve_exec_policy_amendment') return '允许命令前缀';
+  if (decision.type === 'approve_network_policy_amendment') return decision.networkPolicyAmendment.action === 'deny' ? '拒绝并记住网络策略' : '允许网络策略';
+  if (decision.type === 'cancel') return '取消本轮';
+  return '拒绝';
+}
+
+function approvalInputFromDecision(decision: RuntimeApprovalAvailableDecision): AnswerRuntimeApprovalInput {
+  if (decision.type === 'approve_exec_policy_amendment') {
+    return { decision: decision.type, proposedExecPolicyAmendment: decision.proposedExecPolicyAmendment };
+  }
+  if (decision.type === 'approve_network_policy_amendment') {
+    return { decision: decision.type, networkPolicyAmendment: decision.networkPolicyAmendment };
+  }
+  return { decision: decision.type };
 }
 
 function ToolPreview({ code = false, label, value }: { code?: boolean; label: string; value: string }) {
@@ -890,7 +1136,7 @@ function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
   if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory' || run.name === 'read_file' || run.name === 'list_directory' || run.name === 'find_files' || run.name === 'read_diff' || run.name === 'git_status') return 'inspection';
   if (isFileOperationRun(run)) return 'fileMutation';
   if (run.name === 'workspace_search_text' || run.name === 'search_text') return 'search';
-  if (run.name.includes('shell') || run.name === 'run_shell_command' || run.name === 'read_shell_process') return 'shell';
+  if (run.name.includes('shell') || run.name === 'run_shell_command' || run.name === 'read_shell_process' || run.name === 'exec_command' || run.name === 'write_stdin') return 'shell';
   return 'generic';
 }
 

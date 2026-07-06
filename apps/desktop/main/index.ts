@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hydrateDesktopProcessEnvironment } from './desktop-environment.js';
 import { DesktopUpdater } from './desktop-updater.js';
 import {
   checkoutReviewBranch,
@@ -32,6 +33,8 @@ let desktopUpdater: DesktopUpdater | null = null;
 const usesCustomFrame = process.platform !== 'darwin';
 
 async function createWindow(): Promise<void> {
+  await hydrateDesktopProcessEnvironment({ loadLoginShell: app.isPackaged });
+
   const desktopIcon = loadDesktopIcon();
   if (process.platform === 'darwin' && desktopIcon) {
     app.dock?.setIcon(desktopIcon);

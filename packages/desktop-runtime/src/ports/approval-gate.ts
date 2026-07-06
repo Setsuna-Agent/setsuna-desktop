@@ -1,6 +1,11 @@
 import type {
   AnswerRuntimeApprovalInput,
+  RuntimeApprovalAvailableDecision,
   RuntimeApprovalList,
+  RuntimeExecPolicyAmendment,
+  RuntimeNetworkPolicyAmendment,
+  RuntimeNetworkApprovalContext,
+  RuntimePermissionApprovalContext,
   RuntimeApprovalRequest,
 } from '@setsuna-desktop/contracts';
 
@@ -11,6 +16,13 @@ export type CreateApprovalInput = {
   toolName: string;
   reason: string;
   argumentsPreview: string;
+  availableDecisions?: RuntimeApprovalAvailableDecision[];
+  proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
+  networkApprovalContext?: RuntimeNetworkApprovalContext;
+  proposedNetworkPolicyAmendments?: RuntimeNetworkPolicyAmendment[];
+  environmentId?: string;
+  additionalPermissions?: unknown;
+  permissionApprovalContext?: RuntimePermissionApprovalContext;
 };
 
 export type ApprovalGate = {

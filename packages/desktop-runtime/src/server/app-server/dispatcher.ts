@@ -1,10 +1,32 @@
 import path from 'node:path';
 import type { ThreadQuery } from '@setsuna-desktop/contracts';
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
+import {
+  callMcpServerToolResponse,
+  listMcpServerResources,
+  listMcpServerResourceTemplates,
+  readMcpServerResource,
+} from '../../adapters/mcp/mcp-tool-discovery.js';
 import type { AppServerCommandExecManager } from './command-exec.js';
 import { AppServerRpcError } from './errors.js';
+import {
+  appServerFsCopy,
+  appServerFsCreateDirectory,
+  appServerFsGetMetadata,
+  appServerFsReadDirectory,
+  appServerFsReadFile,
+  appServerFsRemove,
+  appServerFsWriteFile,
+  type AppServerFsManager,
+} from './fs-protocol.js';
+import { appServerHooksListResponse } from './hooks-protocol.js';
 import { recordInput, requiredArray, requiredPositiveInteger, requiredString, stringInput, numericInput } from './input.js';
 import { platformOs } from './platform.js';
+import {
+  appServerSkillsConfigWriteResponse,
+  appServerSkillsExtraRootsSetResponse,
+  appServerSkillsListResponse,
+} from './skills-protocol.js';
 import {
   appendAndPublishRuntimeEvent,
   cancelRuntimeTurn,
@@ -28,6 +50,7 @@ import {
   sweInitialTurnsPage,
   sweLoadedThreadListResponse,
   sweMcpServerStatusListResponse,
+  type AppServerMcpStatusInventory,
   sweModelListResponse,
   sweModelProviderCapabilitiesResponse,
   swePatchThreadGitInfo,
@@ -53,6 +76,8 @@ export async function dispatchAppServerRpcRequest(
   params: unknown,
   options: RuntimeServerOptions,
   commandExecManager: AppServerCommandExecManager,
+  fsManager: AppServerFsManager,
+  connectionId?: string,
 ): Promise<unknown> {
   if (method === 'initialize') {
     return {
@@ -132,24 +157,140 @@ export async function dispatchAppServerRpcRequest(
     return swePermissionProfileListResponse(recordInput(params));
   }
 
+  if (method === 'hooks/list') {
+    return appServerHooksListResponse(runtime, params);
+  }
+
+  if (method === 'skills/list') {
+    return appServerSkillsListResponse(runtime, params);
+  }
+
+  if (method === 'skills/extraRoots/set') {
+    return appServerSkillsExtraRootsSetResponse(runtime, params);
+  }
+
+  if (method === 'skills/config/write') {
+    return appServerSkillsConfigWriteResponse(runtime, params);
+  }
+
   if (method === 'mcpServerStatus/list') {
-    return sweMcpServerStatusListResponse(await runtime.mcpStore.listServers(), recordInput(params));
+    const input = recordInput(params);
+    return sweMcpServerStatusListResponse(
+      await runtime.mcpStore.listServers(),
+      input,
+      await appServerMcpStatusInventory(runtime, input),
+    );
+  }
+
+  if (method === 'config/mcpServer/reload') {
+    await runtime.mcpStore.listServers();
+    return {};
+  }
+
+  if (method === 'mcpServer/oauth/login') {
+    const input = recordInput(params);
+    const name = requiredString(input.name, 'name');
+    const threadId = stringInput(input.threadId ?? input.thread_id);
+    if (threadId) await requireRuntimeThread(runtime, threadId);
+    const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === name);
+    if (!server) throw new AppServerRpcError(-32600, `No MCP server named '${name}' found.`);
+    if (server.transport !== 'streamableHttp') {
+      throw new AppServerRpcError(-32600, 'OAuth login is only supported for streamable HTTP servers.');
+    }
+    throw new AppServerRpcError(
+      -32603,
+      `failed to login to MCP server '${name}': MCP OAuth browser login is not available in the local HTTP app-server adapter yet`,
+    );
+  }
+
+  if (method === 'mcpServer/resource/read') {
+    const input = recordInput(params);
+    const threadId = stringInput(input.threadId ?? input.thread_id);
+    if (threadId) await requireRuntimeThread(runtime, threadId);
+    const serverKey = requiredString(input.server, 'server');
+    const uri = requiredString(input.uri, 'uri');
+    const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === serverKey);
+    if (!server) throw new AppServerRpcError(-32602, `MCP server not found: ${serverKey}`);
+    return readMcpServerResource(server, uri);
+  }
+
+  if (method === 'mcpServer/tool/call') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
+    await requireRuntimeThread(runtime, threadId);
+    const serverKey = requiredString(input.server, 'server');
+    const toolName = requiredString(input.tool, 'tool');
+    const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === serverKey);
+    if (!server) throw new AppServerRpcError(-32602, `MCP server not found: ${serverKey}`);
+    return callMcpServerToolResponse(server, toolName, input.arguments);
+  }
+
+  if (method === 'fs/readFile') {
+    return appServerFsReadFile(runtime, params);
+  }
+
+  if (method === 'fs/writeFile') {
+    return appServerFsWriteFile(runtime, params);
+  }
+
+  if (method === 'fs/createDirectory') {
+    return appServerFsCreateDirectory(runtime, params);
+  }
+
+  if (method === 'fs/getMetadata') {
+    return appServerFsGetMetadata(runtime, params);
+  }
+
+  if (method === 'fs/readDirectory') {
+    return appServerFsReadDirectory(runtime, params);
+  }
+
+  if (method === 'fs/remove') {
+    return appServerFsRemove(runtime, params);
+  }
+
+  if (method === 'fs/copy') {
+    return appServerFsCopy(runtime, params);
+  }
+
+  if (method === 'fs/watch') {
+    return fsManager.watch(runtime, params, connectionId);
+  }
+
+  if (method === 'fs/unwatch') {
+    return fsManager.unwatch(params, connectionId);
   }
 
   if (method === 'command/exec') {
-    return await commandExecManager.exec(params);
+    return await commandExecManager.exec(params, connectionId);
   }
 
   if (method === 'command/exec/write') {
-    return commandExecManager.write(params);
+    return commandExecManager.write(params, connectionId);
   }
 
   if (method === 'command/exec/terminate') {
-    return commandExecManager.terminate(params);
+    return commandExecManager.terminate(params, connectionId);
   }
 
   if (method === 'command/exec/resize') {
-    return commandExecManager.resize(params);
+    return commandExecManager.resize(params, connectionId);
+  }
+
+  if (method === 'process/spawn') {
+    return commandExecManager.processSpawn(params, connectionId);
+  }
+
+  if (method === 'process/writeStdin') {
+    return commandExecManager.processWriteStdin(params, connectionId);
+  }
+
+  if (method === 'process/kill') {
+    return commandExecManager.processKill(params, connectionId);
+  }
+
+  if (method === 'process/resizePty') {
+    return commandExecManager.processResizePty(params, connectionId);
   }
 
   if (method === 'thread/start') {
@@ -466,4 +607,23 @@ export async function dispatchAppServerRpcRequest(
   }
 
   throw new AppServerRpcError(-32601, `Method not found: ${method}`);
+}
+
+async function appServerMcpStatusInventory(
+  runtime: RuntimeFactory,
+  input: Record<string, unknown>,
+): Promise<AppServerMcpStatusInventory> {
+  const detail = stringInput(input.detail);
+  if (detail === 'toolsAndAuthOnly') return {};
+  if (detail && detail !== 'full') throw new AppServerRpcError(-32602, `Invalid MCP server status detail: ${detail}`);
+
+  const servers = (await runtime.mcpStore.listServerInputs()).filter((server) => server.enabled !== false);
+  const entries = await Promise.all(servers.map(async (server) => {
+    const [resources, resourceTemplates] = await Promise.all([
+      listMcpServerResources(server).catch(() => []),
+      listMcpServerResourceTemplates(server).catch(() => []),
+    ]);
+    return [server.key, { resources, resourceTemplates }] as const;
+  }));
+  return Object.fromEntries(entries);
 }

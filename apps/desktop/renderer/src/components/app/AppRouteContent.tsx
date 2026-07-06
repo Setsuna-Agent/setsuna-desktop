@@ -100,6 +100,8 @@ export function AppRouteContent({
         skills={runtime.skills}
         selectedSkillCount={selectedSkillCount}
         mcpState={runtime.mcpState}
+        hookState={runtime.hookState}
+        onCreateHook={runtime.createHook}
         onCreateSkill={runtime.createSkill}
         onDeleteSkill={runtime.deleteSkill}
         onGetSkillDetail={runtime.getSkillDetail}
@@ -107,7 +109,12 @@ export function AppRouteContent({
         onRefresh={runtime.refresh}
         onUpdateSkill={runtime.updateSkill}
         onFetchMcpTools={runtime.fetchMcpServerTools}
+        onRefreshHooks={runtime.refreshHooks}
         onSaveMcpServer={runtime.saveMcpServer}
+        onTrustHook={runtime.trustHook}
+        onUpdateHook={runtime.updateHook}
+        onUpdateHookEnabled={runtime.updateHookEnabled}
+        onDeleteHook={runtime.deleteHook}
         onUpdateMcpServer={runtime.updateMcpServer}
         onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
       />
@@ -140,7 +147,7 @@ export function AppRouteContent({
       onAddFileToConversation={chatActions.addFileToConversation}
       onCancelActiveTurn={() => void chatActions.cancelActiveTurn()}
       onApprovalPolicyChange={(policy) => void runtime.saveRuntimePreferences({ approvalPolicy: policy })}
-      onAnswerApproval={(approvalId, decision) => runtime.answerApproval(approvalId, { decision })}
+      onAnswerApproval={(approvalId, input) => runtime.answerApproval(approvalId, input)}
       onCompactContext={() => void runtime.compactCurrentThreadContext()}
       onClearContext={() => void runtime.clearCurrentThreadContext()}
       onThreadMemoryModeChange={(mode) => void runtime.updateCurrentThreadMemoryMode(mode)}

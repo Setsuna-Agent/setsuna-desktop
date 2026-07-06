@@ -1,5 +1,5 @@
 import type { RuntimeEvent } from './events.js';
-import type { RuntimeMessage, RuntimeThread, RuntimeToolRun, RuntimeToolRunStatus } from './threads.js';
+import type { RuntimeHookRun, RuntimeMessage, RuntimeThread, RuntimeToolRun, RuntimeToolRunStatus } from './threads.js';
 
 const TOOL_OUTPUT_PREVIEW_MAX_LENGTH = 12000;
 
@@ -15,6 +15,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     ...thread,
     contextCompaction: thread.contextCompaction ? cloneThreadContextCompaction(thread.contextCompaction) : undefined,
     messages: thread.messages.map(cloneMessage),
+    pendingHookRuns: thread.pendingHookRuns?.map(cloneHookRun),
     lastSeq: Math.max(thread.lastSeq, event.seq),
     updatedAt: event.createdAt,
   };
@@ -52,6 +53,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'thread.context_cleared') {
     next.contextCompaction = undefined;
+    delete next.pendingHookRuns;
     next.messages = [];
     next.messageCount = 0;
     next.lastMessagePreview = '';
@@ -72,6 +74,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'thread.context_compacted') {
+    const pendingHookRuns = next.pendingHookRuns;
     next.contextCompaction = {
       completedAt: event.createdAt,
       forced: event.payload.notice.forced,
@@ -84,12 +87,18 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     };
     // 压缩事件带的是新的模型窗口，reducer 负责把旧可见历史降级为 transcript。
     next.messages = mergeCompactedMessages(next.messages, event.payload.messages);
+    if (pendingHookRuns?.length) {
+      next.pendingHookRuns = pendingHookRuns;
+      attachPendingHookRunsToMessages(next, event.createdAt);
+    }
     refreshThreadSummary(next);
     return next;
   }
 
   if (event.type === 'message.created') {
-    next.messages.push(cloneMessage(event.payload.message));
+    const message = cloneMessage(event.payload.message);
+    attachPendingHookRunsToMessage(next, message, event.createdAt);
+    next.messages.push(message);
     refreshThreadSummary(next);
     if (isTranscriptVisibleMessage(event.payload.message) && next.title === 'New thread' && event.payload.message.role === 'user') {
       next.title = preview(event.payload.message.content || attachmentPreview(event.payload.message)) || next.title;
@@ -168,6 +177,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         approvalId: approval.id,
         approvalReason: approval.reason,
         approvalStatus: approval.status,
+        availableApprovalDecisions: approval.availableDecisions,
+        proposedExecPolicyAmendment: approval.proposedExecPolicyAmendment,
+        networkApprovalContext: approval.networkApprovalContext,
+        proposedNetworkPolicyAmendments: approval.proposedNetworkPolicyAmendments,
+        permissionApprovalContext: approval.permissionApprovalContext,
         startedAt: approval.createdAt,
       });
     }
@@ -178,9 +192,10 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = assistantMessageForTurn(next.messages, event.turnId);
     const run = message?.toolRuns?.find((item) => item.approvalId === event.payload.approvalId);
     if (run) {
-      run.approvalStatus = event.payload.decision === 'approve' ? 'approved' : 'rejected';
+      const rejected = event.payload.decision === 'reject' || event.payload.decision === 'cancel';
+      run.approvalStatus = rejected ? 'rejected' : 'approved';
       run.approvalMessage = event.payload.message;
-      if (event.payload.decision === 'approve') {
+      if (!rejected) {
         run.status = 'running';
       } else {
         run.status = 'rejected';
@@ -240,8 +255,28 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
+  if (event.type === 'hook.started' || event.type === 'hook.completed') {
+    if (event.payload.toolCallId) {
+      const message = assistantMessageForTurn(next.messages, event.turnId);
+      if (message) {
+        upsertToolHookRun(message, event.payload, event.createdAt);
+      }
+    } else {
+      const message = userMessageForTurn(next.messages, event.turnId)
+        ?? assistantMessageForTurn(next.messages, event.turnId)
+        ?? contextMessageForTurn(next.messages, event.turnId);
+      if (message) {
+        upsertMessageHookRun(message, event.payload, event.createdAt);
+      } else {
+        upsertPendingHookRun(next, event.payload, event.createdAt, event.turnId);
+      }
+    }
+    return next;
+  }
+
   if (event.type === 'runtime.error') {
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
+    completeActivePendingHookRuns(next, event.turnId, event.createdAt, event.payload.message);
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
       message.status = 'error';
@@ -264,7 +299,9 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         if (message.role === 'assistant' && !message.content.trim()) message.error = reason;
       }
       completeActiveToolRuns(message, event.createdAt, reason);
+      completeActiveMessageHookRuns(message, event.createdAt, reason);
     }
+    completeActivePendingHookRuns(next, event.turnId, event.createdAt, reason);
     return next;
   }
 
@@ -284,7 +321,22 @@ function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
-    toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),
+    toolRuns: message.toolRuns?.map(cloneToolRun),
+    hookRuns: message.hookRuns?.map(cloneHookRun),
+  };
+}
+
+function cloneToolRun(toolRun: RuntimeToolRun): RuntimeToolRun {
+  return {
+    ...toolRun,
+    hookRuns: toolRun.hookRuns?.map(cloneHookRun),
+  };
+}
+
+function cloneHookRun(hookRun: RuntimeHookRun): RuntimeHookRun {
+  return {
+    ...hookRun,
+    entries: hookRun.entries?.map((entry) => ({ ...entry })),
   };
 }
 
@@ -349,6 +401,51 @@ function assistantMessageForTurn(messages: RuntimeMessage[], turnId?: string): R
   return undefined;
 }
 
+function userMessageForTurn(messages: RuntimeMessage[], turnId?: string): RuntimeMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== 'user') continue;
+    if (!turnId || !message.turnId || message.turnId === turnId) return message;
+  }
+  return undefined;
+}
+
+function contextMessageForTurn(messages: RuntimeMessage[], turnId?: string): RuntimeMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message?.contextCompaction) continue;
+    if (!turnId || !message.turnId || message.turnId === turnId) return message;
+  }
+  return undefined;
+}
+
+function upsertPendingHookRun(thread: RuntimeThread, input: RuntimeHookRun, createdAt: string, turnId?: string): void {
+  const hookRun = normalizeHookRun({
+    ...input,
+    turnId: input.turnId ?? turnId,
+  }, createdAt);
+  thread.pendingHookRuns = upsertHookRunList(thread.pendingHookRuns, hookRun);
+}
+
+function attachPendingHookRunsToMessages(thread: RuntimeThread, createdAt: string): void {
+  if (!thread.pendingHookRuns?.length) return;
+  for (const message of thread.messages) attachPendingHookRunsToMessage(thread, message, createdAt);
+}
+
+function attachPendingHookRunsToMessage(thread: RuntimeThread, message: RuntimeMessage, createdAt: string): void {
+  if (!message.turnId || !thread.pendingHookRuns?.length) return;
+  const remaining: RuntimeHookRun[] = [];
+  for (const run of thread.pendingHookRuns) {
+    if (run.turnId === message.turnId) {
+      upsertMessageHookRun(message, run, run.completedAt ?? run.startedAt ?? createdAt);
+    } else {
+      remaining.push(run);
+    }
+  }
+  if (remaining.length) thread.pendingHookRuns = remaining;
+  else delete thread.pendingHookRuns;
+}
+
 /**
  * 新增或合并 assistant 消息上的 toolRun。
  *
@@ -364,6 +461,51 @@ function upsertToolRun(message: RuntimeMessage, input: RuntimeToolRun): void {
     runs.push(input);
   }
   message.toolRuns = runs;
+}
+
+function upsertToolHookRun(message: RuntimeMessage, input: RuntimeHookRun, createdAt: string): void {
+  if (!input.toolCallId || !input.toolName) return;
+  const runs = message.toolRuns ? [...message.toolRuns] : [];
+  const index = runs.findIndex((item) => item.id === input.toolCallId);
+  const hookRun = normalizeHookRun(input, createdAt);
+  if (index >= 0) {
+    runs[index] = mergeToolRun(runs[index], {
+      ...runs[index],
+      hookRuns: upsertHookRunList(runs[index].hookRuns, hookRun),
+    });
+  } else {
+    runs.push({
+      id: input.toolCallId,
+      name: input.toolName,
+      status: 'running',
+      startedAt: hookRun.startedAt ?? createdAt,
+      hookRuns: [hookRun],
+    });
+  }
+  message.toolRuns = runs;
+}
+
+function upsertMessageHookRun(message: RuntimeMessage, input: RuntimeHookRun, createdAt: string): void {
+  message.hookRuns = upsertHookRunList(message.hookRuns, normalizeHookRun(input, createdAt));
+}
+
+function normalizeHookRun(input: RuntimeHookRun, createdAt: string): RuntimeHookRun {
+  return {
+    ...input,
+    startedAt: input.startedAt ?? createdAt,
+    completedAt: input.status === 'running' ? input.completedAt : input.completedAt ?? createdAt,
+  };
+}
+
+function upsertHookRunList(current: RuntimeHookRun[] | undefined, input: RuntimeHookRun): RuntimeHookRun[] {
+  const runs: RuntimeHookRun[] = current ? current.map((run) => ({ ...run, entries: run.entries?.map((entry) => ({ ...entry })) })) : [];
+  const index = runs.findIndex((run) => run.id === input.id);
+  if (index >= 0) {
+    runs[index] = mergeHookRun(runs[index], input);
+  } else {
+    runs.push(input);
+  }
+  return runs;
 }
 
 /**
@@ -408,7 +550,13 @@ function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, re
   if (!message.toolRuns?.length) return;
   let changed = false;
   const runs = message.toolRuns.map((run) => {
-    if (!isActiveToolRun(run)) return run;
+    const nextHookRuns = completeActiveHookRuns(run.hookRuns, completedAt, reason);
+    const hookChanged = nextHookRuns !== run.hookRuns;
+    if (!isActiveToolRun(run)) {
+      if (!hookChanged) return run;
+      changed = true;
+      return { ...run, hookRuns: nextHookRuns };
+    }
     changed = true;
     const rejectApproval = run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected';
     return {
@@ -416,11 +564,45 @@ function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, re
       status: 'rejected' as RuntimeToolRunStatus,
       resultPreview: run.resultPreview || reason,
       completedAt,
+      hookRuns: nextHookRuns,
       approvalStatus: rejectApproval ? 'rejected' : run.approvalStatus,
       approvalMessage: rejectApproval ? reason : run.approvalMessage,
     };
   });
   if (changed) message.toolRuns = runs;
+}
+
+function completeActiveHookRuns(hookRuns: RuntimeHookRun[] | undefined, completedAt: string, reason: string): RuntimeHookRun[] | undefined {
+  if (!hookRuns?.length) return hookRuns;
+  let changed = false;
+  const next = hookRuns.map((run) => {
+    if (run.status !== 'running') return run;
+    changed = true;
+    return {
+      ...run,
+      status: 'failed' as const,
+      message: run.message || reason,
+      completedAt,
+    };
+  });
+  return changed ? next : hookRuns;
+}
+
+function completeActiveMessageHookRuns(message: RuntimeMessage, completedAt: string, reason: string): void {
+  const next = completeActiveHookRuns(message.hookRuns, completedAt, reason);
+  if (next !== message.hookRuns) message.hookRuns = next;
+}
+
+function completeActivePendingHookRuns(thread: RuntimeThread, turnId: string | undefined, completedAt: string, reason: string): void {
+  if (!thread.pendingHookRuns?.length) return;
+  const next = completeActiveHookRuns(
+    thread.pendingHookRuns.filter((run) => !turnId || !run.turnId || run.turnId === turnId),
+    completedAt,
+    reason,
+  );
+  if (next === thread.pendingHookRuns) return;
+  const completedById = new Map(next?.map((run) => [run.id, run]) ?? []);
+  thread.pendingHookRuns = thread.pendingHookRuns.map((run) => completedById.get(run.id) ?? run);
 }
 
 function hasActiveToolRun(message: RuntimeMessage): boolean {
@@ -453,7 +635,41 @@ function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): RuntimeToo
     approvalReason: next.approvalReason ?? current.approvalReason,
     approvalStatus: next.approvalStatus ?? current.approvalStatus,
     approvalMessage: next.approvalMessage ?? current.approvalMessage,
+    availableApprovalDecisions: next.availableApprovalDecisions ?? current.availableApprovalDecisions,
+    proposedExecPolicyAmendment: next.proposedExecPolicyAmendment ?? current.proposedExecPolicyAmendment,
+    networkApprovalContext: next.networkApprovalContext ?? current.networkApprovalContext,
+    proposedNetworkPolicyAmendments: next.proposedNetworkPolicyAmendments ?? current.proposedNetworkPolicyAmendments,
+    permissionApprovalContext: next.permissionApprovalContext ?? current.permissionApprovalContext,
+    hookRuns: mergeHookRuns(current.hookRuns, next.hookRuns),
     status: next.status as RuntimeToolRunStatus,
+  };
+}
+
+function mergeHookRuns(current: RuntimeHookRun[] | undefined, next: RuntimeHookRun[] | undefined): RuntimeHookRun[] | undefined {
+  if (!next) return current;
+  let merged = current ? current.map((run) => ({ ...run })) : [];
+  for (const hookRun of next) {
+    merged = upsertHookRunList(merged, hookRun);
+  }
+  return merged;
+}
+
+function mergeHookRun(current: RuntimeHookRun, next: RuntimeHookRun): RuntimeHookRun {
+  return {
+    ...current,
+    ...next,
+    command: next.command ?? current.command,
+    matcher: next.matcher ?? current.matcher,
+    statusMessage: next.statusMessage ?? current.statusMessage,
+    sourcePath: next.sourcePath ?? current.sourcePath,
+    source: next.source ?? current.source,
+    message: next.message ?? current.message,
+    entries: next.entries ?? current.entries,
+    stdoutPreview: next.stdoutPreview ?? current.stdoutPreview,
+    stderrPreview: next.stderrPreview ?? current.stderrPreview,
+    durationMs: next.durationMs ?? current.durationMs,
+    startedAt: next.startedAt ?? current.startedAt,
+    completedAt: next.completedAt ?? current.completedAt,
   };
 }
 

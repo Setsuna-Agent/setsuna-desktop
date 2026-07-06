@@ -9,6 +9,14 @@ export class CompositeToolHost implements ToolHost {
     return toolGroups.flat();
   }
 
+  async environmentForToolContext(context: ToolExecutionContext) {
+    for (const host of this.hosts) {
+      const environment = await host.environmentForToolContext?.(context);
+      if (environment) return environment;
+    }
+    return null;
+  }
+
   async systemPrompt(context: ToolExecutionContext): Promise<string | null> {
     const prompts = await Promise.all(this.hosts.map(async (host) => {
       const prompt = await host.systemPrompt?.(context);

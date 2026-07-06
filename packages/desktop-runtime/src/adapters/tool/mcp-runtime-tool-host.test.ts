@@ -16,7 +16,7 @@ describe('mcp runtime tool host', () => {
       transport: 'streamableHttp',
       url: mcpServer.baseUrl,
       headers: { Authorization: 'Bearer secret' },
-      requireApproval: 'never',
+      requireApproval: 'approve',
       tools: [
         {
           name: 'search_web',
@@ -56,16 +56,58 @@ describe('mcp runtime tool host', () => {
     }
   });
 
-  it('uses explicit always or never approval policy for all MCP tools', async () => {
+  it('resolves codex-style bearer and env HTTP headers from stored MCP config', async () => {
+    const mcpServer = await createCallableMcpServer();
+    const previousToken = process.env.SETSUNA_MCP_RUNTIME_TOKEN;
+    const previousAccount = process.env.SETSUNA_MCP_RUNTIME_ACCOUNT;
+    process.env.SETSUNA_MCP_RUNTIME_TOKEN = 'runtime-secret';
+    process.env.SETSUNA_MCP_RUNTIME_ACCOUNT = 'runtime-account';
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')));
+    await store.upsertServer({
+      key: 'search',
+      label: 'Search MCP',
+      transport: 'streamableHttp',
+      url: mcpServer.baseUrl,
+      headers: { 'X-Static': 'static-value' },
+      envHttpHeaders: { 'X-Account': 'SETSUNA_MCP_RUNTIME_ACCOUNT' },
+      bearerTokenEnvVar: 'SETSUNA_MCP_RUNTIME_TOKEN',
+      requireApproval: 'approve',
+      tools: [{ name: 'search_web', description: 'Search the web' }],
+    });
+
+    try {
+      const host = new McpRuntimeToolHost(store);
+      const result = await host.runTool('mcp__search__search_web', { query: 'setsuna' }, { threadId: 'thread_1', turnId: 'turn_1' });
+
+      expect(result.content).toBe('result for setsuna');
+      expect(await mcpServer.requests).toEqual([
+        { method: 'initialize', authorization: 'Bearer runtime-secret', session: '', account: 'runtime-account', staticHeader: 'static-value' },
+        { method: 'notifications/initialized', authorization: 'Bearer runtime-secret', session: 'session_1', account: 'runtime-account', staticHeader: 'static-value' },
+        { method: 'tools/call', authorization: 'Bearer runtime-secret', session: 'session_1', account: 'runtime-account', staticHeader: 'static-value', tool: 'search_web', query: 'setsuna' },
+      ]);
+    } finally {
+      if (previousToken === undefined) delete process.env.SETSUNA_MCP_RUNTIME_TOKEN;
+      else process.env.SETSUNA_MCP_RUNTIME_TOKEN = previousToken;
+      if (previousAccount === undefined) delete process.env.SETSUNA_MCP_RUNTIME_ACCOUNT;
+      else process.env.SETSUNA_MCP_RUNTIME_ACCOUNT = previousAccount;
+      await mcpServer.close();
+    }
+  });
+
+  it('uses codex-style MCP approval modes', async () => {
     const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')));
     await store.upsertServer({
       key: 'search',
       label: 'Search MCP',
       transport: 'streamableHttp',
       url: 'https://example.com/mcp',
-      requireApproval: 'always',
+      requireApproval: 'auto',
       tools: [
-        { name: 'fetchWebContent', description: 'Fetch URL content' },
+        { name: 'fetchWebContent', description: 'Fetch URL content', annotations: { openWorldHint: true } },
+        { name: 'read_status', description: 'Read status', annotations: { readOnlyHint: true } },
+        { name: 'local_index', description: 'Read local index', annotations: { destructive_hint: false, open_world_hint: false } },
+        { name: 'force_prompt', description: 'Always prompt', annotations: { readOnlyHint: true }, approvalMode: 'prompt' },
+        { name: 'trusted_write', description: 'Trusted write', approvalMode: 'approve' },
         { name: 'write_note', description: 'Write a note' },
       ],
     });
@@ -75,25 +117,48 @@ describe('mcp runtime tool host', () => {
 
     await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, context)).resolves.toMatchObject({
       reason: '调用 MCP 工具：Search MCP / fetchWebContent',
+      approvalKeys: ['mcp:search:fetchWebContent'],
+      persistentApprovalKeys: ['mcp:search:fetchWebContent'],
     });
+    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toBeNull();
+    await expect(host.approvalForTool('mcp__search__local_index', {}, context)).resolves.toBeNull();
+    await expect(host.approvalForTool('mcp__search__force_prompt', {}, context)).resolves.toEqual({
+      reason: '调用 MCP 工具：Search MCP / force_prompt',
+    });
+    await expect(host.approvalForTool('mcp__search__trusted_write', {}, context)).resolves.toBeNull();
     await expect(host.approvalForTool('mcp__search__write_note', { text: 'note' }, context)).resolves.toMatchObject({
       reason: '调用 MCP 工具：Search MCP / write_note',
+      approvalKeys: ['mcp:search:write_note'],
+      persistentApprovalKeys: ['mcp:search:write_note'],
+    });
+
+    await store.updateServer('search', { requireApproval: 'prompt' });
+    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toEqual({
+      reason: '调用 MCP 工具：Search MCP / read_status',
+    });
+
+    await store.updateServer('search', { requireApproval: 'approve' });
+    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, context)).resolves.toBeNull();
+    await expect(host.approvalForTool('mcp__search__write_note', { text: 'note' }, context)).resolves.toBeNull();
+
+    await store.updateServer('search', { requireApproval: 'always' });
+    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toEqual({
+      reason: '调用 MCP 工具：Search MCP / read_status',
     });
 
     await store.updateServer('search', { requireApproval: 'never' });
     await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, context)).resolves.toBeNull();
-    await expect(host.approvalForTool('mcp__search__write_note', { text: 'note' }, context)).resolves.toBeNull();
   });
 });
 
 async function createCallableMcpServer(): Promise<{
   baseUrl: string;
-  requests: Promise<Array<{ method?: string; authorization?: string; session?: string; tool?: string; query?: string }>>;
+  requests: Promise<Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>>;
   close(): Promise<void>;
 }> {
-  const requests: Array<{ method?: string; authorization?: string; session?: string; tool?: string; query?: string }> = [];
-  let resolveRequests: (requests: Array<{ method?: string; authorization?: string; session?: string; tool?: string; query?: string }>) => void = () => undefined;
-  const requestsPromise = new Promise<Array<{ method?: string; authorization?: string; session?: string; tool?: string; query?: string }>>((resolve) => {
+  const requests: Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }> = [];
+  let resolveRequests: (requests: Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>) => void = () => undefined;
+  const requestsPromise = new Promise<Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>>((resolve) => {
     resolveRequests = resolve;
   });
   const server = createServer(async (request, response) => {
@@ -102,6 +167,8 @@ async function createCallableMcpServer(): Promise<{
       method: body.method,
       authorization: request.headers.authorization,
       session: String(request.headers['mcp-session-id'] ?? ''),
+      ...(request.headers['x-account'] ? { account: String(request.headers['x-account']) } : {}),
+      ...(request.headers['x-static'] ? { staticHeader: String(request.headers['x-static']) } : {}),
       ...(body.method === 'tools/call' ? { tool: body.params?.name, query: body.params?.arguments?.query } : {}),
     });
     if (body.method === 'initialize') {

@@ -2,10 +2,10 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { Actions, Bubble, CodeHighlighter } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
 import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
-import type { RuntimeApprovalDecision, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { AnswerRuntimeApprovalInput, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
-import { FileChangesSummaryCard, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
+import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
 import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
@@ -24,7 +24,7 @@ const scrollBottomThresholdPx = 96;
 const stickyBottomThresholdPx = 4;
 const pinnedScrollSettleFrameCount = 3;
 const keyboardScrollIntentKeys = new Set(['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' ']);
-type AnswerApprovalHandler = (approvalId: string, decision: RuntimeApprovalDecision) => void | Promise<void>;
+type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 type WorkHistoryExpandedChangeHandler = (itemId: string, expanded: boolean) => void;
 
 export function ChatWorkspace({
@@ -831,7 +831,12 @@ function MessageItem({
     );
   }
   if (item.type === 'context') {
-    return <ContextCompactionDivider message={item.message} />;
+    return (
+      <div className="chat-context-compact-item">
+        <ContextCompactionDivider message={item.message} />
+        <RuntimeHookRuns runs={item.message.hookRuns} />
+      </div>
+    );
   }
   if (item.type === 'review') {
     return <ReviewModeMarker message={item.message} />;
@@ -898,6 +903,7 @@ function MessageItem({
           placement="end"
           variant="filled"
         />
+        <RuntimeHookRuns runs={message.hookRuns} />
         {showExtractedGuidance ? (
           <GuidanceMessageList
             handledMessageIds={new Set(item.handledSteerMessageIds)}

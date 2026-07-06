@@ -27,7 +27,7 @@ import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { stringInput } from './app-server/input.js';
 import { isRuntimeMessageAttachment, memoryScope, optionalNumber, readBody, sendJson, threadScope } from './http-utils.js';
 import { cancelRuntimeTurn } from './runtime-thread-events.js';
-import { handleSse, publishThreadEventsSince, runtimeEventStreamFormat } from './sse.js';
+import { handleSse, publishThreadEventsSince, runtimeEventStreamExperimentalApi, runtimeEventStreamFormat } from './sse.js';
 import type { RuntimeFactory } from './types.js';
 
 export async function handleRuntimeRestRequest(
@@ -361,9 +361,7 @@ export async function handleRuntimeRestRequest(
   const clearContextMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/context$/);
   if (clearContextMatch && request.method === 'DELETE') {
     const threadId = decodeURIComponent(clearContextMatch[1]);
-    const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
-    const thread = await runtime.threadStore.clearThreadMessages(threadId);
-    await publishThreadEventsSince(runtime, threadId, beforeSeq);
+    const thread = await runtime.agentLoop.clearThreadContext(threadId);
     sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }
@@ -429,7 +427,11 @@ export async function handleRuntimeRestRequest(
     const threadId = decodeURIComponent(eventsMatch[1]);
     const sinceSeq = Number(url.searchParams.get('sinceSeq') ?? '0') || 0;
     const format = runtimeEventStreamFormat(url.searchParams.get('format'));
+    const experimentalApi = runtimeEventStreamExperimentalApi(
+      url.searchParams.get('experimentalApi') ?? url.searchParams.get('experimental_api'),
+    );
     await handleSse({
+      experimentalApi,
       format,
       response,
       threadId,

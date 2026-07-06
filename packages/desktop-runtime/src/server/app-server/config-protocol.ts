@@ -4,6 +4,7 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeMemorySettings,
+  RuntimeMcpAuthStatus,
   RuntimeMcpServer,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeFactory } from '../types.js';
@@ -34,6 +35,11 @@ type AppServerPermissionProfileSummary = {
   description: string | null;
   allowed: boolean;
 };
+
+export type AppServerMcpStatusInventory = Record<string, {
+  resources?: Array<Record<string, unknown>>;
+  resourceTemplates?: Array<Record<string, unknown>>;
+}>;
 
 type AppServerExperimentalFeatureStage = 'beta' | 'underDevelopment' | 'stable' | 'deprecated' | 'removed';
 
@@ -68,6 +74,7 @@ const APP_SERVER_CONFIG_LAYER_VERSION = '1';
 
 const APP_SERVER_CONFIG_ENABLEMENT_FEATURES = [
   'auth_elicitation',
+  'hooks',
   'memories',
   'mentions_v2',
   'remote_control',
@@ -233,6 +240,8 @@ function sweEffectiveConfig(config: RuntimeConfigState, cwd: string): Record<str
     instructions: config.globalPrompt || null,
     developer_instructions: null,
     compact_prompt: null,
+    hooks: config.hooks ?? {},
+    bypass_hook_trust: config.bypassHookTrust === true,
     model_reasoning_effort: reasoningEffort,
     model_reasoning_summary: null,
     model_verbosity: null,
@@ -275,6 +284,10 @@ function appServerConfigOrigins(
   for (const key of Object.keys(memories)) {
     origins[`memories.${key}`] = metadata;
   }
+  const hooks = recordInput(configValue.hooks);
+  for (const key of Object.keys(hooks)) {
+    origins[`hooks.${key}`] = metadata;
+  }
   return origins;
 }
 
@@ -291,7 +304,10 @@ function appServerConfigLayerMetadata(config: RuntimeConfigState): AppServerConf
 
 function appServerConfigFeatureEnablement(config: RuntimeConfigState): Record<(typeof APP_SERVER_CONFIG_ENABLEMENT_FEATURES)[number], boolean> {
   return Object.fromEntries(
-    APP_SERVER_CONFIG_ENABLEMENT_FEATURES.map((name) => [name, sweFeatureEnabledByName(name, config)]),
+    APP_SERVER_CONFIG_ENABLEMENT_FEATURES.map((name) => {
+      const feature = APP_SERVER_EXPERIMENTAL_FEATURES.find((item) => item.name === name);
+      return [name, sweFeatureEnabledByName(name, config, feature?.defaultEnabled ?? false)];
+    }),
   ) as Record<(typeof APP_SERVER_CONFIG_ENABLEMENT_FEATURES)[number], boolean>;
 }
 
@@ -382,6 +398,13 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         break;
       case 'memories':
         next.memory = appServerMemorySettingsInput(edit.value);
+        break;
+      case 'hooks':
+        next.hooks = appServerHooksConfigInput(edit.value);
+        break;
+      case 'bypass_hook_trust':
+        if (typeof edit.value !== 'boolean') throw new AppServerRpcError(-32602, 'bypass_hook_trust must be a boolean');
+        next.bypassHookTrust = edit.value;
         break;
       case 'desktop':
         next.desktopSettings = sweMergeObject(next.desktopSettings ?? {}, recordInput(edit.value), edit.mergeStrategy);
@@ -494,13 +517,32 @@ function sweSandboxModeToRuntime(value: string): RuntimeConfigState['permissionP
 function sweSandboxWorkspaceWriteInput(value: unknown): RuntimeConfigInput['sandboxWorkspaceWrite'] {
   const input = recordInput(value);
   return {
+    readableRoots: Array.isArray(input.readable_roots)
+      ? input.readable_roots.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : [],
     writableRoots: Array.isArray(input.writable_roots)
       ? input.writable_roots.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
       : [],
+    deniedRoots: Array.isArray(input.denied_roots)
+      ? input.denied_roots.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : [],
+    deniedGlobPatterns: Array.isArray(input.denied_glob_patterns)
+      ? input.denied_glob_patterns.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : [],
+    globScanMaxDepth: typeof input.glob_scan_max_depth === 'number' && Number.isFinite(input.glob_scan_max_depth)
+      ? Math.max(1, Math.floor(input.glob_scan_max_depth))
+      : undefined,
     networkAccess: input.network_access === true,
     excludeTmpdirEnvVar: input.exclude_tmpdir_env_var === true,
     excludeSlashTmp: input.exclude_slash_tmp === true,
   };
+}
+
+function appServerHooksConfigInput(value: unknown): RuntimeConfigInput['hooks'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw appServerConfigWriteError('configValidationError', 'hooks must be an object');
+  }
+  return value as RuntimeConfigInput['hooks'];
 }
 
 function sweBooleanRecord(value: unknown, name: string): Record<string, boolean> {
@@ -751,24 +793,34 @@ export function swePermissionProfileListResponse(input: Record<string, unknown>)
 export function sweMcpServerStatusListResponse(
   list: { servers: RuntimeMcpServer[] },
   input: Record<string, unknown>,
+  inventory: AppServerMcpStatusInventory = {},
 ) {
   const statuses = [...list.servers]
     .sort((left, right) => left.key.localeCompare(right.key))
-    .map(sweMcpServerStatus);
+    .map((server) => sweMcpServerStatus(server, inventory[server.key]));
   return sweOffsetPage(statuses, stringInput(input.cursor), numericInput(input.limit), 'MCP servers');
 }
 
-function sweMcpServerStatus(server: RuntimeMcpServer) {
+function sweMcpServerStatus(server: RuntimeMcpServer, inventory?: AppServerMcpStatusInventory[string]) {
   return {
     name: server.key,
     serverInfo: null,
     tools: Object.fromEntries(server.tools.map((tool) => [tool.name, {
-      description: tool.description ?? null,
-    }])),
-    resources: [],
-    resourceTemplates: [],
-    authStatus: 'unsupported',
+      name: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      inputSchema: tool.inputSchema ?? { type: 'object', properties: {}, additionalProperties: true },
+        ...(tool.annotations ? { annotations: tool.annotations } : {}),
+      }])),
+    resources: inventory?.resources ?? [],
+    resourceTemplates: inventory?.resourceTemplates ?? [],
+    authStatus: sweMcpAuthStatus(server),
   };
+}
+
+function sweMcpAuthStatus(server: RuntimeMcpServer): RuntimeMcpAuthStatus {
+  if (server.headerKeys.some((key) => key.toLowerCase() === 'authorization')) return 'bearerToken';
+  if (server.oauthClientId || server.oauthResource) return 'notLoggedIn';
+  return 'unsupported';
 }
 
 function sweOffsetPage<T>(items: T[], cursor: string | undefined, limit: number | undefined, totalLabel: string) {
@@ -899,7 +951,11 @@ function sweSandboxWorkspaceWrite(config: RuntimeConfigState, cwd: string) {
   if (config.permissionProfile !== 'workspace-write') return null;
   const sandbox = config.sandboxWorkspaceWrite ?? {};
   return {
+    readable_roots: sandbox.readableRoots?.length ? sandbox.readableRoots : [],
     writable_roots: sandbox.writableRoots?.length ? sandbox.writableRoots : [cwd],
+    denied_roots: sandbox.deniedRoots?.length ? sandbox.deniedRoots : [],
+    denied_glob_patterns: sandbox.deniedGlobPatterns?.length ? sandbox.deniedGlobPatterns : [],
+    glob_scan_max_depth: sandbox.globScanMaxDepth ?? null,
     network_access: sandbox.networkAccess === true,
     exclude_tmpdir_env_var: sandbox.excludeTmpdirEnvVar === true,
     exclude_slash_tmp: sandbox.excludeSlashTmp ?? process.platform === 'win32',

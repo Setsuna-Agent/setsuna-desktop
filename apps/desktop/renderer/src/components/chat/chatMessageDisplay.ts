@@ -277,9 +277,10 @@ function sameTurn(nextTurnId: string | undefined, currentTurnId: string | undefi
 }
 
 function itemIncludesTurn(item: ChatTranscriptItem, turnId: string): boolean {
-  // context 分隔符没有 turn 归属，不参与 active turn 保留策略。
   if (item.type === 'assistant') return assistantRunIncludesTurn(item, turnId);
-  return item.type === 'user' || item.type === 'review' ? item.message.turnId === turnId : false;
+  return item.type === 'user' || item.type === 'review' || item.type === 'context'
+    ? item.message.turnId === turnId
+    : false;
 }
 
 function assistantRunIncludesTurn(item: Extract<ChatDisplayItem, { type: 'assistant' }>, turnId: string): boolean {
@@ -320,8 +321,19 @@ function messageScrollSignal(message: RuntimeMessage): string {
     message.error?.length ?? 0,
     message.attachments?.length ?? 0,
     message.reviewMode ? `${message.reviewMode.kind}:${message.reviewMode.review.length}` : '',
+    message.hookRuns?.map(hookRunScrollSignal).join(';') ?? '',
     message.toolRuns?.map(toolRunScrollSignal).join(';') ?? '',
   ].join(',');
+}
+
+function hookRunScrollSignal(run: NonNullable<RuntimeMessage['hookRuns']>[number]): string {
+  return [
+    run.id,
+    run.status,
+    run.message?.length ?? 0,
+    run.entries?.length ?? 0,
+    run.completedAt ?? '',
+  ].join(':');
 }
 
 function toolRunScrollSignal(run: NonNullable<RuntimeMessage['toolRuns']>[number]): string {

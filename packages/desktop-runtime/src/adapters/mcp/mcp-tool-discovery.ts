@@ -27,49 +27,148 @@ export async function fetchMcpServerTools(input: RuntimeMcpServerInput): Promise
 }
 
 export async function callMcpServerTool(input: RuntimeMcpServerInput, toolName: string, args: unknown): Promise<{ content: string; data: unknown; isError: boolean }> {
+  const result = await callMcpServerToolRaw(input, toolName, args);
+  return normalizeToolCallResult(result);
+}
+
+export async function callMcpServerToolResponse(input: RuntimeMcpServerInput, toolName: string, args: unknown): Promise<{
+  content: unknown[];
+  structuredContent?: unknown;
+  isError?: boolean;
+  _meta?: unknown;
+}> {
+  return normalizeToolCallResponse(await callMcpServerToolRaw(input, toolName, args));
+}
+
+async function callMcpServerToolRaw(input: RuntimeMcpServerInput, toolName: string, args: unknown): Promise<unknown> {
+  const transport = normalizeTransport(input);
+  const timeoutMs = timeoutMsFor(input);
+  return transport === 'stdio'
+    ? await callStdioMcpTool(input, toolName, args, timeoutMs)
+    : await callHttpMcpTool(input, toolName, args, timeoutMs);
+}
+
+export async function readMcpServerResource(input: RuntimeMcpServerInput, uri: string): Promise<{ contents: Array<Record<string, unknown>> }> {
   const transport = normalizeTransport(input);
   const timeoutMs = timeoutMsFor(input);
   const result = transport === 'stdio'
-    ? await callStdioMcpTool(input, toolName, args, timeoutMs)
-    : await callHttpMcpTool(input, toolName, args, timeoutMs);
-  return normalizeToolCallResult(result);
+    ? await readStdioMcpResource(input, uri, timeoutMs)
+    : await readHttpMcpResource(input, uri, timeoutMs);
+  return normalizeResourceReadResult(result);
+}
+
+export async function listMcpServerResources(input: RuntimeMcpServerInput): Promise<Array<Record<string, unknown>>> {
+  const transport = normalizeTransport(input);
+  const timeoutMs = timeoutMsFor(input);
+  const result = transport === 'stdio'
+    ? await listStdioMcpResources(input, timeoutMs)
+    : await listHttpMcpResources(input, timeoutMs);
+  return normalizeResources(recordInput(result).resources);
+}
+
+export async function listMcpServerResourceTemplates(input: RuntimeMcpServerInput): Promise<Array<Record<string, unknown>>> {
+  const transport = normalizeTransport(input);
+  const timeoutMs = timeoutMsFor(input);
+  const result = transport === 'stdio'
+    ? await listStdioMcpResourceTemplates(input, timeoutMs)
+    : await listHttpMcpResourceTemplates(input, timeoutMs);
+  return normalizeResourceTemplates(recordInput(result).resourceTemplates ?? recordInput(result).resource_templates);
 }
 
 async function fetchHttpMcpTools(input: RuntimeMcpServerInput, timeoutMs: number): Promise<RuntimeMcpToolInfo[]> {
   const url = input.url?.trim();
   if (!url) throw new Error('HTTP MCP 需要 URL 后才能获取工具。');
+  const headers = mcpHttpHeaders(input);
   let sessionId = '';
   let id = 1;
 
-  const initialize = await postJsonRpc(url, initializeMessage(id++), input.headers, timeoutMs);
+  const initialize = await postJsonRpc(url, initializeMessage(id++), headers, timeoutMs);
   sessionId = initialize.sessionId;
   assertJsonRpcOk(initialize.message, 'initialize');
 
-  await postJsonRpc(url, initializedMessage(), input.headers, timeoutMs, sessionId).catch(() => null);
-  const list = await postJsonRpc(url, { jsonrpc: '2.0', id: id++, method: 'tools/list', params: {} }, input.headers, timeoutMs, sessionId);
+  await postJsonRpc(url, initializedMessage(), headers, timeoutMs, sessionId).catch(() => null);
+  const list = await postJsonRpc(url, { jsonrpc: '2.0', id: id++, method: 'tools/list', params: {} }, headers, timeoutMs, sessionId);
   assertJsonRpcOk(list.message, 'tools/list');
   return normalizeTools(recordInput(list.message.result).tools);
+}
+
+async function listHttpMcpResources(input: RuntimeMcpServerInput, timeoutMs: number): Promise<unknown> {
+  return httpMcpRequest(input, timeoutMs, 'resources/list', {});
+}
+
+async function listHttpMcpResourceTemplates(input: RuntimeMcpServerInput, timeoutMs: number): Promise<unknown> {
+  return httpMcpRequest(input, timeoutMs, 'resources/templates/list', {});
+}
+
+async function readHttpMcpResource(input: RuntimeMcpServerInput, uri: string, timeoutMs: number): Promise<unknown> {
+  return httpMcpRequest(input, timeoutMs, 'resources/read', { uri });
+}
+
+async function httpMcpRequest(input: RuntimeMcpServerInput, timeoutMs: number, method: string, params: unknown): Promise<unknown> {
+  const url = input.url?.trim();
+  if (!url) throw new Error('HTTP MCP 需要 URL 后才能发送请求。');
+  const headers = mcpHttpHeaders(input);
+  let sessionId = '';
+  let id = 1;
+
+  const initialize = await postJsonRpc(url, initializeMessage(id++), headers, timeoutMs);
+  sessionId = initialize.sessionId;
+  assertJsonRpcOk(initialize.message, 'initialize');
+
+  await postJsonRpc(url, initializedMessage(), headers, timeoutMs, sessionId).catch(() => null);
+  const response = await postJsonRpc(url, {
+    jsonrpc: '2.0',
+    id: id++,
+    method,
+    params,
+  }, headers, timeoutMs, sessionId);
+  assertJsonRpcOk(response.message, method);
+  return response.message.result;
 }
 
 async function callHttpMcpTool(input: RuntimeMcpServerInput, toolName: string, args: unknown, timeoutMs: number): Promise<unknown> {
   const url = input.url?.trim();
   if (!url) throw new Error('HTTP MCP 需要 URL 后才能调用工具。');
+  const headers = mcpHttpHeaders(input);
   let sessionId = '';
   let id = 1;
 
-  const initialize = await postJsonRpc(url, initializeMessage(id++), input.headers, timeoutMs);
+  const initialize = await postJsonRpc(url, initializeMessage(id++), headers, timeoutMs);
   sessionId = initialize.sessionId;
   assertJsonRpcOk(initialize.message, 'initialize');
 
-  await postJsonRpc(url, initializedMessage(), input.headers, timeoutMs, sessionId).catch(() => null);
+  await postJsonRpc(url, initializedMessage(), headers, timeoutMs, sessionId).catch(() => null);
   const call = await postJsonRpc(url, {
     jsonrpc: '2.0',
     id: id++,
     method: 'tools/call',
     params: { name: toolName, arguments: recordInput(args) },
-  }, input.headers, timeoutMs, sessionId);
+  }, headers, timeoutMs, sessionId);
   assertJsonRpcOk(call.message, `tools/call ${toolName}`);
   return call.message.result;
+}
+
+function mcpHttpHeaders(input: RuntimeMcpServerInput): Record<string, string> | undefined {
+  const headers: Record<string, string> = { ...(input.headers ?? {}) };
+
+  for (const [headerName, envVar] of Object.entries(input.envHttpHeaders ?? {})) {
+    const value = process.env[envVar];
+    if (value?.trim()) headers[headerName] = value;
+  }
+
+  const bearerTokenEnvVar = input.bearerTokenEnvVar?.trim();
+  if (bearerTokenEnvVar) {
+    const value = process.env[bearerTokenEnvVar];
+    if (value === undefined) {
+      throw new Error(`Environment variable ${bearerTokenEnvVar} for MCP server '${input.key}' is not set`);
+    }
+    if (!value.trim()) {
+      throw new Error(`Environment variable ${bearerTokenEnvVar} for MCP server '${input.key}' is empty`);
+    }
+    headers.Authorization = `Bearer ${value}`;
+  }
+
+  return Object.keys(headers).length ? headers : undefined;
 }
 
 async function postJsonRpc(
@@ -135,6 +234,36 @@ async function callStdioMcpTool(input: RuntimeMcpServerInput, toolName: string, 
     await client.request('initialize', initializeMessage(1).params);
     client.notify('notifications/initialized', {});
     return await client.request('tools/call', { name: toolName, arguments: recordInput(args) });
+  } finally {
+    client.close();
+  }
+}
+
+async function listStdioMcpResources(input: RuntimeMcpServerInput, timeoutMs: number): Promise<unknown> {
+  return stdioMcpRequest(input, timeoutMs, 'resources/list', {});
+}
+
+async function listStdioMcpResourceTemplates(input: RuntimeMcpServerInput, timeoutMs: number): Promise<unknown> {
+  return stdioMcpRequest(input, timeoutMs, 'resources/templates/list', {});
+}
+
+async function readStdioMcpResource(input: RuntimeMcpServerInput, uri: string, timeoutMs: number): Promise<unknown> {
+  return stdioMcpRequest(input, timeoutMs, 'resources/read', { uri });
+}
+
+async function stdioMcpRequest(input: RuntimeMcpServerInput, timeoutMs: number, method: string, params: unknown): Promise<unknown> {
+  const command = input.command?.trim();
+  if (!command) throw new Error('stdio MCP 需要命令后才能发送请求。');
+  const child = spawn(command, input.args ?? [], {
+    cwd: input.cwd?.trim() || undefined,
+    env: { ...process.env, ...(input.env ?? {}) },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  const client = new StdioMcpClient(child, timeoutMs);
+  try {
+    await client.request('initialize', initializeMessage(1).params);
+    client.notify('notifications/initialized', {});
+    return await client.request(method, params);
   } finally {
     client.close();
   }
@@ -286,6 +415,105 @@ function normalizeToolCallResult(result: unknown): { content: string; data: unkn
     content: mcpContentToText(record.content) || stringifyResult(result),
     data: result,
     isError: record.isError === true,
+  };
+}
+
+function normalizeToolCallResponse(result: unknown): {
+  content: unknown[];
+  structuredContent?: unknown;
+  isError?: boolean;
+  _meta?: unknown;
+} {
+  const record = recordInput(result);
+  const structuredContent = record.structuredContent ?? record.structured_content;
+  const meta = record._meta ?? record.meta;
+  return {
+    content: Array.isArray(record.content) ? record.content : [],
+    ...(structuredContent !== undefined ? { structuredContent } : {}),
+    ...(typeof record.isError === 'boolean' ? { isError: record.isError } : {}),
+    ...(meta !== undefined ? { _meta: meta } : {}),
+  };
+}
+
+function normalizeResourceReadResult(result: unknown): { contents: Array<Record<string, unknown>> } {
+  const contents = recordInput(result).contents;
+  if (!Array.isArray(contents)) return { contents: [] };
+  return {
+    contents: contents
+      .map((item) => normalizeResourceContent(item))
+      .filter((item): item is Record<string, unknown> => Boolean(item)),
+  };
+}
+
+function normalizeResourceContent(value: unknown): Record<string, unknown> | null {
+  const record = recordInput(value);
+  const uri = stringValue(record.uri).trim();
+  if (!uri) return null;
+  const mimeType = optionalString(record.mimeType ?? record.mime_type);
+  const text = typeof record.text === 'string' ? record.text : undefined;
+  const blob = typeof record.blob === 'string' ? record.blob : undefined;
+  if (text === undefined && blob === undefined) return null;
+  return {
+    uri,
+    ...(mimeType ? { mimeType } : {}),
+    ...(text !== undefined ? { text } : {}),
+    ...(blob !== undefined ? { blob } : {}),
+    ...(record._meta !== undefined ? { _meta: record._meta } : {}),
+  };
+}
+
+function normalizeResources(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeResource(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+function normalizeResource(value: unknown): Record<string, unknown> | null {
+  const record = recordInput(value);
+  const uri = stringValue(record.uri).trim();
+  const name = stringValue(record.name).trim();
+  if (!uri || !name) return null;
+  const description = optionalString(record.description);
+  const mimeType = optionalString(record.mimeType ?? record.mime_type);
+  const title = optionalString(record.title);
+  const size = typeof record.size === 'number' && Number.isFinite(record.size) ? record.size : undefined;
+  const icons = Array.isArray(record.icons) ? record.icons : undefined;
+  return {
+    ...(record.annotations !== undefined ? { annotations: record.annotations } : {}),
+    ...(description ? { description } : {}),
+    ...(mimeType ? { mimeType } : {}),
+    name,
+    ...(size !== undefined ? { size } : {}),
+    ...(title ? { title } : {}),
+    uri,
+    ...(icons ? { icons } : {}),
+    ...(record._meta !== undefined ? { _meta: record._meta } : {}),
+  };
+}
+
+function normalizeResourceTemplates(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeResourceTemplate(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+function normalizeResourceTemplate(value: unknown): Record<string, unknown> | null {
+  const record = recordInput(value);
+  const uriTemplate = stringValue(record.uriTemplate ?? record.uri_template).trim();
+  const name = stringValue(record.name).trim();
+  if (!uriTemplate || !name) return null;
+  const title = optionalString(record.title);
+  const description = optionalString(record.description);
+  const mimeType = optionalString(record.mimeType ?? record.mime_type);
+  return {
+    ...(record.annotations !== undefined ? { annotations: record.annotations } : {}),
+    uriTemplate,
+    name,
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    ...(mimeType ? { mimeType } : {}),
   };
 }
 

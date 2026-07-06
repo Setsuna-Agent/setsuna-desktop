@@ -1,8 +1,10 @@
 export type RuntimeMcpTransport = 'stdio' | 'streamableHttp';
 
-export type RuntimeMcpRequireApproval = 'never' | 'always';
+export type RuntimeMcpRequireApproval = 'auto' | 'prompt' | 'approve' | 'always' | 'never';
 
 export type RuntimeMcpServerSource = 'local' | 'workspace' | 'legacy' | 'builtin';
+
+export type RuntimeMcpAuthStatus = 'unsupported' | 'notLoggedIn' | 'bearerToken' | 'oAuth';
 
 export type RuntimeMcpServer = {
   key: string;
@@ -21,6 +23,8 @@ export type RuntimeMcpServer = {
   enabled: boolean;
   allowedTools: string[];
   disabledTools: string[];
+  oauthClientId?: string;
+  oauthResource?: string;
   tools: RuntimeMcpToolInfo[];
   envKeys: string[];
   headerKeys: string[];
@@ -41,6 +45,7 @@ export type RuntimeMcpToolInfo = {
   description?: string;
   inputSchema?: Record<string, unknown>;
   annotations?: Record<string, unknown>;
+  approvalMode?: RuntimeMcpRequireApproval;
 };
 
 export type RuntimeMcpToolList = {
@@ -68,6 +73,10 @@ export type RuntimeMcpServerInput = {
   tools?: RuntimeMcpToolInfo[];
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  envHttpHeaders?: Record<string, string>;
+  bearerTokenEnvVar?: string;
+  oauthClientId?: string;
+  oauthResource?: string;
 };
 
 export type RuntimeMcpServerPatch = Omit<Partial<RuntimeMcpServerInput>, 'key'>;

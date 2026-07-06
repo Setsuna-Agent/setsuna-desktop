@@ -1,9 +1,12 @@
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { FileConfigStore } from '../adapters/store/file-config-store.js';
+import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { FileMcpStore } from '../adapters/store/file-mcp-store.js';
+import { FilePersistentToolApprovalStore } from '../adapters/store/file-persistent-tool-approval-store.js';
+import { FilePolicyAmendmentStore } from '../adapters/store/file-policy-amendment-store.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import { FileUsageStore } from '../adapters/store/file-usage-store.js';
 import { ConfiguredModelClient } from '../adapters/model/configured-model-client.js';
@@ -36,11 +39,14 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const clock = systemClock;
   const ids = new RandomIdGenerator();
   const eventBus = new InMemoryEventBus();
+  const appServerNotificationBus = new InMemoryAppServerNotificationBus();
   const approvalGate = new InMemoryApprovalGate(clock, ids);
   // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
   const threadStore = new JsonThreadStore(runtimeDataDir, clock, ids);
   const usageStore = new FileUsageStore(runtimeDataDir, ids);
   const mcpStore = new FileMcpStore(runtimeDataDir);
+  const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
+  const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir, mcpStore);
   const configStore = new FileConfigStore(runtimeDataDir);
   // memory 的实际存储根会跟随用户配置变化，因此这里用延迟读取的 storagePath。
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids, async () => (await configStore.getConfig()).storagePath);
@@ -52,7 +58,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const toolHost = new CompositeToolHost([
     new McpManagementToolHost(mcpStore),
     new McpRuntimeToolHost(mcpStore),
-    new PcLocalToolHost(workspaceProjects),
+    new PcLocalToolHost(workspaceProjects, policyAmendmentStore),
     new SkillManagementToolHost(skillRegistry),
     new MemoryToolHost(memoryStore, configStore),
   ]);
@@ -69,6 +75,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     toolHost,
     usageStore,
     memoryStore,
+    policyAmendmentStore,
+    persistentToolApprovalStore,
   });
   // Codex 会在 root session 启动时触发 memories startup；桌面端这里做一次轻量历史抽取。
   const memoryStartup = agentLoop.runMemoryStartupExtraction().catch(() => ({ claimed: 0, extracted: 0 }));
@@ -76,12 +84,15 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   return {
     agentLoop,
     approvalGate,
+    appServerNotificationBus,
     configStore,
     eventBus,
     memoryStore,
     memoryStartup,
     modelClient,
     mcpStore,
+    persistentToolApprovalStore,
+    policyAmendmentStore,
     skillRegistry,
     toolHost,
     threadStore,

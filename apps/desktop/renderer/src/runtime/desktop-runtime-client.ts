@@ -17,6 +17,7 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeFetchModelsInput,
+  RuntimeHookListResponse,
   RuntimeAvailableModelsResponse,
   RuntimeEvent,
   RuntimeRequestInput,
@@ -150,6 +151,19 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     fetchProviderModels(input: RuntimeFetchModelsInput) {
       return request<RuntimeAvailableModelsResponse>({ path: '/v1/config/models', method: 'POST', body: input });
     },
+    async listHooks(cwds: string[] = []) {
+      const envelope = await request<RuntimeAppServerEnvelope<RuntimeHookListResponse>>({
+        path: '/v1/swe/app-server',
+        method: 'POST',
+        body: {
+          id: 'hooks/list',
+          method: 'hooks/list',
+          params: { cwds },
+        },
+      });
+      if ('error' in envelope) throw new Error(envelope.error.message);
+      return envelope.result;
+    },
     listSkills() {
       return request<RuntimeSkillList>({ path: '/v1/skills' });
     },
@@ -263,3 +277,7 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
   };
 }
+
+type RuntimeAppServerEnvelope<T> =
+  | { id: unknown; result: T }
+  | { id: unknown; error: { code: number; message: string; data?: unknown } };

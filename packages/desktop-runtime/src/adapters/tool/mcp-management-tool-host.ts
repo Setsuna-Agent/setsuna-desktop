@@ -58,6 +58,40 @@ const configureMcpTool: RuntimeToolDefinition = {
         additionalProperties: { type: 'string' },
         description: 'Optional HTTP headers for streamable HTTP servers.',
       },
+      env_http_headers: {
+        type: 'object',
+        additionalProperties: { type: 'string' },
+        description: 'Optional HTTP header names mapped to environment variable names for streamable HTTP servers.',
+      },
+      envHttpHeaders: {
+        type: 'object',
+        additionalProperties: { type: 'string' },
+        description: 'Optional HTTP header names mapped to environment variable names for streamable HTTP servers.',
+      },
+      bearer_token_env_var: {
+        type: 'string',
+        description: 'Optional environment variable that contains the bearer token for streamable HTTP servers.',
+      },
+      bearerTokenEnvVar: {
+        type: 'string',
+        description: 'Optional environment variable that contains the bearer token for streamable HTTP servers.',
+      },
+      oauth_client_id: {
+        type: 'string',
+        description: 'Optional OAuth client ID for streamable HTTP MCP login.',
+      },
+      oauthClientId: {
+        type: 'string',
+        description: 'Optional OAuth client ID for streamable HTTP MCP login.',
+      },
+      oauth_resource: {
+        type: 'string',
+        description: 'Optional OAuth resource parameter for streamable HTTP MCP login.',
+      },
+      oauthResource: {
+        type: 'string',
+        description: 'Optional OAuth resource parameter for streamable HTTP MCP login.',
+      },
       env: {
         type: 'object',
         additionalProperties: { type: 'string' },
@@ -101,13 +135,13 @@ const configureMcpTool: RuntimeToolDefinition = {
       },
       require_approval: {
         type: 'string',
-        enum: ['always', 'never'],
-        description: 'Whether calls to this server require user approval.',
+        enum: ['auto', 'prompt', 'approve', 'always', 'never'],
+        description: 'MCP approval mode. Use auto by default, prompt to ask every time, or approve to run without asking.',
       },
       requireApproval: {
         type: 'string',
-        enum: ['always', 'never'],
-        description: 'Whether calls to this server require user approval.',
+        enum: ['auto', 'prompt', 'approve', 'always', 'never'],
+        description: 'MCP approval mode. Use auto by default, prompt to ask every time, or approve to run without asking.',
       },
       enabled: {
         type: 'boolean',
@@ -249,6 +283,10 @@ function normalizeMcpInput(input: unknown): RuntimeMcpServerInput {
     disabledTools: stringList(record.disabledTools ?? record.disabled_tools),
     env: stringMap(record.env),
     headers: stringMap(record.headers),
+    envHttpHeaders: stringMap(record.envHttpHeaders ?? record.env_http_headers),
+    bearerTokenEnvVar: optionalString(record.bearerTokenEnvVar ?? record.bearer_token_env_var),
+    oauthClientId: optionalString(record.oauthClientId ?? record.oauth_client_id),
+    oauthResource: optionalString(record.oauthResource ?? record.oauth_resource),
   };
 
   return omitUndefined(normalized);
@@ -270,13 +308,19 @@ function mcpPreviewPayload(
     args: input.args ?? existing?.args ?? [],
     url: input.url ?? existing?.url,
     timeoutMs: input.timeoutMs ?? existing?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    requireApproval: input.requireApproval ?? existing?.requireApproval ?? 'always',
+    requireApproval: input.requireApproval ?? existing?.requireApproval ?? 'auto',
     enabled: input.enabled ?? existing?.enabled ?? true,
     required: input.required ?? existing?.required ?? false,
     allowedTools: input.allowedTools ?? existing?.allowedTools ?? [],
     disabledTools: input.disabledTools ?? existing?.disabledTools ?? [],
-    envKeys: input.env ? Object.keys(input.env).sort((a, b) => a.localeCompare(b)) : existing?.envKeys ?? [],
-    headerKeys: input.headers ? Object.keys(input.headers).sort((a, b) => a.localeCompare(b)) : existing?.headerKeys ?? [],
+    oauthClientId: input.oauthClientId ?? existing?.oauthClientId,
+    oauthResource: input.oauthResource ?? existing?.oauthResource,
+    envKeys: input.env || input.envHttpHeaders || input.bearerTokenEnvVar
+      ? mcpEnvKeys(input)
+      : existing?.envKeys ?? [],
+    headerKeys: input.headers || input.envHttpHeaders || input.bearerTokenEnvVar
+      ? mcpHeaderKeys(input)
+      : existing?.headerKeys ?? [],
     configPath,
   };
 }
@@ -296,6 +340,8 @@ function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer,
     required: server.required,
     allowedTools: server.allowedTools,
     disabledTools: server.disabledTools,
+    oauthClientId: server.oauthClientId,
+    oauthResource: server.oauthResource,
     envKeys: server.envKeys,
     headerKeys: server.headerKeys,
     configPath,
@@ -304,6 +350,24 @@ function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer,
 
 function inferTransport(input: RuntimeMcpServerInput): RuntimeMcpTransport {
   return input.command || !input.url ? 'stdio' : 'streamableHttp';
+}
+
+function mcpHeaderKeys(input: RuntimeMcpServerInput): string[] {
+  const keys = [
+    ...Object.keys(input.headers ?? {}),
+    ...Object.keys(input.envHttpHeaders ?? {}),
+  ];
+  if (input.bearerTokenEnvVar?.trim()) keys.push('Authorization');
+  return [...new Set(keys)].sort((a, b) => a.localeCompare(b));
+}
+
+function mcpEnvKeys(input: RuntimeMcpServerInput): string[] {
+  const keys = [
+    ...Object.keys(input.env ?? {}),
+    ...Object.values(input.envHttpHeaders ?? {}),
+  ];
+  if (input.bearerTokenEnvVar?.trim()) keys.push(input.bearerTokenEnvVar.trim());
+  return [...new Set(keys.filter((value) => value.trim()).map((value) => value.trim()))].sort((a, b) => a.localeCompare(b));
 }
 
 function normalizeMcpKey(value: string): string {
@@ -317,8 +381,9 @@ function normalizeTransport(value: unknown): RuntimeMcpTransport | undefined {
 }
 
 function normalizeRequireApproval(value: unknown): RuntimeMcpRequireApproval | undefined {
-  if (value === 'always' || value === 'never') return value;
-  if (value === 'smart' || value === 'auto' || value === 'on-write' || value === 'onWrite' || value === 'on_write') return 'always';
+  if (value === 'approve' || value === 'never') return 'approve';
+  if (value === 'prompt' || value === 'always') return 'prompt';
+  if (value === 'smart' || value === 'auto' || value === 'on-write' || value === 'onWrite' || value === 'on_write') return 'auto';
   return undefined;
 }
 

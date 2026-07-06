@@ -1,11 +1,15 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
+import * as pty from 'node-pty';
+import type { IDisposable, IPty } from 'node-pty';
+import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import { AppServerRpcError } from './errors.js';
-import { numericInput, recordInput, requiredArray, requiredString } from './input.js';
+import { hasOwn, numericInput, recordInput, requiredArray, requiredRawString, requiredString } from './input.js';
 
 const APP_SERVER_COMMAND_EXEC_DEFAULT_OUTPUT_BYTES_CAP = 1024 * 1024;
 const APP_SERVER_COMMAND_EXEC_DEFAULT_TIMEOUT_MS = 120_000;
 const APP_SERVER_COMMAND_EXEC_TIMEOUT_EXIT_CODE = 124;
+export const APP_SERVER_DEFAULT_CONNECTION_ID = 'default';
 
 type AppServerCommandExecResponse = {
   exitCode: number;
@@ -30,17 +34,51 @@ type AppServerCommandExecParams = {
   permissionProfile?: unknown;
 };
 
+type AppServerProcessSpawnParams = {
+  command: string[];
+  processHandle: string;
+  cwd: string;
+  tty: boolean;
+  streamStdin: boolean;
+  streamStdoutStderr: boolean;
+  outputBytesCap?: number | null;
+  timeoutMs?: number | null;
+  env?: Record<string, string | null>;
+  size?: unknown;
+};
+
 export type AppServerCommandExecManager = {
-  exec(params: unknown): Promise<AppServerCommandExecResponse>;
-  write(params: unknown): Promise<Record<string, never>>;
-  terminate(params: unknown): Promise<Record<string, never>>;
-  resize(params: unknown): Promise<Record<string, never>>;
+  exec(params: unknown, connectionId?: string): Promise<AppServerCommandExecResponse>;
+  write(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  terminate(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  resize(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  processSpawn(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  processWriteStdin(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  processKill(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  processResizePty(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  terminateConnection(connectionId: string): void;
   terminateAll(): void;
 };
 
 type AppServerCommandExecSession = {
-  child: ChildProcessWithoutNullStreams;
+  child?: ChildProcessWithoutNullStreams;
+  connectionId: string;
+  dataDisposable?: IDisposable;
+  exitDisposable?: IDisposable;
+  ptyProcess?: IPty;
   processId: string;
+  streamStdin: boolean;
+  stdinClosed: boolean;
+  timedOut: boolean;
+};
+
+type AppServerProcessSession = {
+  child?: ChildProcessWithoutNullStreams;
+  connectionId: string;
+  dataDisposable?: IDisposable;
+  exitDisposable?: IDisposable;
+  ptyProcess?: IPty;
+  processHandle: string;
   streamStdin: boolean;
   stdinClosed: boolean;
   timedOut: boolean;
@@ -50,14 +88,17 @@ type AppServerCommandExecOutputBuffer = {
   chunks: Buffer[];
   capturedBytes: number;
   capBytes: number | null;
+  capReached: boolean;
 };
 
-export function createAppServerCommandExecManager(): AppServerCommandExecManager {
+export function createAppServerCommandExecManager(notificationBus: AppServerNotificationBus): AppServerCommandExecManager {
   const sessions = new Map<string, AppServerCommandExecSession>();
+  const processSessions = new Map<string, AppServerProcessSession>();
 
   return {
-    exec: (params) => execAppServerCommand(params, sessions),
-    write: async (params) => {
+    exec: (params, connectionId) => execAppServerCommand(params, appServerConnectionId(connectionId), sessions, notificationBus),
+    write: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
       const input = recordInput(params);
       const processId = requiredString(input.processId ?? input.process_id, 'processId');
       const deltaBase64 = input.deltaBase64 ?? input.delta_base64;
@@ -65,7 +106,7 @@ export function createAppServerCommandExecManager(): AppServerCommandExecManager
       if (deltaBase64 === undefined && !closeStdin) {
         throw new AppServerRpcError(-32602, 'command/exec/write requires deltaBase64 or closeStdin');
       }
-      const session = requireAppServerCommandExecSession(sessions, processId);
+      const session = requireAppServerCommandExecSession(sessions, normalizedConnectionId, processId);
       if (!session.streamStdin) {
         throw new AppServerRpcError(-32600, 'stdin streaming is not enabled for this command/exec');
       }
@@ -73,44 +114,130 @@ export function createAppServerCommandExecManager(): AppServerCommandExecManager
         ? Buffer.alloc(0)
         : strictBase64Decode(deltaBase64, 'deltaBase64');
       if (delta.byteLength) {
-        if (session.stdinClosed || session.child.stdin.destroyed || session.child.stdin.writableEnded) {
+        if (session.stdinClosed) throw new AppServerRpcError(-32600, 'stdin is already closed');
+        if (session.ptyProcess) {
+          session.ptyProcess.write(delta.toString('utf8'));
+        } else if (session.child) {
+          if (session.child.stdin.destroyed || session.child.stdin.writableEnded) {
+            throw new AppServerRpcError(-32600, 'stdin is already closed');
+          }
+          session.child.stdin.write(delta);
+        } else {
           throw new AppServerRpcError(-32600, 'stdin is already closed');
         }
-        session.child.stdin.write(delta);
       }
       if (closeStdin && !session.stdinClosed) {
         session.stdinClosed = true;
-        session.child.stdin.end();
+        if (session.ptyProcess) {
+          writePtyEof(session.ptyProcess);
+        } else {
+          session.child?.stdin.end();
+        }
       }
       return {};
     },
-    terminate: async (params) => {
+    terminate: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
       const input = recordInput(params);
-      const session = requireAppServerCommandExecSession(sessions, requiredString(input.processId ?? input.process_id, 'processId'));
+      const session = requireAppServerCommandExecSession(sessions, normalizedConnectionId, requiredString(input.processId ?? input.process_id, 'processId'));
       terminateAppServerCommandExecSession(session);
       return {};
     },
-    resize: async (params) => {
+    resize: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
       const input = recordInput(params);
-      requireAppServerCommandExecSession(sessions, requiredString(input.processId ?? input.process_id, 'processId'));
-      const size = recordInput(input.size);
-      const rows = numericInput(size.rows);
-      const cols = numericInput(size.cols);
-      if (rows === undefined || cols === undefined || rows < 1 || cols < 1) {
-        throw new AppServerRpcError(-32602, 'command/exec size rows and cols must be greater than 0');
+      const session = requireAppServerCommandExecSession(sessions, normalizedConnectionId, requiredString(input.processId ?? input.process_id, 'processId'));
+      const size = requiredAppServerTerminalSize(input.size, 'command/exec');
+      if (!session.ptyProcess) {
+        throw new AppServerRpcError(-32600, 'command/exec/resize requires a PTY-backed session');
       }
-      throw new AppServerRpcError(-32600, 'command/exec/resize requires tty support, which is not available on the HTTP app-server adapter');
+      session.ptyProcess.resize(size.cols, size.rows);
+      return {};
+    },
+    processSpawn: async (params, connectionId) => spawnAppServerProcess(params, appServerConnectionId(connectionId), processSessions, notificationBus),
+    processWriteStdin: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
+      const input = recordInput(params);
+      const processHandle = requiredString(input.processHandle ?? input.process_handle, 'processHandle');
+      const deltaBase64 = input.deltaBase64 ?? input.delta_base64;
+      const closeStdin = input.closeStdin === true || input.close_stdin === true;
+      if (deltaBase64 === undefined && !closeStdin) {
+        throw new AppServerRpcError(-32602, 'process/writeStdin requires deltaBase64 or closeStdin');
+      }
+      const session = requireAppServerProcessSession(processSessions, normalizedConnectionId, processHandle);
+      if (!session.streamStdin) {
+        throw new AppServerRpcError(-32600, 'stdin streaming is not enabled for this process');
+      }
+      const delta = deltaBase64 === undefined || deltaBase64 === null
+        ? Buffer.alloc(0)
+        : strictBase64Decode(deltaBase64, 'deltaBase64');
+      if (delta.byteLength) {
+        if (session.stdinClosed) throw new AppServerRpcError(-32600, 'stdin is already closed');
+        if (session.ptyProcess) {
+          session.ptyProcess.write(delta.toString('utf8'));
+        } else if (session.child) {
+          if (session.child.stdin.destroyed || session.child.stdin.writableEnded) {
+            throw new AppServerRpcError(-32600, 'stdin is already closed');
+          }
+          session.child.stdin.write(delta);
+        } else {
+          throw new AppServerRpcError(-32600, 'stdin is already closed');
+        }
+      }
+      if (closeStdin && !session.stdinClosed) {
+        session.stdinClosed = true;
+        if (session.ptyProcess) {
+          writePtyEof(session.ptyProcess);
+        } else {
+          session.child?.stdin.end();
+        }
+      }
+      return {};
+    },
+    processKill: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
+      const input = recordInput(params);
+      terminateAppServerProcessSession(requireAppServerProcessSession(processSessions, normalizedConnectionId, requiredString(input.processHandle ?? input.process_handle, 'processHandle')));
+      return {};
+    },
+    processResizePty: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
+      const input = recordInput(params);
+      const session = requireAppServerProcessSession(processSessions, normalizedConnectionId, requiredString(input.processHandle ?? input.process_handle, 'processHandle'));
+      const size = requiredAppServerTerminalSize(input.size, 'process/resizePty');
+      if (!session.ptyProcess) {
+        throw new AppServerRpcError(-32600, 'process/resizePty requires a PTY-backed process');
+      }
+      session.ptyProcess.resize(size.cols, size.rows);
+      return {};
+    },
+    terminateConnection: (connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
+      for (const [key, session] of sessions.entries()) {
+        if (session.connectionId !== normalizedConnectionId) continue;
+        sessions.delete(key);
+        terminateAppServerCommandExecSession(session);
+      }
+      for (const [key, session] of processSessions.entries()) {
+        if (session.connectionId !== normalizedConnectionId) continue;
+        processSessions.delete(key);
+        terminateAppServerProcessSession(session);
+      }
     },
     terminateAll: () => {
       for (const session of sessions.values()) terminateAppServerCommandExecSession(session);
       sessions.clear();
+      for (const session of processSessions.values()) terminateAppServerProcessSession(session);
+      processSessions.clear();
     },
   };
 }
 
 async function execAppServerCommand(
   rawParams: unknown,
+  connectionId: string,
   sessions: Map<string, AppServerCommandExecSession>,
+  notificationBus: AppServerNotificationBus,
 ): Promise<AppServerCommandExecResponse> {
   const params = appServerCommandExecParams(rawParams);
   if (params.command.length === 0) throw new AppServerRpcError(-32600, 'command must not be empty');
@@ -129,19 +256,18 @@ async function execAppServerCommand(
   if (!params.processId && (params.tty || params.streamStdin || params.streamStdoutStderr)) {
     throw new AppServerRpcError(-32600, 'command/exec tty or streaming requires a client-supplied processId');
   }
-  if (params.tty || params.streamStdoutStderr) {
-    throw new AppServerRpcError(
-      -32600,
-      'command/exec streaming stdout/stderr requires server notifications, which are not available on the HTTP app-server adapter',
-    );
-  }
-  if (params.processId && sessions.has(params.processId)) {
+  if (params.processId && sessions.has(appServerSessionKey(connectionId, params.processId))) {
     throw new AppServerRpcError(-32600, `duplicate active command/exec process id: ${JSON.stringify(params.processId)}`);
   }
 
+  const effectiveParams: AppServerCommandExecParams = {
+    ...params,
+    streamStdin: params.streamStdin || params.tty,
+    streamStdoutStderr: params.streamStdoutStderr || params.tty,
+  };
   const [program, ...args] = params.command;
-  const stdout = createAppServerOutputBuffer(params);
-  const stderr = createAppServerOutputBuffer(params);
+  const stdout = createAppServerOutputBuffer(effectiveParams);
+  const stderr = createAppServerOutputBuffer(effectiveParams);
   const env = appServerCommandExecEnv(params.env);
   const cwd = path.resolve(process.cwd(), params.cwd ?? '.');
 
@@ -155,9 +281,67 @@ async function execAppServerCommand(
       if (finished) return false;
       finished = true;
       if (timeout) clearTimeout(timeout);
-      if (session) sessions.delete(session.processId);
+      if (session) sessions.delete(appServerSessionKey(session.connectionId, session.processId));
+      session?.dataDisposable?.dispose();
+      session?.exitDisposable?.dispose();
       return true;
     };
+
+    if (params.tty) {
+      const terminalSize = appServerTerminalSize(params.size, 'command/exec');
+      let ptyProcess: IPty;
+      try {
+        ptyProcess = pty.spawn(program, args, {
+          cols: terminalSize.cols,
+          cwd,
+          encoding: 'utf8',
+          env,
+          name: 'xterm-256color',
+          rows: terminalSize.rows,
+        });
+      } catch (error) {
+        reject(new AppServerRpcError(-32603, `failed to spawn command: ${error instanceof Error ? error.message : String(error)}`));
+        return;
+      }
+
+      session = {
+        connectionId,
+        ptyProcess,
+        processId: params.processId!,
+        streamStdin: true,
+        stdinClosed: false,
+        timedOut: false,
+      };
+      sessions.set(appServerSessionKey(connectionId, params.processId!), session);
+      session.dataDisposable = ptyProcess.onData((text) => {
+        appendAppServerCommandOutput(effectiveParams, stdout, Buffer.from(text, 'utf8'), 'stdout', notificationBus, connectionId);
+      });
+      session.exitDisposable = ptyProcess.onExit(({ exitCode }) => {
+        if (!cleanup()) return;
+        resolve({
+          exitCode: timedOut || session?.timedOut ? APP_SERVER_COMMAND_EXEC_TIMEOUT_EXIT_CODE : exitCode,
+          stdout: '',
+          stderr: '',
+        });
+      });
+
+      if (!params.disableTimeout) {
+        timeout = setTimeout(() => {
+          timedOut = true;
+          if (session) session.timedOut = true;
+          terminateAppServerCommandExecSession(session ?? {
+            connectionId,
+            ptyProcess,
+            processId: '',
+            streamStdin: true,
+            stdinClosed: true,
+            timedOut: true,
+          });
+        }, params.timeoutMs ?? APP_SERVER_COMMAND_EXEC_DEFAULT_TIMEOUT_MS);
+        timeout.unref();
+      }
+      return;
+    }
 
     let child: ChildProcessWithoutNullStreams;
     try {
@@ -174,16 +358,17 @@ async function execAppServerCommand(
     if (params.processId) {
       session = {
         child,
+        connectionId,
         processId: params.processId,
-        streamStdin: params.streamStdin,
+        streamStdin: effectiveParams.streamStdin,
         stdinClosed: false,
         timedOut: false,
       };
-      sessions.set(params.processId, session);
+      sessions.set(appServerSessionKey(connectionId, params.processId), session);
     }
 
-    child.stdout.on('data', (chunk: Buffer) => appendAppServerOutputBuffer(stdout, chunk));
-    child.stderr.on('data', (chunk: Buffer) => appendAppServerOutputBuffer(stderr, chunk));
+    child.stdout.on('data', (chunk: Buffer) => appendAppServerCommandOutput(effectiveParams, stdout, chunk, 'stdout', notificationBus, connectionId));
+    child.stderr.on('data', (chunk: Buffer) => appendAppServerCommandOutput(effectiveParams, stderr, chunk, 'stderr', notificationBus, connectionId));
     child.on('error', (error) => {
       cleanup();
       reject(new AppServerRpcError(-32603, `failed to spawn command: ${error.message}`));
@@ -192,12 +377,12 @@ async function execAppServerCommand(
       if (!cleanup()) return;
       resolve({
         exitCode: timedOut || session?.timedOut ? APP_SERVER_COMMAND_EXEC_TIMEOUT_EXIT_CODE : code ?? -1,
-        stdout: Buffer.concat(stdout.chunks).toString('utf8'),
-        stderr: Buffer.concat(stderr.chunks).toString('utf8'),
+        stdout: effectiveParams.streamStdoutStderr ? '' : Buffer.concat(stdout.chunks).toString('utf8'),
+        stderr: effectiveParams.streamStdoutStderr ? '' : Buffer.concat(stderr.chunks).toString('utf8'),
       });
     });
 
-    if (!params.streamStdin) {
+    if (!effectiveParams.streamStdin) {
       child.stdin.end();
     }
 
@@ -207,8 +392,9 @@ async function execAppServerCommand(
         if (session) session.timedOut = true;
         terminateAppServerCommandExecSession(session ?? {
           child,
+          connectionId,
           processId: '',
-          streamStdin: false,
+          streamStdin: effectiveParams.streamStdin,
           stdinClosed: true,
           timedOut: true,
         });
@@ -216,6 +402,175 @@ async function execAppServerCommand(
       timeout.unref();
     }
   });
+}
+
+async function spawnAppServerProcess(
+  rawParams: unknown,
+  connectionId: string,
+  sessions: Map<string, AppServerProcessSession>,
+  notificationBus: AppServerNotificationBus,
+): Promise<Record<string, never>> {
+  const params = appServerProcessSpawnParams(rawParams);
+  if (params.command.length === 0) throw new AppServerRpcError(-32600, 'command must not be empty');
+  if (!params.processHandle) throw new AppServerRpcError(-32600, 'processHandle must not be empty');
+  if (!path.isAbsolute(params.cwd)) throw new AppServerRpcError(-32602, 'process/spawn cwd must be an absolute path');
+  if (params.size !== undefined && !params.tty) {
+    throw new AppServerRpcError(-32602, 'process/spawn size requires tty: true');
+  }
+  if (sessions.has(appServerSessionKey(connectionId, params.processHandle))) {
+    throw new AppServerRpcError(-32600, `duplicate active process/spawn process handle: ${JSON.stringify(params.processHandle)}`);
+  }
+
+  const effectiveParams: AppServerProcessSpawnParams = {
+    ...params,
+    streamStdin: params.streamStdin || params.tty,
+    streamStdoutStderr: params.streamStdoutStderr || params.tty,
+  };
+  const [program, ...args] = params.command;
+  const stdout = createAppServerProcessOutputBuffer(effectiveParams);
+  const stderr = createAppServerProcessOutputBuffer(effectiveParams);
+  const env = appServerCommandExecEnv(params.env);
+
+  if (params.tty) {
+    const terminalSize = appServerTerminalSize(params.size, 'process/spawn');
+    let ptyProcess: IPty;
+    try {
+      ptyProcess = pty.spawn(program, args, {
+        cols: terminalSize.cols,
+        cwd: params.cwd,
+        encoding: 'utf8',
+        env,
+        name: 'xterm-256color',
+        rows: terminalSize.rows,
+      });
+    } catch (error) {
+      throw new AppServerRpcError(-32603, `failed to spawn process: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const session: AppServerProcessSession = {
+      connectionId,
+      ptyProcess,
+      processHandle: params.processHandle,
+      streamStdin: true,
+      stdinClosed: false,
+      timedOut: false,
+    };
+    sessions.set(appServerSessionKey(connectionId, params.processHandle), session);
+
+    let finished = false;
+    let timeout: NodeJS.Timeout | undefined;
+    const cleanup = () => {
+      if (finished) return false;
+      finished = true;
+      if (timeout) clearTimeout(timeout);
+      sessions.delete(appServerSessionKey(connectionId, params.processHandle));
+      session.dataDisposable?.dispose();
+      session.exitDisposable?.dispose();
+      return true;
+    };
+
+    session.dataDisposable = ptyProcess.onData((text) => {
+      appendAppServerProcessOutput(effectiveParams, stdout, Buffer.from(text, 'utf8'), 'stdout', notificationBus, connectionId);
+    });
+    session.exitDisposable = ptyProcess.onExit(({ exitCode }) => {
+      if (!cleanup()) return;
+      notificationBus.publish({
+        method: 'process/exited',
+        params: {
+          processHandle: params.processHandle,
+          exitCode: session.timedOut ? APP_SERVER_COMMAND_EXEC_TIMEOUT_EXIT_CODE : exitCode,
+          stdout: '',
+          stdoutCapReached: stdout.capReached,
+          stderr: '',
+          stderrCapReached: stderr.capReached,
+        },
+      }, { connectionId });
+    });
+
+    if (params.timeoutMs !== null) {
+      timeout = setTimeout(() => {
+        session.timedOut = true;
+        terminateAppServerProcessSession(session);
+      }, params.timeoutMs ?? APP_SERVER_COMMAND_EXEC_DEFAULT_TIMEOUT_MS);
+      timeout.unref();
+    }
+
+    return {};
+  }
+
+  let child: ChildProcessWithoutNullStreams;
+  try {
+    child = spawn(program, args, {
+      cwd: params.cwd,
+      env,
+      windowsHide: true,
+      stdio: 'pipe',
+    });
+  } catch (error) {
+    throw new AppServerRpcError(-32603, `failed to spawn process: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const session: AppServerProcessSession = {
+    child,
+    connectionId,
+    processHandle: params.processHandle,
+    streamStdin: effectiveParams.streamStdin,
+    stdinClosed: false,
+    timedOut: false,
+  };
+  sessions.set(appServerSessionKey(connectionId, params.processHandle), session);
+  if (!session.streamStdin) child.stdin.end();
+
+  let finished = false;
+  let timeout: NodeJS.Timeout | undefined;
+  const cleanup = () => {
+    if (finished) return false;
+    finished = true;
+    if (timeout) clearTimeout(timeout);
+    sessions.delete(appServerSessionKey(connectionId, params.processHandle));
+    return true;
+  };
+
+  child.stdout.on('data', (chunk: Buffer) => appendAppServerProcessOutput(effectiveParams, stdout, chunk, 'stdout', notificationBus, connectionId));
+  child.stderr.on('data', (chunk: Buffer) => appendAppServerProcessOutput(effectiveParams, stderr, chunk, 'stderr', notificationBus, connectionId));
+  child.on('error', (error) => {
+    if (!cleanup()) return;
+    notificationBus.publish({
+      method: 'process/exited',
+      params: {
+        processHandle: params.processHandle,
+        exitCode: -1,
+        stdout: effectiveParams.streamStdoutStderr ? '' : Buffer.concat(stdout.chunks).toString('utf8'),
+        stdoutCapReached: stdout.capReached,
+        stderr: effectiveParams.streamStdoutStderr ? '' : error.message,
+        stderrCapReached: stderr.capReached,
+      },
+    }, { connectionId });
+  });
+  child.on('close', (code) => {
+    if (!cleanup()) return;
+    notificationBus.publish({
+      method: 'process/exited',
+      params: {
+        processHandle: params.processHandle,
+        exitCode: session.timedOut ? APP_SERVER_COMMAND_EXEC_TIMEOUT_EXIT_CODE : code ?? -1,
+        stdout: effectiveParams.streamStdoutStderr ? '' : Buffer.concat(stdout.chunks).toString('utf8'),
+        stdoutCapReached: stdout.capReached,
+        stderr: effectiveParams.streamStdoutStderr ? '' : Buffer.concat(stderr.chunks).toString('utf8'),
+        stderrCapReached: stderr.capReached,
+      },
+    }, { connectionId });
+  });
+
+  if (params.timeoutMs !== null) {
+    timeout = setTimeout(() => {
+      session.timedOut = true;
+      terminateAppServerProcessSession(session);
+    }, params.timeoutMs ?? APP_SERVER_COMMAND_EXEC_DEFAULT_TIMEOUT_MS);
+    timeout.unref();
+  }
+
+  return {};
 }
 
 function appServerCommandExecParams(rawParams: unknown): AppServerCommandExecParams {
@@ -244,21 +599,123 @@ function appServerCommandExecParams(rawParams: unknown): AppServerCommandExecPar
   };
 }
 
+function appServerProcessSpawnParams(rawParams: unknown): AppServerProcessSpawnParams {
+  const input = recordInput(rawParams);
+  const command = requiredArray(input.command, 'command').map((value, index) => {
+    if (typeof value !== 'string') throw new AppServerRpcError(-32602, `command[${index}] must be a string`);
+    return value;
+  });
+  return {
+    command,
+    processHandle: requiredRawString(input.processHandle ?? input.process_handle, 'processHandle'),
+    cwd: requiredRawString(input.cwd, 'cwd'),
+    tty: input.tty === true,
+    streamStdin: input.streamStdin === true || input.stream_stdin === true,
+    streamStdoutStderr: input.streamStdoutStderr === true || input.stream_stdout_stderr === true,
+    outputBytesCap: optionalNullableNonNegativeInteger(input, 'outputBytesCap', 'output_bytes_cap', 'process/spawn outputBytesCap'),
+    timeoutMs: optionalNullableNonNegativeInteger(input, 'timeoutMs', 'timeout_ms', 'process/spawn timeoutMs'),
+    env: optionalAppServerCommandEnv(input.env),
+    size: input.size,
+  };
+}
+
 function createAppServerOutputBuffer(params: AppServerCommandExecParams): AppServerCommandExecOutputBuffer {
   return {
     chunks: [],
     capturedBytes: 0,
     capBytes: params.disableOutputCap ? null : params.outputBytesCap ?? APP_SERVER_COMMAND_EXEC_DEFAULT_OUTPUT_BYTES_CAP,
+    capReached: false,
   };
 }
 
-function appendAppServerOutputBuffer(target: AppServerCommandExecOutputBuffer, chunk: Buffer): void {
-  if (target.capBytes !== null && target.capturedBytes >= target.capBytes) return;
+function createAppServerProcessOutputBuffer(params: AppServerProcessSpawnParams): AppServerCommandExecOutputBuffer {
+  return {
+    chunks: [],
+    capturedBytes: 0,
+    capBytes: params.outputBytesCap === null ? null : params.outputBytesCap ?? APP_SERVER_COMMAND_EXEC_DEFAULT_OUTPUT_BYTES_CAP,
+    capReached: false,
+  };
+}
+
+function appendAppServerCommandOutput(
+  params: AppServerCommandExecParams,
+  target: AppServerCommandExecOutputBuffer,
+  chunk: Buffer,
+  stream: 'stdout' | 'stderr',
+  notificationBus: AppServerNotificationBus,
+  connectionId: string,
+): void {
+  const appended = appendAppServerOutputBuffer(target, chunk, { capture: !params.streamStdoutStderr });
+  if (!params.streamStdoutStderr || !appended.chunk.byteLength || !params.processId) return;
+  notificationBus.publish({
+    method: 'command/exec/outputDelta',
+    params: {
+      processId: params.processId,
+      stream,
+      deltaBase64: appended.chunk.toString('base64'),
+      capReached: appended.capReached,
+    },
+  }, { connectionId });
+}
+
+function appendAppServerProcessOutput(
+  params: AppServerProcessSpawnParams,
+  target: AppServerCommandExecOutputBuffer,
+  chunk: Buffer,
+  stream: 'stdout' | 'stderr',
+  notificationBus: AppServerNotificationBus,
+  connectionId: string,
+): void {
+  const appended = appendAppServerOutputBuffer(target, chunk, { capture: !params.streamStdoutStderr });
+  if (!params.streamStdoutStderr || !appended.chunk.byteLength) return;
+  notificationBus.publish({
+    method: 'process/outputDelta',
+    params: {
+      processHandle: params.processHandle,
+      stream,
+      deltaBase64: appended.chunk.toString('base64'),
+      capReached: appended.capReached,
+    },
+  }, { connectionId });
+}
+
+function appendAppServerOutputBuffer(
+  target: AppServerCommandExecOutputBuffer,
+  chunk: Buffer,
+  options: { capture: boolean } = { capture: true },
+): { chunk: Buffer; capReached: boolean } {
+  if (target.capBytes !== null && target.capturedBytes >= target.capBytes) return { chunk: Buffer.alloc(0), capReached: false };
   const remaining = target.capBytes === null ? chunk.byteLength : Math.max(0, target.capBytes - target.capturedBytes);
   const slice = remaining >= chunk.byteLength ? chunk : chunk.subarray(0, remaining);
-  if (!slice.byteLength) return;
-  target.chunks.push(slice);
+  if (!slice.byteLength) return { chunk: Buffer.alloc(0), capReached: false };
+  if (options.capture) target.chunks.push(slice);
   target.capturedBytes += slice.byteLength;
+  target.capReached = target.capBytes !== null && target.capturedBytes >= target.capBytes;
+  return { chunk: slice, capReached: target.capReached };
+}
+
+function appServerTerminalSize(value: unknown, methodName: string): { rows: number; cols: number } {
+  if (value === undefined || value === null) return { rows: 24, cols: 100 };
+  return requiredAppServerTerminalSize(value, methodName);
+}
+
+function requiredAppServerTerminalSize(value: unknown, methodName: string): { rows: number; cols: number } {
+  const size = recordInput(value);
+  const rows = numericInput(size.rows);
+  const cols = numericInput(size.cols);
+  if (rows === undefined || cols === undefined || !Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || cols < 1) {
+    throw new AppServerRpcError(-32602, `${methodName} size rows and cols must be greater than 0`);
+  }
+  return { rows, cols };
+}
+
+function appServerConnectionId(connectionId: string | undefined): string {
+  const normalized = connectionId?.trim();
+  return normalized || APP_SERVER_DEFAULT_CONNECTION_ID;
+}
+
+function appServerSessionKey(connectionId: string, sessionId: string): string {
+  return JSON.stringify([connectionId, sessionId]);
 }
 
 function appServerCommandExecEnv(overrides: Record<string, string | null> | undefined): NodeJS.ProcessEnv {
@@ -312,6 +769,27 @@ function optionalNonNegativeInteger(value: unknown, name: string): number | unde
   return numeric;
 }
 
+function optionalNullableNonNegativeInteger(
+  input: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+  name: string,
+): number | null | undefined {
+  const hasCamel = hasOwn(input, camelKey);
+  const hasSnake = hasOwn(input, snakeKey);
+  if (!hasCamel && !hasSnake) return undefined;
+  const value = hasCamel ? input[camelKey] : input[snakeKey];
+  if (value === null) return null;
+  const numeric = numericInput(value);
+  if (numeric === undefined || !Number.isInteger(numeric)) {
+    throw new AppServerRpcError(-32602, `${name} must be an integer or null`);
+  }
+  if (numeric < 0) {
+    throw new AppServerRpcError(-32602, `${name} must be non-negative, got ${numeric}`);
+  }
+  return numeric;
+}
+
 function nullableOptional(value: unknown): unknown | undefined {
   return value === undefined || value === null ? undefined : value;
 }
@@ -326,16 +804,52 @@ function strictBase64Decode(value: unknown, name: string): Buffer {
   return decoded;
 }
 
+function writePtyEof(ptyProcess: IPty): void {
+  ptyProcess.write(process.platform === 'win32' ? '\x1a\r' : '\x04');
+}
+
 function requireAppServerCommandExecSession(
   sessions: Map<string, AppServerCommandExecSession>,
+  connectionId: string,
   processId: string,
 ): AppServerCommandExecSession {
-  const session = sessions.get(processId);
+  const session = sessions.get(appServerSessionKey(connectionId, processId));
   if (!session) throw new AppServerRpcError(-32600, `no active command/exec for process id ${JSON.stringify(processId)}`);
   return session;
 }
 
+function requireAppServerProcessSession(
+  sessions: Map<string, AppServerProcessSession>,
+  connectionId: string,
+  processHandle: string,
+): AppServerProcessSession {
+  const session = sessions.get(appServerSessionKey(connectionId, processHandle));
+  if (!session) throw new AppServerRpcError(-32600, `no active process/spawn for process handle ${JSON.stringify(processHandle)}`);
+  return session;
+}
+
 function terminateAppServerCommandExecSession(session: AppServerCommandExecSession): void {
-  if (session.child.killed) return;
+  if (session.ptyProcess) {
+    try {
+      session.ptyProcess.kill();
+    } catch {
+      // PTY processes can disappear between an exit notification and cancellation.
+    }
+    return;
+  }
+  if (!session.child || session.child.killed) return;
+  session.child.kill();
+}
+
+function terminateAppServerProcessSession(session: AppServerProcessSession): void {
+  if (session.ptyProcess) {
+    try {
+      session.ptyProcess.kill();
+    } catch {
+      // PTY processes can already be gone when a timeout or shutdown races with exit.
+    }
+    return;
+  }
+  if (!session.child || session.child.killed) return;
   session.child.kill();
 }

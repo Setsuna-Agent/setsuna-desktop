@@ -14,13 +14,13 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 50px 28px 28px 14px;
+  padding: 20px 28px 28px 14px;
   overflow: hidden;
 }
 
 .desktop-capabilities-panel__inner--detail {
   grid-template-rows: minmax(0, 1fr);
-  padding-top: 46px;
+  padding-top: 20px;
   overflow: auto;
 }
 
@@ -238,7 +238,8 @@
   display: grid;
   grid-row: 4;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  grid-auto-rows: minmax(164px, auto);
+  grid-auto-rows: auto;
+  align-items: stretch;
   align-content: start;
   gap: 12px;
   min-width: 0;
@@ -343,6 +344,33 @@
   white-space: nowrap;
 }
 
+.desktop-capability-card--hook-preset h2 {
+  display: -webkit-box;
+  min-height: 22px;
+  max-height: 44px;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.desktop-capability-card--hook-preset {
+  display: grid;
+  align-content: start;
+  min-height: 216px;
+}
+
+.desktop-capability-card--hook-preset .desktop-capability-card__tool-policy {
+  flex-wrap: wrap;
+  align-content: start;
+  row-gap: 4px;
+}
+
+.desktop-capability-card--hook-preset .desktop-capability-card__tool-policy span {
+  max-width: 100%;
+}
+
 .desktop-capability-card p {
   display: -webkit-box;
   min-height: 40px;
@@ -361,6 +389,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   -webkit-line-clamp: 1;
+}
+
+.desktop-capability-card--hook {
+  min-height: 184px;
+}
+
+.desktop-capability-card__command {
+  font-family: var(--app-code-font-family);
+}
+
+.desktop-capability-card--hook .desktop-capability-card__tool-policy {
+  align-items: stretch;
+}
+
+.desktop-capability-card--hook .desktop-capability-card__tool-policy span {
+  max-width: min(100%, 260px);
+  font-family: var(--app-code-font-family);
 }
 
 .desktop-capability-card__meta {
@@ -586,6 +631,23 @@
   width: min(940px, 100%);
   margin-right: auto;
   margin-left: auto;
+}
+
+.desktop-capabilities-hook-editor {
+  width: min(940px, 100%);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.desktop-capabilities-hook-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.desktop-capabilities-hook-form__full {
+  grid-column: 1 / -1;
 }
 
 .desktop-capabilities-skill-form {

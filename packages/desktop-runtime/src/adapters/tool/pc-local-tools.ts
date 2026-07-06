@@ -10,6 +10,8 @@ import {
   findFileMentionSuggestions,
   invalidateFileMentionIndex,
 } from './file-mentions.js';
+import { isFileMutationToolName, protectedWorkspaceMetadataPathForPath, protectedWorkspaceMetadataPathForTool } from '../../security/file-system-policy.js';
+import { assessShellNetworkAccess } from '../../security/network-approval-policy.js';
 
 const MAX_TEXT_BYTES = 60000;
 const MAX_LIST_ENTRIES = 200;
@@ -34,6 +36,34 @@ const MAX_SHELL_BUFFER_CHARS = 240000;
 const MAX_SHELL_PROGRESS_CHARS = 12000;
 const DEFAULT_READONLY_TIMEOUT_MS = 30000;
 const MAX_TOOL_SUMMARY_CHARS = 120;
+const SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS = new Set([
+  'chmod',
+  'chown',
+  'chgrp',
+  'cp',
+  'install',
+  'mkdir',
+  'mv',
+  'rm',
+  'rmdir',
+  'touch',
+  'truncate',
+  'unlink',
+]);
+const SHELL_READ_COMMANDS_WITH_PATH_ARGS = new Set([
+  'cat',
+  'find',
+  'grep',
+  'head',
+  'less',
+  'ls',
+  'more',
+  'rg',
+  'sed',
+  'stat',
+  'tail',
+  'wc',
+]);
 const SAFE_SHELL_ENV_KEYS = new Set([
   'ComSpec',
   'HOME',
@@ -263,6 +293,18 @@ export const LOCAL_TOOL_DEFINITIONS = [
         type: 'string',
         description: 'AppServer patch text. Add File body lines should start with +, e.g. *** Begin Patch\\n*** Add File: notes.txt\\n+hello\\n*** End Patch.',
       },
+      environment_id: {
+        type: 'string',
+        description: 'Optional active environment id. If present it must match the current local workspace environment.',
+      },
+      environmentId: {
+        type: 'string',
+        description: 'Camel-case alias for environment_id.',
+      },
+      workdir: {
+        type: 'string',
+        description: 'Optional workspace-relative directory used to resolve relative patch paths.',
+      },
     },
     ['patch'],
   ),
@@ -417,6 +459,22 @@ export const LOCAL_TOOL_DEFINITIONS = [
         type: 'string',
         description: 'Optional environment variable that supplies the bearer token for streamable HTTP servers.',
       },
+      oauth_client_id: {
+        type: 'string',
+        description: 'Optional OAuth client ID for streamable HTTP MCP login.',
+      },
+      oauthClientId: {
+        type: 'string',
+        description: 'Optional OAuth client ID for streamable HTTP MCP login.',
+      },
+      oauth_resource: {
+        type: 'string',
+        description: 'Optional OAuth resource parameter for streamable HTTP MCP login.',
+      },
+      oauthResource: {
+        type: 'string',
+        description: 'Optional OAuth resource parameter for streamable HTTP MCP login.',
+      },
       timeout_ms: {
         type: 'integer',
         description: 'Optional request timeout in milliseconds. Defaults to 60000 and is capped at 600000.',
@@ -425,8 +483,8 @@ export const LOCAL_TOOL_DEFINITIONS = [
       },
       require_approval: {
         type: 'string',
-        enum: ['always', 'never'],
-        description: 'Whether calls to this server require user approval. Defaults to always.',
+        enum: ['auto', 'prompt', 'approve', 'always', 'never'],
+        description: 'MCP approval mode. Use auto by default, prompt to ask every time, or approve to run without asking.',
       },
       enabled: {
         type: 'boolean',
@@ -654,10 +712,13 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
   const shellProcessStore = options?.shellProcessStore || createShellProcessStore();
   return {
     root: workspaceRoot,
+    environmentId: options?.environmentId || '',
     mcpConfigPath: MCP_CONFIG_PATH,
     permissionProfile: 'workspace-write',
+    sandboxWorkspaceWrite: {},
     osSandbox: false,
     shellPolicyRules: loadShellPolicyRules(workspaceRoot),
+    networkPolicyAmendments: [],
     reads: new Map(),
     readFileResults: new Map(),
     shellProcessStore,
@@ -1174,11 +1235,27 @@ export function previewRememberMemory(args, state = createLocalToolState()) {
 
 export async function executeLocalTool(name, args, state = createLocalToolState(), options = {}) {
   try {
-    if (isLocalFileMutationToolName(name) && state.permissionProfile === 'read-only') {
-      return errorResult('当前权限配置为 read-only，不能修改工作区文件。', {
-        failure_kind: 'permission_denied',
-        failure_stage: 'preflight',
-      });
+    if (isFileMutationToolName(name)) {
+      if (state.permissionProfile === 'read-only') {
+        return errorResult('当前权限配置为 read-only，不能修改工作区文件。', {
+          failure_kind: 'permission_denied',
+          failure_stage: 'preflight',
+        });
+      }
+      const protectedPath = protectedWorkspaceMetadataPathForTool(name, args, state.permissionProfile);
+      if (protectedPath) {
+        return errorResult(`不能修改受保护的工作区元数据：${protectedPath}`, {
+          failure_kind: 'permission_denied',
+          failure_stage: 'preflight',
+        });
+      }
+      const deniedPath = deniedRootPathForFileMutationTool(name, args, state);
+      if (deniedPath) {
+        return errorResult(`不能修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}`, {
+          failure_kind: 'permission_denied',
+          failure_stage: 'preflight',
+        });
+      }
     }
     if (name === 'list_directory') return await listDirectory(args, state);
     if (name === 'find_files') return await findFiles(args, state);
@@ -1704,9 +1781,9 @@ function fileChangePlanDiffAction(action) {
 }
 
 async function listDirectory(args, state) {
-  const dirPath = resolveWorkspacePath(args?.path || '.', state.root);
+  const dirPath = resolveReadablePath(args?.path || '.', state);
   const info = await stat(dirPath);
-  if (!info.isDirectory()) return errorResult(`Path is not a directory: ${formatPath(dirPath, state.root)}`);
+  if (!info.isDirectory()) return errorResult(`Path is not a directory: ${formatAccessiblePath(dirPath, state)}`);
 
   const entries = await readdir(dirPath, { withFileTypes: true });
   const sorted = entries
@@ -1720,8 +1797,8 @@ async function listDirectory(args, state) {
   if (sorted.length > visible.length) lines.push(`... ${sorted.length - visible.length} more entries`);
 
   return okResult(
-    `Directory listing for ${formatPath(dirPath, state.root)}:\n${lines.join('\n') || '(empty)'}`,
-    `listed ${formatPath(dirPath, state.root)}`,
+    `Directory listing for ${formatAccessiblePath(dirPath, state)}:\n${lines.join('\n') || '(empty)'}`,
+    `listed ${formatAccessiblePath(dirPath, state)}`,
   );
 }
 
@@ -1729,11 +1806,15 @@ async function findFiles(args, state) {
   const query = String(args?.query ?? '');
   const maxResults = boundedInteger(args?.max_results, DEFAULT_FIND_RESULTS, 1, MAX_FIND_RESULTS);
   const scopePath = args?.path ? resolveWorkspacePath(args.path, state.root) : state.root;
+  if (deniedSandboxRuleForPath(scopePath, state)) {
+    return errorResult(`Search path is denied by sandbox filesystem policy: ${formatPath(scopePath, state.root)}`);
+  }
   const scopeInfo = await stat(scopePath);
   if (!scopeInfo.isDirectory()) return errorResult(`Search path is not a directory: ${formatPath(scopePath, state.root)}`);
 
   const index = await buildFileMentionIndex(state.root);
-  const scopedIndex = filterFilesByScope(index, scopePath, state.root);
+  const scopedIndex = filterFilesByScope(index, scopePath, state.root)
+    .filter((file) => !deniedSandboxRuleForPath(path.join(state.root, ...file.path.split('/')), state));
   const matches = findFileMentionSuggestions(scopedIndex, query, maxResults);
   const files = matches.map((file) => file.path);
 
@@ -1760,13 +1841,17 @@ async function searchText(args, state) {
   if (!matcher.ok) return errorResult(matcher.error);
 
   const scopePath = args?.path ? resolveWorkspacePath(args.path, state.root) : state.root;
+  if (deniedSandboxRuleForPath(scopePath, state)) {
+    return errorResult(`Search path is denied by sandbox filesystem policy: ${formatPath(scopePath, state.root)}`);
+  }
   const scopeInfo = await stat(scopePath);
   let candidates = [];
   if (scopeInfo.isFile()) {
     candidates = [{ path: workspaceRelativePath(scopePath, state.root) }];
   } else if (scopeInfo.isDirectory()) {
     const index = await buildFileMentionIndex(state.root);
-    candidates = filterFilesByScope(index, scopePath, state.root);
+    candidates = filterFilesByScope(index, scopePath, state.root)
+      .filter((file) => !deniedSandboxRuleForPath(path.join(state.root, ...file.path.split('/')), state));
   } else {
     return errorResult(`Search path is not a file or directory: ${formatPath(scopePath, state.root)}`);
   }
@@ -1946,16 +2031,16 @@ async function searchTextWithExternalTool({
 }
 
 async function readLocalFile(args, state) {
-  const filePath = resolveWorkspacePath(args?.file_path, state.root);
+  const filePath = resolveReadablePath(args?.file_path, state);
   const info = await stat(filePath);
-  if (!info.isFile()) return errorResult(`Path is not a file: ${formatPath(filePath, state.root)}`);
+  if (!info.isFile()) return errorResult(`Path is not a file: ${formatAccessiblePath(filePath, state)}`);
 
   const content = await readFile(filePath, 'utf8');
   rememberRead(state, filePath, info);
 
   const range = normalizeReadRange(args);
   let body = content;
-  let prefix = `File: ${formatPath(filePath, state.root)}`;
+  let prefix = `File: ${formatAccessiblePath(filePath, state)}`;
   if (range) {
     const lines = content.split(/\r?\n/);
     const start = Math.max(0, range.offset - 1);
@@ -1968,7 +2053,7 @@ async function readLocalFile(args, state) {
   }
 
   rememberReadFileResult(state, filePath, info, range, 'runtime');
-  return okResult(`${prefix}\n${truncateText(body, MAX_TEXT_BYTES)}`, `read ${formatPath(filePath, state.root)}`);
+  return okResult(`${prefix}\n${truncateText(body, MAX_TEXT_BYTES)}`, `read ${formatAccessiblePath(filePath, state)}`);
 }
 
 async function applyLocalPatch(args, state) {
@@ -2039,11 +2124,25 @@ async function writeLocalFile(args, state) {
 async function calculateApplyPatch(args, state) {
   const operations = parseApplyPatch(String(args?.patch || ''));
   if (!operations.ok) return operations;
+  const requestedEnvironmentId = String(args?.environment_id ?? args?.environmentId ?? '').trim();
+  const patchEnvironmentId = operations.environmentId || '';
+  const activeEnvironmentId = String(state.environmentId || '').trim();
+  const environmentId = requestedEnvironmentId || patchEnvironmentId;
+  if (requestedEnvironmentId && patchEnvironmentId && requestedEnvironmentId !== patchEnvironmentId) {
+    return { ok: false, error: `apply_patch environment_id mismatch: argument ${requestedEnvironmentId} does not match patch preamble ${patchEnvironmentId}.` };
+  }
+  if (environmentId && activeEnvironmentId && environmentId !== activeEnvironmentId) {
+    return { ok: false, error: `apply_patch environment_id ${environmentId} does not match active environment ${activeEnvironmentId}.` };
+  }
+  if (environmentId && !activeEnvironmentId) {
+    return { ok: false, error: `apply_patch environment_id ${environmentId} cannot be used without an active environment.` };
+  }
+  const patchRoot = args?.workdir ? resolveWorkspacePath(args.workdir, state.root) : state.root;
 
   const changes = [];
   const touched = new Set();
   for (const operation of operations.operations) {
-    const filePath = resolveWorkspacePath(operation.path, state.root);
+    const filePath = resolveWorkspacePathFromBase(operation.path, patchRoot, state.root);
     if (touched.has(filePath)) return { ok: false, error: `同一个补丁中重复修改了文件：${formatPath(filePath, state.root)}` };
     touched.add(filePath);
 
@@ -2059,7 +2158,7 @@ async function calculateApplyPatch(args, state) {
       continue;
     }
 
-    const moveToPath = operation.moveTo ? resolveWorkspacePath(operation.moveTo, state.root) : null;
+    const moveToPath = operation.moveTo ? resolveWorkspacePathFromBase(operation.moveTo, patchRoot, state.root) : null;
     if (moveToPath) {
       if (touched.has(moveToPath)) return { ok: false, error: `同一个补丁中重复修改了文件：${formatPath(moveToPath, state.root)}` };
       touched.add(moveToPath);
@@ -2139,7 +2238,7 @@ async function calculateApplyPatch(args, state) {
 }
 
 function parseApplyPatch(patch) {
-  const text = String(patch || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const text = normalizeApplyPatchText(patch);
   const lines = text.split('\n');
   if (lines[0] !== '*** Begin Patch') {
     return { ok: false, error: 'apply_patch 补丁必须以 *** Begin Patch 开头。' };
@@ -2149,9 +2248,18 @@ function parseApplyPatch(patch) {
 
   const operations = [];
   let index = 1;
+  let environmentId = '';
   while (index < endIndex) {
     const line = lines[index];
     if (!line) {
+      index += 1;
+      continue;
+    }
+    if (line.startsWith('*** Environment ID: ')) {
+      if (operations.length) return { ok: false, error: 'apply_patch environment_id must appear before file hunks.' };
+      if (environmentId) return { ok: false, error: 'apply_patch environment_id cannot be specified more than once.' };
+      environmentId = line.slice('*** Environment ID: '.length).trim();
+      if (!environmentId) return { ok: false, error: 'apply_patch environment_id cannot be empty.' };
       index += 1;
       continue;
     }
@@ -2221,7 +2329,23 @@ function parseApplyPatch(patch) {
     }
     return { ok: false, error: `无法识别的 apply_patch 行：${line}` };
   }
-  return { ok: true, operations };
+  return { ok: true, operations, environmentId };
+}
+
+function normalizeApplyPatchText(patch) {
+  const text = String(patch || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  const lines = text.split('\n');
+  if (lines[0] === '*** Begin Patch') return text;
+  const first = lines[0];
+  const last = lines[lines.length - 1];
+  if (
+    lines.length >= 4
+    && (first === '<<EOF' || first === "<<'EOF'" || first === '<<"EOF"')
+    && String(last || '').endsWith('EOF')
+  ) {
+    return lines.slice(1, -1).join('\n');
+  }
+  return text;
 }
 
 function isApplyPatchFileHeader(line) {
@@ -2371,6 +2495,8 @@ async function calculateMcpServerConfig(args, state) {
   upsertMcpStringList(server, 'envVars', args?.env_vars ?? args?.envVars);
   upsertMcpStringMap(server, 'envHttpHeaders', args?.env_http_headers ?? args?.envHttpHeaders);
   upsertMcpString(server, 'bearerTokenEnvVar', args?.bearer_token_env_var ?? args?.bearerTokenEnvVar);
+  upsertMcpOAuthClientId(server, args?.oauth_client_id ?? args?.oauthClientId);
+  upsertMcpString(server, 'oauth_resource', args?.oauth_resource ?? args?.oauthResource);
 
   if (Object.hasOwn(args || {}, 'enabled')) server.enabled = Boolean(args.enabled);
   if (Object.hasOwn(args || {}, 'timeout_ms') || Object.hasOwn(args || {}, 'timeoutMs')) {
@@ -2448,6 +2574,21 @@ function upsertMcpStringMap(object, key, value) {
   else delete object[key];
 }
 
+function upsertMcpOAuthClientId(server, value) {
+  if (value === undefined || value === null) return;
+  const text = String(value).trim();
+  const oauth = server.oauth && typeof server.oauth === 'object' && !Array.isArray(server.oauth)
+    ? { ...server.oauth }
+    : {};
+  delete oauth.clientId;
+  if (text) oauth.client_id = text;
+  else delete oauth.client_id;
+  if (Object.keys(oauth).length) server.oauth = oauth;
+  else delete server.oauth;
+  delete server.oauthClientId;
+  delete server.oauth_client_id;
+}
+
 function normalizeMcpStringList(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item).trim()).filter(Boolean);
@@ -2469,9 +2610,9 @@ function normalizeMcpTransport(value, server) {
 
 function normalizeMcpRequireApproval(value) {
   const raw = String(value || '').trim().toLowerCase();
-  if (raw === 'never' || raw === 'approve' || raw === 'approved' || raw === 'false') return 'never';
-  if (raw === 'always' || raw === 'true') return 'always';
-  return 'always';
+  if (raw === 'never' || raw === 'approve' || raw === 'approved' || raw === 'false') return 'approve';
+  if (raw === 'always' || raw === 'prompt' || raw === 'true') return 'prompt';
+  return 'auto';
 }
 
 function validateMcpServerObject(key, server) {
@@ -2494,6 +2635,11 @@ function pruneMcpTransportFields(server) {
     delete server.headers;
     delete server.envHttpHeaders;
     delete server.bearerTokenEnvVar;
+    delete server.oauth;
+    delete server.oauth_resource;
+    delete server.oauthResource;
+    delete server.oauthClientId;
+    delete server.oauth_client_id;
     return;
   }
   delete server.command;
@@ -2518,6 +2664,8 @@ function mcpServerPreview(key, server, configPath) {
     enabled: server.enabled !== false,
     allowedTools: normalizeMcpStringList(server.allowedTools),
     disabledTools: normalizeMcpStringList(server.disabledTools),
+    oauthClientId: String(server.oauth?.client_id || server.oauthClientId || server.oauth_client_id || ''),
+    oauthResource: String(server.oauth_resource || server.oauthResource || ''),
     envKeys: [...new Set([...Object.keys(server.env || {}), ...normalizeMcpStringList(server.envVars)])],
     headerKeys: mcpHeaderKeys(server),
     configPath,
@@ -2676,6 +2824,12 @@ async function runShellCommand(args, state, options = {}) {
       failure_stage: 'validation',
     });
   }
+  if (_usesShellApplyPatch(command)) {
+    return errorResult('Shell apply_patch commands must be routed through the runtime apply_patch tool. Use apply_patch with a raw patch body instead of executing it in the shell.', {
+      failure_kind: 'policy_blocked',
+      failure_stage: 'preflight',
+    });
+  }
   const policyBlock = shellPolicyBlockReason(command, state);
   if (policyBlock) {
     return errorResult(policyBlock, {
@@ -2690,6 +2844,15 @@ async function runShellCommand(args, state, options = {}) {
       failure_stage: 'preflight',
     });
   }
+  const networkBlock = shellNetworkBlockReason(command, state);
+  if (networkBlock) {
+    return errorResult(networkBlock.message, {
+      failure_kind: 'network_denied',
+      failure_stage: 'preflight',
+      ...(networkBlock.context ? { network_approval_context: networkBlock.context } : {}),
+      ...(networkBlock.policyDecision ? { network_policy_decision: networkBlock.policyDecision } : {}),
+    });
+  }
   const sandboxBlock = shellSandboxUnavailableReason(state);
   if (sandboxBlock) {
     return errorResult(sandboxBlock, {
@@ -2698,7 +2861,7 @@ async function runShellCommand(args, state, options = {}) {
     });
   }
 
-  const cwd = args?.directory ? resolveWorkspacePath(args.directory, state.root) : state.root;
+  const cwd = args?.directory ? resolveShellDirectoryPath(args.directory, state) : state.root;
   const cwdInfo = await stat(cwd);
   if (!cwdInfo.isDirectory()) {
     return errorResult(`Shell directory is not a directory: ${formatPath(cwd, state.root)}`, {
@@ -2733,6 +2896,18 @@ async function runShellCommand(args, state, options = {}) {
 
   if (!persist) removeShellSession(state, session.id);
   return completedShellResult(session, state.root);
+}
+
+function resolveShellDirectoryPath(value, state) {
+  const raw = String(value || '').trim();
+  if (!raw) return state.root;
+  const workspaceRoot = realWorkspaceRoot(state.root);
+  const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(workspaceRoot, raw);
+  if (normalizePermissionProfile(state?.permissionProfile) === 'danger-full-access') return resolved;
+  const target = realPathIfExists(resolved);
+  const allowedRoots = shellWorkspaceWriteRoots(state).map(realPathIfExists);
+  if (allowedRoots.some((root) => isPathInsideRoot(target, root))) return target;
+  throw new Error('Shell directory escapes the workspace and configured writable roots.');
 }
 
 function shellCommandTimeoutMs(args, options = {}) {
@@ -2918,6 +3093,7 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
     exitCode: null,
     signal: null,
     errorCode: '',
+    sandboxed: false,
     stdout: '',
     stderr: '',
     stdoutOmittedChars: 0,
@@ -2937,6 +3113,7 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
 
   const detached = process.platform !== 'win32';
   const spawnSpec = shellSpawnSpec(command, state);
+  session.sandboxed = Boolean(spawnSpec.sandboxed);
   const child = spawn(spawnSpec.command, spawnSpec.args, {
     cwd,
     shell: spawnSpec.shell,
@@ -3041,12 +3218,25 @@ function shellSessionFailure(session) {
       failure_stage: 'execution',
     };
   }
+  if (session.sandboxed && isSandboxDeniedShellOutput(session)) {
+    return {
+      failure_kind: 'sandbox_denied',
+      failure_stage: 'execution',
+      exit_code: session.exitCode,
+      signal: session.signal,
+    };
+  }
   return {
     failure_kind: 'process_exit',
     failure_stage: 'execution',
     exit_code: session.exitCode,
     signal: session.signal,
   };
+}
+
+function isSandboxDeniedShellOutput(session) {
+  const output = `${session.stdout || ''}\n${session.stderr || ''}`;
+  return /Operation not permitted|operation not permitted|deny\(\d+\)|sandbox/i.test(output);
 }
 
 function isShellSessionVisibleToState(state, session) {
@@ -3584,6 +3774,207 @@ function resolveWorkspacePath(value, root) {
   return targetPath;
 }
 
+function resolveWorkspacePathFromBase(value, base, root) {
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error('Path is required.');
+  const workspaceRoot = realWorkspaceRoot(root);
+  const basePath = resolveWorkspacePath(base || '.', workspaceRoot);
+  const absolutePath = path.resolve(basePath, raw);
+  const targetPath = realWorkspaceTargetPath(absolutePath, workspaceRoot);
+  if (!isPathInsideWorkspace(targetPath, workspaceRoot)) {
+    throw new Error('路径不在当前工作区内。');
+  }
+  return targetPath;
+}
+
+function resolveReadablePath(value, state) {
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error('Path is required.');
+  const workspaceRoot = realWorkspaceRoot(state?.root);
+  const absolutePath = path.resolve(workspaceRoot, raw);
+  for (const root of readableRootsForState(state)) {
+    const realRoot = realPathIfExists(root);
+    try {
+      const targetPath = realWorkspaceTargetPath(absolutePath, realRoot);
+      if (isPathInsideWorkspace(targetPath, realRoot)) {
+        const deniedRule = deniedSandboxRuleForPath(targetPath, state);
+        if (deniedRule) throw new Error(`路径被 sandbox filesystem deny 规则拒绝：${formatAccessiblePath(targetPath, state)} (${deniedRule})`);
+        return targetPath;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('sandbox filesystem deny')) throw error;
+      // Try the next approved root. The final error below keeps the message deterministic.
+    }
+  }
+  throw new Error('路径不在当前工作区或已批准 readable_roots 内。');
+}
+
+function readableRootsForState(state) {
+  const roots = [state?.root || process.cwd()];
+  const configuredRoots = Array.isArray(state?.sandboxWorkspaceWrite?.readableRoots)
+    ? state.sandboxWorkspaceWrite.readableRoots
+    : [];
+  for (const rawRoot of configuredRoots) {
+    const text = String(rawRoot || '').trim();
+    if (!text) continue;
+    roots.push(path.isAbsolute(text) ? text : path.resolve(state?.root || process.cwd(), text));
+  }
+  return [...new Set(roots.map((root) => path.resolve(root)))];
+}
+
+function deniedRootsForState(state) {
+  const configuredRoots = Array.isArray(state?.sandboxWorkspaceWrite?.deniedRoots)
+    ? state.sandboxWorkspaceWrite.deniedRoots
+    : [];
+  const roots = [];
+  for (const rawRoot of configuredRoots) {
+    const text = String(rawRoot || '').trim();
+    if (!text) continue;
+    roots.push(path.isAbsolute(text) ? text : path.resolve(state?.root || process.cwd(), text));
+  }
+  return [...new Set(roots.map((root) => realPathIfExists(root)))];
+}
+
+function deniedGlobPatternsForState(state) {
+  const configuredPatterns = Array.isArray(state?.sandboxWorkspaceWrite?.deniedGlobPatterns)
+    ? state.sandboxWorkspaceWrite.deniedGlobPatterns
+    : [];
+  const patterns = [];
+  for (const rawPattern of configuredPatterns) {
+    const text = String(rawPattern || '').trim();
+    if (!text) continue;
+    let pattern = '';
+    if (text.startsWith('~/')) {
+      pattern = path.resolve(homedir(), text.slice(2));
+    } else {
+      pattern = path.isAbsolute(text) ? path.resolve(text) : path.resolve(state?.root || process.cwd(), text);
+    }
+    patterns.push(pattern);
+    const canonicalPattern = canonicalGlobPattern(pattern);
+    if (canonicalPattern !== pattern) patterns.push(canonicalPattern);
+  }
+  return [...new Set(patterns)];
+}
+
+function canonicalGlobPattern(pattern: string) {
+  const normalized = path.resolve(pattern);
+  const globIndex = normalized.search(/[*?[]/);
+  if (globIndex < 0) return realPathIfExists(normalized);
+  const fixedPrefix = normalized.slice(0, globIndex);
+  const fixedRoot = fixedPrefix.endsWith(path.sep) ? fixedPrefix.slice(0, -1) : path.dirname(fixedPrefix);
+  if (!fixedRoot) return normalized;
+  const suffix = normalized.slice(fixedRoot.length);
+  const canonicalRoot = realPathIfExists(fixedRoot);
+  return `${canonicalRoot}${suffix}`;
+}
+
+function deniedSandboxRuleForPath(filePath, state) {
+  if (normalizePermissionProfile(state?.permissionProfile) === 'danger-full-access') return '';
+  const targetPath = realPathIfExists(filePath);
+  const deniedRoot = deniedRootsForState(state).find((root) => isPathInsideRoot(targetPath, root));
+  if (deniedRoot) return deniedRoot;
+  return deniedGlobPatternsForState(state).find((pattern) => globPatternMatchesPath(pattern, targetPath)) || '';
+}
+
+function deniedRootPathForFileMutationTool(name, args, state) {
+  for (const rawPath of fileMutationPathCandidates(name, args)) {
+    try {
+      const base = name === 'apply_patch' && args?.workdir ? resolveWorkspacePath(args.workdir, state.root) : state.root;
+      const filePath = name === 'apply_patch'
+        ? resolveWorkspacePathFromBase(rawPath, base, state.root)
+        : resolveWorkspacePath(rawPath, state.root);
+      if (deniedSandboxRuleForPath(filePath, state)) return formatPath(filePath, state.root);
+    } catch {
+      // Let normal path validation report malformed or out-of-workspace paths.
+    }
+  }
+  return '';
+}
+
+function globPatternMatchesPath(pattern, filePath) {
+  const matcher = globPatternRegExp(pattern);
+  if (!matcher) return true;
+  return pathCandidatesForGlob(filePath).some((candidate) => matcher.test(candidate));
+}
+
+const globPatternRegExpCache = new Map();
+
+function globPatternRegExp(pattern) {
+  const normalized = normalizeGlobPath(pattern);
+  if (globPatternRegExpCache.has(normalized)) return globPatternRegExpCache.get(normalized);
+  try {
+    const matcher = new RegExp(`^${globPatternToRegExpSource(normalized)}$`);
+    globPatternRegExpCache.set(normalized, matcher);
+    return matcher;
+  } catch {
+    // Match Codex's fail-closed behavior for invalid deny glob patterns.
+    globPatternRegExpCache.set(normalized, null);
+    return null;
+  }
+}
+
+function globPatternToRegExpSource(pattern) {
+  let source = '';
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === '*') {
+      if (pattern[index + 1] === '*') {
+        if (pattern[index + 2] === '/') {
+          source += '(?:[^/]+/)*';
+          index += 2;
+        } else {
+          source += '.*';
+          index += 1;
+        }
+      } else {
+        source += '[^/]*';
+      }
+      continue;
+    }
+    if (char === '?') {
+      source += '[^/]';
+      continue;
+    }
+    if (char === '[') {
+      const end = pattern.indexOf(']', index + 1);
+      if (end > index + 1) {
+        source += pattern.slice(index, end + 1);
+        index = end;
+      } else {
+        source += '\\[';
+      }
+      continue;
+    }
+    source += escapeRegExp(char);
+  }
+  return source;
+}
+
+function pathCandidatesForGlob(filePath) {
+  const candidates = [normalizeGlobPath(path.resolve(filePath))];
+  try {
+    const real = normalizeGlobPath(realpathSync(path.resolve(filePath)));
+    if (!candidates.includes(real)) candidates.push(real);
+  } catch {
+    // Missing paths still need lexical matching so future-created denied paths stay blocked.
+  }
+  return candidates;
+}
+
+function normalizeGlobPath(value) {
+  return String(value || '').replace(/\\/g, '/');
+}
+
+function fileMutationPathCandidates(name, args) {
+  if (name === 'apply_patch') {
+    const operations = parseApplyPatch(String(args?.patch || ''));
+    if (!operations.ok) return [];
+    return operations.operations.flatMap((operation) => [operation.path, operation.moveTo].filter(Boolean));
+  }
+  return [args?.file_path ?? args?.path].filter(Boolean);
+}
+
 function resolvePathForDisplay(value, root) {
   const raw = String(value || '').trim();
   if (!raw) return '.';
@@ -3604,6 +3995,14 @@ function realWorkspaceRoot(root) {
     return realpathSync(workspaceRoot);
   } catch {
     return workspaceRoot;
+  }
+}
+
+function realPathIfExists(filePath) {
+  try {
+    return realpathSync(path.resolve(filePath));
+  } catch {
+    return path.resolve(filePath);
   }
 }
 
@@ -3650,16 +4049,13 @@ function formatPath(filePath, root) {
   return workspaceRelativePath(filePath, root);
 }
 
-function isEditToolName(name) {
-  return name === 'edit' || name === 'edit_file';
+function formatAccessiblePath(filePath, state) {
+  const workspaceRoot = realWorkspaceRoot(state?.root);
+  return isPathInsideWorkspace(filePath, workspaceRoot) ? formatPath(filePath, workspaceRoot) : path.resolve(filePath);
 }
 
-function isLocalFileMutationToolName(name) {
-  return name === 'write_file'
-    || name === 'append_file'
-    || name === 'delete_file'
-    || name === 'apply_patch'
-    || isEditToolName(name);
+function isEditToolName(name) {
+  return name === 'edit' || name === 'edit_file';
 }
 
 function shouldIgnoreEntry(name) {
@@ -3678,6 +4074,7 @@ function obviousHighRiskShellReason(command) {
   const words = text.split(/[^a-z0-9_.-]+/).filter(Boolean);
   const hasWord = (value) => words.includes(value);
 
+  if (_usesShellApplyPatch(text)) return '命令会通过 apply_patch 修改工作区文件。';
   if (hasWord('rm') || hasWord('rmdir') || hasWord('unlink')) return '命令可能删除文件。';
   if (hasWord('mv') || hasWord('cp') || hasWord('touch') || hasWord('truncate')) return '命令可能修改工作区文件。';
   if (hasWord('chmod') || hasWord('chown') || hasWord('chgrp')) return '命令可能修改文件权限或归属。';
@@ -3865,9 +4262,9 @@ function parseShellWords(command) {
 }
 
 function _usesShellApplyPatch(text) {
-  return /(?:^|[;&|]\s*)apply_patch\b/.test(text)
-    || /\bapply_patch\s*<</.test(text)
-    || /<<[A-Z0-9_'-]*\s*\n?[^|&;]*apply_patch\b/.test(text);
+  return /(?:^|[;&|]\s*)(?:apply_patch|applypatch)\b/.test(text)
+    || /\b(?:apply_patch|applypatch)\s*<</.test(text)
+    || /<<[A-Z0-9_'-]*\s*\n?[^|&;]*(?:apply_patch|applypatch)\b/.test(text);
 }
 
 function shellPermissionBlockReason(command, state) {
@@ -3876,13 +4273,71 @@ function shellPermissionBlockReason(command, state) {
   const normalized = normalizeShellCommandForRisk(command);
   const highRiskReason = obviousHighRiskShellReason(normalized);
   const mutatesViaShell = Boolean(highRiskReason);
+  const deniedAccessPath = firstDeniedShellAccessPath(normalized, state);
+  if (deniedAccessPath) {
+    return `当前权限配置不能通过 shell 访问 sandbox filesystem deny 规则覆盖的路径：${deniedAccessPath}。`;
+  }
   if (profile === 'read-only' && mutatesViaShell) {
+    const protectedPath = firstProtectedWorkspaceMetadataShellPath(normalized, state);
+    if (protectedPath) {
+      return `当前权限配置不能通过 shell 修改受保护的工作区元数据：${protectedPath}。需要 danger-full-access 权限才能执行。`;
+    }
+    const deniedPath = firstDeniedShellWritePath(normalized, state);
+    if (deniedPath) {
+      return `当前权限配置不能通过 shell 修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}。`;
+    }
+    if (state?.sandboxWorkspaceWrite?.networkAccess !== true && assessShellNetworkAccess(normalized)) {
+      return '';
+    }
+    if (state?.sandboxWorkspaceWrite?.writableRoots?.length) {
+      const outsidePath = firstPathOutsideWorkspaceWriteRoots(normalized, state, { includeWorkspaceRoot: false });
+      if (!outsidePath && shellWritePathCandidates(normalized).length) return '';
+      if (outsidePath) {
+        return `当前权限配置为 read-only，仅允许修改已批准的 writable_roots，命令包含未授权路径：${outsidePath}。`;
+      }
+    }
     return `当前权限配置为 read-only，不能执行会修改本地环境的命令：${highRiskReason}`;
   }
   if (profile !== 'workspace-write' || !mutatesViaShell) return '';
-  const outsidePath = firstPathOutsideWorkspace(normalized, state?.root);
+  const protectedPath = firstProtectedWorkspaceMetadataShellPath(normalized, state);
+  if (protectedPath) {
+    return `当前权限配置不能通过 shell 修改受保护的工作区元数据：${protectedPath}。需要 danger-full-access 权限才能执行。`;
+  }
+  const deniedPath = firstDeniedShellWritePath(normalized, state);
+  if (deniedPath) {
+    return `当前权限配置不能通过 shell 修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}。`;
+  }
+  const outsidePath = firstPathOutsideWorkspaceWriteRoots(normalized, state);
   if (!outsidePath) return '';
-  return `当前权限配置只允许修改工作区，命令包含工作区外路径：${outsidePath}。需要 danger-full-access 权限才能执行。`;
+  return `当前权限配置只允许修改工作区或 sandbox_workspace_write.writable_roots，命令包含未授权路径：${outsidePath}。需要 danger-full-access 权限才能执行。`;
+}
+
+function shellNetworkBlockReason(command, state) {
+  const profile = normalizePermissionProfile(state?.permissionProfile);
+  if (profile === 'danger-full-access') return null;
+  if (state?.sandboxWorkspaceWrite?.networkAccess === true) return null;
+  const assessment = assessShellNetworkAccess(normalizeShellCommandForRisk(command));
+  if (!assessment) return null;
+  const policy = networkPolicyDecision(assessment.context, state);
+  if (policy === 'allow') return null;
+  return {
+    message: policy === 'deny'
+      ? `命令访问的网络目标被持久 network policy 拒绝：${assessment.context?.target ?? assessment.reason}`
+      : `当前 sandbox_workspace_write.network_access 未开启，不能执行可能访问网络的命令：${assessment.reason}`,
+    context: assessment.context,
+    policyDecision: policy,
+  };
+}
+
+function networkPolicyDecision(context, state) {
+  if (!context?.host) return '';
+  const amendments = Array.isArray(state?.networkPolicyAmendments) ? state.networkPolicyAmendments : [];
+  const host = String(context.host || '').trim().toLowerCase();
+  const match = [...amendments].reverse().find((item) => String(item?.host || '').trim().toLowerCase() === host);
+  if (!match) return '';
+  if (match.action === 'allow') return 'allow';
+  if (match.action === 'deny') return 'deny';
+  return '';
 }
 
 function shellSandboxUnavailableReason(state) {
@@ -3903,24 +4358,137 @@ function normalizePermissionProfile(value) {
   return 'workspace-write';
 }
 
-function firstPathOutsideWorkspace(command, root) {
-  const workspaceRoot = path.resolve(root || process.cwd());
+function firstPathOutsideWorkspaceWriteRoots(command, state, options = {}) {
+  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  const allowedRoots = shellWorkspaceWriteRoots(state, options);
+  for (const raw of shellWritePathCandidates(command)) {
+    const candidate = raw.startsWith('~/')
+      ? path.join(process.env.HOME || '', raw.slice(2))
+        : raw.startsWith('/')
+          ? raw
+          : raw;
+    const resolved = path.resolve(workspaceRoot, candidate);
+    if (allowedRoots.some((root) => isPathInsideRoot(resolved, root))) continue;
+    return raw;
+  }
+  return '';
+}
+
+function firstDeniedShellWritePath(command, state) {
+  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  for (const raw of shellWritePathCandidates(command)) {
+    const candidate = raw.startsWith('~/')
+      ? path.join(process.env.HOME || '', raw.slice(2))
+      : raw.startsWith('/')
+        ? raw
+        : raw;
+    const resolved = path.resolve(workspaceRoot, candidate);
+    if (deniedSandboxRuleForPath(resolved, state)) return raw;
+  }
+  return '';
+}
+
+function firstDeniedShellAccessPath(command, state) {
+  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  for (const raw of shellPathCandidates(command)) {
+    const candidate = raw.startsWith('~/')
+      ? path.join(process.env.HOME || '', raw.slice(2))
+      : raw.startsWith('/')
+        ? raw
+        : raw;
+    const resolved = path.resolve(workspaceRoot, candidate);
+    if (deniedSandboxRuleForPath(resolved, state)) return raw;
+  }
+  return '';
+}
+
+function shellWritePathCandidates(command) {
+  const candidates = [];
+  const text = String(command || '');
+  const pathMatcher = /(?:^|[\s"'=])((?:\/|~\/|\.\.?\/)[^\s"'`$<>|;&]+)/g;
+  for (const match of text.matchAll(pathMatcher)) candidates.push(match[1]);
+  const redirectMatcher = /(?:^|[^<=>])>{1,2}\s*([^\s"'`$<>|;&]+)/g;
+  for (const match of text.matchAll(redirectMatcher)) candidates.push(match[1]);
+
+  const words = parseShellWords(text);
+  const commandName = path.basename(words[0] || '');
+  if (SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
+    let seenDoubleDash = false;
+    for (const word of words.slice(1)) {
+      if (!seenDoubleDash && word === '--') {
+        seenDoubleDash = true;
+        continue;
+      }
+      if (!seenDoubleDash && word.startsWith('-')) continue;
+      candidates.push(word);
+    }
+  }
+  return [...new Set(candidates.map((item) => String(item || '').trim()).filter((item) => item && !isShellNonPathToken(item)))];
+}
+
+function shellPathCandidates(command) {
+  const candidates = [...shellWritePathCandidates(command)];
+  const words = parseShellWords(command);
+  const commandName = path.basename(words[0] || '');
+  if (SHELL_READ_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
+    let seenDoubleDash = false;
+    for (const word of words.slice(1)) {
+      if (!seenDoubleDash && word === '--') {
+        seenDoubleDash = true;
+        continue;
+      }
+      if (!seenDoubleDash && word.startsWith('-')) continue;
+      candidates.push(word);
+    }
+  }
+  return [...new Set(candidates.map((item) => String(item || '').trim()).filter((item) => item && !isShellNonPathToken(item)))];
+}
+
+function isShellNonPathToken(value) {
+  if (!value || value === '.' || value === '..') return true;
+  if (/^\d+$/.test(value)) return true;
+  if (/^https?:\/\//i.test(value)) return true;
+  return false;
+}
+
+function firstProtectedWorkspaceMetadataShellPath(command, state) {
+  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  const metadataMatches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\.git|\.agents|\.codex)(?:\/[^\s"'`$<>|;&]*)?)/g);
+  for (const match of metadataMatches) {
+    const raw = match[1];
+    const protectedPath = protectedWorkspaceMetadataPathForPath(path.resolve(workspaceRoot, raw), state?.permissionProfile);
+    if (protectedPath) return raw;
+  }
   const matches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\/|~\/|\.\.?\/)[^\s"'`$<>|;&]+)/g);
   for (const match of matches) {
     const raw = match[1];
     const candidate = raw.startsWith('~/')
       ? path.join(process.env.HOME || '', raw.slice(2))
-      : raw.startsWith('/')
-        ? raw
-      : raw;
-    const resolved = path.resolve(workspaceRoot, candidate);
-    const relative = path.relative(workspaceRoot, resolved).replace(/\\/g, '/');
-    if (relative === '' || (!relative.startsWith('../') && relative !== '..' && !path.isAbsolute(relative))) {
-      continue;
-    }
-    return raw;
+        : raw.startsWith('/')
+          ? raw
+          : path.resolve(workspaceRoot, raw);
+    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, state?.permissionProfile);
+    if (protectedPath) return raw;
   }
   return '';
+}
+
+function shellWorkspaceWriteRoots(state, options = {}) {
+  const roots = options.includeWorkspaceRoot === false ? [] : [state?.root || process.cwd()];
+  const configuredRoots = Array.isArray(state?.sandboxWorkspaceWrite?.writableRoots)
+    ? state.sandboxWorkspaceWrite.writableRoots
+    : [];
+  for (const rawRoot of configuredRoots) {
+    const text = String(rawRoot || '').trim();
+    if (!text) continue;
+    roots.push(path.isAbsolute(text) ? text : path.resolve(state?.root || process.cwd(), text));
+  }
+  return [...new Set(roots.map((root) => path.resolve(root)))];
+}
+
+function isPathInsideRoot(filePath, root) {
+  const relative = path.relative(path.resolve(root), path.resolve(filePath)).replace(/\\/g, '/');
+  return relative === '' || (!relative.startsWith('../') && relative !== '..' && !path.isAbsolute(relative));
 }
 
 function findJsonStringValue(raw, key) {
@@ -4047,12 +4615,14 @@ function shellSpawnSpec(command, state) {
     return {
       command,
       args: [],
+      sandboxed: false,
       shell: true,
     };
   }
   return {
     command: '/usr/bin/sandbox-exec',
     args: ['-p', sandboxProfile, '/bin/sh', '-lc', command],
+    sandboxed: true,
     shell: false,
   };
 }
@@ -4129,6 +4699,7 @@ function errorResult(message, diagnostics = {}) {
     ok: false,
     content: `Error: ${message}`,
     display: message,
+    ...diagnostics,
     ...failure,
   };
 }
@@ -4144,7 +4715,7 @@ function normalizeFailureDiagnostics(message, diagnostics = {}) {
 
 function defaultFailureStage(failureKind) {
   if (failureKind === 'timeout' || failureKind === 'process_exit' || failureKind === 'stdin_closed') return 'execution';
-  if (failureKind === 'policy_blocked' || failureKind === 'permission_denied' || failureKind === 'sandbox_unavailable') return 'preflight';
+  if (failureKind === 'policy_blocked' || failureKind === 'permission_denied' || failureKind === 'sandbox_unavailable' || failureKind === 'network_denied') return 'preflight';
   return 'validation';
 }
 

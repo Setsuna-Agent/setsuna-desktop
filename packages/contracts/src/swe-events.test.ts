@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeEvent } from './events.js';
-import { createSweNotificationMapper, runtimeEventToSweNotifications, runtimeThreadToSweTurns } from './swe-events.js';
+import {
+  createSweNotificationMapper,
+  filterSweNotificationsForClientCapabilities,
+  runtimeEventToSweNotifications,
+  runtimeThreadToSweTurns,
+} from './swe-events.js';
+import type { SweNotification } from './swe-events.js';
 import type { RuntimeThread } from './threads.js';
 
 describe('runtime AppServer SWE event mapping', () => {
@@ -937,6 +943,75 @@ describe('runtime AppServer SWE event mapping', () => {
     }]);
   });
 
+  it('maps request_permissions approvals to AppServer permission approval requests', () => {
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.requested',
+      createdAt: '2026-06-27T00:00:00.000Z',
+      payload: {
+        approval: {
+          id: 'approval_1',
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          toolCallId: 'call_permissions',
+          toolName: 'request_permissions',
+          reason: 'Additional permissions requested: network access; writable roots: /work/tmp.',
+          argumentsPreview: '{}',
+          permissionApprovalContext: {
+            environmentId: 'project_1',
+            cwd: '/work',
+            reason: 'Need network and temp write access.',
+            requestedPermissions: {
+              network: { enabled: true },
+              file_system: {
+                read: ['/work/readonly'],
+                write: ['/work/tmp'],
+                glob_scan_max_depth: 4,
+                entries: [
+                  { path: { type: 'glob_pattern', pattern: '**/*.env' }, access: 'deny' },
+                  { path: { type: 'special', value: { kind: 'project_roots', subpath: 'tmp' } }, access: 'write' },
+                ],
+              },
+            },
+            grantedPermissions: {},
+            availableScopes: ['turn', 'session'],
+          },
+          status: 'pending',
+          createdAt: '2026-06-27T00:00:00.000Z',
+        },
+      },
+    };
+
+    expect(runtimeEventToSweNotifications(event)).toEqual([{
+      method: 'item/permissions/requestApproval',
+      id: 'approval_1',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'call_permissions',
+        environmentId: 'project_1',
+        startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        cwd: '/work',
+        reason: 'Need network and temp write access.',
+        permissions: {
+          network: { enabled: true },
+          fileSystem: {
+            read: ['/work/readonly'],
+            write: ['/work/tmp'],
+            globScanMaxDepth: 4,
+            entries: [
+              { path: { type: 'globPattern', pattern: '**/*.env' }, access: 'deny' },
+              { path: { type: 'special', value: { kind: 'project_roots', subpath: 'tmp' } }, access: 'write' },
+            ],
+          },
+        },
+      },
+    }]);
+  });
+
   it('maps shell approvals to AppServer commandExecution approval requests', () => {
     const event: RuntimeEvent = {
       id: 'event_1',
@@ -971,11 +1046,236 @@ describe('runtime AppServer SWE event mapping', () => {
         approvalId: null,
         environmentId: null,
         reason: 'High risk command requires approval.',
+        networkApprovalContext: null,
         command: 'git reset --hard',
         cwd: '.',
-        commandActions: [],
+        commandActions: [{ type: 'unknown', command: 'git reset --hard' }],
+        proposedExecpolicyAmendment: null,
+        proposedNetworkPolicyAmendments: null,
       },
     }]);
+  });
+
+  it('maps Codex policy proposal fields on shell approval requests', () => {
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.requested',
+      createdAt: '2026-06-27T00:00:00.000Z',
+      payload: {
+        approval: {
+          id: 'approval_1',
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          toolCallId: 'call_1',
+          toolName: 'exec_command',
+          reason: 'Network access requires approval.',
+          argumentsPreview: '{"cmd":"curl https://api.example.com/health","workdir":"/work"}',
+          proposedExecPolicyAmendment: ['curl'],
+          networkApprovalContext: {
+            host: 'api.example.com',
+            protocol: 'https',
+            port: 443,
+            target: 'https://api.example.com/health',
+          },
+          proposedNetworkPolicyAmendments: [{ host: 'api.example.com', action: 'allow' }],
+          status: 'pending',
+          createdAt: '2026-06-27T00:00:00.000Z',
+        },
+      },
+    };
+
+    expect(runtimeEventToSweNotifications(event)).toEqual([{
+      method: 'item/commandExecution/requestApproval',
+      id: 'approval_1',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'call_1',
+        startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        approvalId: null,
+        environmentId: null,
+        reason: 'Network access requires approval.',
+        networkApprovalContext: { host: 'api.example.com', protocol: 'https' },
+        command: 'curl https://api.example.com/health',
+        cwd: '/work',
+        commandActions: [{ type: 'unknown', command: 'curl https://api.example.com/health' }],
+        proposedExecpolicyAmendment: ['curl'],
+        proposedNetworkPolicyAmendments: [{ host: 'api.example.com', action: 'allow' }],
+      },
+    }]);
+  });
+
+  it('maps best-effort shell command actions on command approvals', () => {
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.requested',
+      createdAt: '2026-06-27T00:00:00.000Z',
+      payload: {
+        approval: {
+          id: 'approval_1',
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          toolCallId: 'call_1',
+          toolName: 'exec_command',
+          reason: 'Command requires approval.',
+          argumentsPreview: '{"cmd":"rg TODO src && cat README.md","workdir":"/work"}',
+          status: 'pending',
+          createdAt: '2026-06-27T00:00:00.000Z',
+        },
+      },
+    };
+
+    expect(runtimeEventToSweNotifications(event)).toEqual([{
+      method: 'item/commandExecution/requestApproval',
+      id: 'approval_1',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'call_1',
+        startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        approvalId: null,
+        environmentId: null,
+        reason: 'Command requires approval.',
+        networkApprovalContext: null,
+        command: 'rg TODO src && cat README.md',
+        cwd: '/work',
+        commandActions: [
+          { type: 'search', command: 'rg TODO src', query: 'TODO', path: 'src' },
+          { type: 'read', command: 'cat README.md', name: 'README.md', path: '/work/README.md' },
+        ],
+        proposedExecpolicyAmendment: null,
+        proposedNetworkPolicyAmendments: null,
+      },
+    }]);
+  });
+
+  it('maps Codex available command approval decisions', () => {
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.requested',
+      createdAt: '2026-06-27T00:00:00.000Z',
+      payload: {
+        approval: {
+          id: 'approval_1',
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          toolCallId: 'call_1',
+          toolName: 'exec_command',
+          environmentId: 'project_1',
+          reason: 'Command requires approval.',
+          argumentsPreview: '{"cmd":"git status","workdir":"/work"}',
+          additionalPermissions: {
+            network: { enabled: true },
+            file_system: {
+              read: ['/work/readonly'],
+              write: ['/work/tmp'],
+              glob_scan_max_depth: 3,
+              entries: [{ path: { type: 'glob_pattern', pattern: '/work/**/*.env' }, access: 'deny' }],
+            },
+          },
+          availableDecisions: [
+            { type: 'approve' },
+            { type: 'approve_for_turn_with_strict_auto_review' },
+            { type: 'approve_for_session' },
+            { type: 'approve_persistently' },
+            { type: 'approve_exec_policy_amendment', proposedExecPolicyAmendment: ['git', 'status'] },
+            { type: 'approve_network_policy_amendment', networkPolicyAmendment: { host: 'api.example.com', action: 'deny' } },
+            { type: 'reject' },
+            { type: 'cancel' },
+          ],
+          status: 'pending',
+          createdAt: '2026-06-27T00:00:00.000Z',
+        },
+      },
+    };
+
+    expect(runtimeEventToSweNotifications(event)).toEqual([{
+      method: 'item/commandExecution/requestApproval',
+      id: 'approval_1',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'call_1',
+        startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        approvalId: null,
+        environmentId: 'project_1',
+        reason: 'Command requires approval.',
+        networkApprovalContext: null,
+        command: 'git status',
+        cwd: '/work',
+        commandActions: [{ type: 'unknown', command: 'git status' }],
+        additionalPermissions: {
+          network: { enabled: true },
+          fileSystem: {
+            read: ['/work/readonly'],
+            write: ['/work/tmp'],
+            globScanMaxDepth: 3,
+            entries: [{ path: { type: 'globPattern', pattern: '/work/**/*.env' }, access: 'deny' }],
+          },
+        },
+        proposedExecpolicyAmendment: null,
+        proposedNetworkPolicyAmendments: null,
+        availableDecisions: [
+          'accept',
+          'acceptForSession',
+          'acceptAndRemember',
+          { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['git', 'status'] } },
+          { applyNetworkPolicyAmendment: { network_policy_amendment: { host: 'api.example.com', action: 'deny' } } },
+          'decline',
+          'cancel',
+        ],
+      },
+    }]);
+  });
+
+  it('strips experimental command approval fields unless the client enabled experimentalApi', () => {
+    const notification: SweNotification = {
+      method: 'item/commandExecution/requestApproval',
+      id: 'approval_1',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'call_1',
+        startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        approvalId: null,
+        environmentId: 'project_1',
+        reason: 'Need extra access.',
+        networkApprovalContext: null,
+        command: 'cat README.md',
+        cwd: '/work',
+        commandActions: [{ type: 'read', command: 'cat README.md', name: 'README.md', path: '/work/README.md' }],
+        additionalPermissions: {
+          network: { enabled: true },
+          fileSystem: { read: ['/work/allowed'] },
+        },
+        proposedExecpolicyAmendment: null,
+        proposedNetworkPolicyAmendments: null,
+      },
+    };
+
+    const stripped = filterSweNotificationsForClientCapabilities([notification]);
+    const experimental = filterSweNotificationsForClientCapabilities([notification], { experimentalApi: true });
+
+    expect(stripped).toEqual([{
+      ...notification,
+      params: expect.not.objectContaining({
+        additionalPermissions: expect.anything(),
+      }),
+    }]);
+    expect(experimental).toEqual([notification]);
+    expect(notification.params.additionalPermissions).toEqual({
+      network: { enabled: true },
+      fileSystem: { read: ['/work/allowed'] },
+    });
   });
 
   it('maps resolved approvals to AppServer server request resolved notifications', () => {
@@ -1114,7 +1414,7 @@ describe('runtime AppServer SWE event mapping', () => {
           processId: 'shell_1',
           source: 'agent',
           status: 'completed',
-          commandActions: [],
+          commandActions: [{ type: 'unknown', command: 'pnpm test' }],
           aggregatedOutput: '$ pnpm test\nexit: 0',
           exitCode: 0,
           durationMs: 123,

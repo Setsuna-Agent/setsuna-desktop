@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -251,6 +251,241 @@ describe('runtime server', () => {
       id: 'presentation-mcp',
       selected: true,
       enabled: true,
+    });
+  });
+
+  it('supports AppServer skills list, extra roots, and config writes', async () => {
+    const stream = await openAppServerNotificationStream();
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-skills-project-'));
+    const extraRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-skills-extra-'));
+    const extraSkillDir = path.join(extraRoot, 'appserver-extra');
+    const extraSkillPath = path.join(extraSkillDir, 'SKILL.md');
+    await mkdir(extraSkillDir, { recursive: true });
+    await writeFile(
+      extraSkillPath,
+      [
+        '---',
+        'name: AppServer Extra',
+        'description: Loaded through skills/extraRoots/set',
+        '---',
+        '',
+        '# AppServer Extra',
+        '',
+        'Use the AppServer extra root.',
+      ].join('\n'),
+    );
+
+    try {
+      const initial = await appServerRpc('skills/list', { cwds: [projectDir], forceReload: true });
+      expect(initial).toMatchObject({
+        data: [{
+          cwd: projectDir,
+          errors: [],
+          skills: expect.arrayContaining([
+            expect.objectContaining({
+              name: 'presentation-mcp',
+              scope: 'system',
+              enabled: true,
+              path: expect.stringContaining(path.join('presentation-mcp', 'SKILL.md')),
+            }),
+          ]),
+        }],
+      });
+
+      await expect(appServerRpc('skills/extraRoots/set', { extraRoots: [extraRoot] })).resolves.toEqual({});
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1000 }))
+        .resolves.toMatchObject({ method: 'skills/changed', params: {} });
+
+      const withExtraRoot = await appServerRpc('skills/list', { cwds: [projectDir] });
+      expect(withExtraRoot.data[0].skills).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          name: 'AppServer Extra',
+          description: 'Loaded through skills/extraRoots/set',
+          scope: 'user',
+          enabled: true,
+          path: extraSkillPath,
+        }),
+      ]));
+
+      await expect(appServerRpc('skills/config/write', {
+        name: 'AppServer Extra',
+        path: null,
+        enabled: false,
+      })).resolves.toEqual({ effectiveEnabled: false });
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1000 }))
+        .resolves.toMatchObject({ method: 'skills/changed', params: {} });
+
+      await expect(appServerRpc('skills/list', { cwds: [projectDir] })).resolves.toMatchObject({
+        data: [{
+          skills: expect.arrayContaining([
+            expect.objectContaining({
+              name: 'AppServer Extra',
+              enabled: false,
+            }),
+          ]),
+        }],
+      });
+
+      await expect(appServerRpc('skills/config/write', {
+        path: extraSkillPath,
+        name: null,
+        enabled: true,
+      })).resolves.toEqual({ effectiveEnabled: true });
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1000 }))
+        .resolves.toMatchObject({ method: 'skills/changed', params: {} });
+
+      await writeFile(
+        extraSkillPath,
+        [
+          '---',
+          'name: AppServer Extra',
+          'description: Changed outside the AppServer RPC',
+          '---',
+          '',
+          '# AppServer Extra',
+          '',
+          'Updated directly on disk.',
+        ].join('\n'),
+      );
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1500 }))
+        .resolves.toMatchObject({ method: 'skills/changed', params: {} });
+      await expect(appServerRpc('skills/list', { cwds: [projectDir] })).resolves.toMatchObject({
+        data: [{
+          skills: expect.arrayContaining([
+            expect.objectContaining({
+              name: 'AppServer Extra',
+              description: 'Changed outside the AppServer RPC',
+            }),
+          ]),
+        }],
+      });
+
+      await expect(appServerRpcEnvelope({
+        id: 'missing_skill_config',
+        method: 'skills/config/write',
+        params: { name: 'missing-skill', enabled: true },
+      })).resolves.toMatchObject({
+        id: 'missing_skill_config',
+        error: {
+          code: -32600,
+          message: 'No matching skill found',
+        },
+      });
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it('supports AppServer hooks list discovery shape', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-hooks-project-'));
+    const readConfig = await appServerRpc('config/read', {});
+    const configPath = readConfig.origins.hooks.name.file;
+
+    await expect(appServerRpc('config/batchWrite', {
+      edits: [{
+        keyPath: 'hooks',
+        mergeStrategy: 'replace',
+        value: {
+          PreToolUse: [{
+            matcher: 'Bash',
+            hooks: [{
+              type: 'command',
+              command: 'python3 /tmp/listed-hook.py',
+              timeout: 5,
+              statusMessage: 'running listed hook',
+            }],
+          }],
+        },
+      }],
+    })).resolves.toMatchObject({ status: 'ok' });
+
+    const listed = await appServerRpc('hooks/list', { cwds: [projectDir] });
+    expect(listed).toMatchObject({
+      data: [{
+        cwd: projectDir,
+        warnings: [],
+        errors: [],
+        hooks: [{
+          key: `${configPath}:pre_tool_use:0:0`,
+          eventName: 'preToolUse',
+          handlerType: 'command',
+          matcher: 'Bash',
+          command: 'python3 /tmp/listed-hook.py',
+          timeoutSec: 5,
+          statusMessage: 'running listed hook',
+          sourcePath: configPath,
+          source: 'user',
+          pluginId: null,
+          displayOrder: 0,
+          enabled: true,
+          isManaged: false,
+          currentHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+          trustStatus: 'untrusted',
+        }],
+      }],
+    });
+    const hook = listed.data[0].hooks[0];
+
+    await expect(appServerRpc('config/batchWrite', {
+      edits: [{
+        keyPath: 'hooks',
+        mergeStrategy: 'replace',
+        value: {
+          PreToolUse: [{
+            matcher: 'Bash',
+            hooks: [{
+              type: 'command',
+              command: 'python3 /tmp/listed-hook.py',
+              timeout: 5,
+              statusMessage: 'running listed hook',
+            }],
+          }],
+          state: {
+            [hook.key]: {
+              enabled: true,
+              trusted_hash: hook.currentHash,
+            },
+          },
+        },
+      }],
+    })).resolves.toMatchObject({ status: 'ok' });
+
+    await expect(appServerRpc('hooks/list', { cwds: [projectDir] })).resolves.toEqual({
+      data: [{
+        cwd: projectDir,
+        hooks: [{
+          ...hook,
+          trustStatus: 'trusted',
+        }],
+        warnings: [],
+        errors: [],
+      }],
+    });
+
+    await expect(appServerRpc('config/batchWrite', {
+      edits: [{
+        keyPath: 'features.hooks',
+        value: false,
+      }],
+    })).resolves.toMatchObject({ status: 'ok' });
+    await expect(appServerRpc('hooks/list', { cwds: [] })).resolves.toEqual({
+      data: [{
+        cwd: process.cwd(),
+        hooks: [],
+        warnings: [],
+        errors: [],
+      }],
+    });
+    await expect(appServerRpcEnvelope({
+      id: 'invalid_hooks_cwds',
+      method: 'hooks/list',
+      params: { cwds: projectDir },
+    })).resolves.toMatchObject({
+      id: 'invalid_hooks_cwds',
+      error: {
+        code: -32602,
+        message: 'cwds must be an array',
+      },
     });
   });
 
@@ -1430,6 +1665,212 @@ describe('runtime server', () => {
     });
   });
 
+  it('supports AppServer fs methods inside registered workspaces', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-'));
+    await runtimeFetch('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ path: projectDir, name: 'AppServer fs' }),
+    });
+    const sourceDir = path.join(projectDir, 'source');
+    const nestedDir = path.join(sourceDir, 'nested');
+    const nestedFile = path.join(nestedDir, 'blob.bin');
+    const copiedFile = path.join(projectDir, 'copy.bin');
+    const copiedDir = path.join(projectDir, 'copied');
+    const bytes = Buffer.from([0, 1, 2, 255]);
+
+    await expect(appServerRpc('fs/createDirectory', {
+      path: nestedDir,
+    })).resolves.toEqual({});
+    await expect(appServerRpc('fs/writeFile', {
+      path: nestedFile,
+      dataBase64: bytes.toString('base64'),
+    })).resolves.toEqual({});
+    await expect(readFile(nestedFile)).resolves.toEqual(bytes);
+
+    await expect(appServerRpc('fs/readFile', { path: nestedFile })).resolves.toEqual({
+      dataBase64: bytes.toString('base64'),
+    });
+    await expect(appServerRpc('fs/getMetadata', { path: nestedFile })).resolves.toMatchObject({
+      isDirectory: false,
+      isFile: true,
+      isSymlink: false,
+      createdAtMs: expect.any(Number),
+      modifiedAtMs: expect.any(Number),
+    });
+    await expect(appServerRpc('fs/readDirectory', { path: sourceDir })).resolves.toEqual({
+      entries: [
+        {
+          fileName: 'nested',
+          isDirectory: true,
+          isFile: false,
+        },
+      ],
+    });
+
+    await expect(appServerRpc('fs/copy', {
+      sourcePath: nestedFile,
+      destinationPath: copiedFile,
+      recursive: false,
+    })).resolves.toEqual({});
+    await expect(readFile(copiedFile)).resolves.toEqual(bytes);
+    await expect(appServerRpc('fs/copy', {
+      sourcePath: sourceDir,
+      destinationPath: copiedDir,
+      recursive: true,
+    })).resolves.toEqual({});
+    await expect(readFile(path.join(copiedDir, 'nested', 'blob.bin'))).resolves.toEqual(bytes);
+
+    await expect(appServerRpc('fs/remove', { path: copiedDir })).resolves.toEqual({});
+    await expect(readFile(path.join(copiedDir, 'nested', 'blob.bin'))).rejects.toThrow();
+  });
+
+  it('streams AppServer fs/watch changes and scopes fs/unwatch to the owner connection', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-watch-'));
+    await runtimeFetch('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ path: projectDir, name: 'AppServer fs watch' }),
+    });
+    const watchDir = path.join(projectDir, '.git');
+    const changedFile = path.join(watchDir, 'FETCH_HEAD');
+    await mkdir(watchDir, { recursive: true });
+    await writeFile(changedFile, 'old\n');
+
+    const ownerConnectionId = 'fs-watch-owner';
+    const foreignConnectionId = 'fs-watch-foreign';
+    const watchId = 'watch-git-dir';
+    const ownerStream = await openAppServerNotificationStream({ connectionId: ownerConnectionId });
+    const foreignStream = await openAppServerNotificationStream({ connectionId: foreignConnectionId });
+    try {
+      await expect(appServerRpc('fs/watch', {
+        watchId,
+        path: watchDir,
+      }, { connectionId: ownerConnectionId })).resolves.toEqual({ path: watchDir });
+
+      await expect(appServerRpcEnvelope({
+        id: 'duplicate_fs_watch',
+        method: 'fs/watch',
+        params: { watchId, path: changedFile },
+      }, { connectionId: ownerConnectionId })).resolves.toMatchObject({
+        id: 'duplicate_fs_watch',
+        error: {
+          code: -32600,
+          message: 'watchId already exists: watch-git-dir',
+        },
+      });
+
+      await expect(appServerRpc('fs/unwatch', { watchId }, { connectionId: foreignConnectionId })).resolves.toEqual({});
+
+      let changed: AppServerStreamNotification | null = null;
+      for (let attempt = 0; attempt < 8 && !changed; attempt += 1) {
+        await writeFile(changedFile, `updated:${attempt}\n`);
+        changed = await ownerStream.readNotification((notification) => (
+          notification.method === 'fs/changed'
+          && notification.params?.watchId === watchId
+          && Array.isArray(notification.params.changedPaths)
+          && notification.params.changedPaths.includes(changedFile)
+        ), { timeoutMs: 600 });
+      }
+
+      expect(changed).toMatchObject({
+        method: 'fs/changed',
+        params: {
+          watchId,
+          changedPaths: expect.arrayContaining([changedFile]),
+        },
+      });
+      await expect(foreignStream.readNotification((notification) => notification.method === 'fs/changed', { timeoutMs: 250 }))
+        .resolves.toBeNull();
+
+      await expect(appServerRpc('fs/unwatch', { watchId }, { connectionId: ownerConnectionId })).resolves.toEqual({});
+      await writeFile(path.join(watchDir, 'packed-refs'), 'refs\n');
+
+      const missingFile = path.join(watchDir, 'MERGE_HEAD');
+      const missingWatchId = 'watch-missing-file';
+      await expect(appServerRpc('fs/watch', {
+        watchId: missingWatchId,
+        path: missingFile,
+      }, { connectionId: ownerConnectionId })).resolves.toEqual({ path: missingFile });
+
+      let missingChanged: AppServerStreamNotification | null = null;
+      for (let attempt = 0; attempt < 8 && !missingChanged; attempt += 1) {
+        await writeFile(missingFile, `merge:${attempt}\n`);
+        missingChanged = await ownerStream.readNotification((notification) => (
+          notification.method === 'fs/changed'
+          && notification.params?.watchId === missingWatchId
+          && Array.isArray(notification.params.changedPaths)
+          && notification.params.changedPaths.includes(missingFile)
+        ), { timeoutMs: 600 });
+      }
+
+      expect(missingChanged).toMatchObject({
+        method: 'fs/changed',
+        params: {
+          watchId: missingWatchId,
+          changedPaths: expect.arrayContaining([missingFile]),
+        },
+      });
+
+      await expect(appServerRpc('fs/unwatch', { watchId: missingWatchId }, { connectionId: ownerConnectionId })).resolves.toEqual({});
+      await writeFile(path.join(watchDir, 'ORIG_HEAD'), 'refs\n');
+      await expect(ownerStream.readNotification((notification) => notification.method === 'fs/changed', { timeoutMs: 500 }))
+        .resolves.toBeNull();
+    } finally {
+      await ownerStream.close();
+      await foreignStream.close();
+    }
+  }, 10_000);
+
+  it('rejects unsafe AppServer fs requests', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-safe-'));
+    const outsideDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-outside-'));
+    await runtimeFetch('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ path: projectDir, name: 'AppServer fs safety' }),
+    });
+
+    await expect(appServerRpcEnvelope({
+      id: 'relative_fs_read',
+      method: 'fs/readFile',
+      params: { path: 'relative.txt' },
+    })).resolves.toMatchObject({
+      id: 'relative_fs_read',
+      error: {
+        code: -32602,
+        message: 'fs/readFile path must be an absolute path',
+      },
+    });
+
+    await expect(appServerRpcEnvelope({
+      id: 'outside_fs_write',
+      method: 'fs/writeFile',
+      params: {
+        path: path.join(outsideDir, 'outside.txt'),
+        dataBase64: Buffer.from('outside').toString('base64'),
+      },
+    })).resolves.toMatchObject({
+      id: 'outside_fs_write',
+      error: {
+        code: -32600,
+        message: expect.stringContaining('outside registered workspaces'),
+      },
+    });
+
+    await expect(appServerRpcEnvelope({
+      id: 'invalid_fs_base64',
+      method: 'fs/writeFile',
+      params: {
+        path: path.join(projectDir, 'invalid.bin'),
+        dataBase64: '%%%',
+      },
+    })).resolves.toMatchObject({
+      id: 'invalid_fs_base64',
+      error: {
+        code: -32602,
+        message: expect.stringContaining('fs/writeFile requires valid base64 dataBase64'),
+      },
+    });
+  });
+
   it('runs buffered AppServer command/exec requests without creating thread output', async () => {
     const response = await appServerRpc('command/exec', {
       command: [
@@ -1496,22 +1937,288 @@ describe('runtime server', () => {
     });
   });
 
-  it('rejects unsupported AppServer command/exec streaming output on the HTTP adapter', async () => {
-    await expect(appServerRpcEnvelope({
-      id: 'streaming_exec',
-      method: 'command/exec',
-      params: {
-        command: [process.execPath, '-e', 'process.stdout.write("stream")'],
-        processId: 'streaming-process',
+  it('streams AppServer command/exec output through server notifications', async () => {
+    const processId = `streaming-process-${Date.now()}`;
+    const outputPromise = readAppServerNotificationStreamContains(Buffer.from('stream').toString('base64'), { timeoutMs: 3000 });
+
+    await expect(appServerRpc('command/exec', {
+      command: [process.execPath, '-e', 'process.stdout.write("stream")'],
+      processId,
+      streamStdoutStderr: true,
+      timeoutMs: 5_000,
+    })).resolves.toEqual({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
+
+    await expect(outputPromise).resolves.toBe(true);
+  });
+
+  it('supports AppServer command/exec PTY sessions and resize', async () => {
+    const processId = `pty-command-${Date.now()}`;
+    const readyPromise = readAppServerNotificationDecodedOutputContains(
+      'command/exec/outputDelta',
+      'processId',
+      processId,
+      'tty:true',
+      { timeoutMs: 10_000 },
+    );
+    const outputPromise = readAppServerNotificationDecodedOutputContains(
+      'command/exec/outputDelta',
+      'processId',
+      processId,
+      'echo:world',
+      { timeoutMs: 10_000 },
+    );
+
+    const execPromise = appServerRpc('command/exec', {
+      command: [process.execPath, '-e', interactiveEchoScript('echo')],
+      processId,
+      tty: true,
+      size: { rows: 31, cols: 101 },
+      timeoutMs: 10_000,
+    });
+
+    await expect(readyPromise).resolves.toBe(true);
+    await expect(appServerRpc('command/exec/resize', {
+      processId,
+      size: { rows: 32, cols: 102 },
+    })).resolves.toEqual({});
+    await expect(appServerRpc('command/exec/write', {
+      processId,
+      deltaBase64: Buffer.from('world\n').toString('base64'),
+    })).resolves.toEqual({});
+
+    await expect(outputPromise).resolves.toBe(true);
+    await expect(execPromise).resolves.toEqual({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
+  }, 10_000);
+
+  it('scopes AppServer command/exec process ids to explicit event-stream connections', async () => {
+    const processId = `shared-command-${Date.now()}`;
+    const firstConnectionId = `command-conn-a-${Date.now()}`;
+    const secondConnectionId = `command-conn-b-${Date.now()}`;
+    const firstStream = await openAppServerNotificationStream({ connectionId: firstConnectionId });
+    const secondStream = await openAppServerNotificationStream({ connectionId: secondConnectionId });
+    let firstExecPromise: Promise<Record<string, any>> | undefined;
+    let secondExecPromise: Promise<Record<string, any>> | undefined;
+
+    try {
+      firstExecPromise = appServerRpc('command/exec', {
+        command: [process.execPath, '-e', persistentOutputScript('command-one')],
+        processId,
         streamStdoutStderr: true,
-      },
+        timeoutMs: 10_000,
+      }, { connectionId: firstConnectionId });
+      await expect(firstStream.readDecodedOutputContains(
+        'command/exec/outputDelta',
+        'processId',
+        processId,
+        'ready:command-one',
+        { timeoutMs: 5_000 },
+      )).resolves.toBe(true);
+
+      secondExecPromise = appServerRpc('command/exec', {
+        command: [process.execPath, '-e', persistentOutputScript('command-two')],
+        processId,
+        streamStdoutStderr: true,
+        timeoutMs: 10_000,
+      }, { connectionId: secondConnectionId });
+      await expect(secondStream.readDecodedOutputContains(
+        'command/exec/outputDelta',
+        'processId',
+        processId,
+        'ready:command-two',
+        { timeoutMs: 5_000 },
+      )).resolves.toBe(true);
+
+      await firstStream.close();
+      await expect(firstExecPromise).resolves.toMatchObject({ stdout: '', stderr: '' });
+      await sleep(50);
+      await expect(appServerRpc('command/exec/terminate', { processId }, { connectionId: secondConnectionId })).resolves.toEqual({});
+      await expect(secondExecPromise).resolves.toMatchObject({ stdout: '', stderr: '' });
+    } finally {
+      await firstStream.close();
+      await secondStream.close();
+      if (firstExecPromise) await firstExecPromise.catch(() => undefined);
+      if (secondExecPromise) await secondExecPromise.catch(() => undefined);
+    }
+  }, 20_000);
+
+  it('spawns AppServer processes and emits process exit notifications', async () => {
+    const processHandle = `process-buffered-${Date.now()}`;
+    const exitedPromise = readAppServerNotificationStreamContains('"stdout":"proc-out"', { timeoutMs: 3000 });
+
+    await expect(appServerRpc('process/spawn', {
+      command: [process.execPath, '-e', 'process.stdout.write("proc-out")'],
+      processHandle,
+      cwd: process.cwd(),
+      timeoutMs: 5_000,
+    })).resolves.toEqual({});
+
+    await expect(exitedPromise).resolves.toBe(true);
+  });
+
+  it('streams AppServer process output through server notifications', async () => {
+    const processHandle = `process-stream-${Date.now()}`;
+    const outputPromise = readAppServerNotificationStreamContains(Buffer.from('proc-stream').toString('base64'), { timeoutMs: 3000 });
+
+    await expect(appServerRpc('process/spawn', {
+      command: [process.execPath, '-e', 'process.stdout.write("proc-stream")'],
+      processHandle,
+      cwd: process.cwd(),
+      streamStdoutStderr: true,
+      timeoutMs: 5_000,
+    })).resolves.toEqual({});
+
+    await expect(outputPromise).resolves.toBe(true);
+  });
+
+  it('scopes AppServer process/spawn handles to explicit event-stream connections', async () => {
+    const processHandle = `shared-process-${Date.now()}`;
+    const firstConnectionId = `process-conn-a-${Date.now()}`;
+    const secondConnectionId = `process-conn-b-${Date.now()}`;
+    const firstStream = await openAppServerNotificationStream({ connectionId: firstConnectionId });
+    const secondStream = await openAppServerNotificationStream({ connectionId: secondConnectionId });
+
+    try {
+      await expect(appServerRpc('process/spawn', {
+        command: [process.execPath, '-e', persistentOutputScript('process-one')],
+        processHandle,
+        cwd: process.cwd(),
+        streamStdoutStderr: true,
+        timeoutMs: 10_000,
+      }, { connectionId: firstConnectionId })).resolves.toEqual({});
+      await expect(firstStream.readDecodedOutputContains(
+        'process/outputDelta',
+        'processHandle',
+        processHandle,
+        'ready:process-one',
+        { timeoutMs: 5_000 },
+      )).resolves.toBe(true);
+
+      await expect(appServerRpc('process/spawn', {
+        command: [process.execPath, '-e', persistentOutputScript('process-two')],
+        processHandle,
+        cwd: process.cwd(),
+        streamStdoutStderr: true,
+        timeoutMs: 10_000,
+      }, { connectionId: secondConnectionId })).resolves.toEqual({});
+      await expect(secondStream.readDecodedOutputContains(
+        'process/outputDelta',
+        'processHandle',
+        processHandle,
+        'ready:process-two',
+        { timeoutMs: 5_000 },
+      )).resolves.toBe(true);
+
+      await expect(appServerRpc('process/kill', { processHandle }, { connectionId: firstConnectionId })).resolves.toEqual({});
+      await sleep(50);
+      await expect(appServerRpc('process/kill', { processHandle }, { connectionId: secondConnectionId })).resolves.toEqual({});
+    } finally {
+      await firstStream.close();
+      await secondStream.close();
+    }
+  }, 20_000);
+
+  it('supports AppServer process/spawn PTY sessions and resize', async () => {
+    const processHandle = `pty-process-${Date.now()}`;
+    const readyPromise = readAppServerNotificationDecodedOutputContains(
+      'process/outputDelta',
+      'processHandle',
+      processHandle,
+      'tty:true',
+      { timeoutMs: 5_000 },
+    );
+    const outputPromise = readAppServerNotificationDecodedOutputContains(
+      'process/outputDelta',
+      'processHandle',
+      processHandle,
+      'spawn:world',
+      { timeoutMs: 5_000 },
+    );
+    const exitedPromise = readAppServerNotificationStreamContains(
+      `"processHandle":"${processHandle}"`,
+      { timeoutMs: 5_000 },
+    );
+
+    await expect(appServerRpc('process/spawn', {
+      command: [process.execPath, '-e', interactiveEchoScript('spawn')],
+      processHandle,
+      cwd: process.cwd(),
+      tty: true,
+      size: { rows: 29, cols: 99 },
+      timeoutMs: 5_000,
+    })).resolves.toEqual({});
+
+    await expect(readyPromise).resolves.toBe(true);
+    await expect(appServerRpc('process/resizePty', {
+      processHandle,
+      size: { rows: 30, cols: 100 },
+    })).resolves.toEqual({});
+    await expect(appServerRpc('process/writeStdin', {
+      processHandle,
+      deltaBase64: Buffer.from('world\n').toString('base64'),
+    })).resolves.toEqual({});
+
+    await expect(outputPromise).resolves.toBe(true);
+    await expect(exitedPromise).resolves.toBe(true);
+  });
+
+  it('writes stdin to AppServer process sessions', async () => {
+    const processHandle = `process-stdin-${Date.now()}`;
+    const exitedPromise = readAppServerNotificationStreamContains('"stdout":"stdin:hello"', { timeoutMs: 3000 });
+
+    await expect(appServerRpc('process/spawn', {
+      command: [
+        process.execPath,
+        '-e',
+        'let data = ""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => process.stdout.write(`stdin:${data}`));',
+      ],
+      processHandle,
+      cwd: process.cwd(),
+      streamStdin: true,
+      timeoutMs: 5_000,
+    })).resolves.toEqual({});
+
+    await expect(appServerRpc('process/writeStdin', {
+      processHandle,
+      deltaBase64: Buffer.from('hello').toString('base64'),
+      closeStdin: true,
+    })).resolves.toEqual({});
+
+    await expect(exitedPromise).resolves.toBe(true);
+  });
+
+  it('kills AppServer process sessions and rejects PTY resize for non-PTY processes', async () => {
+    const processHandle = `process-kill-${Date.now()}`;
+    const exitedPromise = readAppServerNotificationStreamContains('"method":"process/exited"', { timeoutMs: 3000 });
+
+    await expect(appServerRpc('process/spawn', {
+      command: [process.execPath, '-e', 'setInterval(() => {}, 1000)'],
+      processHandle,
+      cwd: process.cwd(),
+      timeoutMs: null,
+    })).resolves.toEqual({});
+
+    await expect(appServerRpcEnvelope({
+      id: 'resize_process',
+      method: 'process/resizePty',
+      params: { processHandle, size: { rows: 24, cols: 80 } },
     })).resolves.toMatchObject({
-      id: 'streaming_exec',
+      id: 'resize_process',
       error: {
         code: -32600,
-        message: expect.stringContaining('server notifications'),
+        message: expect.stringContaining('PTY-backed process'),
       },
     });
+
+    await expect(appServerRpc('process/kill', { processHandle })).resolves.toEqual({});
+    await expect(exitedPromise).resolves.toBe(true);
   });
 
   it('returns the upstream empty response shape for AppServer turn interrupts', async () => {
@@ -2335,6 +3042,12 @@ describe('runtime server', () => {
         transport: 'streamableHttp',
         url: 'https://example.com/mcp',
         headers: { Authorization: 'Bearer secret' },
+        tools: [{
+          name: 'search',
+          description: 'Search docs',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+          annotations: { readOnlyHint: true },
+        }],
       }),
     });
     const updated = await runtimeFetch('/v1/mcp/servers/docs', {
@@ -2350,20 +3063,27 @@ describe('runtime server', () => {
     expect(JSON.stringify(created)).not.toContain('Bearer secret');
     expect(updated.servers[0]).toMatchObject({ enabled: false });
 
-    await expect(appServerRpc('mcpServerStatus/list', {})).resolves.toEqual({
+    await expect(appServerRpc('mcpServerStatus/list', { detail: 'toolsAndAuthOnly' })).resolves.toEqual({
       data: [
         {
           name: 'docs',
           serverInfo: null,
-          tools: {},
+          tools: {
+            search: {
+              name: 'search',
+              description: 'Search docs',
+              inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+              annotations: { readOnlyHint: true },
+            },
+          },
           resources: [],
           resourceTemplates: [],
-          authStatus: 'unsupported',
+          authStatus: 'bearerToken',
         },
       ],
       nextCursor: null,
     });
-    await expect(appServerRpc('mcpServerStatus/list', { limit: 1 })).resolves.toMatchObject({
+    await expect(appServerRpc('mcpServerStatus/list', { limit: 1, detail: 'toolsAndAuthOnly' })).resolves.toMatchObject({
       data: [{ name: 'docs' }],
       nextCursor: null,
     });
@@ -2379,6 +3099,162 @@ describe('runtime server', () => {
     await runtimeFetch('/v1/mcp/servers/docs', { method: 'DELETE' });
     await expect(runtimeFetch('/v1/mcp/servers')).resolves.toMatchObject({ servers: [] });
     await expect(appServerRpc('mcpServerStatus/list', {})).resolves.toEqual({ data: [], nextCursor: null });
+  });
+
+  it('lists MCP resources and resource templates in AppServer full status', async () => {
+    const mcpServer = await createMcpToolsServer();
+    try {
+      await runtimeFetch('/v1/mcp/servers', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: 'docs',
+          label: 'Docs',
+          transport: 'streamableHttp',
+          url: mcpServer.baseUrl,
+          headers: { Authorization: 'Bearer inventory-secret' },
+          tools: [{ name: 'search', description: 'Search docs' }],
+        }),
+      });
+
+      await expect(appServerRpc('mcpServerStatus/list', {})).resolves.toEqual({
+        data: [
+          {
+            name: 'docs',
+            serverInfo: null,
+            tools: {
+              search: {
+                name: 'search',
+                description: 'Search docs',
+                inputSchema: { type: 'object', properties: {}, additionalProperties: true },
+              },
+            },
+            resources: [
+              {
+                uri: 'memo://hello',
+                name: 'hello',
+                title: 'Hello Memo',
+                description: 'A memo resource',
+                mimeType: 'text/plain',
+              },
+            ],
+            resourceTemplates: [
+              {
+                uriTemplate: 'memo://{id}',
+                name: 'memo',
+                title: 'Memo',
+                description: 'Memo by id',
+                mimeType: 'text/plain',
+              },
+            ],
+            authStatus: 'bearerToken',
+          },
+        ],
+        nextCursor: null,
+      });
+      expect(await mcpServer.requests).toEqual(expect.arrayContaining([
+        expect.objectContaining({ method: 'resources/list', authorization: 'Bearer inventory-secret' }),
+        expect.objectContaining({ method: 'resources/templates/list', authorization: 'Bearer inventory-secret' }),
+      ]));
+    } finally {
+      await mcpServer.close();
+    }
+  });
+
+  it('reports OAuth-configured MCP servers as not logged in in AppServer status', async () => {
+    await runtimeFetch('/v1/mcp/servers', {
+      method: 'POST',
+      body: JSON.stringify({
+        key: 'docs',
+        label: 'Docs',
+        transport: 'streamableHttp',
+        url: 'https://example.com/mcp',
+        oauthClientId: 'client-123',
+        oauthResource: 'https://resource.example.com',
+        tools: [{ name: 'search' }],
+      }),
+    });
+
+    await expect(appServerRpc('mcpServerStatus/list', { detail: 'toolsAndAuthOnly' })).resolves.toEqual({
+      data: [
+        {
+          name: 'docs',
+          serverInfo: null,
+          tools: {
+            search: {
+              name: 'search',
+              inputSchema: { type: 'object', properties: {}, additionalProperties: true },
+            },
+          },
+          resources: [],
+          resourceTemplates: [],
+          authStatus: 'notLoggedIn',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    await runtimeFetch('/v1/mcp/servers/docs', {
+      method: 'PATCH',
+      body: JSON.stringify({ headers: { Authorization: 'Bearer secret' } }),
+    });
+
+    await expect(appServerRpc('mcpServerStatus/list', { detail: 'toolsAndAuthOnly' })).resolves.toMatchObject({
+      data: [{ name: 'docs', authStatus: 'bearerToken' }],
+      nextCursor: null,
+    });
+  });
+
+  it('handles AppServer MCP reload and OAuth login method boundaries', async () => {
+    await expect(appServerRpc('config/mcpServer/reload', {})).resolves.toEqual({});
+
+    await expect(appServerRpcEnvelope({
+      id: 'missing_oauth_server',
+      method: 'mcpServer/oauth/login',
+      params: { name: 'missing' },
+    })).resolves.toMatchObject({
+      id: 'missing_oauth_server',
+      error: { code: -32600, message: "No MCP server named 'missing' found." },
+    });
+
+    await runtimeFetch('/v1/mcp/servers', {
+      method: 'POST',
+      body: JSON.stringify({
+        key: 'local',
+        transport: 'stdio',
+        command: process.execPath,
+      }),
+    });
+
+    await expect(appServerRpcEnvelope({
+      id: 'stdio_oauth_server',
+      method: 'mcpServer/oauth/login',
+      params: { name: 'local' },
+    })).resolves.toMatchObject({
+      id: 'stdio_oauth_server',
+      error: { code: -32600, message: 'OAuth login is only supported for streamable HTTP servers.' },
+    });
+
+    await runtimeFetch('/v1/mcp/servers', {
+      method: 'POST',
+      body: JSON.stringify({
+        key: 'docs',
+        transport: 'streamableHttp',
+        url: 'https://example.com/mcp',
+        oauthClientId: 'client-123',
+      }),
+    });
+
+    await expect(appServerRpcEnvelope({
+      id: 'http_oauth_server',
+      method: 'mcpServer/oauth/login',
+      params: { name: 'docs', threadId: null, scopes: ['read'], timeoutSecs: 1 },
+    })).resolves.toMatchObject({
+      id: 'http_oauth_server',
+      error: {
+        code: -32603,
+        message: expect.stringContaining("failed to login to MCP server 'docs'"),
+      },
+    });
   });
 
   it('fetches MCP tools through the runtime API', async () => {
@@ -2405,6 +3281,110 @@ describe('runtime server', () => {
         { method: 'initialize', authorization: 'Bearer secret', session: '' },
         { method: 'notifications/initialized', authorization: 'Bearer secret', session: 'session_1' },
         { method: 'tools/list', authorization: 'Bearer secret', session: 'session_1' },
+      ]);
+    } finally {
+      await mcpServer.close();
+    }
+  });
+
+  it('resolves codex-style MCP bearer and env HTTP headers for discovery', async () => {
+    const mcpServer = await createMcpToolsServer();
+    const previousToken = process.env.SETSUNA_MCP_TEST_TOKEN;
+    const previousAccount = process.env.SETSUNA_MCP_TEST_ACCOUNT;
+    process.env.SETSUNA_MCP_TEST_TOKEN = 'env-secret';
+    process.env.SETSUNA_MCP_TEST_ACCOUNT = 'account-42';
+    try {
+      const tools = await runtimeFetch('/v1/mcp/tools', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: 'search',
+          transport: 'streamableHttp',
+          url: mcpServer.baseUrl,
+          headers: { 'X-Static': 'static-header' },
+          envHttpHeaders: { 'X-Account': 'SETSUNA_MCP_TEST_ACCOUNT' },
+          bearerTokenEnvVar: 'SETSUNA_MCP_TEST_TOKEN',
+        }),
+      });
+
+      expect(tools).toMatchObject({ errors: [] });
+      expect(await mcpServer.requests).toEqual([
+        { method: 'initialize', authorization: 'Bearer env-secret', session: '', account: 'account-42', staticHeader: 'static-header' },
+        { method: 'notifications/initialized', authorization: 'Bearer env-secret', session: 'session_1', account: 'account-42', staticHeader: 'static-header' },
+        { method: 'tools/list', authorization: 'Bearer env-secret', session: 'session_1', account: 'account-42', staticHeader: 'static-header' },
+      ]);
+    } finally {
+      if (previousToken === undefined) delete process.env.SETSUNA_MCP_TEST_TOKEN;
+      else process.env.SETSUNA_MCP_TEST_TOKEN = previousToken;
+      if (previousAccount === undefined) delete process.env.SETSUNA_MCP_TEST_ACCOUNT;
+      else process.env.SETSUNA_MCP_TEST_ACCOUNT = previousAccount;
+      await mcpServer.close();
+    }
+  });
+
+  it('reads MCP resources through the AppServer API', async () => {
+    const mcpServer = await createMcpToolsServer();
+    try {
+      await runtimeFetch('/v1/mcp/servers', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: 'docs',
+          transport: 'streamableHttp',
+          url: mcpServer.baseUrl,
+          headers: { Authorization: 'Bearer resource-secret' },
+        }),
+      });
+
+      await expect(appServerRpc('mcpServer/resource/read', {
+        server: 'docs',
+        uri: 'memo://hello',
+      })).resolves.toEqual({
+        contents: [
+          {
+            uri: 'memo://hello',
+            mimeType: 'text/plain',
+            text: 'resource for memo://hello',
+          },
+        ],
+      });
+      expect(await mcpServer.requests).toEqual([
+        { method: 'initialize', authorization: 'Bearer resource-secret', session: '' },
+        { method: 'notifications/initialized', authorization: 'Bearer resource-secret', session: 'session_1' },
+        { method: 'resources/read', authorization: 'Bearer resource-secret', session: 'session_1', uri: 'memo://hello' },
+      ]);
+    } finally {
+      await mcpServer.close();
+    }
+  });
+
+  it('calls MCP tools through the AppServer API', async () => {
+    const mcpServer = await createMcpToolsServer();
+    const startedThread = await appServerRpc('thread/start', { name: 'MCP tool call', cwd: process.cwd() });
+    try {
+      await runtimeFetch('/v1/mcp/servers', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: 'docs',
+          transport: 'streamableHttp',
+          url: mcpServer.baseUrl,
+          headers: { Authorization: 'Bearer call-secret' },
+        }),
+      });
+
+      await expect(appServerRpc('mcpServer/tool/call', {
+        threadId: startedThread.thread.id,
+        server: 'docs',
+        tool: 'search_web',
+        arguments: { query: 'setsuna' },
+      })).resolves.toEqual({
+        content: [{ type: 'text', text: 'result for setsuna' }],
+        structuredContent: { query: 'setsuna', count: 1 },
+        isError: false,
+        _meta: { source: 'test-mcp' },
+      });
+      expect(await mcpServer.requests).toEqual([
+        { method: 'initialize', authorization: 'Bearer call-secret', session: '' },
+        { method: 'notifications/initialized', authorization: 'Bearer call-secret', session: 'session_1' },
+        { method: 'tools/call', authorization: 'Bearer call-secret', session: 'session_1', tool: 'search_web', query: 'setsuna' },
       ]);
     } finally {
       await mcpServer.close();
@@ -2517,15 +3497,16 @@ describe('runtime server', () => {
     });
   }
 
-  async function appServerRpc(method: string, params: Record<string, unknown>) {
-    const response = await appServerRpcEnvelope({ id: method, method, params });
+  async function appServerRpc(method: string, params: Record<string, unknown>, options: AppServerRequestOptions = {}) {
+    const response = await appServerRpcEnvelope({ id: method, method, params }, options);
     if ('error' in response) throw new Error(response.error.message);
     return response.result as Record<string, any>;
   }
 
-  async function appServerRpcEnvelope(body: unknown) {
+  async function appServerRpcEnvelope(body: unknown, options: AppServerRequestOptions = {}) {
     return runtimeFetch('/v1/swe/app-server', {
       method: 'POST',
+      headers: appServerSessionHeaders(options),
       body: JSON.stringify(body),
     }) as Promise<{ id: unknown; result: any } | { id: unknown; error: { code: number; message: string; data?: unknown } }>;
   }
@@ -2591,7 +3572,185 @@ describe('runtime server', () => {
       await reader.cancel().catch(() => undefined);
     }
   }
+
+  async function readAppServerNotificationStreamContains(
+    needle: string,
+    options: AppServerRequestOptions & { timeoutMs?: number } = {},
+  ): Promise<boolean> {
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/v1/swe/app-server/events`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...appServerSessionHeaders(options),
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(await response.text());
+    if (!response.body) throw new Error('Expected app-server notification response body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const deadline = Date.now() + (options.timeoutMs ?? 1500);
+    try {
+      while (Date.now() < deadline) {
+        const result = await Promise.race([reader.read(), sleep(deadline - Date.now()).then(() => null)]);
+        if (!result) break;
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+        if (buffer.includes(needle)) return true;
+      }
+      return false;
+    } finally {
+      controller.abort();
+      await reader.cancel().catch(() => undefined);
+    }
+  }
+
+  async function readAppServerNotificationDecodedOutputContains(
+    method: string,
+    idKey: string,
+    idValue: string,
+    needle: string,
+    options: AppServerRequestOptions & { timeoutMs?: number } = {},
+  ): Promise<boolean> {
+    const stream = await openAppServerNotificationStream(options);
+    try {
+      return await stream.readDecodedOutputContains(method, idKey, idValue, needle, options);
+    } finally {
+      await stream.close();
+    }
+  }
+
+  async function openAppServerNotificationStream(options: AppServerRequestOptions = {}): Promise<AppServerNotificationStream> {
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/v1/swe/app-server/events`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...appServerSessionHeaders(options),
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(await response.text());
+    if (!response.body) throw new Error('Expected app-server notification response body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let eventBuffer = '';
+    let output = '';
+    let pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
+    const readNextChunk = async (deadline: number): Promise<ReadableStreamReadResult<Uint8Array> | null> => {
+      if (!pendingRead) pendingRead = reader.read();
+      const result = await Promise.race([pendingRead, sleep(Math.max(1, deadline - Date.now())).then(() => null)]);
+      if (!result) return null;
+      pendingRead = null;
+      return result;
+    };
+    const readNotification = async (
+      predicate: (notification: AppServerStreamNotification) => boolean,
+      readOptions: { timeoutMs?: number } = {},
+    ): Promise<AppServerStreamNotification | null> => {
+      const deadline = Date.now() + (readOptions.timeoutMs ?? 1500);
+      while (Date.now() < deadline) {
+        const result = await readNextChunk(deadline);
+        if (!result) break;
+        if (result.done) break;
+        eventBuffer += decoder.decode(result.value, { stream: true });
+        let separator = eventBuffer.indexOf('\n\n');
+        while (separator !== -1) {
+          const rawEvent = eventBuffer.slice(0, separator);
+          eventBuffer = eventBuffer.slice(separator + 2);
+          separator = eventBuffer.indexOf('\n\n');
+          const data = rawEvent
+            .split('\n')
+            .filter((line) => line.startsWith('data: '))
+            .map((line) => line.slice('data: '.length))
+            .join('\n');
+          if (!data) continue;
+          const notification = JSON.parse(data) as AppServerStreamNotification;
+          if (predicate(notification)) return notification;
+        }
+      }
+      return null;
+    };
+    return {
+      async readDecodedOutputContains(method, idKey, idValue, needle, readOptions = {}) {
+        const deadline = Date.now() + (readOptions.timeoutMs ?? 1500);
+        while (Date.now() < deadline) {
+          const notification = await readNotification((item) => (
+            item.method === method
+            && item.params?.[idKey] === idValue
+            && typeof item.params.deltaBase64 === 'string'
+          ), { timeoutMs: Math.max(1, deadline - Date.now()) });
+          if (!notification || typeof notification.params?.deltaBase64 !== 'string') break;
+          output += Buffer.from(notification.params.deltaBase64, 'base64').toString('utf8');
+          if (output.includes(needle)) return true;
+        }
+        return false;
+      },
+      readNotification,
+      async close() {
+        controller.abort();
+        await reader.cancel().catch(() => undefined);
+      },
+    };
+  }
+
+  function appServerSessionHeaders(options: AppServerRequestOptions): Record<string, string> {
+    return options.connectionId ? { 'x-setsuna-app-server-connection-id': options.connectionId } : {};
+  }
 });
+
+type AppServerRequestOptions = {
+  connectionId?: string;
+};
+
+type AppServerNotificationStream = {
+  readDecodedOutputContains(
+    method: string,
+    idKey: string,
+    idValue: string,
+    needle: string,
+    options?: { timeoutMs?: number },
+  ): Promise<boolean>;
+  readNotification(
+    predicate: (notification: AppServerStreamNotification) => boolean,
+    options?: { timeoutMs?: number },
+  ): Promise<AppServerStreamNotification | null>;
+  close(): Promise<void>;
+};
+
+type AppServerStreamNotification = {
+  method?: string;
+  params?: Record<string, any>;
+};
+
+function interactiveEchoScript(prefix: string): string {
+  return [
+    'process.stdin.setEncoding("utf8");',
+    'process.stdout.write(`tty:${process.stdin.isTTY === true}\\n`);',
+    'let data = "";',
+    'process.stdin.on("data", (chunk) => {',
+    '  data += chunk;',
+    '  const lineEnd = data.indexOf("\\n");',
+    '  if (lineEnd === -1) return;',
+    '  const line = data.slice(0, lineEnd).replace(/\\r/g, "");',
+    `  process.stdout.write(${JSON.stringify(`${prefix}:`)} + line + "\\n");`,
+    '  process.exit(0);',
+    '});',
+    'setTimeout(() => process.exit(2), 4000);',
+  ].join('\n');
+}
+
+function persistentOutputScript(label: string): string {
+  return [
+    `process.stdout.write(${JSON.stringify(`ready:${label}\n`)});`,
+    'process.on("SIGTERM", () => process.exit(143));',
+    'process.on("SIGINT", () => process.exit(130));',
+    'setInterval(() => {}, 1000);',
+    'setTimeout(() => process.exit(2), 15000);',
+  ].join('\n');
+}
 
 async function createOpenAiCaptureServer(responseText = 'Captured.'): Promise<{
   baseUrl: string;
@@ -2718,20 +3877,27 @@ async function createModelListCaptureServer(): Promise<{
 
 async function createMcpToolsServer(): Promise<{
   baseUrl: string;
-  requests: Promise<Array<{ method?: string; authorization?: string; session?: string }>>;
+  requests: Promise<Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; uri?: string; tool?: string; query?: string }>>;
   close(): Promise<void>;
 }> {
-  const requests: Array<{ method?: string; authorization?: string; session?: string }> = [];
-  let resolveRequests: (requests: Array<{ method?: string; authorization?: string; session?: string }>) => void = () => undefined;
-  const requestsPromise = new Promise<Array<{ method?: string; authorization?: string; session?: string }>>((resolve) => {
+  const requests: Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; uri?: string; tool?: string; query?: string }> = [];
+  let resolveRequests: (requests: Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; uri?: string; tool?: string; query?: string }>) => void = () => undefined;
+  const requestsPromise = new Promise<Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; uri?: string; tool?: string; query?: string }>>((resolve) => {
     resolveRequests = resolve;
   });
   const server = createServer(async (request, response) => {
-    const body = JSON.parse(await readRequestText(request)) as { method?: string };
+    const body = JSON.parse(await readRequestText(request)) as {
+      method?: string;
+      params?: { name?: string; uri?: string; arguments?: { query?: string } };
+    };
     requests.push({
       method: body.method,
       authorization: request.headers.authorization,
       session: String(request.headers['mcp-session-id'] ?? ''),
+      ...(request.headers['x-account'] ? { account: String(request.headers['x-account']) } : {}),
+      ...(request.headers['x-static'] ? { staticHeader: String(request.headers['x-static']) } : {}),
+      ...(body.method === 'resources/read' ? { uri: body.params?.uri } : {}),
+      ...(body.method === 'tools/call' ? { tool: body.params?.name, query: body.params?.arguments?.query } : {}),
     });
     if (body.method === 'initialize') {
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'mcp-session-id': 'session_1' });
@@ -2749,6 +3915,79 @@ async function createMcpToolsServer(): Promise<{
     if (body.method === 'notifications/initialized') {
       response.writeHead(202);
       response.end();
+      return;
+    }
+    if (body.method === 'resources/list') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          resources: [
+            {
+              uri: 'memo://hello',
+              name: 'hello',
+              title: 'Hello Memo',
+              description: 'A memo resource',
+              mimeType: 'text/plain',
+            },
+          ],
+        },
+      }));
+      resolveRequests(requests);
+      return;
+    }
+    if (body.method === 'resources/templates/list') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          resourceTemplates: [
+            {
+              uriTemplate: 'memo://{id}',
+              name: 'memo',
+              title: 'Memo',
+              description: 'Memo by id',
+              mimeType: 'text/plain',
+            },
+          ],
+        },
+      }));
+      resolveRequests(requests);
+      return;
+    }
+    if (body.method === 'resources/read') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          contents: [
+            {
+              uri: body.params?.uri,
+              mimeType: 'text/plain',
+              text: `resource for ${body.params?.uri ?? ''}`,
+            },
+          ],
+        },
+      }));
+      resolveRequests(requests);
+      return;
+    }
+    if (body.method === 'tools/call') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          content: [{ type: 'text', text: `result for ${body.params?.arguments?.query ?? ''}` }],
+          structuredContent: { query: body.params?.arguments?.query, count: 1 },
+          isError: false,
+          _meta: { source: 'test-mcp' },
+        },
+      }));
+      resolveRequests(requests);
       return;
     }
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });

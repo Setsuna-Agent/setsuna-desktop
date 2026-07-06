@@ -36,6 +36,8 @@ describe('mcp management tool host', () => {
         transport: 'streamableHttp',
         url: mcpServer.baseUrl,
         headers: { Authorization: 'Bearer secret-token' },
+        oauth_client_id: 'client-123',
+        oauth_resource: 'https://resource.example.com',
         require_approval: 'smart',
       }, context);
 
@@ -53,8 +55,10 @@ describe('mcp management tool host', () => {
             description: 'Search remote docs',
             transport: 'streamableHttp',
             url: mcpServer.baseUrl,
-            requireApproval: 'always',
+            requireApproval: 'auto',
             headerKeys: ['Authorization'],
+            oauthClientId: 'client-123',
+            oauthResource: 'https://resource.example.com',
             tools: [
               { name: 'search_web', description: 'Search the web' },
               { name: 'summarize_page' },

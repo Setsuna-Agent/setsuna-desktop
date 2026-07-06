@@ -600,4 +600,101 @@ describe('applyRuntimeEventToThread context compaction', () => {
     expect(completed.messages[0]).toMatchObject({ id: 'msg_1', visibility: 'transcript' });
     expect(completed.messages[1]).toMatchObject({ id: 'msg_compact', contextCompaction: compactedMessage.contextCompaction });
   });
+
+  it('keeps hook runs pending until a context compaction message exists for the turn', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+    };
+    const started: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_compact',
+      type: 'hook.started',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        id: 'hook_turn_compact_PreCompact_0',
+        turnId: 'turn_compact',
+        eventName: 'PreCompact',
+        handlerType: 'command',
+        status: 'running',
+        matcher: 'manual',
+      },
+    };
+    const completed: RuntimeEvent = {
+      id: 'event_2',
+      seq: 2,
+      threadId: 'thread_1',
+      turnId: 'turn_compact',
+      type: 'hook.completed',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        id: 'hook_turn_compact_PreCompact_0',
+        turnId: 'turn_compact',
+        eventName: 'PreCompact',
+        handlerType: 'command',
+        status: 'completed',
+        matcher: 'manual',
+        entries: [{ kind: 'warning', text: 'pre compact warning' }],
+      },
+    };
+    const compactedMessage = {
+      id: 'msg_compact',
+      turnId: 'turn_compact',
+      role: 'system' as const,
+      content: '<context_compaction_summary>hello</context_compaction_summary>',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      status: 'complete' as const,
+      contextCompaction: {
+        compactedMessageCount: 1,
+        compactedTokens: 128,
+        keptRecentMessageCount: 0,
+        maxContextTokensK: 256,
+        originalMessageCount: 1,
+        originalTokens: 512,
+        triggerScopes: ['manual'],
+      },
+    };
+    const compacted: RuntimeEvent = {
+      id: 'event_3',
+      seq: 3,
+      threadId: 'thread_1',
+      turnId: 'turn_compact',
+      type: 'thread.context_compacted',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: {
+        messages: [compactedMessage],
+        notice: compactedMessage.contextCompaction,
+      },
+    };
+
+    const pending = [started, completed].reduce(applyRuntimeEventToThread, thread);
+    expect(pending.pendingHookRuns).toMatchObject([
+      {
+        eventName: 'PreCompact',
+        status: 'completed',
+        entries: [{ kind: 'warning', text: 'pre compact warning' }],
+      },
+    ]);
+
+    const projected = applyRuntimeEventToThread(pending, compacted);
+    expect(projected.pendingHookRuns).toBeUndefined();
+    expect(projected.messages[0]).toMatchObject({
+      id: 'msg_compact',
+      hookRuns: [{
+        eventName: 'PreCompact',
+        status: 'completed',
+        matcher: 'manual',
+        entries: [{ kind: 'warning', text: 'pre compact warning' }],
+      }],
+    });
+  });
 });

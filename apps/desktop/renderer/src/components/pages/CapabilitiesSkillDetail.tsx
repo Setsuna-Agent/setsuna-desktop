@@ -34,7 +34,7 @@ export function CapabilitiesSkillDetail({
       <PageHeader
         onBack={onBack}
         title={activeSkill.name || 'Skill 详情'}
-        subtitle={`${activeSkill.kind === 'user' ? '个人 Skill' : '系统 Skill'} · ${activeSkill.path ?? activeSkill.id}`}
+        subtitle={activeSkill.kind === 'user' ? '个人 Skill' : '系统 Skill'}
         actions={
           <>
             <Button

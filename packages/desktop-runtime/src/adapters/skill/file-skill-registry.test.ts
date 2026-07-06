@@ -81,6 +81,73 @@ describe('file skill registry', () => {
     expect(await registry.getSkill('workspace-helper')).toBeNull();
   });
 
+  it('loads runtime extra roots without persisting them', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const extraRoot = path.join(dataDir, 'extra-skills');
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await registry.setExtraRoots([path.join(dataDir, 'missing-extra-root')]);
+    expect((await registry.listSkills()).skills.map((skill) => skill.id)).not.toContain('extra-helper');
+
+    await mkdir(path.join(extraRoot, 'extra-helper'), { recursive: true });
+    await writeFile(
+      path.join(extraRoot, 'extra-helper', 'SKILL.md'),
+      [
+        '---',
+        'name: Extra Helper',
+        'description: Comes from a runtime extra root',
+        '---',
+        '',
+        '# Extra Helper',
+        '',
+        'Use the extra root.',
+      ].join('\n'),
+    );
+    await registry.setExtraRoots([extraRoot]);
+
+    expect(await registry.listSkills()).toMatchObject({
+      skills: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'extra-helper',
+          kind: 'user',
+          name: 'Extra Helper',
+          enabled: true,
+        }),
+      ]),
+    });
+    await expect(registry.selectedSkillInjections(['extra-helper'])).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'extra-helper',
+          content: expect.stringContaining('Use the extra root.'),
+        }),
+      ]),
+    );
+  });
+
+  it('notifies subscribers when watched skill files change', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+    const changed = nextSkillChange(registry);
+
+    await sleep(75);
+    await writeFile(
+      path.join(builtinDir, 'presentation-mcp', 'SKILL.md'),
+      [
+        '---',
+        'name: presentation-mcp',
+        'description: Updated externally',
+        '---',
+        '',
+        '# Presentation MCP',
+        '',
+        'Changed outside the registry API.',
+      ].join('\n'),
+    );
+
+    await expect(changed).resolves.toBe(true);
+  });
+
   it('keeps built-in skill content read-only', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
@@ -132,6 +199,25 @@ describe('file skill registry', () => {
     expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'presentation-mcp', selected: false });
   });
 });
+
+function nextSkillChange(registry: FileSkillRegistry): Promise<boolean> {
+  return new Promise((resolve) => {
+    let unsubscribe = () => {};
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      resolve(false);
+    }, 2000);
+    unsubscribe = registry.subscribeChanges(() => {
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve(true);
+    });
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 class CapturingModelClient implements ModelClient {
   messages: Array<{ content: string }> = [];

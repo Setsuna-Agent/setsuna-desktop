@@ -1,4 +1,4 @@
-import type { RuntimeMessage, RuntimePermissionProfile, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
 export type ToolExecutionContext = {
   threadId: string;
@@ -6,8 +6,34 @@ export type ToolExecutionContext = {
   turnId?: string;
   toolCallId?: string;
   permissionProfile?: RuntimePermissionProfile;
+  sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  features?: Record<string, boolean>;
+  sandbox?: ToolSandboxAttempt;
   signal?: AbortSignal;
   onToolOutputDelta?(delta: ToolOutputDelta): void;
+};
+
+/**
+ * runtime 工具执行上下文：在通用 ToolExecutionContext 基础上，
+ * 强制要求 turnId、permissionProfile、sandboxWorkspaceWrite 与 abort signal。
+ * agent-loop 与 tool-orchestrator 共享该类型，避免重复定义导致字段漂移。
+ */
+export type RuntimeToolExecutionContext = ToolExecutionContext & {
+  turnId: string;
+  permissionProfile: RuntimePermissionProfile;
+  sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite | undefined;
+  signal: AbortSignal;
+};
+
+export type ToolExecutionEnvironment = {
+  id: string;
+  cwd: string;
+};
+
+export type ToolSandboxAttempt = {
+  mode: 'default' | 'bypass';
+  networkAccess?: 'default' | 'enabled';
+  retryReason?: string;
 };
 
 export type ToolOutputDelta = {
@@ -23,6 +49,20 @@ export type ToolExecutionResult = {
   containsExternalContext?: boolean;
 };
 
+export class ToolExecutionError extends Error {
+  readonly failureKind?: string;
+  readonly failureStage?: string;
+  readonly data?: unknown;
+
+  constructor(message: string, options: { failureKind?: string; failureStage?: string; data?: unknown } = {}) {
+    super(message);
+    this.name = 'ToolExecutionError';
+    this.failureKind = options.failureKind;
+    this.failureStage = options.failureStage;
+    this.data = options.data;
+  }
+}
+
 export type ToolExecutionPreview = {
   argumentsPreview?: string;
   resultPreview?: string;
@@ -31,10 +71,13 @@ export type ToolExecutionPreview = {
 export type ToolApprovalRequirement = {
   reason: string;
   argumentsPreview?: string;
+  approvalKeys?: string[];
+  persistentApprovalKeys?: string[];
 };
 
 export type ToolHost = {
   listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]>;
+  environmentForToolContext?(context: ToolExecutionContext): Promise<ToolExecutionEnvironment | null> | ToolExecutionEnvironment | null;
   systemPrompt?(context: ToolExecutionContext): Promise<string | null> | string | null;
   toolChoice?(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> | RuntimeToolChoice | null;
   approvalForTool?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolApprovalRequirement | null>;

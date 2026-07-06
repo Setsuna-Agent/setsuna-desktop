@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { IDisposable, IPty } from 'node-pty';
+import { desktopShellPath } from './desktop-environment.js';
 
 const require = createRequire(import.meta.url);
 const pty = require('node-pty') as typeof import('node-pty');
@@ -182,18 +183,4 @@ function terminalEnvironment(): NodeJS.ProcessEnv {
 
 function terminalDimension(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.round(value ?? fallback));
-}
-
-function desktopShellPath(basePath = ''): string {
-  const home = process.env.HOME || process.env.USERPROFILE || homedir();
-  return [
-    ...String(basePath || '').split(path.delimiter),
-    '/usr/local/bin',
-    '/opt/homebrew/bin',
-    path.join(home, '.local', 'share', 'pnpm'),
-    path.join(home, '.local', 'bin'),
-    path.join(home, 'Library', 'pnpm'),
-  ]
-    .filter((item, index, items) => item && items.indexOf(item) === index)
-    .join(path.delimiter);
 }

@@ -1,4 +1,4 @@
-import type { RuntimeMcpServerInput, RuntimeMcpToolInfo, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeMcpRequireApproval, RuntimeMcpServerInput, RuntimeMcpToolInfo, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { McpStore } from '../../ports/mcp-store.js';
 import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import { callMcpServerTool } from '../mcp/mcp-tool-discovery.js';
@@ -8,6 +8,8 @@ type McpToolMapping = {
   server: RuntimeMcpServerInput;
   tool: RuntimeMcpToolInfo;
 };
+
+type McpApprovalMode = 'auto' | 'prompt' | 'approve';
 
 const emptyInputSchema = { type: 'object', properties: {}, additionalProperties: true };
 
@@ -52,11 +54,17 @@ export class McpRuntimeToolHost implements ToolHost {
   async approvalForTool(name: string, _input: unknown, _context: ToolExecutionContext) {
     const mapping = await this.findToolMapping(name);
     if (!mapping) return null;
-    const policy = mapping.server.requireApproval ?? 'always';
-    // MCP 默认走审批，只有 server 明确配置 never 才直接执行。
-    if (policy === 'never') return null;
+    const policy = normalizeApprovalMode(mapping.tool.approvalMode ?? mapping.server.requireApproval);
+    if (policy === 'approve') return null;
+    if (policy === 'auto' && !mcpToolRequiresApproval(mapping.tool.annotations)) return null;
     return {
       reason: `调用 MCP 工具：${mapping.server.label ?? mapping.server.key} / ${mapping.tool.name}`,
+      ...(policy === 'auto'
+        ? {
+            approvalKeys: [mcpApprovalSessionKey(mapping)],
+            persistentApprovalKeys: [mcpApprovalSessionKey(mapping)],
+          }
+        : {}),
     };
   }
 
@@ -167,4 +175,29 @@ function uniqueModelToolName(baseName: string, collisionIndex: number): string {
 function validInputSchema(value: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length) return emptyInputSchema;
   return value;
+}
+
+function normalizeApprovalMode(value: RuntimeMcpRequireApproval | undefined): McpApprovalMode {
+  if (value === 'approve' || value === 'never') return 'approve';
+  if (value === 'prompt' || value === 'always') return 'prompt';
+  return 'auto';
+}
+
+function mcpToolRequiresApproval(annotations: Record<string, unknown> | undefined): boolean {
+  const destructiveHint = annotationBoolean(annotations, 'destructiveHint', 'destructive_hint');
+  if (destructiveHint === true) return true;
+
+  const readOnlyHint = annotationBoolean(annotations, 'readOnlyHint', 'read_only_hint') ?? false;
+  if (readOnlyHint) return false;
+
+  return (destructiveHint ?? true) || (annotationBoolean(annotations, 'openWorldHint', 'open_world_hint') ?? true);
+}
+
+function annotationBoolean(annotations: Record<string, unknown> | undefined, camelCase: string, snakeCase: string): boolean | undefined {
+  const value = annotations?.[camelCase] ?? annotations?.[snakeCase];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function mcpApprovalSessionKey(mapping: McpToolMapping): string {
+  return `mcp:${mapping.server.key}:${mapping.tool.name}`;
 }

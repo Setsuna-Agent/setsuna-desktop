@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type {
   CreateThreadInput,
@@ -6,9 +7,13 @@ import type {
   ModelRequest,
   ModelStreamEvent,
   RuntimeConfigState,
+  RuntimeExecPolicyAmendment,
   RuntimeEvent,
+  RuntimeHookRun,
+  RuntimeNetworkPolicyAmendment,
   RuntimeThread,
   RuntimeThreadSummary,
+  RuntimeToolCall,
   RuntimeToolDefinition,
   RuntimeUsageRecord,
   ThreadPatch,
@@ -22,10 +27,13 @@ import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
 import type { ModelClient } from '../ports/model-client.js';
+import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../ports/policy-amendment-store.js';
+import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
 import { systemClock, type Clock } from '../ports/clock.js';
 import type { ThreadStore } from '../ports/thread-store.js';
-import type { ToolExecutionContext, ToolHost } from '../ports/tool-host.js';
+import { ToolExecutionError, type ToolExecutionContext, type ToolHost } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
+import { createRuntimeToolHookRunner } from '../hooks/runtime-hooks.js';
 import { AgentLoop } from './agent-loop.js';
 
 describe('agent loop tools', () => {
@@ -78,6 +86,789 @@ describe('agent loop tools', () => {
     ]);
   });
 
+  it('runs PreToolUse hooks and blocks denied tool calls', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook block', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PreToolUse: [{
+          matcher: 'workspace_read_file',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stderr.write('blocked by policy'); process.exit(2);"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({
+        toolName: 'workspace_read_file',
+        status: 'rejected',
+        content: expect.stringContaining('blocked by policy'),
+      }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.started',
+      payload: expect.objectContaining({
+        eventName: 'PreToolUse',
+        toolName: 'workspace_read_file',
+        status: 'running',
+      }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PreToolUse',
+        toolName: 'workspace_read_file',
+        status: 'blocked',
+        message: 'blocked by policy',
+        entries: [{ kind: 'feedback', text: 'blocked by policy' }],
+      }),
+    }));
+    const hookRun = saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'workspace_read_file')?.hookRuns?.[0];
+    expect(hookRun).toMatchObject({
+      eventName: 'PreToolUse',
+      status: 'blocked',
+      message: 'blocked by policy',
+      entries: [{ kind: 'feedback', text: 'blocked by policy' }],
+    });
+    expect(saved?.messages.find((message) => message.role === 'tool')?.content).toContain('blocked by policy');
+  });
+
+  it('treats star hook matchers as match-all like Codex', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook star matcher', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PreToolUse: [{
+          matcher: '*',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stderr.write('blocked by star matcher'); process.exit(2);"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PreToolUse',
+        matcher: '*',
+        status: 'blocked',
+        message: 'blocked by star matcher',
+      }),
+    }));
+  });
+
+  it('uses exact matching for literal hook matchers instead of substring regex matching', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook literal matcher', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PreToolUse: [{
+          matcher: 'read',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stderr.write('literal read should not match workspace_read_file'); process.exit(2);"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
+    expect(events.some((event) => event.type === 'hook.completed')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({
+        toolName: 'workspace_read_file',
+        status: 'success',
+      }),
+    }));
+  });
+
+  it('runs SessionStart hooks before the first model request and injects context', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Session start hook context', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        SessionStart: [{
+          matcher: 'startup',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.hook_event_name !== 'SessionStart' || payload.source !== 'startup') process.exit(1); process.stdout.write('session context from startup'); });"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const firstRequestText = modelClient.requests[0]?.messages.map((message) => message.content).join('\n');
+
+    expect(firstRequestText).toContain('<hook_additional_context>');
+    expect(firstRequestText).toContain('session context from startup');
+    expect(saved?.messages.find((message) => message.role === 'user')?.hookRuns).toMatchObject([
+      {
+        eventName: 'SessionStart',
+        matcher: 'startup',
+        status: 'completed',
+        message: 'Added context.',
+        entries: [{ kind: 'context', text: 'session context from startup' }],
+      },
+    ]);
+  });
+
+  it('lets SessionStart hooks stop the turn before user prompt hooks and model calls', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Session start hook stop', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        SessionStart: [{
+          matcher: 'startup',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ continue: false, stopReason: 'session start paused', hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'saved for later' } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+        UserPromptSubmit: [{
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stderr.write('should not run'); process.exit(2);"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(modelClient.requests).toEqual([]);
+    expect(toolHost.calls).toEqual([]);
+    expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.find((message) => message.role === 'assistant')?.content).toBe('session start paused');
+    expect(saved?.messages.find((message) => message.role === 'user')?.hookRuns).toMatchObject([
+      {
+        eventName: 'SessionStart',
+        status: 'stopped',
+        message: 'session start paused',
+        entries: [
+          { kind: 'context', text: 'saved for later' },
+          { kind: 'stop', text: 'session start paused' },
+        ],
+      },
+    ]);
+  });
+
+  it('runs SessionStart clear hooks after clearing thread context through AgentLoop', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Session start clear hook', projectId: 'project_1' });
+    await threadStore.appendEvent(thread.id, {
+      id: ids.id('event'),
+      threadId: thread.id,
+      type: 'message.created',
+      createdAt: '2026-06-26T00:03:00.000Z',
+      payload: {
+        message: {
+          id: 'clear_msg_1',
+          role: 'user',
+          content: 'old context',
+          createdAt: '2026-06-26T00:03:00.000Z',
+          status: 'complete',
+        },
+      },
+    });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        SessionStart: [{
+          matcher: 'clear',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.source !== 'clear') process.exit(1); process.stdout.write('context after clear'); });"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    const cleared = await loop.clearThreadContext(thread.id);
+    await loop.sendTurn(thread.id, { input: 'read README after clear' });
+    const firstRequestText = modelClient.requests[0]?.messages.map((message) => message.content).join('\n');
+
+    expect(cleared.messages).toEqual([]);
+    expect(firstRequestText).toContain('<hook_additional_context>');
+    expect(firstRequestText).toContain('context after clear');
+    expect(firstRequestText).not.toContain('old context');
+  });
+
+  it('runs SubagentStart hooks with agent metadata and ignores continue false', async () => {
+    const config = await new HooksConfigStore({
+      SubagentStart: [{
+        matcher: 'worker',
+        hooks: [{
+          type: 'command',
+          command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.hook_event_name !== 'SubagentStart' || payload.agent_id !== 'agent_child' || payload.agent_type !== 'worker' || payload.permission_mode !== 'on-request') process.exit(1); process.stdout.write(JSON.stringify({ continue: false, stopReason: 'ignored for subagent start', hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: 'child startup context' } })); });"),
+          timeoutSec: 5,
+        }],
+      }],
+    }).getConfig();
+    const runner = createRuntimeToolHookRunner(config);
+    const events = hookEventCapture();
+
+    const outcome = await runner?.runSubagentStart({
+      agentId: 'agent_child',
+      agentType: 'worker',
+      approvalPolicy: 'on-request',
+      context: hookContext(),
+      environment: hookEnvironment(),
+      events,
+    });
+
+    expect(outcome).toEqual({ additionalContexts: ['child startup context'] });
+    expect(events.completed).toMatchObject([
+      {
+        eventName: 'SubagentStart',
+        status: 'completed',
+        message: 'Added context.',
+        entries: [{ kind: 'context', text: 'child startup context' }],
+      },
+    ]);
+  });
+
+  it('runs SubagentStop hooks with agent metadata and blocks continuation', async () => {
+    const config = await new HooksConfigStore({
+      SubagentStop: [{
+        matcher: 'worker',
+        hooks: [{
+          type: 'command',
+          command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.hook_event_name !== 'SubagentStop' || payload.agent_id !== 'agent_child' || payload.agent_type !== 'worker' || payload.agent_transcript_path !== '/tmp/agent.jsonl' || payload.last_assistant_message !== 'done') process.exit(1); process.stdout.write(JSON.stringify({ decision: 'block', reason: 'send summary to parent first' })); });"),
+          timeoutSec: 5,
+        }],
+      }],
+    }).getConfig();
+    const runner = createRuntimeToolHookRunner(config);
+    const events = hookEventCapture();
+
+    const outcome = await runner?.runSubagentStop({
+      agentId: 'agent_child',
+      agentTranscriptPath: '/tmp/agent.jsonl',
+      agentType: 'worker',
+      approvalPolicy: 'on-request',
+      context: hookContext(),
+      environment: hookEnvironment(),
+      events,
+      lastAssistantMessage: 'done',
+      stopHookActive: false,
+    });
+
+    expect(outcome).toEqual({
+      blockReason: 'send summary to parent first',
+      shouldBlock: true,
+      shouldStop: false,
+    });
+    expect(events.completed).toMatchObject([
+      {
+        eventName: 'SubagentStop',
+        status: 'blocked',
+        message: 'send summary to parent first',
+        entries: [{ kind: 'feedback', text: 'send summary to parent first' }],
+      },
+    ]);
+  });
+
+  it('runs UserPromptSubmit hooks and stops the turn before model calls', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'User prompt hook block', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        UserPromptSubmit: [{
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stderr.write('prompt blocked by hook'); process.exit(2);"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(modelClient.requests).toEqual([]);
+    expect(toolHost.calls).toEqual([]);
+    expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.find((message) => message.role === 'assistant')?.content).toBe('prompt blocked by hook');
+    expect(saved?.messages.find((message) => message.role === 'user')?.hookRuns).toMatchObject([
+      {
+        eventName: 'UserPromptSubmit',
+        status: 'blocked',
+        message: 'prompt blocked by hook',
+        entries: [{ kind: 'feedback', text: 'prompt blocked by hook' }],
+      },
+    ]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'turn.completed',
+      payload: {},
+    }));
+  });
+
+  it('injects UserPromptSubmit additional context into the next model request', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'User prompt hook context', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        UserPromptSubmit: [{
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ systemMessage: 'hook warning', hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'prefer compact answers' } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const firstRequestText = modelClient.requests[0]?.messages.map((message) => message.content).join('\n');
+
+    expect(firstRequestText).toContain('<hook_additional_context>');
+    expect(firstRequestText).toContain('prefer compact answers');
+    expect(saved?.messages.find((message) => message.role === 'user')?.hookRuns).toMatchObject([
+      {
+        eventName: 'UserPromptSubmit',
+        status: 'completed',
+        message: 'Added context.',
+        entries: [
+          { kind: 'warning', text: 'hook warning' },
+          { kind: 'context', text: 'prefer compact answers' },
+        ],
+      },
+    ]);
+  });
+
+  it('runs Stop hooks and continues the turn when they block stopping', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Stop hook continuation', projectId: 'project_1' });
+    const modelClient = new StopHookModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new HooksConfigStore({
+        Stop: [{
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (!payload.stop_hook_active) { process.stderr.write('continue with test coverage'); process.exit(2); } process.exit(0); });"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'finish the task' });
+    const saved = await threadStore.getThread(thread.id);
+    const userMessage = saved?.messages.find((message) => message.role === 'user');
+    const assistantMessages = saved?.messages.filter((message) => message.role === 'assistant') ?? [];
+    const secondRequestText = modelClient.requests[1]?.messages.map((message) => message.content).join('\n');
+
+    expect(modelClient.requests).toHaveLength(2);
+    expect(secondRequestText).toContain('<hook_stop_continuation>');
+    expect(secondRequestText).toContain('continue with test coverage');
+    expect(assistantMessages.map((message) => message.content)).toEqual(['first answer', 'final answer']);
+    expect(userMessage?.hookRuns).toMatchObject([
+      {
+        eventName: 'Stop',
+        status: 'blocked',
+        message: 'continue with test coverage',
+        entries: [{ kind: 'feedback', text: 'continue with test coverage' }],
+      },
+      {
+        eventName: 'Stop',
+        status: 'completed',
+      },
+    ]);
+  });
+
+  it('allows PreToolUse hooks to rewrite tool input before execution', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook rewrite', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PreToolUse: [{
+          matcher: 'workspace_read_file',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { path: 'REWRITTEN.md' } } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'REWRITTEN.md' }, projectId: 'project_1' }]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({
+        toolName: 'workspace_read_file',
+        argumentsPreview: expect.stringContaining('REWRITTEN.md'),
+      }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PreToolUse',
+        toolName: 'workspace_read_file',
+        status: 'completed',
+        message: 'Updated tool input.',
+      }),
+    }));
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'workspace_read_file')?.hookRuns).toMatchObject([
+      { eventName: 'PreToolUse', status: 'completed', message: 'Updated tool input.' },
+    ]);
+  });
+
+  it('normalizes shell PreToolUse payload as Bash and preserves local args when rewriting', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Bash hook rewrite', projectId: 'project_1' });
+    const modelClient = new SingleToolCallModelClient({
+      id: 'call_shell_hook',
+      name: 'run_shell_command',
+      arguments: '{"command":"printf original","risk_level":"low","directory":"scripts"}',
+    });
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PreToolUse: [{
+          matcher: 'Bash',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.tool_name !== 'Bash' || payload.tool_input?.command !== 'printf original' || payload.tool_use_id !== 'call_shell_hook') { process.stderr.write(JSON.stringify(payload)); process.exit(1); } process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { command: 'printf rewritten' } } })); });"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run shell' });
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(toolHost.calls).toEqual([{
+      name: 'run_shell_command',
+      input: { command: 'printf rewritten', risk_level: 'low', directory: 'scripts' },
+      projectId: 'project_1',
+    }]);
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'run_shell_command')?.hookRuns).toMatchObject([
+      { eventName: 'PreToolUse', matcher: 'Bash', status: 'completed', message: 'Updated tool input.' },
+    ]);
+  });
+
+  it('normalizes apply_patch hook payload to Codex command shape and rewrites patch only', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Apply patch hook rewrite', projectId: 'project_1' });
+    const originalPatch = '*** Begin Patch\n*** Add File: old.txt\n+old\n*** End Patch';
+    const rewrittenPatch = '*** Begin Patch\n*** Add File: new.txt\n+new\n*** End Patch';
+    const hookCommand = nodeEvalHook(`const originalPatch = ${JSON.stringify(originalPatch)}; const rewrittenPatch = ${JSON.stringify(rewrittenPatch)}; let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.tool_name !== 'apply_patch' || payload.tool_input?.command !== originalPatch || payload.tool_use_id !== 'call_patch_hook') { process.stderr.write(JSON.stringify(payload)); process.exit(1); } process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { command: rewrittenPatch } } })); });`);
+    const modelClient = new SingleToolCallModelClient({
+      id: 'call_patch_hook',
+      name: 'apply_patch',
+      arguments: JSON.stringify({ patch: originalPatch, workdir: 'src' }),
+    });
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PreToolUse: [{
+          matcher: 'apply_patch',
+          hooks: [{
+            type: 'command',
+            command: hookCommand,
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'apply patch' });
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(toolHost.calls).toEqual([{
+      name: 'apply_patch',
+      input: { patch: rewrittenPatch, workdir: 'src' },
+      projectId: 'project_1',
+    }]);
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'apply_patch')?.hookRuns).toMatchObject([
+      { eventName: 'PreToolUse', matcher: 'apply_patch', status: 'completed', message: 'Updated tool input.' },
+    ]);
+  });
+
+  it('marks invalid PreToolUse hook output as failed and ignores rewrites', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook invalid rewrite', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PreToolUse: [{
+          matcher: 'workspace_read_file',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { path: 'INVALID.md' } } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PreToolUse',
+        toolName: 'workspace_read_file',
+        status: 'failed',
+        message: 'PreToolUse hook returned updatedInput without permissionDecision:allow',
+        entries: [{ kind: 'error', text: 'PreToolUse hook returned updatedInput without permissionDecision:allow' }],
+      }),
+    }));
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'workspace_read_file')?.hookRuns).toMatchObject([
+      { eventName: 'PreToolUse', status: 'failed', message: 'PreToolUse hook returned updatedInput without permissionDecision:allow', entries: [{ kind: 'error', text: 'PreToolUse hook returned updatedInput without permissionDecision:allow' }] },
+    ]);
+  });
+
+  it('runs PostToolUse hooks and returns feedback to the model', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook post feedback', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PostToolUse: [{
+          matcher: 'workspace_read_file',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ decision: 'block', reason: 'review the tool result first' }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const toolMessage = modelClient.requests[1].messages.find((message) => message.role === 'tool');
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toHaveLength(1);
+    expect(toolMessage?.content).toContain('review the tool result first');
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({
+        toolName: 'workspace_read_file',
+        status: 'success',
+      }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PostToolUse',
+        toolName: 'workspace_read_file',
+        status: 'blocked',
+        message: 'review the tool result first',
+        entries: [{ kind: 'feedback', text: 'review the tool result first' }],
+      }),
+    }));
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'workspace_read_file')?.hookRuns).toMatchObject([
+      { eventName: 'PostToolUse', status: 'blocked', message: 'review the tool result first', entries: [{ kind: 'feedback', text: 'review the tool result first' }] },
+    ]);
+  });
+
+  it('marks PostToolUse continue false hooks as stopped and returns feedback', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook post stop', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new HooksConfigStore({
+        PostToolUse: [{
+          matcher: 'workspace_read_file',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ continue: false, stopReason: 'stop after tool', reason: 'model-facing stop feedback' }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const toolMessage = modelClient.requests[1].messages.find((message) => message.role === 'tool');
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toHaveLength(1);
+    expect(toolMessage?.content).toContain('model-facing stop feedback');
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PostToolUse',
+        toolName: 'workspace_read_file',
+        status: 'stopped',
+        message: 'model-facing stop feedback',
+        entries: [{ kind: 'stop', text: 'model-facing stop feedback' }],
+      }),
+    }));
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'workspace_read_file')?.hookRuns).toMatchObject([
+      { eventName: 'PostToolUse', status: 'stopped', message: 'model-facing stop feedback', entries: [{ kind: 'stop', text: 'model-facing stop feedback' }] },
+    ]);
+  });
+
   it('publishes tool output deltas before completing command tools', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -123,6 +914,7 @@ describe('agent loop tools', () => {
       clock: systemClock,
       ids,
       toolHost,
+      configStore: new SandboxWorkspaceWriteConfigStore(),
     });
 
     const turn = loop.sendTurn(thread.id, { input: 'inspect both' });
@@ -140,6 +932,7 @@ describe('agent loop tools', () => {
     const saved = await threadStore.getThread(thread.id);
     expect(toolHost.started).toEqual(['read_file', 'search_text']);
     expect(toolHost.contexts.every((context) => context.permissionProfile === 'workspace-write')).toBe(true);
+    expect(toolHost.contexts.every((context) => context.sandboxWorkspaceWrite?.writableRoots?.includes('/tmp/setsuna-extra-writable'))).toBe(true);
     expect(modelClient.requests).toHaveLength(2);
     expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['read_file', 'search_text']);
     expect(saved?.messages.at(-1)?.content).toContain('parallel results received');
@@ -272,6 +1065,32 @@ describe('agent loop tools', () => {
       eventBus: new InMemoryEventBus(),
       clock: systemClock,
       ids,
+      configStore: new HooksConfigStore({
+        PreCompact: [{
+          matcher: 'manual',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.hook_event_name !== 'PreCompact' || payload.trigger !== 'manual') process.exit(1); process.stdout.write(JSON.stringify({ systemMessage: 'pre compact warning' })); });"),
+            timeoutSec: 5,
+          }],
+        }],
+        PostCompact: [{
+          matcher: 'manual',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.hook_event_name !== 'PostCompact' || payload.trigger !== 'manual') process.exit(1); process.stdout.write(JSON.stringify({ systemMessage: 'post compact warning' })); });"),
+            timeoutSec: 5,
+          }],
+        }],
+        SessionStart: [{
+          matcher: 'compact',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("let input = ''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { const payload = JSON.parse(input); if (payload.source !== 'compact') process.exit(1); process.stdout.write('context from compact hook'); });"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
     });
 
     const compacted = await loop.compactThreadContext(thread.id);
@@ -288,11 +1107,90 @@ describe('agent loop tools', () => {
     });
     expect(compactingEvent?.turnId).toBeTruthy();
     expect(compactedEvent?.turnId).toBe(compactingEvent?.turnId);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PreCompact',
+        matcher: 'manual',
+        status: 'completed',
+        entries: [{ kind: 'warning', text: 'pre compact warning' }],
+      }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PostCompact',
+        matcher: 'manual',
+        status: 'completed',
+        entries: [{ kind: 'warning', text: 'post compact warning' }],
+      }),
+    }));
     const compactedSummary = compacted.messages.find((message) => message.contextCompaction);
     expect(compacted.messages.some((message) => message.id === 'msg_0' && message.visibility === 'transcript')).toBe(true);
     expect(compactedSummary?.contextCompaction?.triggerScopes).toEqual(['manual']);
     expect(compactedSummary?.turnId).toBe(compactedEvent?.turnId);
     expect(compactedSummary?.content).toContain('模型整理后的上下文摘要');
+
+    await loop.sendTurn(thread.id, { input: 'continue after compact' });
+    expect(modelClient.requests).toHaveLength(2);
+    expect(modelClient.requests[1]?.messages.map((message) => message.content).join('\n')).toContain('context from compact hook');
+  });
+
+  it('lets PreCompact hooks stop manual context compaction before the model call', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'PreCompact stop' });
+    for (let index = 0; index < 12; index += 1) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'message.created',
+        createdAt: `2026-06-26T00:01:${String(index).padStart(2, '0')}.000Z`,
+        payload: {
+          message: {
+            id: `stop_msg_${index}`,
+            role: index % 2 ? 'assistant' : 'user',
+            content: `message ${index}`,
+            createdAt: `2026-06-26T00:01:${String(index).padStart(2, '0')}.000Z`,
+            status: 'complete',
+          },
+        },
+      });
+    }
+    const modelClient = new ContextCompactionModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new HooksConfigStore({
+        PreCompact: [{
+          matcher: 'manual',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ continue: false, stopReason: 'manual compact paused' }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    const compacted = await loop.compactThreadContext(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(modelClient.requests).toHaveLength(0);
+    expect(compacted.messages.some((message) => message.contextCompaction)).toBe(false);
+    expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PreCompact',
+        status: 'stopped',
+        message: 'manual compact paused',
+        entries: [{ kind: 'stop', text: 'manual compact paused' }],
+      }),
+    }));
   });
 
   it('automatically compacts oversized context before the next model request', async () => {
@@ -343,6 +1241,66 @@ describe('agent loop tools', () => {
     expect(saved?.messages.some((message) => message.content === 'continue after history')).toBe(true);
     expect(mainRequest?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
     expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(oversizedHistory.slice(0, 200));
+  });
+
+  it('lets PreCompact hooks stop automatic compaction and complete the turn without model calls', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Automatic context compaction stop' });
+    const oversizedHistory = 'older context '.repeat(90_000);
+    for (let index = 0; index < 9; index += 1) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'message.created',
+        createdAt: `2026-06-26T00:02:${String(index).padStart(2, '0')}.000Z`,
+        payload: {
+          message: {
+            id: `auto_stop_msg_${index}`,
+            role: index % 2 ? 'assistant' : 'user',
+            content: index === 0 ? oversizedHistory : `recent message ${index}`,
+            createdAt: `2026-06-26T00:02:${String(index).padStart(2, '0')}.000Z`,
+            status: 'complete',
+          },
+        },
+      });
+    }
+    const modelClient = new AutoCompactionModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new HooksConfigStore({
+        PreCompact: [{
+          matcher: 'auto',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ continue: false, stopReason: 'auto compact paused' }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'continue after history' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(modelClient.requests).toHaveLength(0);
+    expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
+    expect(saved?.messages.map((message) => message.role).slice(-2)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.at(-1)?.content).toBe('auto compact paused');
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PreCompact',
+        matcher: 'auto',
+        status: 'stopped',
+        message: 'auto compact paused',
+      }),
+    }));
   });
 
   it('forces a final no-tool response when the tool loop reaches its round limit', async () => {
@@ -1179,6 +2137,839 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'tool.completed' && event.payload.status === 'success')).toBe(true);
   });
 
+  it('persists tool approvals across loop instances', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Persistent approval loop' });
+    const persistentToolApprovalStore = new InMemoryPersistentToolApprovalStore();
+    const approvalKeys = ['mcp:search:write_note'];
+    const firstModelClient = new ApprovalToolModelClient();
+    const firstToolHost = new ApprovalToolHost({
+      approvalKeys,
+      persistentApprovalKeys: approvalKeys,
+    });
+    const firstApprovalGate = new InMemoryApprovalGate(systemClock, ids);
+    const firstLoop = new AgentLoop({
+      threadStore,
+      modelClient: firstModelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: firstToolHost,
+      approvalGate: firstApprovalGate,
+      persistentToolApprovalStore,
+    });
+
+    const pendingTurn = firstLoop.sendTurn(thread.id, { input: 'run risky MCP tool and remember' });
+    const pendingApproval = await waitForPendingApproval(firstApprovalGate);
+    expect(pendingApproval.availableDecisions).toEqual([
+      { type: 'approve' },
+      { type: 'approve_for_session' },
+      { type: 'approve_persistently' },
+      { type: 'reject' },
+    ]);
+    await firstApprovalGate.answerApproval(pendingApproval.id, { decision: 'approve_persistently' });
+    await pendingTurn;
+
+    const secondToolHost = new ApprovalToolHost({
+      approvalKeys,
+      persistentApprovalKeys: approvalKeys,
+    });
+    const secondApprovalGate = new InMemoryApprovalGate(systemClock, ids);
+    const secondLoop = new AgentLoop({
+      threadStore,
+      modelClient: new ApprovalToolModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: secondToolHost,
+      approvalGate: secondApprovalGate,
+      persistentToolApprovalStore,
+    });
+
+    await secondLoop.sendTurn(thread.id, { input: 'run risky MCP tool again' });
+
+    expect(firstToolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
+    expect(secondToolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
+    await expect(persistentToolApprovalStore.hasAll(approvalKeys)).resolves.toBe(true);
+    await expect(secondApprovalGate.listApprovals()).resolves.toEqual({ approvals: [] });
+  });
+
+  it('cancels the active turn when command approval is cancelled', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Approval cancel loop' });
+    const modelClient = new ApprovalToolModelClient();
+    const toolHost = new ApprovalToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run risky tool then cancel' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'cancel' });
+    await pendingTurn;
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([]);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.approvalId === pendingApproval.id && event.payload.decision === 'cancel')).toBe(true);
+    expect(events.some((event) => event.type === 'turn.cancelled' && event.payload.reason?.includes('approval decision'))).toBe(true);
+    expect(events.some((event) => event.type === 'tool.completed' && event.payload.toolName === 'dangerous_tool')).toBe(false);
+    expect(modelClient.requests).toHaveLength(1);
+  });
+
+  it('runs exec_command with require_escalated as a bypassed sandbox attempt after approval', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Escalated exec loop' });
+    const modelClient = new EscalatedExecModelClient();
+    const toolHost = new EscalatedExecToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run escalated command' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(pendingApproval.toolName).toBe('exec_command');
+    expect(pendingApproval.reason).toContain('needs unsandboxed access');
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+
+    expect(toolHost.attempts).toEqual(['bypass']);
+    expect(modelClient.requests).toHaveLength(2);
+  });
+
+  it('reuses exec prefix_rule approvals for matching require_escalated commands', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Escalated prefix exec loop' });
+    const modelClient = new RepeatedEscalatedPrefixExecModelClient();
+    const toolHost = new EscalatedExecToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const policyAmendmentStore = new InMemoryPolicyAmendmentStore();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      policyAmendmentStore,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run escalated prefix commands' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(pendingApproval.toolName).toBe('exec_command');
+    expect(pendingApproval.proposedExecPolicyAmendment).toEqual(['git', 'status']);
+    expect(pendingApproval.availableDecisions).toEqual([
+      { type: 'approve' },
+      { type: 'approve_exec_policy_amendment', proposedExecPolicyAmendment: ['git', 'status'] },
+      { type: 'reject' },
+    ]);
+    const pendingThread = await threadStore.getThread(thread.id);
+    const approvalRun = pendingThread?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.approvalId === pendingApproval.id);
+    expect(approvalRun?.proposedExecPolicyAmendment).toEqual(['git', 'status']);
+    expect(approvalRun?.availableApprovalDecisions).toEqual(pendingApproval.availableDecisions);
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_exec_policy_amendment' });
+    await pendingTurn;
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.attempts).toEqual(['bypass', 'bypass']);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_exec_policy_amendment')).toBe(true);
+    await expect(policyAmendmentStore.listPolicyAmendments()).resolves.toMatchObject({
+      execPolicyAmendments: [['git', 'status']],
+    });
+  });
+
+  it('does not reuse banned broad exec prefix_rule approvals', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Broad prefix exec loop' });
+    const modelClient = new BroadEscalatedPrefixExecModelClient();
+    const toolHost = new EscalatedExecToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run broad prefix commands' });
+    const firstApproval = await waitForPendingApproval(approvalGate);
+
+    expect(firstApproval.toolName).toBe('exec_command');
+    expect(firstApproval.proposedExecPolicyAmendment).toBeUndefined();
+    await approvalGate.answerApproval(firstApproval.id, { decision: 'approve_for_session' });
+    const secondApproval = await waitForPendingApproval(approvalGate);
+    expect(secondApproval.id).not.toBe(firstApproval.id);
+    expect(secondApproval.toolName).toBe('exec_command');
+    await approvalGate.answerApproval(secondApproval.id, { decision: 'approve' });
+    await pendingTurn;
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(toolHost.attempts).toEqual(['bypass', 'bypass']);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(2);
+  });
+
+  it('runs exec_command with approved additional sandbox permissions', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Additional permissions exec loop', projectId: 'project_1' });
+    const environmentCwd = await mkDataDir();
+    const expectedWritableRoot = path.join(environmentCwd, 'extra-write');
+    const modelClient = new RepeatedAdditionalPermissionsExecModelClient('extra-write');
+    const toolHost = new AdditionalPermissionsExecToolHost(environmentCwd);
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run command with additional permissions twice' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(pendingApproval.toolName).toBe('exec_command');
+    expect(pendingApproval.reason).toContain('Additional sandbox permissions requested');
+    expect(pendingApproval.reason).toContain('network access');
+    expect(pendingApproval.reason).toContain(expectedWritableRoot);
+    expect(pendingApproval.environmentId).toBe('project_1');
+    expect(pendingApproval.additionalPermissions).toEqual({
+      network: { enabled: true },
+      file_system: {
+        write: [expectedWritableRoot],
+        entries: [{
+          path: { type: 'path', path: expectedWritableRoot },
+          access: 'write',
+        }],
+      },
+    });
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_for_session' });
+    await pendingTurn;
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.contexts).toHaveLength(2);
+    expect(toolHost.contexts.every((context) => context.sandbox?.mode === 'default')).toBe(true);
+    expect(toolHost.contexts.every((context) => context.sandboxWorkspaceWrite?.networkAccess === true)).toBe(true);
+    expect(toolHost.contexts.every((context) => context.sandboxWorkspaceWrite?.writableRoots?.includes(expectedWritableRoot))).toBe(true);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_for_session')).toBe(true);
+  });
+
+  it('applies request_permissions grants to later exec_command calls in the same turn', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Request permissions loop', projectId: 'project_1' });
+    const environmentCwd = await mkDataDir();
+    const grantedRoot = 'relative-grant';
+    const deniedRoot = 'blocked-grant';
+    const deniedSpecialRoot = 'blocked-special';
+    const deniedGlobPattern = '**/*.env';
+    const expectedGrantedRoot = path.join(environmentCwd, grantedRoot);
+    const expectedDeniedRoot = path.join(environmentCwd, deniedRoot);
+    const expectedDeniedSpecialRoot = path.join(environmentCwd, deniedSpecialRoot);
+    const expectedDeniedGlobPattern = path.join(environmentCwd, deniedGlobPattern);
+    const modelClient = new RequestPermissionsThenExecModelClient(grantedRoot, {
+      deniedRoot,
+      deniedSpecialRoot,
+      deniedGlobPattern,
+    });
+    const toolHost = new RequestPermissionsExecToolHost(environmentCwd);
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new ReadOnlyConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'request permission then run command' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    expect(pendingApproval).toMatchObject({
+      toolName: 'request_permissions',
+      status: 'pending',
+      permissionApprovalContext: {
+        cwd: environmentCwd,
+        environmentId: 'project_1',
+        availableScopes: ['turn', 'session'],
+      },
+    });
+    expect(pendingApproval.permissionApprovalContext?.grantedPermissions).toMatchObject({
+      network: { enabled: true },
+    });
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+    const saved = await threadStore.getThread(thread.id);
+    const approvalRun = saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'request_permissions');
+
+    expect(toolHost.contexts).toHaveLength(1);
+    expect(toolHost.contexts[0].permissionProfile).toBe('read-only');
+    expect(toolHost.contexts[0].sandbox?.networkAccess).toBe('enabled');
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.readableRoots).toContain(expectedGrantedRoot);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.writableRoots).toContain(expectedGrantedRoot);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.deniedRoots).toContain(expectedDeniedRoot);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.deniedRoots).toContain(expectedDeniedSpecialRoot);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.deniedGlobPatterns).toContain(expectedDeniedGlobPattern);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.networkAccess).toBe(true);
+    expect(approvalRun?.permissionApprovalContext?.cwd).toBe(environmentCwd);
+    expect(approvalRun?.permissionApprovalContext?.grantedPermissions).toMatchObject({
+      file_system: { read: [expectedGrantedRoot], write: [expectedGrantedRoot] },
+    });
+    expect(approvalRun?.permissionApprovalContext?.grantedPermissions).toMatchObject({
+      file_system: {
+        entries: expect.arrayContaining([
+          { path: { type: 'path', path: expectedDeniedRoot }, access: 'deny' },
+          { path: { type: 'path', path: expectedDeniedSpecialRoot }, access: 'deny' },
+          { path: { type: 'glob_pattern', pattern: expectedDeniedGlobPattern }, access: 'deny' },
+        ]),
+      },
+    });
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes(expectedGrantedRoot))).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"scope":"turn"'))).toBe(true);
+  });
+
+  it('auto-denies request_permissions when the feature is disabled', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Disabled request permissions loop', projectId: 'project_1' });
+    const environmentCwd = await mkDataDir();
+    const modelClient = new RequestPermissionsThenExecModelClient('disabled-grant');
+    const toolHost = new RequestPermissionsExecToolHost(environmentCwd);
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new RequestPermissionsDisabledConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'request permission while disabled' });
+
+    await expect(approvalGate.listApprovals()).resolves.toEqual({ approvals: [] });
+    expect(toolHost.contexts).toHaveLength(1);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.writableRoots).toBeUndefined();
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.readableRoots).toBeUndefined();
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.networkAccess).toBeUndefined();
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"permissions":{}'))).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"scope":"turn"'))).toBe(true);
+  });
+
+  it('clamps request_permissions approval grants to the originally requested permissions', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Clamped request permissions loop', projectId: 'project_1' });
+    const environmentCwd = await mkDataDir();
+    const grantedRoot = 'requested-grant';
+    const requestedRoot = path.join(environmentCwd, grantedRoot);
+    const modelClient = new RequestPermissionsThenExecModelClient(grantedRoot);
+    const toolHost = new RequestPermissionsExecToolHost(environmentCwd);
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new ReadOnlyConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'request permission then clamp the grant' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, {
+      decision: 'approve_for_session',
+      permissionGrant: {
+        permissions: {
+          network: { enabled: true },
+          file_system: {
+            write: [environmentCwd],
+            read: [environmentCwd],
+          },
+        },
+        scope: 'session',
+      },
+    });
+    await pendingTurn;
+
+    expect(toolHost.contexts).toHaveLength(1);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.writableRoots).toEqual([requestedRoot]);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.readableRoots).toEqual([requestedRoot]);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.networkAccess).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes(requestedRoot))).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes(environmentCwd) && !message.content.includes(requestedRoot))).toBe(false);
+  });
+
+  it('enables strict auto review for later tools in the same request_permissions turn', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Strict request permissions loop', projectId: 'project_1' });
+    const environmentCwd = await mkDataDir();
+    const grantedRoot = 'strict-grant';
+    const modelClient = new RequestPermissionsThenExecModelClient(grantedRoot);
+    const toolHost = new RequestPermissionsExecToolHost(environmentCwd);
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new ReadOnlyConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'request permission then strictly review command' });
+    const permissionsApproval = await waitForPendingApproval(approvalGate);
+    expect(permissionsApproval.toolName).toBe('request_permissions');
+    expect(permissionsApproval.availableDecisions).toEqual([
+      { type: 'approve' },
+      { type: 'approve_for_turn_with_strict_auto_review' },
+      { type: 'approve_for_session' },
+      { type: 'reject' },
+    ]);
+
+    await approvalGate.answerApproval(permissionsApproval.id, { decision: 'approve_for_turn_with_strict_auto_review' });
+    const execApproval = await waitForPendingApproval(approvalGate);
+    expect(execApproval.id).not.toBe(permissionsApproval.id);
+    expect(execApproval.toolName).toBe('exec_command');
+    expect(execApproval.reason).toContain('Strict auto review');
+
+    await approvalGate.answerApproval(execApproval.id, { decision: 'approve' });
+    await pendingTurn;
+
+    const approvals = await approvalGate.listApprovals();
+    expect(approvals.approvals.map((approval) => approval.toolName)).toEqual(['exec_command', 'request_permissions']);
+    expect(toolHost.contexts).toHaveLength(1);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.writableRoots).toContain(path.join(environmentCwd, grantedRoot));
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"strict_auto_review":true'))).toBe(true);
+  });
+
+  it('normalizes session-scoped strict request_permissions responses to an empty turn grant', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Invalid strict session permissions loop', projectId: 'project_1' });
+    const environmentCwd = await mkDataDir();
+    const grantedRoot = 'strict-session-grant';
+    const modelClient = new RequestPermissionsThenExecModelClient(grantedRoot);
+    const toolHost = new RequestPermissionsExecToolHost(environmentCwd);
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new ReadOnlyConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'request invalid strict session permissions' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, {
+      decision: 'approve_for_session',
+      permissionGrant: {
+        permissions: {
+          network: { enabled: true },
+          file_system: { write: [path.join(environmentCwd, grantedRoot)] },
+        },
+        scope: 'session',
+        strictAutoReview: true,
+      },
+    });
+    await pendingTurn;
+
+    expect(toolHost.contexts).toHaveLength(1);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.writableRoots).toBeUndefined();
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.networkAccess).toBeUndefined();
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"permissions":{}'))).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"scope":"turn"'))).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"strict_auto_review":false'))).toBe(true);
+  });
+
+  it('keeps request_permissions grants when approved for session', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Session request permissions loop', projectId: 'project_1' });
+    const grantedRoot = '/tmp/setsuna-request-permissions-session';
+    const modelClient = new SessionRequestPermissionsModelClient(grantedRoot);
+    const toolHost = new RequestPermissionsExecToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const firstTurn = loop.sendTurn(thread.id, { input: 'request session permission' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_for_session' });
+    await firstTurn;
+
+    await loop.sendTurn(thread.id, { input: 'reuse session permission' });
+
+    const approvals = await approvalGate.listApprovals();
+    expect(approvals.approvals).toHaveLength(1);
+    expect(toolHost.contexts).toHaveLength(1);
+    expect(toolHost.contexts[0].sandboxWorkspaceWrite?.writableRoots).toContain(grantedRoot);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"scope":"session"'))).toBe(true);
+  });
+
+  it('rejects additional sandbox write permissions for protected metadata', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Protected additional permissions loop', projectId: 'project_1' });
+    const modelClient = new ProtectedAdditionalPermissionsExecModelClient();
+    const toolHost = new AdditionalPermissionsExecToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run command with unsafe additional permissions' });
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.contexts).toHaveLength(0);
+    expect(approvals.approvals).toHaveLength(0);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'exec_command'
+      && event.payload.status === 'rejected'
+      && event.payload.content.includes('protected workspace metadata')
+    )).toBe(true);
+  });
+
+  it('retries a sandbox-denied tool after bypass approval', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Sandbox retry loop' });
+    const modelClient = new SandboxDeniedModelClient();
+    const toolHost = new SandboxRetryToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run sandboxed tool' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(toolHost.attempts).toEqual(['default']);
+    expect(pendingApproval.toolName).toBe('sandboxed_tool');
+    expect(pendingApproval.reason).toContain('Sandbox denied sandboxed_tool');
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.attempts).toEqual(['default', 'bypass']);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.approvalId === pendingApproval.id && event.payload.decision === 'approve')).toBe(true);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'sandboxed_tool'
+      && event.payload.status === 'success'
+      && event.payload.content.includes('retried without sandbox')
+    )).toBe(true);
+  });
+
+  it('caches sandbox retry approvals when approved for session', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Session sandbox retry loop' });
+    const modelClient = new RepeatedSandboxDeniedModelClient();
+    const toolHost = new SandboxRetryToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run sandboxed tool twice' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_for_session' });
+    await pendingTurn;
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.attempts).toEqual(['default', 'bypass', 'default', 'bypass']);
+    expect(modelClient.requests).toHaveLength(3);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_for_session')).toBe(true);
+  });
+
+  it('retries a network-denied tool after network approval', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Network retry loop' });
+    const modelClient = new NetworkDeniedModelClient();
+    const toolHost = new NetworkRetryToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run network tool' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(toolHost.attempts).toEqual(['default']);
+    expect(pendingApproval.toolName).toBe('network_tool');
+    expect(pendingApproval.reason).toContain('Network access is blocked for network_tool');
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.attempts).toEqual(['default', 'enabled']);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.approvalId === pendingApproval.id && event.payload.decision === 'approve')).toBe(true);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'network_tool'
+      && event.payload.status === 'success'
+      && event.payload.content.includes('retried with network')
+    )).toBe(true);
+  });
+
+  it('preserves require_escalated sandbox intent when retrying after network approval', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Escalated network retry loop' });
+    const modelClient = new EscalatedNetworkDeniedModelClient();
+    const toolHost = new EscalatedNetworkRetryToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run escalated network command' });
+    const execApproval = await waitForPendingApproval(approvalGate);
+    expect(execApproval.reason).toContain('needs unsandboxed network access');
+    await approvalGate.answerApproval(execApproval.id, { decision: 'approve' });
+    const networkApproval = await waitForPendingApproval(approvalGate);
+    expect(networkApproval.reason).toContain('Network access');
+    await approvalGate.answerApproval(networkApproval.id, { decision: 'approve' });
+    await pendingTurn;
+
+    expect(toolHost.attempts).toEqual([
+      { mode: 'bypass', networkAccess: 'default' },
+      { mode: 'bypass', networkAccess: 'enabled' },
+    ]);
+  });
+
+  it('caches network retry approvals when approved for session', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Session network approval loop' });
+    const modelClient = new RepeatedNetworkDeniedModelClient();
+    const toolHost = new NetworkRetryToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run network tool twice' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_for_session' });
+    await pendingTurn;
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.attempts).toEqual(['default', 'enabled', 'enabled']);
+    expect(modelClient.requests).toHaveLength(3);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_for_session')).toBe(true);
+  });
+
+  it('caches network approvals by host context for shell commands', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Host network approval loop', projectId: 'project_1' });
+    const modelClient = new RepeatedHostNetworkShellModelClient();
+    const toolHost = new ShellNetworkRetryToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const policyAmendmentStore = new InMemoryPolicyAmendmentStore();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      policyAmendmentStore,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'fetch two URLs from the same host' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(pendingApproval.toolName).toBe('run_shell_command');
+    expect(pendingApproval.reason).toContain('https://api.example.com:443');
+    expect(pendingApproval.argumentsPreview).toContain('network-access');
+    expect(pendingApproval.networkApprovalContext).toEqual({
+      host: 'api.example.com',
+      protocol: 'https',
+      port: 443,
+      target: 'https://api.example.com:443',
+    });
+    expect(pendingApproval.proposedNetworkPolicyAmendments).toEqual([
+      { host: 'api.example.com', action: 'allow' },
+      { host: 'api.example.com', action: 'deny' },
+    ]);
+    expect(pendingApproval.availableDecisions).toEqual([
+      { type: 'approve' },
+      { type: 'approve_for_session' },
+      { type: 'approve_network_policy_amendment', networkPolicyAmendment: { host: 'api.example.com', action: 'allow' } },
+      { type: 'approve_network_policy_amendment', networkPolicyAmendment: { host: 'api.example.com', action: 'deny' } },
+      { type: 'reject' },
+    ]);
+    const pendingThread = await threadStore.getThread(thread.id);
+    const approvalRun = pendingThread?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.approvalId === pendingApproval.id);
+    expect(approvalRun?.networkApprovalContext).toEqual(pendingApproval.networkApprovalContext);
+    expect(approvalRun?.proposedNetworkPolicyAmendments).toEqual(pendingApproval.proposedNetworkPolicyAmendments);
+    expect(approvalRun?.availableApprovalDecisions).toEqual(pendingApproval.availableDecisions);
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_network_policy_amendment' });
+    await pendingTurn;
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.attempts).toEqual([
+      { command: 'curl https://api.example.com/a', networkAccess: 'default' },
+      { command: 'curl https://api.example.com/a', networkAccess: 'enabled' },
+      { command: 'curl https://api.example.com/b', networkAccess: 'enabled' },
+    ]);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_network_policy_amendment')).toBe(true);
+    await expect(policyAmendmentStore.listPolicyAmendments()).resolves.toMatchObject({
+      networkPolicyAmendments: [{ host: 'api.example.com', action: 'allow' }],
+    });
+  });
+
+  it('persists network deny amendments and skips later prompts for the same host', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Host network deny policy loop', projectId: 'project_1' });
+    const modelClient = new RepeatedHostNetworkShellModelClient();
+    const policyAmendmentStore = new InMemoryPolicyAmendmentStore();
+    const toolHost = new PolicyAwareShellNetworkRetryToolHost(policyAmendmentStore);
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      policyAmendmentStore,
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'deny repeated host network commands' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, {
+      decision: 'approve_network_policy_amendment',
+      networkPolicyAmendment: { host: 'api.example.com', action: 'deny' },
+    });
+    await pendingTurn;
+
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(toolHost.attempts).toEqual([
+      { command: 'curl https://api.example.com/a', networkAccess: 'default' },
+      { command: 'curl https://api.example.com/b', networkAccess: 'default' },
+    ]);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'tool.completed' && event.payload.status === 'error')).toHaveLength(2);
+    await expect(policyAmendmentStore.listPolicyAmendments()).resolves.toMatchObject({
+      networkPolicyAmendments: [{ host: 'api.example.com', action: 'deny' }],
+    });
+  });
+
   it('requires approval for every tool when approval policy is strict', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -1210,7 +3001,168 @@ describe('agent loop tools', () => {
     expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
   });
 
-  it('skips file mutation approvals even when approval policy is strict', async () => {
+  it('lets PermissionRequest hooks approve tools before user approval UI', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Permission hook allow' });
+    const modelClient = new ApprovalToolModelClient();
+    const toolHost = new ApprovalToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new HooksConfigStore({
+        PermissionRequest: [{
+          matcher: 'dangerous_tool',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run risky tool with hook allow' });
+    const saved = await threadStore.getThread(thread.id);
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
+    expect(approvals.approvals).toEqual([]);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PermissionRequest',
+        toolName: 'dangerous_tool',
+        status: 'completed',
+        message: 'Approved by hook.',
+      }),
+    }));
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'dangerous_tool')?.hookRuns).toMatchObject([
+      { eventName: 'PermissionRequest', status: 'completed', message: 'Approved by hook.' },
+    ]);
+  });
+
+  it('lets PermissionRequest hooks deny tools before user approval UI', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Permission hook deny' });
+    const modelClient = new ApprovalToolModelClient();
+    const toolHost = new ApprovalToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new HooksConfigStore({
+        PermissionRequest: [{
+          matcher: 'dangerous_tool',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message: 'denied by permission hook' } } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run risky tool with hook deny' });
+    const saved = await threadStore.getThread(thread.id);
+    const approvals = await approvalGate.listApprovals();
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([]);
+    expect(approvals.approvals).toEqual([]);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({
+        toolName: 'dangerous_tool',
+        status: 'rejected',
+        content: expect.stringContaining('denied by permission hook'),
+      }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PermissionRequest',
+        toolName: 'dangerous_tool',
+        status: 'blocked',
+        message: 'denied by permission hook',
+        entries: [{ kind: 'feedback', text: 'denied by permission hook' }],
+      }),
+    }));
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'dangerous_tool')?.hookRuns).toMatchObject([
+      { eventName: 'PermissionRequest', status: 'blocked', message: 'denied by permission hook', entries: [{ kind: 'feedback', text: 'denied by permission hook' }] },
+    ]);
+  });
+
+  it('marks invalid PermissionRequest hook output as failed and continues to approval UI', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Permission hook invalid' });
+    const modelClient = new ApprovalToolModelClient();
+    const toolHost = new ApprovalToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new HooksConfigStore({
+        PermissionRequest: [{
+          matcher: 'dangerous_tool',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow', updatedInput: {} } } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run risky tool with invalid hook allow' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    const eventsBeforeApproval = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([]);
+    expect(pendingApproval.toolName).toBe('dangerous_tool');
+    expect(eventsBeforeApproval).toContainEqual(expect.objectContaining({
+      type: 'hook.completed',
+      payload: expect.objectContaining({
+        eventName: 'PermissionRequest',
+        toolName: 'dangerous_tool',
+        status: 'failed',
+        message: 'PermissionRequest hook returned unsupported updatedInput',
+        entries: [{ kind: 'error', text: 'PermissionRequest hook returned unsupported updatedInput' }],
+      }),
+    }));
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(toolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'dangerous_tool')?.hookRuns).toMatchObject([
+      { eventName: 'PermissionRequest', status: 'failed', message: 'PermissionRequest hook returned unsupported updatedInput', entries: [{ kind: 'error', text: 'PermissionRequest hook returned unsupported updatedInput' }] },
+    ]);
+  });
+
+  it('routes strict file mutations through the tool orchestrator approval flow', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Strict file write loop' });
@@ -1228,17 +3180,319 @@ describe('agent loop tools', () => {
       configStore: new StrictApprovalConfigStore(),
     });
 
-    await loop.sendTurn(thread.id, { input: 'write file strictly' });
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'write file strictly' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(toolHost.calls).toBe(0);
+    expect(pendingApproval.toolName).toBe('write_file');
+    expect(pendingApproval.reason).toContain('Strict approval policy');
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
     const events = await threadStore.listEvents(thread.id, 0);
     const approvals = await approvalGate.listApprovals();
 
-    expect(approvals.approvals).toEqual([]);
-    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(approvals.approvals[0]).toMatchObject({ toolName: 'write_file', status: 'approved' });
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(true);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve')).toBe(true);
     expect(events.some((event) =>
       event.type === 'tool.completed'
       && event.payload.toolName === 'write_file'
       && event.payload.status === 'success'
     )).toBe(true);
+  });
+
+  it('caches strict file mutation approvals only when approved for session', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Session file approval loop' });
+    const modelClient = new RepeatedFileWriteModelClient();
+    const toolHost = new PreviewingToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new StrictApprovalConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'write same file twice with session approval' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_for_session' });
+    await pendingTurn;
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    const approvals = await approvalGate.listApprovals();
+
+    expect(toolHost.calls).toBe(2);
+    expect(approvals.approvals).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_for_session')).toBe(true);
+    expect(events.filter((event) => event.type === 'tool.completed' && event.payload.toolName === 'write_file' && event.payload.status === 'success')).toHaveLength(2);
+  });
+
+  it('does not cache strict file mutation approvals for one-time approvals', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'One-time file approval loop' });
+    const modelClient = new RepeatedFileWriteModelClient();
+    const toolHost = new PreviewingToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new StrictApprovalConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'write same file twice with one-time approval' });
+    const firstApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(firstApproval.id, { decision: 'approve' });
+    const secondApproval = await waitForPendingApproval(approvalGate);
+    await approvalGate.answerApproval(secondApproval.id, { decision: 'approve' });
+    await pendingTurn;
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    const approvals = await approvalGate.listApprovals();
+
+    expect(toolHost.calls).toBe(2);
+    expect(approvals.approvals).toHaveLength(2);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(2);
+  });
+
+  it('rejects file mutations before execution in read-only permission profile', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Read-only file write loop' });
+    const modelClient = new ToolDeltaModelClient();
+    const toolHost = new PreviewingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new ReadOnlyConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'write file read-only' });
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toBe(0);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'write_file'
+      && event.payload.status === 'rejected'
+      && event.payload.content.includes('read-only permission profile')
+    )).toBe(true);
+  });
+
+  it('rejects protected workspace metadata file mutations before execution', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Protected metadata write loop' });
+    const modelClient = new ProtectedMetadataWriteModelClient();
+    const toolHost = new PreviewingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'write git config' });
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toBe(0);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'write_file'
+      && event.payload.status === 'rejected'
+      && event.payload.content.includes('protected workspace metadata')
+    )).toBe(true);
+  });
+
+  it('intercepts shell apply_patch commands into the file mutation approval path', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Shell patch loop' });
+    const modelClient = new ShellApplyPatchModelClient('src/from-shell.txt');
+    const toolHost = new ShellApplyPatchInterceptHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new StrictApprovalConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'apply patch through shell' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(toolHost.calls).toEqual([]);
+    expect(pendingApproval.toolName).toBe('apply_patch');
+    expect(pendingApproval.argumentsPreview).toContain('src/from-shell.txt');
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([
+      {
+        name: 'apply_patch',
+        input: expect.objectContaining({
+          patch: expect.stringContaining('src/from-shell.txt'),
+          intercepted_from_shell_command: true,
+        }),
+      },
+    ]);
+    expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'apply_patch')).toBe(true);
+    expect(events.some((event) => event.type === 'tool.completed' && event.payload.toolName === 'apply_patch' && event.payload.status === 'success')).toBe(true);
+    expect(events.some((event) => event.type === 'tool.completed' && event.payload.toolName === 'run_shell_command')).toBe(false);
+  });
+
+  it('preserves shell cd workdir when intercepting apply_patch commands', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Shell cd patch loop' });
+    const modelClient = new ShellApplyPatchModelClient('from-shell-cd.txt', 'cd src && ');
+    const toolHost = new ShellApplyPatchInterceptHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new StrictApprovalConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'apply patch through shell cd' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(pendingApproval.toolName).toBe('apply_patch');
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+
+    expect(toolHost.calls).toEqual([
+      {
+        name: 'apply_patch',
+        input: expect.objectContaining({
+          patch: expect.stringContaining('from-shell-cd.txt'),
+          workdir: 'src',
+          intercepted_from_shell_command: true,
+        }),
+      },
+    ]);
+  });
+
+  it('intercepts shell applypatch alias commands into apply_patch', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Shell applypatch alias loop' });
+    const modelClient = new ShellApplyPatchModelClient('src/from-alias.txt', '', 'applypatch');
+    const toolHost = new ShellApplyPatchInterceptHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new StrictApprovalConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'apply patch through shell alias' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+
+    expect(pendingApproval.toolName).toBe('apply_patch');
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+
+    expect(toolHost.calls).toEqual([
+      {
+        name: 'apply_patch',
+        input: expect.objectContaining({
+          patch: expect.stringContaining('src/from-alias.txt'),
+          intercepted_from_shell_command: true,
+        }),
+      },
+    ]);
+  });
+
+  it('rejects protected workspace metadata writes hidden in shell apply_patch commands', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Protected shell patch loop' });
+    const modelClient = new ShellApplyPatchModelClient('.git/config');
+    const toolHost = new ShellApplyPatchInterceptHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'hide git write in shell patch' });
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([]);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'apply_patch'
+      && event.payload.status === 'rejected'
+      && event.payload.content.includes('protected workspace metadata')
+    )).toBe(true);
+  });
+
+  it('does not intercept ordinary shell commands that merely mention apply_patch', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Shell search loop' });
+    const modelClient = new ShellMentionApplyPatchModelClient();
+    const toolHost = new ShellApplyPatchInterceptHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'search for apply_patch' });
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([
+      {
+        name: 'run_shell_command',
+        input: expect.objectContaining({ command: 'rg apply_patch' }),
+      },
+    ]);
+    expect(events.some((event) => event.type === 'tool.completed' && event.payload.toolName === 'run_shell_command' && event.payload.status === 'success')).toBe(true);
+    expect(events.some((event) => event.type === 'tool.completed' && event.payload.toolName === 'apply_patch')).toBe(false);
   });
 
   it('skips tool approvals when approval policy is full', async () => {
@@ -1536,6 +3790,36 @@ class ToolCallingModelClient implements ModelClient {
   }
 }
 
+class SingleToolCallModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  constructor(private readonly toolCall: RuntimeToolCall) {}
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [this.toolCall],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'tool handled' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class StopHookModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'text_delta', text: this.requests.length === 1 ? 'first answer' : 'final answer' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class ShellOutputDeltaModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -1623,6 +3907,98 @@ class ToolDeltaModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'done' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RepeatedFileWriteModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length <= 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: `call_repeated_write_${this.requests.length}`, name: 'write_file', arguments: '{"file_path":"src/generated.txt","content":"generated\\n"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'done' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ProtectedMetadataWriteModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_protected_write', name: 'write_file', arguments: '{"file_path":".git/config","content":"unsafe\\n"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'blocked' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ShellApplyPatchModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  constructor(
+    private readonly filePath: string,
+    private readonly commandPrefix = '',
+    private readonly commandName = 'apply_patch',
+  ) {}
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_shell_patch',
+          name: 'run_shell_command',
+          arguments: JSON.stringify({
+            command: shellApplyPatchCommand(this.filePath, this.commandPrefix, this.commandName),
+            risk_level: 'low',
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'shell patch handled' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ShellMentionApplyPatchModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_shell_search',
+          name: 'run_shell_command',
+          arguments: JSON.stringify({
+            command: 'rg apply_patch',
+            risk_level: 'low',
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'search handled' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -1970,6 +4346,8 @@ class ForcedToolChoiceHost implements ToolHost {
 }
 
 class PreviewingToolHost implements ToolHost {
+  calls = 0;
+
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
       {
@@ -1998,7 +4376,45 @@ class PreviewingToolHost implements ToolHost {
   }
 
   async runTool() {
+    this.calls += 1;
     return { content: 'wrote file', preview: filePreview().resultPreview };
+  }
+}
+
+class ShellApplyPatchInterceptHost implements ToolHost {
+  calls: Array<{ name: string; input: unknown }> = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'run_shell_command',
+        description: 'Run a shell command',
+        inputSchema: {
+          type: 'object',
+          properties: { command: { type: 'string' }, risk_level: { type: 'string' } },
+          required: ['command', 'risk_level'],
+        },
+      },
+      {
+        name: 'apply_patch',
+        description: 'Apply a patch',
+        inputSchema: {
+          type: 'object',
+          properties: { patch: { type: 'string' } },
+          required: ['patch'],
+        },
+      },
+    ];
+  }
+
+  async previewToolCall(name: string, input: unknown) {
+    if (name !== 'apply_patch') return null;
+    return shellPatchPreview(input);
+  }
+
+  async runTool(name: string, input: unknown) {
+    this.calls.push({ name, input });
+    return { content: 'applied intercepted patch', preview: shellPatchPreview(input).resultPreview };
   }
 }
 
@@ -2016,6 +4432,37 @@ function filePreview() {
       },
     }),
   };
+}
+
+function shellPatchPreview(input: unknown) {
+  const patch = input && typeof input === 'object' && !Array.isArray(input) && typeof (input as { patch?: unknown }).patch === 'string'
+    ? (input as { patch: string }).patch
+    : '';
+  const filePath = /(?:\*\*\* Add File: |\*\*\* Update File: |\*\*\* Delete File: )(.+)/.exec(patch)?.[1]?.trim() || 'src/from-shell.txt';
+  return {
+    argumentsPreview: JSON.stringify({ patch }),
+    resultPreview: JSON.stringify({
+      diff: {
+        path: filePath,
+        action: 'Created',
+        additions: 1,
+        deletions: 0,
+        truncated: false,
+        lines: [{ type: 'added', content: 'shell', newLine: 1 }],
+      },
+    }),
+  };
+}
+
+function shellApplyPatchCommand(filePath: string, prefix = '', commandName = 'apply_patch'): string {
+  return [
+    `${prefix}${commandName} <<'PATCH'`,
+    '*** Begin Patch',
+    `*** Add File: ${filePath}`,
+    '+shell',
+    '*** End Patch',
+    'PATCH',
+  ].join('\n');
 }
 
 class MemoryCapturingModelClient implements ModelClient {
@@ -2388,6 +4835,414 @@ class ApprovalToolModelClient implements ModelClient {
   }
 }
 
+class EscalatedExecModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_escalated',
+          name: 'exec_command',
+          arguments: '{"cmd":"printf ok","sandbox_permissions":"require_escalated","justification":"needs unsandboxed access"}',
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The escalated command ran.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RepeatedEscalatedPrefixExecModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_prefix_first',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'git status',
+            sandbox_permissions: 'require_escalated',
+            justification: 'needs unsandboxed git access',
+            prefix_rule: ['git', 'status'],
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_prefix_second',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'git status --short',
+            sandbox_permissions: 'require_escalated',
+            justification: 'same approved prefix',
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The prefix-approved commands ran.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class BroadEscalatedPrefixExecModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_broad_prefix_first',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'git status',
+            sandbox_permissions: 'require_escalated',
+            justification: 'needs broad git access',
+            prefix_rule: ['git'],
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_broad_prefix_second',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'git push',
+            sandbox_permissions: 'require_escalated',
+            justification: 'another broad git command',
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The broad-prefix commands ran.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RepeatedAdditionalPermissionsExecModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  constructor(private readonly writableRoot: string) {}
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1 || this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: `call_exec_additional_${this.requests.length}`,
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'curl https://api.example.com/a',
+            sandbox_permissions: 'with_additional_permissions',
+            additional_permissions: {
+              network: { enabled: true },
+              file_system: { write: [this.writableRoot] },
+            },
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The additional-permissions command ran.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RequestPermissionsThenExecModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  constructor(
+    private readonly grantedRoot: string,
+    private readonly denyOptions?: { deniedRoot?: string; deniedSpecialRoot?: string; deniedGlobPattern?: string },
+  ) {}
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_request_permissions_turn',
+          name: 'request_permissions',
+          arguments: JSON.stringify({
+            reason: 'Allow reading and writing an external temp directory plus network access.',
+            permissions: {
+              network: { enabled: true },
+              file_system: {
+                read: [this.grantedRoot],
+                write: [this.grantedRoot],
+                entries: [
+                  ...(this.denyOptions?.deniedRoot ? [{
+                    path: { type: 'path', path: this.denyOptions.deniedRoot },
+                    access: 'deny',
+                  }] : []),
+                  ...(this.denyOptions?.deniedSpecialRoot ? [{
+                    path: { type: 'special', value: { kind: 'project_roots', subpath: this.denyOptions.deniedSpecialRoot } },
+                    access: 'deny',
+                  }] : []),
+                  ...(this.denyOptions?.deniedGlobPattern ? [{
+                    path: { type: 'glob_pattern', pattern: this.denyOptions.deniedGlobPattern },
+                    access: 'deny',
+                  }] : []),
+                ],
+              },
+            },
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_after_request_permissions',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: `printf ok > ${this.grantedRoot}/allowed.txt`,
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The request_permissions grant was used.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class SessionRequestPermissionsModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  constructor(private readonly grantedRoot: string) {}
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_request_permissions_session',
+          name: 'request_permissions',
+          arguments: JSON.stringify({
+            reason: 'Allow reusing an external temp directory across turns.',
+            permissions: {
+              file_system: {
+                entries: [{
+                  path: { type: 'path', path: this.grantedRoot },
+                  access: 'write',
+                }],
+              },
+            },
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield { type: 'text_delta', text: 'Session permission recorded.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 3) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_after_session_request_permissions',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: `printf ok > ${this.grantedRoot}/session.txt`,
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The session grant was reused.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ProtectedAdditionalPermissionsExecModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_protected_additional',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'printf unsafe',
+            sandbox_permissions: 'with_additional_permissions',
+            additional_permissions: {
+              file_system: { write: ['.git'] },
+            },
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The unsafe command was rejected.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class SandboxDeniedModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_sandboxed', name: 'sandboxed_tool', arguments: '{"value":42}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The sandboxed tool recovered.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RepeatedSandboxDeniedModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1 || this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: `call_sandboxed_${this.requests.length}`, name: 'sandboxed_tool', arguments: '{"value":42}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The repeated sandboxed tool recovered.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class NetworkDeniedModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_network', name: 'network_tool', arguments: '{"value":42}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The network tool recovered.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RepeatedNetworkDeniedModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1 || this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: `call_network_${this.requests.length}`, name: 'network_tool', arguments: '{"value":42}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The repeated network tool recovered.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class EscalatedNetworkDeniedModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_escalated_network',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'curl https://api.example.com/a',
+            sandbox_permissions: 'require_escalated',
+            justification: 'needs unsandboxed network access',
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The escalated network command recovered.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class RepeatedHostNetworkShellModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_network_a', name: 'run_shell_command', arguments: '{"command":"curl https://api.example.com/a","risk_level":"low"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_network_b', name: 'run_shell_command', arguments: '{"command":"curl https://api.example.com/b","risk_level":"low"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The repeated host network commands recovered.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class CancellableModelClient implements ModelClient {
   requests: ModelRequest[] = [];
   aborted = false;
@@ -2448,6 +5303,8 @@ class SteerableModelClient implements ModelClient {
 class ApprovalToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown }> = [];
 
+  constructor(private readonly options: { approvalKeys?: string[]; persistentApprovalKeys?: string[] } = {}) {}
+
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
       {
@@ -2461,15 +5318,280 @@ class ApprovalToolHost implements ToolHost {
   async approvalForTool(name: string, input: unknown) {
     return name === 'dangerous_tool'
       ? {
-          reason: 'This tool changes local state.',
-          argumentsPreview: JSON.stringify(input),
-        }
+        reason: 'This tool changes local state.',
+        argumentsPreview: JSON.stringify(input),
+        approvalKeys: this.options.approvalKeys,
+        persistentApprovalKeys: this.options.persistentApprovalKeys,
+      }
       : null;
   }
 
   async runTool(name: string, input: unknown) {
     this.calls.push({ name, input });
     return { content: 'approved result' };
+  }
+}
+
+class InMemoryPersistentToolApprovalStore implements PersistentToolApprovalStore {
+  private readonly approvalKeys = new Set<string>();
+
+  async hasAll(keys: string[]): Promise<boolean> {
+    return keys.length > 0 && keys.every((key) => this.approvalKeys.has(key));
+  }
+
+  async approve(keys: string[]): Promise<void> {
+    for (const key of keys) {
+      if (key) this.approvalKeys.add(key);
+    }
+  }
+}
+
+class EscalatedExecToolHost implements ToolHost {
+  attempts: string[] = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'exec_command',
+        description: 'A Codex-compatible exec tool',
+        inputSchema: { type: 'object', properties: { cmd: { type: 'string' } } },
+      },
+    ];
+  }
+
+  async approvalForTool(name: string, input: unknown) {
+    const args = input && typeof input === 'object' && !Array.isArray(input)
+      ? input as Record<string, unknown>
+      : {};
+    return name === 'exec_command' && args.sandbox_permissions === 'require_escalated'
+      ? {
+          reason: String(args.justification || 'requires escalated sandbox permissions'),
+          argumentsPreview: JSON.stringify(input),
+        }
+      : null;
+  }
+
+  async runTool(_name: string, _input: unknown, context: ToolExecutionContext) {
+    this.attempts.push(context.sandbox?.mode ?? 'missing');
+    return { content: 'ran escalated exec' };
+  }
+}
+
+class AdditionalPermissionsExecToolHost implements ToolHost {
+  contexts: ToolExecutionContext[] = [];
+
+  constructor(private readonly cwd = process.cwd()) {}
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'exec_command',
+        description: 'A Codex-compatible exec tool',
+        inputSchema: { type: 'object', properties: { cmd: { type: 'string' } } },
+      },
+    ];
+  }
+
+  environmentForToolContext(context: ToolExecutionContext) {
+    return {
+      id: context.projectId ?? context.threadId,
+      cwd: this.cwd,
+    };
+  }
+
+  async runTool(_name: string, _input: unknown, context: ToolExecutionContext) {
+    this.contexts.push(context);
+    return { content: 'ran with additional permissions' };
+  }
+}
+
+class RequestPermissionsExecToolHost implements ToolHost {
+  contexts: ToolExecutionContext[] = [];
+
+  constructor(private readonly cwd = process.cwd()) {}
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'request_permissions',
+        description: 'A Codex-compatible permission request tool',
+        inputSchema: { type: 'object', properties: { permissions: { type: 'object' } } },
+      },
+      {
+        name: 'exec_command',
+        description: 'A Codex-compatible exec tool',
+        inputSchema: { type: 'object', properties: { cmd: { type: 'string' } } },
+      },
+    ];
+  }
+
+  environmentForToolContext(context: ToolExecutionContext) {
+    return {
+      id: context.projectId ?? context.threadId,
+      cwd: this.cwd,
+    };
+  }
+
+  async runTool(name: string, _input: unknown, context: ToolExecutionContext) {
+    if (name === 'request_permissions') throw new Error('request_permissions should be handled by the orchestrator');
+    this.contexts.push(context);
+    return { content: 'ran after request_permissions' };
+  }
+}
+
+class SandboxRetryToolHost implements ToolHost {
+  attempts: string[] = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'sandboxed_tool',
+        description: 'A tool that needs sandbox retry',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+      },
+    ];
+  }
+
+  async runTool(_name: string, _input: unknown, context: ToolExecutionContext) {
+    this.attempts.push(context.sandbox?.mode ?? 'missing');
+    if (context.sandbox?.mode !== 'bypass') {
+      throw new ToolExecutionError('seatbelt denied file write', {
+        failureKind: 'sandbox_denied',
+        failureStage: 'execution',
+      });
+    }
+    return { content: 'retried without sandbox' };
+  }
+}
+
+class NetworkRetryToolHost implements ToolHost {
+  attempts: string[] = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'network_tool',
+        description: 'A tool that needs network retry',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
+      },
+    ];
+  }
+
+  async runTool(_name: string, _input: unknown, context: ToolExecutionContext) {
+    this.attempts.push(context.sandbox?.networkAccess ?? 'default');
+    if (context.sandbox?.networkAccess !== 'enabled') {
+      throw new ToolExecutionError('network access disabled', {
+        failureKind: 'network_denied',
+        failureStage: 'preflight',
+      });
+    }
+    return { content: 'retried with network' };
+  }
+}
+
+class EscalatedNetworkRetryToolHost implements ToolHost {
+  attempts: Array<{ mode: string; networkAccess: string }> = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'exec_command',
+        description: 'A Codex-compatible exec tool that needs network retry',
+        inputSchema: { type: 'object', properties: { cmd: { type: 'string' } } },
+      },
+    ];
+  }
+
+  async approvalForTool(name: string, input: unknown) {
+    const args = input && typeof input === 'object' && !Array.isArray(input)
+      ? input as Record<string, unknown>
+      : {};
+    return name === 'exec_command' && args.sandbox_permissions === 'require_escalated'
+      ? {
+          reason: String(args.justification || 'requires escalated sandbox permissions'),
+          argumentsPreview: JSON.stringify(input),
+        }
+      : null;
+  }
+
+  async runTool(_name: string, _input: unknown, context: ToolExecutionContext) {
+    this.attempts.push({
+      mode: context.sandbox?.mode ?? 'missing',
+      networkAccess: context.sandbox?.networkAccess ?? 'default',
+    });
+    if (context.sandbox?.networkAccess !== 'enabled') {
+      throw new ToolExecutionError('network access disabled', {
+        failureKind: 'network_denied',
+        failureStage: 'preflight',
+      });
+    }
+    return { content: 'retried escalated command with network' };
+  }
+}
+
+class ShellNetworkRetryToolHost implements ToolHost {
+  attempts: Array<{ command: string; networkAccess: string }> = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'run_shell_command',
+        description: 'A shell tool that needs network retry',
+        inputSchema: { type: 'object', properties: { command: { type: 'string' } } },
+      },
+    ];
+  }
+
+  async runTool(_name: string, input: unknown, context: ToolExecutionContext) {
+    const command = input && typeof input === 'object' && !Array.isArray(input)
+      ? String((input as Record<string, unknown>).command || '')
+      : '';
+    this.attempts.push({ command, networkAccess: context.sandbox?.networkAccess ?? 'default' });
+    if (context.sandbox?.networkAccess !== 'enabled') {
+      throw new ToolExecutionError('network access disabled', {
+        failureKind: 'network_denied',
+        failureStage: 'preflight',
+      });
+    }
+    return { content: `retried with network: ${command}` };
+  }
+}
+
+class PolicyAwareShellNetworkRetryToolHost extends ShellNetworkRetryToolHost {
+  constructor(private readonly policyAmendmentStore: PolicyAmendmentStore) {
+    super();
+  }
+
+  override async runTool(_name: string, input: unknown, context: ToolExecutionContext) {
+    const command = input && typeof input === 'object' && !Array.isArray(input)
+      ? String((input as Record<string, unknown>).command || '')
+      : '';
+    this.attempts.push({ command, networkAccess: context.sandbox?.networkAccess ?? 'default' });
+    if (context.sandbox?.networkAccess === 'enabled') return { content: `retried with network: ${command}` };
+    const networkContext = {
+      host: 'api.example.com',
+      protocol: 'https',
+      port: 443,
+      target: 'https://api.example.com:443',
+    };
+    const amendments = await this.policyAmendmentStore.listPolicyAmendments();
+    if (amendments.networkPolicyAmendments.some((item) => item.host === networkContext.host && item.action === 'deny')) {
+      throw new ToolExecutionError('blocked by persistent network policy', {
+        failureKind: 'network_denied',
+        failureStage: 'preflight',
+        data: {
+          network_policy_decision: 'deny',
+          network_approval_context: networkContext,
+        },
+      });
+    }
+    throw new ToolExecutionError('network access disabled', {
+      failureKind: 'network_denied',
+      failureStage: 'preflight',
+      data: {
+        network_approval_context: networkContext,
+      },
+    });
   }
 }
 
@@ -2494,6 +5616,28 @@ class CapturingUsageStore implements UsageStore {
         byModel: [],
       },
     };
+  }
+}
+
+class InMemoryPolicyAmendmentStore implements PolicyAmendmentStore {
+  private readonly amendments: RuntimePolicyAmendments = {
+    execPolicyAmendments: [],
+    networkPolicyAmendments: [],
+  };
+
+  async listPolicyAmendments(): Promise<RuntimePolicyAmendments> {
+    return {
+      execPolicyAmendments: this.amendments.execPolicyAmendments.map((item) => [...item]),
+      networkPolicyAmendments: this.amendments.networkPolicyAmendments.map((item) => ({ ...item })),
+    };
+  }
+
+  async appendExecPolicyAmendment(amendment: RuntimeExecPolicyAmendment): Promise<void> {
+    this.amendments.execPolicyAmendments.push([...amendment]);
+  }
+
+  async appendNetworkPolicyAmendment(amendment: RuntimeNetworkPolicyAmendment): Promise<void> {
+    this.amendments.networkPolicyAmendments.push({ ...amendment });
   }
 }
 
@@ -2569,6 +5713,10 @@ async function appendCompletedExchange(
   });
 }
 
+function nodeEvalHook(script: string): string {
+  return `node -e ${JSON.stringify(script)}`;
+}
+
 class PersonalizationConfigStore implements ConfigStore {
   async getConfig() {
     return {
@@ -2588,6 +5736,41 @@ class PersonalizationConfigStore implements ConfigStore {
       setsunaStyle: 'daily' as const,
       approvalPolicy: 'on-request' as const,
       permissionProfile: 'workspace-write' as const,
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
+class HooksConfigStore implements ConfigStore {
+  constructor(private readonly hooks: RuntimeConfigState['hooks']) {}
+
+  async getConfig() {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [],
+      globalPrompt: '',
+      memory: {
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
+      memoryEnabled: true,
+      setsunaStyle: 'developer' as const,
+      approvalPolicy: 'on-request' as const,
+      permissionProfile: 'workspace-write' as const,
+      hooks: this.hooks,
+      bypassHookTrust: true,
     };
   }
 
@@ -2681,6 +5864,58 @@ class StrictApprovalConfigStore implements ConfigStore {
 
   async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
     return null;
+  }
+}
+
+class SandboxWorkspaceWriteConfigStore extends StrictApprovalConfigStore {
+  async getConfig() {
+    return {
+      ...(await super.getConfig()),
+      sandboxWorkspaceWrite: {
+        writableRoots: ['/tmp/setsuna-extra-writable'],
+        networkAccess: false,
+      },
+    };
+  }
+}
+
+class ReadOnlyConfigStore implements ConfigStore {
+  async getConfig() {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [],
+      globalPrompt: '',
+      memory: {
+        useMemories: true,
+        generateMemories: true,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
+      memoryEnabled: true,
+      setsunaStyle: 'developer' as const,
+      approvalPolicy: 'on-request' as const,
+      permissionProfile: 'read-only' as const,
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
+class RequestPermissionsDisabledConfigStore extends ReadOnlyConfigStore {
+  async getConfig() {
+    return {
+      ...(await super.getConfig()),
+      features: { request_permissions_tool: false },
+    };
   }
 }
 
@@ -2820,4 +6055,34 @@ async function waitForTurnCompleted(threadStore: ThreadStore, threadId: string, 
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('Timed out waiting for turn completion');
+}
+
+function hookContext(): ToolExecutionContext & { turnId: string } {
+  return {
+    threadId: 'thread_parent',
+    turnId: 'turn_child',
+    permissionProfile: 'workspace-write',
+    sandboxWorkspaceWrite: {},
+    features: {},
+    signal: new AbortController().signal,
+  };
+}
+
+function hookEnvironment() {
+  return { id: 'local', cwd: '/tmp' };
+}
+
+function hookEventCapture() {
+  const started: RuntimeHookRun[] = [];
+  const completed: RuntimeHookRun[] = [];
+  return {
+    started,
+    completed,
+    publishHookStarted: async (run: RuntimeHookRun) => {
+      started.push(run);
+    },
+    publishHookCompleted: async (run: RuntimeHookRun) => {
+      completed.push(run);
+    },
+  };
 }

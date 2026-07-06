@@ -1,5 +1,5 @@
 import type { AnswerRuntimeApprovalInput, RuntimeApprovalList } from './approvals.js';
-import type { RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput } from './config.js';
+import type { RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeHookListResponse } from './config.js';
 import type { RuntimeEvent } from './events.js';
 import type { CreateRuntimeMemoryInput, RuntimeMemoryList, RuntimeMemoryPreview, RuntimeMemoryQuery } from './memory.js';
 import type { RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerPatch, RuntimeMcpToolList } from './mcp.js';
@@ -66,6 +66,7 @@ export type DesktopRuntimeClient = {
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
   fetchProviderModels(input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse>;
+  listHooks(cwds?: string[]): Promise<RuntimeHookListResponse>;
   listSkills(): Promise<RuntimeSkillList>;
   createSkill(input: RuntimeSkillInput): Promise<RuntimeSkillDetail>;
   getSkill(skillId: string): Promise<RuntimeSkillDetail>;

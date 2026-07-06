@@ -165,4 +165,6 @@ export function fileName(path: string): string {
 
 export type ToolRuntimeEvent =
   | Extract<RuntimeEvent, { type: 'tool.started' }>
-  | Extract<RuntimeEvent, { type: 'tool.completed' }>;
+  | Extract<RuntimeEvent, { type: 'tool.completed' }>
+  | Extract<RuntimeEvent, { type: 'hook.started' }>
+  | Extract<RuntimeEvent, { type: 'hook.completed' }>;

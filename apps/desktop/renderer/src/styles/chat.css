@@ -175,6 +175,12 @@
   min-width: 0;
 }
 
+.chat-context-compact-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .chat-context-compact-divider {
   display: grid;
   grid-template-columns: minmax(20px, 1fr) auto minmax(20px, 1fr);
@@ -2265,6 +2271,12 @@
   width: 100%;
 }
 
+.chat-tool-run__mixed-file-operation {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .chat-tool-run__group-item {
   display: grid;
   gap: 6px;
@@ -2354,6 +2366,151 @@
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.chat-tool-run__hook-groups {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-hook-runs {
+  width: min(520px, 100%);
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-surface) 82%, transparent);
+}
+
+.chat-context-compact-item > .chat-hook-runs {
+  justify-self: center;
+}
+
+.chat-user-turn > .chat-hook-runs {
+  justify-self: end;
+}
+
+.chat-tool-run__hook-group {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.chat-tool-run__hook-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-tool-run__hook-group-title code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tool-run__hooks {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-tool-run__hook {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-tool-run__hook-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--app-text-muted) 46%, transparent);
+}
+
+.chat-tool-run__hook--running .chat-tool-run__hook-dot {
+  background: var(--app-primary);
+}
+
+.chat-tool-run__hook--blocked .chat-tool-run__hook-dot,
+.chat-tool-run__hook--failed .chat-tool-run__hook-dot {
+  background: var(--app-danger);
+}
+
+.chat-tool-run__hook--stopped .chat-tool-run__hook-dot {
+  background: var(--app-warning);
+}
+
+.chat-tool-run__hook-main {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-tool-run__hook-title,
+.chat-tool-run__hook-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tool-run__hook-title {
+  color: var(--app-text);
+}
+
+.chat-tool-run__hook-message {
+  color: var(--app-text-muted);
+}
+
+.chat-tool-run__hook-entries {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-tool-run__hook-entry {
+  min-width: 0;
+  max-width: min(420px, 100%);
+  overflow: hidden;
+  color: var(--app-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tool-run__hook-entry--error,
+.chat-tool-run__hook-entry--feedback {
+  color: color-mix(in srgb, var(--app-danger) 82%, var(--app-text));
+}
+
+.chat-tool-run__hook-entry--warning,
+.chat-tool-run__hook-entry--stop {
+  color: color-mix(in srgb, var(--app-warning) 82%, var(--app-text));
+}
+
+.chat-tool-run__hook-entry--context {
+  color: var(--app-text-muted);
+}
+
+.chat-tool-run__hook-status {
+  color: color-mix(in srgb, var(--app-text-muted) 78%, transparent);
+  white-space: nowrap;
 }
 
 .chat-tool-run__actions {

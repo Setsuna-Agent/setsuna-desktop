@@ -13,4 +13,6 @@ export type SkillRegistry = {
   updateSkill(skillId: string, patch: RuntimeSkillPatch): Promise<RuntimeSkillDetail>;
   deleteSkill(skillId: string): Promise<void>;
   selectedSkillInjections(skillIds?: string[]): Promise<SkillInjection[]>;
+  setExtraRoots(extraRoots: string[]): Promise<void>;
+  subscribeChanges(listener: () => void): () => void;
 };

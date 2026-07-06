@@ -1,4 +1,4 @@
-import type { ModelRequest, RuntimeApprovalDecision, RuntimeConfigState, RuntimeMemoryCitation, RuntimeMemoryKind, RuntimeMemoryRecord, RuntimeMemoryScope, RuntimeMemorySourceLocation, RuntimeMemoryStage1Status, RuntimeMessage, RuntimeThread, RuntimeThreadSummary, RuntimeToolCall, RuntimeToolCallDelta, RuntimeToolDefinition, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
+import type { ModelRequest, RuntimeApprovalDecision, RuntimeApprovalRequest, RuntimeConfigState, RuntimeHookRun, RuntimeMemoryCitation, RuntimeMemoryKind, RuntimeMemoryRecord, RuntimeMemoryScope, RuntimeMemorySourceLocation, RuntimeMemoryStage1Status, RuntimeMessage, RuntimeThread, RuntimeThreadSummary, RuntimeToolCall, RuntimeToolCallDelta, RuntimeToolDefinition, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
@@ -6,13 +6,17 @@ import type { EventBus } from '../ports/event-bus.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { MemoryStore } from '../ports/memory-store.js';
 import type { ModelClient } from '../ports/model-client.js';
+import type { PolicyAmendmentStore } from '../ports/policy-amendment-store.js';
+import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
-import type { ToolExecutionContext, ToolExecutionResult, ToolHost, ToolOutputDelta } from '../ports/tool-host.js';
+import type { RuntimeToolExecutionContext, ToolExecutionContext, ToolExecutionEnvironment, ToolExecutionResult, ToolHost, ToolOutputDelta } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
+import { createRuntimeToolHookRunner, type RuntimeCompactHookTrigger, type RuntimeSessionStartSource } from '../hooks/runtime-hooks.js';
 import { CONTEXT_COMPACTION_MAX_TOKENS_K, createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction, type RuntimeContextCompactionCandidate, runtimeContextTokenUsageForMessages } from './context-compaction.js';
 import { runMemoryConsolidationAgent } from './memory-consolidation-agent.js';
 import { MemoryCitationStreamParser, parseMemoryCitationBodies } from './memory-citation.js';
+import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
 
 export type AgentLoopOptions = {
   threadStore: ThreadStore;
@@ -26,6 +30,8 @@ export type AgentLoopOptions = {
   toolHost?: ToolHost;
   usageStore?: UsageStore;
   memoryStore?: MemoryStore;
+  policyAmendmentStore?: PolicyAmendmentStore;
+  persistentToolApprovalStore?: PersistentToolApprovalStore;
   maxToolRounds?: number;
 };
 
@@ -60,7 +66,6 @@ const DAYS_TO_MS = 24 * HOURS_TO_MS;
 const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
 const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
-const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'workspace_write_file']);
 // 并行集合要比 INSPECTION_TOOL_NAMES 更窄：只有确定性的本地只读工具才允许批处理。
 const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 
@@ -93,11 +98,6 @@ type PassiveMemoryCandidate = {
   title?: string;
   tags?: string[];
 };
-type RuntimeToolExecutionContext = ToolExecutionContext & {
-  turnId: string;
-  permissionProfile: NonNullable<RuntimeConfigState['permissionProfile']>;
-  signal: AbortSignal;
-};
 type ToolCallExecution = {
   message: RuntimeMessage;
   processed: boolean;
@@ -128,6 +128,9 @@ export class AgentLoop {
   // activeTurns 用于精确取消 turn，activeTurnByThread 用于 UI 查询当前线程是否仍有任务。
   private readonly activeTurns = new Map<string, AbortController>();
   private readonly activeTurnByThread = new Map<string, ActiveTurnState>();
+  private readonly toolApprovalStore = new ToolApprovalStore();
+  private readonly sessionStartInitializedThreads = new Set<string>();
+  private readonly pendingSessionStartSourcesByThread = new Map<string, RuntimeSessionStartSource[]>();
 
   constructor(private readonly options: AgentLoopOptions) {}
 
@@ -225,6 +228,19 @@ export class AgentLoop {
   async sendTurn(threadId: string, input: SendTurnInput): Promise<void> {
     const run = await this.createTurnRun(threadId, input);
     await run.done;
+  }
+
+  /**
+   * 清空线程上下文，并把下一轮 SessionStart 标记为 clear source。
+   *
+   * @param threadId 需要清空上下文的线程 ID。
+   */
+  async clearThreadContext(threadId: string): Promise<RuntimeThread> {
+    const beforeSeq = (await this.options.threadStore.getThread(threadId))?.lastSeq ?? 0;
+    const thread = await this.options.threadStore.clearThreadMessages(threadId);
+    this.queueSessionStartSource(threadId, 'clear');
+    await this.publishStoredEventsSince(threadId, beforeSeq);
+    return thread;
   }
 
   /**
@@ -357,6 +373,16 @@ export class AgentLoop {
     const candidate = createRuntimeContextCompactionCandidate({ force, messages: thread.messages });
     if (!candidate) return thread;
     const turnId = this.options.ids.id('turn');
+    const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
+    const trigger = compactHookTrigger(force);
+    const preCompact = await this.runCompactHooks({
+      eventName: 'PreCompact',
+      runtimeConfig,
+      thread,
+      trigger,
+      turnId,
+    });
+    if (preCompact.shouldStop) return thread;
     // 手动压缩也走事件链，保证 renderer 能看到“压缩中 -> 已压缩”的完整生命周期。
     await this.publishContextCompacting(threadId, turnId, force, thread.messages);
     try {
@@ -376,7 +402,16 @@ export class AgentLoop {
         createdAt: this.options.clock.now().toISOString(),
         payload: result,
       });
-      return (await this.options.threadStore.getThread(threadId)) ?? thread;
+      this.queueSessionStartSource(threadId, 'compact');
+      const compacted = (await this.options.threadStore.getThread(threadId)) ?? thread;
+      await this.runCompactHooks({
+        eventName: 'PostCompact',
+        runtimeConfig,
+        thread,
+        trigger,
+        turnId,
+      });
+      return compacted;
     } catch (error) {
       await this.appendAndPublish(threadId, {
         id: this.options.ids.id('event'),
@@ -574,6 +609,7 @@ export class AgentLoop {
       status: 'complete',
     };
     const modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
+    let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
 
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
@@ -585,6 +621,84 @@ export class AgentLoop {
     });
     if (publishUserMessage) await this.publishMessage(threadId, turnId, userMessage);
     if (options.review) await this.publishReviewModeMessage(threadId, turnId, 'entered', options.review.displayText);
+    const hookRunner = createRuntimeToolHookRunner(runtimeConfig);
+    const userPromptHookContext = {
+      threadId,
+      projectId: thread.projectId,
+      turnId,
+      permissionProfile: runtimeConfig?.permissionProfile ?? 'workspace-write',
+      sandboxWorkspaceWrite: runtimeConfig?.sandboxWorkspaceWrite ?? {},
+      features: runtimeConfig?.features ?? {},
+      signal,
+    };
+    const userPromptHookEnvironment = await this.hookEnvironmentForContext(userPromptHookContext);
+    const sessionStartSource = this.takeSessionStartSource(thread);
+    const sessionStartHookOutcome = sessionStartSource
+      ? await hookRunner?.runSessionStart({
+          approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
+          context: userPromptHookContext,
+          environment: userPromptHookEnvironment,
+          events: {
+            publishHookStarted: (run) => this.publishHookStarted(threadId, turnId, run),
+            publishHookCompleted: (run) => this.publishHookCompleted(threadId, turnId, run),
+          },
+          source: sessionStartSource,
+        })
+      : undefined;
+    if (sessionStartHookOutcome?.shouldStop) {
+      this.stopAcceptingSteers(threadId, turnId);
+      await this.publishMessage(threadId, turnId, {
+        id: this.options.ids.id('msg'),
+        turnId,
+        role: 'assistant',
+        content: sessionStartHookOutcome.stopReason || 'SessionStart hook stopped this turn.',
+        createdAt: this.options.clock.now().toISOString(),
+        status: 'complete',
+      });
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: {},
+      });
+      return;
+    }
+    const userPromptHookOutcome = await hookRunner?.runUserPromptSubmit({
+      approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
+      context: userPromptHookContext,
+      environment: userPromptHookEnvironment,
+      events: {
+        publishHookStarted: (run) => this.publishHookStarted(threadId, turnId, run),
+        publishHookCompleted: (run) => this.publishHookCompleted(threadId, turnId, run),
+      },
+      prompt: options.modelInput ?? text,
+    });
+    if (userPromptHookOutcome?.shouldStop) {
+      this.stopAcceptingSteers(threadId, turnId);
+      await this.publishMessage(threadId, turnId, {
+        id: this.options.ids.id('msg'),
+        turnId,
+        role: 'assistant',
+        content: userPromptHookOutcome.stopReason || 'UserPromptSubmit hook stopped this turn.',
+        createdAt: this.options.clock.now().toISOString(),
+        status: 'complete',
+      });
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: {},
+      });
+      return;
+    }
+    const hookContextMessages = this.hookAdditionalContextMessages([
+      ...(sessionStartHookOutcome?.additionalContexts ?? []),
+      ...(userPromptHookOutcome?.additionalContexts ?? []),
+    ], turnId);
 
     let usage: RuntimeUsage | undefined;
     let turnCompleted = false;
@@ -593,18 +707,22 @@ export class AgentLoop {
       const conversationMessages = await this.compactMessagesBeforeModelRequest({
         force: false,
         messages: [...thread.messages, ...(publishUserMessage ? [userMessage] : [])],
+        runtimeConfig,
         signal,
+        thread,
         threadId,
         turnId,
       });
       const modelConversationMessages = options.modelInput && publishUserMessage ? conversationMessages.map((message) => (message.id === userMessage.id ? modelUserMessage : message)) : conversationMessages;
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
-      const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
+      runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
       const toolContext = {
         threadId,
         projectId: thread.projectId,
         turnId,
         permissionProfile: runtimeConfig?.permissionProfile ?? 'workspace-write',
+        sandboxWorkspaceWrite: runtimeConfig?.sandboxWorkspaceWrite ?? {},
+        features: runtimeConfig?.features ?? {},
         signal,
       };
       const tools = await this.options.toolHost?.listTools(toolContext);
@@ -614,7 +732,7 @@ export class AgentLoop {
         fileMutationCallCount: 0,
       };
       // 模型上下文按“长期规则 -> 临时能力 -> 对话历史”排序，当前用户 turn 保持离模型最近。
-      const modelMessages: RuntimeMessage[] = [...this.personalizationContextMessages(runtimeConfig), ...(await this.memoryContextMessages(thread.projectId, runtimeConfig)), ...(await this.toolSystemPromptMessages(toolContext)), ...(await this.skillContextMessages(skillIds)), ...modelConversationMessages];
+      const modelMessages: RuntimeMessage[] = [...this.personalizationContextMessages(runtimeConfig), ...(await this.memoryContextMessages(thread.projectId, runtimeConfig)), ...(await this.toolSystemPromptMessages(toolContext)), ...(await this.skillContextMessages(skillIds)), ...hookContextMessages, ...modelConversationMessages];
       let explicitMemoryUserContent = userMessage.content;
       const appendSteerMessagesToModel = (messages: RuntimeMessage[]) => {
         if (!messages.length) return false;
@@ -630,6 +748,7 @@ export class AgentLoop {
       };
       let memorySavedByTool = false;
       const maxToolRounds = normalizedMaxToolRounds(this.options.maxToolRounds);
+      let stopHookActive = false;
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       for (let round = 0; round < maxToolRounds; round += 1) {
@@ -731,6 +850,27 @@ export class AgentLoop {
           continue;
         }
 
+        const stopHookOutcome = await this.runStopHooks({
+          context: toolContext,
+          lastAssistantMessage: roundText,
+          runtimeConfig,
+          stopHookActive,
+        });
+        if (stopHookOutcome.shouldBlock && stopHookOutcome.blockReason) {
+          await this.completeMessage(threadId, turnId, assistantMessageId, { memoryCitation: roundMemoryCitation });
+          activeAssistantMessageId = null;
+          modelMessages.push({
+            ...assistantMessage,
+            content: roundText,
+            memoryCitation: roundMemoryCitation,
+            status: 'complete',
+          });
+          modelMessages.push(...this.stopHookContinuationMessages(stopHookOutcome.blockReason, turnId));
+          stopHookActive = true;
+          usage = undefined;
+          continue;
+        }
+
         this.stopAcceptingSteers(threadId, turnId);
         await this.finishAssistantTurn(threadId, turnId, assistantMessageId, usage, {
           explicitMemory: {
@@ -819,6 +959,29 @@ export class AgentLoop {
         activeAssistantMessageId = null;
       }
     } catch (error) {
+      if (error instanceof HookStoppedTurnError) {
+        if (activeAssistantMessageId) {
+          await this.completeMessage(threadId, turnId, activeAssistantMessageId);
+        }
+        this.stopAcceptingSteers(threadId, turnId);
+        await this.publishMessage(threadId, turnId, {
+          id: this.options.ids.id('msg'),
+          turnId,
+          role: 'assistant',
+          content: error.message,
+          createdAt: this.options.clock.now().toISOString(),
+          status: 'complete',
+        });
+        await this.appendAndPublish(threadId, {
+          id: this.options.ids.id('event'),
+          threadId,
+          turnId,
+          type: 'turn.completed',
+          createdAt: this.options.clock.now().toISOString(),
+          payload: {},
+        });
+        return;
+      }
       if (isAbortError(error)) {
         if (activeAssistantMessageId) {
           await this.completeMessage(threadId, turnId, activeAssistantMessageId);
@@ -858,6 +1021,139 @@ export class AgentLoop {
     const activeProvider = await this.options.configStore?.getActiveProviderConfig().catch(() => null);
     if (!activeProvider || activeProvider.activeModel?.supportsImages) return;
     throw new Error('当前模型未启用图片输入。');
+  }
+
+  private queueSessionStartSource(threadId: string, source: RuntimeSessionStartSource): void {
+    const pending = this.pendingSessionStartSourcesByThread.get(threadId) ?? [];
+    pending.push(source);
+    this.pendingSessionStartSourcesByThread.set(threadId, pending);
+  }
+
+  private takeSessionStartSource(thread: RuntimeThread): RuntimeSessionStartSource | null {
+    const pending = this.pendingSessionStartSourcesByThread.get(thread.id);
+    const next = pending?.shift();
+    if (pending && !pending.length) this.pendingSessionStartSourcesByThread.delete(thread.id);
+    if (next) {
+      this.sessionStartInitializedThreads.add(thread.id);
+      return next;
+    }
+    if (this.sessionStartInitializedThreads.has(thread.id)) return null;
+    this.sessionStartInitializedThreads.add(thread.id);
+    if (thread.forkedFromId) return 'startup';
+    return thread.messages.length ? 'resume' : 'startup';
+  }
+
+  private async hookEnvironmentForContext(context: ToolExecutionContext & { turnId: string }): Promise<ToolExecutionEnvironment> {
+    const environment = this.options.toolHost?.environmentForToolContext
+      ? await Promise.resolve(this.options.toolHost.environmentForToolContext(context)).catch(() => null)
+      : null;
+    return environment ?? {
+      id: context.projectId ?? context.threadId,
+      cwd: process.cwd(),
+    };
+  }
+
+  private hookAdditionalContextMessages(contexts: string[], turnId: string): RuntimeMessage[] {
+    const text = contexts.map((context) => context.trim()).filter(Boolean).join('\n\n');
+    if (!text) return [];
+    return [{
+      id: this.options.ids.id('msg'),
+      turnId,
+      role: 'system',
+      content: [
+        '<hook_additional_context>',
+        text,
+        '</hook_additional_context>',
+      ].join('\n'),
+      createdAt: this.options.clock.now().toISOString(),
+      status: 'complete',
+      visibility: 'model',
+    }];
+  }
+
+  private stopHookContinuationMessages(reason: string, turnId: string): RuntimeMessage[] {
+    const text = reason.trim();
+    if (!text) return [];
+    return [{
+      id: this.options.ids.id('msg'),
+      turnId,
+      role: 'system',
+      content: [
+        '<hook_stop_continuation>',
+        text,
+        '</hook_stop_continuation>',
+      ].join('\n'),
+      createdAt: this.options.clock.now().toISOString(),
+      status: 'complete',
+      visibility: 'model',
+    }];
+  }
+
+  private async runCompactHooks({
+    eventName,
+    runtimeConfig,
+    signal,
+    thread,
+    trigger,
+    turnId,
+  }: {
+    eventName: 'PreCompact' | 'PostCompact';
+    runtimeConfig: RuntimeConfigState | null | undefined;
+    signal?: AbortSignal;
+    thread: RuntimeThread;
+    trigger: RuntimeCompactHookTrigger;
+    turnId: string;
+  }) {
+    const runner = createRuntimeToolHookRunner(runtimeConfig);
+    if (!runner) return { shouldStop: false };
+    const context = {
+      threadId: thread.id,
+      projectId: thread.projectId,
+      turnId,
+      permissionProfile: runtimeConfig?.permissionProfile ?? 'workspace-write',
+      sandboxWorkspaceWrite: runtimeConfig?.sandboxWorkspaceWrite ?? {},
+      features: runtimeConfig?.features ?? {},
+      signal,
+    };
+    const environment = await this.hookEnvironmentForContext(context);
+    const input = {
+      approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
+      context,
+      environment,
+      events: {
+        publishHookStarted: (run: RuntimeHookRun) => this.publishHookStarted(thread.id, turnId, run),
+        publishHookCompleted: (run: RuntimeHookRun) => this.publishHookCompleted(thread.id, turnId, run),
+      },
+      trigger,
+    };
+    return eventName === 'PreCompact' ? runner.runPreCompact(input) : runner.runPostCompact(input);
+  }
+
+  private async runStopHooks({
+    context,
+    lastAssistantMessage,
+    runtimeConfig,
+    stopHookActive,
+  }: {
+    context: RuntimeToolExecutionContext;
+    lastAssistantMessage: string;
+    runtimeConfig: RuntimeConfigState | null | undefined;
+    stopHookActive: boolean;
+  }) {
+    const runner = createRuntimeToolHookRunner(runtimeConfig);
+    if (!runner) return { shouldBlock: false, shouldStop: false };
+    const environment = await this.hookEnvironmentForContext(context);
+    return runner.runStop({
+      approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
+      context,
+      environment,
+      events: {
+        publishHookStarted: (run) => this.publishHookStarted(context.threadId, context.turnId, run),
+        publishHookCompleted: (run) => this.publishHookCompleted(context.threadId, context.turnId, run),
+      },
+      lastAssistantMessage,
+      stopHookActive,
+    });
   }
 
   /**
@@ -1265,10 +1561,20 @@ export class AgentLoop {
    * @param threadId 目标线程 ID。
    * @param turnId 当前 turn ID。
    */
-  private async compactMessagesBeforeModelRequest({ force, messages, signal, threadId, turnId }: { force: boolean; messages: RuntimeMessage[]; signal: AbortSignal; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
+  private async compactMessagesBeforeModelRequest({ force, messages, runtimeConfig, signal, thread, threadId, turnId }: { force: boolean; messages: RuntimeMessage[]; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
     // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
     const candidate = createRuntimeContextCompactionCandidate({ force, messages });
     if (!candidate) return messages;
+    const trigger = compactHookTrigger(force);
+    const preCompact = await this.runCompactHooks({
+      eventName: 'PreCompact',
+      runtimeConfig,
+      signal,
+      thread,
+      trigger,
+      turnId,
+    });
+    if (preCompact.shouldStop) throw new HookStoppedTurnError(preCompact.stopReason || 'PreCompact hook stopped execution');
     await this.publishContextCompacting(threadId, turnId, force, messages);
     const summary = await this.generateContextCompactionSummary(candidate, signal);
     const result = materializeRuntimeContextCompaction({
@@ -1286,6 +1592,16 @@ export class AgentLoop {
       createdAt: this.options.clock.now().toISOString(),
       payload: result,
     });
+    this.queueSessionStartSource(threadId, 'compact');
+    const postCompact = await this.runCompactHooks({
+      eventName: 'PostCompact',
+      runtimeConfig,
+      signal,
+      thread,
+      trigger,
+      turnId,
+    });
+    if (postCompact.shouldStop) throw new HookStoppedTurnError(postCompact.stopReason || 'PostCompact hook stopped execution');
     return result.messages;
   }
 
@@ -1491,6 +1807,9 @@ export class AgentLoop {
    */
   private async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, previewedToolCallIds: ReadonlySet<string> = new Set()): Promise<RuntimeMessage[]> {
     if (!this.options.toolHost) return [];
+    // 整个 turn 内 hook 配置不变，orchestrator（含 hook 发现与信任哈希计算）只构造一次，
+    // 避免每个工具调用都重复 discoverRuntimeHooks。
+    const orchestrator = this.toolOrchestratorFor(context, runtimeConfig);
     const messages: RuntimeMessage[] = [];
     let inspectionCallsExecutedThisRound = 0;
     for (let index = 0; index < toolCalls.length; ) {
@@ -1502,10 +1821,10 @@ export class AgentLoop {
         break;
       }
 
-      const parallelBatch = await this.collectParallelToolBatch(toolCalls, index, context, toolBudget, approvalPolicy);
+      const parallelBatch = await this.collectParallelToolBatch(toolCalls, index, context, toolBudget, approvalPolicy, runtimeConfig, orchestrator);
       if (parallelBatch.length > 1) {
         // 批量执行只读工具时统一跳过审批和预算二次检查，预算已在 collect 阶段模拟预留。
-        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig, { checkBudget: false, skipApproval: true })));
+        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig, orchestrator, { checkBudget: false, skipApproval: true })));
         for (let batchIndex = 0; batchIndex < parallelBatch.length; batchIndex += 1) {
           if (executions[batchIndex].processed) {
             markToolBudgetProcessed(toolBudget, parallelBatch[batchIndex]);
@@ -1518,7 +1837,7 @@ export class AgentLoop {
       }
 
       const toolCall = toolCalls[index];
-      const execution = await this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig);
+      const execution = await this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig, orchestrator);
       if (execution.processed) {
         markToolBudgetProcessed(toolBudget, toolCall);
         if (isInspectionToolCall(toolCall)) inspectionCallsExecutedThisRound += 1;
@@ -1538,7 +1857,7 @@ export class AgentLoop {
    * @param toolBudget 当前已消耗的工具预算。
    * @param approvalPolicy 当前审批策略。
    */
-  private async collectParallelToolBatch(toolCalls: RuntimeToolCall[], startIndex: number, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<RuntimeToolCall[]> {
+  private async collectParallelToolBatch(toolCalls: RuntimeToolCall[], startIndex: number, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, orchestrator: ToolOrchestrator | null): Promise<RuntimeToolCall[]> {
     const simulatedBudget = { ...toolBudget };
     const readFileKeys = new Set<string>();
     const batch: RuntimeToolCall[] = [];
@@ -1547,7 +1866,7 @@ export class AgentLoop {
       if (batch.length >= MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE) break;
       const toolCall = toolCalls[index];
       const parsedArguments = parseToolArguments(toolCall.arguments);
-      if (!(await this.canRunToolCallInParallel(toolCall, parsedArguments, context, approvalPolicy))) break;
+      if (!(await this.canRunToolCallInParallel(toolCall, parsedArguments, context, approvalPolicy, orchestrator))) break;
       const readFileKey = parallelReadFileKey(toolCall, parsedArguments);
       // 同一个文件片段重复读取不并行，避免浪费上下文并让模型误以为拿到了不同信息。
       if (readFileKey && readFileKeys.has(readFileKey)) break;
@@ -1567,12 +1886,12 @@ export class AgentLoop {
    * @param context 当前工具执行上下文。
    * @param approvalPolicy 当前审批策略。
    */
-  private async canRunToolCallInParallel(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<boolean> {
+  private async canRunToolCallInParallel(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], orchestrator: ToolOrchestrator | null): Promise<boolean> {
     if (!LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES.has(toolCall.name)) return false;
     if (!isPlainRecord(parsedArguments)) return false;
     if (this.options.approvalGate && approvalPolicy === 'strict') return false;
-    const approval = await this.options.toolHost?.approvalForTool?.(toolCall.name, parsedArguments, context).catch(() => ({ reason: 'Approval check failed.' }));
-    return !approval;
+    if (!orchestrator) return false;
+    return orchestrator.canRunWithoutApproval(toolCall, parsedArguments, context, approvalPolicy);
   }
 
   /**
@@ -1584,13 +1903,10 @@ export class AgentLoop {
    * @param approvalPolicy 当前审批策略。
    * @param options 批处理场景下可跳过预算或审批的内部选项。
    */
-  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, options: { checkBudget?: boolean; skipApproval?: boolean } = {}): Promise<ToolCallExecution> {
+  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, orchestrator: ToolOrchestrator | null, options: { checkBudget?: boolean; skipApproval?: boolean } = {}): Promise<ToolCallExecution> {
     let content = '';
     let processed = false;
     let parsedArguments: unknown;
-    let startResultPreview: string | undefined;
-    let startedAtMs: number | undefined;
-    const outputDeltaPublishes: Promise<void>[] = [];
     try {
       throwIfAborted(context.signal);
       parsedArguments = parseToolArguments(toolCall.arguments);
@@ -1612,53 +1928,27 @@ export class AgentLoop {
           processed,
         };
       }
-      const startPreview = await this.options.toolHost?.previewToolCall?.(toolCall.name, parsedArguments, context).catch(() => null);
-      startResultPreview = startPreview?.resultPreview;
-      startedAtMs = this.options.clock.now().getTime();
-      // preview 先作为 tool.started 发出，用户无需等工具完成就能看到模型准备做什么。
-      await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, startResultPreview);
-      const approval = options.skipApproval ? 'not-required' : await this.approveToolCall(toolCall, parsedArguments, context, approvalPolicy);
-      if (approval === 'reject') {
-        content = `Tool ${toolCall.name} was rejected by the user.`;
-        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'rejected', content, {
-          resultPreview: startResultPreview,
-          startedAtMs,
-        });
+      if (!orchestrator) {
+        content = `Tool ${toolCall.name} failed: no tool host is available.`;
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return {
           message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
           processed,
         };
       }
-      throwIfAborted(context.signal);
-      const toolRunContext: RuntimeToolExecutionContext = {
-        ...context,
-        toolCallId: toolCall.id,
-        onToolOutputDelta: (delta) => {
-          // shell/stdout 等流式输出单独发 delta，避免等长命令完成后 UI 才刷新。
-          const publish = this.publishToolOutputDelta(context.threadId, context.turnId, toolCall, delta).catch(() => undefined);
-          outputDeltaPublishes.push(publish);
-        },
-      };
-      const result = await this.options.toolHost!.runTool(toolCall.name, parsedArguments, toolRunContext);
-      processed = true;
-      throwIfAborted(context.signal);
-      content = result.content;
-      await Promise.all(outputDeltaPublishes);
-      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', result.preview ?? content, {
-        data: result.data,
-        resultPreview: result.preview,
-        startedAtMs,
+      const execution = await orchestrator.runToolCall(toolCall, parsedArguments, context, approvalPolicy, {
+        checkApproval: options.skipApproval !== true,
       });
-      await this.markMemoryPollutedByExternalContext(context.threadId, context.turnId, toolCall, result, runtimeConfig);
+      content = execution.content;
+      processed = execution.processed;
+      if (execution.status === 'success' && execution.result) {
+        await this.markMemoryPollutedByExternalContext(context.threadId, context.turnId, toolCall, execution.result, runtimeConfig);
+      }
     } catch (error) {
       if (isAbortError(error)) throw error;
       processed = true;
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
-      await Promise.all(outputDeltaPublishes);
-      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content, {
-        resultPreview: startResultPreview,
-        startedAtMs,
-      });
+      await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
     }
     return {
       message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
@@ -1835,6 +2125,37 @@ export class AgentLoop {
     });
   }
 
+  private async publishHookStarted(threadId: string, turnId: string, run: RuntimeHookRun): Promise<void> {
+    const createdAt = this.options.clock.now().toISOString();
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'hook.started',
+      createdAt,
+      payload: {
+        ...run,
+        startedAt: run.startedAt ?? createdAt,
+        status: 'running',
+      },
+    });
+  }
+
+  private async publishHookCompleted(threadId: string, turnId: string, run: RuntimeHookRun): Promise<void> {
+    const createdAt = this.options.clock.now().toISOString();
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'hook.completed',
+      createdAt,
+      payload: {
+        ...run,
+        completedAt: run.completedAt ?? createdAt,
+      },
+    });
+  }
+
   /**
    * 发布 tool.completed 事件，记录最终状态、预览、数据和耗时。
    *
@@ -1867,30 +2188,29 @@ export class AgentLoop {
     });
   }
 
-  /**
-   * 按审批策略为工具调用申请用户确认。
-   *
-   * @param toolCall 待审批的工具调用。
-   * @param parsedArguments 已解析的工具参数。
-   * @param context 当前工具执行上下文。
-   * @param approvalPolicy 当前审批策略。
-   */
-  private async approveToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<RuntimeApprovalDecision | 'not-required'> {
-    if (!this.options.approvalGate || !this.options.toolHost) return 'not-required';
-    // 文件变更由 PC local tool host 的 plan/begin/write 顺序保护，这里不再插入额外审批打断流程。
-    if (FILE_MUTATION_TOOL_NAMES.has(toolCall.name)) return 'not-required';
-    if (approvalPolicy === 'full') return 'not-required';
-    const requirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, context);
-    if (!requirement && approvalPolicy !== 'strict') return 'not-required';
-
-    const approval = await this.options.approvalGate.createApproval({
-      threadId: context.threadId,
-      turnId: context.turnId,
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      reason: requirement?.reason ?? `Strict approval policy requires confirmation before running ${toolCall.name}.`,
-      argumentsPreview: requirement?.argumentsPreview ?? previewArguments(parsedArguments),
+  private toolOrchestratorFor(context: RuntimeToolExecutionContext, runtimeConfig: RuntimeConfigState | null | undefined): ToolOrchestrator | null {
+    if (!this.options.toolHost) return null;
+    return new ToolOrchestrator({
+      toolHost: this.options.toolHost,
+      approvalGate: this.options.approvalGate,
+      approvalStore: this.toolApprovalStore,
+      policyAmendmentStore: this.options.policyAmendmentStore,
+      persistentToolApprovalStore: this.options.persistentToolApprovalStore,
+      hookRunner: createRuntimeToolHookRunner(runtimeConfig),
+      clock: this.options.clock,
+      events: {
+        publishToolStarted: (toolCall, parsedArguments, resultPreview) => this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, resultPreview),
+        publishToolCompleted: (toolCall, parsedArguments, status, content, metadata = {}) => this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, status, content, metadata),
+        publishToolOutputDelta: (toolCall, delta) => this.publishToolOutputDelta(context.threadId, context.turnId, toolCall, delta),
+        publishHookStarted: (run) => this.publishHookStarted(context.threadId, context.turnId, run),
+        publishHookCompleted: (run) => this.publishHookCompleted(context.threadId, context.turnId, run),
+        publishApprovalRequested: (approval) => this.publishApprovalRequested(context, approval),
+        publishApprovalResolved: (approvalId, decision, message, createdAt) => this.publishApprovalResolved(context, approvalId, decision, message, createdAt),
+      },
     });
+  }
+
+  private async publishApprovalRequested(context: RuntimeToolExecutionContext, approval: RuntimeApprovalRequest): Promise<void> {
     await this.appendAndPublish(context.threadId, {
       id: this.options.ids.id('event'),
       threadId: context.threadId,
@@ -1899,43 +2219,21 @@ export class AgentLoop {
       createdAt: approval.createdAt,
       payload: { approval },
     });
-    let answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>;
-    try {
-      answer = await abortable(this.options.approvalGate.waitForDecision(approval.id), context.signal);
-    } catch (error) {
-      if (isAbortError(error)) {
-        const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-          decision: 'reject',
-          message: 'Turn cancelled.',
-        });
-        await this.appendAndPublish(context.threadId, {
-          id: this.options.ids.id('event'),
-          threadId: context.threadId,
-          turnId: context.turnId,
-          type: 'approval.resolved',
-          createdAt: resolved.resolvedAt ?? this.options.clock.now().toISOString(),
-          payload: {
-            approvalId: approval.id,
-            decision: 'reject',
-            message: 'Turn cancelled.',
-          },
-        });
-      }
-      throw error;
-    }
+  }
+
+  private async publishApprovalResolved(context: RuntimeToolExecutionContext, approvalId: string, decision: RuntimeApprovalDecision, message?: string, createdAt?: string): Promise<void> {
     await this.appendAndPublish(context.threadId, {
       id: this.options.ids.id('event'),
       threadId: context.threadId,
       turnId: context.turnId,
       type: 'approval.resolved',
-      createdAt: this.options.clock.now().toISOString(),
+      createdAt: createdAt ?? this.options.clock.now().toISOString(),
       payload: {
-        approvalId: approval.id,
-        decision: answer.decision,
-        message: answer.message,
+        approvalId,
+        decision,
+        message,
       },
     });
-    return answer.decision;
   }
 }
 
@@ -2105,6 +2403,17 @@ class TurnCancelledError extends Error {
     super('Turn cancelled.');
     this.name = 'AbortError';
   }
+}
+
+class HookStoppedTurnError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HookStoppedTurnError';
+  }
+}
+
+function compactHookTrigger(force: boolean): RuntimeCompactHookTrigger {
+  return force ? 'manual' : 'auto';
 }
 
 function activeTurnKey(threadId: string, turnId: string): string {
@@ -2282,21 +2591,6 @@ function abortReason(signal: AbortSignal): Error {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.message === 'This operation was aborted');
-}
-
-/**
- * 给任意 Promise 增加 AbortSignal 支持。
- *
- * @param promise 待等待的异步任务。
- * @param signal 用于中断等待的取消信号。
- */
-function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(abortReason(signal));
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(abortReason(signal));
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
-  });
 }
 
 function escapeSkillAttribute(value: string): string {

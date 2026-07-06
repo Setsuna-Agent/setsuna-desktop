@@ -1,5 +1,13 @@
 import type { RuntimeToolCall } from './provider.js';
 import type { RuntimeMemoryCitation } from './memory.js';
+import type { RuntimeHookSource } from './config.js';
+import type {
+  RuntimeApprovalAvailableDecision,
+  RuntimeExecPolicyAmendment,
+  RuntimeNetworkApprovalContext,
+  RuntimeNetworkPolicyAmendment,
+  RuntimePermissionApprovalContext,
+} from './approvals.js';
 
 export type RuntimeMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -22,6 +30,7 @@ export type RuntimeMessage = {
   toolName?: string;
   toolCalls?: RuntimeToolCall[];
   toolRuns?: RuntimeToolRun[];
+  hookRuns?: RuntimeHookRun[];
 };
 
 export type RuntimeMessageAttachment = {
@@ -92,6 +101,41 @@ export type RuntimeThreadMemoryMode = 'enabled' | 'disabled' | 'polluted';
 
 export type RuntimeToolRunStatus = 'pending_approval' | 'running' | 'success' | 'error' | 'rejected';
 
+export type RuntimeHookRunEventName = 'PreToolUse' | 'PermissionRequest' | 'PostToolUse' | 'PreCompact' | 'PostCompact' | 'SessionStart' | 'SubagentStart' | 'UserPromptSubmit' | 'SubagentStop' | 'Stop';
+
+export type RuntimeHookRunStatus = 'running' | 'completed' | 'failed' | 'blocked' | 'stopped';
+
+export type RuntimeHookOutputEntryKind = 'warning' | 'stop' | 'feedback' | 'context' | 'error';
+
+export type RuntimeHookOutputEntry = {
+  kind: RuntimeHookOutputEntryKind;
+  text: string;
+};
+
+export type RuntimeHookRun = {
+  id: string;
+  turnId?: string;
+  toolCallId?: string;
+  toolName?: string;
+  eventName: RuntimeHookRunEventName;
+  handlerType: 'command';
+  status: RuntimeHookRunStatus;
+  command?: string;
+  matcher?: string | null;
+  lastAssistantMessagePreview?: string;
+  promptPreview?: string;
+  statusMessage?: string | null;
+  sourcePath?: string;
+  source?: RuntimeHookSource;
+  message?: string;
+  entries?: RuntimeHookOutputEntry[];
+  stdoutPreview?: string;
+  stderrPreview?: string;
+  durationMs?: number;
+  startedAt?: string;
+  completedAt?: string;
+};
+
 export type RuntimeToolRun = {
   id: string;
   name: string;
@@ -107,6 +151,12 @@ export type RuntimeToolRun = {
   approvalReason?: string;
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   approvalMessage?: string;
+  availableApprovalDecisions?: RuntimeApprovalAvailableDecision[];
+  proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
+  networkApprovalContext?: RuntimeNetworkApprovalContext;
+  proposedNetworkPolicyAmendments?: RuntimeNetworkPolicyAmendment[];
+  permissionApprovalContext?: RuntimePermissionApprovalContext;
+  hookRuns?: RuntimeHookRun[];
 };
 
 export type RuntimeThreadSummary = {
@@ -127,6 +177,7 @@ export type RuntimeThreadSummary = {
 
 export type RuntimeThread = RuntimeThreadSummary & {
   contextCompaction?: RuntimeThreadContextCompactionState;
+  pendingHookRuns?: RuntimeHookRun[];
   messages: RuntimeMessage[];
   lastSeq: number;
 };

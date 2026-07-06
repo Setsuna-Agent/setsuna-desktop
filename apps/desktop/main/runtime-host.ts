@@ -6,6 +6,7 @@ import net from 'node:net';
 import path from 'node:path';
 import type { WebContents } from 'electron';
 import type { RuntimeEvent, RuntimeRequestInput } from '@setsuna-desktop/contracts';
+import { desktopProcessEnvironment } from './desktop-environment.js';
 
 type RuntimeHostOptions = {
   appRoot: string;
@@ -42,7 +43,7 @@ export class RuntimeHost {
       cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
-        ...process.env,
+        ...desktopProcessEnvironment(process.env),
         ELECTRON_RUN_AS_NODE: '1',
         SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR: builtinSkillsDir,
         SETSUNA_DESKTOP_DATA_DIR: this.options.dataDir,

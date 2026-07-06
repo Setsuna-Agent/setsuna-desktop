@@ -1,5 +1,5 @@
 import type { RuntimeApprovalDecision, RuntimeApprovalRequest } from './approvals.js';
-import type { RuntimeGitInfo, RuntimeMessage, RuntimeThreadGoal, RuntimeThreadMemoryMode } from './threads.js';
+import type { RuntimeGitInfo, RuntimeHookRun, RuntimeMessage, RuntimeThreadGoal, RuntimeThreadMemoryMode } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 
 export type RuntimeEventType =
@@ -23,6 +23,8 @@ export type RuntimeEventType =
   | 'tool.started'
   | 'tool.output_delta'
   | 'tool.completed'
+  | 'hook.started'
+  | 'hook.completed'
   | 'approval.requested'
   | 'approval.resolved'
   | 'turn.completed'
@@ -82,6 +84,8 @@ export type RuntimeEvent =
         durationMs?: number;
       }
     >
+  | RuntimeEventBase<'hook.started', RuntimeHookRun>
+  | RuntimeEventBase<'hook.completed', RuntimeHookRun>
   | RuntimeEventBase<'approval.requested', { approval: RuntimeApprovalRequest }>
   | RuntimeEventBase<'approval.resolved', { approvalId: string; decision: RuntimeApprovalDecision; message?: string }>
   | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage }>

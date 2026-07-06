@@ -21,5 +21,5 @@ export function isActivityEvent(event: RuntimeEvent): boolean {
 }
 
 function isToolEvent(event: RuntimeEvent): event is ToolRuntimeEvent {
-  return event.type === 'tool.started' || event.type === 'tool.completed';
+  return event.type === 'tool.started' || event.type === 'tool.completed' || event.type === 'hook.started' || event.type === 'hook.completed';
 }

@@ -5,6 +5,10 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeHookEventName,
+  RuntimeHookHandlerConfig,
+  RuntimeHookMatcherGroup,
+  RuntimeHooksConfig,
   RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
@@ -12,6 +16,19 @@ import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 68000;
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
+
+const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
+  'PreToolUse',
+  'PermissionRequest',
+  'PostToolUse',
+  'PreCompact',
+  'PostCompact',
+  'SessionStart',
+  'UserPromptSubmit',
+  'SubagentStart',
+  'SubagentStop',
+  'Stop',
+];
 
 type StoredConfig = Omit<RuntimeConfigState, 'configPath' | 'dataPath' | 'providers' | 'memory' | 'memoryEnabled'> & {
   memory?: Partial<RuntimeMemorySettings>;
@@ -71,6 +88,8 @@ export class FileConfigStore implements ConfigStore {
       approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
       permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
       sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite),
+      hooks: normalizeHooksConfig(input.hooks ?? previous.hooks),
+      bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
       features: normalizeFeatureFlags(input.features ?? previous.features),
       desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
       providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
@@ -109,6 +128,8 @@ export class FileConfigStore implements ConfigStore {
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
       sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite),
+      hooks: normalizeHooksConfig(stored.hooks),
+      bypassHookTrust: stored.bypassHookTrust === true,
       features: normalizeFeatureFlags(stored.features),
       desktopSettings: normalizeDesktopSettings(stored.desktopSettings),
       providers: stored.providers.map((provider) => {
@@ -134,7 +155,9 @@ function defaultConfig(): StoredConfig {
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',
     sandboxWorkspaceWrite: {},
-    features: {},
+    hooks: {},
+    bypassHookTrust: false,
+    features: { request_permissions_tool: true },
     desktopSettings: {},
     providers: [
       {
@@ -307,6 +330,10 @@ function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function booleanOrUndefined(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 function positiveOptionalInt(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
@@ -347,13 +374,93 @@ function normalizeSandboxWorkspaceWrite(value: unknown): RuntimeConfigState['san
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
   return {
+    readableRoots: Array.isArray(record.readableRoots)
+      ? record.readableRoots.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : [],
     writableRoots: Array.isArray(record.writableRoots)
       ? record.writableRoots.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
       : [],
+    deniedRoots: Array.isArray(record.deniedRoots)
+      ? record.deniedRoots.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : [],
+    deniedGlobPatterns: Array.isArray(record.deniedGlobPatterns)
+      ? record.deniedGlobPatterns.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : [],
+    globScanMaxDepth: typeof record.globScanMaxDepth === 'number' && Number.isFinite(record.globScanMaxDepth)
+      ? Math.max(1, Math.floor(record.globScanMaxDepth))
+      : undefined,
     networkAccess: record.networkAccess === true,
     excludeTmpdirEnvVar: record.excludeTmpdirEnvVar === true,
     excludeSlashTmp: record.excludeSlashTmp === true,
   };
+}
+
+function normalizeHooksConfig(value: unknown): RuntimeHooksConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  const hooks: RuntimeHooksConfig = {};
+  for (const eventName of HOOK_EVENT_NAMES) {
+    const groups = normalizeHookMatcherGroups(record[eventName]);
+    if (groups.length) hooks[eventName] = groups;
+  }
+  const state = normalizeHookState(record.state);
+  if (Object.keys(state).length) hooks.state = state;
+  return hooks;
+}
+
+function normalizeHookMatcherGroups(value: unknown): RuntimeHookMatcherGroup[] {
+  if (!Array.isArray(value)) return [];
+  const groups: RuntimeHookMatcherGroup[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const hooks = normalizeHookHandlers(record.hooks);
+    if (!hooks.length) continue;
+    const matcher = nonEmpty(record.matcher);
+    groups.push({
+      ...(matcher ? { matcher } : {}),
+      hooks,
+    });
+  }
+  return groups;
+}
+
+function normalizeHookHandlers(value: unknown): RuntimeHookHandlerConfig[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const record = item as Record<string, unknown>;
+      const type = record.type;
+      if (type !== 'command' && type !== 'prompt' && type !== 'agent') return null;
+      const handler: RuntimeHookHandlerConfig = { type };
+      const command = nonEmpty(record.command);
+      if (command) handler.command = command;
+      const commandWindows = nonEmpty(record.commandWindows ?? record.command_windows);
+      if (commandWindows) handler.commandWindows = commandWindows;
+      const timeout = positiveOptionalInt(record.timeoutSec ?? record.timeout_sec ?? record.timeout);
+      if (timeout !== undefined) handler.timeoutSec = timeout;
+      if (record.async === true) handler.async = true;
+      const statusMessage = nonEmpty(record.statusMessage ?? record.status_message);
+      if (statusMessage) handler.statusMessage = statusMessage;
+      return handler;
+    })
+    .filter((item): item is RuntimeHookHandlerConfig => Boolean(item));
+}
+
+function normalizeHookState(value: unknown): NonNullable<RuntimeHooksConfig['state']> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const state: NonNullable<RuntimeHooksConfig['state']> = {};
+  for (const [key, rawState] of Object.entries(value)) {
+    if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)) continue;
+    const record = rawState as Record<string, unknown>;
+    const next = {
+      enabled: booleanOrUndefined(record.enabled),
+      trustedHash: nonEmpty(record.trustedHash ?? record.trusted_hash),
+    };
+    if (next.enabled !== undefined || next.trustedHash) state[key] = next;
+  }
+  return state;
 }
 
 function normalizeDesktopSettings(value: unknown): Record<string, unknown> {
