@@ -260,6 +260,43 @@ describe('createAssistantRunTimeline', () => {
     });
   });
 
+  it('hides active thinking items once the work block enters a file change flow', () => {
+    const segments: RuntimeMessage[] = [
+      {
+        id: 'assistant_thinking',
+        role: 'assistant',
+        content: '<think>preparing the edit',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        status: 'streaming',
+      },
+      {
+        id: 'assistant_begin',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        status: 'streaming',
+        toolRuns: [{ id: 'call_begin', name: 'begin_file_change', status: 'success' }],
+      },
+      {
+        id: 'assistant_patch',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-27T00:00:02.000Z',
+        status: 'streaming',
+        toolRuns: [{ id: 'call_patch', name: 'apply_patch', status: 'running' }],
+      },
+    ];
+    const work = createAssistantRunTimeline(segments)[0];
+
+    if (work?.type !== 'work') throw new Error('expected a work block');
+    expect(work.thinkingSegments).toMatchObject([{ content: 'preparing the edit' }]);
+    expect(work.items.map((item) => item.type)).toEqual(['toolRuns']);
+    expect(work.items[0]).toMatchObject({
+      type: 'toolRuns',
+      toolRuns: [{ id: 'call_begin' }, { id: 'call_patch' }],
+    });
+  });
+
   it('merges adjacent tool-run items across assistant segment boundaries', () => {
     const segments: RuntimeMessage[] = [
       {

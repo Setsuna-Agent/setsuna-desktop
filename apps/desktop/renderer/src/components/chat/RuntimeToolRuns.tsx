@@ -69,6 +69,7 @@ export function RuntimeHookRuns({ runs }: { runs?: RuntimeHookRun[] }) {
 
 export function isDisplayableRuntimeToolRun(run: RuntimeToolRun): boolean {
   if (run.status === 'error') return false;
+  if (run.name === 'begin_file_change') return false;
   return Boolean(run.name || run.status || run.argumentsPreview || run.resultPreview);
 }
 
@@ -647,7 +648,7 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
 }
 
 function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
-  const entries = fileOperationEntries(runs);
+  const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
   if (!entries.length) return null;
   return (
     <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
@@ -1347,7 +1348,7 @@ type FileOperationRunSummary = {
 function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSummary {
   const status = toolRunGroupStatus(runs);
   const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
-  const entries = fileOperationEntries(runs);
+  const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
   const activeTarget = active ? fileOperationTarget(active) : '';
   const fallbackTarget = activeTarget || (entries.length === 1 ? entries[0]?.path : entries.length > 1 ? `${entries.length} 个文件` : '');
   const changeCounts = fileOperationGroupChangeTotals(runs) ?? undefined;
@@ -1369,7 +1370,8 @@ function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSumm
       : { title: '已规划文件改动', target: entries[0]?.path, changeCounts };
   }
 
-  const singleEntry = entries.length === 1 ? entries[0] : undefined;
+  const appliedEntries = entries.filter((entry) => entry.applied);
+  const singleEntry = appliedEntries.length === 1 ? appliedEntries[0] : undefined;
   if (singleEntry) {
     return {
       title: completedFileOperationActionLabel(singleEntry.action),
@@ -1384,14 +1386,14 @@ function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSumm
     };
   }
 
-  return { title: completedFileOperationAggregateTitle(entries, runs.length) };
+  return { title: completedFileOperationAggregateTitle(appliedEntries, runs.length) };
 }
 
 function fileOperationAggregateTitle(runs: RuntimeToolRun[]): string {
   const status = toolRunGroupStatus(runs);
   const hasAppliedMutation = runs.some(isRuntimeFileMutationRun);
   if (status === 'success' && hasAppliedMutation) {
-    return completedFileOperationAggregateTitle(fileOperationEntries(runs), runs.length);
+    return completedFileOperationAggregateTitle(fileOperationEntries(runs).filter((entry) => entry.applied), runs.length);
   }
   return fileOperationGroupSummary(runs).title;
 }
@@ -1418,12 +1420,13 @@ type FileOperationEntry = {
   additions?: number;
   deletions?: number;
   hasChangeCounts?: boolean;
+  applied?: boolean;
   showZeroChangeCounts?: boolean;
   path: string;
   priority: number;
 };
 
-function fileOperationEntries(runs: RuntimeToolRun[]): FileOperationEntry[] {
+function fileOperationEntries(runs: RuntimeToolRun[], options: { appliedOnlyWhenCompletedMutation?: boolean } = {}): FileOperationEntry[] {
   const byPath = new Map<string, FileOperationEntry>();
   for (const run of runs) {
     const priority = isRuntimeFileMutationRun(run) ? 2 : run.name === 'begin_file_change' ? 1 : 0;
@@ -1434,6 +1437,7 @@ function fileOperationEntries(runs: RuntimeToolRun[]): FileOperationEntry[] {
           additions: change.additions,
           deletions: change.deletions,
           hasChangeCounts: true,
+          applied: isRuntimeFileMutationRun(run),
           showZeroChangeCounts: true,
           path: change.path,
           priority,
@@ -1447,7 +1451,11 @@ function fileOperationEntries(runs: RuntimeToolRun[]): FileOperationEntry[] {
       if (!current || entry.priority >= current.priority) byPath.set(key, entry);
     }
   }
-  return [...byPath.values()];
+  const entries = [...byPath.values()];
+  if (options.appliedOnlyWhenCompletedMutation && toolRunGroupStatus(runs) === 'success' && runs.some(isRuntimeFileMutationRun)) {
+    return entries.filter((entry) => entry.applied);
+  }
+  return entries;
 }
 
 function plannedFileOperationEntriesFromRun(run: RuntimeToolRun, priority: number): FileOperationEntry[] {
@@ -1464,6 +1472,7 @@ function plannedFileOperationEntriesFromRun(run: RuntimeToolRun, priority: numbe
       if (!path) return null;
       return {
         action: normalizeFileOperationAction(item.action),
+        applied: false,
         path,
         priority,
       };
@@ -1479,6 +1488,7 @@ function fileOperationEntryFromRun(run: RuntimeToolRun, priority: number): FileO
     additions: totals?.additions,
     deletions: totals?.deletions,
     hasChangeCounts: Boolean(totals),
+    applied: isRuntimeFileMutationRun(run),
     showZeroChangeCounts: totals?.showZero,
     path: fileOperationTarget(run),
     priority,

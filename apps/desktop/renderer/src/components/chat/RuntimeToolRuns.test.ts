@@ -59,13 +59,51 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(text).not.toContain('结果');
   });
 
+  it('does not count planned-but-unapplied files in completed mutation summaries', () => {
+    const text = renderedText([
+      toolRun('plan', 'plan_file_changes', {
+        files: [
+          { file_path: 'src/a.ts', action: 'edit' },
+          { file_path: 'src/b.ts', action: 'edit' },
+          { file_path: 'src/c.ts', action: 'edit' },
+          { file_path: 'src/d.ts', action: 'edit' },
+        ],
+      }),
+      toolRun('begin', 'begin_file_change', { file_path: 'src/a.ts', action: 'edit' }),
+      fileRun('edit_a', 'edit_file', 'src/a.ts', 'Modified'),
+    ]);
+
+    expect(text).toContain('已编辑');
+    expect(text).toContain('src/a.ts');
+    expect(text).not.toContain('已编辑 4 个文件');
+    expect(text).not.toContain('src/b.ts');
+    expect(text).not.toContain('src/c.ts');
+    expect(text).not.toContain('src/d.ts');
+  });
+
+  it('does not render begin_file_change as a visible transient row', () => {
+    expect(renderedText([
+      toolRun('begin_only', 'begin_file_change', { file_path: 'src/a.ts', action: 'edit' }, 'running'),
+    ])).toBe('');
+
+    const text = renderedText([
+      toolRun('begin_edit', 'begin_file_change', { file_path: 'src/a.ts', action: 'edit' }),
+      fileRun('edit_a', 'edit_file', 'src/a.ts', 'Modified'),
+    ]);
+
+    expect(text).toContain('已编辑');
+    expect(text).toContain('a.ts');
+    expect(text).not.toContain('准备写入');
+  });
+
   it('shows change counts next to a concrete single edited file instead of an aggregate count', () => {
     const html = renderedHtml([
       toolRun('begin_edit', 'begin_file_change', { file_path: 'merge_sort.py', action: 'edit' }),
       fileRun('edit_merge', 'edit_file', 'merge_sort.py', 'Modified'),
     ]);
 
-    expect(html).toContain('<span class="chat-tool-run__title">已编辑</span><span class="chat-tool-run__target">merge_sort.py</span><span class="chat-change-counts"');
+    expect(html).toContain('<span class="chat-tool-run__file-status"><span>已编辑</span><code class="chat-tool-run__file-target" title="merge_sort.py">merge_sort.py</code></span>');
+    expect(html).toContain('<span class="chat-change-counts"');
   });
 
   it('renders planned multi-file changes as file rows without zero aggregate counts', () => {

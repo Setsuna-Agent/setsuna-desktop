@@ -1,5 +1,6 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
+import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
 
 export type AssistantRunTimelineBlock =
   | {
@@ -80,12 +81,13 @@ export function createAssistantRunTimeline(segments: RuntimeMessage[]): Assistan
 
   const flushWork = () => {
     if (!workBlock) return;
+    const hideThinkingItems = workBlock.toolRuns.some(isFileChangeWorkflowRun);
     blocks.push({
       type: 'work',
       id: workBlock.id,
       segments: workBlock.segments,
       toolRuns: workBlock.toolRuns,
-      items: workBlock.items,
+      items: hideThinkingItems ? workBlock.items.filter((item) => item.type !== 'thinking') : workBlock.items,
       contentSegments: workBlock.contentSegments,
       thinkingSegments: workBlock.thinkingSegments,
       active: workBlock.segments.some((segment) => segment.status === 'streaming') || workBlock.toolRuns.some(isActiveWorkToolRun),
@@ -246,4 +248,8 @@ function isEmptyStreamingAssistantSegment(segment: RuntimeMessage): boolean {
 
 function isActiveWorkToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
   return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected');
+}
+
+function isFileChangeWorkflowRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
+  return run.name === 'plan_file_changes' || run.name === 'begin_file_change' || isRuntimeFileMutationRun(run);
 }
