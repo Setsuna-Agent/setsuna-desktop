@@ -221,6 +221,7 @@ type RunTurnOptions = {
   clientId?: string;
   includeUserMessageInModel?: boolean;
   modelInput?: string;
+  planDecision?: RuntimePlanDecision;
   planOnly?: boolean;
   publishUserMessage?: boolean;
   review?: { displayText: string };
@@ -378,7 +379,12 @@ export class AgentLoop {
    * @param turnId 要取消的 turn ID。
    */
   async cancelTurn(threadId: string, turnId: string): Promise<boolean> {
-    return this.turnTasks.cancel(threadId, turnId, new TurnCancelledError());
+    const task = this.turnTasks.taskFor(threadId, turnId);
+    const cancelled = this.turnTasks.cancel(threadId, turnId, new TurnCancelledError());
+    if (!cancelled) return false;
+    // 取消是最高优先级交互：先落终态事件释放 UI，不等待 provider/tool 主动响应 AbortSignal。
+    await this.publishTurnCancelledOnce(threadId, turnId, task?.taskKind ?? 'regular', 'Turn cancelled.', { marker: true });
+    return true;
   }
 
   /**
@@ -507,6 +513,35 @@ export class AgentLoop {
         },
       },
     });
+  }
+
+  private async publishTurnCancelledOnce(
+    threadId: string,
+    turnId: string,
+    taskKind: RuntimeTaskKind,
+    reason: string,
+    options: { marker?: boolean } = {},
+  ): Promise<boolean> {
+    if (await this.turnHasTerminalEvent(threadId, turnId)) return false;
+    if (options.marker) await this.publishTurnAbortedMarker(threadId, turnId);
+    if (await this.turnHasTerminalEvent(threadId, turnId)) return false;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'turn.cancelled',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { reason, taskKind },
+    });
+    return true;
+  }
+
+  private async turnHasTerminalEvent(threadId: string, turnId: string): Promise<boolean> {
+    const events = await this.options.threadStore.listEvents(threadId, 0);
+    return events.some((event) =>
+      event.turnId === turnId &&
+      (event.type === 'turn.cancelled' || event.type === 'turn.completed' || event.type === 'runtime.error')
+    );
   }
 
   private stopAcceptingSteers(threadId: string, turnId: string): void {
@@ -786,15 +821,13 @@ export class AgentLoop {
       return compacted;
     } catch (error) {
       if (isAbortError(error)) {
-        await this.publishTurnAbortedMarker(threadId, turnId);
-        await this.appendAndPublish(threadId, {
-          id: this.options.ids.id('event'),
+        await this.publishTurnCancelledOnce(
           threadId,
           turnId,
-          type: 'turn.cancelled',
-          createdAt: this.options.clock.now().toISOString(),
-          payload: { reason: error instanceof Error ? error.message : 'Turn cancelled.', taskKind: 'compact' },
-        });
+          'compact',
+          error instanceof Error ? error.message : 'Turn cancelled.',
+          { marker: true },
+        );
         throw error;
       }
       await this.appendAndPublish(threadId, {
@@ -929,15 +962,13 @@ export class AgentLoop {
         cleanupStatus = 'cancelled';
         if (holderMessageId) await this.completeMessage(threadId, turnId, holderMessageId);
         if (standaloneTurn) {
-          await this.publishTurnAbortedMarker(threadId, turnId);
-          await this.appendAndPublish(threadId, {
-            id: this.options.ids.id('event'),
+          await this.publishTurnCancelledOnce(
             threadId,
             turnId,
-            type: 'turn.cancelled',
-            createdAt: this.options.clock.now().toISOString(),
-            payload: { reason: error instanceof Error ? error.message : 'Turn cancelled.', taskKind: 'user_shell' },
-          });
+            'user_shell',
+            error instanceof Error ? error.message : 'Turn cancelled.',
+            { marker: true },
+          );
         }
         await this.cleanupToolHostTurn({ threadId, projectId: thread.projectId, turnId, toolCallId }, { status: cleanupStatus });
         return;
@@ -1010,7 +1041,8 @@ export class AgentLoop {
   private async createTurnRun(threadId: string, input: SendTurnInput): Promise<{ turnId: string; done: Promise<void> }> {
     const text = input.input.trim();
     const attachments = normalizeAttachments(input.attachments);
-    if (!text && !attachments.length) throw new Error('Turn input is required.');
+    const planDecision = input.planDecision;
+    if (!text && !attachments.length && !planDecision) throw new Error('Turn input is required.');
     await this.assertImageAttachmentsSupported(attachments);
     await this.waitForFinalizingRegularTurn(threadId);
 
@@ -1019,6 +1051,8 @@ export class AgentLoop {
     const threadForRun = await this.applyPendingPlanDecision(threadId, thread, planDecisionForTurnInput(input));
 
     const turnId = this.options.ids.id('turn');
+    // 纯计划决策 turn（无文本/附件）：accepted 用不可见执行指令驱动模型；dismissed 在 runTurn 内短路不调模型。
+    const planDecisionOnly = Boolean(planDecision) && !text && !attachments.length;
     const run = this.turnTasks.run({
       turnId,
       threadId,
@@ -1036,6 +1070,10 @@ export class AgentLoop {
         clientId: input.clientId,
         planOnly: input.collaborationMode === 'plan',
         taskKind: 'regular',
+        planDecision: planDecisionOnly ? planDecision : undefined,
+        ...(planDecisionOnly && planDecision === 'accepted'
+          ? { publishUserMessage: false, includeUserMessageInModel: true, modelInput: PLAN_ACCEPT_EXECUTION_PROMPT }
+          : {}),
       },
       turnThinkingOptions(input)
     ));
@@ -1233,6 +1271,19 @@ export class AgentLoop {
       createdAt,
       payload: { input: text, taskKind },
     });
+    if (options.planDecision === 'dismissed') {
+      // 放弃计划：awaiting 状态已由 applyPendingPlanDecision 标记为 dismissed，无需调用模型，直接结束 turn。
+      this.stopAcceptingSteers(threadId, turnId);
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { taskKind },
+      });
+      return;
+    }
     if (publishUserMessage) await this.publishMessage(threadId, turnId, userMessage);
     if (options.review) await this.publishReviewModeMessage(threadId, turnId, 'entered', options.review.displayText);
     const hookRunner = createRuntimeToolHookRunner(runtimeConfig);
@@ -1668,15 +1719,13 @@ export class AgentLoop {
         if (activeAssistantMessageId) {
           await this.completeMessage(threadId, turnId, activeAssistantMessageId);
         }
-        await this.publishTurnAbortedMarker(threadId, turnId);
-        await this.appendAndPublish(threadId, {
-          id: this.options.ids.id('event'),
+        await this.publishTurnCancelledOnce(
           threadId,
           turnId,
-          type: 'turn.cancelled',
-          createdAt: this.options.clock.now().toISOString(),
-          payload: { reason: error instanceof Error ? error.message : 'Turn cancelled.', taskKind },
-        });
+          taskKind,
+          error instanceof Error ? error.message : 'Turn cancelled.',
+          { marker: true },
+        );
         return;
       }
       cleanupStatus = 'failed';
@@ -4811,6 +4860,8 @@ function noToolStepSnapshot(snapshot: RuntimeModelRequestStepSnapshot): RuntimeM
     toolChoice: 'none',
   };
 }
+
+const PLAN_ACCEPT_EXECUTION_PROMPT = '请按照上述已确认的计划开始执行。';
 
 function planDecisionForTurnInput(input: SendTurnInput): RuntimePlanDecision {
   if (input.planDecision) return input.planDecision;

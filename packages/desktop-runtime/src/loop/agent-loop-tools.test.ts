@@ -4394,6 +4394,33 @@ describe('agent loop tools', () => {
     expect(saved?.messages.at(-1)?.status).toBe('complete');
   });
 
+  it('publishes cancellation immediately when a model stream ignores abort', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Non-cooperative cancel' });
+    const modelClient = new NonCooperativeCancellationModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'start and hang' });
+    await waitForModelRequest(modelClient);
+
+    await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    const saved = await threadStore.getThread(thread.id);
+    expect(modelClient.aborted).toBe(true);
+    expect(events.filter((event) => event.type === 'turn.cancelled' && event.turnId === started.turnId)).toHaveLength(1);
+    expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
+    expect(saved?.activeTurnId).toBeNull();
+    expect(saved?.messages.find((message) => message.role === 'assistant' && message.turnId === started.turnId)?.status).toBe('complete');
+  });
+
   it('does not wait for tool runtimes that opt out of cancellation waiting', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -7271,6 +7298,20 @@ class CancellableModelClient implements ModelClient {
   }
 }
 
+class NonCooperativeCancellationModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  aborted = false;
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'text_delta', text: 'partial response' };
+    request.signal?.addEventListener('abort', () => {
+      this.aborted = true;
+    }, { once: true });
+    await new Promise<never>(() => undefined);
+  }
+}
+
 class SteerableModelClient implements ModelClient {
   requests: ModelRequest[] = [];
   private releaseFirst: () => void = () => undefined;
@@ -8245,7 +8286,7 @@ async function waitForPendingApproval(approvalGate: InMemoryApprovalGate) {
   throw new Error('Timed out waiting for approval');
 }
 
-async function waitForModelRequest(modelClient: CancellableModelClient) {
+async function waitForModelRequest(modelClient: { requests: ModelRequest[] }) {
   await waitForModelRequestCount(modelClient, 1);
 }
 

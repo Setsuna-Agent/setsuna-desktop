@@ -1185,6 +1185,7 @@ function ProviderSettings({
                         </div>
                         <span className="settings-model-option__meta">
                           <span>{model.maxOutputTokens}</span>
+                          {model.contextWindowTokens ? <span>{formatTokens(model.contextWindowTokens)} ctx</span> : null}
                           {model.thinkingEnabled ? <span>思考</span> : null}
                           {model.supportsImages ? <span>图片</span> : null}
                         </span>
@@ -1341,6 +1342,20 @@ function ModelSettingsDialog({ model, onClose, onConfirm }: { model: ProviderMod
                 }}
               />
             </label>
+            <label className="settings-model-field">
+              <span className="settings-model-label">上下文窗口</span>
+              <TextField
+                className="settings-local-control settings-model-context-control"
+                type="number"
+                min={0}
+                placeholder="未设置"
+                value={draftModel.contextWindowTokens ?? ''}
+                onChange={(event) => {
+                  const contextWindowTokens = positiveInt(Number(event.target.value), 0) || undefined;
+                  updateDraft((item) => ({ ...item, contextWindowTokens }));
+                }}
+              />
+            </label>
           </div>
           <div className="settings-model-modal__section">
             <span className="settings-model-label">能力</span>
@@ -1473,6 +1488,7 @@ function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = fa
     code,
     enabled: model.enabled ?? fallbackEnabled,
     maxOutputTokens: positiveInt(model.maxOutputTokens, DEFAULT_MODEL_MAX_OUTPUT_TOKENS),
+    contextWindowTokens: model.contextWindowTokens ? positiveInt(model.contextWindowTokens, 0) || undefined : undefined,
     thinkingEnabled: Boolean(model.thinkingEnabled),
     thinkingEfforts,
     defaultThinkingEffort: model.thinkingEnabled ? normalizeDefaultThinkingEffort({ ...model, thinkingEfforts }) : undefined,

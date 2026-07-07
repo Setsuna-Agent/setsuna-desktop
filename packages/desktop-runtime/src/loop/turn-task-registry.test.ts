@@ -60,6 +60,27 @@ describe('RuntimeTurnTaskRegistry', () => {
     await run.done;
   });
 
+  it('exposes a running task by thread and turn before cancellation', async () => {
+    const registry = new RuntimeTurnTaskRegistry();
+    const deferred = createDeferred<void>();
+    const run = registry.run({
+      acceptingSteers: true,
+      taskKind: 'regular',
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+    }, async () => {
+      await deferred.promise;
+    });
+
+    expect(registry.taskFor('thread_1', 'turn_1')).toBe(run.task);
+
+    registry.cancel('thread_1', 'turn_1', new Error('stop'));
+    expect(registry.taskFor('thread_1', 'turn_1')).toBeNull();
+
+    deferred.resolve(undefined);
+    await run.done;
+  });
+
   it('does not overwrite an active task for the same thread', async () => {
     const registry = new RuntimeTurnTaskRegistry();
     const deferred = createDeferred<void>();

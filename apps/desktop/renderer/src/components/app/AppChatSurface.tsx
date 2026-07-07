@@ -3,6 +3,7 @@ import type {
   AnswerRuntimeApprovalInput,
   RuntimeThread,
   RuntimeConfigState,
+  RuntimePlanDecision,
   RuntimeSkillSummary,
   RuntimeThreadMemoryMode,
   WorkspaceEntry,
@@ -76,6 +77,7 @@ export function AppChatSurface({
   onReorderBottomPanels,
   onReviewRefresh,
   onSend,
+  onPlanDecision,
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
@@ -136,6 +138,7 @@ export function AppChatSurface({
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; skillIds?: string[] }) => void;
+  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -182,6 +185,7 @@ export function AppChatSurface({
         onSelectModel={onSelectModel}
         onSearchProjectEntries={onSearchProjectEntries}
         onSend={onSend}
+        onPlanDecision={onPlanDecision}
         onReviewRefresh={onReviewRefresh}
         onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       />

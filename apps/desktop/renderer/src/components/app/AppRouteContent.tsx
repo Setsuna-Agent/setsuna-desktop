@@ -179,6 +179,7 @@ export function AppRouteContent({
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
       onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
       onSend={(value, options) => void chatActions.sendInput(value, options)}
+      onPlanDecision={(decision) => void chatActions.sendInput('', { planDecision: decision })}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}
       onTerminalResizeStart={onTerminalResizeStart}

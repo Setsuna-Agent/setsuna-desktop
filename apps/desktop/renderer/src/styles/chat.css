@@ -2871,3 +2871,100 @@
   font-family: var(--app-code-font-family);
   font-size: 12px;
 }
+
+.chat-plan-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 28%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-primary) 5%, transparent);
+}
+
+.chat-plan-card--accepted {
+  border-color: color-mix(in srgb, var(--app-success) 32%, transparent);
+  background: color-mix(in srgb, var(--app-success) 6%, transparent);
+}
+
+.chat-plan-card--dismissed {
+  border-color: color-mix(in srgb, var(--app-text-muted) 24%, transparent);
+  background: color-mix(in srgb, var(--app-text) 3%, transparent);
+  opacity: 0.82;
+}
+
+.chat-plan-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.chat-plan-card__title {
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.chat-plan-card__status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--app-text-secondary);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.chat-plan-card__status--awaiting_confirmation {
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 14%, transparent);
+}
+
+.chat-plan-card__status--accepted {
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 16%, transparent);
+}
+
+.chat-plan-card__status--dismissed {
+  color: var(--app-text-muted);
+}
+
+.chat-plan-card__body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--app-text);
+}
+
+.chat-plan-card__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-plan-card__action {
+  height: 28px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-plan-card__action--accept {
+  color: #fff;
+  background: var(--app-primary);
+}
+
+.chat-plan-card__action--accept:hover {
+  background: color-mix(in srgb, var(--app-primary) 88%, #000);
+}
+
+.chat-plan-card__action--dismiss {
+  color: var(--app-text-secondary);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.chat-plan-card__action--dismiss:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 10%, transparent);
+}

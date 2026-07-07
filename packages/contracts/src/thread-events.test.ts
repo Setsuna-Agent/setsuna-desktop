@@ -326,6 +326,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
       messageCount: 0,
       lastMessagePreview: '',
       lastSeq: 0,
+      activeTurnId: null,
       messages: [],
     };
     const event: RuntimeEvent = {
@@ -500,6 +501,50 @@ describe('applyRuntimeEventToThread context compaction', () => {
         { id: 'tool_item_1', status: 'cancelled' },
         { id: 'plan_item_1', status: 'completed' },
       ],
+    });
+  });
+
+  it('does not reactivate a cancelled turn when a delayed started event arrives', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      activeTurnId: null,
+      messages: [],
+    };
+    const cancelled: RuntimeEvent = {
+      id: 'event_cancel',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'turn.cancelled',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: { reason: 'Turn cancelled.', taskKind: 'regular' },
+    };
+    const delayedStarted: RuntimeEvent = {
+      id: 'event_started',
+      seq: 2,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'turn.started',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: { input: 'late start', taskKind: 'regular' },
+    };
+
+    const projected = applyRuntimeEventToThread(applyRuntimeEventToThread(thread, cancelled), delayedStarted);
+
+    expect(projected.activeTurnId).toBeNull();
+    expect(projected.turns?.[0]).toMatchObject({
+      id: 'turn_1',
+      input: 'late start',
+      status: 'cancelled',
+      completedAt: '2026-06-26T00:00:01.000Z',
+      error: 'Turn cancelled.',
     });
   });
 

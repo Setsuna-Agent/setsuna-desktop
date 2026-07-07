@@ -138,6 +138,7 @@ export function ChatModelPicker({
                     <span className="chat-model-command-menu__capabilities">
                       {option.model.thinkingEnabled ? <Sparkles size={12} /> : null}
                       {option.model.supportsImages ? <ImageIcon size={12} /> : null}
+                      {option.model.contextWindowTokens ? <span className="chat-model-command-menu__ctx">{formatTokenCount(option.model.contextWindowTokens)}</span> : null}
                     </span>
                     <span className="chat-command-menu__item-scope chat-model-command-menu__provider">{option.provider.name || '未命名厂商'}</span>
                     <span className="chat-model-command-menu__check">{selected ? <Check size={13} /> : null}</span>

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { Actions, Bubble, CodeHighlighter } from '@ant-design/x';
 import { XMarkdown, type ComponentProps as XMarkdownComponentProps } from '@ant-design/x-markdown';
 import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
-import type { AnswerRuntimeApprovalInput, RuntimeConfigState, RuntimeMessage, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
 import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
@@ -52,6 +52,7 @@ export function ChatWorkspace({
   onSelectModel,
   onSearchProjectEntries,
   onSend,
+  onPlanDecision,
   onReviewRefresh,
   onSkillSelectionRequestConsumed,
   reviewLoading = false,
@@ -80,7 +81,8 @@ export function ChatWorkspace({
   onOpenFileReview?: () => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; skillIds?: string[] }) => void;
+  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   reviewLoading?: boolean;
@@ -421,6 +423,7 @@ export function ChatWorkspace({
                         onDiscardFileChanges={onDiscardFileChanges}
                         onEditDraftChange={setEditingDraft}
                         onOpenFileReview={onOpenFileReview}
+                        onPlanDecision={onPlanDecision}
                         onStartEdit={startEditingMessage}
                         onStartDelete={startDeleteSelection}
                         onSubmitEdit={submitEditingMessage}
@@ -785,6 +788,7 @@ function MessageItem({
   onDiscardFileChanges,
   onEditDraftChange,
   onOpenFileReview,
+  onPlanDecision,
   onStartEdit,
   onStartDelete,
   onSubmitEdit,
@@ -806,6 +810,7 @@ function MessageItem({
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onEditDraftChange: (value: string) => void;
   onOpenFileReview?: () => void;
+  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onStartEdit: (message: RuntimeMessage) => void;
   onStartDelete: (itemId: string) => void;
   onSubmitEdit: (messageId: string) => void;
@@ -823,6 +828,7 @@ function MessageItem({
         onAnswerApproval={onAnswerApproval}
         onDiscardFileChanges={onDiscardFileChanges}
         onOpenFileReview={onOpenFileReview}
+        onPlanDecision={onPlanDecision}
         onStartDelete={onStartDelete}
         onToggleDelete={onToggleDelete}
         onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
@@ -938,6 +944,7 @@ function AssistantRunItem({
   onAnswerApproval,
   onDiscardFileChanges,
   onOpenFileReview,
+  onPlanDecision,
   onStartDelete,
   onToggleDelete,
   onWorkHistoryExpandedChange,
@@ -950,6 +957,7 @@ function AssistantRunItem({
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: () => void;
+  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onStartDelete: (itemId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
@@ -992,6 +1000,7 @@ function AssistantRunItem({
             onAnswerApproval={onAnswerApproval}
             onDiscardFileChanges={onDiscardFileChanges}
             onOpenFileReview={onOpenFileReview}
+            onPlanDecision={onPlanDecision}
             onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
           />
         }
@@ -1187,6 +1196,7 @@ function AssistantRunContent({
   onAnswerApproval,
   onDiscardFileChanges,
   onOpenFileReview,
+  onPlanDecision,
   onWorkHistoryExpandedChange,
 }: {
   active: boolean;
@@ -1194,9 +1204,11 @@ function AssistantRunContent({
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: () => void;
+  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
 }) {
   const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
+  const planSegment = useMemo(() => [...displaySegments].reverse().find((segment) => segment.planMode), [displaySegments]);
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
   const timelineBlocks = useMemo(() => createAssistantRunTimeline(displaySegments), [displaySegments]);
@@ -1237,6 +1249,13 @@ function AssistantRunContent({
       </div>
     ) : <AssistantLoadingIndicator label="思考中" />;
   }
+  if (planSegment) {
+    return (
+      <div className="chat-assistant-run">
+        <PlanCard message={planSegment} active={active} onPlanDecision={onPlanDecision} />
+      </div>
+    );
+  }
   return (
     <div className="chat-assistant-run">
       {showActiveWorkPlaceholder ? <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder> : null}
@@ -1255,6 +1274,48 @@ function AssistantRunContent({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function PlanCard({
+  message,
+  active,
+  onPlanDecision,
+}: {
+  message: RuntimeMessage;
+  active: boolean;
+  onPlanDecision: (decision: RuntimePlanDecision) => void;
+}) {
+  const planMode = message.planMode;
+  if (!planMode) return null;
+  const status = planMode.status;
+  const streaming = message.status === 'streaming';
+  const awaiting = status === 'awaiting_confirmation';
+  const canDecide = awaiting && !active;
+  const statusLabel = awaiting ? '待确认' : status === 'accepted' ? '已接受' : '已放弃';
+  const body = message.content.trim()
+    ? <MarkdownContent content={message.content} streaming={streaming} />
+    : streaming
+      ? <AssistantLoadingIndicator label="正在拟定计划" />
+      : null;
+  return (
+    <section className={`chat-plan-card chat-plan-card--${status}${streaming ? ' is-streaming' : ''}`}>
+      <header className="chat-plan-card__header">
+        <span className="chat-plan-card__title">计划</span>
+        <span className={`chat-plan-card__status chat-plan-card__status--${status}`}>{statusLabel}</span>
+      </header>
+      <div className="chat-plan-card__body">{body}</div>
+      {canDecide ? (
+        <footer className="chat-plan-card__actions">
+          <button type="button" className="chat-plan-card__action chat-plan-card__action--accept" onClick={() => onPlanDecision('accepted')}>
+            接受并执行
+          </button>
+          <button type="button" className="chat-plan-card__action chat-plan-card__action--dismiss" onClick={() => onPlanDecision('dismissed')}>
+            放弃
+          </button>
+        </footer>
+      ) : null}
+    </section>
   );
 }
 

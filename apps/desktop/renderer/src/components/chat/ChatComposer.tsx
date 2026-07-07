@@ -3,7 +3,7 @@ import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import { Button, Dropdown } from 'antd';
 import { ArrowUp, Boxes, Check, Paperclip, Sparkles, Square, X } from 'lucide-react';
-import type { RuntimeConfigState, RuntimeMessageAttachment, RuntimeSkillSummary, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
@@ -61,7 +61,7 @@ export function ChatComposer({
   onDraftChange: (value: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
 }) {
@@ -79,6 +79,7 @@ export function ChatComposer({
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [thinkingEffort, setThinkingEffort] = useState('');
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
+  const [planModeEnabled, setPlanModeEnabled] = useState(false);
   const [cursorOffset, setCursorOffset] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
@@ -107,6 +108,15 @@ export function ChatComposer({
         title: '模型',
         description: activeModelName(config) ?? '选择本地配置模型',
         scope: '本地',
+      },
+      {
+        key: 'plan',
+        kind: 'action',
+        type: 'plan',
+        title: '计划模式',
+        description: planModeEnabled ? '已开启：模型先给出计划，待确认后执行' : '模型先给出计划，待确认后再执行',
+        checked: planModeEnabled,
+        scope: planModeEnabled ? '已开启' : '本地',
       },
       {
         key: 'memory-mode',
@@ -156,7 +166,7 @@ export function ChatComposer({
       .slice(0, Math.max(0, 8 - visibleActions.length))
       .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
     return [...visibleActions, ...visibleSkills];
-  }, [canClearContext, config, contextCompactPercent, contextCompacting, memoryGenerationEnabled, memoryMode, selectedSkillIds, skillQuery, skills]);
+  }, [canClearContext, config, contextCompactPercent, contextCompacting, memoryGenerationEnabled, memoryMode, planModeEnabled, selectedSkillIds, skillQuery, skills]);
 
   useEffect(() => {
     if (!commandOpen || !activeProject) {
@@ -351,6 +361,11 @@ export function ChatComposer({
       setModelOpenSignal((value) => value + 1);
       return;
     }
+    if (item.kind === 'action' && item.type === 'plan') {
+      setPlanModeEnabled((value) => !value);
+      setFocused(true);
+      return;
+    }
     if (item.type === 'clear-context' && !item.disabled) {
       onClearContext();
       return;
@@ -368,9 +383,11 @@ export function ChatComposer({
       ...(!steering ? { skillIds: selectedSkills.map((skill) => skill.id) } : {}),
       ...(!steering ? { thinking } : {}),
       ...(!steering && thinking && thinkingEffort ? { thinkingEffort } : {}),
+      ...(!steering && planModeEnabled ? { collaborationMode: 'plan' as const } : {}),
     });
     setSelectedSkills([]);
     setImageAttachments([]);
+    setPlanModeEnabled(false);
     senderRef.current?.clear?.();
   };
 

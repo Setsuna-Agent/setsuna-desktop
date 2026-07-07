@@ -111,15 +111,19 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.started') {
-    next.activeTurnId = event.turnId ?? next.activeTurnId ?? null;
+    const existingTurn = next.turns?.find((item) => item.id === event.turnId);
+    const alreadyTerminal = Boolean(existingTurn && isTerminalTurnStatus(existingTurn.status));
+    if (!alreadyTerminal) next.activeTurnId = event.turnId ?? next.activeTurnId ?? null;
     const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
     if (turn) {
       turn.input = event.payload.input;
       turn.taskKind = event.payload.taskKind;
-      turn.status = 'in_progress';
+      if (!alreadyTerminal) turn.status = 'in_progress';
       turn.startedAt = turn.startedAt ?? event.createdAt;
-      delete turn.completedAt;
-      delete turn.error;
+      if (!alreadyTerminal) {
+        delete turn.completedAt;
+        delete turn.error;
+      }
     }
     return next;
   }
@@ -537,6 +541,10 @@ function ensureThreadTurn(thread: RuntimeThread, turnId: string | undefined, cre
     thread.turns.push(turn);
   }
   return turn;
+}
+
+function isTerminalTurnStatus(status: RuntimeThreadTurn['status']): boolean {
+  return status === 'cancelled' || status === 'completed' || status === 'failed';
 }
 
 function upsertThreadTurnItem(turn: RuntimeThreadTurn, item: RuntimeThreadTurn['items'][number]): void {

@@ -65,6 +65,12 @@ export class RuntimeTurnTaskRegistry {
     return task;
   }
 
+  taskFor(threadId: string, turnId: string): RuntimeTurnTask | null {
+    const task = this.tasksByKey.get(turnTaskKey(threadId, turnId));
+    if (!task || task.controller.signal.aborted) return null;
+    return task;
+  }
+
   cancel(threadId: string, turnId: string, reason?: unknown): boolean {
     const task = this.tasksByKey.get(turnTaskKey(threadId, turnId));
     if (!task || task.controller.signal.aborted) return false;

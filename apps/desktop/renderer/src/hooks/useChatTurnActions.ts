@@ -1,5 +1,5 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
-import type { DesktopRuntimeClient, RuntimeMessageAttachment, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { DesktopRuntimeClient, RuntimeCollaborationMode, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { MainView } from '../types/app.js';
 
 export function useChatTurnActions({
@@ -32,10 +32,12 @@ export function useChatTurnActions({
   terminalTurnIdsRef: MutableRefObject<Set<string>>;
 }) {
   const sendInput = useCallback(
-    async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
+    async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
       const input = (value ?? draft).trim();
       const attachments = options.attachments ?? [];
-      if (!input && !attachments.length) return;
+      if (!input && !attachments.length && !options.planDecision) return;
+      // 计划决策只能针对已有线程里的 awaiting 计划，没有线程时无从裁决。
+      if (options.planDecision && !currentThread) return;
       try {
         let thread = currentThread;
         if (!thread) {
@@ -54,8 +56,10 @@ export function useChatTurnActions({
           skillIds: options.skillIds,
           thinking: options.thinking === true,
           ...(options.thinking === true && options.thinkingEffort ? { thinkingEffort: options.thinkingEffort } : {}),
+          ...(options.collaborationMode ? { collaborationMode: options.collaborationMode } : {}),
+          ...(options.planDecision ? { planDecision: options.planDecision } : {}),
         });
-        const response = activeTurnId
+        const response = activeTurnId && !options.planDecision
           ? await steerActiveTurn({
               activeTurnId,
               attachments,
@@ -77,8 +81,9 @@ export function useChatTurnActions({
     if (!currentThread || !activeTurnId) return;
     const turnId = activeTurnId;
     await client.cancelTurn(currentThread.id, turnId);
+    terminalTurnIdsRef.current.add(turnId);
     setActiveTurnId((current) => (current === turnId ? null : current));
-  }, [activeTurnId, client, currentThread, setActiveTurnId]);
+  }, [activeTurnId, client, currentThread, setActiveTurnId, terminalTurnIdsRef]);
 
   const deleteMessages = useCallback(
     async (messageIds: string[]) => {
