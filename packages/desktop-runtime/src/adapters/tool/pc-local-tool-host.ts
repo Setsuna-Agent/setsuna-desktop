@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
-import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost } from '../../ports/tool-host.js';
+import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost, type ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import * as pcTools from './pc-local-tools.js';
@@ -331,6 +331,9 @@ export class PcLocalToolHost implements ToolHost {
     }
     const result = await pcTools.executeLocalTool(normalized.name, normalized.args, projectState.toolState, {
       signal: context.signal,
+      threadId: context.threadId,
+      turnId: context.turnId,
+      toolCallId: context.toolCallId,
       onProgress: context.onToolOutputDelta
         ? (progress: Record<string, unknown>) => {
             const processId = stringArg(progress.process_id);
@@ -358,6 +361,24 @@ export class PcLocalToolHost implements ToolHost {
       preview: result.diff ? previewPayload(result) : preview ? previewPayload(preview) : undefined,
       data: result,
     };
+  }
+
+  /**
+   * 清理当前 turn 产生的临时本地资源。
+   *
+   * 持久 shell 进程由模型显式 `persist` 后跨 turn 恢复；未持久化的进程只属于当前
+   * turn，完成、失败或取消时都不应继续在后台运行。
+   */
+  async cleanupTurn(context: ToolExecutionContext, _outcome: ToolTurnCleanupOutcome): Promise<void> {
+    if (!context.turnId) return;
+    const states = await this.projectStatesForCleanup(context);
+    await Promise.all(states.map((projectState) =>
+      pcTools.cleanupLocalToolTurn(projectState.toolState, {
+        threadId: context.threadId,
+        turnId: context.turnId,
+        toolCallId: context.toolCallId,
+      })
+    ));
   }
 
   /**
@@ -389,6 +410,17 @@ export class PcLocalToolHost implements ToolHost {
     await this.refreshPolicyAmendments(created);
     this.projectStates.set(root, created);
     return created;
+  }
+
+  private async projectStatesForCleanup(context: ToolExecutionContext): Promise<ProjectToolState[]> {
+    if (typeof context.projectId !== 'string' || !context.projectId) {
+      return [...this.projectStates.values()];
+    }
+    const list = await this.projects.listProjects().catch(() => ({ projects: [] }));
+    const project = list.projects.find((item) => item.id === context.projectId);
+    if (!project) return [];
+    const existing = this.projectStates.get(path.resolve(project.path));
+    return existing ? [existing] : [];
   }
 
   private async refreshPolicyAmendments(projectState: ProjectToolState): Promise<void> {

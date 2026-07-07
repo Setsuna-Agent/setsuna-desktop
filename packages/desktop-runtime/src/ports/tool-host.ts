@@ -1,10 +1,16 @@
 import type { RuntimeMessage, RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
+export type ToolExecutionEnvironment = {
+  id: string;
+  cwd: string;
+};
+
 export type ToolExecutionContext = {
   threadId: string;
   projectId?: string;
   turnId?: string;
   toolCallId?: string;
+  environment?: ToolExecutionEnvironment;
   permissionProfile?: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
   features?: Record<string, boolean>;
@@ -23,11 +29,6 @@ export type RuntimeToolExecutionContext = ToolExecutionContext & {
   permissionProfile: RuntimePermissionProfile;
   sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite | undefined;
   signal: AbortSignal;
-};
-
-export type ToolExecutionEnvironment = {
-  id: string;
-  cwd: string;
 };
 
 export type ToolSandboxAttempt = {
@@ -49,6 +50,10 @@ export type ToolExecutionResult = {
   containsExternalContext?: boolean;
 };
 
+export type ToolTurnCleanupOutcome = {
+  status: 'completed' | 'cancelled' | 'failed';
+};
+
 export class ToolExecutionError extends Error {
   readonly failureKind?: string;
   readonly failureStage?: string;
@@ -68,6 +73,13 @@ export type ToolExecutionPreview = {
   resultPreview?: string;
 };
 
+export type ToolRuntimeProfile = {
+  exposure?: 'direct' | 'deferred' | 'hidden';
+  supportsParallel?: boolean;
+  waitsForRuntimeCancellation?: boolean;
+  visibleToModel?: boolean;
+};
+
 export type ToolApprovalRequirement = {
   reason: string;
   argumentsPreview?: string;
@@ -80,8 +92,10 @@ export type ToolHost = {
   environmentForToolContext?(context: ToolExecutionContext): Promise<ToolExecutionEnvironment | null> | ToolExecutionEnvironment | null;
   systemPrompt?(context: ToolExecutionContext): Promise<string | null> | string | null;
   toolChoice?(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> | RuntimeToolChoice | null;
+  toolRuntimeProfile?(name: string, context: ToolExecutionContext): Promise<ToolRuntimeProfile | null> | ToolRuntimeProfile | null;
   approvalForTool?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolApprovalRequirement | null>;
   previewToolCall?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null>;
   previewPartialToolCall?(name: string, rawArguments: string, context: ToolExecutionContext): Promise<ToolExecutionPreview | null>;
   runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult>;
+  cleanupTurn?(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void> | void;
 };

@@ -12,6 +12,7 @@ import type {
   RuntimeMcpServerPatch,
   RuntimeMemoryQuery,
   RuntimeMessage,
+  ModelStreamEvent,
   RuntimeConfigState,
   RuntimeThread,
   RuntimeThreadSummary,
@@ -65,6 +66,8 @@ export async function handleRuntimeRestRequest(
     const query: ThreadQuery = {
       search: url.searchParams.get('search') ?? undefined,
       includeArchived: url.searchParams.get('includeArchived') === 'true',
+      ancestorThreadId: url.searchParams.get('ancestorThreadId') ?? undefined,
+      parentThreadId: url.searchParams.get('parentThreadId') ?? undefined,
       scope: threadScope(url.searchParams.get('scope')),
       projectId: url.searchParams.get('projectId') ?? undefined,
     };
@@ -376,7 +379,7 @@ export async function handleRuntimeRestRequest(
   const turnMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/turns$/);
   if (turnMatch && request.method === 'POST') {
     const threadId = decodeURIComponent(turnMatch[1]);
-    const input = await readBody<{ attachments?: unknown; clientId?: unknown; input?: unknown; skillIds?: unknown; thinking?: unknown; thinkingEffort?: unknown; thinking_effort?: unknown }>(request);
+    const input = await readBody<{ attachments?: unknown; clientId?: unknown; collaborationMode?: unknown; collaboration_mode?: unknown; input?: unknown; planDecision?: unknown; plan_decision?: unknown; skillIds?: unknown; thinking?: unknown; thinkingEffort?: unknown; thinking_effort?: unknown }>(request);
     const text = typeof input.input === 'string' ? input.input : '';
     const skillIds = Array.isArray(input.skillIds) ? input.skillIds.filter((item): item is string => typeof item === 'string') : [];
     const attachments: SendTurnInput['attachments'] = Array.isArray(input.attachments)
@@ -385,7 +388,9 @@ export async function handleRuntimeRestRequest(
     sendJson(response, 202, await runtime.agentLoop.startTurn(threadId, {
       attachments,
       clientId: stringInput(input.clientId),
+      collaborationMode: collaborationModeInput(input.collaborationMode ?? input.collaboration_mode),
       input: text,
+      planDecision: planDecisionInput(input.planDecision ?? input.plan_decision),
       skillIds,
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
       thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
@@ -483,7 +488,7 @@ async function generateCommitMessage(runtime: RuntimeFactory, input: unknown): P
     },
   ];
 
-  let text = '';
+  const streamText = createModelStreamTextCollector();
   for await (const item of runtime.modelClient.stream({
     model: 'local-runtime-smoke',
     messages,
@@ -491,11 +496,53 @@ async function generateCommitMessage(runtime: RuntimeFactory, input: unknown): P
     temperature: 0.2,
     toolChoice: 'none',
   })) {
-    if (item.type === 'text_delta') text += item.text;
+    streamText.consume(item);
   }
 
+  const text = streamText.text();
   const message = normalizeGeneratedCommitMessage(text);
   return message || fallbackGeneratedCommitMessage(status, diff);
+}
+
+function createModelStreamTextCollector() {
+  let text = '';
+  const agentItemIds = new Set<string>();
+  const itemsWithDeltas = new Set<string>();
+  return {
+    consume(item: ModelStreamEvent) {
+      if (item.type === 'text_delta') {
+        text += item.text;
+        return;
+      }
+      if (item.type === 'item_started') {
+        if (item.item.kind === 'agent_message') agentItemIds.add(item.item.id);
+        return;
+      }
+      if (item.type === 'item_delta') {
+        if (!agentItemIds.size || agentItemIds.has(item.itemId)) {
+          text += item.delta;
+          itemsWithDeltas.add(item.itemId);
+        }
+        return;
+      }
+      if (item.type === 'item_completed' && item.item.kind === 'agent_message' && item.item.content && !itemsWithDeltas.has(item.item.id)) {
+        text += item.item.content;
+      }
+    },
+    text: () => text,
+  };
+}
+
+function collaborationModeInput(value: unknown): SendTurnInput['collaborationMode'] {
+  const text = stringInput(value);
+  if (text === 'default' || text === 'plan') return text;
+  return undefined;
+}
+
+function planDecisionInput(value: unknown): SendTurnInput['planDecision'] {
+  const text = stringInput(value);
+  if (text === 'accepted' || text === 'dismissed') return text;
+  return undefined;
 }
 
 function recordInput(value: unknown): Record<string, unknown> {

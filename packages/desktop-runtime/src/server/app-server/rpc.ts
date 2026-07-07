@@ -1,5 +1,6 @@
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
 import type { AppServerCommandExecManager } from './command-exec.js';
+import type { AppServerConnectionRegistry } from './connections.js';
 import type { AppServerFsManager } from './fs-protocol.js';
 import { AppServerRpcError, appServerRpcError } from './errors.js';
 import { appServerApprovalAnswerFromResponse } from './protocol.js';
@@ -13,6 +14,7 @@ export async function handleAppServerRpcRequest(
   commandExecManager: AppServerCommandExecManager,
   fsManager: AppServerFsManager,
   connectionId?: string,
+  connectionRegistry?: AppServerConnectionRegistry,
 ): Promise<AppServerRpcResponse | null> {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     return appServerRpcError(null, -32600, 'Invalid Request');
@@ -43,6 +45,7 @@ export async function handleAppServerRpcRequest(
       commandExecManager,
       fsManager,
       connectionId,
+      connectionRegistry,
     );
     return { id, result };
   } catch (error) {
@@ -57,6 +60,7 @@ async function handleAppServerRpcResponseEnvelope(
 ): Promise<AppServerRpcResponse | null> {
   const approvalId = typeof request.id === 'string' ? request.id : String(request.id ?? '');
   if (!approvalId) return appServerRpcError(null, -32600, 'Invalid Request');
+  if (runtime.agentLoop.answerAppServerDynamicToolResponse(request.id, request)) return null;
   try {
     const answer = appServerApprovalAnswerFromResponse(request);
     await runtime.approvalGate.answerApproval(approvalId, answer);

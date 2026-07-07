@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { appServerCommandSandboxProfile } from './app-server/command-exec.js';
 import { createRuntimeServer, type RuntimeServer } from './runtime-server.js';
 
 describe('runtime server', () => {
@@ -581,6 +582,28 @@ describe('runtime server', () => {
     });
   });
 
+  it('settles persisted item-based active turns when the runtime starts', async () => {
+    await server.close();
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-stale-items-test-'));
+    const threadId = await seedStaleRuntimeItemThread(dataDir);
+
+    await startRuntimeServer(dataDir);
+
+    const thread = (await runtimeFetch(`/v1/threads/${encodeURIComponent(threadId)}`)) as RuntimeThread;
+    expect(thread.lastSeq).toBe(1);
+    expect(thread.activeTurnId).toBeNull();
+    expect(thread.turns?.[0]).toMatchObject({
+      id: 'turn_stale_items',
+      status: 'cancelled',
+      completedAt: expect.any(String),
+      error: 'Turn cancelled because the desktop runtime restarted.',
+      items: [
+        { id: 'agent_item_stale', status: 'cancelled' },
+        { id: 'tool_item_stale', status: 'cancelled' },
+      ],
+    });
+  });
+
   it('accepts AppServer app-server JSON-RPC shaped requests for the SWE path', async () => {
     const initialized = await appServerRpc('initialize', {
       clientInfo: { name: 'setsuna-test', version: 'test' },
@@ -1054,6 +1077,7 @@ describe('runtime server', () => {
                 name: 'GPT Alpha',
                 code: 'gpt-alpha',
                 enabled: true,
+                contextWindowTokens: 128000,
                 maxOutputTokens: 4000,
                 thinkingEnabled: true,
                 thinkingEfforts: ['low', 'high'],
@@ -1068,6 +1092,7 @@ describe('runtime server', () => {
     const response = await appServerRpc('config/read', { includeLayers: true, cwd: process.cwd() });
     expect(response.config).toMatchObject({
       model: 'gpt-alpha',
+      model_context_window: 128000,
       model_provider: 'config-openai',
       approval_policy: 'untrusted',
       approvals_reviewer: 'user',
@@ -1148,6 +1173,7 @@ describe('runtime server', () => {
                 name: 'GPT Beta',
                 code: 'gpt-beta',
                 enabled: false,
+                contextWindowTokens: 64000,
                 maxOutputTokens: 4000,
                 thinkingEnabled: false,
                 thinkingEfforts: [],
@@ -1179,6 +1205,8 @@ describe('runtime server', () => {
           mergeStrategy: 'replace',
         },
         { keyPath: 'features.memories', value: false, mergeStrategy: 'replace' },
+        { keyPath: 'model_context_window', value: 32000, mergeStrategy: 'replace' },
+        { keyPath: 'model_auto_compact_token_limit', value: 28000, mergeStrategy: 'replace' },
         { keyPath: 'desktop.selected-avatar-id', value: 'swe', mergeStrategy: 'replace' },
       ],
     })).resolves.toMatchObject({ status: 'ok', version: '1' });
@@ -1186,6 +1214,8 @@ describe('runtime server', () => {
     const read = await appServerRpc('config/read', {});
     expect(read.config).toMatchObject({
       model: 'gpt-beta',
+      model_context_window: 32000,
+      model_auto_compact_token_limit: 28000,
       approval_policy: 'never',
       sandbox_mode: 'workspace-write',
       sandbox_workspace_write: {
@@ -1357,6 +1387,34 @@ describe('runtime server', () => {
         },
       ],
     });
+  });
+
+  it('applies AppServer Plan collaboration mode reasoning to turn starts', async () => {
+    const capture = await createOpenAiCaptureServer();
+    try {
+      await configureOpenAiProvider('planmodeprovider', capture.baseUrl, {
+        thinkingEnabled: true,
+        thinkingEfforts: ['medium'],
+        defaultThinkingEffort: 'medium',
+      });
+      const startedThread = await appServerRpc('thread/start', { name: 'Plan mode thread', cwd: process.cwd() });
+      await appServerRpc('thread/memoryMode/set', { threadId: startedThread.thread.id, mode: 'disabled' });
+
+      await appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        input: [{ type: 'text', text: 'Plan before editing.' }],
+        collaborationMode: { mode: 'plan' },
+      });
+      const body = await withTimeout(capture.nextBody, 1500, 'Timed out waiting for plan mode provider request');
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+
+      expect(body.reasoning_effort).toBe('medium');
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice === undefined || body.tool_choice === 'none').toBe(true);
+      expect(messages.some((message) => String((message as { content?: unknown }).content).includes('<plan_mode>'))).toBe(true);
+    } finally {
+      await capture.close();
+    }
   });
 
   it('deletes AppServer threads from thread/read, thread/list, and loaded-list results', async () => {
@@ -1888,6 +1946,47 @@ describe('runtime server', () => {
     });
   });
 
+  it('builds AppServer command/exec sandbox profiles from sandboxPolicy', () => {
+    const cwd = path.join(tmpdir(), 'setsuna app-server command sandbox');
+    const writableRoot = path.join(cwd, 'generated');
+    const profile = appServerCommandSandboxProfile({
+      sandboxPolicy: {
+        type: 'workspaceWrite',
+        writableRoots: [writableRoot],
+        networkAccess: false,
+      },
+    }, cwd, { supported: true, provider: 'macos-seatbelt', reason: '' });
+
+    expect(profile).toContain('(deny network*)');
+    expect(profile).toContain('(deny file-write*');
+    expect(profile).toContain(`(require-not (subpath ${JSON.stringify(path.resolve(writableRoot))}))`);
+  });
+
+  it('accepts upstream AppServer command/exec permission profile ids', () => {
+    const cwd = path.join(tmpdir(), 'setsuna app-server command profile');
+    const profile = appServerCommandSandboxProfile({
+      permissionProfile: ':workspace',
+    }, cwd, { supported: true, provider: 'macos-seatbelt', reason: '' });
+
+    expect(profile).toContain('(deny network*)');
+    expect(profile).toContain(`(require-not (subpath ${JSON.stringify(path.resolve(cwd))}))`);
+    expect(appServerCommandSandboxProfile({
+      permissionProfile: ':danger-full-access',
+    }, cwd, { supported: false, provider: 'none', reason: 'unsupported platform: test' })).toBe('');
+  });
+
+  it('accepts AppServer command/exec externalSandbox policy without local enforcement', () => {
+    expect(appServerCommandSandboxProfile({
+      sandboxPolicy: { type: 'externalSandbox', networkAccess: 'enabled' },
+    }, process.cwd(), { supported: false, provider: 'none', reason: 'unsupported platform: test' })).toBe('');
+  });
+
+  it('fails closed for AppServer command/exec sandboxPolicy when OS sandbox is unavailable', () => {
+    expect(() => appServerCommandSandboxProfile({
+      sandboxPolicy: { type: 'readOnly', networkAccess: false },
+    }, process.cwd(), { supported: false, provider: 'none', reason: 'unsupported platform: test' })).toThrow('OS sandbox is unavailable');
+  });
+
   it('merges AppServer command/exec environment overrides and supports unset values', async () => {
     const response = await appServerRpc('command/exec', {
       command: [
@@ -2221,6 +2320,92 @@ describe('runtime server', () => {
     await expect(exitedPromise).resolves.toBe(true);
   });
 
+  it('lists and terminates AppServer background terminals by thread', async () => {
+    const startedThread = await appServerRpc('thread/start', { name: 'Background terminals', cwd: process.cwd() });
+    const otherThread = await appServerRpc('thread/start', { name: 'Other background terminals', cwd: process.cwd() });
+    const connectionId = `background-terminals-${Date.now()}`;
+    const processHandle = `background-terminal-${Date.now()}`;
+    try {
+      await expect(appServerRpc('process/spawn', {
+        command: [process.execPath, '-e', persistentOutputScript('background-terminal')],
+        processHandle,
+        cwd: process.cwd(),
+        threadId: startedThread.thread.id,
+        tty: true,
+        timeoutMs: null,
+      }, { connectionId })).resolves.toEqual({});
+
+      await expect(appServerRpc('thread/backgroundTerminals/list', {
+        threadId: startedThread.thread.id,
+      }, { connectionId })).resolves.toEqual({
+        data: [
+          expect.objectContaining({
+            cwd: process.cwd(),
+            processHandle,
+            threadId: startedThread.thread.id,
+            tty: true,
+          }),
+        ],
+      });
+      await expect(appServerRpc('thread/backgroundTerminals/list', {
+        threadId: otherThread.thread.id,
+      }, { connectionId })).resolves.toEqual({ data: [] });
+      await expect(appServerRpc('thread/backgroundTerminals/terminate', {
+        threadId: startedThread.thread.id,
+        processHandle,
+      }, { connectionId })).resolves.toEqual({ terminated: true });
+      await expect(appServerRpc('thread/backgroundTerminals/terminate', {
+        threadId: startedThread.thread.id,
+        processHandle,
+      }, { connectionId })).resolves.toEqual({ terminated: false });
+      await expect(appServerRpc('thread/backgroundTerminals/list', {
+        threadId: startedThread.thread.id,
+      }, { connectionId })).resolves.toEqual({ data: [] });
+    } finally {
+      await appServerRpc('process/kill', { processHandle }, { connectionId }).catch(() => undefined);
+    }
+  });
+
+  it('cleans AppServer background terminals for a thread without touching other threads', async () => {
+    const firstThread = await appServerRpc('thread/start', { name: 'Background clean A', cwd: process.cwd() });
+    const secondThread = await appServerRpc('thread/start', { name: 'Background clean B', cwd: process.cwd() });
+    const connectionId = `background-clean-${Date.now()}`;
+    const firstHandle = `background-clean-a-${Date.now()}`;
+    const secondHandle = `background-clean-b-${Date.now()}`;
+    try {
+      await expect(appServerRpc('process/spawn', {
+        command: [process.execPath, '-e', persistentOutputScript('background-clean-a')],
+        processHandle: firstHandle,
+        cwd: process.cwd(),
+        threadId: firstThread.thread.id,
+        timeoutMs: null,
+      }, { connectionId })).resolves.toEqual({});
+      await expect(appServerRpc('process/spawn', {
+        command: [process.execPath, '-e', persistentOutputScript('background-clean-b')],
+        processHandle: secondHandle,
+        cwd: process.cwd(),
+        threadId: secondThread.thread.id,
+        timeoutMs: null,
+      }, { connectionId })).resolves.toEqual({});
+
+      await expect(appServerRpc('thread/backgroundTerminals/clean', {
+        threadId: firstThread.thread.id,
+      }, { connectionId })).resolves.toEqual({});
+
+      await expect(appServerRpc('thread/backgroundTerminals/list', {
+        threadId: firstThread.thread.id,
+      }, { connectionId })).resolves.toEqual({ data: [] });
+      await expect(appServerRpc('thread/backgroundTerminals/list', {
+        threadId: secondThread.thread.id,
+      }, { connectionId })).resolves.toEqual({
+        data: [expect.objectContaining({ processHandle: secondHandle })],
+      });
+    } finally {
+      await appServerRpc('process/kill', { processHandle: firstHandle }, { connectionId }).catch(() => undefined);
+      await appServerRpc('process/kill', { processHandle: secondHandle }, { connectionId }).catch(() => undefined);
+    }
+  });
+
   it('returns the upstream empty response shape for AppServer turn interrupts', async () => {
     const startedThread = await appServerRpc('thread/start', { name: 'Interrupt shape', cwd: process.cwd() });
     const startedTurn = await appServerRpc('turn/start', {
@@ -2496,11 +2681,17 @@ describe('runtime server', () => {
       0,
       '"type":"tool.output_delta"',
     );
+    const hasUserShellTaskKind = await readEventStreamContains(
+      thread.id,
+      0,
+      '"taskKind":"user_shell"',
+    );
     const read = await appServerRpc('thread/read', { threadId: thread.id, includeTurns: true });
 
     expect(hasUserShellItem).toBe(true);
     expect(hasOutputDelta).toBe(true);
     expect(hasRuntimeOutputDelta).toBe(true);
+    expect(hasUserShellTaskKind).toBe(true);
     expect(read.thread.turns).toEqual([expect.objectContaining({
       items: expect.arrayContaining([
         expect.objectContaining({
@@ -2681,6 +2872,323 @@ describe('runtime server', () => {
     } finally {
       capture.release();
       await capture.close();
+    }
+  });
+
+  it('delivers AppServer mailbox input into the active turn', async () => {
+    const capture = await createDelayedOpenAiCaptureServer();
+    try {
+      await runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          activeProviderId: 'mailbox-provider',
+          providers: [
+            {
+              id: 'mailbox-provider',
+              name: 'Mailbox provider',
+              provider: 'openai-compatible',
+              baseUrl: capture.baseUrl,
+              apiKey: 'sk-mailbox',
+              enabled: true,
+              models: [
+                {
+                  id: 'mailbox-model',
+                  name: 'Mailbox model',
+                  code: 'mailbox-model',
+                  enabled: true,
+                  maxOutputTokens: 1000,
+                  thinkingEnabled: false,
+                  thinkingEfforts: [],
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      const startedThread = await appServerRpc('thread/start', { name: 'Mailbox active AppServer turn', cwd: process.cwd() });
+      const startedTurn = await appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        clientUserMessageId: 'client-start-message-1',
+        input: [{ type: 'text', text: 'Keep this turn active.' }],
+      });
+      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed provider request');
+
+      await expect(appServerRpc('turn/mailbox/deliver', {
+        threadId: startedThread.thread.id,
+        expectedTurnId: startedTurn.turn.id,
+        id: 'mail_appserver_1',
+        fromAgentId: 'agent_child',
+        content: 'child agent found the app-server regression',
+      })).resolves.toEqual({ queued: false, turnId: startedTurn.turn.id });
+
+      const hasMailboxEvent = await readEventStreamContains(
+        startedThread.thread.id,
+        0,
+        '"type":"mailbox.delivered"',
+      );
+      const hasCollabItem = await readEventStreamContains(
+        startedThread.thread.id,
+        0,
+        '"type":"collabToolCall"',
+        { format: 'swe' },
+      );
+      capture.release();
+      const updated = await waitForThread(startedThread.thread.id, (item) => item.activeTurnId === null);
+
+      expect(hasMailboxEvent).toBe(true);
+      expect(hasCollabItem).toBe(true);
+      expect(updated.messages.filter((message) => message.turnId === startedTurn.turn.id && message.role === 'user')).toHaveLength(1);
+    } finally {
+      capture.release();
+      await capture.close();
+    }
+  });
+
+  it('starts an AppServer trigger-turn mailbox delivery when the thread is idle', async () => {
+    const capture = await createDelayedOpenAiCaptureServer();
+    try {
+      await configureOpenAiProvider('mailbox-trigger-provider', capture.baseUrl);
+      const startedThread = await appServerRpc('thread/start', { name: 'Mailbox trigger AppServer turn', cwd: process.cwd() });
+
+      const delivered = await appServerRpc('turn/mailbox/deliver', {
+        threadId: startedThread.thread.id,
+        id: 'mail_appserver_trigger_1',
+        deliveryMode: 'trigger_turn',
+        fromAgentId: 'agent_child',
+        fromThreadId: 'thread_child',
+        toAgentId: 'agent_parent',
+        content: 'wake the idle app-server parent',
+      });
+      const body = await withTimeout(capture.nextBody, 1500, 'Timed out waiting for trigger mailbox provider request');
+      const requestText = JSON.stringify(body);
+
+      expect(delivered).toEqual({ queued: false, turnId: expect.any(String) });
+      expect(requestText).toContain('mailbox_message');
+      expect(requestText).toContain('mail_appserver_trigger_1');
+      expect(requestText).toContain('wake the idle app-server parent');
+      expect(requestText).toContain('trigger_turn');
+
+      const hasMailboxEvent = await readEventStreamContains(
+        startedThread.thread.id,
+        0,
+        '"type":"mailbox.delivered"',
+      );
+      const hasCollabItem = await readEventStreamContains(
+        startedThread.thread.id,
+        0,
+        '"tool":"resume_agent"',
+        { format: 'swe' },
+      );
+      capture.release();
+      const updated = await waitForThread(startedThread.thread.id, (item) => item.activeTurnId === null);
+
+      expect(hasMailboxEvent).toBe(true);
+      expect(hasCollabItem).toBe(true);
+      expect(updated.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user')).toHaveLength(0);
+    } finally {
+      capture.release();
+      await capture.close();
+    }
+  });
+
+  it('routes AppServer dynamic tool calls through item/tool/call responses', async () => {
+    const modelServer = await createOpenAiDynamicToolServer();
+    const connectionId = 'dynamic-tool-session';
+    await appServerRpc('initialize', {
+      clientInfo: { name: 'setsuna-dynamic-tool-test', version: 'test' },
+      capabilities: { experimentalApi: true },
+    }, { connectionId });
+    const stream = await openAppServerNotificationStream({ connectionId });
+    try {
+      await configureOpenAiProvider('dynamic-tool-provider', modelServer.baseUrl);
+      const startedThread = await appServerRpc('thread/start', {
+        name: 'Dynamic tool AppServer turn',
+        cwd: process.cwd(),
+        dynamicTools: [
+          {
+            name: 'tickets',
+            description: 'Ticket tools.',
+            tools: [
+              {
+                name: 'lookup_ticket',
+                description: 'Look up a ticket by id.',
+                inputSchema: {
+                  type: 'object',
+                  properties: { id: { type: 'string' } },
+                  required: ['id'],
+                },
+              },
+            ],
+          },
+        ],
+      }, { connectionId });
+
+      const startedTurn = await appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        input: [{ type: 'text', text: 'Look up ticket ABC-123.' }],
+      }, { connectionId });
+      const request = await stream.readNotification((notification) => (
+        notification.method === 'item/tool/call'
+        && notification.params?.threadId === startedThread.thread.id
+      ), { timeoutMs: 3000 });
+
+      expect(request).toMatchObject({
+        method: 'item/tool/call',
+        id: expect.any(String),
+        params: {
+          threadId: startedThread.thread.id,
+          turnId: startedTurn.turn.id,
+          callId: 'call_dynamic_1',
+          namespace: 'tickets',
+          tool: 'lookup_ticket',
+          arguments: { id: 'ABC-123' },
+        },
+      });
+
+      await expect(appServerRpcResponseEnvelope({
+        id: request?.id,
+        result: {
+          contentItems: [{ type: 'inputText', text: 'Ticket ABC-123 is open.' }],
+          success: true,
+        },
+      }, { connectionId })).resolves.toBeNull();
+
+      const updated = await waitForThread(
+        startedThread.thread.id,
+        (item) => item.messages.some((message) =>
+          message.turnId === startedTurn.turn.id
+          && message.role === 'assistant'
+          && message.status === 'complete'
+          && message.content.includes('Dynamic tool result received.')
+        ),
+      );
+      const requests = await withTimeout(modelServer.requests, 1500, 'Timed out waiting for dynamic tool model requests');
+      const read = await appServerRpc('thread/read', { threadId: startedThread.thread.id, includeTurns: true });
+      const turn = read.thread.turns.find((item: { id: string }) => item.id === startedTurn.turn.id);
+
+      expect(JSON.stringify(requests[0])).toContain('tickets__lookup_ticket');
+      expect(JSON.stringify(requests[1])).toContain('Ticket ABC-123 is open.');
+      expect(updated.messages).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          role: 'tool',
+          toolCallId: 'call_dynamic_1',
+          toolName: 'tickets__lookup_ticket',
+          content: 'Ticket ABC-123 is open.',
+        }),
+      ]));
+      expect(turn?.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          type: 'dynamicToolCall',
+          tool: 'tickets__lookup_ticket',
+          contentItems: [{ type: 'inputText', text: 'Ticket ABC-123 is open.' }],
+          success: true,
+        }),
+      ]));
+    } finally {
+      await stream.close();
+      await modelServer.close();
+    }
+  });
+
+  it('requires experimental AppServer capability for dynamic tools', async () => {
+    await expect(appServerRpcEnvelope({
+      id: 'dynamic_tools_no_capability',
+      method: 'thread/start',
+      params: {
+        name: 'Dynamic tool rejected',
+        cwd: process.cwd(),
+        dynamicTools: [{ name: 'lookup', description: 'Lookup.', inputSchema: { type: 'object' } }],
+      },
+    }, { connectionId: 'dynamic-tool-rejected-session' })).resolves.toMatchObject({
+      id: 'dynamic_tools_no_capability',
+      error: {
+        code: -32600,
+        message: 'dynamicTools requires initialize.params.capabilities.experimentalApi = true',
+      },
+    });
+  });
+
+  it('reveals deferred AppServer dynamic tools through tool_search', async () => {
+    const modelServer = await createOpenAiDeferredDynamicToolServer();
+    const connectionId = 'deferred-dynamic-tool-session';
+    await appServerRpc('initialize', {
+      clientInfo: { name: 'setsuna-deferred-dynamic-tool-test', version: 'test' },
+      capabilities: { experimentalApi: true },
+    }, { connectionId });
+    const stream = await openAppServerNotificationStream({ connectionId });
+    try {
+      await configureOpenAiProvider('deferred-dynamic-tool-provider', modelServer.baseUrl);
+      const startedThread = await appServerRpc('thread/start', {
+        name: 'Deferred dynamic tool AppServer turn',
+        cwd: process.cwd(),
+        dynamicTools: [
+          {
+            name: 'tickets',
+            description: 'Ticket tools.',
+            tools: [
+              {
+                name: 'lookup_ticket',
+                description: 'Look up a ticket by id.',
+                deferLoading: true,
+                inputSchema: {
+                  type: 'object',
+                  properties: { id: { type: 'string' } },
+                  required: ['id'],
+                },
+              },
+            ],
+          },
+        ],
+      }, { connectionId });
+
+      const startedTurn = await appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        input: [{ type: 'text', text: 'Find the deferred lookup tool, then look up ticket ABC-123.' }],
+      }, { connectionId });
+      const request = await stream.readNotification((notification) => (
+        notification.method === 'item/tool/call'
+        && notification.params?.threadId === startedThread.thread.id
+      ), { timeoutMs: 3000 });
+
+      expect(request).toMatchObject({
+        method: 'item/tool/call',
+        id: expect.any(String),
+        params: {
+          threadId: startedThread.thread.id,
+          turnId: startedTurn.turn.id,
+          callId: 'call_deferred_dynamic_1',
+          namespace: 'tickets',
+          tool: 'lookup_ticket',
+          arguments: { id: 'ABC-123' },
+        },
+      });
+
+      await expect(appServerRpcResponseEnvelope({
+        id: request?.id,
+        result: {
+          contentItems: [{ type: 'inputText', text: 'Deferred ticket ABC-123 is open.' }],
+          success: true,
+        },
+      }, { connectionId })).resolves.toBeNull();
+
+      await waitForThread(
+        startedThread.thread.id,
+        (item) => item.messages.some((message) =>
+          message.turnId === startedTurn.turn.id
+          && message.role === 'assistant'
+          && message.status === 'complete'
+          && message.content.includes('Deferred dynamic tool result received.')
+        ),
+      );
+      const requests = await withTimeout(modelServer.requests, 1500, 'Timed out waiting for deferred dynamic model requests');
+
+      expect(JSON.stringify(requests[0])).toContain('tool_search');
+      expect(JSON.stringify(requests[0])).not.toContain('tickets__lookup_ticket');
+      expect(JSON.stringify(requests[1])).toContain('tickets__lookup_ticket');
+      expect(JSON.stringify(requests[2])).toContain('Deferred ticket ABC-123 is open.');
+    } finally {
+      await stream.close();
+      await modelServer.close();
     }
   });
 
@@ -3450,6 +3958,51 @@ describe('runtime server', () => {
     return thread.id;
   }
 
+  async function seedStaleRuntimeItemThread(dataDir: string): Promise<string> {
+    const now = '2026-06-26T00:00:00.000Z';
+    const thread: RuntimeThread = {
+      id: 'thread_stale_items',
+      title: 'Stale item thread',
+      createdAt: now,
+      updatedAt: now,
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      activeTurnId: 'turn_stale_items',
+      messages: [],
+      turns: [{
+        id: 'turn_stale_items',
+        startedAt: now,
+        status: 'in_progress',
+        items: [
+          { id: 'agent_item_stale', kind: 'agent_message', status: 'in_progress', content: 'Partial answer' },
+          { id: 'tool_item_stale', kind: 'tool_call', status: 'in_progress', toolCall: { id: 'tool_item_stale', name: 'workspace_read_file', arguments: '{"path":"README.md"}' } },
+        ],
+      }],
+    };
+    const threadsDir = path.join(dataDir, 'runtime', 'threads');
+    await mkdir(threadsDir, { recursive: true });
+    await writeFile(
+      path.join(threadsDir, 'index.json'),
+      JSON.stringify({
+        threads: [
+          {
+            id: thread.id,
+            title: thread.title,
+            createdAt: thread.createdAt,
+            updatedAt: thread.updatedAt,
+            archived: thread.archived,
+            messageCount: thread.messageCount,
+            lastMessagePreview: thread.lastMessagePreview,
+          },
+        ],
+      }),
+    );
+    await writeFile(path.join(threadsDir, `${thread.id}.json`), JSON.stringify(thread));
+    return thread.id;
+  }
+
   async function runtimeFetch(pathname: string, init: RequestInit = {}) {
     const response = await fetch(`${baseUrl}${pathname}`, {
       ...init,
@@ -3467,7 +4020,7 @@ describe('runtime server', () => {
     return (await readdir(dir)).sort();
   }
 
-  async function configureOpenAiProvider(id: string, providerBaseUrl: string) {
+  async function configureOpenAiProvider(id: string, providerBaseUrl: string, modelOverrides: Record<string, unknown> = {}) {
     await runtimeFetch('/v1/config', {
       method: 'PUT',
       body: JSON.stringify({
@@ -3489,6 +4042,7 @@ describe('runtime server', () => {
                 maxOutputTokens: 1000,
                 thinkingEnabled: false,
                 thinkingEfforts: [],
+                ...modelOverrides,
               },
             ],
           },
@@ -3509,6 +4063,21 @@ describe('runtime server', () => {
       headers: appServerSessionHeaders(options),
       body: JSON.stringify(body),
     }) as Promise<{ id: unknown; result: any } | { id: unknown; error: { code: number; message: string; data?: unknown } }>;
+  }
+
+  async function appServerRpcResponseEnvelope(body: unknown, options: AppServerRequestOptions = {}): Promise<unknown | null> {
+    const response = await fetch(`${baseUrl}/v1/swe/app-server`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...appServerSessionHeaders(options),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    if (response.status === 204) return null;
+    return response.json();
   }
 
   async function waitForThread(
@@ -3721,6 +4290,7 @@ type AppServerNotificationStream = {
 };
 
 type AppServerStreamNotification = {
+  id?: string | number | null;
   method?: string;
   params?: Record<string, any>;
 };
@@ -3791,6 +4361,157 @@ async function createOpenAiCaptureServer(responseText = 'Captured.'): Promise<{
     nextBody,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
+}
+
+async function createOpenAiDynamicToolServer(): Promise<{
+  baseUrl: string;
+  requests: Promise<Record<string, unknown>[]>;
+  close(): Promise<void>;
+}> {
+  const requests: Record<string, unknown>[] = [];
+  let resolveRequests: (requests: Record<string, unknown>[]) => void = () => undefined;
+  let rejectRequests: (error: unknown) => void = () => undefined;
+  const requestsPromise = new Promise<Record<string, unknown>[]>((resolve, reject) => {
+    resolveRequests = resolve;
+    rejectRequests = reject;
+  });
+  const server = createServer(async (request, response) => {
+    try {
+      if (request.method !== 'POST') {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+      const body = JSON.parse(await readRequestText(request)) as Record<string, unknown>;
+      requests.push(body);
+      response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
+      if (requests.length === 1) {
+        response.write(`data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_dynamic_1',
+                    type: 'function',
+                    function: {
+                      name: 'tickets__lookup_ticket',
+                      arguments: '{"id":"ABC-123"}',
+                    },
+                  },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        })}\n\n`);
+      } else {
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Dynamic tool result received.' } }] })}\n\n`);
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
+        resolveRequests([...requests]);
+      }
+      response.write('data: [DONE]\n\n');
+      response.end();
+    } catch (error) {
+      rejectRequests(error);
+      response.writeHead(500);
+      response.end(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected TCP address for dynamic tool server');
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    requests: requestsPromise,
+    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+  };
+}
+
+async function createOpenAiDeferredDynamicToolServer(): Promise<{
+  baseUrl: string;
+  requests: Promise<Record<string, unknown>[]>;
+  close(): Promise<void>;
+}> {
+  const requests: Record<string, unknown>[] = [];
+  let resolveRequests: (requests: Record<string, unknown>[]) => void = () => undefined;
+  let rejectRequests: (error: unknown) => void = () => undefined;
+  const requestsPromise = new Promise<Record<string, unknown>[]>((resolve, reject) => {
+    resolveRequests = resolve;
+    rejectRequests = reject;
+  });
+  const server = createServer(async (request, response) => {
+    try {
+      if (request.method !== 'POST') {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+      const body = JSON.parse(await readRequestText(request)) as Record<string, unknown>;
+      requests.push(body);
+      response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
+      if (requests.length === 1) {
+        writeOpenAiToolCallChunk(response, {
+          id: 'call_tool_search_1',
+          name: 'tool_search',
+          argumentsText: '{"query":"lookup_ticket"}',
+        });
+      } else if (requests.length === 2) {
+        writeOpenAiToolCallChunk(response, {
+          id: 'call_deferred_dynamic_1',
+          name: 'tickets__lookup_ticket',
+          argumentsText: '{"id":"ABC-123"}',
+        });
+      } else {
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Deferred dynamic tool result received.' } }] })}\n\n`);
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
+        resolveRequests([...requests]);
+      }
+      response.write('data: [DONE]\n\n');
+      response.end();
+    } catch (error) {
+      rejectRequests(error);
+      response.writeHead(500);
+      response.end(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected TCP address for deferred dynamic tool server');
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    requests: requestsPromise,
+    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+  };
+}
+
+function writeOpenAiToolCallChunk(
+  response: { write(chunk: string): unknown },
+  toolCall: { id: string; name: string; argumentsText: string },
+): void {
+  response.write(`data: ${JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: toolCall.id,
+              type: 'function',
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.argumentsText,
+              },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+  })}\n\n`);
 }
 
 async function createDelayedOpenAiCaptureServer(): Promise<{

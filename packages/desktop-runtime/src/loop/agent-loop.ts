@@ -1,22 +1,27 @@
-import type { ModelRequest, RuntimeApprovalDecision, RuntimeApprovalRequest, RuntimeConfigState, RuntimeHookRun, RuntimeMemoryCitation, RuntimeMemoryKind, RuntimeMemoryRecord, RuntimeMemoryScope, RuntimeMemorySourceLocation, RuntimeMemoryStage1Status, RuntimeMessage, RuntimeThread, RuntimeThreadSummary, RuntimeToolCall, RuntimeToolCallDelta, RuntimeToolDefinition, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
+import { createHash } from 'node:crypto';
+import type { ModelRequest, ModelStreamEvent, RuntimeApprovalDecision, RuntimeApprovalRequest, RuntimeCollabToolCall, RuntimeConfigState, RuntimeDynamicToolCallResult, RuntimeDynamicToolContentItem, RuntimeDynamicToolDefinition, RuntimeHookRun, RuntimeMailboxDelivery, RuntimeMemoryCitation, RuntimeMemoryKind, RuntimeMemoryRecord, RuntimeMemoryScope, RuntimeMemorySourceLocation, RuntimeMemoryStage1Status, RuntimeMessage, RuntimeModelRequestStepSnapshot, RuntimePlanDecision, RuntimeStreamItem, RuntimeTaskKind, RuntimeThread, RuntimeThreadSummary, RuntimeToolCall, RuntimeToolCallDelta, RuntimeToolDefinition, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
+import type { AppServerNotificationBus } from '../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
 import type { EventBus } from '../ports/event-bus.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { MemoryStore } from '../ports/memory-store.js';
+import type { McpStore } from '../ports/mcp-store.js';
 import type { ModelClient } from '../ports/model-client.js';
 import type { PolicyAmendmentStore } from '../ports/policy-amendment-store.js';
 import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
-import type { RuntimeToolExecutionContext, ToolExecutionContext, ToolExecutionEnvironment, ToolExecutionResult, ToolHost, ToolOutputDelta } from '../ports/tool-host.js';
+import type { RuntimeToolExecutionContext, ToolExecutionContext, ToolExecutionEnvironment, ToolExecutionResult, ToolHost, ToolOutputDelta, ToolTurnCleanupOutcome } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import { createRuntimeToolHookRunner, type RuntimeCompactHookTrigger, type RuntimeSessionStartSource } from '../hooks/runtime-hooks.js';
-import { CONTEXT_COMPACTION_MAX_TOKENS_K, createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction, type RuntimeContextCompactionCandidate, runtimeContextTokenUsageForMessages } from './context-compaction.js';
+import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction, type RuntimeContextCompactionBudget, type RuntimeContextCompactionCandidate, runtimeContextTokenUsageForMessages } from './context-compaction.js';
 import { runMemoryConsolidationAgent } from './memory-consolidation-agent.js';
 import { MemoryCitationStreamParser, parseMemoryCitationBodies } from './memory-citation.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
+import { RuntimeToolRouter } from './tool-router.js';
+import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
 
 export type AgentLoopOptions = {
   threadStore: ThreadStore;
@@ -25,11 +30,13 @@ export type AgentLoopOptions = {
   clock: Clock;
   ids: IdGenerator;
   approvalGate?: ApprovalGate;
+  appServerNotificationBus?: AppServerNotificationBus;
   configStore?: ConfigStore;
   skillRegistry?: SkillRegistry;
   toolHost?: ToolHost;
   usageStore?: UsageStore;
   memoryStore?: MemoryStore;
+  mcpStore?: Pick<McpStore, 'listServerInputs'>;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   maxToolRounds?: number;
@@ -45,6 +52,7 @@ const MAX_FILE_MUTATION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE = 8;
 // 单轮模型响应里最多先执行一批查看类工具，避免模型一次性长链路查看导致界面无文字反馈。
 const MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND = MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE;
+const APP_SERVER_DYNAMIC_TOOL_TIMEOUT_MS = 120_000;
 const INSPECTION_PROGRESS_NOTE = '我先查看项目结构和第一批关键文件，读完后再继续收敛。\n\n';
 const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
 const PASSIVE_MEMORY_MAX_ITEMS = 5;
@@ -66,8 +74,74 @@ const DAYS_TO_MS = 24 * HOURS_TO_MS;
 const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
 const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
-// 并行集合要比 INSPECTION_TOOL_NAMES 更窄：只有确定性的本地只读工具才允许批处理。
-const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
+const TURN_ABORTED_MODEL_GUIDANCE = [
+  '<turn_aborted>',
+  'The user interrupted the previous turn on purpose. Any running shell commands may still be running in the background. If any tools or commands were aborted, they may have partially executed.',
+  '</turn_aborted>',
+].join('\n');
+const COLLABORATION_TOOL_NAMES = new Set(['spawn_agent', 'send_input', 'resume_agent', 'wait', 'close_agent']);
+const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
+  {
+    name: 'spawn_agent',
+    description: 'Start a child agent thread for a focused subtask and return its thread and turn identifiers.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Task prompt for the child agent.' },
+        title: { type: 'string', description: 'Optional child thread title.' },
+      },
+      required: ['prompt'],
+    },
+  },
+  {
+    name: 'send_input',
+    description: 'Queue a mailbox message for another agent thread without forcing it to resume immediately.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        thread_id: { type: 'string', description: 'Receiver thread id.' },
+        content: { type: 'string', description: 'Mailbox message content.' },
+      },
+      required: ['thread_id', 'content'],
+    },
+  },
+  {
+    name: 'resume_agent',
+    description: 'Deliver a mailbox message and start the receiver agent if it is idle.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        thread_id: { type: 'string', description: 'Receiver thread id.' },
+        content: { type: 'string', description: 'Resume prompt or mailbox message content.' },
+      },
+      required: ['thread_id', 'content'],
+    },
+  },
+  {
+    name: 'wait',
+    description: 'Wait briefly for another agent thread to finish its current turn and return its status.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        thread_id: { type: 'string', description: 'Thread id to wait on.' },
+        timeout_ms: { type: 'number', description: 'Maximum wait time in milliseconds, capped by the runtime.' },
+      },
+      required: ['thread_id'],
+    },
+  },
+  {
+    name: 'close_agent',
+    description: 'Stop tracking a child agent thread; cancels its active turn if one is still running.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        thread_id: { type: 'string', description: 'Child thread id to close.' },
+        reason: { type: 'string', description: 'Optional close reason.' },
+      },
+      required: ['thread_id'],
+    },
+  },
+];
 
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 type PassiveMemoryStage1Result = {
@@ -87,6 +161,15 @@ type ToolBudget = {
   inspectionCallCount: number;
   fileMutationCallCount: number;
 };
+type LegacyModelStreamMirrorState = {
+  agentItemStarted: boolean;
+  agentText: string;
+  reasoningItemStarted: boolean;
+  reasoningText: string;
+  toolCalls: Map<string, RuntimeToolCall>;
+  completedToolCallIds: Set<string>;
+  tokenCountPublished: boolean;
+};
 type ToolBudgetBlock = {
   content: string;
   display: string;
@@ -102,35 +185,68 @@ type ToolCallExecution = {
   message: RuntimeMessage;
   processed: boolean;
 };
-type ActiveTurnKind = 'conversation' | 'review';
-type ActiveTurnState = {
-  turnId: string;
-  controller: AbortController;
-  kind: ActiveTurnKind;
-  acceptingSteers: boolean;
-  pendingSteers: RuntimeMessage[];
-  steerWritesInFlight: number;
-  steerWriteWaiters: Array<() => void>;
+type AppServerDynamicToolRegistration = {
+  connectionId: string;
+  tools: RuntimeDynamicToolDefinition[];
+  toolsByName: Map<string, RuntimeDynamicToolDefinition>;
 };
+type AppServerDynamicToolLookup =
+  | { status: 'available'; registration: AppServerDynamicToolRegistration; tool: RuntimeDynamicToolDefinition }
+  | { status: 'not_advertised' };
+type PendingAppServerDynamicToolCall = {
+  reject(error: Error): void;
+  resolve(result: RuntimeDynamicToolCallResult): void;
+};
+type AssistantOutputAccumulator = ReturnType<typeof createAssistantOutputAccumulator>;
 type ReviewTurnInput = {
   displayText: string;
   prompt: string;
 };
+export type DeliverMailboxInput = {
+  content: string;
+  deliveryMode?: RuntimeMailboxDelivery['deliveryMode'];
+  expectedTurnId?: string;
+  fromAgentId?: string;
+  fromThreadId?: string;
+  id?: string;
+  toAgentId?: string;
+  triggerTurn?: boolean;
+};
+export type DeliverMailboxResponse = {
+  accepted: true;
+  queued?: boolean;
+  turnId: string | null;
+};
 type RunTurnOptions = {
   clientId?: string;
+  includeUserMessageInModel?: boolean;
   modelInput?: string;
+  planOnly?: boolean;
   publishUserMessage?: boolean;
   review?: { displayText: string };
+  taskKind?: RuntimeTaskKind;
   userMessage?: RuntimeMessage;
+};
+type RuntimeSamplingStepContext = {
+  conversationMessages: RuntimeMessage[];
+  messages: RuntimeMessage[];
+  runtimeConfig: RuntimeConfigState | null | undefined;
+  snapshot: RuntimeModelRequestStepSnapshot;
+  toolChoice: ModelRequest['toolChoice'];
+  toolContext: RuntimeToolExecutionContext;
+  toolRouter: RuntimeToolRouter | null;
+  tools?: RuntimeToolDefinition[];
 };
 
 export class AgentLoop {
-  // activeTurns 用于精确取消 turn，activeTurnByThread 用于 UI 查询当前线程是否仍有任务。
-  private readonly activeTurns = new Map<string, AbortController>();
-  private readonly activeTurnByThread = new Map<string, ActiveTurnState>();
+  private readonly turnTasks = new RuntimeTurnTaskRegistry();
   private readonly toolApprovalStore = new ToolApprovalStore();
+  private readonly idleMailboxByThread = new Map<string, RuntimeMailboxDelivery[]>();
   private readonly sessionStartInitializedThreads = new Set<string>();
   private readonly pendingSessionStartSourcesByThread = new Map<string, RuntimeSessionStartSource[]>();
+  private readonly revealedDeferredToolNamesByTurn = new Map<string, Set<string>>();
+  private readonly appServerDynamicToolsByThread = new Map<string, AppServerDynamicToolRegistration>();
+  private readonly pendingAppServerDynamicToolCalls = new Map<string, PendingAppServerDynamicToolCall>();
 
   constructor(private readonly options: AgentLoopOptions) {}
 
@@ -191,8 +307,8 @@ export class AgentLoop {
    * @param input 用户输入、附件、skill 选择和客户端消息 ID。
    */
   async startTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse> {
-    const active = this.activeTurnByThread.get(threadId);
-    if (active?.kind === 'conversation' && active.acceptingSteers && !active.controller.signal.aborted) {
+    const active = this.turnTasks.activeForThread(threadId);
+    if (active?.taskKind === 'regular' && active.acceptingSteers && !active.controller.signal.aborted) {
       // 防御 renderer/SSE 短暂不同步：active 期间的普通发送必须落回当前 turn 的 steer。
       return this.steerTurn(threadId, {
         attachments: input.attachments,
@@ -262,10 +378,7 @@ export class AgentLoop {
    * @param turnId 要取消的 turn ID。
    */
   async cancelTurn(threadId: string, turnId: string): Promise<boolean> {
-    const controller = this.activeTurns.get(activeTurnKey(threadId, turnId));
-    if (!controller || controller.signal.aborted) return false;
-    controller.abort(new TurnCancelledError());
-    return true;
+    return this.turnTasks.cancel(threadId, turnId, new TurnCancelledError());
   }
 
   /**
@@ -274,47 +387,136 @@ export class AgentLoop {
    * @param threadId 要查询的线程 ID。
    */
   activeTurnId(threadId: string): string | null {
-    const active = this.activeTurnByThread.get(threadId);
-    if (!active || active.controller.signal.aborted) return null;
-    return active.turnId;
+    return this.turnTasks.activeForThread(threadId)?.turnId ?? null;
+  }
+
+  registerAppServerDynamicTools(threadId: string, tools: RuntimeDynamicToolDefinition[], connectionId: string): void {
+    if (!tools.length) {
+      this.appServerDynamicToolsByThread.delete(threadId);
+      return;
+    }
+    this.appServerDynamicToolsByThread.set(threadId, {
+      connectionId,
+      tools,
+      toolsByName: new Map(tools.map((tool) => [tool.name, tool])),
+    });
+  }
+
+  clearAppServerDynamicTools(threadId: string): void {
+    this.appServerDynamicToolsByThread.delete(threadId);
+  }
+
+  answerAppServerDynamicToolResponse(id: string | number | null | undefined, response: { result?: unknown; error?: unknown }): boolean {
+    const requestId = appServerRpcId(id);
+    if (!requestId) return false;
+    const pending = this.pendingAppServerDynamicToolCalls.get(requestId);
+    if (!pending) return false;
+    this.pendingAppServerDynamicToolCalls.delete(requestId);
+    if (response.error !== undefined) {
+      pending.reject(new Error(appServerDynamicToolErrorMessage(response.error)));
+      return true;
+    }
+    try {
+      pending.resolve(appServerDynamicToolResult(response.result));
+    } catch (error) {
+      pending.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+    return true;
   }
 
   private takePendingSteers(threadId: string, turnId: string): RuntimeMessage[] {
-    const active = this.activeTurnByThread.get(threadId);
+    const active = this.turnTasks.activeForThread(threadId);
     if (!active || active.turnId !== turnId || active.controller.signal.aborted) return [];
-    return active.pendingSteers.splice(0);
+    return active.inputQueue.takeSteers();
   }
 
-  private async waitForPendingSteerWrites(threadId: string, turnId: string): Promise<void> {
-    const active = this.activeTurnByThread.get(threadId);
+  private takePendingMailbox(threadId: string, turnId: string): RuntimeMailboxDelivery[] {
+    const active = this.turnTasks.activeForThread(threadId);
+    if (!active || active.turnId !== turnId || active.controller.signal.aborted) return [];
+    return active.inputQueue.takeMailbox();
+  }
+
+  private queueIdleMailbox(threadId: string, input: RuntimeMailboxDelivery): void {
+    const pending = this.idleMailboxByThread.get(threadId) ?? [];
+    pending.push(input);
+    this.idleMailboxByThread.set(threadId, pending);
+  }
+
+  private takeIdleMailbox(threadId: string): RuntimeMailboxDelivery[] {
+    const pending = this.idleMailboxByThread.get(threadId);
+    if (!pending?.length) return [];
+    this.idleMailboxByThread.delete(threadId);
+    return pending;
+  }
+
+  private async waitForPendingInputWrites(threadId: string, turnId: string): Promise<void> {
+    const active = this.turnTasks.activeForThread(threadId);
     if (!active || active.turnId !== turnId || active.controller.signal.aborted) return;
-    while (active.steerWritesInFlight > 0) {
-      await new Promise<void>((resolve) => active.steerWriteWaiters.push(resolve));
-      const current = this.activeTurnByThread.get(threadId);
-      if (current !== active || active.controller.signal.aborted) return;
-    }
+    await active.inputQueue.waitForWrites();
+    const current = this.turnTasks.activeForThread(threadId);
+    if (current !== active || active.controller.signal.aborted) return;
   }
 
   private async drainPendingSteers(threadId: string, turnId: string): Promise<RuntimeMessage[]> {
-    await this.waitForPendingSteerWrites(threadId, turnId);
+    await this.waitForPendingInputWrites(threadId, turnId);
     return this.takePendingSteers(threadId, turnId);
   }
 
+  private async drainPendingMailboxMessages(threadId: string, turnId: string): Promise<RuntimeMessage[]> {
+    await this.waitForPendingInputWrites(threadId, turnId);
+    return [
+      ...this.takeIdleMailbox(threadId),
+      ...this.takePendingMailbox(threadId, turnId),
+    ].map((input) => this.mailboxMessageForModel(turnId, input));
+  }
+
+  private mailboxMessageForModel(turnId: string, input: RuntimeMailboxDelivery): RuntimeMessage {
+    const fromAttribute = input.fromAgentId ? ` from_agent_id="${escapeSkillAttribute(input.fromAgentId)}"` : '';
+    const fromThreadAttribute = input.fromThreadId ? ` from_thread_id="${escapeSkillAttribute(input.fromThreadId)}"` : '';
+    const toAttribute = input.toAgentId ? ` to_agent_id="${escapeSkillAttribute(input.toAgentId)}"` : '';
+    const modeAttribute = input.deliveryMode ? ` delivery_mode="${escapeSkillAttribute(input.deliveryMode)}"` : '';
+    const triggerAttribute = input.triggerTurn ? ' trigger_turn="true"' : '';
+    return {
+      id: `mailbox_${input.id}`,
+      turnId,
+      role: 'system',
+      content: `<mailbox_message id="${escapeSkillAttribute(input.id)}"${fromAttribute}${fromThreadAttribute}${toAttribute}${modeAttribute}${triggerAttribute}>\n${neutralizeMailboxTags(input.content)}\n</mailbox_message>`,
+      createdAt: this.options.clock.now().toISOString(),
+      status: 'complete',
+      visibility: 'model',
+    };
+  }
+
+  private async publishTurnAbortedMarker(threadId: string, turnId: string): Promise<void> {
+    const createdAt = this.options.clock.now().toISOString();
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: this.options.ids.id('msg'),
+          turnId,
+          role: 'user',
+          content: TURN_ABORTED_MODEL_GUIDANCE,
+          createdAt,
+          status: 'complete',
+          visibility: 'model',
+        },
+      },
+    });
+  }
+
   private stopAcceptingSteers(threadId: string, turnId: string): void {
-    const active = this.activeTurnByThread.get(threadId);
-    if (!active || active.turnId !== turnId) return;
-    active.acceptingSteers = false;
+    this.turnTasks.stopAcceptingSteers(threadId, turnId);
   }
 
-  private markSteerWriteInFlight(active: ActiveTurnState): void {
-    active.steerWritesInFlight += 1;
-  }
-
-  private markSteerWriteSettled(active: ActiveTurnState): void {
-    active.steerWritesInFlight = Math.max(0, active.steerWritesInFlight - 1);
-    if (active.steerWritesInFlight > 0) return;
-    const waiters = active.steerWriteWaiters.splice(0);
-    waiters.forEach((resolve) => resolve());
+  private async waitForFinalizingRegularTurn(threadId: string): Promise<void> {
+    const active = this.turnTasks.activeForThread(threadId);
+    if (active?.taskKind !== 'regular' || active.acceptingSteers || !active.done) return;
+    await active.done.catch(() => undefined);
   }
 
   /**
@@ -329,14 +531,14 @@ export class AgentLoop {
     if (!text && !attachments.length) throw new Error('input must not be empty');
     await this.assertImageAttachmentsSupported(attachments);
 
-    const active = this.activeTurnByThread.get(threadId);
+    const active = this.turnTasks.activeForThread(threadId);
     if (!active || active.controller.signal.aborted) throw new Error('no active turn to steer');
-    if (active.kind !== 'conversation') throw new Error('cannot steer a review turn');
+    if (active.taskKind !== 'regular') throw new Error(`cannot steer a ${active.taskKind} turn`);
     if (active.turnId !== input.expectedTurnId) {
       throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active.turnId}\``);
     }
     if (!active.acceptingSteers) throw new Error('active turn is finishing and can no longer be steered');
-    this.markSteerWriteInFlight(active);
+    active.inputQueue.beginWrite();
 
     try {
       const thread = await this.options.threadStore.getThread(threadId);
@@ -354,11 +556,126 @@ export class AgentLoop {
       };
       // steer 先进入 transcript，保证插话立即可见；模型消费仍等当前模型段/工具链路结束后 drain。
       await this.publishMessage(threadId, active.turnId, message);
-      active.pendingSteers.push(message);
+      active.inputQueue.enqueueSteer(message);
       return { accepted: true, turnId: active.turnId };
     } finally {
-      this.markSteerWriteSettled(active);
+      active.inputQueue.settleWrite();
     }
+  }
+
+  /**
+   * 向当前 active turn 投递来自子 agent/协作方的 mailbox 消息。
+   *
+   * @param threadId 目标线程 ID。
+   * @param input mailbox 内容和可选来源。
+   */
+  async deliverMailboxInput(threadId: string, input: DeliverMailboxInput): Promise<DeliverMailboxResponse> {
+    const content = input.content.trim();
+    if (!content) throw new Error('mailbox content must not be empty');
+    const active = this.turnTasks.activeForThread(threadId);
+    if (input.expectedTurnId && (!active || active.turnId !== input.expectedTurnId)) {
+      throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active?.turnId ?? 'none'}\``);
+    }
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+    const triggerTurn = input.triggerTurn === true || input.deliveryMode === 'trigger_turn';
+    const delivery: RuntimeMailboxDelivery = {
+      id: input.id?.trim() || this.options.ids.id('mailbox'),
+      content,
+      deliveryMode: input.deliveryMode ?? (triggerTurn ? 'trigger_turn' : 'queue_only'),
+      fromAgentId: input.fromAgentId?.trim() || undefined,
+      fromThreadId: input.fromThreadId?.trim() || undefined,
+      toAgentId: input.toAgentId?.trim() || undefined,
+      triggerTurn: triggerTurn || undefined,
+    };
+
+    if (active && !active.controller.signal.aborted && !turnTaskCanReceiveMailbox(active)) {
+      if (input.expectedTurnId) {
+        throw new Error(`active ${active.taskKind} turn cannot receive mailbox input`);
+      }
+    }
+
+    if (active && !active.controller.signal.aborted && turnTaskCanReceiveMailbox(active)) {
+      active.inputQueue.beginWrite();
+      try {
+        if (active.controller.signal.aborted) throw new Error('no active turn to deliver mailbox input');
+        await this.appendAndPublish(threadId, {
+          id: this.options.ids.id('event'),
+          threadId,
+          turnId: active.turnId,
+          type: 'mailbox.delivered',
+          createdAt: this.options.clock.now().toISOString(),
+          payload: delivery,
+        });
+        active.inputQueue.enqueueMailbox(delivery);
+        return { accepted: true, turnId: active.turnId };
+      } finally {
+        active.inputQueue.settleWrite();
+      }
+    }
+
+    if (triggerTurn && !active) {
+      const turnId = this.options.ids.id('turn');
+      this.queueIdleMailbox(threadId, delivery);
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'mailbox.delivered',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: delivery,
+      });
+      const run = this.createMailboxTriggeredRun(threadId, thread, turnId, content);
+      void run.done.catch(() => undefined);
+      return { accepted: true, turnId };
+    }
+
+    this.queueIdleMailbox(threadId, delivery);
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      type: 'mailbox.delivered',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: delivery,
+    });
+    return { accepted: true, queued: true, turnId: null };
+  }
+
+  async runUserShellCommand(threadId: string, command: string, activeTurnId: string | null = null): Promise<void> {
+    const text = command.trim();
+    if (!text) throw new Error('command must not be empty');
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+
+    if (activeTurnId) {
+      const active = this.turnTasks.activeForThread(threadId);
+      await this.executeUserShellCommand({
+        activeTurnId,
+        command: text,
+        signal: active?.turnId === activeTurnId ? active.controller.signal : undefined,
+        standaloneTurn: false,
+        thread,
+        threadId,
+        turnId: activeTurnId,
+      });
+      return;
+    }
+
+    const turnId = this.options.ids.id('turn_shell');
+    const run = this.turnTasks.run({
+      acceptingSteers: false,
+      taskKind: 'user_shell',
+      threadId,
+      turnId,
+    }, (task) => this.executeUserShellCommand({
+      command: text,
+      signal: task.controller.signal,
+      standaloneTurn: true,
+      thread,
+      threadId,
+      turnId,
+    }));
+    await run.done;
   }
 
   /**
@@ -368,29 +685,74 @@ export class AgentLoop {
    * @param force 是否忽略 token 阈值强制压缩。
    */
   async compactThreadContext(threadId: string, force = true): Promise<RuntimeThread> {
+    await this.waitForFinalizingRegularTurn(threadId);
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
     const candidate = createRuntimeContextCompactionCandidate({ force, messages: thread.messages });
     if (!candidate) return thread;
     const turnId = this.options.ids.id('turn');
+    const run = this.turnTasks.run<RuntimeThread>({
+      acceptingSteers: false,
+      taskKind: 'compact',
+      threadId,
+      turnId,
+    }, (task) => this.runCompactTask({ candidate, force, signal: task.controller.signal, thread, threadId, turnId }));
+    return run.done;
+  }
+
+  private async runCompactTask({
+    candidate,
+    force,
+    signal,
+    thread,
+    threadId,
+    turnId,
+  }: {
+    candidate: RuntimeContextCompactionCandidate;
+    force: boolean;
+    signal: AbortSignal;
+    thread: RuntimeThread;
+    threadId: string;
+    turnId: string;
+  }): Promise<RuntimeThread> {
     const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const trigger = compactHookTrigger(force);
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'turn.started',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { input: force ? '/compact' : '/compact auto', taskKind: 'compact' },
+    });
     const preCompact = await this.runCompactHooks({
       eventName: 'PreCompact',
       runtimeConfig,
+      signal,
       thread,
       trigger,
       turnId,
     });
-    if (preCompact.shouldStop) return thread;
+    if (preCompact.shouldStop) {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { taskKind: 'compact' },
+      });
+      return (await this.options.threadStore.getThread(threadId)) ?? thread;
+    }
     // 手动压缩也走事件链，保证 renderer 能看到“压缩中 -> 已压缩”的完整生命周期。
     await this.publishContextCompacting(threadId, turnId, force, thread.messages);
     try {
-      const summary = await this.generateContextCompactionSummary(candidate);
+      const summary = await this.generateContextCompactionSummary(candidate, signal);
       const result = materializeRuntimeContextCompaction({
         candidate,
         createdAt: this.options.clock.now().toISOString(),
         id: this.options.ids.id('msg'),
+        source: summary.source,
         summary: summary.text,
         turnId,
       });
@@ -402,17 +764,39 @@ export class AgentLoop {
         createdAt: this.options.clock.now().toISOString(),
         payload: result,
       });
+      await this.publishContextCompactionUsage(threadId, turnId, summary.usage);
       this.queueSessionStartSource(threadId, 'compact');
-      const compacted = (await this.options.threadStore.getThread(threadId)) ?? thread;
       await this.runCompactHooks({
         eventName: 'PostCompact',
         runtimeConfig,
+        signal,
         thread,
         trigger,
         turnId,
       });
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { taskKind: 'compact' },
+      });
+      const compacted = (await this.options.threadStore.getThread(threadId)) ?? thread;
       return compacted;
     } catch (error) {
+      if (isAbortError(error)) {
+        await this.publishTurnAbortedMarker(threadId, turnId);
+        await this.appendAndPublish(threadId, {
+          id: this.options.ids.id('event'),
+          threadId,
+          turnId,
+          type: 'turn.cancelled',
+          createdAt: this.options.clock.now().toISOString(),
+          payload: { reason: error instanceof Error ? error.message : 'Turn cancelled.', taskKind: 'compact' },
+        });
+        throw error;
+      }
       await this.appendAndPublish(threadId, {
         id: this.options.ids.id('event'),
         threadId,
@@ -425,7 +809,196 @@ export class AgentLoop {
         },
       });
       throw error;
+    } finally {
+      this.clearDeferredToolRevealsForTurn(turnId);
     }
+  }
+
+  private async executeUserShellCommand({
+    activeTurnId,
+    command,
+    signal,
+    standaloneTurn,
+    thread,
+    threadId,
+    turnId,
+  }: {
+    activeTurnId?: string | null;
+    command: string;
+    signal?: AbortSignal;
+    standaloneTurn: boolean;
+    thread: RuntimeThread;
+    threadId: string;
+    turnId: string;
+  }): Promise<void> {
+    const toolHost = this.options.toolHost;
+    if (!toolHost) throw new Error('Tool host is not configured.');
+    const toolCallId = this.options.ids.id('call_shell');
+    const startedAtDate = this.options.clock.now();
+    const startedAtMs = startedAtDate.getTime();
+    const startedAt = startedAtDate.toISOString();
+    const argumentsPreview = JSON.stringify({ command, risk_level: 'low', yield_time_ms: 0 });
+    const deltaPublishes: Promise<void>[] = [];
+    const holderMessageId = threadHasAssistantForTurn(thread, turnId) ? null : this.options.ids.id('msg_shell');
+
+    if (standaloneTurn) {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.started',
+        createdAt: startedAt,
+        payload: { input: command, taskKind: 'user_shell' },
+      });
+    }
+    if (holderMessageId) {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'message.created',
+        createdAt: startedAt,
+        payload: {
+          message: {
+            id: holderMessageId,
+            turnId,
+            role: 'assistant',
+            content: '',
+            createdAt: startedAt,
+            status: 'streaming',
+          },
+        },
+      });
+    }
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'tool.started',
+      createdAt: startedAt,
+      payload: {
+        toolCallId,
+        toolName: 'run_shell_command',
+        source: 'userShell',
+        argumentsPreview,
+      },
+    });
+
+    let status: 'success' | 'error' = 'success';
+    let cleanupStatus: ToolTurnCleanupOutcome['status'] = 'completed';
+    let content = '';
+    let data: unknown;
+    try {
+      throwIfAborted(signal);
+      const result = await toolHost.runTool('run_shell_command', {
+        command,
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, {
+        threadId,
+        projectId: thread.projectId,
+        turnId,
+        toolCallId,
+        permissionProfile: 'danger-full-access',
+        signal,
+        onToolOutputDelta: (delta) => {
+          const publish = this.appendAndPublish(threadId, {
+            id: this.options.ids.id('event'),
+            threadId,
+            turnId,
+            type: 'tool.output_delta',
+            createdAt: this.options.clock.now().toISOString(),
+            payload: {
+              toolCallId,
+              toolName: 'run_shell_command',
+              source: 'userShell',
+              delta: delta.delta,
+              stream: delta.stream,
+              processId: delta.processId,
+            },
+          }).then(() => undefined, () => undefined);
+          deltaPublishes.push(publish);
+        },
+      });
+      throwIfAborted(signal);
+      content = result.content;
+      data = result.data;
+    } catch (error) {
+      await Promise.all(deltaPublishes);
+      if (isAbortError(error)) {
+        cleanupStatus = 'cancelled';
+        if (holderMessageId) await this.completeMessage(threadId, turnId, holderMessageId);
+        if (standaloneTurn) {
+          await this.publishTurnAbortedMarker(threadId, turnId);
+          await this.appendAndPublish(threadId, {
+            id: this.options.ids.id('event'),
+            threadId,
+            turnId,
+            type: 'turn.cancelled',
+            createdAt: this.options.clock.now().toISOString(),
+            payload: { reason: error instanceof Error ? error.message : 'Turn cancelled.', taskKind: 'user_shell' },
+          });
+        }
+        await this.cleanupToolHostTurn({ threadId, projectId: thread.projectId, turnId, toolCallId }, { status: cleanupStatus });
+        return;
+      }
+      status = 'error';
+      cleanupStatus = 'failed';
+      content = error instanceof Error ? error.message : String(error);
+    }
+
+    await Promise.all(deltaPublishes);
+    const completedAt = this.options.clock.now();
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'tool.completed',
+      createdAt: completedAt.toISOString(),
+      payload: {
+        toolCallId,
+        toolName: 'run_shell_command',
+        source: 'userShell',
+        status,
+        content,
+        argumentsPreview,
+        data,
+        durationMs: Math.max(0, completedAt.getTime() - startedAtMs),
+      },
+    });
+    if (holderMessageId) await this.completeMessage(threadId, turnId, holderMessageId);
+    if (activeTurnId) {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'message.created',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: {
+          message: {
+            id: this.options.ids.id('msg_shell'),
+            turnId,
+            role: 'tool',
+            toolCallId,
+            toolName: 'run_shell_command',
+            content,
+            createdAt: this.options.clock.now().toISOString(),
+            status: 'complete',
+          },
+        },
+      });
+    }
+    if (standaloneTurn) {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { taskKind: 'user_shell' },
+      });
+    }
+    await this.cleanupToolHostTurn({ threadId, projectId: thread.projectId, turnId, toolCallId }, { status: cleanupStatus });
   }
 
   /**
@@ -439,28 +1012,82 @@ export class AgentLoop {
     const attachments = normalizeAttachments(input.attachments);
     if (!text && !attachments.length) throw new Error('Turn input is required.');
     await this.assertImageAttachmentsSupported(attachments);
+    await this.waitForFinalizingRegularTurn(threadId);
 
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
+    const threadForRun = await this.applyPendingPlanDecision(threadId, thread, planDecisionForTurnInput(input));
 
     const turnId = this.options.ids.id('turn');
-    const controller = new AbortController();
-    const key = activeTurnKey(threadId, turnId);
-    this.activeTurns.set(key, controller);
-    this.activeTurnByThread.set(threadId, {
+    const run = this.turnTasks.run({
       turnId,
-      controller,
-      kind: 'conversation',
+      threadId,
+      taskKind: 'regular',
       acceptingSteers: true,
-      pendingSteers: [],
-      steerWritesInFlight: 0,
-      steerWriteWaiters: [],
+    }, (task) => this.runTurn(
+      threadId,
+      text,
+      input.skillIds ?? [],
+      attachments,
+      threadForRun,
+      turnId,
+      task.controller.signal,
+      {
+        clientId: input.clientId,
+        planOnly: input.collaborationMode === 'plan',
+        taskKind: 'regular',
+      },
+      turnThinkingOptions(input)
+    ));
+    return { turnId, done: run.done };
+  }
+
+  private async applyPendingPlanDecision(threadId: string, thread: RuntimeThread, decision: RuntimePlanDecision): Promise<RuntimeThread> {
+    const planMessage = [...thread.messages].reverse().find((message) =>
+      message.role === 'assistant' &&
+      message.planMode?.mode === 'plan' &&
+      message.planMode.status === 'awaiting_confirmation'
+    );
+    if (!planMessage) return thread;
+
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId: planMessage.turnId,
+      type: 'message.plan_mode_updated',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: {
+        messageId: planMessage.id,
+        content: planMessage.content,
+        planMode: { mode: 'plan', status: decision },
+      },
     });
-    const done = this.runTurn(threadId, text, input.skillIds ?? [], attachments, thread, turnId, controller.signal, { clientId: input.clientId }, turnThinkingOptions(input)).finally(() => {
-      if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
-      if (this.activeTurnByThread.get(threadId)?.controller === controller) this.activeTurnByThread.delete(threadId);
-    });
-    return { turnId, done };
+    return (await this.options.threadStore.getThread(threadId)) ?? thread;
+  }
+
+  private createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string): { turnId: string; done: Promise<void> } {
+    const displayText = `Mailbox message received: ${content.slice(0, 160)}`;
+    const run = this.turnTasks.run({
+      turnId,
+      threadId,
+      taskKind: 'regular',
+      acceptingSteers: true,
+    }, (task) => this.runTurn(
+      threadId,
+      displayText,
+      [],
+      [],
+      thread,
+      turnId,
+      task.controller.signal,
+      {
+        includeUserMessageInModel: true,
+        publishUserMessage: false,
+        taskKind: 'regular',
+      },
+      {},
+    ));
+    return { turnId, done: run.done };
   }
 
   /**
@@ -474,34 +1101,29 @@ export class AgentLoop {
     const prompt = input.prompt.trim();
     if (!displayText) throw new Error('review display text is required');
     if (!prompt) throw new Error('review prompt is required');
+    await this.waitForFinalizingRegularTurn(threadId);
 
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
 
     const turnId = this.options.ids.id('turn');
-    const controller = new AbortController();
-    const key = activeTurnKey(threadId, turnId);
-    this.activeTurns.set(key, controller);
-    this.activeTurnByThread.set(threadId, {
+    const run = this.turnTasks.run({
       turnId,
-      controller,
-      kind: 'review',
+      threadId,
+      taskKind: 'review',
       acceptingSteers: false,
-      pendingSteers: [],
-      steerWritesInFlight: 0,
-      steerWriteWaiters: [],
-    });
-    const done = this.runTurn(
+    }, (task) => this.runTurn(
       threadId,
       displayText,
       [],
       [],
       thread,
       turnId,
-      controller.signal,
+      task.controller.signal,
       {
         modelInput: prompt,
         review: { displayText },
+        taskKind: 'review',
         userMessage: {
           id: turnId,
           turnId,
@@ -512,11 +1134,8 @@ export class AgentLoop {
         },
       },
       {}
-    ).finally(() => {
-      if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
-      if (this.activeTurnByThread.get(threadId)?.controller === controller) this.activeTurnByThread.delete(threadId);
-    });
-    return { turnId, done };
+    ));
+    return { turnId, done: run.done };
   }
 
   /**
@@ -527,6 +1146,7 @@ export class AgentLoop {
    * @param input 可覆盖原消息内容、skill 选择和思考参数。
    */
   private async createRegenerateRun(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }): Promise<{ turnId: string; done: Promise<void> }> {
+    await this.waitForFinalizingRegularTurn(threadId);
     const originalThread = await this.options.threadStore.getThread(threadId);
     if (!originalThread) throw new Error(`Thread not found: ${threadId}`);
     const originalMessage = originalThread.messages.find((message) => message.id === messageId);
@@ -549,36 +1169,27 @@ export class AgentLoop {
     if (!userMessage || userMessage.role !== 'user') throw new Error(`User message not found after regeneration setup: ${messageId}`);
 
     const turnId = this.options.ids.id('turn');
-    const controller = new AbortController();
-    const key = activeTurnKey(threadId, turnId);
-    this.activeTurns.set(key, controller);
-    this.activeTurnByThread.set(threadId, {
+    const run = this.turnTasks.run({
       turnId,
-      controller,
-      kind: 'conversation',
+      threadId,
+      taskKind: 'regular',
       acceptingSteers: true,
-      pendingSteers: [],
-      steerWritesInFlight: 0,
-      steerWriteWaiters: [],
-    });
-    const done = this.runTurn(
+    }, (task) => this.runTurn(
       threadId,
       text,
       input.skillIds ?? [],
       normalizeAttachments(userMessage.attachments),
       thread,
       turnId,
-      controller.signal,
+      task.controller.signal,
       {
         userMessage,
         publishUserMessage: false,
+        taskKind: 'regular',
       },
       turnThinkingOptions(input)
-    ).finally(() => {
-      if (this.activeTurns.get(key) === controller) this.activeTurns.delete(key);
-      if (this.activeTurnByThread.get(threadId)?.controller === controller) this.activeTurnByThread.delete(threadId);
-    });
-    return { turnId, done };
+    ));
+    return { turnId, done: run.done };
   }
 
   /**
@@ -598,6 +1209,8 @@ export class AgentLoop {
     const createdAt = this.options.clock.now().toISOString();
     let activeAssistantMessageId: string | null = null;
     const publishUserMessage = options.publishUserMessage !== false;
+    const taskKind = options.taskKind ?? 'regular';
+    const planOnly = options.planOnly === true;
     const userMessage: RuntimeMessage = options.userMessage ?? {
       id: this.options.ids.id('msg'),
       clientId: options.clientId,
@@ -609,6 +1222,7 @@ export class AgentLoop {
       status: 'complete',
     };
     const modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
+    const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
     let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
 
     await this.appendAndPublish(threadId, {
@@ -617,7 +1231,7 @@ export class AgentLoop {
       turnId,
       type: 'turn.started',
       createdAt,
-      payload: { input: text },
+      payload: { input: text, taskKind },
     });
     if (publishUserMessage) await this.publishMessage(threadId, turnId, userMessage);
     if (options.review) await this.publishReviewModeMessage(threadId, turnId, 'entered', options.review.displayText);
@@ -661,7 +1275,7 @@ export class AgentLoop {
         turnId,
         type: 'turn.completed',
         createdAt: this.options.clock.now().toISOString(),
-        payload: {},
+        payload: { taskKind },
       });
       return;
     }
@@ -691,7 +1305,7 @@ export class AgentLoop {
         turnId,
         type: 'turn.completed',
         createdAt: this.options.clock.now().toISOString(),
-        payload: {},
+        payload: { taskKind },
       });
       return;
     }
@@ -699,51 +1313,49 @@ export class AgentLoop {
       ...(sessionStartHookOutcome?.additionalContexts ?? []),
       ...(userPromptHookOutcome?.additionalContexts ?? []),
     ], turnId);
+    const additionalContextMessages = [
+      ...hookContextMessages,
+      ...(planOnly ? this.planModeContextMessages(turnId) : []),
+    ];
 
     let usage: RuntimeUsage | undefined;
     let turnCompleted = false;
+    let cleanupStatus: ToolTurnCleanupOutcome['status'] = 'completed';
     try {
       throwIfAborted(signal);
-      const conversationMessages = await this.compactMessagesBeforeModelRequest({
+      const initialConversationMessages = await this.compactMessagesBeforeModelRequest({
         force: false,
-        messages: [...thread.messages, ...(publishUserMessage ? [userMessage] : [])],
+        messages: [...thread.messages, ...(includeUserMessageInConversation ? [modelUserMessage] : [])],
         runtimeConfig,
         signal,
         thread,
         threadId,
         turnId,
       });
-      const modelConversationMessages = options.modelInput && publishUserMessage ? conversationMessages.map((message) => (message.id === userMessage.id ? modelUserMessage : message)) : conversationMessages;
+      let conversationMessages = initialConversationMessages;
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
-      const toolContext = {
-        threadId,
-        projectId: thread.projectId,
-        turnId,
-        permissionProfile: runtimeConfig?.permissionProfile ?? 'workspace-write',
-        sandboxWorkspaceWrite: runtimeConfig?.sandboxWorkspaceWrite ?? {},
-        features: runtimeConfig?.features ?? {},
-        signal,
-      };
-      const tools = await this.options.toolHost?.listTools(toolContext);
       const toolBudget: ToolBudget = {
         readFileCallCount: 0,
         inspectionCallCount: 0,
         fileMutationCallCount: 0,
       };
-      // 模型上下文按“长期规则 -> 临时能力 -> 对话历史”排序，当前用户 turn 保持离模型最近。
-      const modelMessages: RuntimeMessage[] = [...this.personalizationContextMessages(runtimeConfig), ...(await this.memoryContextMessages(thread.projectId, runtimeConfig)), ...(await this.toolSystemPromptMessages(toolContext)), ...(await this.skillContextMessages(skillIds)), ...hookContextMessages, ...modelConversationMessages];
       let explicitMemoryUserContent = userMessage.content;
-      const appendSteerMessagesToModel = (messages: RuntimeMessage[]) => {
+      const appendSteerMessagesToConversation = (messages: RuntimeMessage[]) => {
         if (!messages.length) return false;
         // 与 Codex turn/steer 对齐：steer 是同一 turn 的原始用户输入，
-        // 不在 runtime 侧改写成额外提示词，只在下一个模型检查点并入上下文。
-        modelMessages.push(...messages);
+        // 不在 runtime 侧改写成额外提示词，只在下一个 sampling step 并入上下文。
+        conversationMessages.push(...messages);
         const steerText = messages
           .map((message) => message.content.trim())
           .filter(Boolean)
           .join('\n\n');
         if (steerText) explicitMemoryUserContent = [explicitMemoryUserContent, steerText].filter(Boolean).join('\n\n');
+        return true;
+      };
+      const appendMailboxMessagesToConversation = (messages: RuntimeMessage[]) => {
+        if (!messages.length) return false;
+        conversationMessages.push(...messages);
         return true;
       };
       let memorySavedByTool = false;
@@ -752,7 +1364,21 @@ export class AgentLoop {
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       for (let round = 0; round < maxToolRounds; round += 1) {
-        appendSteerMessagesToModel(await this.drainPendingSteers(threadId, turnId));
+        appendMailboxMessagesToConversation(await this.drainPendingMailboxMessages(threadId, turnId));
+        appendSteerMessagesToConversation(await this.drainPendingSteers(threadId, turnId));
+        const stepContext = await this.captureSamplingStepContext({
+          conversationMessages,
+          hookContextMessages: additionalContextMessages,
+          runtimeConfig,
+          signal,
+          skillIds,
+          thread,
+          threadId,
+          turnId,
+        });
+        conversationMessages = stepContext.conversationMessages;
+        runtimeConfig = stepContext.runtimeConfig;
+
         const assistantMessageId = this.options.ids.id('msg');
         const assistantCreatedAt = this.options.clock.now().toISOString();
         activeAssistantMessageId = assistantMessageId;
@@ -762,56 +1388,81 @@ export class AgentLoop {
           role: 'assistant',
           content: '',
           createdAt: assistantCreatedAt,
+          planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
           status: 'streaming',
         };
         await this.publishMessage(threadId, turnId, assistantMessage);
-        const toolChoice = await this.toolChoiceForRequest(toolContext, tools, modelMessages);
 
         let toolCalls: RuntimeToolCall[] = [];
         const partialToolCalls = new Map<string, RuntimeToolCall>();
         const announcedToolPreviews = new Map<string, string>();
         const roundOutput = createAssistantOutputAccumulator((delta) => this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta));
-        let reasoningOpen = false;
+        const roundStreamBridge = createAssistantItemStreamBridge(roundOutput, {
+          renderPlanDeltas: planOnly,
+        });
+        const roundMirror = createLegacyModelStreamMirrorState();
+        const requestTools = planOnly ? undefined : stepContext.tools;
+        const requestToolChoice = planOnly ? 'none' : stepContext.toolChoice;
+        const requestSnapshot = planOnly ? noToolStepSnapshot(stepContext.snapshot) : stepContext.snapshot;
+        await this.publishSamplingStepSnapshot(threadId, turnId, requestSnapshot);
         // reasoning_delta 统一包进 <think>，renderer 后续只需要解析一种思考标记。
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
-          messages: modelRequestMessages(modelMessages),
-          tools,
-          toolChoice,
+          messages: modelRequestMessages(stepContext.messages),
+          tools: requestTools,
+          toolChoice: requestToolChoice,
+          stepSnapshot: requestSnapshot,
           ...thinkingOptions,
           signal,
         })) {
           throwIfAborted(signal);
+          if (await this.publishModelStreamProtocolEvent(threadId, turnId, item)) {
+            if (item.type === 'token_count') usage = item.usage;
+            await roundStreamBridge.consume(item);
+            const protocolToolCall = toolCallFromModelStreamItem(item);
+            if (protocolToolCall) toolCalls = upsertRuntimeToolCall(toolCalls, protocolToolCall);
+            continue;
+          }
           if (item.type === 'reasoning_delta') {
-            await roundOutput.append(`${reasoningOpen ? '' : '<think>'}${item.text}`);
-            reasoningOpen = true;
+            await this.mirrorLegacyReasoningDelta(roundMirror, threadId, turnId, assistantMessageId, item.text);
+            await roundStreamBridge.appendReasoning(item.text);
           }
           if (item.type === 'text_delta') {
-            if (reasoningOpen) {
-              await roundOutput.append('</think>');
-              reasoningOpen = false;
-            }
-            await roundOutput.append(item.text);
+            await this.mirrorLegacyAgentDelta(roundMirror, threadId, turnId, assistantMessageId, item.text);
+            await roundStreamBridge.appendAgent(item.text);
           }
           if (item.type === 'tool_call_delta') {
+            await this.mirrorLegacyToolCallDelta(roundMirror, threadId, turnId, item.call);
             await this.publishToolCallDeltaPreview({
               announcedToolPreviews,
               call: item.call,
               partialToolCalls,
               threadId,
-              toolContext,
+              toolRouter: stepContext.toolRouter,
               turnId,
             });
           }
-          if (item.type === 'tool_calls') toolCalls = item.toolCalls;
-          if (item.type === 'usage') usage = item.usage;
+          if (item.type === 'tool_calls') {
+            toolCalls = item.toolCalls;
+            await this.mirrorLegacyToolCallsCompleted(roundMirror, threadId, turnId, toolCalls);
+          }
+          if (item.type === 'usage') {
+            usage = item.usage;
+            await this.mirrorLegacyUsage(roundMirror, threadId, turnId, item.usage);
+          }
         }
-        if (reasoningOpen) {
-          await roundOutput.append('</think>');
-          reasoningOpen = false;
-        }
+        await roundStreamBridge.finish();
+        await this.completeLegacyStreamItems(roundMirror, threadId, turnId, assistantMessageId);
         const roundMemoryCitation = await roundOutput.finish();
         let roundText = roundOutput.text();
+        if (planOnly && toolCalls.length) {
+          toolCalls = [];
+          if (!roundText.trim()) {
+            const fallbackText = 'Plan mode is active. I will wait for confirmation before running tools.';
+            roundText += fallbackText;
+            await this.publishAssistantDelta(threadId, turnId, assistantMessageId, fallbackText);
+          }
+        }
 
         if (toolCalls.length) {
           throwIfAborted(signal);
@@ -822,36 +1473,38 @@ export class AgentLoop {
           // 先把 toolCalls 挂到 assistant 消息上，再执行工具，UI 才能把后续 toolRuns 归到正确气泡。
           await this.completeMessage(threadId, turnId, assistantMessageId, { toolCalls, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
-          modelMessages.push({
+          conversationMessages.push({
             ...assistantMessage,
             content: roundText,
             memoryCitation: roundMemoryCitation,
             toolCalls,
             status: 'complete',
           });
-          const toolMessages = await this.runToolCalls(toolCalls, toolContext, toolBudget, runtimeConfig?.approvalPolicy ?? 'on-request', runtimeConfig, new Set(announcedToolPreviews.keys()));
+          const toolMessages = await this.runToolCalls(toolCalls, stepContext.toolContext, stepContext.toolRouter, toolBudget, stepContext.runtimeConfig, new Set(announcedToolPreviews.keys()));
           if (toolMessages.some(isSuccessfulRememberMemoryMessage)) memorySavedByTool = true;
-          modelMessages.push(...toolMessages);
+          conversationMessages.push(...toolMessages);
           continue;
         }
 
+        const pendingMailboxMessages = await this.drainPendingMailboxMessages(threadId, turnId);
         const pendingSteers = await this.drainPendingSteers(threadId, turnId);
-        if (pendingSteers.length) {
+        if (pendingMailboxMessages.length || pendingSteers.length) {
           await this.completeMessage(threadId, turnId, assistantMessageId, { usage, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
-          modelMessages.push({
+          conversationMessages.push({
             ...assistantMessage,
             content: roundText,
             memoryCitation: roundMemoryCitation,
             status: 'complete',
           });
-          appendSteerMessagesToModel(pendingSteers);
+          appendMailboxMessagesToConversation(pendingMailboxMessages);
+          appendSteerMessagesToConversation(pendingSteers);
           usage = undefined;
           continue;
         }
 
         const stopHookOutcome = await this.runStopHooks({
-          context: toolContext,
+          context: stepContext.toolContext,
           lastAssistantMessage: roundText,
           runtimeConfig,
           stopHookActive,
@@ -859,13 +1512,13 @@ export class AgentLoop {
         if (stopHookOutcome.shouldBlock && stopHookOutcome.blockReason) {
           await this.completeMessage(threadId, turnId, assistantMessageId, { memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
-          modelMessages.push({
+          conversationMessages.push({
             ...assistantMessage,
             content: roundText,
             memoryCitation: roundMemoryCitation,
             status: 'complete',
           });
-          modelMessages.push(...this.stopHookContinuationMessages(stopHookOutcome.blockReason, turnId));
+          conversationMessages.push(...this.stopHookContinuationMessages(stopHookOutcome.blockReason, turnId));
           stopHookActive = true;
           usage = undefined;
           continue;
@@ -880,7 +1533,10 @@ export class AgentLoop {
             userContent: explicitMemoryUserContent,
           },
           memoryCitation: roundMemoryCitation,
+          content: roundText,
+          planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
           review: options.review ? roundText : undefined,
+          taskKind,
         });
         activeAssistantMessageId = null;
         turnCompleted = true;
@@ -889,7 +1545,20 @@ export class AgentLoop {
 
       if (!turnCompleted) {
         // 达到工具轮次上限后禁用 toolChoice 再要一次最终回答，避免无限工具循环。
-        appendSteerMessagesToModel(await this.drainPendingSteers(threadId, turnId));
+        appendMailboxMessagesToConversation(await this.drainPendingMailboxMessages(threadId, turnId));
+        appendSteerMessagesToConversation(await this.drainPendingSteers(threadId, turnId));
+        const finalStepContext = await this.captureSamplingStepContext({
+          conversationMessages,
+          hookContextMessages: additionalContextMessages,
+          runtimeConfig,
+          signal,
+          skillIds,
+          thread,
+          threadId,
+          turnId,
+        });
+        conversationMessages = finalStepContext.conversationMessages;
+        runtimeConfig = finalStepContext.runtimeConfig;
         this.stopAcceptingSteers(threadId, turnId);
         const assistantMessageId = this.options.ids.id('msg');
         const assistantCreatedAt = this.options.clock.now().toISOString();
@@ -900,36 +1569,45 @@ export class AgentLoop {
           role: 'assistant',
           content: '',
           createdAt: assistantCreatedAt,
+          planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
           status: 'streaming',
         });
 
         const finalOutput = createAssistantOutputAccumulator((delta) => this.publishAssistantDelta(threadId, turnId, assistantMessageId, delta));
-        let finalReasoningOpen = false;
+        const finalStreamBridge = createAssistantItemStreamBridge(finalOutput, {
+          renderPlanDeltas: planOnly,
+        });
+        const finalMirror = createLegacyModelStreamMirrorState();
+        const finalRequestSnapshot = noToolStepSnapshot(finalStepContext.snapshot);
+        await this.publishSamplingStepSnapshot(threadId, turnId, finalRequestSnapshot);
         for await (const item of this.options.modelClient.stream({
           model: 'local-runtime-smoke',
-          messages: modelRequestMessages(modelMessages),
+          messages: modelRequestMessages(finalStepContext.messages),
           toolChoice: 'none',
+          stepSnapshot: finalRequestSnapshot,
           ...thinkingOptions,
           signal,
         })) {
           throwIfAborted(signal);
+          if (await this.publishModelStreamProtocolEvent(threadId, turnId, item)) {
+            await finalStreamBridge.consume(item);
+            continue;
+          }
           if (item.type === 'reasoning_delta') {
-            await finalOutput.append(`${finalReasoningOpen ? '' : '<think>'}${item.text}`);
-            finalReasoningOpen = true;
+            await this.mirrorLegacyReasoningDelta(finalMirror, threadId, turnId, assistantMessageId, item.text);
+            await finalStreamBridge.appendReasoning(item.text);
           }
           if (item.type === 'text_delta') {
-            if (finalReasoningOpen) {
-              await finalOutput.append('</think>');
-              finalReasoningOpen = false;
-            }
-            await finalOutput.append(item.text);
+            await this.mirrorLegacyAgentDelta(finalMirror, threadId, turnId, assistantMessageId, item.text);
+            await finalStreamBridge.appendAgent(item.text);
           }
-          if (item.type === 'usage') usage = item.usage;
+          if (item.type === 'usage') {
+            usage = item.usage;
+            await this.mirrorLegacyUsage(finalMirror, threadId, turnId, item.usage);
+          }
         }
-        if (finalReasoningOpen) {
-          await finalOutput.append('</think>');
-          finalReasoningOpen = false;
-        }
+        await finalStreamBridge.finish();
+        await this.completeLegacyStreamItems(finalMirror, threadId, turnId, assistantMessageId);
         const finalMemoryCitation = await finalOutput.finish();
         let finalText = finalOutput.text();
 
@@ -954,7 +1632,10 @@ export class AgentLoop {
             userContent: explicitMemoryUserContent,
           },
           memoryCitation: finalMemoryCitation,
+          content: finalText,
+          planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
           review: options.review ? finalText : undefined,
+          taskKind,
         });
         activeAssistantMessageId = null;
       }
@@ -978,24 +1659,27 @@ export class AgentLoop {
           turnId,
           type: 'turn.completed',
           createdAt: this.options.clock.now().toISOString(),
-          payload: {},
+          payload: { taskKind },
         });
         return;
       }
       if (isAbortError(error)) {
+        cleanupStatus = 'cancelled';
         if (activeAssistantMessageId) {
           await this.completeMessage(threadId, turnId, activeAssistantMessageId);
         }
+        await this.publishTurnAbortedMarker(threadId, turnId);
         await this.appendAndPublish(threadId, {
           id: this.options.ids.id('event'),
           threadId,
           turnId,
           type: 'turn.cancelled',
           createdAt: this.options.clock.now().toISOString(),
-          payload: { reason: error instanceof Error ? error.message : 'Turn cancelled.' },
+          payload: { reason: error instanceof Error ? error.message : 'Turn cancelled.', taskKind },
         });
         return;
       }
+      cleanupStatus = 'failed';
       await this.appendAndPublish(threadId, {
         id: this.options.ids.id('event'),
         threadId,
@@ -1008,6 +1692,32 @@ export class AgentLoop {
         },
       });
       throw error;
+    } finally {
+      await this.cleanupToolHostTurn({
+        threadId,
+        projectId: thread.projectId,
+        turnId,
+      }, { status: cleanupStatus });
+    }
+  }
+
+  private async cleanupToolHostTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void> {
+    const cleanupTurn = this.options.toolHost?.cleanupTurn;
+    if (!cleanupTurn || !context.turnId) return;
+    try {
+      await cleanupTurn.call(this.options.toolHost, context, outcome);
+    } catch (error) {
+      await this.appendAndPublish(context.threadId, {
+        id: this.options.ids.id('event'),
+        threadId: context.threadId,
+        turnId: context.turnId,
+        type: 'runtime.error',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: {
+          message: error instanceof Error ? error.message : String(error),
+          code: 'tool_cleanup_failed',
+        },
+      }).catch(() => undefined);
     }
   }
 
@@ -1064,6 +1774,24 @@ export class AgentLoop {
         '<hook_additional_context>',
         text,
         '</hook_additional_context>',
+      ].join('\n'),
+      createdAt: this.options.clock.now().toISOString(),
+      status: 'complete',
+      visibility: 'model',
+    }];
+  }
+
+  private planModeContextMessages(turnId: string): RuntimeMessage[] {
+    return [{
+      id: 'desktop_plan_mode',
+      turnId,
+      role: 'system',
+      content: [
+        '<plan_mode>',
+        'Plan mode is active. Produce a concise implementation plan or review plan only.',
+        'Do not call tools, edit files, run commands, or claim completed work in this turn.',
+        'End by waiting for the user to confirm before execution.',
+        '</plan_mode>',
       ].join('\n'),
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
@@ -1193,6 +1921,270 @@ export class AgentLoop {
     });
   }
 
+  private async publishSamplingStepSnapshot(threadId: string, turnId: string, snapshot: RuntimeModelRequestStepSnapshot): Promise<void> {
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'turn.step_snapshot',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { snapshot },
+    });
+  }
+
+  /**
+   * 桥接更接近 Codex 的 item-based stream 事件。
+   * 旧 provider 仍走 message/tool 事件；新 provider 可以逐步双写 item lifecycle。
+   */
+  private async publishModelStreamProtocolEvent(threadId: string, turnId: string, item: ModelStreamEvent): Promise<boolean> {
+    if (item.type === 'item_started') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.started',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { item: item.item },
+      });
+      return true;
+    }
+    if (item.type === 'item_delta') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.delta',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { itemId: item.itemId, delta: item.delta },
+      });
+      return true;
+    }
+    if (item.type === 'item_completed') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { item: item.item, content: item.item.content },
+      });
+      return true;
+    }
+    if (item.type === 'plan_delta') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'plan.delta',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { itemId: item.itemId ?? `${turnId}:plan`, delta: item.text },
+      });
+      return true;
+    }
+    if (item.type === 'reasoning_summary_delta') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'reasoning.summary_delta',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { itemId: item.itemId ?? `${turnId}:reasoning`, delta: item.text, summaryIndex: item.summaryIndex },
+      });
+      return true;
+    }
+    if (item.type === 'reasoning_summary_part_added') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'reasoning.summary_part_added',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { itemId: item.itemId ?? `${turnId}:reasoning`, summaryIndex: item.summaryIndex },
+      });
+      return true;
+    }
+    if (item.type === 'reasoning_raw_delta') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'reasoning.raw_delta',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { itemId: item.itemId ?? `${turnId}:reasoning`, delta: item.text, contentIndex: item.contentIndex },
+      });
+      return true;
+    }
+    if (item.type === 'safety_buffering') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'safety.buffering',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { buffering: item.buffering },
+      });
+      return true;
+    }
+    if (item.type === 'model_verification') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'model.verification',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { verification: item.verification },
+      });
+      return true;
+    }
+    if (item.type === 'token_count') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'token.count',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: {
+          usage: item.usage,
+          modelContextWindow: item.modelContextWindow,
+          tokensUntilCompaction: item.tokensUntilCompaction,
+        },
+      });
+      return true;
+    }
+    if (item.type === 'turn_diff') {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.diff',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { unifiedDiff: item.unifiedDiff },
+      });
+      return true;
+    }
+    return false;
+  }
+
+  private async mirrorLegacyAgentDelta(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, messageId: string, delta: string): Promise<void> {
+    if (!delta) return;
+    if (!state.agentItemStarted) {
+      state.agentItemStarted = true;
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.started',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { item: { id: messageId, kind: 'agent_message', status: 'in_progress', transcriptMessageId: messageId } },
+      });
+    }
+    state.agentText += delta;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'item.delta',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { itemId: messageId, delta },
+    });
+  }
+
+  private async mirrorLegacyReasoningDelta(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, messageId: string, delta: string): Promise<void> {
+    if (!delta) return;
+    const itemId = `${messageId}:reasoning`;
+    if (!state.reasoningItemStarted) {
+      state.reasoningItemStarted = true;
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.started',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { item: { id: itemId, kind: 'reasoning', status: 'in_progress', transcriptMessageId: messageId } },
+      });
+    }
+    state.reasoningText += delta;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'reasoning.raw_delta',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { itemId, delta, contentIndex: 0 },
+    });
+  }
+
+  private async mirrorLegacyToolCallDelta(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, call: RuntimeToolCallDeltaLike): Promise<void> {
+    const id = call.id || `tool_call_${state.toolCalls.size}`;
+    const current = state.toolCalls.get(id) ?? { id, name: '', arguments: '' };
+    const next = {
+      id,
+      name: call.name || current.name,
+      arguments: mergeToolArgumentDelta(current.arguments, call.argumentsDelta),
+    };
+    state.toolCalls.set(id, next);
+    if (!next.name || current.name) return;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'item.started',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { item: { id, kind: 'tool_call', status: 'in_progress', toolCall: next } },
+    });
+  }
+
+  private async mirrorLegacyToolCallsCompleted(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, toolCalls: RuntimeToolCall[]): Promise<void> {
+    for (const toolCall of toolCalls) {
+      if (!toolCall.id || state.completedToolCallIds.has(toolCall.id)) continue;
+      state.completedToolCallIds.add(toolCall.id);
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { item: { id: toolCall.id, kind: 'tool_call', status: 'completed', toolCall } },
+      });
+    }
+  }
+
+  private async mirrorLegacyUsage(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, usage: RuntimeUsage): Promise<void> {
+    if (state.tokenCountPublished) return;
+    state.tokenCountPublished = true;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'token.count',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { usage },
+    });
+  }
+
+  private async completeLegacyStreamItems(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, messageId: string): Promise<void> {
+    if (state.reasoningItemStarted) {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { item: { id: `${messageId}:reasoning`, kind: 'reasoning', content: state.reasoningText, status: 'completed', transcriptMessageId: messageId } },
+      });
+    }
+    if (state.agentItemStarted) {
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { item: { id: messageId, kind: 'agent_message', content: state.agentText, status: 'completed', transcriptMessageId: messageId } },
+      });
+    }
+  }
+
   /**
    * 标记消息完成，并可附带 usage 或最终 toolCalls。
    *
@@ -1201,7 +2193,7 @@ export class AgentLoop {
    * @param messageId 要完成的消息 ID。
    * @param payload 可选的 usage 和 toolCalls 补充数据。
    */
-  private async completeMessage(threadId: string, turnId: string, messageId: string, payload: { usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation } = {}): Promise<void> {
+  private async completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; planMode?: RuntimeMessage['planMode'] } = {}): Promise<void> {
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -1240,7 +2232,10 @@ export class AgentLoop {
         userContent: string;
       };
       memoryCitation?: RuntimeMemoryCitation;
+      content?: string;
+      planMode?: RuntimeMessage['planMode'];
       review?: string;
+      taskKind?: RuntimeTaskKind;
     } = {}
   ): Promise<void> {
     if (usage) {
@@ -1252,7 +2247,7 @@ export class AgentLoop {
         ...usage,
       });
     }
-    await this.completeMessage(threadId, turnId, messageId, { usage, memoryCitation: options.memoryCitation });
+    await this.completeMessage(threadId, turnId, messageId, { content: options.content, usage, memoryCitation: options.memoryCitation, planMode: options.planMode });
     if (options.review !== undefined) {
       await this.publishReviewModeMessage(threadId, turnId, 'exited', options.review.trim() || 'Review completed.');
     }
@@ -1263,7 +2258,7 @@ export class AgentLoop {
       turnId,
       type: 'turn.completed',
       createdAt: this.options.clock.now().toISOString(),
-      payload: { usage },
+      payload: { usage, taskKind: options.taskKind },
     });
     // 被动记忆失败不影响本轮回答完成，避免辅助功能阻塞主对话。
     await this.extractPassiveMemoriesForTurn(threadId, turnId).catch(() => undefined);
@@ -1563,7 +2558,8 @@ export class AgentLoop {
    */
   private async compactMessagesBeforeModelRequest({ force, messages, runtimeConfig, signal, thread, threadId, turnId }: { force: boolean; messages: RuntimeMessage[]; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
     // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
-    const candidate = createRuntimeContextCompactionCandidate({ force, messages });
+    const budget = contextCompactionBudgetForConfig(runtimeConfig);
+    const candidate = createRuntimeContextCompactionCandidate({ budget, force, messages });
     if (!candidate) return messages;
     const trigger = compactHookTrigger(force);
     const preCompact = await this.runCompactHooks({
@@ -1575,12 +2571,13 @@ export class AgentLoop {
       turnId,
     });
     if (preCompact.shouldStop) throw new HookStoppedTurnError(preCompact.stopReason || 'PreCompact hook stopped execution');
-    await this.publishContextCompacting(threadId, turnId, force, messages);
+    await this.publishContextCompacting(threadId, turnId, force, messages, budget);
     const summary = await this.generateContextCompactionSummary(candidate, signal);
     const result = materializeRuntimeContextCompaction({
       candidate,
       createdAt: this.options.clock.now().toISOString(),
       id: this.options.ids.id('msg'),
+      source: summary.source,
       summary: summary.text,
       turnId,
     });
@@ -1592,6 +2589,7 @@ export class AgentLoop {
       createdAt: this.options.clock.now().toISOString(),
       payload: result,
     });
+    await this.publishContextCompactionUsage(threadId, turnId, summary.usage);
     this.queueSessionStartSource(threadId, 'compact');
     const postCompact = await this.runCompactHooks({
       eventName: 'PostCompact',
@@ -1611,9 +2609,13 @@ export class AgentLoop {
    * @param candidate 已选出的上下文压缩候选。
    * @param signal 可选取消信号，自动压缩时跟随当前 turn。
    */
-  private async generateContextCompactionSummary(candidate: RuntimeContextCompactionCandidate, signal?: AbortSignal): Promise<{ text: string }> {
+  private async generateContextCompactionSummary(candidate: RuntimeContextCompactionCandidate, signal?: AbortSignal): Promise<{ source: 'local' | 'remote'; text: string; usage?: RuntimeUsage }> {
+    const remoteSummary = await this.generateRemoteContextCompactionSummary(candidate, signal);
+    if (remoteSummary) return remoteSummary;
+
     try {
       let text = '';
+      let usage: RuntimeUsage | undefined;
       for await (const item of this.options.modelClient.stream({
         model: 'context-compaction',
         messages: this.contextCompactionPromptMessages(candidate),
@@ -1624,14 +2626,58 @@ export class AgentLoop {
       })) {
         throwIfAborted(signal);
         if (item.type === 'text_delta') text += item.text;
+        if (item.type === 'usage') usage = item.usage;
       }
       const parsed = compactedSummaryFromModelText(text);
-      if (parsed) return { text: parsed };
+      if (parsed) return { source: 'local', text: parsed, ...(usage ? { usage } : {}) };
     } catch (error) {
       if (signal?.aborted) throw error;
       throw new Error(`Context compaction model request failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     throw new Error('Context compaction model returned an empty summary.');
+  }
+
+  /**
+   * 使用 provider 原生压缩能力生成摘要；不支持或失败时由调用方回落到本地 prompt 压缩。
+   *
+   * @param candidate 已选出的上下文压缩候选。
+   * @param signal 可选取消信号，自动压缩时跟随当前 turn。
+   */
+  private async generateRemoteContextCompactionSummary(candidate: RuntimeContextCompactionCandidate, signal?: AbortSignal): Promise<{ source: 'remote'; text: string; usage?: RuntimeUsage } | null> {
+    if (!this.options.modelClient.compactConversation) return null;
+    try {
+      const result = await this.options.modelClient.compactConversation({
+        model: 'context-compaction',
+        messages: this.contextCompactionPromptMessages(candidate),
+        maxOutputTokens: 1600,
+        temperature: 0,
+        signal,
+      });
+      throwIfAborted(signal);
+      const parsed = compactedSummaryFromModelText(result.summary);
+      return parsed ? { source: 'remote', text: parsed, ...(result.usage ? { usage: result.usage } : {}) } : null;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return null;
+    }
+  }
+
+  private async publishContextCompactionUsage(threadId: string, turnId: string, usage: RuntimeUsage | undefined): Promise<void> {
+    if (!usage) return;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'token.count',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { usage },
+    });
+    await this.options.usageStore?.recordUsage({
+      threadId,
+      turnId,
+      createdAt: this.options.clock.now().toISOString(),
+      ...usage,
+    });
   }
 
   /**
@@ -1669,8 +2715,8 @@ export class AgentLoop {
    * @param force 是否为手动强制压缩。
    * @param messages 用于估算 token 使用量的消息列表。
    */
-  private async publishContextCompacting(threadId: string, turnId: string | undefined, force: boolean, messages: RuntimeMessage[]): Promise<void> {
-    const usage = runtimeContextTokenUsageForMessages(messages);
+  private async publishContextCompacting(threadId: string, turnId: string | undefined, force: boolean, messages: RuntimeMessage[], budget?: RuntimeContextCompactionBudget): Promise<void> {
+    const usage = runtimeContextTokenUsageForMessages(messages, budget);
     await this.appendAndPublish(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -1680,7 +2726,7 @@ export class AgentLoop {
       payload: {
         forced: force || undefined,
         maxContextTokens: usage.maxContextTokens,
-        maxContextTokensK: CONTEXT_COMPACTION_MAX_TOKENS_K,
+        maxContextTokensK: usage.maxContextTokensK,
         percent: usage.percent,
         usedTokens: usage.usedTokens,
       },
@@ -1688,21 +2734,155 @@ export class AgentLoop {
   }
 
   /**
+   * 捕获一次模型 sampling 使用的完整 step 视图。
+   *
+   * Codex 的关键语义是同一次请求里的历史、工具暴露和工具调用环境来自同一个快照。
+   * 这里把上下文压缩、工具上下文、工具列表和最终模型消息放在一个边界内构造，
+   * 后续接 ToolRouter / item protocol 时也能沿用这个 step 边界。
+   */
+  private async captureSamplingStepContext({
+    conversationMessages,
+    hookContextMessages,
+    runtimeConfig,
+    signal,
+    skillIds,
+    thread,
+    threadId,
+    turnId,
+  }: {
+    conversationMessages: RuntimeMessage[];
+    hookContextMessages: RuntimeMessage[];
+    runtimeConfig: RuntimeConfigState | null | undefined;
+    signal: AbortSignal;
+    skillIds: string[];
+    thread: RuntimeThread;
+    threadId: string;
+    turnId: string;
+  }): Promise<RuntimeSamplingStepContext> {
+    const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
+    const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
+    const compactedConversationMessages = await this.compactMessagesBeforeModelRequest({
+      force: false,
+      messages: conversationMessages,
+      runtimeConfig: stepRuntimeConfig,
+      signal,
+      thread,
+      threadId,
+      turnId,
+    });
+    const toolContext: RuntimeToolExecutionContext = {
+      threadId,
+      projectId: thread.projectId,
+      turnId,
+      permissionProfile: stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
+      sandboxWorkspaceWrite: stepRuntimeConfig?.sandboxWorkspaceWrite ?? {},
+      features: stepRuntimeConfig?.features ?? {},
+      signal,
+    };
+    const dynamicTools = this.appServerDynamicToolsByThread.get(threadId)?.tools;
+    const revealedDeferredToolNames = this.revealedDeferredToolNamesForTurn(turnId);
+    const toolRouter = this.options.toolHost
+      ? await RuntimeToolRouter.create({
+          toolHost: this.options.toolHost,
+          orchestrator: this.toolOrchestratorFor(toolContext, stepRuntimeConfig),
+          context: toolContext,
+          approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
+          additionalDeferredTools: dynamicTools?.filter((tool) => tool.deferLoading),
+          revealedDeferredToolNames,
+          revealDeferredTools: (names) => this.revealDeferredToolsForTurn(turnId, names),
+          strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
+        })
+      : null;
+    const tools = modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, revealedDeferredToolNames);
+    const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
+    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig);
+    const skillContext = await this.skillContextMessages(skillIds);
+    // 模型上下文按“长期规则 -> 临时能力 -> 对话历史”排序，当前用户 turn 保持离模型最近。
+    const messages: RuntimeMessage[] = [
+      ...this.personalizationContextMessages(stepRuntimeConfig),
+      ...(await this.memoryContextMessages(thread.projectId, stepRuntimeConfig)),
+      ...(await this.toolSystemPromptMessages(toolContext, toolRouter)),
+      ...skillContext.messages,
+      ...hookContextMessages,
+      ...compactedConversationMessages,
+    ];
+    const toolChoice = tools?.length ? (await toolRouter?.toolChoice(messages) ?? 'auto') : undefined;
+    const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
+    const mcpServerKeys = await this.mcpServerKeysForSnapshot();
+    const snapshot: RuntimeModelRequestStepSnapshot = {
+      threadId,
+      turnId,
+      threadLastSeq: snapshotThread?.lastSeq ?? thread.lastSeq,
+      ...(thread.projectId ? { projectId: thread.projectId } : {}),
+      conversationMessageIds: compactedConversationMessages.map((message) => message.id),
+      messageIds: messages.map((message) => message.id),
+      inputMessageIds: samplingInputMessageIds(messages, turnId),
+      toolNames: advertisedToolNames,
+      advertisedToolNames,
+      deferredToolNames: toolRouter?.deferredToolNames() ?? [],
+      routerToolNames: toolRouter?.routerOwnedToolNames() ?? [],
+      toolRuntimes,
+      ...(toolChoice ? { toolChoice } : {}),
+      toolEnvironment: toolRouter?.environment ?? null,
+      selectedSkills: skillContext.selectedSkills,
+      mcpServerKeys,
+      mcpServerCount: mcpServerKeys.length,
+      permissionProfile: toolContext.permissionProfile,
+      ...(toolContext.sandboxWorkspaceWrite ? { sandboxWorkspaceWrite: toolContext.sandboxWorkspaceWrite } : {}),
+      contextWindow: samplingContextWindowForMessages(modelRequestMessages(messages), contextCompactionBudgetForConfig(stepRuntimeConfig)),
+      featureKeys: Object.keys(toolContext.features ?? {}).sort(),
+      worldState: {
+        ...(stepRuntimeConfig?.activeProviderId ? { activeProviderId: stepRuntimeConfig.activeProviderId } : {}),
+        ...(stepRuntimeConfig?.configPath ? { configPath: stepRuntimeConfig.configPath } : {}),
+        ...(stepRuntimeConfig?.dataPath ? { dataPath: stepRuntimeConfig.dataPath } : {}),
+        ...(stepRuntimeConfig ? { memoryEnabled: stepRuntimeConfig.memoryEnabled } : {}),
+        ...(stepRuntimeConfig?.storagePath ? { storagePath: stepRuntimeConfig.storagePath } : {}),
+        threadMessageCount: snapshotThread?.messageCount ?? thread.messageCount,
+        threadUpdatedAt: snapshotThread?.updatedAt ?? thread.updatedAt,
+      },
+    };
+    return {
+      conversationMessages: compactedConversationMessages,
+      messages,
+      runtimeConfig: stepRuntimeConfig,
+      snapshot,
+      toolChoice,
+      toolContext,
+      toolRouter,
+      tools,
+    };
+  }
+
+  private async mcpServerKeysForSnapshot(): Promise<string[]> {
+    const servers = await this.options.mcpStore?.listServerInputs().catch(() => []);
+    if (!servers?.length) return [];
+    return servers
+      .filter((server) => server.enabled !== false)
+      .map((server) => server.key.trim())
+      .filter(Boolean)
+      .sort();
+  }
+
+  /**
    * 根据本轮选择的 skill 构造注入模型的 system 消息。
    *
    * @param skillIds 本轮用户显式选择的 skill ID 列表。
    */
-  private async skillContextMessages(skillIds: string[] = []) {
+  private async skillContextMessages(skillIds: string[] = []): Promise<{ messages: RuntimeMessage[]; selectedSkills: RuntimeModelRequestStepSnapshot['selectedSkills'] }> {
     const injections = await this.options.skillRegistry?.selectedSkillInjections(skillIds);
-    if (!injections?.length) return [];
+    if (!injections?.length) return { messages: [], selectedSkills: [] };
     // Skill 内容包在自定义标签里，并转义闭合标签，避免 skill 文本提前截断注入块。
-    return injections.map((skill) => ({
+    const messages = injections.map((skill) => ({
       id: `skill_${skill.id}`,
       role: 'system' as const,
       content: `<skill name="${escapeSkillAttribute(skill.name)}" id="${escapeSkillAttribute(skill.id)}">\n${neutralizeSkillTags(skill.content)}\n</skill>`,
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete' as const,
     }));
+    return {
+      messages,
+      selectedSkills: injections.map((skill) => ({ id: skill.id, name: skill.name })),
+    };
   }
 
   /**
@@ -1710,8 +2890,8 @@ export class AgentLoop {
    *
    * @param context 当前工具执行上下文。
    */
-  private async toolSystemPromptMessages(context: RuntimeToolExecutionContext) {
-    const prompt = await this.options.toolHost?.systemPrompt?.(context);
+  private async toolSystemPromptMessages(context: RuntimeToolExecutionContext, toolRouter?: RuntimeToolRouter | null) {
+    const prompt = toolRouter ? await toolRouter.systemPrompt() : await this.options.toolHost?.systemPrompt?.(context);
     if (typeof prompt !== 'string' || !prompt.trim()) return [];
     return [
       {
@@ -1722,24 +2902,6 @@ export class AgentLoop {
         status: 'complete' as const,
       },
     ];
-  }
-
-  /**
-   * 计算本轮模型请求的 toolChoice，允许 ToolHost 强制下一步工具。
-   *
-   * @param context 当前工具执行上下文。
-   * @param tools 当前可提供给模型的工具定义。
-   * @param messages 当前模型上下文消息。
-   */
-  private async toolChoiceForRequest(context: RuntimeToolExecutionContext, tools: RuntimeToolDefinition[] | undefined, messages: RuntimeMessage[]): Promise<ModelRequest['toolChoice']> {
-    if (!tools?.length) return undefined;
-    let forcedChoice: ModelRequest['toolChoice'] | null = null;
-    try {
-      forcedChoice = (await this.options.toolHost?.toolChoice?.(context, { tools, messages })) ?? null;
-    } catch {
-      forcedChoice = null;
-    }
-    return forcedChoice ?? 'auto';
   }
 
   /**
@@ -1801,15 +2963,11 @@ export class AgentLoop {
    *
    * @param toolCalls 模型本轮返回的工具调用列表。
    * @param context 当前工具执行上下文。
+   * @param toolRouter 当前 sampling step 捕获的工具路由器。
    * @param toolBudget 本轮累计工具预算计数器。
-   * @param approvalPolicy 当前审批策略。
    * @param previewedToolCallIds 已通过 delta 预览发布过的工具调用 ID。
    */
-  private async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, previewedToolCallIds: ReadonlySet<string> = new Set()): Promise<RuntimeMessage[]> {
-    if (!this.options.toolHost) return [];
-    // 整个 turn 内 hook 配置不变，orchestrator（含 hook 发现与信任哈希计算）只构造一次，
-    // 避免每个工具调用都重复 discoverRuntimeHooks。
-    const orchestrator = this.toolOrchestratorFor(context, runtimeConfig);
+  private async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, toolBudget: ToolBudget, runtimeConfig: RuntimeConfigState | null | undefined, previewedToolCallIds: ReadonlySet<string> = new Set()): Promise<RuntimeMessage[]> {
     const messages: RuntimeMessage[] = [];
     let inspectionCallsExecutedThisRound = 0;
     for (let index = 0; index < toolCalls.length; ) {
@@ -1821,10 +2979,12 @@ export class AgentLoop {
         break;
       }
 
-      const parallelBatch = await this.collectParallelToolBatch(toolCalls, index, context, toolBudget, approvalPolicy, runtimeConfig, orchestrator);
+      const parallelBatch = toolRouter
+        ? await this.collectParallelToolBatch(toolCalls, index, toolRouter, toolBudget)
+        : [];
       if (parallelBatch.length > 1) {
         // 批量执行只读工具时统一跳过审批和预算二次检查，预算已在 collect 阶段模拟预留。
-        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig, orchestrator, { checkBudget: false, skipApproval: true })));
+        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolRouter, toolBudget, runtimeConfig, { checkBudget: false, skipApproval: true })));
         for (let batchIndex = 0; batchIndex < parallelBatch.length; batchIndex += 1) {
           if (executions[batchIndex].processed) {
             markToolBudgetProcessed(toolBudget, parallelBatch[batchIndex]);
@@ -1837,7 +2997,7 @@ export class AgentLoop {
       }
 
       const toolCall = toolCalls[index];
-      const execution = await this.runSingleToolCall(toolCall, context, toolBudget, approvalPolicy, runtimeConfig, orchestrator);
+      const execution = await this.runSingleToolCall(toolCall, context, toolRouter, toolBudget, runtimeConfig);
       if (execution.processed) {
         markToolBudgetProcessed(toolBudget, toolCall);
         if (isInspectionToolCall(toolCall)) inspectionCallsExecutedThisRound += 1;
@@ -1853,11 +3013,10 @@ export class AgentLoop {
    *
    * @param toolCalls 完整工具调用列表。
    * @param startIndex 本次尝试收集的起始下标。
-   * @param context 当前工具执行上下文。
+   * @param toolRouter 当前 sampling step 捕获的工具路由器。
    * @param toolBudget 当前已消耗的工具预算。
-   * @param approvalPolicy 当前审批策略。
    */
-  private async collectParallelToolBatch(toolCalls: RuntimeToolCall[], startIndex: number, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, orchestrator: ToolOrchestrator | null): Promise<RuntimeToolCall[]> {
+  private async collectParallelToolBatch(toolCalls: RuntimeToolCall[], startIndex: number, toolRouter: RuntimeToolRouter, toolBudget: ToolBudget): Promise<RuntimeToolCall[]> {
     const simulatedBudget = { ...toolBudget };
     const readFileKeys = new Set<string>();
     const batch: RuntimeToolCall[] = [];
@@ -1866,7 +3025,7 @@ export class AgentLoop {
       if (batch.length >= MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE) break;
       const toolCall = toolCalls[index];
       const parsedArguments = parseToolArguments(toolCall.arguments);
-      if (!(await this.canRunToolCallInParallel(toolCall, parsedArguments, context, approvalPolicy, orchestrator))) break;
+      if (!(await toolRouter.canRunInParallel(toolCall, parsedArguments))) break;
       const readFileKey = parallelReadFileKey(toolCall, parsedArguments);
       // 同一个文件片段重复读取不并行，避免浪费上下文并让模型误以为拿到了不同信息。
       if (readFileKey && readFileKeys.has(readFileKey)) break;
@@ -1879,37 +3038,52 @@ export class AgentLoop {
   }
 
   /**
-   * 判断单个工具调用是否满足并行执行条件。
-   *
-   * @param toolCall 待判断的工具调用。
-   * @param parsedArguments 已解析的工具参数。
-   * @param context 当前工具执行上下文。
-   * @param approvalPolicy 当前审批策略。
-   */
-  private async canRunToolCallInParallel(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], orchestrator: ToolOrchestrator | null): Promise<boolean> {
-    if (!LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES.has(toolCall.name)) return false;
-    if (!isPlainRecord(parsedArguments)) return false;
-    if (this.options.approvalGate && approvalPolicy === 'strict') return false;
-    if (!orchestrator) return false;
-    return orchestrator.canRunWithoutApproval(toolCall, parsedArguments, context, approvalPolicy);
-  }
-
-  /**
    * 执行单个工具调用，负责预算、预览、审批、运行、结果事件和 tool 消息。
    *
    * @param toolCall 要执行的工具调用。
    * @param context 当前工具执行上下文。
+   * @param toolRouter 当前 sampling step 捕获的工具路由器。
    * @param toolBudget 本轮工具预算计数器。
-   * @param approvalPolicy 当前审批策略。
    * @param options 批处理场景下可跳过预算或审批的内部选项。
    */
-  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolBudget: ToolBudget, approvalPolicy: RuntimeConfigState['approvalPolicy'], runtimeConfig: RuntimeConfigState | null | undefined, orchestrator: ToolOrchestrator | null, options: { checkBudget?: boolean; skipApproval?: boolean } = {}): Promise<ToolCallExecution> {
+  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, toolBudget: ToolBudget, runtimeConfig: RuntimeConfigState | null | undefined, options: { checkBudget?: boolean; skipApproval?: boolean } = {}): Promise<ToolCallExecution> {
     let content = '';
     let processed = false;
     let parsedArguments: unknown;
     try {
       throwIfAborted(context.signal);
       parsedArguments = parseToolArguments(toolCall.arguments);
+      if (isCollaborationToolName(toolCall.name)) {
+        if (!collaborationToolsEnabled(runtimeConfig)) {
+          content = `Tool ${toolCall.name} failed: multi_agent feature is disabled.`;
+          await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
+          return {
+            message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
+            processed,
+          };
+        }
+        const execution = await this.runCollaborationToolCall(toolCall, parsedArguments, context);
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content),
+          processed: true,
+        };
+      }
+      const dynamicTool = this.appServerDynamicToolForCall(context.threadId, context.turnId, toolCall.name, toolRouter);
+      if (dynamicTool?.status === 'not_advertised') {
+        content = `Tool ${toolCall.name} failed: it was not advertised in this sampling step.`;
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
+          processed,
+        };
+      }
+      if (dynamicTool?.status === 'available') {
+        const execution = await this.runAppServerDynamicToolCall(toolCall, parsedArguments, context, dynamicTool.registration, dynamicTool.tool);
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content),
+          processed: true,
+        };
+      }
       const memoryBlock = await this.memoryToolBlockForCall(toolCall, context.threadId, runtimeConfig);
       if (memoryBlock) {
         content = memoryBlock;
@@ -1928,7 +3102,7 @@ export class AgentLoop {
           processed,
         };
       }
-      if (!orchestrator) {
+      if (!toolRouter) {
         content = `Tool ${toolCall.name} failed: no tool host is available.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return {
@@ -1936,7 +3110,25 @@ export class AgentLoop {
           processed,
         };
       }
-      const execution = await orchestrator.runToolCall(toolCall, parsedArguments, context, approvalPolicy, {
+      if (toolRouter.isRouterTool(toolCall.name)) {
+        const startedAtMs = this.options.clock.now().getTime();
+        await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
+        const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
+          checkApproval: options.skipApproval !== true,
+        });
+        content = execution.content;
+        processed = execution.processed;
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, execution.status, execution.content, {
+          data: execution.result?.data,
+          resultPreview: execution.result?.preview,
+          startedAtMs,
+        });
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
+          processed,
+        };
+      }
+      const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
         checkApproval: options.skipApproval !== true,
       });
       content = execution.content;
@@ -1954,6 +3146,282 @@ export class AgentLoop {
       message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
       processed,
     };
+  }
+
+  private appServerDynamicToolForCall(threadId: string, turnId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
+    const registration = this.appServerDynamicToolsByThread.get(threadId);
+    const tool = registration?.toolsByName.get(name);
+    if (!registration || !tool) return null;
+    // If a local ToolHost tool with the same model-facing name exists, the local
+    // runtime owns execution; dynamic tools are appended only for free names.
+    if (toolRouter?.hasTool(name)) return null;
+    if (tool.deferLoading && !this.revealedDeferredToolNamesForTurn(turnId).has(name)) {
+      return { status: 'not_advertised' };
+    }
+    return { status: 'available', registration, tool };
+  }
+
+  private async runAppServerDynamicToolCall(
+    toolCall: RuntimeToolCall,
+    parsedArguments: unknown,
+    context: RuntimeToolExecutionContext,
+    registration: AppServerDynamicToolRegistration,
+    tool: RuntimeDynamicToolDefinition,
+  ): Promise<{ content: string }> {
+    if (!this.options.appServerNotificationBus) throw new Error('AppServer dynamic tool runtime is unavailable.');
+    const startedAtMs = this.options.clock.now().getTime();
+    await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
+    const requestId = this.options.ids.id('dynamic_tool_call');
+    const pending = this.waitForAppServerDynamicToolResponse(requestId, context.signal, APP_SERVER_DYNAMIC_TOOL_TIMEOUT_MS);
+    this.options.appServerNotificationBus.publish({
+      method: 'item/tool/call',
+      id: requestId,
+      params: {
+        threadId: context.threadId,
+        turnId: context.turnId,
+        callId: toolCall.id,
+        namespace: tool.namespace ?? null,
+        tool: tool.toolName,
+        arguments: parsedArguments ?? {},
+      },
+    }, { connectionId: registration.connectionId });
+    const result = await pending;
+    const success = result.success !== false;
+    const content = appServerDynamicToolContent(result.contentItems, success);
+    await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, success ? 'success' : 'error', content, {
+      data: {
+        contentItems: result.contentItems,
+        namespace: tool.namespace ?? null,
+        success,
+        tool: tool.toolName,
+      },
+      resultPreview: content,
+      startedAtMs,
+    });
+    return { content };
+  }
+
+  private waitForAppServerDynamicToolResponse(requestId: string, signal: AbortSignal, timeoutMs: number): Promise<RuntimeDynamicToolCallResult> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout>;
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        signal.removeEventListener('abort', abort);
+        this.pendingAppServerDynamicToolCalls.delete(requestId);
+        fn();
+      };
+      timeout = setTimeout(() => {
+        settle(() => reject(new Error(`Dynamic tool call timed out: ${requestId}`)));
+      }, timeoutMs);
+      const abort = () => {
+        settle(() => reject(new TurnCancelledError()));
+      };
+      signal.addEventListener('abort', abort, { once: true });
+      this.pendingAppServerDynamicToolCalls.set(requestId, {
+        resolve: (result) => settle(() => resolve(result)),
+        reject: (error) => settle(() => reject(error)),
+      });
+      if (signal.aborted) abort();
+    });
+  }
+
+  private async runCollaborationToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<{ content: string }> {
+    const startedAtMs = this.options.clock.now().getTime();
+    await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
+    const execution = await this.executeCollaborationToolCall(toolCall.name, parsedArguments, context);
+    await this.publishCollaborationItem(context.threadId, context.turnId, toolCall.id, execution.collabToolCall, 'in_progress');
+    await this.publishCollaborationItem(context.threadId, context.turnId, toolCall.id, {
+      ...execution.collabToolCall,
+      agentStatus: execution.collabToolCall.agentStatus ?? 'completed',
+    }, 'completed');
+    await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', execution.preview, {
+      data: execution.data,
+      resultPreview: execution.preview,
+      startedAtMs,
+    });
+    return { content: execution.content };
+  }
+
+  private async executeCollaborationToolCall(name: string, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<{ collabToolCall: RuntimeCollabToolCall; content: string; data: Record<string, unknown>; preview: string }> {
+    const input = isPlainRecord(parsedArguments) ? parsedArguments : {};
+    if (name === 'spawn_agent') {
+      const prompt = requiredCollaborationString(input, ['prompt', 'task', 'input'], 'prompt');
+      const parent = await this.options.threadStore.getThread(context.threadId);
+      if (!parent) throw new Error(`Thread not found: ${context.threadId}`);
+      const child = await this.options.threadStore.createThread({
+        title: collaborationTitle(input, prompt),
+        projectId: parent.projectId,
+        parentThreadId: context.threadId,
+        memoryMode: parent.memoryMode,
+      });
+      const started = await this.startTurn(child.id, { input: prompt });
+      const data = {
+        tool: name,
+        senderThreadId: context.threadId,
+        newThreadId: child.id,
+        turnId: started.turnId,
+        prompt,
+        status: 'running',
+      };
+      return {
+        collabToolCall: {
+          tool: 'spawn_agent',
+          senderThreadId: context.threadId,
+          newThreadId: child.id,
+          prompt,
+          agentStatus: 'running',
+        },
+        content: JSON.stringify(data),
+        data,
+        preview: `Spawned child agent ${child.id}.`,
+      };
+    }
+
+    if (name === 'send_input' || name === 'resume_agent') {
+      const receiverThreadId = requiredCollaborationString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
+      const content = requiredCollaborationString(input, ['content', 'prompt', 'input'], 'content');
+      const resume = name === 'resume_agent';
+      const delivered = await this.deliverMailboxInput(receiverThreadId, {
+        content,
+        deliveryMode: resume ? 'trigger_turn' : 'queue_only',
+        fromAgentId: context.threadId,
+        fromThreadId: context.threadId,
+        toAgentId: receiverThreadId,
+        triggerTurn: resume,
+      });
+      const data = {
+        tool: name,
+        senderThreadId: context.threadId,
+        receiverThreadId,
+        turnId: delivered.turnId,
+        queued: delivered.queued ?? false,
+        status: delivered.turnId ? 'delivered' : 'queued',
+      };
+      return {
+        collabToolCall: {
+          tool: name,
+          senderThreadId: context.threadId,
+          receiverThreadId,
+          prompt: content,
+          agentStatus: delivered.turnId ? 'delivered' : 'queued',
+        },
+        content: JSON.stringify(data),
+        data,
+        preview: resume ? `Resumed agent ${receiverThreadId}.` : `Queued input for agent ${receiverThreadId}.`,
+      };
+    }
+
+    if (name === 'wait') {
+      const receiverThreadId = requiredCollaborationString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
+      const wait = await this.waitForCollaborationThread(receiverThreadId, context, collaborationTimeoutMs(input));
+      const thread = await this.options.threadStore.getThread(receiverThreadId);
+      const data = {
+        tool: name,
+        senderThreadId: context.threadId,
+        receiverThreadId,
+        activeTurnId: this.activeTurnId(receiverThreadId),
+        status: wait.status,
+        timedOut: wait.timedOut,
+        lastMessagePreview: thread?.lastMessagePreview ?? '',
+      };
+      return {
+        collabToolCall: {
+          tool: 'wait',
+          senderThreadId: context.threadId,
+          receiverThreadId,
+          agentStatus: wait.status,
+        },
+        content: JSON.stringify(data),
+        data,
+        preview: wait.status === 'idle' ? `Agent ${receiverThreadId} is idle.` : `Agent ${receiverThreadId} is still running.`,
+      };
+    }
+
+    if (name === 'close_agent') {
+      const receiverThreadId = requiredCollaborationString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
+      const reason = collaborationOptionalString(input, ['reason']);
+      const active = this.turnTasks.activeForThread(receiverThreadId);
+      const cancelled = active ? this.cancelTurn(receiverThreadId, active.turnId) : false;
+      const data = {
+        tool: name,
+        senderThreadId: context.threadId,
+        receiverThreadId,
+        cancelled,
+        reason: reason || undefined,
+        status: cancelled ? 'cancelled' : 'closed',
+      };
+      return {
+        collabToolCall: {
+          tool: 'close_agent',
+          senderThreadId: context.threadId,
+          receiverThreadId,
+          agentStatus: cancelled ? 'cancelled' : 'closed',
+        },
+        content: JSON.stringify(data),
+        data,
+        preview: cancelled ? `Cancelled agent ${receiverThreadId}.` : `Closed agent ${receiverThreadId}.`,
+      };
+    }
+
+    throw new Error(`Unknown collaboration tool: ${name}`);
+  }
+
+  private async waitForCollaborationThread(threadId: string, context: RuntimeToolExecutionContext, timeoutMs: number): Promise<{ status: 'idle' | 'running' | 'failed'; timedOut: boolean }> {
+    const active = this.turnTasks.activeForThread(threadId);
+    if (!active) {
+      const thread = await this.options.threadStore.getThread(threadId);
+      if (!thread) throw new Error(`Thread not found: ${threadId}`);
+      return { status: 'idle', timedOut: false };
+    }
+    if (active.threadId === context.threadId && active.turnId === context.turnId) {
+      return { status: 'running', timedOut: false };
+    }
+    const wait = await waitForTurnTask(active.done, context.signal, timeoutMs);
+    if (wait === 'failed') return { status: 'failed', timedOut: false };
+    if (wait === 'timeout') return { status: 'running', timedOut: true };
+    const stillActive = this.turnTasks.activeForThread(threadId);
+    return { status: stillActive ? 'running' : 'idle', timedOut: false };
+  }
+
+  private async publishCollaborationItem(threadId: string, turnId: string, itemId: string, collabToolCall: RuntimeCollabToolCall, status: NonNullable<RuntimeStreamItem['status']>): Promise<void> {
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: status === 'completed' || status === 'failed' || status === 'cancelled' ? 'item.completed' : 'item.started',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: {
+        item: {
+          id: itemId,
+          kind: 'collab_tool_call',
+          status,
+          collabToolCall,
+        },
+      },
+    });
+  }
+
+  private revealedDeferredToolNamesForTurn(turnId: string): Set<string> {
+    let names = this.revealedDeferredToolNamesByTurn.get(turnId);
+    if (!names) {
+      names = new Set<string>();
+      this.revealedDeferredToolNamesByTurn.set(turnId, names);
+    }
+    return names;
+  }
+
+  private revealDeferredToolsForTurn(turnId: string, names: string[]): void {
+    const revealed = this.revealedDeferredToolNamesForTurn(turnId);
+    for (const name of names) {
+      if (name) revealed.add(name);
+    }
+  }
+
+  private clearDeferredToolRevealsForTurn(turnId: string): void {
+    this.revealedDeferredToolNamesByTurn.delete(turnId);
   }
 
   /**
@@ -2061,11 +3529,11 @@ export class AgentLoop {
    * @param call 本次模型输出的工具调用增量。
    * @param partialToolCalls 已合并的部分工具调用缓存。
    * @param threadId 目标线程 ID。
-   * @param toolContext 当前工具执行上下文。
+   * @param toolRouter 当前 sampling step 的工具路由器。
    * @param turnId 当前 turn ID。
    */
-  private async publishToolCallDeltaPreview({ announcedToolPreviews, call, partialToolCalls, threadId, toolContext, turnId }: { announcedToolPreviews: Map<string, string>; call: RuntimeToolCallDeltaLike; partialToolCalls: Map<string, RuntimeToolCall>; threadId: string; toolContext: RuntimeToolExecutionContext; turnId: string }): Promise<void> {
-    if (!this.options.toolHost) return;
+  private async publishToolCallDeltaPreview({ announcedToolPreviews, call, partialToolCalls, threadId, toolRouter, turnId }: { announcedToolPreviews: Map<string, string>; call: RuntimeToolCallDeltaLike; partialToolCalls: Map<string, RuntimeToolCall>; threadId: string; toolRouter: RuntimeToolRouter | null; turnId: string }): Promise<void> {
+    if (!toolRouter) return;
     const id = call.id || `tool_call_${partialToolCalls.size}`;
     const current = partialToolCalls.get(id) ?? { id, name: '', arguments: '' };
     // 部分模型会分片输出 arguments；这里尽量合并成可预览的渐进工具调用。
@@ -2076,8 +3544,9 @@ export class AgentLoop {
     };
     partialToolCalls.set(id, next);
     if (!next.name) return;
+    if (!toolRouter.isRouterTool(next.name) && !toolRouter.hasTool(next.name)) return;
 
-    const preview = await this.options.toolHost.previewPartialToolCall?.(next.name, next.arguments, toolContext).catch(() => null);
+    const preview = await toolRouter.previewPartialToolCall(next.name, next.arguments);
     const argumentsPreview = preview?.argumentsPreview ?? previewPartialArguments(next.arguments);
     const resultPreview = preview?.resultPreview;
     const signature = JSON.stringify({ name: next.name, argumentsPreview, resultPreview });
@@ -2186,6 +3655,21 @@ export class AgentLoop {
         durationMs: metadata.startedAtMs === undefined ? undefined : Math.max(0, completedAt.getTime() - metadata.startedAtMs),
       },
     });
+    await this.publishTurnDiffFromToolPreview(threadId, turnId, toolCall.name, status, metadata.resultPreview);
+  }
+
+  private async publishTurnDiffFromToolPreview(threadId: string, turnId: string, toolName: string, status: 'success' | 'error' | 'rejected', resultPreview?: string): Promise<void> {
+    if (status !== 'success' || !FILE_MUTATION_TOOL_NAMES.has(toolName)) return;
+    const unifiedDiff = unifiedDiffFromToolPreview(resultPreview);
+    if (!unifiedDiff) return;
+    await this.appendAndPublish(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'turn.diff',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { unifiedDiff },
+    });
   }
 
   private toolOrchestratorFor(context: RuntimeToolExecutionContext, runtimeConfig: RuntimeConfigState | null | undefined): ToolOrchestrator | null {
@@ -2248,6 +3732,157 @@ function parseToolArguments(value: string): unknown {
     return JSON.parse(value) as unknown;
   } catch {
     return value;
+  }
+}
+
+function appServerRpcId(id: string | number | null | undefined): string {
+  if (typeof id === 'string') return id.trim();
+  if (typeof id === 'number' && Number.isFinite(id)) return String(id);
+  return '';
+}
+
+function appServerDynamicToolErrorMessage(error: unknown): string {
+  const input = isPlainRecord(error) ? error : {};
+  const message = typeof input.message === 'string' && input.message.trim() ? input.message.trim() : 'Dynamic tool call failed.';
+  const code = typeof input.code === 'number' && Number.isFinite(input.code) ? ` (${input.code})` : '';
+  return `${message}${code}`;
+}
+
+function appServerDynamicToolResult(value: unknown): RuntimeDynamicToolCallResult {
+  const input = isPlainRecord(value) ? value : {};
+  const contentItemsInput = Array.isArray(input.contentItems)
+    ? input.contentItems
+    : typeof input.content === 'string'
+      ? [{ type: 'inputText', text: input.content }]
+      : [];
+  if (!contentItemsInput.length) throw new Error('Dynamic tool response must include contentItems.');
+  const contentItems = contentItemsInput.map((item, index) => appServerDynamicToolContentItem(item, index));
+  return {
+    contentItems,
+    ...(typeof input.success === 'boolean' ? { success: input.success } : {}),
+  };
+}
+
+function appServerDynamicToolContentItem(value: unknown, index: number): RuntimeDynamicToolContentItem {
+  const input = isPlainRecord(value) ? value : {};
+  if (input.type === 'inputText' && typeof input.text === 'string') {
+    return { type: 'inputText', text: input.text };
+  }
+  if (input.type === 'inputImage' && typeof input.imageUrl === 'string' && input.imageUrl.startsWith('data:image/')) {
+    return { type: 'inputImage', imageUrl: input.imageUrl };
+  }
+  throw new Error(`Invalid dynamic tool contentItems[${index}].`);
+}
+
+function appServerDynamicToolContent(contentItems: RuntimeDynamicToolContentItem[], success: boolean): string {
+  const text = contentItems
+    .map((item) => item.type === 'inputText' ? item.text : `[inputImage:${item.imageUrl.slice(0, 80)}]`)
+    .join('\n')
+    .trim();
+  const content = text || JSON.stringify({ contentItems });
+  return success ? content : `Dynamic tool reported failure:\n${content}`;
+}
+
+function modelFacingTools(
+  tools: RuntimeToolDefinition[] | undefined,
+  config: RuntimeConfigState | null | undefined,
+  dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
+  revealedDeferredToolNames: ReadonlySet<string>,
+): RuntimeToolDefinition[] | undefined {
+  const names = new Set((tools ?? []).map((tool) => tool.name));
+  const merged = [...(tools ?? [])];
+  if (collaborationToolsEnabled(config)) {
+    for (const tool of COLLABORATION_TOOL_DEFINITIONS) {
+      if (!names.has(tool.name)) {
+        names.add(tool.name);
+        merged.push(tool);
+      }
+    }
+  }
+  for (const tool of dynamicTools ?? []) {
+    if ((tool.deferLoading && !revealedDeferredToolNames.has(tool.name)) || names.has(tool.name)) continue;
+    names.add(tool.name);
+    merged.push(tool);
+  }
+  return merged.length ? merged : undefined;
+}
+
+async function samplingToolRuntimes(
+  tools: RuntimeToolDefinition[],
+  toolRouter: RuntimeToolRouter | null,
+  dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
+  config: RuntimeConfigState | null | undefined,
+): Promise<RuntimeModelRequestStepSnapshot['toolRuntimes']> {
+  if (!tools.length) return [];
+  const routerRuntimes = new Map((await toolRouter?.toolRuntimeMetadata() ?? []).map((runtime) => [runtime.name, runtime]));
+  const dynamicToolNames = new Set((dynamicTools ?? []).map((tool) => tool.name));
+  const collaborationEnabled = collaborationToolsEnabled(config);
+  return tools.map((tool) => {
+    const routerRuntime = routerRuntimes.get(tool.name);
+    if (routerRuntime) return { ...routerRuntime };
+    return {
+      name: tool.name,
+      source: collaborationEnabled && isCollaborationToolName(tool.name)
+        ? 'collaboration'
+        : dynamicToolNames.has(tool.name) ? 'dynamic' : 'host',
+      exposure: 'direct',
+      supportsParallel: false,
+      waitsForRuntimeCancellation: true,
+    };
+  });
+}
+
+function collaborationToolsEnabled(config: RuntimeConfigState | null | undefined): boolean {
+  return config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
+}
+
+function isCollaborationToolName(name: string): boolean {
+  return COLLABORATION_TOOL_NAMES.has(name);
+}
+
+function requiredCollaborationString(record: Record<string, unknown>, keys: string[], label: string): string {
+  const value = collaborationOptionalString(record, keys);
+  if (!value) throw new Error(`${label} is required`);
+  return value;
+}
+
+function collaborationOptionalString(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function collaborationTitle(record: Record<string, unknown>, prompt: string): string {
+  const title = collaborationOptionalString(record, ['title', 'name']);
+  if (title) return title;
+  const compact = prompt.replace(/\s+/g, ' ').trim().slice(0, 80);
+  return compact ? `Subagent: ${compact}` : 'Subagent';
+}
+
+function collaborationTimeoutMs(record: Record<string, unknown>): number {
+  const value = record.timeout_ms ?? record.timeoutMs;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 30_000;
+  return Math.max(0, Math.min(30_000, Math.floor(value)));
+}
+
+async function waitForTurnTask(done: Promise<unknown> | undefined, signal: AbortSignal, timeoutMs: number): Promise<'done' | 'failed' | 'timeout'> {
+  if (!done) return 'done';
+  if (signal.aborted) throw signal.reason ?? new TurnCancelledError();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      done.then(() => 'done' as const, () => 'failed' as const),
+      new Promise<'timeout'>((resolve) => {
+        timeout = setTimeout(() => resolve('timeout'), timeoutMs);
+      }),
+      new Promise<never>((_, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason ?? new TurnCancelledError()), { once: true });
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 
@@ -2372,6 +4007,112 @@ function createAssistantOutputAccumulator(publishVisibleDelta: (delta: string) =
   };
 }
 
+function createLegacyModelStreamMirrorState(): LegacyModelStreamMirrorState {
+  return {
+    agentItemStarted: false,
+    agentText: '',
+    reasoningItemStarted: false,
+    reasoningText: '',
+    toolCalls: new Map(),
+    completedToolCallIds: new Set(),
+    tokenCountPublished: false,
+  };
+}
+
+function createAssistantItemStreamBridge(output: AssistantOutputAccumulator, options: { renderPlanDeltas?: boolean } = {}): {
+  appendAgent(delta: string): Promise<void>;
+  appendReasoning(delta: string): Promise<void>;
+  consume(event: ModelStreamEvent): Promise<void>;
+  finish(): Promise<void>;
+} {
+  const items = new Map<string, RuntimeStreamItem>();
+  const emittedTextItemIds = new Set<string>();
+  let reasoningOpen = false;
+
+  const appendReasoning = async (delta: string) => {
+    if (!delta) return;
+    await output.append(`${reasoningOpen ? '' : '<think>'}${delta}`);
+    reasoningOpen = true;
+  };
+
+  const appendAgent = async (delta: string) => {
+    if (!delta) return;
+    if (reasoningOpen) {
+      await output.append('</think>');
+      reasoningOpen = false;
+    }
+    await output.append(delta);
+  };
+
+  const appendItemText = async (item: RuntimeStreamItem, text: string) => {
+    if (item.kind === 'agent_message') {
+      emittedTextItemIds.add(item.id);
+      await appendAgent(text);
+      return;
+    }
+    if (item.kind === 'reasoning') {
+      emittedTextItemIds.add(item.id);
+      await appendReasoning(text);
+    }
+  };
+
+  return {
+    appendAgent,
+    appendReasoning,
+    async consume(event) {
+      if (event.type === 'item_started') {
+        items.set(event.item.id, event.item);
+        return;
+      }
+      if (event.type === 'item_delta') {
+        const item = items.get(event.itemId);
+        if (item) await appendItemText(item, event.delta);
+        return;
+      }
+      if (event.type === 'item_completed') {
+        items.set(event.item.id, event.item);
+        if (event.item.content && !emittedTextItemIds.has(event.item.id)) await appendItemText(event.item, event.item.content);
+        return;
+      }
+      if (event.type === 'reasoning_summary_delta' || event.type === 'reasoning_raw_delta') {
+        if (event.itemId) emittedTextItemIds.add(event.itemId);
+        await appendReasoning(event.text);
+        return;
+      }
+      if (event.type === 'plan_delta' && options.renderPlanDeltas) {
+        await appendAgent(event.text);
+      }
+    },
+    async finish() {
+      if (reasoningOpen) {
+        await output.append('</think>');
+        reasoningOpen = false;
+      }
+    },
+  };
+}
+
+function toolCallFromModelStreamItem(event: ModelStreamEvent): RuntimeToolCall | null {
+  if (event.type !== 'item_started' && event.type !== 'item_completed') return null;
+  const { item } = event;
+  if (item.kind !== 'tool_call') return null;
+  const toolCall = item.toolCall;
+  if (!toolCall?.id || !toolCall.name) return null;
+  return toolCall;
+}
+
+function upsertRuntimeToolCall(toolCalls: RuntimeToolCall[], next: RuntimeToolCall): RuntimeToolCall[] {
+  const index = toolCalls.findIndex((toolCall) => toolCall.id === next.id);
+  if (index < 0) return [...toolCalls, { ...next }];
+  const copy = [...toolCalls];
+  copy[index] = {
+    ...copy[index],
+    ...next,
+    arguments: next.arguments || copy[index]?.arguments || '',
+  };
+  return copy;
+}
+
 function markToolBudgetProcessed(budget: ToolBudget, toolCall: RuntimeToolCall): void {
   reserveToolBudgetForCall(budget, toolCall);
 }
@@ -2416,8 +4157,75 @@ function compactHookTrigger(force: boolean): RuntimeCompactHookTrigger {
   return force ? 'manual' : 'auto';
 }
 
-function activeTurnKey(threadId: string, turnId: string): string {
-  return `${threadId}:${turnId}`;
+function contextCompactionBudgetForConfig(config: RuntimeConfigState | null | undefined): RuntimeContextCompactionBudget | undefined {
+  if (!config) return undefined;
+  const activeProvider = config.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
+    ?? config.providers.find((provider) => provider.enabled)
+    ?? config.providers[0];
+  const activeModel = activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0];
+  const maxContextTokens = positiveRuntimeInt(
+    activeModel?.contextWindowTokens ??
+    config.desktopSettings?.modelContextWindow ??
+    config.desktopSettings?.model_context_window,
+  );
+  const autoCompactTokenLimit = positiveRuntimeInt(
+    config.desktopSettings?.modelAutoCompactTokenLimit ??
+    config.desktopSettings?.model_auto_compact_token_limit,
+  );
+  if (maxContextTokens === undefined && autoCompactTokenLimit === undefined) return undefined;
+  return {
+    ...(maxContextTokens !== undefined ? { maxContextTokens } : {}),
+    ...(autoCompactTokenLimit !== undefined ? { autoCompactTokenLimit } : {}),
+  };
+}
+
+function positiveRuntimeInt(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+}
+
+function samplingContextWindowForMessages(
+  messages: RuntimeMessage[],
+  budget?: RuntimeContextCompactionBudget,
+): RuntimeModelRequestStepSnapshot['contextWindow'] {
+  const usage = runtimeContextTokenUsageForMessages(messages, budget);
+  const compactionSummaryMessageIds = messages
+    .filter((message) => message.contextCompaction)
+    .map((message) => message.id);
+  return {
+    autoCompactTokenLimit: usage.autoCompactTokenLimit,
+    ...(compactionSummaryMessageIds.length ? { compactionHash: contextCompactionHash(messages) } : {}),
+    compactionSummaryMessageIds,
+    estimatedTokens: usage.usedTokens,
+    maxContextTokens: usage.maxContextTokens,
+    maxContextTokensK: usage.maxContextTokensK,
+    messageCount: messages.length,
+    tokensUntilCompaction: usage.tokensUntilCompaction,
+  };
+}
+
+function samplingInputMessageIds(messages: RuntimeMessage[], turnId: string): string[] {
+  return messages
+    .filter((message) => message.turnId === turnId && (message.role === 'user' || message.id.startsWith('mailbox_')))
+    .map((message) => message.id);
+}
+
+function contextCompactionHash(messages: RuntimeMessage[]): string {
+  const summaries = messages
+    .filter((message) => message.contextCompaction)
+    .map((message) => ({
+      content: stripContextCompactionTags(message.content),
+      id: message.id,
+      notice: message.contextCompaction,
+    }));
+  return `sha256:${createHash('sha256').update(JSON.stringify(summaries)).digest('hex')}`;
+}
+
+function threadHasAssistantForTurn(thread: RuntimeThread, turnId: string): boolean {
+  return thread.messages.some((message) => message.turnId === turnId && message.role === 'assistant');
+}
+
+function turnTaskCanReceiveMailbox(task: RuntimeTurnTask): boolean {
+  return task.taskKind === 'regular' && task.acceptingSteers && !task.controller.signal.aborted;
 }
 
 function isSuccessfulRememberMemoryMessage(message: RuntimeMessage): boolean {
@@ -2609,6 +4417,10 @@ function neutralizePersonalizationTags(value: string): string {
   return value.replaceAll('</memory', '<\\/memory').replaceAll('</skill', '<\\/skill');
 }
 
+function neutralizeMailboxTags(value: string): string {
+  return value.replaceAll('</mailbox_message', '<\\/mailbox_message');
+}
+
 function previewArguments(value: unknown): string {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   return (text ?? '').slice(0, 1200);
@@ -2625,6 +4437,47 @@ function previewPartialArguments(value: string): string {
  */
 function previewToolContent(value: string): string {
   return value.length > 60_000 ? `${value.slice(0, 60_000)}\n[truncated ${value.length - 60_000} chars]` : value;
+}
+
+function unifiedDiffFromToolPreview(value: string | undefined): string {
+  if (!value) return '';
+  const parsed = parseJsonObjectFromText(value);
+  if (!parsed) return '';
+  const diff = isPlainRecord(parsed.diff) ? parsed.diff : parsed;
+  const diffs = Array.isArray(diff.diffs) ? diff.diffs : [diff];
+  return diffs
+    .map(unifiedDiffFromToolDiff)
+    .filter(Boolean)
+    .join('\n');
+}
+
+function unifiedDiffFromToolDiff(value: unknown): string {
+  if (!isPlainRecord(value)) return '';
+  const filePath = typeof value.path === 'string' ? value.path.trim() : '';
+  if (!filePath) return '';
+  const diffText = diffTextFromToolPreviewLines(value.lines);
+  if (!diffText) return '';
+  const action = typeof value.action === 'string' ? value.action.toLowerCase() : '';
+  const isCreate = action.includes('create') || action.includes('add');
+  const isDelete = action.includes('delete') || action.includes('remove');
+  const oldPath = isCreate ? '/dev/null' : `a/${filePath}`;
+  const newPath = isDelete ? '/dev/null' : `b/${filePath}`;
+  return [`diff --git a/${filePath} b/${filePath}`, `--- ${oldPath}`, `+++ ${newPath}`, diffText].join('\n');
+}
+
+function diffTextFromToolPreviewLines(value: unknown): string {
+  if (!Array.isArray(value)) return '';
+  return value
+    .map((line) => {
+      if (!isPlainRecord(line)) return '';
+      const content = typeof line.content === 'string' ? line.content : '';
+      if (line.type === 'add' || line.type === 'added') return `+${content}`;
+      if (line.type === 'del' || line.type === 'delete' || line.type === 'removed') return `-${content}`;
+      if (line.type === 'gap') return '...';
+      return ` ${content}`;
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 /**
@@ -2680,7 +4533,8 @@ function isPassiveMemoryExcludedMessage(message: RuntimeMessage): boolean {
 
 function isMemoryExcludedContextualUserFragment(text: string): boolean {
   return matchesMarkedFragment(text, '# AGENTS.md instructions', '</INSTRUCTIONS>')
-    || matchesMarkedFragment(text, '<skill>', '</skill>');
+    || matchesMarkedFragment(text, '<skill>', '</skill>')
+    || matchesMarkedFragment(text, '<turn_aborted>', '</turn_aborted>');
 }
 
 function matchesMarkedFragment(text: string, startMarker: string, endMarker: string): boolean {
@@ -2945,6 +4799,29 @@ function compactForPrompt(value: string, maxChars: number): string {
   const head = Math.floor(maxChars * 0.6);
   const tail = Math.max(0, maxChars - head - 48);
   return `${normalized.slice(0, head)}\n...[omitted ${normalized.length - head - tail} chars]...\n${normalized.slice(-tail)}`;
+}
+
+function noToolStepSnapshot(snapshot: RuntimeModelRequestStepSnapshot): RuntimeModelRequestStepSnapshot {
+  return {
+    ...snapshot,
+    toolNames: [],
+    advertisedToolNames: [],
+    routerToolNames: [],
+    toolRuntimes: [],
+    toolChoice: 'none',
+  };
+}
+
+function planDecisionForTurnInput(input: SendTurnInput): RuntimePlanDecision {
+  if (input.planDecision) return input.planDecision;
+  return input.collaborationMode === 'plan' ? 'dismissed' : 'accepted';
+}
+
+function awaitingPlanConfirmationNotice(): NonNullable<RuntimeMessage['planMode']> {
+  return {
+    mode: 'plan',
+    status: 'awaiting_confirmation',
+  };
 }
 
 /**

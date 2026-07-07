@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import * as pty from 'node-pty';
 import type { IDisposable, IPty } from 'node-pty';
@@ -34,10 +35,28 @@ type AppServerCommandExecParams = {
   permissionProfile?: unknown;
 };
 
+export type AppServerCommandSandboxInput = {
+  permissionProfile?: unknown;
+  sandboxPolicy?: unknown;
+};
+
+export type AppServerCommandSandboxCapability = {
+  supported: boolean;
+  provider: 'macos-seatbelt' | 'none';
+  reason: string;
+};
+
+type AppServerCommandSpawnSpec = {
+  args: string[];
+  command: string;
+  sandboxed: boolean;
+};
+
 type AppServerProcessSpawnParams = {
   command: string[];
   processHandle: string;
   cwd: string;
+  threadId?: string;
   tty: boolean;
   streamStdin: boolean;
   streamStdoutStderr: boolean;
@@ -56,6 +75,9 @@ export type AppServerCommandExecManager = {
   processWriteStdin(params: unknown, connectionId?: string): Promise<Record<string, never>>;
   processKill(params: unknown, connectionId?: string): Promise<Record<string, never>>;
   processResizePty(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  backgroundTerminalsClean(params: unknown, connectionId?: string): Promise<Record<string, never>>;
+  backgroundTerminalsList(params: unknown, connectionId?: string): Promise<{ data: AppServerBackgroundTerminalInfo[] }>;
+  backgroundTerminalsTerminate(params: unknown, connectionId?: string): Promise<{ terminated: boolean }>;
   terminateConnection(connectionId: string): void;
   terminateAll(): void;
 };
@@ -74,14 +96,26 @@ type AppServerCommandExecSession = {
 
 type AppServerProcessSession = {
   child?: ChildProcessWithoutNullStreams;
+  command: string[];
   connectionId: string;
+  cwd: string;
   dataDisposable?: IDisposable;
   exitDisposable?: IDisposable;
   ptyProcess?: IPty;
   processHandle: string;
   streamStdin: boolean;
   stdinClosed: boolean;
+  threadId?: string;
   timedOut: boolean;
+  tty: boolean;
+};
+
+type AppServerBackgroundTerminalInfo = {
+  command: string[];
+  cwd: string;
+  processHandle: string;
+  threadId: string;
+  tty: boolean;
 };
 
 type AppServerCommandExecOutputBuffer = {
@@ -211,6 +245,42 @@ export function createAppServerCommandExecManager(notificationBus: AppServerNoti
       session.ptyProcess.resize(size.cols, size.rows);
       return {};
     },
+    backgroundTerminalsClean: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
+      const threadId = backgroundTerminalThreadId(params);
+      for (const [key, session] of processSessions.entries()) {
+        if (session.connectionId !== normalizedConnectionId || session.threadId !== threadId) continue;
+        processSessions.delete(key);
+        terminateAppServerProcessSession(session);
+      }
+      return {};
+    },
+    backgroundTerminalsList: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
+      const threadId = backgroundTerminalThreadId(params);
+      const data = [...processSessions.values()]
+        .filter((session) => session.connectionId === normalizedConnectionId && session.threadId === threadId)
+        .map((session) => ({
+          command: [...session.command],
+          cwd: session.cwd,
+          processHandle: session.processHandle,
+          threadId,
+          tty: session.tty,
+        }));
+      return { data };
+    },
+    backgroundTerminalsTerminate: async (params, connectionId) => {
+      const normalizedConnectionId = appServerConnectionId(connectionId);
+      const input = recordInput(params);
+      const threadId = backgroundTerminalThreadId(input);
+      const processHandle = requiredString(input.processHandle ?? input.process_handle ?? input.processId ?? input.process_id ?? input.id, 'processHandle');
+      const key = appServerSessionKey(normalizedConnectionId, processHandle);
+      const session = processSessions.get(key);
+      if (!session || session.threadId !== threadId) return { terminated: false };
+      processSessions.delete(key);
+      terminateAppServerProcessSession(session);
+      return { terminated: true };
+    },
     terminateConnection: (connectionId) => {
       const normalizedConnectionId = appServerConnectionId(connectionId);
       for (const [key, session] of sessions.entries()) {
@@ -270,6 +340,7 @@ async function execAppServerCommand(
   const stderr = createAppServerOutputBuffer(effectiveParams);
   const env = appServerCommandExecEnv(params.env);
   const cwd = path.resolve(process.cwd(), params.cwd ?? '.');
+  const spawnSpec = appServerCommandSpawnSpec(program, args, effectiveParams, cwd);
 
   return await new Promise<AppServerCommandExecResponse>((resolve, reject) => {
     let finished = false;
@@ -291,7 +362,7 @@ async function execAppServerCommand(
       const terminalSize = appServerTerminalSize(params.size, 'command/exec');
       let ptyProcess: IPty;
       try {
-        ptyProcess = pty.spawn(program, args, {
+        ptyProcess = pty.spawn(spawnSpec.command, spawnSpec.args, {
           cols: terminalSize.cols,
           cwd,
           encoding: 'utf8',
@@ -345,7 +416,7 @@ async function execAppServerCommand(
 
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(program, args, {
+      child = spawn(spawnSpec.command, spawnSpec.args, {
         cwd,
         env,
         windowsHide: true,
@@ -448,12 +519,16 @@ async function spawnAppServerProcess(
     }
 
     const session: AppServerProcessSession = {
+      command: [...params.command],
       connectionId,
+      cwd: params.cwd,
       ptyProcess,
       processHandle: params.processHandle,
       streamStdin: true,
       stdinClosed: false,
+      threadId: params.threadId,
       timedOut: false,
+      tty: true,
     };
     sessions.set(appServerSessionKey(connectionId, params.processHandle), session);
 
@@ -512,11 +587,15 @@ async function spawnAppServerProcess(
 
   const session: AppServerProcessSession = {
     child,
+    command: [...params.command],
     connectionId,
+    cwd: params.cwd,
     processHandle: params.processHandle,
     streamStdin: effectiveParams.streamStdin,
     stdinClosed: false,
+    threadId: params.threadId,
     timedOut: false,
+    tty: false,
   };
   sessions.set(appServerSessionKey(connectionId, params.processHandle), session);
   if (!session.streamStdin) child.stdin.end();
@@ -599,6 +678,83 @@ function appServerCommandExecParams(rawParams: unknown): AppServerCommandExecPar
   };
 }
 
+function appServerCommandSpawnSpec(program: string, args: string[], params: AppServerCommandSandboxInput, cwd: string, capability = appServerCommandSandboxCapability()): AppServerCommandSpawnSpec {
+  const profile = appServerCommandSandboxProfile(params, cwd, capability);
+  if (!profile) return { command: program, args, sandboxed: false };
+  return {
+    command: '/usr/bin/sandbox-exec',
+    args: ['-p', profile, program, ...args],
+    sandboxed: true,
+  };
+}
+
+export function appServerCommandSandboxProfile(params: AppServerCommandSandboxInput, cwd: string, capability = appServerCommandSandboxCapability()): string {
+  const policy = appServerCommandSandboxRuntimePolicy(params, cwd);
+  if (policy.type === 'dangerFullAccess' || policy.type === 'externalSandbox') return '';
+  if (!capability.supported || capability.provider !== 'macos-seatbelt') {
+    throw new AppServerRpcError(-32603, `OS sandbox is unavailable for command/exec: ${capability.reason || 'unsupported platform'}`);
+  }
+
+  const lines = ['(version 1)', '(allow default)'];
+  if (!policy.networkAccess) lines.push('(deny network*)');
+  if (policy.type === 'readOnly') {
+    lines.push('(deny file-write*)');
+    return lines.join('\n');
+  }
+
+  const writableRoots = [...new Set(policy.writableRoots.map((root) => path.resolve(cwd, root)))];
+  lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
+  return lines.join('\n');
+}
+
+function appServerCommandSandboxRuntimePolicy(params: AppServerCommandSandboxInput, cwd: string): { type: 'dangerFullAccess' } | { type: 'externalSandbox' } | { type: 'readOnly'; networkAccess: boolean } | { type: 'workspaceWrite'; networkAccess: boolean; writableRoots: string[] } {
+  if (params.permissionProfile !== undefined && params.permissionProfile !== null) {
+    const profile = requiredRawString(params.permissionProfile, 'permissionProfile');
+    if (profile === 'danger-full-access' || profile === ':danger-full-access') return { type: 'dangerFullAccess' };
+    if (profile === 'read-only' || profile === ':read-only') return { type: 'readOnly', networkAccess: false };
+    if (profile === 'workspace-write' || profile === ':workspace') return { type: 'workspaceWrite', networkAccess: false, writableRoots: [cwd] };
+    throw new AppServerRpcError(-32602, 'permissionProfile must be :danger-full-access, :read-only, :workspace, danger-full-access, read-only, or workspace-write');
+  }
+
+  if (params.sandboxPolicy === undefined || params.sandboxPolicy === null) return { type: 'dangerFullAccess' };
+  const policy = recordInput(params.sandboxPolicy);
+  const type = requiredRawString(policy.type, 'sandboxPolicy.type');
+  if (type === 'dangerFullAccess') return { type: 'dangerFullAccess' };
+  if (type === 'externalSandbox') return { type: 'externalSandbox' };
+  if (type === 'readOnly') return { type: 'readOnly', networkAccess: policy.networkAccess === true };
+  if (type === 'workspaceWrite') {
+    const writableRoots = Array.isArray(policy.writableRoots)
+      ? policy.writableRoots.map((root, index) => {
+          if (typeof root !== 'string' || !root.trim()) throw new AppServerRpcError(-32602, `sandboxPolicy.writableRoots[${index}] must be a non-empty string`);
+          return root;
+        })
+      : [cwd];
+    return { type: 'workspaceWrite', networkAccess: policy.networkAccess === true, writableRoots };
+  }
+  throw new AppServerRpcError(-32602, 'sandboxPolicy.type must be dangerFullAccess, externalSandbox, readOnly, or workspaceWrite');
+}
+
+function appServerCommandSandboxCapability(): AppServerCommandSandboxCapability {
+  if (process.platform !== 'darwin') {
+    return { supported: false, provider: 'none', reason: `unsupported platform: ${process.platform}` };
+  }
+  if (!existsSync('/usr/bin/sandbox-exec')) {
+    return { supported: false, provider: 'macos-seatbelt', reason: '/usr/bin/sandbox-exec is not available' };
+  }
+  return { supported: true, provider: 'macos-seatbelt', reason: '' };
+}
+
+function seatbeltDenyWritesOutsideRoots(roots: string[]): string {
+  const filters = roots.map((root) => `(require-not (subpath ${seatbeltString(path.resolve(root))}))`);
+  if (!filters.length) return '(deny file-write*)';
+  if (filters.length === 1) return `(deny file-write* ${filters[0]})`;
+  return `(deny file-write* (require-all ${filters.join(' ')}))`;
+}
+
+function seatbeltString(value: string): string {
+  return JSON.stringify(value);
+}
+
 function appServerProcessSpawnParams(rawParams: unknown): AppServerProcessSpawnParams {
   const input = recordInput(rawParams);
   const command = requiredArray(input.command, 'command').map((value, index) => {
@@ -609,6 +765,7 @@ function appServerProcessSpawnParams(rawParams: unknown): AppServerProcessSpawnP
     command,
     processHandle: requiredRawString(input.processHandle ?? input.process_handle, 'processHandle'),
     cwd: requiredRawString(input.cwd, 'cwd'),
+    threadId: optionalRawString(input.threadId ?? input.thread_id, 'threadId'),
     tty: input.tty === true,
     streamStdin: input.streamStdin === true || input.stream_stdin === true,
     streamStdoutStderr: input.streamStdoutStderr === true || input.stream_stdout_stderr === true,
@@ -617,6 +774,11 @@ function appServerProcessSpawnParams(rawParams: unknown): AppServerProcessSpawnP
     env: optionalAppServerCommandEnv(input.env),
     size: input.size,
   };
+}
+
+function backgroundTerminalThreadId(rawParams: unknown): string {
+  const input = recordInput(rawParams);
+  return requiredString(input.threadId ?? input.thread_id, 'threadId');
 }
 
 function createAppServerOutputBuffer(params: AppServerCommandExecParams): AppServerCommandExecOutputBuffer {

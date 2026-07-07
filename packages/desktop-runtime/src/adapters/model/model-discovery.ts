@@ -143,8 +143,27 @@ function availableModelCapabilities(object: Record<string, unknown>): Partial<Ru
     booleanValue(object.supportsImages ?? object.supports_images ?? object.vision ?? object.supportsVision ?? object.supports_vision) ??
     booleanValue(capabilities.images ?? capabilities.image ?? capabilities.vision) ??
     modalityListIncludesImage(object.modalities ?? object.inputModalities ?? object.input_modalities ?? capabilities.modalities ?? capabilities.inputModalities ?? capabilities.input_modalities);
+  const contextWindowTokens = numberValue(
+    object.contextWindowTokens ??
+    object.context_window_tokens ??
+    object.contextWindow ??
+    object.context_window ??
+    object.contextLength ??
+    object.context_length ??
+    object.maxContextTokens ??
+    object.max_context_tokens ??
+    object.inputTokenLimit ??
+    object.input_token_limit ??
+    capabilities.contextWindowTokens ??
+    capabilities.context_window_tokens ??
+    capabilities.contextWindow ??
+    capabilities.context_window ??
+    capabilities.maxContextTokens ??
+    capabilities.max_context_tokens,
+  );
   const maxOutputTokens = numberValue(object.maxOutputTokens ?? object.max_output_tokens ?? object.outputTokenLimit ?? object.output_token_limit ?? capabilities.maxOutputTokens ?? capabilities.max_output_tokens);
   return {
+    ...(contextWindowTokens ? { contextWindowTokens } : {}),
     ...(maxOutputTokens ? { maxOutputTokens } : {}),
     ...(thinkingEnabled !== undefined ? { thinkingEnabled } : {}),
     ...(thinkingEfforts.length ? { thinkingEfforts } : {}),

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { ThreadQuery } from '@setsuna-desktop/contracts';
+import type { RuntimeCollaborationMode, RuntimePlanDecision, ThreadQuery } from '@setsuna-desktop/contracts';
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
 import {
   callMcpServerToolResponse,
@@ -8,6 +8,8 @@ import {
   readMcpServerResource,
 } from '../../adapters/mcp/mcp-tool-discovery.js';
 import type { AppServerCommandExecManager } from './command-exec.js';
+import type { AppServerConnectionRegistry } from './connections.js';
+import { appServerDynamicToolsInput } from './dynamic-tools.js';
 import { AppServerRpcError } from './errors.js';
 import {
   appServerFsCopy,
@@ -78,8 +80,10 @@ export async function dispatchAppServerRpcRequest(
   commandExecManager: AppServerCommandExecManager,
   fsManager: AppServerFsManager,
   connectionId?: string,
+  connectionRegistry?: AppServerConnectionRegistry,
 ): Promise<unknown> {
   if (method === 'initialize') {
+    connectionRegistry?.initialize(connectionId, params);
     return {
       userAgent: `setsuna-desktop/${options.version}`,
       appHome: path.resolve(options.dataDir),
@@ -293,13 +297,36 @@ export async function dispatchAppServerRpcRequest(
     return commandExecManager.processResizePty(params, connectionId);
   }
 
+  if (method === 'thread/backgroundTerminals/list') {
+    const input = recordInput(params);
+    await requireRuntimeThread(runtime, requiredString(input.threadId ?? input.thread_id, 'threadId'));
+    return commandExecManager.backgroundTerminalsList(params, connectionId);
+  }
+
+  if (method === 'thread/backgroundTerminals/clean') {
+    const input = recordInput(params);
+    await requireRuntimeThread(runtime, requiredString(input.threadId ?? input.thread_id, 'threadId'));
+    return commandExecManager.backgroundTerminalsClean(params, connectionId);
+  }
+
+  if (method === 'thread/backgroundTerminals/terminate') {
+    const input = recordInput(params);
+    await requireRuntimeThread(runtime, requiredString(input.threadId ?? input.thread_id, 'threadId'));
+    return commandExecManager.backgroundTerminalsTerminate(params, connectionId);
+  }
+
   if (method === 'thread/start') {
     const input = recordInput(params);
     const cwd = stringInput(input.cwd) || process.cwd();
+    if (hasAppServerDynamicToolsInput(input)) requireExperimentalAppServerApi(connectionRegistry, connectionId, 'dynamicTools');
+    const dynamicTools = appServerDynamicToolsInput(input.dynamicTools ?? input.dynamic_tools);
     const thread = await runtime.threadStore.createThread({
       title: stringInput(input.name) || stringInput(input.threadName) || path.basename(cwd) || 'New thread',
       projectId: stringInput(input.projectId),
     });
+    if (dynamicTools !== undefined) {
+      runtime.agentLoop.registerAppServerDynamicTools(thread.id, dynamicTools, connectionId ?? 'default');
+    }
     const config = await runtime.configStore.getConfig();
     return sweThreadSessionResponse(thread, cwd, config, options);
   }
@@ -377,7 +404,9 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/list') {
     const input = recordInput(params);
     const query: ThreadQuery = {
+      ancestorThreadId: stringInput(input.ancestorThreadId ?? input.ancestor_thread_id),
       includeArchived: input.archived === true,
+      parentThreadId: stringInput(input.parentThreadId ?? input.parent_thread_id),
       search: stringInput(input.searchTerm),
     };
     const threads = await runtime.threadStore.listThreads(query);
@@ -497,6 +526,7 @@ export async function dispatchAppServerRpcRequest(
       createdAt: new Date().toISOString(),
       payload: {},
     });
+    runtime.agentLoop.clearAppServerDynamicTools(threadId);
     await runtime.threadStore.deleteThread(threadId);
     return {};
   }
@@ -538,10 +568,13 @@ export async function dispatchAppServerRpcRequest(
     const numTurns = requiredPositiveInteger(input.numTurns, 'numTurns');
     const thread = await runtime.threadStore.getThread(threadId);
     if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
-    const rollbackMessageId = rollbackStartMessageId(thread.messages, numTurns);
+    const activeTurnId = runtime.agentLoop.activeTurnId(threadId);
+    if (activeTurnId) await runtime.agentLoop.cancelTurn(threadId, activeTurnId);
+    const currentThread = await runtime.threadStore.getThread(threadId) ?? thread;
+    const rollbackMessageId = rollbackStartMessageId(currentThread.messages, numTurns);
     const rolledBack = rollbackMessageId
       ? await runtime.threadStore.truncateMessagesAfter(threadId, rollbackMessageId, true)
-      : thread;
+      : currentThread;
     return { thread: sweThreadFromRuntimeThread(rolledBack, process.cwd(), options, true) };
   }
 
@@ -571,9 +604,20 @@ export async function dispatchAppServerRpcRequest(
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
     const text = sweUserInputText(input.input);
+    const collaborationMode = appServerCollaborationMode(input.collaborationMode ?? input.collaboration_mode ?? input.mode);
+    const thinking = appServerTurnThinkingInput(input, collaborationMode);
+    if (hasAppServerDynamicToolsInput(input)) requireExperimentalAppServerApi(connectionRegistry, connectionId, 'dynamicTools');
+    const dynamicTools = appServerDynamicToolsInput(input.dynamicTools ?? input.dynamic_tools);
+    if (dynamicTools !== undefined) {
+      await requireRuntimeThread(runtime, threadId);
+      runtime.agentLoop.registerAppServerDynamicTools(threadId, dynamicTools, connectionId ?? 'default');
+    }
     const started = await runtime.agentLoop.startTurn(threadId, {
       input: text,
       clientId: sweClientUserMessageId(input),
+      ...(collaborationMode ? { collaborationMode } : {}),
+      ...appServerPlanDecisionInput(input.planDecision ?? input.plan_decision),
+      ...thinking,
     });
     return { turn: sweTurn(started.turnId, 'inProgress') };
   }
@@ -591,6 +635,30 @@ export async function dispatchAppServerRpcRequest(
         expectedTurnId,
       });
       return { turnId: steered.turnId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('Thread not found:')) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+      throw new AppServerRpcError(-32600, message);
+    }
+  }
+
+  if (method === 'turn/mailbox/deliver') {
+    const input = recordInput(params);
+    const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
+    const expectedTurnId = stringInput(input.expectedTurnId ?? input.expected_turn_id);
+    const content = requiredString(input.content, 'content');
+    try {
+      const delivered = await runtime.agentLoop.deliverMailboxInput(threadId, {
+        content,
+        deliveryMode: mailboxDeliveryMode(input.deliveryMode ?? input.delivery_mode),
+        expectedTurnId,
+        fromAgentId: stringInput(input.fromAgentId ?? input.from_agent_id),
+        fromThreadId: stringInput(input.fromThreadId ?? input.from_thread_id),
+        id: stringInput(input.id),
+        toAgentId: stringInput(input.toAgentId ?? input.to_agent_id),
+        triggerTurn: booleanInput(input.triggerTurn ?? input.trigger_turn),
+      });
+      return { queued: delivered.queued ?? false, turnId: delivered.turnId };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.startsWith('Thread not found:')) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
@@ -626,4 +694,60 @@ async function appServerMcpStatusInventory(
     return [server.key, { resources, resourceTemplates }] as const;
   }));
   return Object.fromEntries(entries);
+}
+
+function hasAppServerDynamicToolsInput(input: Record<string, unknown>): boolean {
+  return Object.prototype.hasOwnProperty.call(input, 'dynamicTools')
+    || Object.prototype.hasOwnProperty.call(input, 'dynamic_tools');
+}
+
+function requireExperimentalAppServerApi(
+  registry: AppServerConnectionRegistry | undefined,
+  connectionId: string | undefined,
+  feature: string,
+): void {
+  if (registry?.experimentalApi(connectionId)) return;
+  throw new AppServerRpcError(-32600, `${feature} requires initialize.params.capabilities.experimentalApi = true`);
+}
+
+function booleanInput(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return undefined;
+}
+
+function mailboxDeliveryMode(value: unknown): 'queue_only' | 'trigger_turn' | undefined {
+  const text = stringInput(value);
+  if (!text) return undefined;
+  if (text === 'queue_only' || text === 'trigger_turn') return text;
+  throw new AppServerRpcError(-32602, 'deliveryMode must be queue_only or trigger_turn');
+}
+
+function appServerTurnThinkingInput(input: Record<string, unknown>, collaborationMode: RuntimeCollaborationMode | ''): { thinking?: boolean; thinkingEffort?: string } {
+  const reasoningEffort = stringInput(input.reasoningEffort ?? input.reasoning_effort ?? input.thinkingEffort ?? input.thinking_effort);
+  const explicitThinking = typeof input.thinking === 'boolean' ? input.thinking : undefined;
+  const planMode = collaborationMode === 'plan';
+  const thinking = explicitThinking ?? (planMode || Boolean(reasoningEffort) ? true : undefined);
+  const thinkingEffort = reasoningEffort ?? (planMode ? 'medium' : undefined);
+  return {
+    ...(thinking !== undefined ? { thinking } : {}),
+    ...(thinking && thinkingEffort ? { thinkingEffort } : {}),
+  };
+}
+
+function appServerCollaborationMode(value: unknown): RuntimeCollaborationMode | '' {
+  const text = typeof value === 'string' ? value.trim() : stringInput(recordInput(value).mode) ?? '';
+  if (!text) return '';
+  if (text === 'default' || text === 'plan') return text;
+  throw new AppServerRpcError(-32602, 'collaborationMode must be default or plan');
+}
+
+function appServerPlanDecisionInput(value: unknown): { planDecision?: RuntimePlanDecision } {
+  const text = stringInput(value);
+  if (!text) return {};
+  if (text === 'accepted' || text === 'dismissed') return { planDecision: text };
+  throw new AppServerRpcError(-32602, 'planDecision must be accepted or dismissed');
 }

@@ -3,6 +3,7 @@ import { URL } from 'node:url';
 import type { RuntimeHealth } from '@setsuna-desktop/contracts';
 import { createRuntimeFactory } from '../runtime/runtime-factory.js';
 import { APP_SERVER_DEFAULT_CONNECTION_ID, createAppServerCommandExecManager } from './app-server/command-exec.js';
+import { createAppServerConnectionRegistry } from './app-server/connections.js';
 import { createAppServerFsManager } from './app-server/fs-protocol.js';
 import { handleAppServerRpcRequest } from './app-server/rpc.js';
 import type { AppServerRpcRequest } from './app-server/rpc-types.js';
@@ -29,6 +30,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   await settleStaleRuntimeTurns(runtime);
   const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus);
   const fsManager = createAppServerFsManager(runtime.appServerNotificationBus);
+  const appServerConnections = createAppServerConnectionRegistry();
   const unsubscribeSkillChanges = runtime.skillRegistry.subscribeChanges(() => {
     runtime.appServerNotificationBus.publish({ method: 'skills/changed', params: {} });
   });
@@ -57,7 +59,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           connectionId,
           experimentalApi: runtimeEventStreamExperimentalApi(
             url.searchParams.get('experimentalApi') ?? url.searchParams.get('experimental_api'),
-          ),
+          ) || appServerConnections.experimentalApi(connectionId),
           onClose: () => {
             fsManager.terminateConnection(connectionId);
             if (explicitConnectionId) commandExecManager.terminateConnection(connectionId);
@@ -78,6 +80,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           commandExecManager,
           fsManager,
           appServerConnectionId(request, url) ?? APP_SERVER_DEFAULT_CONNECTION_ID,
+          appServerConnections,
         );
         if (!responseMessage) {
           response.writeHead(204);

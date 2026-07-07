@@ -1,5 +1,7 @@
 import type { RuntimeEvent } from './events.js';
-import type { RuntimeGitInfo, RuntimeMessage, RuntimeThread, RuntimeThreadGoal, RuntimeToolRun } from './threads.js';
+import type { RuntimeGitInfo, RuntimeMailboxDeliveryRecord, RuntimeMessage, RuntimeThread, RuntimeThreadGoal, RuntimeThreadTurn, RuntimeToolRun } from './threads.js';
+import type { RuntimeDynamicToolContentItem, RuntimeModelRequestStepSnapshot, RuntimeModelVerification, RuntimeSafetyBuffering, RuntimeStreamItem } from './provider.js';
+import type { RuntimeUsage } from './usage.js';
 import type {
   RuntimeApprovalAvailableDecision,
   RuntimeExecPolicyAmendment,
@@ -12,10 +14,24 @@ export type SwePatchChangeKind = 'add' | 'delete' | 'update';
 export type SweCommandExecutionStatus = 'inProgress' | 'completed' | 'failed' | 'declined';
 export type SweCommandExecutionSource = 'agent' | 'userShell' | 'unifiedExecStartup' | 'unifiedExecInteraction';
 export type SweDynamicToolCallStatus = 'inProgress' | 'completed' | 'failed';
+export type SweCollabToolCallStatus = 'inProgress' | 'completed' | 'failed';
+export type SweCollabToolName = 'spawn_agent' | 'send_input' | 'resume_agent' | 'wait' | 'close_agent';
 export type SweThreadActiveFlag = 'waitingOnApproval' | 'waitingOnUserInput';
 export type SweThreadStatus =
   | { type: 'notLoaded' | 'idle' | 'systemError' }
   | { type: 'active'; activeFlags: SweThreadActiveFlag[] };
+export type SweTokenUsageBreakdown = {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+};
+export type SweThreadTokenUsage = {
+  total: SweTokenUsageBreakdown;
+  last: SweTokenUsageBreakdown;
+  modelContextWindow: number | null;
+};
 
 export type SweThreadGoal = RuntimeThreadGoal;
 
@@ -70,6 +86,12 @@ export type SweThreadItem =
       memoryCitation: RuntimeMessage['memoryCitation'] | null;
     }
   | {
+      type: 'plan';
+      id: string;
+      text: string;
+      status?: NonNullable<RuntimeMessage['planMode']>['status'];
+    }
+  | {
       type: 'reasoning';
       id: string;
       summary: string[];
@@ -115,9 +137,20 @@ export type SweThreadItem =
       tool: string;
       arguments: unknown;
       status: SweDynamicToolCallStatus;
-      contentItems: null;
+      contentItems: RuntimeDynamicToolContentItem[] | null;
       success: boolean | null;
       durationMs: number | null;
+    }
+  | {
+      type: 'collabToolCall';
+      id: string;
+      tool: SweCollabToolName;
+      status: SweCollabToolCallStatus;
+      senderThreadId: string;
+      receiverThreadId?: string;
+      newThreadId?: string;
+      prompt?: string;
+      agentStatus?: string;
     };
 
 export type SweThread = {
@@ -144,15 +177,32 @@ export type SweThread = {
   turns: SweTurn[];
 };
 
+export type SweTurnStepSnapshot = {
+  createdAtMs: number;
+  snapshot: RuntimeModelRequestStepSnapshot;
+};
+
+export type SweTurnTokenCount = {
+  createdAtMs: number;
+  modelContextWindow?: number;
+  tokensUntilCompaction?: number;
+  usage: RuntimeUsage;
+};
+
 export type SweTurn = {
   id: string;
   items: SweThreadItem[];
   itemsView: 'notLoaded' | 'summary' | 'full';
   status: 'inProgress' | 'completed' | 'failed' | 'interrupted';
   error: null;
+  diff?: string;
+  modelVerifications?: RuntimeModelVerification[];
+  safetyBuffering?: RuntimeSafetyBuffering;
   startedAt: number | null;
   completedAt: number | null;
   durationMs: number | null;
+  stepSnapshots?: SweTurnStepSnapshot[];
+  tokenCounts?: SweTurnTokenCount[];
 };
 
 export type SweNotification =
@@ -233,6 +283,10 @@ export type SweNotification =
       params: { threadId: string; status: SweThreadStatus };
     }
   | {
+      method: 'thread/tokenUsage/updated';
+      params: { threadId: string; turnId: string; tokenUsage: SweThreadTokenUsage };
+    }
+  | {
       method: 'turn/started';
       params: { threadId: string; turn: SweTurn };
     }
@@ -245,6 +299,10 @@ export type SweNotification =
       params: { threadId: string; turnId: string; diff: string };
     }
   | {
+      method: 'turn/stepSnapshot/updated';
+      params: { threadId: string; turnId: string; stepSnapshot: SweTurnStepSnapshot };
+    }
+  | {
       method: 'item/started';
       params: { threadId: string; turnId: string; item: SweThreadItem; startedAtMs: number };
     }
@@ -254,6 +312,10 @@ export type SweNotification =
     }
   | {
       method: 'item/agentMessage/delta';
+      params: { threadId: string; turnId: string; itemId: string; delta: string };
+    }
+  | {
+      method: 'item/plan/delta';
       params: { threadId: string; turnId: string; itemId: string; delta: string };
     }
   | {
@@ -280,6 +342,18 @@ export type SweNotification =
       method: 'item/fileChange/requestApproval';
       id: string;
       params: { threadId: string; turnId: string; itemId: string; startedAtMs: number; reason?: string | null; grantRoot?: string | null };
+    }
+  | {
+      method: 'item/tool/call';
+      id: string;
+      params: {
+        threadId: string;
+        turnId: string;
+        callId: string;
+        namespace: string | null;
+        tool: string;
+        arguments: unknown;
+      };
     }
   | {
       method: 'item/commandExecution/requestApproval';
@@ -323,6 +397,22 @@ export type SweNotification =
   | {
       method: 'thread/compacted';
       params: { threadId: string; turnId: string };
+    }
+  | {
+      method: 'model/verification';
+      params: { threadId: string; turnId: string; verifications: RuntimeModelVerification[] };
+    }
+  | {
+      method: 'model/safetyBuffering/updated';
+      params: {
+        threadId: string;
+        turnId: string;
+        model: string;
+        useCases: string[];
+        reasons: string[];
+        showBufferingUi: boolean;
+        fasterModel: string | null;
+      };
     };
 
 export type SweNotificationClientCapabilities = {
@@ -369,11 +459,17 @@ const SHELL_TOOL_NAMES = new Set(['run_shell_command', 'exec_command', 'write_st
 
 type SweMapperState = {
   assistantStreams: Map<string, AssistantStreamState>;
+  itemTranscriptMessageIds: Set<string>;
   turnDiffs: Map<string, string>;
   turnStartedAtMs: Map<string, number>;
+  streamItems: Map<string, SweThreadItem>;
   startedItems: Set<string>;
+  tokenUsageTotals: Map<string, SweTokenUsageBreakdown>;
   threadStatuses: Map<string, SweThreadStatus>;
   threadRuntime: Map<string, ThreadRuntimeState>;
+  planMessageIds: Set<string>;
+  planItemsByMessageId: Map<string, SweThreadItem>;
+  turnPlanItemIds: Map<string, string>;
 };
 
 type ThreadRuntimeState = {
@@ -400,14 +496,28 @@ type AssistantContentSegment = {
 
 type ToolCompletedPayload = Extract<RuntimeEvent, { type: 'tool.completed' }>['payload'];
 
+type RuntimeSweTurnEntry = {
+  createdAt: string;
+  index: number;
+  message?: RuntimeMessage;
+  mailbox?: RuntimeMailboxDeliveryRecord;
+  turn?: RuntimeThreadTurn;
+};
+
 export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotification[] {
   const state: SweMapperState = {
     assistantStreams: new Map(),
+    itemTranscriptMessageIds: new Set(),
     turnDiffs: new Map(),
     turnStartedAtMs: new Map(),
+    streamItems: new Map(),
     startedItems: new Set(),
+    tokenUsageTotals: new Map(),
     threadStatuses: new Map(),
     threadRuntime: new Map(),
+    planMessageIds: new Set(),
+    planItemsByMessageId: new Map(),
+    turnPlanItemIds: new Map(),
   };
   return (event) => runtimeEventToSweNotifications(event, state);
 }
@@ -418,21 +528,40 @@ export function runtimeEventsToSweNotifications(events: RuntimeEvent[]): SweNoti
 }
 
 export function runtimeThreadToSweTurns(thread: RuntimeThread): SweTurn[] {
-  const groups = new Map<string, Array<{ index: number; message: RuntimeMessage }>>();
+  const groups = new Map<string, RuntimeSweTurnEntry[]>();
   for (const [index, message] of thread.messages.entries()) {
     if (message.visibility === 'model') continue;
     if (!message.turnId) continue;
-    groups.set(message.turnId, [...(groups.get(message.turnId) ?? []), { index, message }]);
+    groups.set(message.turnId, [...(groups.get(message.turnId) ?? []), { createdAt: message.createdAt, index, message }]);
+  }
+  const messageCount = thread.messages.length;
+  for (const [index, mailbox] of (thread.mailboxDeliveries ?? []).entries()) {
+    if (!mailbox.turnId) continue;
+    groups.set(mailbox.turnId, [
+      ...(groups.get(mailbox.turnId) ?? []),
+      { createdAt: mailbox.createdAt, index: messageCount + index, mailbox },
+    ]);
+  }
+  const mailboxCount = thread.mailboxDeliveries?.length ?? 0;
+  for (const [index, turn] of (thread.turns ?? []).entries()) {
+    groups.set(turn.id, [
+      ...(groups.get(turn.id) ?? []),
+      {
+        createdAt: turn.startedAt ?? turn.completedAt ?? thread.createdAt,
+        index: messageCount + mailboxCount + index,
+        turn,
+      },
+    ]);
   }
   return [...groups.entries()]
     .map(([turnId, entries]) => ({
       firstIndex: Math.min(...entries.map((entry) => entry.index)),
-      messages: [...entries].sort(compareRuntimeMessageEntries).map((entry) => entry.message),
-      startedAtMs: minPositiveMs(entries.map((entry) => toEpochMs(entry.message.createdAt))),
+      entries: [...entries].sort(compareRuntimeSweTurnEntries),
+      startedAtMs: minPositiveMs(entries.map((entry) => toEpochMs(entry.createdAt))),
       turnId,
     }))
     .sort((left, right) => compareNullableMs(left.startedAtMs, right.startedAtMs) || left.firstIndex - right.firstIndex)
-    .map(({ turnId, messages }) => runtimeMessagesToSweTurn(turnId, messages));
+    .map(({ turnId, entries }) => runtimeEntriesToSweTurn(thread.id, turnId, entries));
 }
 
 export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweMapperState): SweNotification[] {
@@ -555,6 +684,40 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     ];
   }
 
+  if (event.type === 'turn.step_snapshot') {
+    if (!turnId) return [];
+    return [{
+      method: 'turn/stepSnapshot/updated',
+      params: {
+        threadId: event.threadId,
+        turnId,
+        stepSnapshot: sweTurnStepSnapshot(event.createdAt, event.payload.snapshot),
+      },
+    }];
+  }
+
+  if (event.type === 'mailbox.delivered') {
+    if (!turnId) return [];
+    const timestampMs = toEpochMs(event.createdAt);
+    const record: RuntimeMailboxDeliveryRecord = {
+      ...event.payload,
+      createdAt: event.createdAt,
+      turnId,
+    };
+    const started = collabToolCallItemFromMailbox(record, 'inProgress', event.threadId);
+    const completed = collabToolCallItemFromMailbox(record, 'completed', event.threadId);
+    return [
+      {
+        method: 'item/started',
+        params: { threadId: event.threadId, turnId, item: started, startedAtMs: timestampMs },
+      },
+      {
+        method: 'item/completed',
+        params: { threadId: event.threadId, turnId, item: completed, completedAtMs: timestampMs },
+      },
+    ];
+  }
+
   if (event.type === 'turn.completed') {
     const turn = completedLiveSweTurn(state, event.threadId, turnId, 'completed', toEpochMs(event.createdAt));
     if (turnId) markTurnFinished(state, event.threadId, turnId);
@@ -599,6 +762,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
 
   if (event.type === 'message.created') {
     const message = event.payload.message;
+    if (message.visibility === 'model') return [];
     if (!turnId || message.role === 'tool') return [];
     if (message.role === 'system') {
       if (!message.reviewMode) return [];
@@ -636,6 +800,16 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
         },
       }];
     }
+    if (message.planMode) {
+      rememberPlanMessage(state, event.threadId, turnId, message.id);
+      if (message.status === 'streaming') return [];
+      const item = planItem(message.id, message.content, message.planMode.status);
+      rememberPlanMessageItem(state, event.threadId, message.id, item);
+      return [{
+        method: 'item/completed',
+        params: { threadId: event.threadId, turnId, item, completedAtMs: toEpochMs(event.createdAt) },
+      }];
+    }
     if (message.status === 'streaming') {
       return startAssistantMessageStream(state, event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt));
     }
@@ -644,15 +818,183 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
 
   if (event.type === 'message.delta') {
     if (!turnId) return [];
+    if (hasItemTranscriptMessage(state, event.threadId, turnId, event.payload.messageId)) return [];
+    if (isPlanMessage(state, event.threadId, turnId, event.payload.messageId)) {
+      return appendPlanMessageDelta(state, event.threadId, turnId, event.payload.messageId, event.payload.text, toEpochMs(event.createdAt));
+    }
     return appendAssistantMessageDelta(state, event.threadId, turnId, event.payload.messageId, event.payload.text, toEpochMs(event.createdAt));
   }
 
   if (event.type === 'message.completed') {
     if (!turnId) return [];
+    if (event.payload.planMode) {
+      clearAssistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
+      return completedPlanMessageNotifications(state, event.threadId, turnId, event.payload.messageId, event.payload.content ?? '', event.payload.planMode, toEpochMs(event.createdAt));
+    }
+    if (hasItemTranscriptMessage(state, event.threadId, turnId, event.payload.messageId)) {
+      clearAssistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
+      return [];
+    }
     const stream = assistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
     if (!stream) return [];
     clearAssistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
     return completedAssistantContentNotifications(event.threadId, turnId, event.payload.messageId, stream.text, toEpochMs(event.createdAt), event.payload.memoryCitation ?? null);
+  }
+
+  if (event.type === 'item.started') {
+    if (!turnId) return [];
+    rememberItemTranscriptMessage(state, event.threadId, turnId, event.payload.item);
+    const item = sweItemFromRuntimeStreamItem(event.payload.item);
+    if (!item) return [];
+    rememberStreamItem(state, event.threadId, turnId, item);
+    if (!shouldEmitItemStarted(state, event.threadId, turnId, item.id)) return [];
+    return [{
+      method: 'item/started',
+      params: {
+        threadId: event.threadId,
+        turnId,
+        item,
+        startedAtMs: toEpochMs(event.createdAt),
+      },
+    }];
+  }
+
+  if (event.type === 'item.delta') {
+    if (!turnId) return [];
+    const item = rememberedStreamItem(state, event.threadId, turnId, event.payload.itemId);
+    return streamItemDeltaNotifications(event.threadId, turnId, event.payload.itemId, item, event.payload.delta, toEpochMs(event.createdAt), state);
+  }
+
+  if (event.type === 'item.completed') {
+    if (!turnId) return [];
+    const item = sweItemFromRuntimeStreamItem(event.payload.item);
+    if (!item) return [];
+    rememberStreamItem(state, event.threadId, turnId, item);
+    return [{
+      method: 'item/completed',
+      params: {
+        threadId: event.threadId,
+        turnId,
+        item,
+        completedAtMs: toEpochMs(event.createdAt),
+      },
+    }];
+  }
+
+  if (event.type === 'plan.delta') {
+    if (!turnId) return [];
+    rememberTurnPlanItem(state, event.threadId, turnId, event.payload.itemId);
+    const started = ensurePlanItemStarted(state, event.threadId, turnId, event.payload.itemId, toEpochMs(event.createdAt));
+    appendPlanItemText(state, event.threadId, turnId, event.payload.itemId, event.payload.delta);
+    return [
+      ...started,
+      {
+        method: 'item/plan/delta',
+        params: { threadId: event.threadId, turnId, itemId: event.payload.itemId, delta: event.payload.delta },
+      },
+    ];
+  }
+
+  if (event.type === 'reasoning.summary_delta') {
+    if (!turnId) return [];
+    return [
+      ...ensureReasoningItemStarted(state, event.threadId, turnId, event.payload.itemId, toEpochMs(event.createdAt)),
+      {
+        method: 'item/reasoning/summaryTextDelta',
+        params: {
+          threadId: event.threadId,
+          turnId,
+          itemId: event.payload.itemId,
+          delta: event.payload.delta,
+          summaryIndex: event.payload.summaryIndex ?? 0,
+        },
+      },
+    ];
+  }
+
+  if (event.type === 'reasoning.summary_part_added') {
+    if (!turnId) return [];
+    return [
+      ...ensureReasoningItemStarted(state, event.threadId, turnId, event.payload.itemId, toEpochMs(event.createdAt)),
+      {
+        method: 'item/reasoning/summaryPartAdded',
+        params: {
+          threadId: event.threadId,
+          turnId,
+          itemId: event.payload.itemId,
+          summaryIndex: event.payload.summaryIndex ?? 0,
+        },
+      },
+    ];
+  }
+
+  if (event.type === 'reasoning.raw_delta') {
+    if (!turnId) return [];
+    return [
+      ...ensureReasoningItemStarted(state, event.threadId, turnId, event.payload.itemId, toEpochMs(event.createdAt)),
+      {
+        method: 'item/reasoning/textDelta',
+        params: {
+          threadId: event.threadId,
+          turnId,
+          itemId: event.payload.itemId,
+          delta: event.payload.delta,
+          contentIndex: event.payload.contentIndex ?? 0,
+        },
+      },
+    ];
+  }
+
+  if (event.type === 'safety.buffering') {
+    if (!turnId) return [];
+    const buffering = event.payload.buffering;
+    return [{
+      method: 'model/safetyBuffering/updated',
+      params: {
+        threadId: event.threadId,
+        turnId,
+        model: buffering.model ?? '',
+        useCases: buffering.useCases ?? [],
+        reasons: buffering.reasons ?? [],
+        showBufferingUi: buffering.showBufferingUi ?? false,
+        fasterModel: buffering.fasterModel ?? null,
+      },
+    }];
+  }
+
+  if (event.type === 'model.verification') {
+    if (!turnId) return [];
+    return [{
+      method: 'model/verification',
+      params: {
+        threadId: event.threadId,
+        turnId,
+        verifications: [event.payload.verification],
+      },
+    }];
+  }
+
+  if (event.type === 'token.count') {
+    if (!turnId) return [];
+    return [{
+      method: 'thread/tokenUsage/updated',
+      params: {
+        threadId: event.threadId,
+        turnId,
+        tokenUsage: threadTokenUsage(state, event.threadId, event.payload.usage, event.payload.modelContextWindow),
+      },
+    }];
+  }
+
+  if (event.type === 'turn.diff') {
+    if (!turnId) return [];
+    const diff = updateTurnDiff(state, event.threadId, turnId, event.payload.unifiedDiff);
+    return diff
+      ? [{
+          method: 'turn/diff/updated',
+          params: { threadId: event.threadId, turnId, diff },
+        }]
+      : [];
   }
 
   if (event.type === 'tool.started') {
@@ -802,6 +1144,11 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     ];
   }
 
+  if (event.type === 'message.plan_mode_updated') {
+    if (!turnId) return [];
+    return completedPlanMessageNotifications(state, event.threadId, turnId, event.payload.messageId, event.payload.content ?? '', event.payload.planMode, toEpochMs(event.createdAt));
+  }
+
   return [];
 }
 
@@ -848,25 +1195,198 @@ function toolCompletedItem(id: string, payload: ToolCompletedPayload): SweThread
       commandSource(payload.source),
     );
   }
-  return dynamicToolItem(id, toolName, recordFromJson(payload.argumentsPreview), status === 'success' ? 'completed' : 'failed', status === 'success');
+  const dynamicData = dynamicToolData(payload.data);
+  return dynamicToolItem(
+    id,
+    toolName,
+    recordFromJson(payload.argumentsPreview),
+    status === 'success' ? 'completed' : 'failed',
+    dynamicData.success ?? status === 'success',
+    payload.durationMs ?? null,
+    dynamicData.contentItems,
+  );
 }
 
-function runtimeMessagesToSweTurn(turnId: string, messages: RuntimeMessage[]): SweTurn {
-  const items = messages.flatMap(runtimeMessageToSweItems);
-  const startedAt = minEpochSeconds(messages.map((message) => message.createdAt));
-  const hasError = messages.some((message) => message.status === 'error');
-  const inProgress = messages.some(messageInProgress);
-  const completedAt = inProgress ? null : maxEpochSeconds(messages.map((message) => message.completedAt ?? message.createdAt));
+function runtimeEntriesToSweTurn(threadId: string, turnId: string, entries: RuntimeSweTurnEntry[]): SweTurn {
+  const messages = entries.map((entry) => entry.message).filter((message): message is RuntimeMessage => Boolean(message));
+  const turn = entries.find((entry) => entry.turn)?.turn;
+  const streamItems = turn?.items.map(sweItemFromRuntimeStreamItem).filter((item): item is SweThreadItem => Boolean(item)) ?? [];
+  const canonicalTranscriptMessageIds = new Set((turn?.items ?? []).map((item) => item.transcriptMessageId).filter((id): id is string => Boolean(id)));
+  const canonicalItemIds = new Set(streamItems.map((item) => item.id));
+  const items = streamItems.length
+    ? dedupeSweItems([
+        ...entries.flatMap((entry) => runtimeSweTurnEntryToItems(threadId, entry, canonicalTranscriptMessageIds, canonicalItemIds, { onlyUserMessages: true })),
+        ...streamItems,
+        ...entries.flatMap((entry) => runtimeSweTurnEntryToItems(threadId, entry, canonicalTranscriptMessageIds, canonicalItemIds, { allowCanonicalToolItems: true, skipUserMessages: true })),
+      ])
+    : entries.flatMap((entry) => runtimeSweTurnEntryToItems(threadId, entry, canonicalTranscriptMessageIds, canonicalItemIds));
+  const startedAt = turn?.startedAt ? toEpochSeconds(turn.startedAt) : minEpochSeconds(entries.map((entry) => entry.createdAt));
+  const stepSnapshots = turn?.stepSnapshots?.map((step) => sweTurnStepSnapshot(step.createdAt, step.snapshot));
+  const tokenCounts = turn?.tokenCounts?.map((count) => sweTurnTokenCount(count.createdAt, count));
+  const turnStatus = sweTurnStatusFromRuntimeTurn(turn?.status);
+  const hasError = turnStatus === 'failed' || messages.some((message) => message.status === 'error');
+  const inProgress = turnStatus === 'inProgress' || (!turnStatus && messages.some(messageInProgress));
+  const completedAt = inProgress
+    ? null
+    : turn?.completedAt
+      ? toEpochSeconds(turn.completedAt)
+      : maxEpochSeconds(entries.map((entry) => entry.message?.completedAt ?? entry.turn?.completedAt ?? entry.createdAt));
+  const status = turnStatus ?? (hasError ? 'failed' : inProgress ? 'inProgress' : 'completed');
   return {
     id: turnId,
     items,
     itemsView: 'full',
-    status: hasError ? 'failed' : inProgress ? 'inProgress' : 'completed',
+    status,
     error: null,
     startedAt,
     completedAt,
     durationMs: startedAt === null || completedAt === null ? null : Math.max(0, (completedAt - startedAt) * 1000),
+    ...(turn?.diff ? { diff: turn.diff } : {}),
+    ...(turn?.modelVerifications?.length ? { modelVerifications: turn.modelVerifications.map((verification) => ({ ...verification, warnings: verification.warnings ? [...verification.warnings] : undefined })) } : {}),
+    ...(turn?.safetyBuffering ? { safetyBuffering: cloneSafetyBuffering(turn.safetyBuffering) } : {}),
+    ...(stepSnapshots?.length ? { stepSnapshots } : {}),
+    ...(tokenCounts?.length ? { tokenCounts } : {}),
   };
+}
+
+function sweTurnStepSnapshot(createdAt: string, snapshot: RuntimeModelRequestStepSnapshot): SweTurnStepSnapshot {
+  return {
+    createdAtMs: toEpochMs(createdAt),
+    snapshot: cloneRuntimeModelRequestStepSnapshot(snapshot),
+  };
+}
+
+function cloneRuntimeModelRequestStepSnapshot(snapshot: RuntimeModelRequestStepSnapshot): RuntimeModelRequestStepSnapshot {
+  return {
+    ...snapshot,
+    advertisedToolNames: snapshot.advertisedToolNames ? [...snapshot.advertisedToolNames] : undefined,
+    contextWindow: snapshot.contextWindow
+      ? {
+          ...snapshot.contextWindow,
+          compactionSummaryMessageIds: [...snapshot.contextWindow.compactionSummaryMessageIds],
+        }
+      : undefined,
+    conversationMessageIds: [...snapshot.conversationMessageIds],
+    deferredToolNames: snapshot.deferredToolNames ? [...snapshot.deferredToolNames] : undefined,
+    featureKeys: [...snapshot.featureKeys],
+    inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
+    mcpServerKeys: [...snapshot.mcpServerKeys],
+    messageIds: [...snapshot.messageIds],
+    routerToolNames: snapshot.routerToolNames ? [...snapshot.routerToolNames] : undefined,
+    sandboxWorkspaceWrite: snapshot.sandboxWorkspaceWrite
+      ? {
+          ...snapshot.sandboxWorkspaceWrite,
+          deniedGlobPatterns: snapshot.sandboxWorkspaceWrite.deniedGlobPatterns ? [...snapshot.sandboxWorkspaceWrite.deniedGlobPatterns] : undefined,
+          deniedRoots: snapshot.sandboxWorkspaceWrite.deniedRoots ? [...snapshot.sandboxWorkspaceWrite.deniedRoots] : undefined,
+          readableRoots: snapshot.sandboxWorkspaceWrite.readableRoots ? [...snapshot.sandboxWorkspaceWrite.readableRoots] : undefined,
+          writableRoots: snapshot.sandboxWorkspaceWrite.writableRoots ? [...snapshot.sandboxWorkspaceWrite.writableRoots] : undefined,
+        }
+      : undefined,
+    selectedSkills: snapshot.selectedSkills.map((skill) => ({ ...skill })),
+    toolEnvironment: snapshot.toolEnvironment ? { ...snapshot.toolEnvironment } : snapshot.toolEnvironment,
+    toolNames: [...snapshot.toolNames],
+    toolRuntimes: snapshot.toolRuntimes ? snapshot.toolRuntimes.map((runtime) => ({ ...runtime })) : undefined,
+    worldState: { ...snapshot.worldState },
+  };
+}
+
+function sweTurnTokenCount(
+  createdAt: string,
+  count: NonNullable<RuntimeThreadTurn['tokenCounts']>[number],
+): SweTurnTokenCount {
+  return {
+    createdAtMs: toEpochMs(createdAt),
+    usage: { ...count.usage },
+    ...(count.modelContextWindow !== undefined ? { modelContextWindow: count.modelContextWindow } : {}),
+    ...(count.tokensUntilCompaction !== undefined ? { tokensUntilCompaction: count.tokensUntilCompaction } : {}),
+  };
+}
+
+function cloneSafetyBuffering(buffering: RuntimeSafetyBuffering): RuntimeSafetyBuffering {
+  return {
+    ...buffering,
+    reasons: buffering.reasons ? [...buffering.reasons] : undefined,
+    useCases: buffering.useCases ? [...buffering.useCases] : undefined,
+  };
+}
+
+function runtimeSweTurnEntryToItems(
+  threadId: string,
+  entry: RuntimeSweTurnEntry,
+  canonicalTranscriptMessageIds = new Set<string>(),
+  canonicalItemIds = new Set<string>(),
+  options: { allowCanonicalToolItems?: boolean; onlyUserMessages?: boolean; skipUserMessages?: boolean } = {},
+): SweThreadItem[] {
+  if (entry.turn) return [];
+  if (entry.message) {
+    if (options.onlyUserMessages && entry.message.role !== 'user') return [];
+    if (options.skipUserMessages && entry.message.role === 'user') return [];
+    return runtimeMessageToSweItems(entry.message, {
+      skipTranscriptContent: canonicalTranscriptMessageIds.has(entry.message.id),
+    }).filter((item) => !canonicalItemIds.has(item.id) || (options.allowCanonicalToolItems && isToolResultSweItem(item)));
+  }
+  if (entry.mailbox) {
+    if (options.onlyUserMessages) return [];
+    const item = collabToolCallItemFromMailbox(entry.mailbox, 'completed', threadId);
+    return canonicalItemIds.has(item.id) ? [] : [item];
+  }
+  return [];
+}
+
+function sweTurnStatusFromRuntimeTurn(status: RuntimeThreadTurn['status'] | undefined): SweTurn['status'] | null {
+  if (status === 'in_progress') return 'inProgress';
+  if (status === 'completed') return 'completed';
+  if (status === 'failed') return 'failed';
+  if (status === 'cancelled') return 'interrupted';
+  return null;
+}
+
+function dedupeSweItems(items: SweThreadItem[]): SweThreadItem[] {
+  const indexes = new Map<string, number>();
+  const toolIndexes = new Map<string, number>();
+  const result: SweThreadItem[] = [];
+  for (const item of items) {
+    const toolIndex = isToolResultSweItem(item) ? toolIndexes.get(item.id) : undefined;
+    if (toolIndex !== undefined) {
+      result[toolIndex] = mergeDuplicateSweItem(result[toolIndex]!, item);
+      continue;
+    }
+    const key = sweItemDedupeKey(item);
+    const index = indexes.get(key);
+    if (index !== undefined) {
+      result[index] = mergeDuplicateSweItem(result[index]!, item);
+      if (isToolResultSweItem(result[index]!)) toolIndexes.set(item.id, index);
+      continue;
+    }
+    indexes.set(key, result.length);
+    if (isToolResultSweItem(item)) toolIndexes.set(item.id, result.length);
+    result.push(item);
+  }
+  return result;
+}
+
+function sweItemDedupeKey(item: SweThreadItem): string {
+  return `${item.type}:${item.id}`;
+}
+
+function isToolResultSweItem(item: SweThreadItem): boolean {
+  return item.type === 'dynamicToolCall' || item.type === 'commandExecution' || item.type === 'fileChange';
+}
+
+function mergeDuplicateSweItem(existing: SweThreadItem, incoming: SweThreadItem): SweThreadItem {
+  if (isToolResultSweItem(incoming)) {
+    if (existing.type === 'dynamicToolCall' && incoming.type === 'dynamicToolCall') {
+      return {
+        ...existing,
+        ...incoming,
+        contentItems: incoming.contentItems ?? existing.contentItems,
+        durationMs: incoming.durationMs ?? existing.durationMs,
+        success: incoming.success ?? existing.success,
+      };
+    }
+    return incoming;
+  }
+  return existing;
 }
 
 function liveSweTurn(
@@ -911,21 +1431,29 @@ function compareRuntimeMessageEntries(
   return compareNullableMs(toEpochMs(left.message.createdAt), toEpochMs(right.message.createdAt)) || left.index - right.index;
 }
 
-function runtimeMessageToSweItems(message: RuntimeMessage): SweThreadItem[] {
+function compareRuntimeSweTurnEntries(left: RuntimeSweTurnEntry, right: RuntimeSweTurnEntry): number {
+  return compareNullableMs(toEpochMs(left.createdAt), toEpochMs(right.createdAt)) || left.index - right.index;
+}
+
+function runtimeMessageToSweItems(message: RuntimeMessage, options: { skipTranscriptContent?: boolean } = {}): SweThreadItem[] {
   if (message.visibility === 'model') return [];
   if (message.role === 'tool') return [];
   if (message.role === 'system') {
     const items: SweThreadItem[] = [];
-    if (message.reviewMode && message.turnId) items.push(reviewModeItem(message.turnId, message.reviewMode));
-    if (message.contextCompaction && message.turnId) items.push(contextCompactionItem(contextCompactionItemId(message.turnId)));
+    if (!options.skipTranscriptContent && message.reviewMode && message.turnId) items.push(reviewModeItem(message.turnId, message.reviewMode));
+    if (!options.skipTranscriptContent && message.contextCompaction && message.turnId) items.push(contextCompactionItem(contextCompactionItemId(message.turnId)));
     return items;
   }
   const items: SweThreadItem[] = [];
-  if (message.role === 'user') {
+  if (!options.skipTranscriptContent && message.role === 'user') {
     items.push({ type: 'userMessage', id: message.id, clientId: message.clientId ?? null, content: [{ type: 'text', text: message.content }] });
   }
-  if (message.role === 'assistant' && message.content.trim()) {
-    items.push(...assistantContentItems(message.id, message.content, message.memoryCitation ?? null));
+  if (!options.skipTranscriptContent && message.role === 'assistant' && message.content.trim()) {
+    if (message.planMode) {
+      items.push(planItem(message.id, message.content, message.planMode.status));
+    } else {
+      items.push(...assistantContentItems(message.id, message.content, message.memoryCitation ?? null));
+    }
   }
   for (const run of message.toolRuns ?? []) {
     items.push(runtimeToolRunToSweItem(run));
@@ -953,13 +1481,15 @@ function runtimeToolRunToSweItem(run: RuntimeToolRun): SweThreadItem {
       commandSource(run.source),
     );
   }
+  const dynamicData = dynamicToolData(run.data);
   return dynamicToolItem(
     run.id,
     run.name,
     recordFromJson(run.argumentsPreview),
     dynamicStatusFromToolRun(run.status),
-    run.status === 'success' ? true : run.status === 'error' || run.status === 'rejected' ? false : null,
+    dynamicData.success ?? (run.status === 'success' ? true : run.status === 'error' || run.status === 'rejected' ? false : null),
     run.durationMs,
+    dynamicData.contentItems,
   );
 }
 
@@ -996,6 +1526,7 @@ function dynamicToolItem(
   status: SweDynamicToolCallStatus,
   success: boolean | null,
   durationMs: number | null = null,
+  contentItems: RuntimeDynamicToolContentItem[] | null = null,
 ): SweThreadItem {
   return {
     type: 'dynamicToolCall',
@@ -1004,14 +1535,100 @@ function dynamicToolItem(
     tool,
     arguments: args,
     status,
-    contentItems: null,
+    contentItems,
     success,
     durationMs,
   };
 }
 
+function dynamicToolData(value: unknown): { contentItems: RuntimeDynamicToolContentItem[] | null; success?: boolean } {
+  const input = recordInput(value);
+  const contentItems = Array.isArray(input.contentItems)
+    ? input.contentItems.filter(isRuntimeDynamicToolContentItem)
+    : null;
+  return {
+    contentItems,
+    ...(typeof input.success === 'boolean' ? { success: input.success } : {}),
+  };
+}
+
+function isRuntimeDynamicToolContentItem(value: unknown): value is RuntimeDynamicToolContentItem {
+  const input = recordInput(value);
+  if (input.type === 'inputText') return typeof input.text === 'string';
+  if (input.type === 'inputImage') return typeof input.imageUrl === 'string' && input.imageUrl.startsWith('data:image/');
+  return false;
+}
+
+function collabToolCallItemFromMailbox(delivery: RuntimeMailboxDeliveryRecord, status: SweCollabToolCallStatus, receiverThreadId: string): SweThreadItem {
+  return {
+    type: 'collabToolCall',
+    id: `mailbox_${delivery.id}`,
+    tool: delivery.triggerTurn || delivery.deliveryMode === 'trigger_turn' ? 'resume_agent' : 'send_input',
+    status,
+    senderThreadId: delivery.fromThreadId ?? delivery.fromAgentId ?? 'unknown',
+    receiverThreadId,
+    prompt: delivery.content,
+  };
+}
+
+function sweItemFromRuntimeStreamItem(item: RuntimeStreamItem): SweThreadItem | null {
+  if (item.kind === 'agent_message') return agentMessageItem(item.id, item.content ?? '');
+  if (item.kind === 'plan') return planItem(item.id, item.content ?? '');
+  if (item.kind === 'reasoning') return reasoningItem(item.id, item.content ? [item.content] : []);
+  if (item.kind === 'context_compaction') return contextCompactionItem(item.id);
+  if (item.kind === 'collab_tool_call' && item.collabToolCall) {
+    return collabToolCallItem(item.id, item.collabToolCall, collabStatusFromStreamItem(item.status));
+  }
+  if (item.kind === 'tool_call' && item.toolCall) {
+    return dynamicToolItem(
+      item.id,
+      item.toolCall.name,
+      recordFromJson(item.toolCall.arguments),
+      dynamicStatusFromStreamItem(item.status),
+      dynamicSuccessFromStreamItem(item.status),
+    );
+  }
+  return null;
+}
+
+function collabToolCallItem(id: string, call: NonNullable<RuntimeStreamItem['collabToolCall']>, status: SweCollabToolCallStatus): SweThreadItem {
+  return {
+    type: 'collabToolCall',
+    id,
+    tool: call.tool,
+    status,
+    senderThreadId: call.senderThreadId,
+    ...(call.receiverThreadId ? { receiverThreadId: call.receiverThreadId } : {}),
+    ...(call.newThreadId ? { newThreadId: call.newThreadId } : {}),
+    ...(call.prompt ? { prompt: call.prompt } : {}),
+    ...(call.agentStatus ? { agentStatus: call.agentStatus } : {}),
+  };
+}
+
+function collabStatusFromStreamItem(status: RuntimeStreamItem['status']): SweCollabToolCallStatus {
+  if (status === 'completed') return 'completed';
+  if (status === 'failed' || status === 'cancelled') return 'failed';
+  return 'inProgress';
+}
+
+function dynamicStatusFromStreamItem(status: RuntimeStreamItem['status']): SweDynamicToolCallStatus {
+  if (status === 'completed') return 'completed';
+  if (status === 'failed' || status === 'cancelled') return 'failed';
+  return 'inProgress';
+}
+
+function dynamicSuccessFromStreamItem(status: RuntimeStreamItem['status']): boolean | null {
+  if (status === 'completed') return true;
+  if (status === 'failed' || status === 'cancelled') return false;
+  return null;
+}
+
 function agentMessageItem(id: string, text: string, memoryCitation: RuntimeMessage['memoryCitation'] | null = null): SweThreadItem {
   return { type: 'agentMessage', id, text, phase: null, memoryCitation };
+}
+
+function planItem(id: string, text: string, status?: NonNullable<RuntimeMessage['planMode']>['status']): SweThreadItem {
+  return { type: 'plan', id, text, ...(status ? { status } : {}) };
 }
 
 function reasoningItem(id: string, summary: string[] = [], content: string[] = []): SweThreadItem {
@@ -1069,6 +1686,51 @@ function completedAssistantContentNotifications(
     method: 'item/completed',
     params: { threadId, turnId, item, completedAtMs },
   }));
+}
+
+function appendPlanMessageDelta(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  messageId: string,
+  delta: string,
+  startedAtMs: number,
+): SweNotification[] {
+  const existingPlanItemId = turnPlanItemId(state, threadId, turnId);
+  if (existingPlanItemId && existingPlanItemId !== messageId) return [];
+  const itemId = existingPlanItemId ?? messageId;
+  rememberTurnPlanItem(state, threadId, turnId, itemId);
+  const started = ensurePlanItemStarted(state, threadId, turnId, itemId, startedAtMs);
+  appendPlanItemText(state, threadId, turnId, itemId, delta);
+  return [
+    ...started,
+    {
+      method: 'item/plan/delta',
+      params: { threadId, turnId, itemId, delta },
+    },
+  ];
+}
+
+function completedPlanMessageNotifications(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  messageId: string,
+  content: string,
+  planMode: NonNullable<RuntimeMessage['planMode']>,
+  completedAtMs: number,
+): SweNotification[] {
+  const rememberedMessageItem = rememberedPlanMessageItem(state, threadId, messageId);
+  const itemId = turnPlanItemId(state, threadId, turnId) ?? rememberedMessageItem?.id ?? messageId;
+  const rememberedTurnItem = rememberedStreamItem(state, threadId, turnId, itemId);
+  const rememberedText = rememberedTurnItem?.type === 'plan' ? rememberedTurnItem.text : rememberedMessageItem?.text ?? '';
+  const item = planItem(itemId, content || rememberedText, planMode.status);
+  rememberStreamItem(state, threadId, turnId, item);
+  rememberPlanMessageItem(state, threadId, messageId, item);
+  return [{
+    method: 'item/completed',
+    params: { threadId, turnId, item, completedAtMs },
+  }];
 }
 
 function assistantContentSegments(content: string): AssistantContentSegment[] {
@@ -1192,9 +1854,70 @@ function updateTurnDiff(state: SweMapperState | undefined, threadId: string, tur
   if (!state) return diff;
   const key = turnDiffKey(threadId, turnId);
   const previous = state.turnDiffs.get(key);
-  const next = previous ? `${previous}\n${diff}` : diff;
+  const next = previous
+    ? previous.includes(diff)
+      ? previous
+      : `${previous}\n${diff}`
+    : diff;
   state.turnDiffs.set(key, next);
   return next;
+}
+
+function threadTokenUsage(
+  state: SweMapperState | undefined,
+  threadId: string,
+  usage: RuntimeUsage,
+  modelContextWindow?: number,
+): SweThreadTokenUsage {
+  const last = tokenUsageBreakdown(usage);
+  if (!state) {
+    return { total: last, last, modelContextWindow: modelContextWindow ?? null };
+  }
+  const previous = state.tokenUsageTotals.get(threadId) ?? emptyTokenUsageBreakdown();
+  const total = addTokenUsageBreakdown(previous, last);
+  state.tokenUsageTotals.set(threadId, total);
+  return { total, last, modelContextWindow: modelContextWindow ?? null };
+}
+
+function tokenUsageBreakdown(usage: RuntimeUsage): SweTokenUsageBreakdown {
+  const inputTokens = finiteTokenCount(usage.inputTokens);
+  const outputTokens = finiteTokenCount(usage.outputTokens);
+  const totalTokens = finiteTokenCount(usage.totalTokens) || inputTokens + outputTokens;
+  return {
+    totalTokens,
+    inputTokens,
+    cachedInputTokens: 0,
+    outputTokens,
+    reasoningOutputTokens: 0,
+  };
+}
+
+function addTokenUsageBreakdown(
+  left: SweTokenUsageBreakdown,
+  right: SweTokenUsageBreakdown,
+): SweTokenUsageBreakdown {
+  return {
+    totalTokens: left.totalTokens + right.totalTokens,
+    inputTokens: left.inputTokens + right.inputTokens,
+    cachedInputTokens: left.cachedInputTokens + right.cachedInputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    reasoningOutputTokens: left.reasoningOutputTokens + right.reasoningOutputTokens,
+  };
+}
+
+function emptyTokenUsageBreakdown(): SweTokenUsageBreakdown {
+  return {
+    totalTokens: 0,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  };
+}
+
+function finiteTokenCount(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
 }
 
 function fileChangePatchUpdatedNotification(
@@ -1220,6 +1943,189 @@ function shouldEmitItemStarted(
   if (state.startedItems.has(key)) return false;
   state.startedItems.add(key);
   return true;
+}
+
+function rememberStreamItem(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  item: SweThreadItem,
+): void {
+  state?.streamItems.set(itemKey(threadId, turnId, item.id), item);
+}
+
+function rememberItemTranscriptMessage(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  item: RuntimeStreamItem,
+): void {
+  if (!state || !item.transcriptMessageId) return;
+  state.itemTranscriptMessageIds.add(itemKey(threadId, turnId, item.transcriptMessageId));
+}
+
+function hasItemTranscriptMessage(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  messageId: string,
+): boolean {
+  return state?.itemTranscriptMessageIds.has(itemKey(threadId, turnId, messageId)) === true;
+}
+
+function rememberedStreamItem(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  itemId: string,
+): SweThreadItem | null {
+  return state?.streamItems.get(itemKey(threadId, turnId, itemId)) ?? null;
+}
+
+function rememberPlanMessage(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  messageId: string,
+): void {
+  state?.planMessageIds.add(itemKey(threadId, turnId, messageId));
+}
+
+function isPlanMessage(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  messageId: string,
+): boolean {
+  return state?.planMessageIds.has(itemKey(threadId, turnId, messageId)) === true;
+}
+
+function rememberTurnPlanItem(state: SweMapperState | undefined, threadId: string, turnId: string, itemId: string): void {
+  state?.turnPlanItemIds.set(turnDiffKey(threadId, turnId), itemId);
+}
+
+function turnPlanItemId(state: SweMapperState | undefined, threadId: string, turnId: string): string | null {
+  return state?.turnPlanItemIds.get(turnDiffKey(threadId, turnId)) ?? null;
+}
+
+function appendPlanItemText(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  delta: string,
+): void {
+  if (!state || !delta) return;
+  const existing = rememberedStreamItem(state, threadId, turnId, itemId);
+  const text = existing?.type === 'plan' ? existing.text : '';
+  rememberStreamItem(state, threadId, turnId, planItem(itemId, `${text}${delta}`, existing?.type === 'plan' ? existing.status : undefined));
+}
+
+function planMessageKey(threadId: string, messageId: string): string {
+  return `${threadId}:${messageId}`;
+}
+
+function rememberPlanMessageItem(
+  state: SweMapperState | undefined,
+  threadId: string,
+  messageId: string,
+  item: SweThreadItem,
+): void {
+  if (!state || item.type !== 'plan') return;
+  state.planItemsByMessageId.set(planMessageKey(threadId, messageId), item);
+}
+
+function rememberedPlanMessageItem(
+  state: SweMapperState | undefined,
+  threadId: string,
+  messageId: string,
+): Extract<SweThreadItem, { type: 'plan' }> | null {
+  const item = state?.planItemsByMessageId.get(planMessageKey(threadId, messageId));
+  return item?.type === 'plan' ? item : null;
+}
+
+function streamItemDeltaNotifications(
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  item: SweThreadItem | null,
+  delta: string,
+  startedAtMs: number,
+  state: SweMapperState | undefined,
+): SweNotification[] {
+  if (!delta) return [];
+  if (item?.type === 'agentMessage') {
+    return [{
+      method: 'item/agentMessage/delta',
+      params: { threadId, turnId, itemId, delta },
+    }];
+  }
+  if (item?.type === 'plan') {
+    appendPlanItemText(state, threadId, turnId, itemId, delta);
+    return [{
+      method: 'item/plan/delta',
+      params: { threadId, turnId, itemId, delta },
+    }];
+  }
+  if (item?.type === 'reasoning') {
+    return [{
+      method: 'item/reasoning/summaryTextDelta',
+      params: { threadId, turnId, itemId, delta, summaryIndex: 0 },
+    }];
+  }
+  return ensureAgentItemStarted(state, threadId, turnId, itemId, startedAtMs).concat({
+    method: 'item/agentMessage/delta',
+    params: { threadId, turnId, itemId, delta },
+  });
+}
+
+function ensureAgentItemStarted(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  startedAtMs: number,
+): SweNotification[] {
+  const remembered = rememberedStreamItem(state, threadId, turnId, itemId);
+  const item = remembered?.type === 'agentMessage' ? remembered : agentMessageItem(itemId, '');
+  rememberStreamItem(state, threadId, turnId, item);
+  if (!shouldEmitItemStarted(state, threadId, turnId, itemId)) return [];
+  return [{
+    method: 'item/started',
+    params: { threadId, turnId, item, startedAtMs },
+  }];
+}
+
+function ensurePlanItemStarted(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  startedAtMs: number,
+): SweNotification[] {
+  const item = rememberedStreamItem(state, threadId, turnId, itemId) ?? planItem(itemId, '');
+  rememberStreamItem(state, threadId, turnId, item);
+  if (!shouldEmitItemStarted(state, threadId, turnId, itemId)) return [];
+  return [{
+    method: 'item/started',
+    params: { threadId, turnId, item, startedAtMs },
+  }];
+}
+
+function ensureReasoningItemStarted(
+  state: SweMapperState | undefined,
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  startedAtMs: number,
+): SweNotification[] {
+  const item = rememberedStreamItem(state, threadId, turnId, itemId) ?? reasoningItem(itemId);
+  rememberStreamItem(state, threadId, turnId, item);
+  if (!shouldEmitItemStarted(state, threadId, turnId, itemId)) return [];
+  return [{
+    method: 'item/started',
+    params: { threadId, turnId, item, startedAtMs },
+  }];
 }
 
 function startAssistantMessageStream(
@@ -1416,8 +2322,18 @@ function clearTurnState(state: SweMapperState | undefined, threadId: string, tur
   const prefix = `${turnDiffKey(threadId, turnId)}:`;
   state.turnDiffs.delete(turnDiffKey(threadId, turnId));
   state.turnStartedAtMs.delete(turnDiffKey(threadId, turnId));
+  state.turnPlanItemIds.delete(turnDiffKey(threadId, turnId));
   for (const item of state.startedItems) {
     if (item.startsWith(prefix)) state.startedItems.delete(item);
+  }
+  for (const item of state.streamItems.keys()) {
+    if (item.startsWith(prefix)) state.streamItems.delete(item);
+  }
+  for (const item of state.itemTranscriptMessageIds) {
+    if (item.startsWith(prefix)) state.itemTranscriptMessageIds.delete(item);
+  }
+  for (const item of state.planMessageIds) {
+    if (item.startsWith(prefix)) state.planMessageIds.delete(item);
   }
   for (const item of state.assistantStreams.keys()) {
     if (item.startsWith(prefix)) state.assistantStreams.delete(item);

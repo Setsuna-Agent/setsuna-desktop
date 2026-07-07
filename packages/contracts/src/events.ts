@@ -1,6 +1,19 @@
 import type { RuntimeApprovalDecision, RuntimeApprovalRequest } from './approvals.js';
+import type { RuntimeModelRequestStepSnapshot, RuntimeModelVerification, RuntimeSafetyBuffering, RuntimeStreamItem } from './provider.js';
 import type { RuntimeGitInfo, RuntimeHookRun, RuntimeMessage, RuntimeThreadGoal, RuntimeThreadMemoryMode } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
+
+export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'user_shell';
+
+export type RuntimeMailboxDelivery = {
+  id: string;
+  content: string;
+  deliveryMode?: 'queue_only' | 'trigger_turn';
+  fromAgentId?: string;
+  fromThreadId?: string;
+  toAgentId?: string;
+  triggerTurn?: boolean;
+};
 
 export type RuntimeEventType =
   | 'thread.created'
@@ -14,10 +27,24 @@ export type RuntimeEventType =
   | 'thread.context_compacting'
   | 'thread.context_compacted'
   | 'turn.started'
+  | 'turn.step_snapshot'
+  | 'mailbox.delivered'
   | 'message.created'
   | 'message.delta'
   | 'message.updated'
+  | 'message.plan_mode_updated'
   | 'message.completed'
+  | 'item.started'
+  | 'item.delta'
+  | 'item.completed'
+  | 'plan.delta'
+  | 'reasoning.summary_delta'
+  | 'reasoning.summary_part_added'
+  | 'reasoning.raw_delta'
+  | 'safety.buffering'
+  | 'model.verification'
+  | 'token.count'
+  | 'turn.diff'
   | 'messages.deleted'
   | 'messages.truncated'
   | 'tool.started'
@@ -61,11 +88,25 @@ export type RuntimeEvent =
       }
     >
   | RuntimeEventBase<'thread.context_compacted', { messages: RuntimeMessage[]; notice: NonNullable<RuntimeMessage['contextCompaction']> }>
-  | RuntimeEventBase<'turn.started', { input: string }>
+  | RuntimeEventBase<'turn.started', { input: string; taskKind?: RuntimeTaskKind }>
+  | RuntimeEventBase<'turn.step_snapshot', { snapshot: RuntimeModelRequestStepSnapshot }>
+  | RuntimeEventBase<'mailbox.delivered', RuntimeMailboxDelivery>
   | RuntimeEventBase<'message.created', { message: RuntimeMessage }>
   | RuntimeEventBase<'message.delta', { messageId: string; text: string }>
   | RuntimeEventBase<'message.updated', { messageId: string; content: string }>
-  | RuntimeEventBase<'message.completed', { messageId: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls']; memoryCitation?: RuntimeMessage['memoryCitation'] }>
+  | RuntimeEventBase<'message.plan_mode_updated', { messageId: string; content?: string; planMode: NonNullable<RuntimeMessage['planMode']> }>
+  | RuntimeEventBase<'message.completed', { messageId: string; content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls']; memoryCitation?: RuntimeMessage['memoryCitation']; planMode?: RuntimeMessage['planMode'] }>
+  | RuntimeEventBase<'item.started', { item: RuntimeStreamItem }>
+  | RuntimeEventBase<'item.delta', { itemId: string; delta: string }>
+  | RuntimeEventBase<'item.completed', { item: RuntimeStreamItem; content?: string; data?: unknown }>
+  | RuntimeEventBase<'plan.delta', { itemId: string; delta: string }>
+  | RuntimeEventBase<'reasoning.summary_delta', { itemId: string; delta: string; summaryIndex?: number }>
+  | RuntimeEventBase<'reasoning.summary_part_added', { itemId: string; summaryIndex?: number }>
+  | RuntimeEventBase<'reasoning.raw_delta', { itemId: string; delta: string; contentIndex?: number }>
+  | RuntimeEventBase<'safety.buffering', { buffering: RuntimeSafetyBuffering }>
+  | RuntimeEventBase<'model.verification', { verification: RuntimeModelVerification }>
+  | RuntimeEventBase<'token.count', { usage: RuntimeUsage; modelContextWindow?: number; tokensUntilCompaction?: number }>
+  | RuntimeEventBase<'turn.diff', { unifiedDiff: string }>
   | RuntimeEventBase<'messages.deleted', { messageIds: string[] }>
   | RuntimeEventBase<'messages.truncated', { messageId: string; includeSelf?: boolean; removedMessageIds: string[] }>
   | RuntimeEventBase<'tool.started', { toolCallId: string; toolName: string; argumentsPreview: string; resultPreview?: string; source?: 'agent' | 'userShell' }>
@@ -88,8 +129,8 @@ export type RuntimeEvent =
   | RuntimeEventBase<'hook.completed', RuntimeHookRun>
   | RuntimeEventBase<'approval.requested', { approval: RuntimeApprovalRequest }>
   | RuntimeEventBase<'approval.resolved', { approvalId: string; decision: RuntimeApprovalDecision; message?: string }>
-  | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage }>
-  | RuntimeEventBase<'turn.cancelled', { reason?: string }>
+  | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage; taskKind?: RuntimeTaskKind }>
+  | RuntimeEventBase<'turn.cancelled', { reason?: string; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'runtime.error', { message: string; code?: string }>;
 
 export type RuntimeSseEnvelope = {

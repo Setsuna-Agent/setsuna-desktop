@@ -26,6 +26,18 @@ describe('json thread store', () => {
     expect(global.memoryMode).toBe('enabled');
   });
 
+  it('stores spawned child relationships and filters by parent or ancestor', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+
+    const parent = await store.createThread({ title: 'Parent' });
+    const child = await store.createThread({ title: 'Child', parentThreadId: parent.id });
+    const grandchild = await store.createThread({ title: 'Grandchild', parentThreadId: child.id });
+
+    expect(child).toMatchObject({ parentThreadId: parent.id });
+    expect((await store.listThreads({ includeArchived: true, parentThreadId: parent.id })).map((thread) => thread.id)).toEqual([child.id]);
+    expect((await store.listThreads({ includeArchived: true, ancestorThreadId: parent.id })).map((thread) => thread.id).sort()).toEqual([child.id, grandchild.id].sort());
+  });
+
   it('keeps the thread index complete across concurrent thread writes', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
 

@@ -1,6 +1,7 @@
-import type { RuntimeToolCall } from './provider.js';
+import type { RuntimeModelRequestStepSnapshot, RuntimeModelVerification, RuntimeSafetyBuffering, RuntimeStreamItem, RuntimeToolCall } from './provider.js';
 import type { RuntimeMemoryCitation } from './memory.js';
 import type { RuntimeHookSource } from './config.js';
+import type { RuntimeUsage } from './usage.js';
 import type {
   RuntimeApprovalAvailableDecision,
   RuntimeExecPolicyAmendment,
@@ -25,6 +26,7 @@ export type RuntimeMessage = {
   attachments?: RuntimeMessageAttachment[];
   contextCompaction?: RuntimeContextCompactionNotice;
   reviewMode?: RuntimeReviewModeNotice;
+  planMode?: RuntimePlanModeNotice;
   memoryCitation?: RuntimeMemoryCitation;
   toolCallId?: string;
   toolName?: string;
@@ -42,6 +44,7 @@ export type RuntimeMessageAttachment = {
 };
 
 export type RuntimeContextCompactionNotice = {
+  autoCompactTokenLimit?: number;
   compactedMessageCount: number;
   compactedRequestTokens?: number;
   compactedTokens: number;
@@ -55,15 +58,68 @@ export type RuntimeContextCompactionNotice = {
   originalRequestTokens?: number;
   originalTokens: number;
   scope?: string;
+  source?: 'local' | 'remote';
   summaryRole?: string;
   summaryTokens?: number;
   targetContextTokens?: number;
+  tokensUntilCompaction?: number;
   triggerScopes?: string[];
 };
 
 export type RuntimeReviewModeNotice = {
   kind: 'entered' | 'exited';
   review: string;
+};
+
+export type RuntimePlanModeNotice = {
+  mode: 'plan';
+  status: 'awaiting_confirmation' | 'accepted' | 'dismissed';
+};
+
+export type RuntimePlanDecision = Exclude<RuntimePlanModeNotice['status'], 'awaiting_confirmation'>;
+
+export type RuntimeMailboxDeliveryRecord = {
+  id: string;
+  content: string;
+  createdAt: string;
+  turnId?: string;
+  deliveryMode?: 'queue_only' | 'trigger_turn';
+  fromAgentId?: string;
+  fromThreadId?: string;
+  toAgentId?: string;
+  triggerTurn?: boolean;
+};
+
+export type RuntimeThreadTurnTaskKind = 'regular' | 'compact' | 'review' | 'user_shell';
+
+export type RuntimeThreadTurnStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
+
+export type RuntimeThreadTurnTokenCount = {
+  createdAt: string;
+  modelContextWindow?: number;
+  tokensUntilCompaction?: number;
+  usage: RuntimeUsage;
+};
+
+export type RuntimeThreadTurnStepSnapshot = {
+  createdAt: string;
+  snapshot: RuntimeModelRequestStepSnapshot;
+};
+
+export type RuntimeThreadTurn = {
+  id: string;
+  completedAt?: string;
+  diff?: string;
+  error?: string;
+  input?: string;
+  items: RuntimeStreamItem[];
+  modelVerifications?: RuntimeModelVerification[];
+  safetyBuffering?: RuntimeSafetyBuffering;
+  startedAt?: string;
+  status?: RuntimeThreadTurnStatus;
+  stepSnapshots?: RuntimeThreadTurnStepSnapshot[];
+  taskKind?: RuntimeThreadTurnTaskKind;
+  tokenCounts?: RuntimeThreadTurnTokenCount[];
 };
 
 export type RuntimeThreadContextCompactionState = {
@@ -75,6 +131,7 @@ export type RuntimeThreadContextCompactionState = {
   notice?: RuntimeContextCompactionNotice;
   percent?: number;
   startedAt?: string;
+  tokensUntilCompaction?: number;
   usedTokens?: number;
 };
 
@@ -163,6 +220,7 @@ export type RuntimeThreadSummary = {
   id: string;
   activeTurnId?: string | null;
   forkedFromId?: string;
+  parentThreadId?: string;
   projectId?: string;
   title: string;
   createdAt: string;
@@ -177,7 +235,9 @@ export type RuntimeThreadSummary = {
 
 export type RuntimeThread = RuntimeThreadSummary & {
   contextCompaction?: RuntimeThreadContextCompactionState;
+  mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
   pendingHookRuns?: RuntimeHookRun[];
+  turns?: RuntimeThreadTurn[];
   messages: RuntimeMessage[];
   lastSeq: number;
 };
@@ -185,6 +245,8 @@ export type RuntimeThread = RuntimeThreadSummary & {
 export type ThreadQuery = {
   search?: string;
   includeArchived?: boolean;
+  ancestorThreadId?: string;
+  parentThreadId?: string;
   scope?: 'all' | 'global' | 'project';
   projectId?: string;
 };
@@ -197,6 +259,7 @@ export type CreateThreadInput = {
   title?: string;
   projectId?: string;
   forkedFromId?: string;
+  parentThreadId?: string;
   memoryMode?: RuntimeThreadMemoryMode;
 };
 
@@ -209,10 +272,14 @@ export type ThreadMemoryModePatch = {
   mode: RuntimeThreadMemoryMode;
 };
 
+export type RuntimeCollaborationMode = 'default' | 'plan';
+
 export type SendTurnInput = {
   input: string;
   clientId?: string;
   attachments?: RuntimeMessageAttachment[];
+  collaborationMode?: RuntimeCollaborationMode;
+  planDecision?: RuntimePlanDecision;
   skillIds?: string[];
   thinking?: boolean;
   thinkingEffort?: string;

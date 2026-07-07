@@ -70,11 +70,13 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     clock,
     ids,
     approvalGate,
+    appServerNotificationBus,
     configStore,
     skillRegistry,
     toolHost,
     usageStore,
     memoryStore,
+    mcpStore,
     policyAmendmentStore,
     persistentToolApprovalStore,
   });

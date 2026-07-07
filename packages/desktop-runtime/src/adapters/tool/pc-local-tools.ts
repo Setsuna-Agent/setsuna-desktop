@@ -1300,6 +1300,28 @@ export async function closeLocalToolState(state = createLocalToolState()) {
   pruneShellProcessStore(state.shellProcessStore);
 }
 
+export async function cleanupLocalToolTurn(state = createLocalToolState(), context = {}) {
+  const turnId = String(context?.turnId || '');
+  if (!turnId) return { terminated: 0 };
+  const threadId = String(context?.threadId || '');
+  const toolCallId = String(context?.toolCallId || '');
+  const sessions = [...(shellSessionsMap(state).values?.() || [])]
+    .filter((session) => !session.persist)
+    .filter((session) => session.turnId === turnId)
+    .filter((session) => !threadId || !session.threadId || session.threadId === threadId)
+    .filter((session) => !toolCallId || session.toolCallId === toolCallId)
+    .filter((session) => isShellSessionVisibleToState(state, session));
+
+  sessions.forEach((session) => terminateShellSession(session, 'SIGTERM'));
+  await Promise.allSettled(sessions.map((session) =>
+    Promise.race([session.done, sleep(SHELL_GRACEFUL_KILL_MS + 1000)])
+  ));
+  for (const session of sessions) {
+    removeShellSession(state, session.id);
+  }
+  return { terminated: sessions.length };
+}
+
 export async function closeShellProcessStore(store = createShellProcessStore()) {
   const sessions = [...(store.sessions?.values?.() || [])];
   sessions.forEach((session) => terminateShellSession(session, 'SIGTERM'));
@@ -1326,6 +1348,9 @@ function registerShellSession(state, session, options = {}) {
     ? boundedInteger(options.persistTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS)
     : 0;
   session.root = state.root;
+  session.threadId = String(options.threadId || '');
+  session.turnId = String(options.turnId || '');
+  session.toolCallId = String(options.toolCallId || '');
   session.persist = persist;
   session.persistTtlMs = persistTtlMs;
   session.expiresAt = persist ? Date.now() + persistTtlMs : 0;
@@ -2882,7 +2907,13 @@ async function runShellCommand(args, state, options = {}) {
     signal: options.signal,
     onProgress: options.onProgress,
   });
-  registerShellSession(state, session, { persist, persistTtlMs });
+  registerShellSession(state, session, {
+    persist,
+    persistTtlMs,
+    threadId: options.threadId,
+    turnId: options.turnId,
+    toolCallId: options.toolCallId,
+  });
 
   const wait = yieldTimeMs === 0
     ? await session.done.then(() => ({ completed: true }))
@@ -3094,6 +3125,9 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
     signal: null,
     errorCode: '',
     sandboxed: false,
+    threadId: '',
+    turnId: '',
+    toolCallId: '',
     stdout: '',
     stderr: '',
     stdoutOmittedChars: 0,
@@ -3254,6 +3288,9 @@ function shellProcessSnapshot(session, root) {
     persisted: Boolean(session.persist),
     started_at_ms: session.startedAt,
     finished_at_ms: session.finishedAt || null,
+    thread_id: session.threadId || null,
+    turn_id: session.turnId || null,
+    tool_call_id: session.toolCallId || null,
     expires_at_ms: session.persist ? session.expiresAt : null,
     exit_code: session.exitCode ?? null,
     signal: session.signal ?? null,
@@ -4340,15 +4377,15 @@ function networkPolicyDecision(context, state) {
   return '';
 }
 
-function shellSandboxUnavailableReason(state) {
+export function shellSandboxUnavailableReason(state, capability = shellSandboxCapability()) {
   if (!state?.osSandbox) return '';
   const profile = normalizePermissionProfile(state?.permissionProfile);
   if (profile === 'danger-full-access') return '';
-  if (profile !== 'read-only') {
-    return 'OS sandbox 当前只支持 read-only 硬隔离；workspace-write 仍由 runtime policy 预检保护。请关闭 os_sandbox，或切换到 read-only。';
+  if (profile !== 'read-only' && profile !== 'workspace-write') {
+    return 'OS sandbox 当前只支持 read-only 或 workspace-write 硬隔离；请关闭 os_sandbox，或切换权限配置。';
   }
-  const capability = shellSandboxCapability();
   if (!capability.supported) return capability.reason;
+  if (capability.provider !== 'macos-seatbelt') return '当前 OS sandbox provider 不支持 shell 硬隔离。';
   return '';
 }
 
@@ -4627,16 +4664,43 @@ function shellSpawnSpec(command, state) {
   };
 }
 
-function shellSandboxProfile(state) {
+export function shellSandboxProfile(state, capability = shellSandboxCapability()) {
   if (!state?.osSandbox) return '';
   const profile = normalizePermissionProfile(state?.permissionProfile);
-  if (profile !== 'read-only') return '';
-  if (shellSandboxCapability().provider !== 'macos-seatbelt') return '';
-  return [
+  if (profile === 'danger-full-access') return '';
+  if (capability.provider !== 'macos-seatbelt') return '';
+  const lines = [
     '(version 1)',
     '(allow default)',
-    '(deny file-write*)',
-  ].join('\n');
+  ];
+  if (state?.sandboxWorkspaceWrite?.networkAccess !== true) lines.push('(deny network*)');
+  if (profile === 'read-only') {
+    lines.push('(deny file-write*)');
+    return lines.join('\n');
+  }
+  if (profile !== 'workspace-write') return '';
+
+  const writableRoots = [...new Set(shellWorkspaceWriteRoots(state).map(realPathIfExists))];
+  // Seatbelt does not reopen a broad deny with later allow rules, so deny writes
+  // only when the target is outside every approved writable root.
+  lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
+  for (const root of deniedRootsForState(state)) {
+    lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
+  }
+  return lines.join('\n');
+}
+
+function seatbeltDenyWritesOutsideRoots(roots) {
+  const filters = roots
+    .filter(Boolean)
+    .map((root) => `(require-not (subpath ${seatbeltString(root)}))`);
+  if (!filters.length) return '(deny file-write*)';
+  if (filters.length === 1) return `(deny file-write* ${filters[0]})`;
+  return `(deny file-write* (require-all ${filters.join(' ')}))`;
+}
+
+function seatbeltString(value) {
+  return JSON.stringify(String(value || ''));
 }
 
 function shellEnvironment() {

@@ -1,5 +1,5 @@
 import type { RuntimeEvent } from './events.js';
-import type { RuntimeHookRun, RuntimeMessage, RuntimeThread, RuntimeToolRun, RuntimeToolRunStatus } from './threads.js';
+import type { RuntimeHookRun, RuntimeMessage, RuntimeThread, RuntimeThreadTurn, RuntimeToolRun, RuntimeToolRunStatus } from './threads.js';
 
 const TOOL_OUTPUT_PREVIEW_MAX_LENGTH = 12000;
 
@@ -14,8 +14,10 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   const next: RuntimeThread = {
     ...thread,
     contextCompaction: thread.contextCompaction ? cloneThreadContextCompaction(thread.contextCompaction) : undefined,
+    mailboxDeliveries: thread.mailboxDeliveries?.map((delivery) => ({ ...delivery })),
     messages: thread.messages.map(cloneMessage),
     pendingHookRuns: thread.pendingHookRuns?.map(cloneHookRun),
+    turns: thread.turns?.map(cloneThreadTurn),
     lastSeq: Math.max(thread.lastSeq, event.seq),
     updatedAt: event.createdAt,
   };
@@ -54,6 +56,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'thread.context_cleared') {
     next.contextCompaction = undefined;
     delete next.pendingHookRuns;
+    next.turns = [];
     next.messages = [];
     next.messageCount = 0;
     next.lastMessagePreview = '';
@@ -83,6 +86,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       notice: { ...event.payload.notice },
       percent: percentForNotice(event.payload.notice),
       status: 'completed',
+      tokensUntilCompaction: event.payload.notice.tokensUntilCompaction,
       usedTokens: event.payload.notice.compactedTokens,
     };
     // 压缩事件带的是新的模型窗口，reducer 负责把旧可见历史降级为 transcript。
@@ -108,6 +112,38 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'turn.started') {
     next.activeTurnId = event.turnId ?? next.activeTurnId ?? null;
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) {
+      turn.input = event.payload.input;
+      turn.taskKind = event.payload.taskKind;
+      turn.status = 'in_progress';
+      turn.startedAt = turn.startedAt ?? event.createdAt;
+      delete turn.completedAt;
+      delete turn.error;
+    }
+    return next;
+  }
+
+  if (event.type === 'turn.step_snapshot') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) {
+      turn.stepSnapshots = [
+        ...(turn.stepSnapshots ?? []),
+        { createdAt: event.createdAt, snapshot: cloneStepSnapshot(event.payload.snapshot) },
+      ];
+    }
+    return next;
+  }
+
+  if (event.type === 'mailbox.delivered') {
+    next.mailboxDeliveries = [
+      ...(next.mailboxDeliveries ?? []),
+      {
+        ...event.payload,
+        createdAt: event.createdAt,
+        turnId: event.turnId,
+      },
+    ];
     return next;
   }
 
@@ -135,15 +171,90 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
+  if (event.type === 'message.plan_mode_updated') {
+    const message = next.messages.find((item) => item.id === event.payload.messageId);
+    if (message) {
+      message.planMode = { ...event.payload.planMode };
+      if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
+    }
+    return next;
+  }
+
   if (event.type === 'message.completed') {
     const message = next.messages.find((item) => item.id === event.payload.messageId);
     if (message) {
+      if (event.payload.content !== undefined) message.content = event.payload.content;
       message.status = 'complete';
       message.completedAt = event.createdAt;
       if (event.payload.toolCalls?.length) message.toolCalls = event.payload.toolCalls.map((toolCall) => ({ ...toolCall }));
       if (event.payload.memoryCitation) message.memoryCitation = cloneMemoryCitation(event.payload.memoryCitation);
+      if (event.payload.planMode) message.planMode = { ...event.payload.planMode };
       if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
     }
+    return next;
+  }
+
+  if (event.type === 'item.started') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) upsertThreadTurnItem(turn, { ...event.payload.item, status: event.payload.item.status ?? 'in_progress' });
+    return next;
+  }
+
+  if (event.type === 'item.delta') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) appendThreadTurnItemDelta(turn, event.payload.itemId, event.payload.delta);
+    return next;
+  }
+
+  if (event.type === 'item.completed') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) upsertThreadTurnItem(turn, { ...event.payload.item, status: event.payload.item.status ?? 'completed' });
+    return next;
+  }
+
+  if (event.type === 'plan.delta') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) appendThreadTurnItemDelta(turn, event.payload.itemId, event.payload.delta, 'plan');
+    return next;
+  }
+
+  if (event.type === 'reasoning.summary_delta' || event.type === 'reasoning.raw_delta') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) appendThreadTurnItemDelta(turn, event.payload.itemId, event.payload.delta, 'reasoning');
+    return next;
+  }
+
+  if (event.type === 'safety.buffering') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) turn.safetyBuffering = { ...event.payload.buffering };
+    return next;
+  }
+
+  if (event.type === 'model.verification') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) turn.modelVerifications = [...(turn.modelVerifications ?? []), { ...event.payload.verification }];
+    return next;
+  }
+
+  if (event.type === 'token.count') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) {
+      turn.tokenCounts = [
+        ...(turn.tokenCounts ?? []),
+        {
+          createdAt: event.createdAt,
+          usage: { ...event.payload.usage },
+          ...(event.payload.modelContextWindow !== undefined ? { modelContextWindow: event.payload.modelContextWindow } : {}),
+          ...(event.payload.tokensUntilCompaction !== undefined ? { tokensUntilCompaction: event.payload.tokensUntilCompaction } : {}),
+        },
+      ];
+    }
+    return next;
+  }
+
+  if (event.type === 'turn.diff') {
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) turn.diff = appendTurnDiff(turn.diff, event.payload.unifiedDiff);
     return next;
   }
 
@@ -157,8 +268,13 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'messages.truncated') {
     const index = next.messages.findIndex((message) => message.id === event.payload.messageId);
     if (index >= 0) {
+      const removedMessageIds = new Set(event.payload.removedMessageIds);
+      const removedTurnIds = new Set(next.messages
+        .filter((message) => message.turnId && removedMessageIds.has(message.id))
+        .map((message) => message.turnId!));
       const keepUntil = event.payload.includeSelf ? index : index + 1;
       next.messages = next.messages.slice(0, keepUntil);
+      pruneRemovedTurns(next, removedTurnIds);
       refreshThreadSummary(next);
     }
     return next;
@@ -276,6 +392,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'runtime.error') {
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) {
+      turn.status = 'failed';
+      turn.completedAt = event.createdAt;
+      turn.error = event.payload.message;
+    }
     completeActivePendingHookRuns(next, event.turnId, event.createdAt, event.payload.message);
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
@@ -291,6 +413,13 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'turn.cancelled') {
     const reason = event.payload.reason || 'Turn cancelled.';
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) {
+      turn.status = 'cancelled';
+      turn.completedAt = event.createdAt;
+      turn.error = reason;
+      completeActiveTurnItems(turn);
+    }
     for (const message of next.messages) {
       if (event.turnId && message.turnId !== event.turnId) continue;
       if (message.status === 'streaming' || (message.role === 'assistant' && hasActiveToolRun(message))) {
@@ -307,6 +436,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'turn.completed') {
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
+    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    if (turn) {
+      turn.status = turn.status === 'failed' || turn.status === 'cancelled' ? turn.status : 'completed';
+      turn.completedAt = turn.completedAt ?? event.createdAt;
+    }
     return next;
   }
 
@@ -319,11 +453,125 @@ function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
+    planMode: message.planMode ? { ...message.planMode } : undefined,
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map(cloneToolRun),
     hookRuns: message.hookRuns?.map(cloneHookRun),
   };
+}
+
+function cloneThreadTurn(turn: RuntimeThreadTurn): RuntimeThreadTurn {
+  return {
+    ...turn,
+    items: turn.items.map(cloneStreamItem),
+    modelVerifications: turn.modelVerifications?.map((verification) => ({ ...verification, warnings: verification.warnings ? [...verification.warnings] : undefined })),
+    safetyBuffering: turn.safetyBuffering
+      ? {
+          ...turn.safetyBuffering,
+          reasons: turn.safetyBuffering.reasons ? [...turn.safetyBuffering.reasons] : undefined,
+          useCases: turn.safetyBuffering.useCases ? [...turn.safetyBuffering.useCases] : undefined,
+        }
+      : undefined,
+    tokenCounts: turn.tokenCounts?.map((count) => ({
+      ...count,
+      usage: { ...count.usage },
+    })),
+    stepSnapshots: turn.stepSnapshots?.map((step) => ({
+      createdAt: step.createdAt,
+      snapshot: cloneStepSnapshot(step.snapshot),
+    })),
+  };
+}
+
+function cloneStepSnapshot(
+  snapshot: NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot'],
+): NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot'] {
+  return {
+    ...snapshot,
+    conversationMessageIds: [...snapshot.conversationMessageIds],
+    advertisedToolNames: snapshot.advertisedToolNames ? [...snapshot.advertisedToolNames] : undefined,
+    contextWindow: snapshot.contextWindow
+      ? {
+          ...snapshot.contextWindow,
+          compactionSummaryMessageIds: [...snapshot.contextWindow.compactionSummaryMessageIds],
+        }
+      : undefined,
+    deferredToolNames: snapshot.deferredToolNames ? [...snapshot.deferredToolNames] : undefined,
+    featureKeys: [...snapshot.featureKeys],
+    inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
+    mcpServerKeys: [...snapshot.mcpServerKeys],
+    messageIds: [...snapshot.messageIds],
+    sandboxWorkspaceWrite: snapshot.sandboxWorkspaceWrite
+      ? {
+          ...snapshot.sandboxWorkspaceWrite,
+          deniedGlobPatterns: snapshot.sandboxWorkspaceWrite.deniedGlobPatterns ? [...snapshot.sandboxWorkspaceWrite.deniedGlobPatterns] : undefined,
+          deniedRoots: snapshot.sandboxWorkspaceWrite.deniedRoots ? [...snapshot.sandboxWorkspaceWrite.deniedRoots] : undefined,
+          readableRoots: snapshot.sandboxWorkspaceWrite.readableRoots ? [...snapshot.sandboxWorkspaceWrite.readableRoots] : undefined,
+          writableRoots: snapshot.sandboxWorkspaceWrite.writableRoots ? [...snapshot.sandboxWorkspaceWrite.writableRoots] : undefined,
+        }
+      : undefined,
+    selectedSkills: snapshot.selectedSkills.map((skill) => ({ ...skill })),
+    toolEnvironment: snapshot.toolEnvironment ? { ...snapshot.toolEnvironment } : snapshot.toolEnvironment,
+    toolNames: [...snapshot.toolNames],
+    routerToolNames: snapshot.routerToolNames ? [...snapshot.routerToolNames] : undefined,
+    toolRuntimes: snapshot.toolRuntimes ? snapshot.toolRuntimes.map((runtime) => ({ ...runtime })) : undefined,
+    worldState: { ...snapshot.worldState },
+  };
+}
+
+function cloneStreamItem(item: RuntimeThreadTurn['items'][number]): RuntimeThreadTurn['items'][number] {
+  return {
+    ...item,
+    toolCall: item.toolCall ? { ...item.toolCall } : undefined,
+    collabToolCall: item.collabToolCall ? { ...item.collabToolCall } : undefined,
+  };
+}
+
+function ensureThreadTurn(thread: RuntimeThread, turnId: string | undefined, createdAt: string): RuntimeThreadTurn | null {
+  if (!turnId) return null;
+  thread.turns = thread.turns ? [...thread.turns] : [];
+  let turn = thread.turns.find((item) => item.id === turnId);
+  if (!turn) {
+    turn = { id: turnId, items: [], startedAt: createdAt, status: 'in_progress' };
+    thread.turns.push(turn);
+  }
+  return turn;
+}
+
+function upsertThreadTurnItem(turn: RuntimeThreadTurn, item: RuntimeThreadTurn['items'][number]): void {
+  const index = turn.items.findIndex((current) => current.id === item.id);
+  const cloned = cloneStreamItem(item);
+  if (index < 0) {
+    turn.items.push(cloned);
+    return;
+  }
+  const current = turn.items[index];
+  turn.items[index] = {
+    ...current,
+    ...cloned,
+    content: cloned.content ?? current.content,
+    status: cloned.status ?? current.status,
+    transcriptMessageId: cloned.transcriptMessageId ?? current.transcriptMessageId,
+    toolCall: cloned.toolCall ?? current.toolCall,
+    collabToolCall: cloned.collabToolCall ?? current.collabToolCall,
+  };
+}
+
+function appendThreadTurnItemDelta(
+  turn: RuntimeThreadTurn,
+  itemId: string,
+  delta: string,
+  fallbackKind: RuntimeThreadTurn['items'][number]['kind'] = 'agent_message',
+): void {
+  if (!itemId || !delta) return;
+  let item = turn.items.find((current) => current.id === itemId);
+  if (!item) {
+    item = { id: itemId, kind: fallbackKind, status: 'in_progress', content: '' };
+    turn.items.push(item);
+  }
+  item.content = `${item.content ?? ''}${delta}`;
+  item.status = item.status ?? 'in_progress';
 }
 
 function cloneToolRun(toolRun: RuntimeToolRun): RuntimeToolRun {
@@ -572,6 +820,32 @@ function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, re
   if (changed) message.toolRuns = runs;
 }
 
+function completeActiveTurnItems(turn: RuntimeThreadTurn): void {
+  if (!turn.items.length) return;
+  turn.items = turn.items.map((item) => {
+    if (item.status !== 'in_progress') return item;
+    return {
+      ...item,
+      status: 'cancelled' as const,
+    };
+  });
+}
+
+function pruneRemovedTurns(thread: RuntimeThread, removedTurnIds: Set<string>): void {
+  if (!removedTurnIds.size || !thread.turns?.length) return;
+  const keptTurnIds = new Set<string>();
+  for (const message of thread.messages) {
+    if (message.turnId) keptTurnIds.add(message.turnId);
+  }
+  for (const delivery of thread.mailboxDeliveries ?? []) {
+    if (delivery.turnId) keptTurnIds.add(delivery.turnId);
+  }
+  thread.turns = thread.turns.filter((turn) => !removedTurnIds.has(turn.id) || keptTurnIds.has(turn.id));
+  if (thread.activeTurnId && removedTurnIds.has(thread.activeTurnId) && !keptTurnIds.has(thread.activeTurnId)) {
+    thread.activeTurnId = null;
+  }
+}
+
 function completeActiveHookRuns(hookRuns: RuntimeHookRun[] | undefined, completedAt: string, reason: string): RuntimeHookRun[] | undefined {
   if (!hookRuns?.length) return hookRuns;
   let changed = false;
@@ -678,6 +952,14 @@ function appendPreviewDelta(current: string, delta: string): string {
   if (next.length <= TOOL_OUTPUT_PREVIEW_MAX_LENGTH) return next;
   // 终端类输出的尾部通常包含最终状态或错误，所以超长时保留尾部。
   return next.slice(next.length - TOOL_OUTPUT_PREVIEW_MAX_LENGTH);
+}
+
+function appendTurnDiff(current: string | undefined, diff: string): string | undefined {
+  const next = diff.trim();
+  if (!next) return current;
+  if (!current) return next;
+  if (current.split('\n\n').includes(next) || current.includes(next)) return current;
+  return `${current}\n\n${next}`;
 }
 
 function updatePreviewFromMessage(thread: RuntimeThread, message: RuntimeMessage): void {

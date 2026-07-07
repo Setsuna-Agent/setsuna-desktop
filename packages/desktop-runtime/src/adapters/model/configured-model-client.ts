@@ -1,6 +1,6 @@
 import type { ModelRequest } from '@setsuna-desktop/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
-import type { ModelClient } from '../../ports/model-client.js';
+import type { ModelClient, ModelCompactionRequest, ModelCompactionResult } from '../../ports/model-client.js';
 import { AnthropicMessagesModelClient } from './anthropic-messages-model-client.js';
 import { AiSdkOpenAiCompatibleModelClient } from './ai-sdk-model-client.js';
 import { OpenAiChatModelClient } from './openai-chat-model-client.js';
@@ -31,6 +31,24 @@ export class ConfiguredModelClient implements ModelClient {
       model: requestModel,
       maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
       ...thinkingRequestDefaults(requestProvider, { ...request, model: requestModel }),
+    });
+  }
+
+  async compactConversation(request: ModelCompactionRequest): Promise<ModelCompactionResult> {
+    const provider = await this.configStore.getActiveProviderConfig();
+    const requestProvider = provider ? providerForRequestModel(provider, request.model) : null;
+    if (!shouldUseConfiguredProvider(requestProvider)) {
+      if (this.fallback.compactConversation) return this.fallback.compactConversation(request);
+      throw new Error('Remote context compaction is not supported by the fallback model client.');
+    }
+
+    const requestModel = requestProvider.activeModel?.code || request.model;
+    const client = providerModelClient(requestProvider, this.fetchImpl);
+    if (!client.compactConversation) throw new Error(`Remote context compaction is not supported by provider ${requestProvider.provider}.`);
+    return client.compactConversation({
+      ...request,
+      model: requestModel,
+      maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
     });
   }
 }

@@ -275,6 +275,135 @@ describe('applyRuntimeEventToThread context compaction', () => {
     });
   });
 
+  it('records plan mode metadata from message.completed events', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [
+        {
+          id: 'msg_1',
+          role: 'assistant',
+          content: '1. Inspect first.',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          status: 'streaming',
+        },
+      ],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: {
+        messageId: 'msg_1',
+        planMode: { mode: 'plan', status: 'awaiting_confirmation' },
+      },
+    };
+
+    const completed = applyRuntimeEventToThread(thread, event);
+
+    expect(completed.messages[0]).toMatchObject({
+      planMode: { mode: 'plan', status: 'awaiting_confirmation' },
+      status: 'complete',
+    });
+  });
+
+  it('records mailbox deliveries for thread history projections', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'mailbox.delivered',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: {
+        id: 'mail_1',
+        content: 'child result',
+        deliveryMode: 'queue_only',
+        fromAgentId: 'agent_child',
+        fromThreadId: 'thread_child',
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, event);
+
+    expect(updated.mailboxDeliveries).toEqual([
+      {
+        id: 'mail_1',
+        content: 'child result',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        turnId: 'turn_1',
+        deliveryMode: 'queue_only',
+        fromAgentId: 'agent_child',
+        fromThreadId: 'thread_child',
+      },
+    ]);
+  });
+
+  it('updates plan mode metadata without recompleting the message', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '1. Inspect first.',
+      lastSeq: 0,
+      messages: [
+        {
+          id: 'msg_1',
+          turnId: 'turn_plan',
+          role: 'assistant',
+          content: '1. Inspect first.',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          completedAt: '2026-06-26T00:00:01.000Z',
+          status: 'complete',
+          planMode: { mode: 'plan', status: 'awaiting_confirmation' },
+        },
+      ],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_plan',
+      type: 'message.plan_mode_updated',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: {
+        messageId: 'msg_1',
+        planMode: { mode: 'plan', status: 'accepted' },
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, event);
+
+    expect(updated.messages[0]).toMatchObject({
+      completedAt: '2026-06-26T00:00:01.000Z',
+      planMode: { mode: 'plan', status: 'accepted' },
+      status: 'complete',
+    });
+  });
+
   it('terminalizes active messages and tool runs when a turn is cancelled', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',
@@ -285,6 +414,16 @@ describe('applyRuntimeEventToThread context compaction', () => {
       messageCount: 2,
       lastMessagePreview: 'request',
       lastSeq: 0,
+      turns: [{
+        id: 'turn_1',
+        startedAt: '2026-06-26T00:00:00.000Z',
+        status: 'in_progress',
+        items: [
+          { id: 'agent_item_1', kind: 'agent_message', status: 'in_progress', content: 'partial' },
+          { id: 'tool_item_1', kind: 'tool_call', status: 'in_progress', toolCall: { id: 'tool_item_1', name: 'run_shell_command', arguments: '{"command":"pnpm test"}' } },
+          { id: 'plan_item_1', kind: 'plan', status: 'completed', content: 'Already finished.' },
+        ],
+      }],
       messages: [
         {
           id: 'msg_user',
@@ -351,6 +490,67 @@ describe('applyRuntimeEventToThread context compaction', () => {
         completedAt: '2026-06-26T00:00:03.000Z',
       }),
     ]);
+    expect(cancelled.turns?.[0]).toMatchObject({
+      id: 'turn_1',
+      status: 'cancelled',
+      completedAt: '2026-06-26T00:00:03.000Z',
+      error: 'Stopped after restart.',
+      items: [
+        { id: 'agent_item_1', status: 'cancelled' },
+        { id: 'tool_item_1', status: 'cancelled' },
+        { id: 'plan_item_1', status: 'completed' },
+      ],
+    });
+  });
+
+  it('prunes persisted turn items when messages are truncated', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 4,
+      lastMessagePreview: 'second answer',
+      lastSeq: 0,
+      activeTurnId: 'turn_2',
+      turns: [
+        {
+          id: 'turn_1',
+          status: 'completed',
+          items: [{ id: 'agent_1', kind: 'agent_message', status: 'completed', content: 'first answer' }],
+        },
+        {
+          id: 'turn_2',
+          status: 'completed',
+          items: [{ id: 'agent_2', kind: 'agent_message', status: 'completed', content: 'second answer' }],
+        },
+      ],
+      messages: [
+        { id: 'msg_user_1', role: 'user', turnId: 'turn_1', content: 'first', createdAt: '2026-06-26T00:00:00.000Z', status: 'complete' },
+        { id: 'msg_assistant_1', role: 'assistant', turnId: 'turn_1', content: 'first answer', createdAt: '2026-06-26T00:00:01.000Z', status: 'complete' },
+        { id: 'msg_user_2', role: 'user', turnId: 'turn_2', content: 'second', createdAt: '2026-06-26T00:00:02.000Z', status: 'complete' },
+        { id: 'msg_assistant_2', role: 'assistant', turnId: 'turn_2', content: 'second answer', createdAt: '2026-06-26T00:00:03.000Z', status: 'complete' },
+      ],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_truncate',
+      seq: 1,
+      threadId: 'thread_1',
+      type: 'messages.truncated',
+      createdAt: '2026-06-26T00:00:04.000Z',
+      payload: {
+        messageId: 'msg_user_2',
+        includeSelf: true,
+        removedMessageIds: ['msg_user_2', 'msg_assistant_2'],
+      },
+    };
+
+    const truncated = applyRuntimeEventToThread(thread, event);
+
+    expect(truncated.messages.map((message) => message.id)).toEqual(['msg_user_1', 'msg_assistant_1']);
+    expect(truncated.turns?.map((turn) => turn.id)).toEqual(['turn_1']);
+    expect(truncated.activeTurnId).toBeNull();
   });
 
   it('keeps model-only messages out of transcript summary fields', () => {
@@ -569,6 +769,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
       createdAt: '2026-06-26T00:00:02.000Z',
       status: 'complete' as const,
       contextCompaction: {
+        autoCompactTokenLimit: 400,
         compactedMessageCount: 1,
         compactedTokens: 128,
         keptRecentMessageCount: 0,
@@ -576,6 +777,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
         maxContextTokensK: 256,
         originalMessageCount: 1,
         originalTokens: 512,
+        tokensUntilCompaction: 272,
         triggerScopes: ['manual'],
       },
     };
@@ -594,6 +796,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
     expect(completed.contextCompaction).toMatchObject({
       notice: compactedMessage.contextCompaction,
       status: 'completed',
+      tokensUntilCompaction: 272,
       usedTokens: 128,
     });
     expect(completed.messages).toHaveLength(2);
@@ -696,5 +899,306 @@ describe('applyRuntimeEventToThread context compaction', () => {
         entries: [{ kind: 'warning', text: 'pre compact warning' }],
       }],
     });
+  });
+
+  it('projects sampling step snapshots into the owning turn', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+    };
+    const snapshot = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      threadLastSeq: 3,
+      conversationMessageIds: ['msg_user'],
+      messageIds: ['msg_system', 'msg_user'],
+      inputMessageIds: ['msg_user'],
+      toolNames: ['read_file'],
+      advertisedToolNames: ['read_file'],
+      deferredToolNames: ['hidden_lookup'],
+      routerToolNames: ['tool_search'],
+      toolRuntimes: [{
+        name: 'read_file',
+        source: 'host' as const,
+        exposure: 'direct' as const,
+        supportsParallel: true,
+        waitsForRuntimeCancellation: true,
+      }],
+      toolChoice: 'auto' as const,
+      toolEnvironment: { id: 'project_1', cwd: '/tmp/project' },
+      selectedSkills: [{ id: 'skill_1', name: 'Skill One' }],
+      mcpServerKeys: ['filesystem'],
+      mcpServerCount: 1,
+      permissionProfile: 'workspace-write' as const,
+      sandboxWorkspaceWrite: {
+        writableRoots: ['/tmp/project'],
+        readableRoots: ['/tmp/project'],
+        deniedRoots: ['/tmp/project/.git'],
+        deniedGlobPatterns: ['**/.env'],
+        networkAccess: false,
+      },
+      contextWindow: {
+        autoCompactTokenLimit: 850,
+        compactionHash: 'sha256:abc',
+        compactionSummaryMessageIds: ['msg_compact'],
+        estimatedTokens: 128,
+        maxContextTokens: 1000,
+        maxContextTokensK: 1,
+        messageCount: 2,
+        tokensUntilCompaction: 722,
+      },
+      featureKeys: ['request_permissions_tool'],
+      worldState: {
+        activeProviderId: 'test',
+        memoryEnabled: true,
+        threadMessageCount: 1,
+        threadUpdatedAt: '2026-06-26T00:00:00.000Z',
+      },
+    };
+
+    const projected = applyRuntimeEventToThread(thread, {
+      id: 'event_step_1',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'turn.step_snapshot',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: { snapshot },
+    });
+
+    expect(projected.turns?.[0]?.stepSnapshots).toEqual([{
+      createdAt: '2026-06-26T00:00:01.000Z',
+      snapshot,
+    }]);
+
+    const cloned = applyRuntimeEventToThread(projected, {
+      id: 'event_step_2',
+      seq: 2,
+      threadId: 'thread_1',
+      type: 'thread.updated',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: { title: 'Renamed' },
+    });
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolNames.push('mutated');
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.advertisedToolNames!.push('mutated');
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.deferredToolNames!.push('mutated');
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.inputMessageIds!.push('mutated');
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.routerToolNames!.push('mutated');
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolRuntimes![0]!.name = 'mutated';
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.contextWindow!.compactionSummaryMessageIds.push('mutated');
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolNames).toEqual(['read_file']);
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.advertisedToolNames).toEqual(['read_file']);
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.deferredToolNames).toEqual(['hidden_lookup']);
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.inputMessageIds).toEqual(['msg_user']);
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.routerToolNames).toEqual(['tool_search']);
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolRuntimes?.[0]?.name).toBe('read_file');
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.contextWindow?.compactionSummaryMessageIds).toEqual(['msg_compact']);
+  });
+
+  it('projects item-based model stream state into the owning turn', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+    };
+    const events: RuntimeEvent[] = [
+      {
+        id: 'event_1',
+        seq: 1,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'turn.started',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        payload: { input: 'inspect', taskKind: 'regular' },
+      },
+      {
+        id: 'event_2',
+        seq: 2,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'item.started',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        payload: {
+          item: {
+            id: 'item_agent_1',
+            kind: 'agent_message',
+            status: 'in_progress',
+            transcriptMessageId: 'msg_assistant_1',
+          },
+        },
+      },
+      {
+        id: 'event_3',
+        seq: 3,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'item.delta',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        payload: { itemId: 'item_agent_1', delta: 'Hello' },
+      },
+      {
+        id: 'event_4',
+        seq: 4,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'item.completed',
+        createdAt: '2026-06-26T00:00:04.000Z',
+        payload: {
+          item: {
+            id: 'item_agent_1',
+            kind: 'agent_message',
+            status: 'completed',
+            transcriptMessageId: 'msg_assistant_1',
+          },
+        },
+      },
+      {
+        id: 'event_5',
+        seq: 5,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'plan.delta',
+        createdAt: '2026-06-26T00:00:05.000Z',
+        payload: { itemId: 'item_plan_1', delta: '1. Inspect state.' },
+      },
+      {
+        id: 'event_6',
+        seq: 6,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'reasoning.summary_delta',
+        createdAt: '2026-06-26T00:00:06.000Z',
+        payload: { itemId: 'item_reasoning_1', delta: 'Thinking briefly.', summaryIndex: 0 },
+      },
+      {
+        id: 'event_7',
+        seq: 7,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'safety.buffering',
+        createdAt: '2026-06-26T00:00:07.000Z',
+        payload: { buffering: { model: 'slow-model', fasterModel: 'fast-model', reasons: ['policy'], showBufferingUi: true } },
+      },
+      {
+        id: 'event_8',
+        seq: 8,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'model.verification',
+        createdAt: '2026-06-26T00:00:08.000Z',
+        payload: { verification: { model: 'slow-model', provider: 'setsuna', warnings: ['fallback'] } },
+      },
+      {
+        id: 'event_9',
+        seq: 9,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'token.count',
+        createdAt: '2026-06-26T00:00:09.000Z',
+        payload: {
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          modelContextWindow: 128000,
+          tokensUntilCompaction: 64000,
+        },
+      },
+      {
+        id: 'event_10',
+        seq: 10,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'turn.diff',
+        createdAt: '2026-06-26T00:00:10.000Z',
+        payload: { unifiedDiff: 'diff --git a/a.txt b/a.txt' },
+      },
+      {
+        id: 'event_10b',
+        seq: 11,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'turn.diff',
+        createdAt: '2026-06-26T00:00:10.100Z',
+        payload: { unifiedDiff: 'diff --git a/b.txt b/b.txt' },
+      },
+      {
+        id: 'event_10c',
+        seq: 12,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'turn.diff',
+        createdAt: '2026-06-26T00:00:10.200Z',
+        payload: { unifiedDiff: 'diff --git a/a.txt b/a.txt' },
+      },
+      {
+        id: 'event_11',
+        seq: 13,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'turn.completed',
+        createdAt: '2026-06-26T00:00:11.000Z',
+        payload: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+      },
+    ];
+
+    const projected = events.reduce(applyRuntimeEventToThread, thread);
+
+    expect(projected.activeTurnId).toBeNull();
+    expect(projected.turns).toHaveLength(1);
+    expect(projected.turns?.[0]).toMatchObject({
+      id: 'turn_1',
+      input: 'inspect',
+      taskKind: 'regular',
+      status: 'completed',
+      startedAt: '2026-06-26T00:00:01.000Z',
+      completedAt: '2026-06-26T00:00:11.000Z',
+      diff: 'diff --git a/a.txt b/a.txt\n\ndiff --git a/b.txt b/b.txt',
+      safetyBuffering: {
+        model: 'slow-model',
+        fasterModel: 'fast-model',
+        reasons: ['policy'],
+        showBufferingUi: true,
+      },
+      modelVerifications: [{ model: 'slow-model', provider: 'setsuna', warnings: ['fallback'] }],
+      tokenCounts: [{
+        createdAt: '2026-06-26T00:00:09.000Z',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        modelContextWindow: 128000,
+        tokensUntilCompaction: 64000,
+      }],
+      items: [
+        {
+          id: 'item_agent_1',
+          kind: 'agent_message',
+          status: 'completed',
+          content: 'Hello',
+          transcriptMessageId: 'msg_assistant_1',
+        },
+        { id: 'item_plan_1', kind: 'plan', status: 'in_progress', content: '1. Inspect state.' },
+        { id: 'item_reasoning_1', kind: 'reasoning', status: 'in_progress', content: 'Thinking briefly.' },
+      ],
+    });
+
+    const cloned = applyRuntimeEventToThread(projected, {
+      id: 'event_12',
+      seq: 12,
+      threadId: 'thread_1',
+      type: 'thread.updated',
+      createdAt: '2026-06-26T00:00:12.000Z',
+      payload: { title: 'Renamed' },
+    });
+    cloned.turns![0]!.items[0]!.content = 'mutated';
+    expect(projected.turns?.[0]?.items[0]?.content).toBe('Hello');
   });
 });

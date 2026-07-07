@@ -1,4 +1,4 @@
-import type { ModelRequest, RuntimeToolCall } from '@setsuna-desktop/contracts';
+import type { ModelRequest, ModelStreamEvent, RuntimeStreamItem, RuntimeToolCall } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
@@ -28,7 +28,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
     private readonly fetchImpl: FetchImpl = globalThis.fetch,
   ) {}
 
-  async *stream(request: ModelRequest) {
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
     const system = systemText(request.messages);
@@ -58,35 +58,71 @@ export class AnthropicMessagesModelClient implements ModelClient {
     let finishReason = undefined;
     const toolCalls = new Map<number, RuntimeToolCall>();
     let toolCallsYielded = false;
+    let nativeToolItems = false;
+    const blocks = new Map<number, AnthropicBlockState>();
     for await (const { event, data } of parseSse(response)) {
       const payload = objectValue(parseJson(data));
       const type = stringValue(payload.type) || event || '';
       if (type === 'content_block_start') {
-        const toolCall = mergeAnthropicBlockStart(toolCalls, payload);
-        if (toolCall) {
-          yield {
-            type: 'tool_call_delta' as const,
-            call: { id: toolCall.id, name: toolCall.name, argumentsDelta: toolCall.arguments },
-          };
+        const blockState = anthropicBlockState(payload);
+        if (blockState) {
+          blocks.set(blockState.index, blockState);
+          if (blockState.item.kind === 'tool_call') nativeToolItems = true;
+          yield { type: 'item_started' as const, item: cloneRuntimeStreamItem(blockState.item) };
+        } else {
+          const toolCall = mergeAnthropicBlockStart(toolCalls, payload);
+          if (toolCall) {
+            yield {
+              type: 'tool_call_delta' as const,
+              call: { id: toolCall.id, name: toolCall.name, argumentsDelta: toolCall.arguments },
+            };
+          }
         }
       } else if (type === 'content_block_delta') {
         const delta = objectValue(payload.delta);
+        const index = typeof payload.index === 'number' ? payload.index : undefined;
+        const blockState = index === undefined ? null : blocks.get(index) ?? null;
         const text = stringValue(delta.text);
         const thinking = stringValue(delta.thinking);
-        if (thinking) yield { type: 'reasoning_delta' as const, text: thinking };
-        if (text) yield { type: 'text_delta' as const, text };
-        const toolCall = mergeAnthropicInputDelta(toolCalls, payload);
-        if (toolCall) {
-          yield {
-            type: 'tool_call_delta' as const,
-            call: { id: toolCall.id, name: toolCall.name, argumentsDelta: stringValue(delta.partial_json) },
-          };
+        const partialJson = stringValue(delta.partial_json);
+        if (blockState?.item.kind === 'reasoning' && thinking) {
+          blockState.content += thinking;
+          yield { type: 'reasoning_raw_delta' as const, itemId: blockState.item.id, text: thinking, contentIndex: 0 };
+        } else if (thinking) {
+          yield { type: 'reasoning_delta' as const, text: thinking };
+        }
+        if (blockState?.item.kind === 'agent_message' && text) {
+          blockState.content += text;
+          yield { type: 'item_delta' as const, itemId: blockState.item.id, delta: text };
+        } else if (text) {
+          yield { type: 'text_delta' as const, text };
+        }
+        if (blockState?.item.kind === 'tool_call' && partialJson) {
+          const toolCall = blockState.item.toolCall ?? { id: blockState.item.id, name: blockState.item.name ?? '', arguments: '' };
+          toolCall.arguments = `${toolCall.arguments}${partialJson}`;
+          blockState.item.toolCall = toolCall;
+          toolCalls.set(blockState.index, toolCall);
+        } else {
+          const toolCall = mergeAnthropicInputDelta(toolCalls, payload);
+          if (toolCall) {
+            yield {
+              type: 'tool_call_delta' as const,
+              call: { id: toolCall.id, name: toolCall.name, argumentsDelta: partialJson },
+            };
+          }
+        }
+      } else if (type === 'content_block_stop') {
+        const index = typeof payload.index === 'number' ? payload.index : undefined;
+        const blockState = index === undefined ? null : blocks.get(index) ?? null;
+        if (blockState) {
+          blocks.delete(blockState.index);
+          yield { type: 'item_completed' as const, item: completedAnthropicBlockItem(blockState) };
         }
       } else if (type === 'message_delta') {
         const delta = objectValue(payload.delta);
         usage = normalizeAnthropicUsage(payload.usage);
         finishReason = stringValue(delta.stop_reason) || finishReason;
-        if (finishReason === 'tool_use') {
+        if (finishReason === 'tool_use' && !nativeToolItems) {
           const calls = [...toolCalls.values()].filter((call) => call.name);
           if (calls.length) {
             toolCallsYielded = true;
@@ -100,7 +136,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
         throw new Error(stringValue(error.message) || 'Anthropic Messages stream failed.');
       }
     }
-    if (!toolCallsYielded && toolCalls.size) {
+    if (!toolCallsYielded && !nativeToolItems && toolCalls.size) {
       const calls = [...toolCalls.values()].filter((call) => call.name);
       if (calls.length) yield { type: 'tool_calls' as const, toolCalls: calls };
     }
@@ -112,6 +148,71 @@ export class AnthropicMessagesModelClient implements ModelClient {
 function toAnthropicToolChoice(toolChoice: Exclude<ModelRequest['toolChoice'], undefined | 'none'>) {
   if (toolChoice === 'auto') return { type: 'auto' };
   return { type: 'tool', name: toolChoice.name };
+}
+
+type AnthropicBlockState = {
+  content: string;
+  index: number;
+  item: RuntimeStreamItem;
+};
+
+function anthropicBlockState(payload: Record<string, unknown>): AnthropicBlockState | null {
+  const block = objectValue(payload.content_block);
+  const type = stringValue(block.type);
+  const index = typeof payload.index === 'number' ? payload.index : 0;
+  if (type === 'text') {
+    const content = stringValue(block.text);
+    return {
+      content,
+      index,
+      item: { id: `content_${index}`, kind: 'agent_message', content, status: 'in_progress' },
+    };
+  }
+  if (type === 'thinking') {
+    const content = stringValue(block.thinking);
+    return {
+      content,
+      index,
+      item: { id: `reasoning_${index}`, kind: 'reasoning', content, status: 'in_progress' },
+    };
+  }
+  if (type === 'tool_use') {
+    const input = block.input === undefined ? '' : JSON.stringify(block.input);
+    const toolCall = {
+      id: stringValue(block.id) || `toolu_${index}`,
+      name: stringValue(block.name),
+      arguments: input === '{}' ? '' : input,
+    };
+    return {
+      content: '',
+      index,
+      item: { id: toolCall.id, kind: 'tool_call', name: toolCall.name, status: 'in_progress', toolCall },
+    };
+  }
+  return null;
+}
+
+function completedAnthropicBlockItem(blockState: AnthropicBlockState): RuntimeStreamItem {
+  const item = blockState.item;
+  if (item.kind === 'tool_call') {
+    return cloneRuntimeStreamItem({
+      ...item,
+      status: 'completed',
+      toolCall: item.toolCall,
+    });
+  }
+  return cloneRuntimeStreamItem({
+    ...item,
+    content: blockState.content,
+    status: 'completed',
+  });
+}
+
+function cloneRuntimeStreamItem(item: RuntimeStreamItem): RuntimeStreamItem {
+  return {
+    ...item,
+    ...(item.toolCall ? { toolCall: { ...item.toolCall } } : {}),
+  };
 }
 
 function mergeAnthropicBlockStart(toolCalls: Map<number, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {

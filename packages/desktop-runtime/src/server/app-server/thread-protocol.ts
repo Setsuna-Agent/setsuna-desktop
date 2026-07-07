@@ -16,7 +16,7 @@ import { hasOwn, numericInput, recordInput, requiredRawString, requiredString, s
 import { activeModelCode, activeModelProvider, appServerApprovalPolicy, sweSandboxPolicy } from './config-protocol.js';
 
 export function sweThreadFromRuntimeSummary(
-  thread: RuntimeThread | Pick<RuntimeThread, 'id' | 'forkedFromId' | 'title' | 'createdAt' | 'updatedAt' | 'lastMessagePreview' | 'archived' | 'gitInfo'>,
+  thread: RuntimeThread | Pick<RuntimeThread, 'id' | 'forkedFromId' | 'parentThreadId' | 'title' | 'createdAt' | 'updatedAt' | 'lastMessagePreview' | 'archived' | 'gitInfo'>,
   cwd: string,
   options: RuntimeServerOptions,
 ) {
@@ -26,7 +26,7 @@ export function sweThreadFromRuntimeSummary(
     id: thread.id,
     sessionId: thread.id,
     forkedFromId: thread.forkedFromId ?? null,
-    parentThreadId: null,
+    parentThreadId: thread.parentThreadId ?? null,
     preview: thread.lastMessagePreview,
     ephemeral: false,
     modelProvider: 'setsuna',

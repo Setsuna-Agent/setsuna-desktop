@@ -1,5 +1,5 @@
 import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
+import type { ToolExecutionContext, ToolExecutionResult, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 
 export class CompositeToolHost implements ToolHost {
   constructor(private readonly hosts: ToolHost[]) {}
@@ -52,6 +52,10 @@ export class CompositeToolHost implements ToolHost {
   async previewPartialToolCall(name: string, rawArguments: string, context: ToolExecutionContext) {
     const host = await this.hostFor(name, context);
     return host?.previewPartialToolCall?.(name, rawArguments, context) ?? null;
+  }
+
+  async cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void> {
+    await Promise.all(this.hosts.map((host) => host.cleanupTurn?.(context, outcome)));
   }
 
   private async hostFor(name: string, context: ToolExecutionContext): Promise<ToolHost | null> {

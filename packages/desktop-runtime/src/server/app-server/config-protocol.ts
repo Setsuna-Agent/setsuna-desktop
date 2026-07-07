@@ -225,8 +225,8 @@ function sweEffectiveConfig(config: RuntimeConfigState, cwd: string): Record<str
   return {
     model: activeModelCode(config),
     review_model: null,
-    model_context_window: null,
-    model_auto_compact_token_limit: null,
+    model_context_window: activeModelConfig(config)?.contextWindowTokens ?? null,
+    model_auto_compact_token_limit: appServerModelAutoCompactTokenLimit(config),
     model_auto_compact_token_limit_scope: null,
     model_provider: activeModelProvider(config),
     approval_policy: appServerApprovalPolicy(config.approvalPolicy),
@@ -375,6 +375,15 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
       case 'model':
         providers = sweProvidersWithActiveModel(config, ensureProviders(), requiredRawString(edit.value, 'model'));
         break;
+      case 'model_context_window':
+        providers = sweProvidersWithModelContextWindow(config, ensureProviders(), edit.value);
+        break;
+      case 'model_auto_compact_token_limit':
+        next.desktopSettings = {
+          ...(next.desktopSettings ?? {}),
+          model_auto_compact_token_limit: edit.value === null ? null : positiveRequiredConfigInt(edit.value, 'model_auto_compact_token_limit'),
+        };
+        break;
       case 'model_provider':
         next.activeProviderId = sweProviderIdForWrite(config, requiredRawString(edit.value, 'model_provider'));
         break;
@@ -458,7 +467,7 @@ function sweProvidersWithActiveModel(
     return {
       ...provider,
       models: [
-        { id: modelCode, name: modelCode, code: modelCode, enabled: true, maxOutputTokens: 68000, thinkingEnabled: false, thinkingEfforts: [] },
+        { id: modelCode, name: modelCode, code: modelCode, enabled: true, contextWindowTokens: 256_000, maxOutputTokens: 68000, thinkingEnabled: false, thinkingEfforts: [] },
         ...models.map((model) => ({ ...model, enabled: false })),
       ],
     };
@@ -488,6 +497,28 @@ function sweProvidersWithReasoningEffort(
             }
           : model
       )) ?? [],
+    };
+  });
+}
+
+function sweProvidersWithModelContextWindow(
+  config: RuntimeConfigState,
+  providers: NonNullable<RuntimeConfigInput['providers']>,
+  value: unknown,
+): NonNullable<RuntimeConfigInput['providers']> {
+  const activeProviderId = config.activeProviderId ?? providers[0]?.id;
+  const contextWindowTokens = value === null ? undefined : positiveRequiredConfigInt(value, 'model_context_window');
+  return providers.map((provider) => {
+    if (provider.id !== activeProviderId) return provider;
+    return {
+      ...provider,
+      models: provider.models?.map((model) => {
+        if (!model.enabled) return model;
+        const next = { ...model };
+        if (contextWindowTokens === undefined) delete next.contextWindowTokens;
+        else next.contextWindowTokens = contextWindowTokens;
+        return next;
+      }) ?? [],
     };
   });
 }
@@ -979,6 +1010,13 @@ function activeModelReasoningEffort(config: RuntimeConfigState): string | null {
   return model.defaultThinkingEffort ?? sweReasoningEfforts(model)[0] ?? null;
 }
 
+function appServerModelAutoCompactTokenLimit(config: RuntimeConfigState): number | null {
+  return positiveConfigInt(
+    config.desktopSettings?.modelAutoCompactTokenLimit ??
+    config.desktopSettings?.model_auto_compact_token_limit,
+  ) ?? null;
+}
+
 export function activeModelCode(config: Awaited<ReturnType<RuntimeFactory['configStore']['getConfig']>>): string {
   return activeModelConfig(config)?.code ?? 'unknown';
 }
@@ -986,4 +1024,14 @@ export function activeModelCode(config: Awaited<ReturnType<RuntimeFactory['confi
 export function activeModelProvider(config: Awaited<ReturnType<RuntimeFactory['configStore']['getConfig']>>): string {
   const provider = activeProviderConfig(config);
   return provider?.id ?? 'unknown';
+}
+
+function positiveConfigInt(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+}
+
+function positiveRequiredConfigInt(value: unknown, label: string): number {
+  const parsed = positiveConfigInt(value);
+  if (parsed === undefined) throw appServerConfigWriteError('configValidationError', `${label} must be a positive number`);
+  return parsed;
 }

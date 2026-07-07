@@ -134,6 +134,12 @@ export type ToolOrchestratorOptions = {
 
 export type ToolOrchestratorRunOptions = {
   checkApproval?: boolean;
+  environment?: ToolExecutionEnvironment;
+  waitsForRuntimeCancellation?: boolean;
+};
+
+export type ToolOrchestratorCheckOptions = {
+  environment?: ToolExecutionEnvironment;
 };
 
 export type ToolOrchestratorRunResult = {
@@ -151,10 +157,12 @@ export type ToolOrchestratorRunResult = {
 export class ToolOrchestrator {
   constructor(private readonly options: ToolOrchestratorOptions) {}
 
-  async canRunWithoutApproval(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<boolean> {
+  async canRunWithoutApproval(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], options: ToolOrchestratorCheckOptions = {}): Promise<boolean> {
     const effective = effectiveToolCallFor(toolCall, parsedArguments);
     if (effective.rejectionReason) return false;
-    const requirement = await this.approvalRequirement(effective.toolCall, effective.parsedArguments, context, approvalPolicy).catch((): ToolApprovalRequirement => ({
+    const environment = options.environment ?? await this.toolEnvironmentForContext(context);
+    const stepContext: RuntimeToolExecutionContext = { ...context, environment };
+    const requirement = await this.approvalRequirement(effective.toolCall, effective.parsedArguments, stepContext, approvalPolicy, environment).catch((): ToolApprovalRequirement => ({
       action: 'ask',
       reason: 'Approval check failed.',
       argumentsPreview: previewArguments(effective.parsedArguments),
@@ -166,25 +174,27 @@ export class ToolOrchestrator {
     const effective = effectiveToolCallFor(toolCall, parsedArguments);
     let runToolCall = effective.toolCall;
     let runArguments = effective.parsedArguments;
-    const environment = await this.toolEnvironmentForContext(context);
+    const environment = runOptions.environment ?? await this.toolEnvironmentForContext(context);
+    const stepContext: RuntimeToolExecutionContext = { ...context, environment };
     if (runToolCall.name === REQUEST_PERMISSIONS_TOOL_NAME) {
-      return this.runRequestPermissionsTool(runToolCall, runArguments, context, approvalPolicy, environment);
+      return this.runRequestPermissionsTool(runToolCall, runArguments, stepContext, approvalPolicy, environment);
     }
-    const additionalSandboxPermissions = additionalSandboxPermissionsForTool(runToolCall, runArguments, context, environment);
+    const additionalSandboxPermissions = additionalSandboxPermissionsForTool(runToolCall, runArguments, stepContext, environment);
     let content = '';
     let processed = false;
     let startResultPreview: string | undefined;
     let startedAtMs: number | undefined;
     const outputDeltaPublishes: Promise<void>[] = [];
+    let acceptingOutputDeltas = true;
     let preHookAdditionalContexts: string[] = [];
 
     try {
-      throwIfAborted(context.signal);
+      throwIfAborted(stepContext.signal);
       const preHookOutcome = effective.rejectionReason
         ? null
         : await this.options.hookRunner?.runPreToolUse({
           approvalPolicy,
-          context,
+          context: stepContext,
           environment,
           events: this.hookEvents(),
           parsedArguments: runArguments,
@@ -202,7 +212,7 @@ export class ToolOrchestrator {
       }
       const startPreview = effective.rejectionReason
         ? null
-        : await this.options.toolHost.previewToolCall?.(runToolCall.name, runArguments, context).catch(() => null);
+        : await this.options.toolHost.previewToolCall?.(runToolCall.name, runArguments, stepContext).catch(() => null);
       startResultPreview = startPreview?.resultPreview;
       startedAtMs = this.options.clock.now().getTime();
       await this.options.events.publishToolStarted(runToolCall, runArguments, startResultPreview);
@@ -211,7 +221,7 @@ export class ToolOrchestrator {
         throw new ToolPolicyRejectedError(effective.rejectionReason);
       }
 
-      const approval = runOptions.checkApproval === false ? 'approve' : await this.approveToolCall(runToolCall, runArguments, context, approvalPolicy);
+      const approval = runOptions.checkApproval === false ? 'approve' : await this.approveToolCall(runToolCall, runArguments, stepContext, approvalPolicy, environment);
       if (approval === 'reject') {
         content = `Tool ${runToolCall.name} was rejected.`;
         await this.options.events.publishToolCompleted(runToolCall, runArguments, 'rejected', content, {
@@ -221,14 +231,14 @@ export class ToolOrchestrator {
         return { content, processed, status: 'rejected' };
       }
 
-      throwIfAborted(context.signal);
-      const sandboxWorkspaceWrite = this.sandboxWorkspaceWriteForRun(context, additionalSandboxPermissions?.sandboxWorkspaceWrite);
-      const networkAccessApprovedForSession = this.options.approvalStore?.hasAny(networkRetryApprovalKeys(runToolCall, runArguments, context), context.turnId) ?? false;
+      throwIfAborted(stepContext.signal);
+      const sandboxWorkspaceWrite = this.sandboxWorkspaceWriteForRun(stepContext, additionalSandboxPermissions?.sandboxWorkspaceWrite);
+      const networkAccessApprovedForSession = this.options.approvalStore?.hasAny(networkRetryApprovalKeys(runToolCall, runArguments, stepContext), stepContext.turnId) ?? false;
       const firstRunSandbox = requestedSandboxBypass(runToolCall.name, runArguments)
         ? { mode: 'bypass' as const, retryReason: 'Command requested escalated sandbox permissions.' }
         : { mode: 'default' as const };
       const toolRunContext: RuntimeToolExecutionContext = {
-        ...context,
+        ...stepContext,
         sandboxWorkspaceWrite,
         sandbox: {
           ...firstRunSandbox,
@@ -241,17 +251,20 @@ export class ToolOrchestrator {
         },
         toolCallId: runToolCall.id,
         onToolOutputDelta: (delta) => {
+          if (!acceptingOutputDeltas) return;
           const publish = this.options.events.publishToolOutputDelta(runToolCall, delta).catch(() => undefined);
           outputDeltaPublishes.push(publish);
         },
       };
-      const result = await this.options.toolHost.runTool(runToolCall.name, runArguments, toolRunContext);
+      const toolRun = this.options.toolHost.runTool(runToolCall.name, runArguments, toolRunContext);
+      const result = await toolRunWithCancellationProfile(toolRun, stepContext.signal, runOptions.waitsForRuntimeCancellation !== false);
+      acceptingOutputDeltas = false;
       processed = true;
-      throwIfAborted(context.signal);
+      throwIfAborted(stepContext.signal);
       content = result.content;
       const postHookOutcome = await this.options.hookRunner?.runPostToolUse({
         approvalPolicy,
-        context,
+        context: stepContext,
         environment,
         events: this.hookEvents(),
         parsedArguments: runArguments,
@@ -275,11 +288,13 @@ export class ToolOrchestrator {
       });
       return { content, processed, result, status: 'success' };
     } catch (error) {
+      acceptingOutputDeltas = false;
       if (isAbortError(error)) throw error;
       if (error instanceof ToolExecutionError && error.failureKind === 'sandbox_denied') {
         const retry = await this.retryAfterSandboxDenied({
           approvalPolicy,
-          context,
+          context: stepContext,
+          environment,
           outputDeltaPublishes,
           parsedArguments: runArguments,
           resultPreview: startResultPreview,
@@ -292,7 +307,8 @@ export class ToolOrchestrator {
       if (error instanceof ToolExecutionError && error.failureKind === 'network_denied') {
         const retry = await this.retryAfterNetworkDenied({
           approvalPolicy,
-          context,
+          context: stepContext,
+          environment,
           outputDeltaPublishes,
           parsedArguments: runArguments,
           resultPreview: startResultPreview,
@@ -450,6 +466,7 @@ export class ToolOrchestrator {
   }
 
   private async toolEnvironmentForContext(context: RuntimeToolExecutionContext): Promise<ToolExecutionEnvironment> {
+    if (context.environment) return context.environment;
     const environment = this.options.toolHost.environmentForToolContext
       ? await Promise.resolve(this.options.toolHost.environmentForToolContext(context)).catch(() => null)
       : null;
@@ -469,6 +486,7 @@ export class ToolOrchestrator {
   private async retryAfterNetworkDenied({
     approvalPolicy,
     context,
+    environment,
     outputDeltaPublishes,
     parsedArguments,
     resultPreview,
@@ -478,6 +496,7 @@ export class ToolOrchestrator {
   }: {
     approvalPolicy: RuntimeConfigState['approvalPolicy'];
     context: RuntimeToolExecutionContext;
+    environment: ToolExecutionEnvironment;
     outputDeltaPublishes: Promise<void>[];
     parsedArguments: unknown;
     resultPreview?: string;
@@ -498,7 +517,7 @@ export class ToolOrchestrator {
     const retryReason = networkApprovalContext
       ? `Network access to "${networkApprovalContext.target}" is blocked by policy. Approve retry with network access.`
       : `Network access is blocked for ${toolCall.name}: ${toolError.message}. Approve retry with network access.`;
-    const approvalAnswer = await this.approveNetworkAccessRetry(toolCall, parsedArguments, context, approvalPolicy, retryReason, networkApprovalContext);
+    const approvalAnswer = await this.approveNetworkAccessRetry(toolCall, parsedArguments, context, approvalPolicy, retryReason, environment, networkApprovalContext);
     if (approvalAnswer.decision === 'reject') {
       const content = `Tool ${toolCall.name} network retry was rejected.`;
       await Promise.all(outputDeltaPublishes);
@@ -521,7 +540,6 @@ export class ToolOrchestrator {
 
     try {
       throwIfAborted(context.signal);
-      const environment = await this.toolEnvironmentForContext(context);
       const retrySandbox = requestedSandboxBypass(toolCall.name, parsedArguments)
         ? { mode: 'bypass' as const, networkAccess: 'enabled' as const, retryReason }
         : { mode: 'default' as const, networkAccess: 'enabled' as const, retryReason };
@@ -560,6 +578,7 @@ export class ToolOrchestrator {
   private async retryAfterSandboxDenied({
     approvalPolicy,
     context,
+    environment,
     outputDeltaPublishes,
     parsedArguments,
     resultPreview,
@@ -569,6 +588,7 @@ export class ToolOrchestrator {
   }: {
     approvalPolicy: RuntimeConfigState['approvalPolicy'];
     context: RuntimeToolExecutionContext;
+    environment: ToolExecutionEnvironment;
     outputDeltaPublishes: Promise<void>[];
     parsedArguments: unknown;
     resultPreview?: string;
@@ -577,7 +597,7 @@ export class ToolOrchestrator {
     toolError: ToolExecutionError;
   }): Promise<ToolOrchestratorRunResult | null> {
     const retryReason = `Sandbox denied ${toolCall.name}: ${toolError.message}. Approve retry without the OS sandbox.`;
-    const decision = await this.approveSandboxBypassRetry(toolCall, parsedArguments, context, approvalPolicy, retryReason);
+    const decision = await this.approveSandboxBypassRetry(toolCall, parsedArguments, context, approvalPolicy, retryReason, environment);
     if (decision === 'reject') {
       const content = `Tool ${toolCall.name} sandbox retry was rejected.`;
       await Promise.all(outputDeltaPublishes);
@@ -590,7 +610,6 @@ export class ToolOrchestrator {
 
     try {
       throwIfAborted(context.signal);
-      const environment = await this.toolEnvironmentForContext(context);
       const retryContext: RuntimeToolExecutionContext = {
         ...context,
         sandboxWorkspaceWrite: this.sandboxWorkspaceWriteForRun(context, additionalSandboxPermissionsForTool(toolCall, parsedArguments, context, environment)?.sandboxWorkspaceWrite),
@@ -629,13 +648,13 @@ export class ToolOrchestrator {
     context: RuntimeToolExecutionContext,
     approvalPolicy: RuntimeConfigState['approvalPolicy'],
     reason: string,
+    environment: ToolExecutionEnvironment,
     networkApprovalContext?: RuntimeNetworkApprovalContext | null,
   ): Promise<NetworkRetryApprovalAnswer> {
     if (approvalPolicy === 'full') return { decision: 'approve' };
     const approvalKeys = networkRetryApprovalKeys(toolCall, parsedArguments, context, networkApprovalContext);
     if (this.options.approvalStore?.hasAny(approvalKeys, context.turnId)) return { decision: 'approve_for_session' };
     if (!this.options.approvalGate) return { decision: 'reject' };
-    const environment = await this.toolEnvironmentForContext(context);
     const approval = await this.options.approvalGate.createApproval({
       threadId: context.threadId,
       turnId: context.turnId,
@@ -675,12 +694,11 @@ export class ToolOrchestrator {
     return answer;
   }
 
-  private async approveSandboxBypassRetry(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], reason: string): Promise<RuntimeApprovalDecision> {
+  private async approveSandboxBypassRetry(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], reason: string, environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
     if (approvalPolicy === 'full') return 'approve';
     const approvalKeys = sandboxRetryApprovalKeys(toolCall, parsedArguments, context);
     if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
     if (!this.options.approvalGate) return 'reject';
-    const environment = await this.toolEnvironmentForContext(context);
     const approval = await this.options.approvalGate.createApproval({
       threadId: context.threadId,
       turnId: context.turnId,
@@ -719,8 +737,8 @@ export class ToolOrchestrator {
     return answer.decision;
   }
 
-  private async approveToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<RuntimeApprovalDecision> {
-    const requirement = await this.approvalRequirement(toolCall, parsedArguments, context, approvalPolicy);
+  private async approveToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
+    const requirement = await this.approvalRequirement(toolCall, parsedArguments, context, approvalPolicy, environment);
     if (requirement.action === 'skip') return 'approve';
     if (requirement.action === 'reject') {
       throw new ToolPolicyRejectedError(requirement.reason);
@@ -730,7 +748,6 @@ export class ToolOrchestrator {
     if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
     if (await this.persistentApprovalIsRemembered(persistentApprovalKeys)) return 'approve';
     if (!this.options.approvalGate) return 'approve';
-    const environment = await this.toolEnvironmentForContext(context);
     const hookDecision = await this.options.hookRunner?.runPermissionRequest({
       approvalPolicy,
       context,
@@ -785,11 +802,10 @@ export class ToolOrchestrator {
     return answer.decision;
   }
 
-  private async approvalRequirement(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<ToolApprovalRequirement> {
+  private async approvalRequirement(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], environment: ToolExecutionEnvironment): Promise<ToolApprovalRequirement> {
     const strictAutoReview = this.options.approvalStore?.strictAutoReviewEnabled(context.turnId) ?? false;
     const fileRequirement = assessFileMutationApproval(toolCall, parsedArguments, context, approvalPolicy);
     if (fileRequirement) return fileRequirement;
-    const environment = await this.toolEnvironmentForContext(context);
     const additionalPermissionRequirement = assessAdditionalSandboxPermissionsApproval(toolCall, parsedArguments, context, approvalPolicy, Boolean(this.options.approvalGate), environment);
     if (additionalPermissionRequirement) return additionalPermissionRequirement;
     if (!this.options.approvalGate) return { action: 'skip' };
@@ -1702,6 +1718,14 @@ function appendHookAdditionalContexts(content: string, contexts: string[]): stri
     ...visibleContexts,
     '</hook_additional_context>',
   ].join('\n');
+}
+
+function toolRunWithCancellationProfile<T>(promise: Promise<T>, signal: AbortSignal, waitsForRuntimeCancellation: boolean): Promise<T> {
+  if (waitsForRuntimeCancellation) return promise;
+  // Some runtimes manage their own background process lifecycle. Do not let a
+  // non-settling tool promise keep the agent turn alive after the turn is cancelled.
+  void promise.catch(() => undefined);
+  return abortable(promise, signal);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

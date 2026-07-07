@@ -11,7 +11,7 @@ import {
   type ToolSet,
   type UserContent,
 } from 'ai';
-import type { ModelRequest, ModelStreamEvent, RuntimeMessage, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { ModelRequest, ModelStreamEvent, RuntimeMessage, RuntimeStreamItem, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
@@ -27,6 +27,15 @@ type PendingToolCall = {
   id: string;
   name: string;
   arguments: string;
+};
+
+type AiSdkStreamItemState = {
+  agentItemId: string | null;
+  agentText: string;
+  reasoningItemId: string | null;
+  reasoningText: string;
+  toolItemsStarted: Set<string>;
+  toolItemsCompleted: Set<string>;
 };
 
 type ProviderOptionJson = string | number | boolean | null | ProviderOptionJson[] | { [key: string]: ProviderOptionJson };
@@ -66,28 +75,29 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
     let toolCallsYielded = false;
     let finishReason: FinishReason | undefined;
     let usage: LanguageModelUsage | undefined;
+    const streamItems = createAiSdkStreamItemState();
 
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') {
-        yield { type: 'text_delta', text: part.text };
+        yield* aiSdkAgentItemDelta(streamItems, part.text);
       } else if (part.type === 'reasoning-delta') {
-        yield { type: 'reasoning_delta', text: part.text };
+        yield* aiSdkReasoningItemDelta(streamItems, part.text);
       } else if (part.type === 'tool-input-start') {
         const toolCall = upsertToolCall(toolCalls, part.id, { name: part.toolName });
-        yield { type: 'tool_call_delta', call: { id: toolCall.id, name: toolCall.name, argumentsDelta: '' } };
+        yield* aiSdkToolItemStarted(streamItems, toolCall);
       } else if (part.type === 'tool-input-delta') {
-        const toolCall = upsertToolCall(toolCalls, part.id, { argumentsDelta: part.delta });
-        yield { type: 'tool_call_delta', call: { id: toolCall.id, name: toolCall.name, argumentsDelta: part.delta } };
+        upsertToolCall(toolCalls, part.id, { argumentsDelta: part.delta });
       } else if (part.type === 'tool-call') {
         const toolCall = upsertToolCall(toolCalls, part.toolCallId, {
           name: part.toolName,
           arguments: stringifyToolInput(part.input),
         });
-        yield { type: 'tool_call_delta', call: { id: toolCall.id, name: toolCall.name, argumentsDelta: '' } };
+        yield* aiSdkToolItemStarted(streamItems, toolCall);
+        yield* aiSdkToolItemCompleted(streamItems, toolCall);
       } else if (part.type === 'finish-step') {
         finishReason = part.finishReason;
         usage = part.usage;
-        if (part.finishReason === 'tool-calls' && toolCalls.size) {
+        if (part.finishReason === 'tool-calls' && shouldYieldAiSdkToolCallsFallback(streamItems, toolCalls)) {
           toolCallsYielded = true;
           yield { type: 'tool_calls', toolCalls: completeToolCalls(toolCalls) };
         }
@@ -101,7 +111,8 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
       }
     }
 
-    if (!toolCallsYielded && toolCalls.size) {
+    yield* completeAiSdkTextItems(streamItems);
+    if (!toolCallsYielded && shouldYieldAiSdkToolCallsFallback(streamItems, toolCalls)) {
       yield { type: 'tool_calls', toolCalls: completeToolCalls(toolCalls) };
     }
     if (usage) {
@@ -242,6 +253,80 @@ function upsertToolCall(toolCalls: Map<string, PendingToolCall>, id: string, nex
 
 function completeToolCalls(toolCalls: Map<string, PendingToolCall>): RuntimeToolCall[] {
   return [...toolCalls.values()].filter((toolCall) => toolCall.name);
+}
+
+function createAiSdkStreamItemState(): AiSdkStreamItemState {
+  return {
+    agentItemId: null,
+    agentText: '',
+    reasoningItemId: null,
+    reasoningText: '',
+    toolItemsStarted: new Set(),
+    toolItemsCompleted: new Set(),
+  };
+}
+
+function* aiSdkAgentItemDelta(state: AiSdkStreamItemState, delta: string): Generator<ModelStreamEvent> {
+  if (!delta) return;
+  if (!state.agentItemId) {
+    state.agentItemId = 'ai_sdk_agent_message_0';
+    yield {
+      type: 'item_started',
+      item: { id: state.agentItemId, kind: 'agent_message', content: '', status: 'in_progress' },
+    };
+  }
+  state.agentText += delta;
+  yield { type: 'item_delta', itemId: state.agentItemId, delta };
+}
+
+function* aiSdkReasoningItemDelta(state: AiSdkStreamItemState, delta: string): Generator<ModelStreamEvent> {
+  if (!delta) return;
+  if (!state.reasoningItemId) {
+    state.reasoningItemId = 'ai_sdk_reasoning_0';
+    yield {
+      type: 'item_started',
+      item: { id: state.reasoningItemId, kind: 'reasoning', content: '', status: 'in_progress' },
+    };
+  }
+  state.reasoningText += delta;
+  yield { type: 'reasoning_raw_delta', itemId: state.reasoningItemId, text: delta, contentIndex: 0 };
+}
+
+function* aiSdkToolItemStarted(state: AiSdkStreamItemState, toolCall: PendingToolCall): Generator<ModelStreamEvent> {
+  if (!toolCall.id || state.toolItemsStarted.has(toolCall.id)) return;
+  state.toolItemsStarted.add(toolCall.id);
+  yield {
+    type: 'item_started',
+    item: { id: toolCall.id, kind: 'tool_call', status: 'in_progress', toolCall: { ...toolCall } },
+  };
+}
+
+function* aiSdkToolItemCompleted(state: AiSdkStreamItemState, toolCall: PendingToolCall): Generator<ModelStreamEvent> {
+  if (!toolCall.id || !toolCall.name || state.toolItemsCompleted.has(toolCall.id)) return;
+  state.toolItemsCompleted.add(toolCall.id);
+  yield {
+    type: 'item_completed',
+    item: { id: toolCall.id, kind: 'tool_call', status: 'completed', toolCall: { ...toolCall } },
+  };
+}
+
+function* completeAiSdkTextItems(state: AiSdkStreamItemState): Generator<ModelStreamEvent> {
+  if (state.reasoningItemId) {
+    yield {
+      type: 'item_completed',
+      item: { id: state.reasoningItemId, kind: 'reasoning', content: state.reasoningText, status: 'completed' },
+    };
+  }
+  if (state.agentItemId) {
+    yield {
+      type: 'item_completed',
+      item: { id: state.agentItemId, kind: 'agent_message', content: state.agentText, status: 'completed' },
+    };
+  }
+}
+
+function shouldYieldAiSdkToolCallsFallback(state: AiSdkStreamItemState, toolCalls: Map<string, PendingToolCall>): boolean {
+  return completeToolCalls(toolCalls).some((toolCall) => !state.toolItemsCompleted.has(toolCall.id));
 }
 
 function stringifyToolInput(input: unknown): string {

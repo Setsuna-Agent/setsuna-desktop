@@ -8,6 +8,7 @@ import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../ports/
 import { ToolExecutionError } from '../../ports/tool-host.js';
 import { FileWorkspaceProjectStore } from '../workspace/file-workspace-project-store.js';
 import { PcLocalToolHost } from './pc-local-tool-host.js';
+import { shellSandboxProfile, shellSandboxUnavailableReason } from './pc-local-tools.js';
 
 describe('pc local tool host', () => {
   it('exposes the pc SWE tool contract and enforces begin-before-write sequencing', async () => {
@@ -391,6 +392,54 @@ describe('pc local tool host', () => {
     })).rejects.toThrow('network policy');
   });
 
+  it('builds a macOS seatbelt profile for workspace-write shell sandboxing', () => {
+    const root = path.join(tmpdir(), 'setsuna seatbelt workspace');
+    const writableRoot = path.join(tmpdir(), 'setsuna approved writes');
+    const deniedRoot = path.join(root, 'blocked');
+    const capability = { supported: true, provider: 'macos-seatbelt', reason: '' };
+    const workspaceFilter = `(require-not (subpath ${JSON.stringify(path.resolve(root))}))`;
+    const writableRootFilter = `(require-not (subpath ${JSON.stringify(path.resolve(writableRoot))}))`;
+    const denyOutsideWritableRoots = `(deny file-write* (require-all ${workspaceFilter} ${writableRootFilter}))`;
+
+    const profile = shellSandboxProfile({
+      root,
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: {
+        writableRoots: [writableRoot],
+        deniedRoots: ['blocked'],
+        networkAccess: false,
+      },
+    }, capability);
+
+    expect(profile.split('\n')).toEqual([
+      '(version 1)',
+      '(allow default)',
+      '(deny network*)',
+      denyOutsideWritableRoots,
+      `(deny file-write* (subpath ${JSON.stringify(path.resolve(deniedRoot))}))`,
+    ]);
+    expect(shellSandboxUnavailableReason({
+      root,
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: {},
+    }, capability)).toBe('');
+  });
+
+  it('keeps macOS seatbelt network open only after sandbox network approval', () => {
+    const capability = { supported: true, provider: 'macos-seatbelt', reason: '' };
+    const profile = shellSandboxProfile({
+      root: path.join(tmpdir(), 'setsuna seatbelt network'),
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: { networkAccess: true },
+    }, capability);
+
+    expect(profile).not.toContain('(deny network*)');
+    expect(profile).toContain('(deny file-write*');
+  });
+
   it('allows read-only shell writes only inside approved writable roots', async () => {
     const { host, projectDir } = await createHost();
     const grantedDir = path.join(projectDir, 'granted');
@@ -578,6 +627,61 @@ describe('pc local tool host', () => {
       yield_time_ms: 500,
     }, { threadId: 'thread_1', turnId: 'turn_1' });
     expect(polled.content).toContain('stdin:hello');
+  });
+
+  it('cleans non-persisted shell processes for a turn', async () => {
+    const { host, projectId } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1', projectId, toolCallId: 'call_temp' };
+    const running = await host.runTool(
+      'run_shell_command',
+      {
+        command: `${nodeCommand()} -e "setInterval(() => {}, 1000)"`,
+        risk_level: 'low',
+        yield_time_ms: 1,
+      },
+      context,
+    );
+    const processId = String((running.data as Record<string, unknown>).process_id || '');
+    expect(processId).toBeTruthy();
+
+    await host.cleanupTurn?.(context, { status: 'completed' });
+
+    await expect(host.runTool('read_shell_process', { process_id: processId }, context))
+      .rejects.toThrow('Shell process not found');
+  });
+
+  it('preserves explicitly persisted shell processes across turn cleanup', async () => {
+    const { host, projectId } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1', projectId, toolCallId: 'call_persist' };
+    const running = await host.runTool(
+      'run_shell_command',
+      {
+        command: `${nodeCommand()} -e "setInterval(() => {}, 1000)"`,
+        risk_level: 'low',
+        yield_time_ms: 1,
+        persist: true,
+        persist_ttl_ms: 5000,
+      },
+      context,
+    );
+    const processId = String((running.data as Record<string, unknown>).process_id || '');
+    expect(processId).toBeTruthy();
+
+    try {
+      await host.cleanupTurn?.(context, { status: 'completed' });
+      const listed = await host.runTool('list_shell_processes', {}, context);
+      const processes = (listed.data as { processes?: Array<Record<string, unknown>> }).processes ?? [];
+      expect(processes).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          process_id: processId,
+          persisted: true,
+          turn_id: 'turn_1',
+          tool_call_id: 'call_persist',
+        }),
+      ]));
+    } finally {
+      await host.runTool('terminate_shell_process', { process_id: processId }, context).catch(() => undefined);
+    }
   });
 });
 

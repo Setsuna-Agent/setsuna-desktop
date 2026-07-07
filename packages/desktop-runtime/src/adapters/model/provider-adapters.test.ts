@@ -219,6 +219,262 @@ describe('provider model adapters', () => {
     expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { totalTokens: 6 } });
   });
 
+  it('uses OpenAI Responses compact endpoint when provider-native compaction is requested', async () => {
+    const captured: CapturedRequest = {};
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        JSON.stringify({
+          output: [{ type: 'compaction', summary: 'Provider compact summary.' }],
+          usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+        }),
+        captured,
+      ),
+    );
+
+    const result = await client.compactConversation({
+      ...request,
+      maxOutputTokens: 1600,
+      temperature: 0,
+    });
+
+    expect(captured.url).toBe('https://api.openai.test/v1/responses/compact');
+    const body = expectBody(captured);
+    expect(body.model).toBe('model-code');
+    expect(body.instructions).toBe('System prompt');
+    expect(body.max_output_tokens).toBe(1600);
+    expect(body.temperature).toBe(0);
+    expect(body.input).toEqual([
+      { role: 'user', content: 'Hello' },
+      { type: 'compaction_trigger' },
+    ]);
+    expect(result).toMatchObject({
+      summary: 'Provider compact summary.',
+      usage: {
+        provider: 'openai-responses',
+        model: 'model-code',
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+      },
+    });
+  });
+
+  it('streams native OpenAI Responses output items', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","item_id":"msg_1","delta":"Hi"}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"reasoning_1","type":"reasoning","status":"in_progress"}}',
+          '',
+          'event: response.reasoning_summary_text.delta',
+          'data: {"type":"response.reasoning_summary_text.delta","item_id":"reasoning_1","summary_index":1,"delta":"Need context."}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"id":"reasoning_1","type":"reasoning","summary":[{"type":"summary_text","text":"Need context."}]}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":4,"output_tokens":2,"total_tokens":6}}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events).toContainEqual({ type: 'item_started', item: { id: 'msg_1', kind: 'agent_message', content: '', status: 'in_progress' } });
+    expect(events).toContainEqual({ type: 'item_delta', itemId: 'msg_1', delta: 'Hi' });
+    expect(events).toContainEqual({ type: 'item_completed', item: { id: 'msg_1', kind: 'agent_message', content: 'Hi', status: 'completed' } });
+    expect(events).toContainEqual({ type: 'item_started', item: { id: 'reasoning_1', kind: 'reasoning', content: '', status: 'in_progress' } });
+    expect(events).toContainEqual({ type: 'reasoning_summary_delta', itemId: 'reasoning_1', text: 'Need context.', summaryIndex: 1 });
+    expect(events).toContainEqual({ type: 'item_completed', item: { id: 'reasoning_1', kind: 'reasoning', content: 'Need context.', status: 'completed' } });
+    expect(events.some((event) => event.type === 'text_delta')).toBe(false);
+    expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { totalTokens: 6 } });
+  });
+
+  it('streams OpenAI Responses metadata, safety buffering, and reasoning section events', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"id":"resp_1","headers":{"openai-model":"server-routed-model"}}}',
+          '',
+          'event: response.metadata',
+          'data: {"type":"response.metadata","metadata":{"openai_verification_recommendation":["trusted_access_for_cyber"]}}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"reasoning_1","type":"reasoning","status":"in_progress"}}',
+          '',
+          'event: response.reasoning_summary_part.added',
+          'data: {"type":"response.reasoning_summary_part.added","item_id":"reasoning_1","summary_index":2}',
+          '',
+          'event: response.reasoning_summary_text.delta',
+          'data: {"type":"response.reasoning_summary_text.delta","item_id":"reasoning_1","summary_index":2,"delta":"Second section."}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","item_id":"msg_1","delta":"Hi","safety_buffering":{"use_cases":["cyber"],"reasons":["user_risk"],"retry_model":"gpt-fast"}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"status":"completed"}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events).toContainEqual({
+      type: 'model_verification',
+      verification: {
+        model: 'model-code',
+        provider: 'openai-responses',
+        serverModel: 'server-routed-model',
+        warnings: ['server_model_mismatch'],
+      },
+    });
+    expect(events).toContainEqual({
+      type: 'model_verification',
+      verification: {
+        model: 'model-code',
+        provider: 'openai-responses',
+        warnings: ['trusted_access_for_cyber'],
+      },
+    });
+    expect(events).toContainEqual({
+      type: 'reasoning_summary_part_added',
+      itemId: 'reasoning_1',
+      summaryIndex: 2,
+    });
+    expect(events).toContainEqual({
+      type: 'reasoning_summary_delta',
+      itemId: 'reasoning_1',
+      text: 'Second section.',
+      summaryIndex: 2,
+    });
+    expect(events).toContainEqual({
+      type: 'safety_buffering',
+      buffering: {
+        model: 'model-code',
+        fasterModel: 'gpt-fast',
+        reasons: ['user_risk'],
+        showBufferingUi: true,
+        useCases: ['cyber'],
+      },
+    });
+    expect(events).toContainEqual({ type: 'item_delta', itemId: 'msg_1', delta: 'Hi' });
+  });
+
+  it('completes OpenAI Responses reasoning items from reasoning done events', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"reasoning_1","type":"reasoning","status":"in_progress"}}',
+          '',
+          'event: response.reasoning_summary_text.delta',
+          'data: {"type":"response.reasoning_summary_text.delta","item_id":"reasoning_1","summary_index":0,"delta":"Need context."}',
+          '',
+          'event: response.reasoning_summary_text.done',
+          'data: {"type":"response.reasoning_summary_text.done","item_id":"reasoning_1","summary_index":0}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"reasoning_2","type":"reasoning","status":"in_progress"}}',
+          '',
+          'event: response.reasoning_text.delta',
+          'data: {"type":"response.reasoning_text.delta","item_id":"reasoning_2","content_index":0,"delta":"Raw chain."}',
+          '',
+          'event: response.reasoning_text.done',
+          'data: {"type":"response.reasoning_text.done","item_id":"reasoning_2","content_index":0,"text":"Raw chain."}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"status":"completed"}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: { id: 'reasoning_1', kind: 'reasoning', content: 'Need context.', status: 'completed' },
+    });
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: { id: 'reasoning_2', kind: 'reasoning', content: 'Raw chain.', status: 'completed' },
+    });
+  });
+
+  it('streams native OpenAI Responses collab tool call items', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"collab_1","type":"collab_tool_call","tool":"spawn_agent","status":"in_progress","sender_thread_id":"thread_parent","new_thread_id":"thread_child","prompt":"Inspect auth"}}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"id":"collab_1","type":"collab_tool_call","tool":"spawn_agent","status":"completed","senderThreadId":"thread_parent","newThreadId":"thread_child","prompt":"Inspect auth","agentStatus":"completed"}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"status":"completed"}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events).toContainEqual({
+      type: 'item_started',
+      item: {
+        id: 'collab_1',
+        kind: 'collab_tool_call',
+        status: 'in_progress',
+        collabToolCall: {
+          tool: 'spawn_agent',
+          senderThreadId: 'thread_parent',
+          newThreadId: 'thread_child',
+          prompt: 'Inspect auth',
+        },
+      },
+    });
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: {
+        id: 'collab_1',
+        kind: 'collab_tool_call',
+        status: 'completed',
+        collabToolCall: {
+          tool: 'spawn_agent',
+          senderThreadId: 'thread_parent',
+          newThreadId: 'thread_child',
+          prompt: 'Inspect auth',
+          agentStatus: 'completed',
+        },
+      },
+    });
+  });
+
   it('normalizes OpenAI Responses function calls and history items', async () => {
     const captured: CapturedRequest = {};
     const client = new OpenAiResponsesModelClient(
@@ -286,10 +542,25 @@ describe('provider model adapters', () => {
     expect(body.input).toContainEqual({ type: 'function_call', call_id: 'old_call', name: 'workspace_search_text', arguments: '{"query":"old"}' });
     expect(body.input).toContainEqual({ type: 'function_call_output', call_id: 'old_call', output: 'old result' });
     expect(body.input).toContainEqual({ role: 'user', content: 'Injected hidden boundary' });
-    expect(events.find((event) => event.type === 'tool_calls')).toEqual({
-      type: 'tool_calls',
-      toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+    expect(events.find((event) => event.type === 'item_started')).toEqual({
+      type: 'item_started',
+      item: {
+        id: 'call_1',
+        kind: 'tool_call',
+        status: 'in_progress',
+        toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '' },
+      },
     });
+    expect(events.find((event) => event.type === 'item_completed')).toEqual({
+      type: 'item_completed',
+      item: {
+        id: 'call_1',
+        kind: 'tool_call',
+        status: 'completed',
+        toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+      },
+    });
+    expect(events.some((event) => event.type === 'tool_calls')).toBe(false);
   });
 
   it('streams Anthropic Messages content deltas', async () => {
@@ -324,6 +595,49 @@ describe('provider model adapters', () => {
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'end_turn' });
   });
 
+  it('streams native Anthropic content blocks as runtime items', async () => {
+    const client = new AnthropicMessagesModelClient(
+      provider('anthropic', 'https://api.anthropic.test'),
+      fakeFetch(
+        [
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Need context."}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":0}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Claude"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":1}',
+          '',
+          'event: message_stop',
+          'data: {"type":"message_stop"}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events).toContainEqual({ type: 'item_started', item: { id: 'reasoning_0', kind: 'reasoning', content: '', status: 'in_progress' } });
+    expect(events).toContainEqual({ type: 'reasoning_raw_delta', itemId: 'reasoning_0', text: 'Need context.', contentIndex: 0 });
+    expect(events).toContainEqual({ type: 'item_completed', item: { id: 'reasoning_0', kind: 'reasoning', content: 'Need context.', status: 'completed' } });
+    expect(events).toContainEqual({ type: 'item_started', item: { id: 'content_1', kind: 'agent_message', content: '', status: 'in_progress' } });
+    expect(events).toContainEqual({ type: 'item_delta', itemId: 'content_1', delta: 'Claude' });
+    expect(events).toContainEqual({ type: 'item_completed', item: { id: 'content_1', kind: 'agent_message', content: 'Claude', status: 'completed' } });
+    expect(events.some((event) => event.type === 'text_delta')).toBe(false);
+    expect(events.some((event) => event.type === 'reasoning_delta')).toBe(false);
+  });
+
   it('normalizes Anthropic tool_use blocks and tool_result history', async () => {
     const captured: CapturedRequest = {};
     const client = new AnthropicMessagesModelClient(
@@ -335,6 +649,9 @@ describe('provider model adapters', () => {
           '',
           'event: content_block_delta',
           'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"needle\\"}"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":0}',
           '',
           'event: message_delta',
           'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":3,"output_tokens":5}}',
@@ -394,10 +711,27 @@ describe('provider model adapters', () => {
       role: 'user',
       content: [{ type: 'tool_result', tool_use_id: 'old_toolu', content: 'old file' }],
     });
-    expect(events.find((event) => event.type === 'tool_calls')).toEqual({
-      type: 'tool_calls',
-      toolCalls: [{ id: 'toolu_1', name: 'workspace_search_text', arguments: '{"query":"needle"}' }],
+    expect(events.find((event) => event.type === 'item_started')).toEqual({
+      type: 'item_started',
+      item: {
+        id: 'toolu_1',
+        kind: 'tool_call',
+        name: 'workspace_search_text',
+        status: 'in_progress',
+        toolCall: { id: 'toolu_1', name: 'workspace_search_text', arguments: '' },
+      },
     });
+    expect(events.find((event) => event.type === 'item_completed')).toEqual({
+      type: 'item_completed',
+      item: {
+        id: 'toolu_1',
+        kind: 'tool_call',
+        name: 'workspace_search_text',
+        status: 'completed',
+        toolCall: { id: 'toolu_1', name: 'workspace_search_text', arguments: '{"query":"needle"}' },
+      },
+    });
+    expect(events.some((event) => event.type === 'tool_calls')).toBe(false);
   });
 
   it('serializes forced tool choices for raw provider adapters', async () => {
@@ -470,7 +804,11 @@ describe('provider model adapters', () => {
     expect(captured.url).toBe('https://llm.example/v1/chat/completions');
     const headers = expectHeaders(captured);
     expect(headers.Authorization ?? headers.authorization).toBeUndefined();
-    expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Local' });
+    expect(events).toContainEqual({ type: 'item_delta', itemId: 'ai_sdk_agent_message_0', delta: 'Local' });
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: { id: 'ai_sdk_agent_message_0', kind: 'agent_message', content: 'Local', status: 'completed' },
+    });
   });
 
   it('uses Responses and Anthropic providers without an API key', async () => {
@@ -555,7 +893,11 @@ describe('provider model adapters', () => {
     const events = await collect(client);
 
     expect(captured.url).toBe('https://llm.example/v1/chat/completions');
-    expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Configured' });
+    expect(events).toContainEqual({ type: 'item_delta', itemId: 'ai_sdk_agent_message_0', delta: 'Configured' });
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: { id: 'ai_sdk_agent_message_0', kind: 'agent_message', content: 'Configured', status: 'completed' },
+    });
   });
 
   it('uses a requested model when it exists on the active provider', async () => {
@@ -704,10 +1046,25 @@ describe('provider model adapters', () => {
         },
       },
     ]);
-    expect(events.find((event) => event.type === 'tool_calls')).toEqual({
-      type: 'tool_calls',
-      toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+    expect(events.find((event) => event.type === 'item_started')).toEqual({
+      type: 'item_started',
+      item: {
+        id: 'call_1',
+        kind: 'tool_call',
+        status: 'in_progress',
+        toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '' },
+      },
     });
+    expect(events.find((event) => event.type === 'item_completed')).toEqual({
+      type: 'item_completed',
+      item: {
+        id: 'call_1',
+        kind: 'tool_call',
+        status: 'completed',
+        toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+      },
+    });
+    expect(events.some((event) => event.type === 'tool_calls')).toBe(false);
   });
 
   it('passes custom reasoning effort through AI SDK OpenAI compatible requests', async () => {

@@ -10,6 +10,7 @@ import type {
   RuntimeExecPolicyAmendment,
   RuntimeEvent,
   RuntimeHookRun,
+  RuntimeMessage,
   RuntimeNetworkPolicyAmendment,
   RuntimeThread,
   RuntimeThreadSummary,
@@ -26,12 +27,14 @@ import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
-import type { ModelClient } from '../ports/model-client.js';
+import type { ModelClient, ModelCompactionRequest } from '../ports/model-client.js';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../ports/policy-amendment-store.js';
 import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
+import type { SkillRegistry } from '../ports/skill-registry.js';
+import type { McpStore } from '../ports/mcp-store.js';
 import { systemClock, type Clock } from '../ports/clock.js';
 import type { ThreadStore } from '../ports/thread-store.js';
-import { ToolExecutionError, type ToolExecutionContext, type ToolHost } from '../ports/tool-host.js';
+import { ToolExecutionError, type ToolExecutionContext, type ToolHost, type ToolRuntimeProfile, type ToolTurnCleanupOutcome } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import { createRuntimeToolHookRunner } from '../hooks/runtime-hooks.js';
 import { AgentLoop } from './agent-loop.js';
@@ -57,13 +60,27 @@ describe('agent loop tools', () => {
     await loop.sendTurn(thread.id, { input: 'read README' });
     const saved = await threadStore.getThread(thread.id);
     const events = await threadStore.listEvents(thread.id, 0);
+    const startedTurnId = events.find((event) => event.type === 'turn.started')?.turnId;
 
     expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
     expect(modelClient.requests).toHaveLength(2);
     expect(modelClient.requests[0].tools?.[0].name).toBe('workspace_read_file');
     expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('file contents'))).toBe(true);
+    expect(events.find((event) => event.type === 'turn.started')?.payload).toMatchObject({ taskKind: 'regular' });
+    expect(events.find((event) => event.type === 'turn.completed')?.payload).toMatchObject({ taskKind: 'regular' });
     expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'workspace_read_file')).toBe(true);
     expect(events.some((event) => event.type === 'tool.completed' && event.payload.status === 'success')).toBe(true);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'item.completed',
+      payload: {
+        item: {
+          id: 'call_1',
+          kind: 'tool_call',
+          status: 'completed',
+          toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+        },
+      },
+    }));
     const completed = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
       event.type === 'tool.completed' && event.payload.toolName === 'workspace_read_file');
     expect(completed?.payload.argumentsPreview).toContain('README.md');
@@ -74,6 +91,9 @@ describe('agent loop tools', () => {
     ]);
     expect(saved?.messages.find((message) => message.role === 'tool')?.content).toContain('file contents');
     expect(saved?.messages.at(-1)?.content).toContain('I read the file.');
+    expect(toolHost.cleanupCalls).toEqual([
+      { threadId: thread.id, projectId: 'project_1', turnId: startedTurnId, status: 'completed' },
+    ]);
     expect(usageStore.records).toMatchObject([
       {
         threadId: thread.id,
@@ -84,6 +104,220 @@ describe('agent loop tools', () => {
         totalTokens: 8,
       },
     ]);
+  });
+
+  it('captures a fresh sampling step before each model request', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Step snapshot', projectId: 'project_1' });
+    const modelClient = new StepSnapshotModelClient();
+    const toolHost = new RefreshingToolHost();
+    const skillRegistry = stepSnapshotSkillRegistry();
+    const mcpStore = stepSnapshotMcpStore();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new StepSnapshotConfigStore(),
+      skillRegistry,
+      mcpStore,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'use the current tool snapshot', skillIds: ['skill_step'] });
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    const saved = await threadStore.getThread(thread.id);
+    const snapshotEvents = events.filter((event): event is Extract<RuntimeEvent, { type: 'turn.step_snapshot' }> => event.type === 'turn.step_snapshot');
+
+    expect(toolHost.listCalls).toBe(2);
+    expect(snapshotEvents.map((event) => event.payload.snapshot.toolNames)).toEqual([
+      ['step_tool_1'],
+      ['step_tool_2'],
+    ]);
+    expect(snapshotEvents.map((event) => event.payload.snapshot.advertisedToolNames)).toEqual([
+      ['step_tool_1'],
+      ['step_tool_2'],
+    ]);
+    expect(snapshotEvents.map((event) => event.payload.snapshot.deferredToolNames)).toEqual([[], []]);
+    expect(snapshotEvents.map((event) => event.payload.snapshot.routerToolNames)).toEqual([[], []]);
+    expect(saved?.turns?.[0]?.stepSnapshots?.map((step) => step.snapshot.toolNames)).toEqual([
+      ['step_tool_1'],
+      ['step_tool_2'],
+    ]);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['step_tool_1']);
+    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['step_tool_2']);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('step_tool_1 result'))).toBe(true);
+    const firstSnapshotEnvironment = modelClient.requests[0].stepSnapshot?.toolEnvironment;
+    const secondSnapshotEnvironment = modelClient.requests[1].stepSnapshot?.toolEnvironment;
+    expect(modelClient.requests[0].stepSnapshot).toMatchObject({
+      threadId: thread.id,
+      projectId: 'project_1',
+      toolNames: ['step_tool_1'],
+      advertisedToolNames: ['step_tool_1'],
+      deferredToolNames: [],
+      routerToolNames: [],
+      toolChoice: 'auto',
+      toolEnvironment: {
+        id: expect.stringMatching(/^step_env_\d+$/),
+        cwd: expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/),
+      },
+      selectedSkills: [{ id: 'skill_step', name: 'Step Skill' }],
+      mcpServerKeys: ['alpha', 'zeta'],
+      mcpServerCount: 2,
+      permissionProfile: 'read-only',
+      sandboxWorkspaceWrite: { writableRoots: ['/tmp/setsuna-step-writable'], networkAccess: false },
+      contextWindow: {
+        autoCompactTokenLimit: expect.any(Number),
+        compactionSummaryMessageIds: [],
+        estimatedTokens: expect.any(Number),
+        maxContextTokens: expect.any(Number),
+        maxContextTokensK: expect.any(Number),
+        messageCount: expect.any(Number),
+        tokensUntilCompaction: expect.any(Number),
+      },
+      featureKeys: ['request_permissions_tool', 'step_snapshot'],
+      worldState: {
+        activeProviderId: 'test',
+        configPath: '/tmp/config.json',
+        dataPath: '/tmp',
+        memoryEnabled: false,
+        storagePath: '/tmp/memories',
+        threadMessageCount: expect.any(Number),
+        threadUpdatedAt: expect.any(String),
+      },
+    });
+    expect(modelClient.requests[1].stepSnapshot).toMatchObject({
+      toolNames: ['step_tool_2'],
+      advertisedToolNames: ['step_tool_2'],
+      toolEnvironment: {
+        id: expect.stringMatching(/^step_env_\d+$/),
+        cwd: expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/),
+      },
+    });
+    expect(modelClient.requests[1].stepSnapshot?.permissionProfile).toBe('workspace-write');
+    expect(modelClient.requests[1].stepSnapshot?.sandboxWorkspaceWrite).toMatchObject({
+      writableRoots: ['/tmp/setsuna-step-writable-2'],
+      networkAccess: true,
+    });
+    expect(modelClient.requests[1].stepSnapshot?.featureKeys).toEqual([
+      'mid_turn_config_refresh',
+      'request_permissions_tool',
+      'step_snapshot',
+    ]);
+    expect(modelClient.requests[1].stepSnapshot?.worldState.activeProviderId).toBe('test-updated');
+    expect(secondSnapshotEnvironment).not.toEqual(firstSnapshotEnvironment);
+    expect(modelClient.requests[0].stepSnapshot?.conversationMessageIds).toHaveLength(1);
+    expect(modelClient.requests[1].stepSnapshot?.conversationMessageIds.length).toBeGreaterThan(1);
+    expect(modelClient.requests[0].stepSnapshot?.messageIds).toContain('skill_skill_step');
+    expect(modelClient.requests[0].stepSnapshot?.threadLastSeq).toEqual(expect.any(Number));
+    expect(modelClient.requests[0].stepSnapshot?.contextWindow?.estimatedTokens).toBeGreaterThan(0);
+    expect(modelClient.requests[0].stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThan(0);
+    expect(toolHost.runContexts[0].environment).toEqual(firstSnapshotEnvironment);
+  });
+
+  it('keeps plan collaboration mode from executing tools', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Plan-only loop', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'make a plan first', collaborationMode: 'plan' });
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(modelClient.requests).toHaveLength(1);
+    expect(modelClient.requests[0].tools).toBeUndefined();
+    expect(modelClient.requests[0].toolChoice).toBe('none');
+    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual([]);
+    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual([]);
+    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual([]);
+    expect(modelClient.requests[0].messages.some((message) => message.id === 'desktop_plan_mode' && message.content.includes('<plan_mode>'))).toBe(true);
+    expect(toolHost.calls).toEqual([]);
+    expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.at(-1)?.content).toContain('Plan mode is active');
+    expect(saved?.messages.at(-1)?.planMode).toEqual({ mode: 'plan', status: 'awaiting_confirmation' });
+  });
+
+  it('persists PlanDelta-only model output as the plan-mode assistant message', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Plan delta loop', projectId: 'project_1' });
+    const modelClient = new PlanDeltaOnlyModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'plan from delta stream', collaborationMode: 'plan' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(modelClient.requests[0].tools).toBeUndefined();
+    expect(modelClient.requests[0].toolChoice).toBe('none');
+    expect(toolHost.calls).toEqual([]);
+    expect(events.filter((event) => event.type === 'plan.delta').map((event) => event.payload.delta)).toEqual([
+      '1. Inspect current files.\n',
+      '2. Wait for confirmation before edits.',
+    ]);
+    expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.at(-1)?.content).toBe('1. Inspect current files.\n2. Wait for confirmation before edits.');
+    expect(saved?.messages.at(-1)?.planMode).toEqual({ mode: 'plan', status: 'awaiting_confirmation' });
+  });
+
+  it('accepts an awaiting Plan mode message when a default turn continues execution', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Plan accept loop', projectId: 'project_1' });
+    const modelClient = new PlanThenToolModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'plan before editing', collaborationMode: 'plan' });
+    const planned = await threadStore.getThread(thread.id);
+    const planMessageId = planned?.messages.at(-1)?.id;
+
+    await loop.sendTurn(thread.id, { input: 'Proceed with the plan.' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const planUpdatedIndex = events.findIndex((event) =>
+      event.type === 'message.plan_mode_updated' &&
+      event.payload.messageId === planMessageId &&
+      event.payload.planMode.status === 'accepted'
+    );
+    const executionTurnIndex = events.findIndex((event) =>
+      event.type === 'turn.started' &&
+      event.payload.input === 'Proceed with the plan.'
+    );
+
+    expect(saved?.messages.find((message) => message.id === planMessageId)?.planMode).toEqual({ mode: 'plan', status: 'accepted' });
+    expect(planUpdatedIndex).toBeGreaterThanOrEqual(0);
+    expect(executionTurnIndex).toBeGreaterThan(planUpdatedIndex);
+    expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
+    expect(modelClient.requests[0].toolChoice).toBe('none');
+    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toContain('workspace_read_file');
   });
 
   it('runs PreToolUse hooks and blocks denied tool calls', async () => {
@@ -492,7 +726,7 @@ describe('agent loop tools', () => {
     ]);
     expect(events).toContainEqual(expect.objectContaining({
       type: 'turn.completed',
-      payload: {},
+      payload: expect.objectContaining({ taskKind: 'regular' }),
     }));
   });
 
@@ -645,7 +879,7 @@ describe('agent loop tools', () => {
       name: 'run_shell_command',
       arguments: '{"command":"printf original","risk_level":"low","directory":"scripts"}',
     });
-    const toolHost = new CapturingToolHost();
+    const toolHost = new CapturingToolHost([RUN_SHELL_COMMAND_TOOL]);
     const loop = new AgentLoop({
       threadStore,
       modelClient,
@@ -690,7 +924,7 @@ describe('agent loop tools', () => {
       name: 'apply_patch',
       arguments: JSON.stringify({ patch: originalPatch, workdir: 'src' }),
     });
-    const toolHost = new CapturingToolHost();
+    const toolHost = new CapturingToolHost([APPLY_PATCH_TOOL]);
     const loop = new AgentLoop({
       threadStore,
       modelClient,
@@ -938,6 +1172,301 @@ describe('agent loop tools', () => {
     expect(saved?.messages.at(-1)?.content).toContain('parallel results received');
   });
 
+  it('honors tool runtime profile when deciding parallel execution', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Serial profiled tools', projectId: 'project_1' });
+    const modelClient = new ParallelReadModelClient();
+    const toolHost = new SerialProfileReadToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new SandboxWorkspaceWriteConfigStore(),
+    });
+
+    const turn = loop.sendTurn(thread.id, { input: 'inspect both serially' });
+    await waitForToolStarts(toolHost, 1);
+    expect(toolHost.started).toEqual(['read_file']);
+    toolHost.releaseAll();
+    await turn;
+
+    const saved = await threadStore.getThread(thread.id);
+    expect(toolHost.started).toEqual(['read_file', 'search_text']);
+    expect(modelClient.requests).toHaveLength(2);
+    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['read_file', 'search_text']);
+  });
+
+  it('reveals deferred tools through tool_search on the next sampling step', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Deferred tools', projectId: 'project_1' });
+    const modelClient = new DeferredToolSearchModelClient();
+    const toolHost = new DeferredToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'find the deferred lookup tool' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
+      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
+
+    expect(modelClient.requests).toHaveLength(3);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['direct_tool', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
+    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.toolRuntimes).toEqual([
+      {
+        name: 'direct_tool',
+        source: 'host',
+        exposure: 'direct',
+        supportsParallel: false,
+        waitsForRuntimeCancellation: true,
+      },
+      {
+        name: 'tool_search',
+        source: 'router',
+        exposure: 'direct',
+        supportsParallel: false,
+        waitsForRuntimeCancellation: true,
+      },
+    ]);
+    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'deferred_lookup']);
+    expect(modelClient.requests[1].stepSnapshot?.toolNames).toEqual(['direct_tool', 'deferred_lookup']);
+    expect(modelClient.requests[1].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'deferred_lookup']);
+    expect(modelClient.requests[1].stepSnapshot?.deferredToolNames).toEqual([]);
+    expect(modelClient.requests[1].stepSnapshot?.routerToolNames).toEqual([]);
+    expect(modelClient.requests[1].stepSnapshot?.toolRuntimes).toEqual([
+      {
+        name: 'direct_tool',
+        source: 'host',
+        exposure: 'direct',
+        supportsParallel: false,
+        waitsForRuntimeCancellation: true,
+      },
+      {
+        name: 'deferred_lookup',
+        source: 'host',
+        exposure: 'deferred',
+        supportsParallel: false,
+        waitsForRuntimeCancellation: true,
+      },
+    ]);
+    expect(modelClient.requests[1].messages.some((message) =>
+      message.role === 'tool'
+      && message.toolName === 'tool_search'
+      && message.content.includes('deferred_lookup'))).toBe(true);
+    expect(toolHost.calls).toEqual([{ name: 'deferred_lookup', input: { id: 'alpha' }, projectId: 'project_1' }]);
+    expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'tool_search')).toBe(true);
+    expect(toolSearchCompleted?.payload.resultPreview).toContain('Revealed 1 deferred tool');
+    expect(toolSearchCompleted?.payload.data).toMatchObject({ revealedToolNames: ['deferred_lookup'] });
+    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['tool_search', 'deferred_lookup']);
+    expect(saved?.messages.at(-1)?.content).toContain('deferred lookup complete');
+  });
+
+  it('suggests deferred tools without revealing them before tool_search', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Suggested deferred tools', projectId: 'project_1' });
+    const modelClient = new ToolSuggestThenSearchModelClient();
+    const toolHost = new DeferredToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new ToolSuggestConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'suggest then reveal lookup tool' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const toolSuggestCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
+      event.type === 'tool.completed' && event.payload.toolName === 'tool_suggest');
+    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
+      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
+
+    expect(modelClient.requests).toHaveLength(4);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
+    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
+    expect(modelClient.requests[2].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'deferred_lookup']);
+    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
+    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
+    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search', 'tool_suggest']);
+    expect(modelClient.requests[1].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
+    expect(modelClient.requests[1].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
+    expect(modelClient.requests[1].stepSnapshot?.routerToolNames).toEqual(['tool_search', 'tool_suggest']);
+    expect(modelClient.requests[2].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'deferred_lookup']);
+    expect(modelClient.requests[2].stepSnapshot?.deferredToolNames).toEqual([]);
+    expect(modelClient.requests[2].stepSnapshot?.routerToolNames).toEqual([]);
+    expect(toolSuggestCompleted?.payload.resultPreview).toContain('Suggested 1 deferred tool');
+    expect(toolSuggestCompleted?.payload.data).toMatchObject({
+      suggestions: [{ name: 'deferred_lookup', revealWith: 'tool_search' }],
+    });
+    expect(toolSuggestCompleted?.payload.data).not.toMatchObject({ revealedToolNames: expect.any(Array) });
+    expect(toolSearchCompleted?.payload.data).toMatchObject({ revealedToolNames: ['deferred_lookup'] });
+    expect(toolHost.calls).toEqual([{ name: 'deferred_lookup', input: { id: 'alpha' }, projectId: 'project_1' }]);
+    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['tool_suggest', 'tool_search', 'deferred_lookup']);
+    expect(saved?.messages.at(-1)?.content).toContain('suggested deferred lookup complete');
+  });
+
+  it('keeps router-owned tool_search from being shadowed by host tools', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Reserved tool search', projectId: 'project_1' });
+    const modelClient = new DeferredToolSearchModelClient();
+    const toolHost = new ToolSearchCollisionHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'discover lookup tool' });
+
+    expect(modelClient.requests[0].tools?.find((tool) => tool.name === 'tool_search')?.description).toContain('Search deferred tools');
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
+    expect(toolHost.calls).toEqual([{ name: 'deferred_lookup', input: { id: 'alpha' }, projectId: 'project_1' }]);
+  });
+
+  it('rejects tool calls that were not advertised in the current sampling step', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Unadvertised deferred tool', projectId: 'project_1' });
+    const modelClient = new UnadvertisedDeferredToolModelClient();
+    const toolHost = new DeferredToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'call hidden lookup directly' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['direct_tool', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
+    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
+    expect(toolHost.calls).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({
+        toolName: 'deferred_lookup',
+        status: 'error',
+        content: expect.stringContaining('not advertised'),
+      }),
+    }));
+    expect(saved?.messages.find((message) => message.role === 'tool' && message.toolName === 'deferred_lookup')?.content).toContain('not advertised');
+    expect(saved?.messages.at(-1)?.content).toContain('handled unadvertised tool rejection');
+  });
+
+  it('rejects deferred AppServer dynamic tool calls before discovery', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Unadvertised dynamic tool', projectId: 'project_1' });
+    const modelClient = new SingleToolCallModelClient({
+      id: 'call_unadvertised_dynamic_lookup',
+      name: 'tickets__lookup_ticket',
+      arguments: '{"id":"ABC-123"}',
+    });
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+    loop.registerAppServerDynamicTools(thread.id, [{
+      name: 'tickets__lookup_ticket',
+      namespace: 'tickets',
+      toolName: 'lookup_ticket',
+      deferLoading: true,
+      description: 'Look up a ticket by id.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    }], 'dynamic-connection-1');
+
+    await loop.sendTurn(thread.id, { input: 'call hidden dynamic lookup directly' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['workspace_read_file', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['workspace_read_file', 'tool_search']);
+    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['tickets__lookup_ticket']);
+    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
+    expect(toolHost.calls).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({
+        toolName: 'tickets__lookup_ticket',
+        status: 'error',
+        content: expect.stringContaining('not advertised'),
+      }),
+    }));
+    expect(saved?.messages.find((message) => message.role === 'tool' && message.toolName === 'tickets__lookup_ticket')?.content).toContain('not advertised');
+    expect(saved?.messages.at(-1)?.content).toContain('tool handled');
+  });
+
+  it('prioritizes exact deferred tool names in tool_search results', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Exact deferred search', projectId: 'project_1' });
+    const modelClient = new ExactDeferredToolSearchModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new ManyDeferredToolHost(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'load search_graph only' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
+      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
+
+    expect(toolSearchCompleted?.payload.data).toMatchObject({ revealedToolNames: ['search_graph'] });
+    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'search_graph', 'tool_search']);
+    expect(modelClient.requests[1].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'search_graph', 'tool_search']);
+    expect(modelClient.requests[1].stepSnapshot?.deferredToolNames).toEqual(['graph_search_history', 'search_projects']);
+    expect(modelClient.requests[1].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
+    expect(modelClient.requests[1].tools?.some((tool) => tool.name === 'graph_search_history')).toBe(false);
+    expect(modelClient.requests[1].messages.some((message) =>
+      message.role === 'tool'
+      && message.toolName === 'tool_search'
+      && message.content.includes('"search_graph"'))).toBe(true);
+  });
+
   it('pauses overlarge local inspection batches after a visible progress note', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -1026,6 +1555,8 @@ describe('agent loop tools', () => {
     );
 
     expect(runningPreview).toBeTruthy();
+    expect(toolHost.partialPreviewCalls).toHaveLength(2);
+    expect(toolHost.partialPreviewCalls).toEqual(toolHost.partialPreviewCalls.map(() => ({ name: 'write_file', hasProjectId: true })));
     expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).toContain('PC local tool prompt');
     expect(saved?.messages.find((message) => message.role === 'assistant' && message.toolRuns?.length)?.toolRuns).toMatchObject([
       {
@@ -1035,6 +1566,34 @@ describe('agent loop tools', () => {
         resultPreview: expect.stringContaining('src/generated.txt'),
       },
     ]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'turn.diff',
+      payload: { unifiedDiff: expect.stringContaining('diff --git a/src/generated.txt b/src/generated.txt') },
+    }));
+    expect(saved?.turns?.[0]?.diff).toContain('+generated');
+  });
+
+  it('does not publish streaming previews for deferred tools before discovery', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Deferred delta preview', projectId: 'project_1' });
+    const modelClient = new UnadvertisedDeferredToolDeltaModelClient();
+    const toolHost = new DeferredPreviewingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'stream hidden lookup arguments' });
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.partialPreviewCalls).toEqual([]);
+    expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'deferred_lookup')).toBe(false);
+    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
   });
 
   it('uses the model client to compact context manually', async () => {
@@ -1097,6 +1656,7 @@ describe('agent loop tools', () => {
     const events = await threadStore.listEvents(thread.id, 0);
     const compactingEvent = events.find((event) => event.type === 'thread.context_compacting');
     const compactedEvent = events.find((event) => event.type === 'thread.context_compacted');
+    const compactTurnId = compactingEvent?.turnId;
 
     expect(modelClient.requests).toHaveLength(1);
     expect(modelClient.requests[0]).toMatchObject({
@@ -1107,6 +1667,16 @@ describe('agent loop tools', () => {
     });
     expect(compactingEvent?.turnId).toBeTruthy();
     expect(compactedEvent?.turnId).toBe(compactingEvent?.turnId);
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId: compactTurnId,
+      type: 'turn.started',
+      payload: expect.objectContaining({ taskKind: 'compact' }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId: compactTurnId,
+      type: 'turn.completed',
+      payload: expect.objectContaining({ taskKind: 'compact' }),
+    }));
     expect(events).toContainEqual(expect.objectContaining({
       type: 'hook.completed',
       payload: expect.objectContaining({
@@ -1183,6 +1753,10 @@ describe('agent loop tools', () => {
     expect(compacted.messages.some((message) => message.contextCompaction)).toBe(false);
     expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
     expect(events).toContainEqual(expect.objectContaining({
+      type: 'turn.completed',
+      payload: expect.objectContaining({ taskKind: 'compact' }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
       type: 'hook.completed',
       payload: expect.objectContaining({
         eventName: 'PreCompact',
@@ -1190,6 +1764,58 @@ describe('agent loop tools', () => {
         message: 'manual compact paused',
         entries: [{ kind: 'stop', text: 'manual compact paused' }],
       }),
+    }));
+  });
+
+  it('registers manual context compaction as an active cancellable compact task', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Cancellable context compaction' });
+    for (let index = 0; index < 12; index += 1) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'message.created',
+        createdAt: `2026-06-26T00:02:${String(index).padStart(2, '0')}.000Z`,
+        payload: {
+          message: {
+            id: `cancel_compact_msg_${index}`,
+            role: index % 2 ? 'assistant' : 'user',
+            content: `message ${index}`,
+            createdAt: `2026-06-26T00:02:${String(index).padStart(2, '0')}.000Z`,
+            status: 'complete',
+          },
+        },
+      });
+    }
+    const modelClient = new BlockingContextCompactionModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const compacting = loop.compactThreadContext(thread.id);
+    await modelClient.started;
+    const turnId = loop.activeTurnId(thread.id);
+
+    expect(turnId).toBeTruthy();
+    await expect(loop.cancelTurn(thread.id, turnId!)).resolves.toBe(true);
+    await expect(compacting).rejects.toMatchObject({ name: 'AbortError' });
+    expect(loop.activeTurnId(thread.id)).toBeNull();
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId,
+      type: 'turn.started',
+      payload: expect.objectContaining({ taskKind: 'compact' }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId,
+      type: 'turn.cancelled',
+      payload: expect.objectContaining({ taskKind: 'compact' }),
     }));
   });
 
@@ -1237,10 +1863,192 @@ describe('agent loop tools', () => {
     expect(saved?.messages.some((message) => message.id === 'msg_0' && message.visibility === 'transcript')).toBe(true);
     expect(savedCompactionSummary?.turnId).toBe(compactedEvent?.turnId);
     expect(savedCompactionSummary?.contextCompaction?.triggerScopes).toEqual(['total']);
+    expect(savedCompactionSummary?.contextCompaction?.autoCompactTokenLimit).toBeGreaterThan(0);
+    expect(savedCompactionSummary?.contextCompaction?.tokensUntilCompaction).toBeGreaterThan(0);
+    expect(saved?.contextCompaction?.tokensUntilCompaction).toBe(savedCompactionSummary?.contextCompaction?.tokensUntilCompaction);
     expect(savedCompactionSummary?.content).toContain('<context_compaction_summary');
     expect(saved?.messages.some((message) => message.content === 'continue after history')).toBe(true);
     expect(mainRequest?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
+    expect(mainRequest?.stepSnapshot?.contextWindow).toMatchObject({
+      compactionHash: expect.stringMatching(/^sha256:/),
+      compactionSummaryMessageIds: [savedCompactionSummary?.id],
+    });
+    expect(mainRequest?.stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThan(0);
+    expect(mainRequest?.stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeLessThanOrEqual(savedCompactionSummary?.contextCompaction?.tokensUntilCompaction ?? 0);
     expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(oversizedHistory.slice(0, 200));
+  });
+
+  it('uses the active model context window when deciding automatic compaction', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Small window automatic context compaction' });
+    const smallWindowHistory = 'older context '.repeat(600);
+    for (let index = 0; index < 3; index += 1) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'message.created',
+        createdAt: `2026-06-26T00:00:${String(index).padStart(2, '0')}.000Z`,
+        payload: {
+          message: {
+            id: `small_window_msg_${index}`,
+            role: index % 2 ? 'assistant' : 'user',
+            content: index === 0 ? smallWindowHistory : `recent message ${index}`,
+            createdAt: `2026-06-26T00:00:${String(index).padStart(2, '0')}.000Z`,
+            status: 'complete',
+          },
+        },
+      });
+    }
+    const modelClient = new AutoCompactionModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new ContextWindowConfigStore(1_000),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'continue after small-window history' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const compactingEvent = events.find((event) => event.type === 'thread.context_compacting' && event.turnId);
+    const mainRequest = modelClient.requests.find((request) => request.model === 'local-runtime-smoke');
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
+    expect(compactingEvent?.payload).toMatchObject({
+      maxContextTokens: 1_000,
+      maxContextTokensK: 1,
+    });
+    expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
+      autoCompactTokenLimit: 850,
+      maxContextTokens: 1_000,
+      maxContextTokensK: 1,
+      tokensUntilCompaction: expect.any(Number),
+      triggerScopes: ['total'],
+    });
+    expect(mainRequest?.messages.some((message) => message.contextCompaction?.maxContextTokens === 1_000)).toBe(true);
+    expect(mainRequest?.stepSnapshot?.contextWindow).toMatchObject({
+      autoCompactTokenLimit: 850,
+      maxContextTokens: 1_000,
+      maxContextTokensK: 1,
+      compactionHash: expect.stringMatching(/^sha256:/),
+    });
+    expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
+  });
+
+  it('uses provider-native context compaction when available', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Remote automatic context compaction' });
+    const smallWindowHistory = 'remote older context '.repeat(600);
+    for (let index = 0; index < 3; index += 1) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'message.created',
+        createdAt: `2026-06-26T00:03:${String(index).padStart(2, '0')}.000Z`,
+        payload: {
+          message: {
+            id: `remote_compact_msg_${index}`,
+            role: index % 2 ? 'assistant' : 'user',
+            content: index === 0 ? smallWindowHistory : `recent remote message ${index}`,
+            createdAt: `2026-06-26T00:03:${String(index).padStart(2, '0')}.000Z`,
+            status: 'complete',
+          },
+        },
+      });
+    }
+    const modelClient = new RemoteCompactionModelClient();
+    const usageStore = new CapturingUsageStore();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new ContextWindowConfigStore(1_000),
+      usageStore,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'continue after remote compaction' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const mainRequest = modelClient.requests.find((request) => request.model === 'local-runtime-smoke');
+
+    expect(modelClient.compactRequests).toHaveLength(1);
+    expect(modelClient.compactRequests[0]).toMatchObject({
+      model: 'context-compaction',
+      maxOutputTokens: 1600,
+      temperature: 0,
+    });
+    expect(modelClient.compactRequests[0].messages.map((message) => message.content).join('\n')).toContain(smallWindowHistory.slice(0, 200));
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke']);
+    expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
+      source: 'remote',
+      triggerScopes: ['total'],
+    });
+    expect(mainRequest?.stepSnapshot?.contextWindow).toMatchObject({
+      compactionHash: expect.stringMatching(/^sha256:/),
+      compactionSummaryMessageIds: [expect.any(String)],
+    });
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'token.count',
+      payload: {
+        usage: {
+          provider: 'openai-responses',
+          model: 'gpt-compact',
+          inputTokens: 10,
+          outputTokens: 2,
+          totalTokens: 12,
+        },
+      },
+    }));
+    expect(usageStore.records).toMatchObject([{
+      threadId: thread.id,
+      provider: 'openai-responses',
+      model: 'gpt-compact',
+      inputTokens: 10,
+      outputTokens: 2,
+      totalTokens: 12,
+    }]);
+    expect(mainRequest?.messages.map((message) => message.content).join('\n')).toContain('Remote provider compacted the older history.');
+    expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
+  });
+
+  it('automatically compacts oversized mid-turn tool results before follow-up sampling', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Mid-turn context compaction', projectId: 'project_1' });
+    const modelClient = new MidTurnToolCompactionModelClient();
+    const toolHost = new LargeToolResultHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read the huge generated report' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const followUpRequest = modelClient.requests[2];
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'context-compaction', 'local-runtime-smoke']);
+    expect(events.some((event) => event.type === 'thread.context_compacted' && event.turnId)).toBe(true);
+    expect(saved?.messages.find((message) => message.role === 'tool')?.visibility).toBe('transcript');
+    expect(saved?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
+    expect(followUpRequest.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
+    expect(followUpRequest.stepSnapshot?.contextWindow).toMatchObject({
+      compactionHash: expect.stringMatching(/^sha256:/),
+      compactionSummaryMessageIds: [expect.any(String)],
+    });
+    expect(followUpRequest.messages.map((message) => message.content).join('\n')).toContain('Summarized oversized tool output.');
+    expect(followUpRequest.messages.map((message) => message.content).join('\n')).not.toContain(toolHost.largeContent.slice(0, 200));
+    expect(saved?.messages.at(-1)?.content).toContain('Final answer after summarized tool result.');
   });
 
   it('lets PreCompact hooks stop automatic compaction and complete the turn without model calls', async () => {
@@ -2063,9 +2871,31 @@ describe('agent loop tools', () => {
 
     await loop.sendTurn(thread.id, { input: 'think first', thinking: true, thinkingEffort: 'max' });
     const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id);
+    const assistant = saved?.messages.find((message) => message.role === 'assistant');
+    const agentItemStarted = events.find((event) => event.type === 'item.started'
+      && event.payload.item.kind === 'agent_message'
+      && event.payload.item.transcriptMessageId === assistant?.id);
+    const reasoningItemStarted = events.find((event) => event.type === 'item.started'
+      && event.payload.item.kind === 'reasoning'
+      && event.payload.item.transcriptMessageId === assistant?.id);
 
     expect(modelClient.requests[0]).toMatchObject({ thinking: true, reasoningEffort: 'max' });
-    expect(saved?.messages.find((message) => message.role === 'assistant')?.content).toBe('<think>plan</think>answer');
+    expect(assistant?.content).toBe('<think>plan</think>answer');
+    expect(agentItemStarted).toBeTruthy();
+    expect(reasoningItemStarted).toBeTruthy();
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'reasoning.raw_delta',
+      payload: expect.objectContaining({ itemId: `${assistant?.id}:reasoning`, delta: 'plan' }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'item.delta',
+      payload: { itemId: assistant?.id, delta: 'answer' },
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'token.count',
+      payload: { usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } },
+    }));
   });
 
   it('rejects image attachments when the active model does not support image input', async () => {
@@ -3541,11 +4371,164 @@ describe('agent loop tools', () => {
     await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
     const events = await waitForTurnCancelled(threadStore, thread.id);
     const saved = await threadStore.getThread(thread.id);
+    const markerIndex = events.findIndex((event) => event.type === 'message.created'
+      && event.turnId === started.turnId
+      && event.payload.message.role === 'user'
+      && event.payload.message.visibility === 'model'
+      && event.payload.message.content.includes('<turn_aborted>'));
+    const cancelledIndex = events.findIndex((event) => event.type === 'turn.cancelled' && event.turnId === started.turnId);
 
     expect(modelClient.aborted).toBe(true);
     expect(events.some((event) => event.type === 'turn.cancelled' && event.turnId === started.turnId)).toBe(true);
     expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
+    expect(markerIndex).toBeGreaterThanOrEqual(0);
+    expect(cancelledIndex).toBeGreaterThan(markerIndex);
+    expect(saved?.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        turnId: started.turnId,
+        role: 'user',
+        visibility: 'model',
+        content: expect.stringContaining('<turn_aborted>'),
+      }),
+    ]));
     expect(saved?.messages.at(-1)?.status).toBe('complete');
+  });
+
+  it('does not wait for tool runtimes that opt out of cancellation waiting', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Non waiting tool cancel', projectId: 'project_1' });
+    const toolHost = new NonWaitingCancellationToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new SingleToolCallModelClient({ id: 'call_background', name: 'background_tool', arguments: '{}' }),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    const running = loop.sendTurn(thread.id, { input: 'start background tool' });
+    await toolHost.started;
+    const turnId = loop.activeTurnId(thread.id);
+
+    expect(turnId).toBeTruthy();
+    await expect(loop.cancelTurn(thread.id, turnId!)).resolves.toBe(true);
+    await expect(Promise.race([
+      running.then(() => 'finished'),
+      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 500)),
+    ])).resolves.toBe('finished');
+    expect(loop.activeTurnId(thread.id)).toBeNull();
+    toolHost.release();
+    await toolHost.done;
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'background_tool')).toBe(true);
+    expect(events.some((event) => event.type === 'turn.cancelled' && event.turnId === turnId)).toBe(true);
+    expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
+  });
+
+  it('runs standalone user shell commands as cancellable user_shell tasks', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'User shell task', projectId: 'project_1' });
+    const toolHost = new BlockingUserShellHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new SteerableModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    const running = loop.runUserShellCommand(thread.id, 'node -e "setTimeout(() => {}, 10000)"');
+    await toolHost.started;
+    const turnId = loop.activeTurnId(thread.id);
+
+    expect(turnId).toBeTruthy();
+    expect(toolHost.calls).toEqual([{
+      command: 'node -e "setTimeout(() => {}, 10000)"',
+      projectId: 'project_1',
+      turnId,
+    }]);
+
+    await expect(loop.cancelTurn(thread.id, turnId!)).resolves.toBe(true);
+    await expect(running).resolves.toBeUndefined();
+    expect(loop.activeTurnId(thread.id)).toBeNull();
+
+    const events = await threadStore.listEvents(thread.id, 0);
+    const markerIndex = events.findIndex((event) => event.type === 'message.created'
+      && event.turnId === turnId
+      && event.payload.message.role === 'user'
+      && event.payload.message.visibility === 'model'
+      && event.payload.message.content.includes('<turn_aborted>'));
+    const cancelledIndex = events.findIndex((event) => event.type === 'turn.cancelled' && event.turnId === turnId);
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId,
+      type: 'turn.started',
+      payload: expect.objectContaining({ taskKind: 'user_shell' }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId,
+      type: 'tool.started',
+      payload: expect.objectContaining({ source: 'userShell' }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId,
+      type: 'turn.cancelled',
+      payload: expect.objectContaining({ taskKind: 'user_shell' }),
+    }));
+    expect(markerIndex).toBeGreaterThanOrEqual(0);
+    expect(cancelledIndex).toBeGreaterThan(markerIndex);
+  });
+
+  it('queues mailbox input that arrives while a user_shell task is active', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Busy shell mailbox queue', projectId: 'project_1' });
+    const modelClient = new MailboxAwareModelClient();
+    const toolHost = new BlockingUserShellHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    const running = loop.runUserShellCommand(thread.id, 'node -e "setTimeout(() => {}, 10000)"');
+    await toolHost.started;
+    const shellTurnId = loop.activeTurnId(thread.id);
+    expect(shellTurnId).toBeTruthy();
+
+    await expect(loop.deliverMailboxInput(thread.id, {
+      id: 'mail_shell_expected',
+      expectedTurnId: shellTurnId!,
+      fromAgentId: 'agent_child',
+      content: 'this should not attach to a shell task',
+    })).rejects.toThrow('active user_shell turn cannot receive mailbox input');
+
+    await expect(loop.deliverMailboxInput(thread.id, {
+      id: 'mail_shell_queue',
+      fromAgentId: 'agent_child',
+      content: 'queue this until the shell finishes',
+    })).resolves.toEqual({ accepted: true, queued: true, turnId: null });
+
+    const queuedEvents = await threadStore.listEvents(thread.id, 0);
+    const mailboxEvent = queuedEvents.find((event) =>
+      event.type === 'mailbox.delivered' && event.payload.id === 'mail_shell_queue'
+    );
+    expect(mailboxEvent?.turnId).toBeUndefined();
+
+    await expect(loop.cancelTurn(thread.id, shellTurnId!)).resolves.toBe(true);
+    await expect(running).resolves.toBeUndefined();
+    await loop.sendTurn(thread.id, { input: 'continue after shell' });
+
+    const requestText = modelClient.requests[0].messages.map((message) => message.content).join('\n');
+    expect(requestText).toContain('<mailbox_message id="mail_shell_queue" from_agent_id="agent_child" delivery_mode="queue_only">');
+    expect(requestText).toContain('queue this until the shell finishes');
   });
 
   it('steers active user input into the next model request of the same turn', async () => {
@@ -3589,6 +4572,10 @@ describe('agent loop tools', () => {
     ]);
     expect(modelSteerMessage).toMatchObject({ role: 'user' });
     expect(modelSteerMessage?.content).toBe('Prefer the shorter path.');
+    expect(modelClient.requests[1].stepSnapshot?.inputMessageIds).toEqual(
+      secondTurnMessages.filter((message) => message.role === 'user').map((message) => message.id),
+    );
+    expect(modelClient.requests[1].stepSnapshot?.conversationMessageIds).toContain(modelSteerMessage?.id);
     expect(saved?.messages.map((message) => `${message.role}:${message.content}`)).toEqual([
       'user:initial prompt',
       'assistant:initial answer',
@@ -3600,6 +4587,57 @@ describe('agent loop tools', () => {
       turnId: started.turnId,
     });
     expect(events.filter((event) => event.type === 'turn.completed' && event.turnId === started.turnId)).toHaveLength(1);
+  });
+
+  it('compacts oversized active steer input before the follow-up sampling step', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Oversized steer loop' });
+    const modelClient = new OversizedSteerCompactionModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new ContextWindowConfigStore(1_000),
+    });
+    const oversizedSteer = 'OVERSIZED_STEER_DETAIL '.repeat(800);
+    const storedOversizedSteer = oversizedSteer.trim();
+
+    const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
+    await waitForModelRequestCount(modelClient, 1);
+    await expect(loop.steerTurn(thread.id, {
+      clientId: 'client-oversized-steer',
+      expectedTurnId: started.turnId,
+      input: oversizedSteer,
+    })).resolves.toEqual({ accepted: true, turnId: started.turnId });
+
+    modelClient.releaseFirstResponse();
+    await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+    const saved = await threadStore.getThread(thread.id);
+    const compactRequest = modelClient.requests.find((request) => request.model === 'context-compaction');
+    const followUpRequest = modelClient.requests.at(-1);
+    const savedSteer = saved?.messages.find((message) => message.clientId === 'client-oversized-steer');
+
+    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'context-compaction', 'local-runtime-smoke']);
+    expect(compactRequest?.messages.map((message) => message.content).join('\n')).toContain(oversizedSteer.slice(0, 200));
+    expect(savedSteer).toMatchObject({
+      content: storedOversizedSteer,
+      role: 'user',
+      visibility: 'transcript',
+    });
+    expect(followUpRequest?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('latest_input'))).toBe(true);
+    expect(followUpRequest?.messages.map((message) => message.content).join('\n')).toContain('Summarized oversized steer input.');
+    expect(followUpRequest?.messages.map((message) => message.content).join('\n')).not.toContain(oversizedSteer.slice(0, 200));
+    expect(followUpRequest?.stepSnapshot?.inputMessageIds).toContain(savedSteer?.id);
+    expect(followUpRequest?.stepSnapshot?.conversationMessageIds).toContain(savedSteer?.id);
+    expect(followUpRequest?.stepSnapshot?.contextWindow).toMatchObject({
+      autoCompactTokenLimit: 850,
+      compactionHash: expect.stringMatching(/^sha256:/),
+      tokensUntilCompaction: expect.any(Number),
+    });
+    expect(followUpRequest?.stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThan(0);
   });
 
   it('treats a new start request during an active conversation as a steer', async () => {
@@ -3688,6 +4726,8 @@ describe('agent loop tools', () => {
     expect(toolMessageIndex).toBeGreaterThanOrEqual(0);
     expect(steerMessageIndex).toBeGreaterThan(toolMessageIndex);
     expect(secondRequestMessages[steerMessageIndex]?.content).toBe('Prefer the shorter path.');
+    expect(modelClient.requests[1].stepSnapshot?.inputMessageIds).toContain(secondRequestMessages[steerMessageIndex]?.id);
+    expect(modelClient.requests[1].stepSnapshot?.conversationMessageIds).toContain(secondRequestMessages[steerMessageIndex]?.id);
   });
 
   it('waits for an accepted steer message to be stored before the final drain closes the turn', async () => {
@@ -3725,6 +4765,292 @@ describe('agent loop tools', () => {
       content: 'Do not finish before this is stored.',
       role: 'user',
     });
+  });
+
+  it('delivers mailbox input into the next model request within the active turn', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Mailbox loop' });
+    const modelClient = new SteerableModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
+    await waitForModelRequestCount(modelClient, 1);
+
+    await expect(loop.deliverMailboxInput(thread.id, {
+      id: 'mail_1',
+      fromAgentId: 'agent_child',
+      expectedTurnId: started.turnId,
+      content: 'child agent found the auth regression',
+    })).resolves.toEqual({ accepted: true, turnId: started.turnId });
+
+    modelClient.releaseFirstResponse();
+    const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+    const secondRequestText = modelClient.requests[1].messages.map((message) => message.content).join('\n');
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'mailbox.delivered',
+      payload: expect.objectContaining({
+        id: 'mail_1',
+        fromAgentId: 'agent_child',
+        content: 'child agent found the auth regression',
+      }),
+    }));
+    expect(modelClient.requests).toHaveLength(2);
+    expect(modelClient.requests[1].messages.find((message) => message.id === 'mailbox_mail_1')).toMatchObject({
+      role: 'system',
+      visibility: 'model',
+      turnId: started.turnId,
+    });
+    expect(modelClient.requests[1].stepSnapshot?.inputMessageIds).toEqual(expect.arrayContaining(['mailbox_mail_1']));
+    expect(secondRequestText).toContain('<mailbox_message id="mail_1" from_agent_id="agent_child" delivery_mode="queue_only">');
+    expect(secondRequestText).toContain('child agent found the auth regression');
+  });
+
+  it('queues idle mailbox input for the next user-started model request', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Queued mailbox loop' });
+    const modelClient = new MailboxAwareModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    await expect(loop.deliverMailboxInput(thread.id, {
+      id: 'mail_queue_1',
+      fromAgentId: 'agent_child',
+      fromThreadId: 'thread_child',
+      toAgentId: 'agent_parent',
+      content: 'queue this before the next user turn',
+    })).resolves.toEqual({ accepted: true, queued: true, turnId: null });
+
+    await loop.sendTurn(thread.id, { input: 'continue with queued mailbox' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const firstRequestText = modelClient.requests[0].messages.map((message) => message.content).join('\n');
+    const mailboxEvent = events.find((event) => event.type === 'mailbox.delivered');
+
+    expect(mailboxEvent?.turnId).toBeUndefined();
+    expect(mailboxEvent?.payload).toEqual(expect.objectContaining({
+      deliveryMode: 'queue_only',
+      fromAgentId: 'agent_child',
+      fromThreadId: 'thread_child',
+      toAgentId: 'agent_parent',
+    }));
+    expect(firstRequestText).toContain('<mailbox_message id="mail_queue_1" from_agent_id="agent_child" from_thread_id="thread_child" to_agent_id="agent_parent" delivery_mode="queue_only">');
+    expect(firstRequestText).toContain('queue this before the next user turn');
+    expect(firstRequestText).toContain('continue with queued mailbox');
+  });
+
+  it('starts a trigger-turn mailbox delivery when the thread is idle', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Trigger mailbox loop' });
+    const modelClient = new MailboxAwareModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const delivered = await loop.deliverMailboxInput(thread.id, {
+      id: 'mail_trigger_1',
+      deliveryMode: 'trigger_turn',
+      fromAgentId: 'agent_child',
+      content: 'wake the parent agent',
+    });
+
+    expect(delivered.turnId).toBeTruthy();
+    const events = await waitForTurnCompleted(threadStore, thread.id, delivered.turnId!);
+    const requestText = modelClient.requests[0].messages.map((message) => message.content).join('\n');
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId: delivered.turnId,
+      type: 'mailbox.delivered',
+      payload: expect.objectContaining({
+        deliveryMode: 'trigger_turn',
+        triggerTurn: true,
+      }),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      turnId: delivered.turnId,
+      type: 'turn.started',
+      payload: expect.objectContaining({ taskKind: 'regular' }),
+    }));
+    expect(requestText).toContain('<mailbox_message id="mail_trigger_1" from_agent_id="agent_child" delivery_mode="trigger_turn" trigger_turn="true">');
+    expect(requestText).toContain('wake the parent agent');
+    expect(saved?.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user')).toHaveLength(0);
+  });
+
+  it('runs built-in collaboration tools across spawned child threads', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const parent = await threadStore.createThread({ title: 'Parent collaboration loop', projectId: 'project_1' });
+    const modelClient = new CollaborationToolModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new MultiAgentConfigStore(),
+    });
+
+    await loop.sendTurn(parent.id, { input: 'coordinate child agent work' });
+
+    const children = await threadStore.listThreads({ includeArchived: true, parentThreadId: parent.id });
+    const child = children[0] ? await threadStore.getThread(children[0].id) : null;
+    const parentEvents = await threadStore.listEvents(parent.id, 0);
+    const childEvents = child ? await threadStore.listEvents(child.id, 0) : [];
+
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual([
+      'spawn_agent',
+      'send_input',
+      'resume_agent',
+      'wait',
+      'close_agent',
+    ]);
+    expect(child).toMatchObject({ parentThreadId: parent.id, projectId: 'project_1' });
+    expect(parentEvents.filter((event) => event.type === 'item.completed').map((event) => event.payload.item.kind)).toEqual(expect.arrayContaining([
+      'collab_tool_call',
+    ]));
+    expect(parentEvents.filter((event) => event.type === 'tool.completed').map((event) => event.payload.toolName)).toEqual([
+      'spawn_agent',
+      'send_input',
+      'resume_agent',
+      'wait',
+      'close_agent',
+    ]);
+    expect(childEvents.filter((event) => event.type === 'mailbox.delivered').map((event) => event.payload.deliveryMode)).toEqual([
+      'queue_only',
+      'trigger_turn',
+    ]);
+    expect(child?.messages.some((message) => message.role === 'assistant' && message.content.includes('Child resumed with mailbox.'))).toBe(true);
+    expect((await threadStore.getThread(parent.id))?.messages.at(-1)?.content).toBe('Parent completed collaboration.');
+  });
+
+  it('keeps assistant history populated when the model streams item-based content', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Item stream loop' });
+    const modelClient = new ItemBasedModelClient();
+    const usageStore = new CapturingUsageStore();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      usageStore,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'stream using response items' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const saved = await threadStore.getThread(thread.id);
+    const assistant = saved?.messages.find((message) => message.role === 'assistant');
+
+    expect(assistant?.content).toBe('<think>Need context.</think>Hello from item stream.');
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'item.started',
+      payload: { item: { id: 'agent_item_1', kind: 'agent_message', status: 'in_progress' } },
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'plan.delta',
+      payload: { itemId: 'plan_item_1', delta: '1. Inspect state.' },
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'reasoning.summary_delta',
+      payload: { itemId: 'reasoning_item_1', delta: 'Need context.', summaryIndex: 0 },
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'reasoning.summary_part_added',
+      payload: { itemId: 'reasoning_item_1', summaryIndex: 0 },
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'token.count',
+      payload: { usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, modelContextWindow: 128000 },
+    }));
+    expect(saved?.turns?.[0]).toMatchObject({
+      id: expect.any(String),
+      status: 'completed',
+      diff: 'diff --git a/README.md b/README.md\n+Hello',
+      items: [
+        { id: 'plan_item_1', kind: 'plan', content: '1. Inspect state.' },
+        { id: 'reasoning_item_1', kind: 'reasoning', status: 'completed', content: 'Need context.' },
+        { id: 'agent_item_1', kind: 'agent_message', status: 'completed', content: 'Hello from item stream.' },
+      ],
+    });
+    expect(saved?.turns?.[0]?.tokenCounts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 },
+        modelContextWindow: 128000,
+      }),
+    ]));
+    expect(usageStore.records).toMatchObject([{
+      threadId: thread.id,
+      inputTokens: 10,
+      outputTokens: 4,
+      totalTokens: 14,
+    }]);
+  });
+
+  it('executes tool calls surfaced as native stream items', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Native item tool loop', projectId: 'project_1' });
+    const modelClient = new NativeItemToolCallModelClient();
+    const toolHost = new CapturingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README via native item' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+
+    expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
+    expect(modelClient.requests).toHaveLength(2);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('file contents'))).toBe(true);
+    expect(saved?.messages.at(-1)?.content).toBe('Native item tool result handled.');
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'item.started',
+      payload: {
+        item: {
+          id: 'call_native_1',
+          kind: 'tool_call',
+          status: 'in_progress',
+          toolCall: { id: 'call_native_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+        },
+      },
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'item.completed',
+      payload: {
+        item: {
+          id: 'call_native_1',
+          kind: 'tool_call',
+          status: 'completed',
+          toolCall: { id: 'call_native_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+        },
+      },
+    }));
   });
 
   it('edits a user message, truncates following replies, and regenerates without duplicating the user turn', async () => {
@@ -3786,6 +5112,198 @@ class ToolCallingModelClient implements ModelClient {
         totalTokens: 8,
       },
     };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ItemBasedModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'plan_delta', itemId: 'plan_item_1', text: '1. Inspect state.' };
+    yield {
+      type: 'item_started',
+      item: { id: 'reasoning_item_1', kind: 'reasoning', status: 'in_progress' },
+    };
+    yield { type: 'reasoning_summary_part_added', itemId: 'reasoning_item_1', summaryIndex: 0 };
+    yield { type: 'reasoning_summary_delta', itemId: 'reasoning_item_1', text: 'Need context.', summaryIndex: 0 };
+    yield {
+      type: 'item_completed',
+      item: { id: 'reasoning_item_1', kind: 'reasoning', content: 'Need context.', status: 'completed' },
+    };
+    yield {
+      type: 'item_started',
+      item: { id: 'agent_item_1', kind: 'agent_message', status: 'in_progress' },
+    };
+    yield { type: 'item_delta', itemId: 'agent_item_1', delta: 'Hello ' };
+    yield { type: 'item_delta', itemId: 'agent_item_1', delta: 'from item stream.' };
+    yield {
+      type: 'item_completed',
+      item: { id: 'agent_item_1', kind: 'agent_message', content: 'Hello from item stream.', status: 'completed' },
+    };
+    yield {
+      type: 'token_count',
+      usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 },
+      modelContextWindow: 128000,
+    };
+    yield { type: 'turn_diff', unifiedDiff: 'diff --git a/README.md b/README.md\n+Hello\n' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class NativeItemToolCallModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      const toolCall = { id: 'call_native_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' };
+      yield {
+        type: 'item_started',
+        item: { id: toolCall.id, kind: 'tool_call', status: 'in_progress', toolCall },
+      };
+      yield {
+        type: 'item_completed',
+        item: { id: toolCall.id, kind: 'tool_call', status: 'completed', toolCall },
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield {
+      type: 'item_started',
+      item: { id: 'agent_native_1', kind: 'agent_message', status: 'in_progress' },
+    };
+    yield { type: 'item_delta', itemId: 'agent_native_1', delta: 'Native item tool result handled.' };
+    yield {
+      type: 'item_completed',
+      item: { id: 'agent_native_1', kind: 'agent_message', content: 'Native item tool result handled.', status: 'completed' },
+    };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class PlanDeltaOnlyModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'plan_delta', itemId: 'plan_item_1', text: '1. Inspect current files.\n' };
+    yield { type: 'plan_delta', itemId: 'plan_item_1', text: '2. Wait for confirmation before edits.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class PlanThenToolModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield { type: 'plan_delta', itemId: 'plan_item_1', text: '1. Inspect current files.\n' };
+      yield { type: 'plan_delta', itemId: 'plan_item_1', text: '2. Run the read tool after confirmation.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_after_plan', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Executed the accepted plan.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class MailboxAwareModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'text_delta', text: 'Mailbox handled.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class CollaborationToolModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.messages.some((message) => message.content.includes('<mailbox_message'))) {
+      yield { type: 'text_delta', text: 'Child resumed with mailbox.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (request.messages.some((message) => message.role === 'user' && message.content === 'Inspect auth as child')) {
+      yield { type: 'text_delta', text: 'Child initial result.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+
+    const childThreadId = childThreadIdFromCollaborationToolMessages(request.messages);
+    if (!childThreadId) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_spawn_agent', name: 'spawn_agent', arguments: '{"prompt":"Inspect auth as child","title":"Auth child"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (!hasToolMessage(request.messages, 'send_input')) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_send_input', name: 'send_input', arguments: JSON.stringify({ thread_id: childThreadId, content: 'queued clue' }) }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (!hasToolMessage(request.messages, 'resume_agent')) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_resume_agent', name: 'resume_agent', arguments: JSON.stringify({ thread_id: childThreadId, content: 'resume with queued clue' }) }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (!hasToolMessage(request.messages, 'wait')) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_wait', name: 'wait', arguments: JSON.stringify({ thread_id: childThreadId }) }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (!hasToolMessage(request.messages, 'close_agent')) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_close_agent', name: 'close_agent', arguments: JSON.stringify({ thread_id: childThreadId, reason: 'done' }) }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Parent completed collaboration.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class StepSnapshotModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_step_1', name: 'step_tool_1', arguments: '{}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Fresh step captured.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -3859,6 +5377,106 @@ class ParallelReadModelClient implements ModelClient {
   }
 }
 
+class DeferredToolSearchModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_tool_search', name: 'tool_search', arguments: '{"query":"lookup"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_deferred_lookup', name: 'deferred_lookup', arguments: '{"id":"alpha"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'deferred lookup complete' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ToolSuggestThenSearchModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_tool_suggest', name: 'tool_suggest', arguments: '{"query":"lookup","limit":1}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_tool_search_after_suggest', name: 'tool_search', arguments: '{"query":"lookup","limit":1}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 3) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_suggested_deferred_lookup', name: 'deferred_lookup', arguments: '{"id":"alpha"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'suggested deferred lookup complete' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class UnadvertisedDeferredToolModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_unadvertised_deferred_lookup', name: 'deferred_lookup', arguments: '{"id":"alpha"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'handled unadvertised tool rejection' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ExactDeferredToolSearchModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exact_tool_search',
+          name: 'tool_search',
+          arguments: '{"query":"search_graph graph search projects","limit":1}',
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'exact deferred search complete' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class OverlargeInspectionModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -3907,6 +5525,17 @@ class ToolDeltaModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'done' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class UnadvertisedDeferredToolDeltaModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'tool_call_delta', call: { id: 'call_hidden_delta', name: 'deferred_lookup', argumentsDelta: '{"id":"alpha"}' } };
+    yield { type: 'text_delta', text: 'handled hidden delta without preview' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -4040,6 +5669,32 @@ class ContextCompactionModelClient implements ModelClient {
   }
 }
 
+class BlockingContextCompactionModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private markStarted: () => void = () => undefined;
+  readonly started = new Promise<void>((resolve) => {
+    this.markStarted = resolve;
+  });
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    this.markStarted();
+    await new Promise<void>((resolve) => {
+      if (!request.signal) {
+        resolve();
+        return;
+      }
+      if (request.signal.aborted) {
+        resolve();
+        return;
+      }
+      request.signal.addEventListener('abort', () => resolve(), { once: true });
+    });
+    request.signal?.throwIfAborted();
+    yield { type: 'text_delta', text: 'should not finish' };
+  }
+}
+
 class AutoCompactionModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -4064,26 +5719,168 @@ class AutoCompactionModelClient implements ModelClient {
   }
 }
 
+class RemoteCompactionModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  compactRequests: ModelCompactionRequest[] = [];
+
+  async compactConversation(request: ModelCompactionRequest) {
+    this.compactRequests.push(request);
+    return {
+      summary: JSON.stringify({
+        summary: 'Remote provider compacted the older history.',
+        important_constraints: ['Preserve the latest user request.'],
+        open_items: ['Continue after remote compaction.'],
+        already_said: 'Older context was compacted by the provider-native path.',
+        tool_context: 'No active tool context.',
+      }),
+      usage: {
+        provider: 'openai-responses',
+        model: 'gpt-compact',
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+      },
+    };
+  }
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'text_delta', text: 'Final answer after remote compaction.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class MidTurnToolCompactionModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'context-compaction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          summary: 'Summarized oversized tool output.',
+          important_constraints: ['Keep the user request and tool-call intent.'],
+          open_items: ['Continue after the tool result.'],
+          already_said: 'The raw tool output was too large for the active context window.',
+          tool_context: 'The read_file result was summarized instead of replayed verbatim.',
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.filter((item) => item.model === 'local-runtime-smoke').length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_huge_tool', name: 'workspace_read_file', arguments: '{"path":"huge-report.txt"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Final answer after summarized tool result.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+const WORKSPACE_READ_FILE_TOOL: RuntimeToolDefinition = {
+  name: 'workspace_read_file',
+  description: 'Read a file',
+  inputSchema: {
+    type: 'object',
+    properties: { path: { type: 'string' } },
+    required: ['path'],
+  },
+};
+
+const RUN_SHELL_COMMAND_TOOL: RuntimeToolDefinition = {
+  name: 'run_shell_command',
+  description: 'Run a shell command',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      command: { type: 'string' },
+      risk_level: { type: 'string' },
+      directory: { type: 'string' },
+    },
+    required: ['command'],
+  },
+};
+
+const APPLY_PATCH_TOOL: RuntimeToolDefinition = {
+  name: 'apply_patch',
+  description: 'Apply a workspace patch',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      patch: { type: 'string' },
+      workdir: { type: 'string' },
+    },
+    required: ['patch'],
+  },
+};
+
 class CapturingToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown; projectId?: string }> = [];
+  cleanupCalls: Array<{ threadId: string; projectId?: string; turnId?: string; status: ToolTurnCleanupOutcome['status'] }> = [];
+
+  constructor(private readonly tools: RuntimeToolDefinition[] = [WORKSPACE_READ_FILE_TOOL]) {}
 
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return [
-      {
-        name: 'workspace_read_file',
-        description: 'Read a file',
-        inputSchema: {
-          type: 'object',
-          properties: { path: { type: 'string' } },
-          required: ['path'],
-        },
-      },
-    ];
+    return this.tools;
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     this.calls.push({ name, input, projectId: context.projectId });
     return { content: 'file contents from tool' };
+  }
+
+  cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome) {
+    this.cleanupCalls.push({
+      threadId: context.threadId,
+      projectId: context.projectId,
+      turnId: context.turnId,
+      status: outcome.status,
+    });
+  }
+}
+
+class RefreshingToolHost implements ToolHost {
+  listCalls = 0;
+  environmentCalls = 0;
+  runContexts: ToolExecutionContext[] = [];
+
+  environmentForToolContext(_context: ToolExecutionContext) {
+    this.environmentCalls += 1;
+    return {
+      id: `step_env_${this.environmentCalls}`,
+      cwd: `/tmp/setsuna-step-${this.environmentCalls}`,
+    };
+  }
+
+  async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    this.listCalls += 1;
+    if (!context.environment) throw new Error('Expected listTools to receive the step environment.');
+    return [
+      {
+        name: `step_tool_${this.listCalls}`,
+        description: 'Tool that changes between sampling steps',
+        inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+      },
+    ];
+  }
+
+  async runTool(name: string, _input: unknown, context: ToolExecutionContext) {
+    this.runContexts.push(context);
+    return { content: `${name} result from current step` };
+  }
+}
+
+class LargeToolResultHost extends CapturingToolHost {
+  readonly largeContent = 'BEGIN_HUGE_TOOL_OUTPUT ' + 'huge generated report '.repeat(90_000);
+
+  override async runTool(name: string, input: unknown, context: ToolExecutionContext) {
+    this.calls.push({ name, input, projectId: context.projectId });
+    return { content: this.largeContent };
   }
 }
 
@@ -4142,6 +5939,84 @@ class BlockingToolHost implements ToolHost {
     this.markStarted();
     await this.released;
     return { content: 'file contents from blocked tool' };
+  }
+
+  release(): void {
+    this.releaseTool();
+  }
+}
+
+class BlockingUserShellHost implements ToolHost {
+  calls: Array<{ command: string; projectId?: string; turnId?: string }> = [];
+  private markStarted: () => void = () => undefined;
+  readonly started = new Promise<void>((resolve) => {
+    this.markStarted = resolve;
+  });
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'run_shell_command',
+        description: 'Run a shell command',
+        inputSchema: {
+          type: 'object',
+          properties: { command: { type: 'string' } },
+          required: ['command'],
+        },
+      },
+    ];
+  }
+
+  async runTool(_name: string, input: unknown, context: ToolExecutionContext) {
+    const command = input && typeof input === 'object' && !Array.isArray(input) && typeof (input as { command?: unknown }).command === 'string'
+      ? (input as { command: string }).command
+      : '';
+    this.calls.push({ command, projectId: context.projectId, turnId: context.turnId });
+    this.markStarted();
+    await new Promise<void>((resolve) => {
+      if (!context.signal) {
+        resolve();
+        return;
+      }
+      if (context.signal.aborted) {
+        resolve();
+        return;
+      }
+      context.signal.addEventListener('abort', () => resolve(), { once: true });
+    });
+    context.signal?.throwIfAborted();
+    return { content: 'user shell finished' };
+  }
+}
+
+class NonWaitingCancellationToolHost implements ToolHost {
+  private markStarted: () => void = () => undefined;
+  private releaseTool: () => void = () => undefined;
+  readonly started = new Promise<void>((resolve) => {
+    this.markStarted = resolve;
+  });
+  readonly done = new Promise<void>((resolve) => {
+    this.releaseTool = resolve;
+  });
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'background_tool',
+        description: 'A runtime-managed background tool',
+        inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+      },
+    ];
+  }
+
+  toolRuntimeProfile(_name: string, _context: ToolExecutionContext): ToolRuntimeProfile {
+    return { waitsForRuntimeCancellation: false };
+  }
+
+  async runTool() {
+    this.markStarted();
+    await this.done;
+    return { content: 'background tool finished' };
   }
 
   release(): void {
@@ -4297,6 +6172,111 @@ class ParallelReadToolHost implements ToolHost {
   }
 }
 
+class SerialProfileReadToolHost extends ParallelReadToolHost {
+  toolRuntimeProfile(_name: string, _context: ToolExecutionContext): ToolRuntimeProfile {
+    return { supportsParallel: false };
+  }
+}
+
+class DeferredToolHost implements ToolHost {
+  calls: Array<{ name: string; input: unknown; projectId?: string }> = [];
+
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'direct_tool',
+        description: 'A directly visible tool',
+        inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+      },
+      {
+        name: 'deferred_lookup',
+        description: 'Lookup hidden project facts after discovery',
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+      },
+    ];
+  }
+
+  toolRuntimeProfile(name: string, _context: ToolExecutionContext): ToolRuntimeProfile {
+    return name === 'deferred_lookup' ? { exposure: 'deferred' } : { exposure: 'direct' };
+  }
+
+  async runTool(name: string, input: unknown, context: ToolExecutionContext) {
+    this.calls.push({ name, input, projectId: context.projectId });
+    return { content: `${name} result` };
+  }
+}
+
+class ToolSearchCollisionHost extends DeferredToolHost {
+  override async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'tool_search',
+        description: 'Host-provided tool search that must not shadow runtime discovery',
+        inputSchema: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      },
+      ...(await super.listTools(context)),
+    ];
+  }
+
+  override async runTool(name: string, input: unknown, context: ToolExecutionContext) {
+    if (name === 'tool_search') throw new Error('Host tool_search should not be executed.');
+    return super.runTool(name, input, context);
+  }
+}
+
+class ManyDeferredToolHost implements ToolHost {
+  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return [
+      {
+        name: 'direct_tool',
+        description: 'A directly visible tool',
+        inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+      },
+      {
+        name: 'graph_search_history',
+        description: 'Search graph history and projects with many overlapping graph search terms',
+        inputSchema: {
+          type: 'object',
+          properties: { project: { type: 'string' } },
+        },
+      },
+      {
+        name: 'search_projects',
+        description: 'Search projects and graph indexes',
+        inputSchema: {
+          type: 'object',
+          properties: { graph: { type: 'string' } },
+        },
+      },
+      {
+        name: 'search_graph',
+        description: 'Exact graph search tool',
+        inputSchema: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      },
+    ];
+  }
+
+  toolRuntimeProfile(name: string, _context: ToolExecutionContext): ToolRuntimeProfile {
+    return name === 'direct_tool' ? { exposure: 'direct' } : { exposure: 'deferred' };
+  }
+
+  async runTool() {
+    return { content: 'unused' };
+  }
+}
+
 class CountingReadToolHost implements ToolHost {
   readonly calls: Array<{ file_path?: unknown }> = [];
 
@@ -4347,6 +6327,7 @@ class ForcedToolChoiceHost implements ToolHost {
 
 class PreviewingToolHost implements ToolHost {
   calls = 0;
+  partialPreviewCalls: Array<{ name: string; hasProjectId: boolean }> = [];
 
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
@@ -4366,7 +6347,8 @@ class PreviewingToolHost implements ToolHost {
     return 'PC local tool prompt';
   }
 
-  async previewPartialToolCall(_name: string, rawArguments: string) {
+  async previewPartialToolCall(name: string, rawArguments: string, context: ToolExecutionContext) {
+    this.partialPreviewCalls.push({ name, hasProjectId: Boolean(context.projectId) });
     if (!rawArguments.includes('src/generated.txt')) return null;
     return filePreview();
   }
@@ -4378,6 +6360,18 @@ class PreviewingToolHost implements ToolHost {
   async runTool() {
     this.calls += 1;
     return { content: 'wrote file', preview: filePreview().resultPreview };
+  }
+}
+
+class DeferredPreviewingToolHost extends DeferredToolHost {
+  partialPreviewCalls: Array<{ name: string; rawArguments: string }> = [];
+
+  async previewPartialToolCall(name: string, rawArguments: string) {
+    this.partialPreviewCalls.push({ name, rawArguments });
+    return {
+      argumentsPreview: rawArguments,
+      resultPreview: `preview for ${name}`,
+    };
   }
 }
 
@@ -4428,7 +6422,7 @@ function filePreview() {
         additions: 1,
         deletions: 0,
         truncated: false,
-        lines: [],
+        lines: [{ type: 'added', content: 'generated', newLine: 1 }],
       },
     }),
   };
@@ -4813,6 +6807,7 @@ class ReasoningModelClient implements ModelClient {
     this.requests.push(request);
     yield { type: 'reasoning_delta', text: 'plan' };
     yield { type: 'text_delta', text: 'answer' };
+    yield { type: 'usage', usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -5300,6 +7295,45 @@ class SteerableModelClient implements ModelClient {
   }
 }
 
+class OversizedSteerCompactionModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private releaseFirst: () => void = () => undefined;
+  private readonly firstResponseReleased = new Promise<void>((resolve) => {
+    this.releaseFirst = resolve;
+  });
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'context-compaction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          summary: 'Summarized oversized steer input.',
+          important_constraints: ['Preserve the user steer intent.'],
+          open_items: ['Continue after applying the steer.'],
+          already_said: 'The active user steer was too large for the active context window.',
+          tool_context: 'No tool output was involved.',
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    const localRequestCount = this.requests.filter((item) => item.model === 'local-runtime-smoke').length;
+    if (localRequestCount === 1) {
+      yield { type: 'text_delta', text: 'initial answer' };
+      await this.firstResponseReleased;
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'guided answer after oversized steer summary' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+
+  releaseFirstResponse(): void {
+    this.releaseFirst();
+  }
+}
+
 class ApprovalToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown }> = [];
 
@@ -5717,6 +7751,28 @@ function nodeEvalHook(script: string): string {
   return `node -e ${JSON.stringify(script)}`;
 }
 
+function hasToolMessage(messages: RuntimeMessage[], toolName: string): boolean {
+  return messages.some((message) => message.role === 'tool' && message.toolName === toolName);
+}
+
+function childThreadIdFromCollaborationToolMessages(messages: RuntimeMessage[]): string {
+  for (const message of messages) {
+    if (message.role !== 'tool') continue;
+    const parsed = parseToolMessageJson(message.content);
+    if (typeof parsed?.newThreadId === 'string') return parsed.newThreadId;
+  }
+  return '';
+}
+
+function parseToolMessageJson(content: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
 class PersonalizationConfigStore implements ConfigStore {
   async getConfig() {
     return {
@@ -5771,6 +7827,176 @@ class HooksConfigStore implements ConfigStore {
       permissionProfile: 'workspace-write' as const,
       hooks: this.hooks,
       bypassHookTrust: true,
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
+class MultiAgentConfigStore implements ConfigStore {
+  async getConfig() {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [],
+      globalPrompt: '',
+      memory: {
+        useMemories: false,
+        generateMemories: false,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
+      memoryEnabled: false,
+      setsunaStyle: 'developer' as const,
+      approvalPolicy: 'on-request' as const,
+      permissionProfile: 'workspace-write' as const,
+      sandboxWorkspaceWrite: {},
+      features: {
+        multi_agent: true,
+      },
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
+class ToolSuggestConfigStore implements ConfigStore {
+  async getConfig() {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [],
+      globalPrompt: '',
+      memory: {
+        useMemories: false,
+        generateMemories: false,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
+      memoryEnabled: false,
+      setsunaStyle: 'developer' as const,
+      approvalPolicy: 'on-request' as const,
+      permissionProfile: 'workspace-write' as const,
+      features: {
+        tool_suggest: true,
+      },
+    };
+  }
+
+  async saveConfig() {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    return null;
+  }
+}
+
+class ContextWindowConfigStore implements ConfigStore {
+  constructor(private readonly contextWindowTokens: number) {}
+
+  async getConfig(): Promise<RuntimeConfigState> {
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: 'test',
+      providers: [{
+        id: 'test',
+        name: 'Test provider',
+        provider: 'openai-compatible',
+        baseUrl: 'https://llm.test/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: 'secret',
+        models: [{
+          id: 'local-runtime-smoke',
+          name: 'Local runtime smoke',
+          code: 'local-runtime-smoke',
+          enabled: true,
+          contextWindowTokens: this.contextWindowTokens,
+          maxOutputTokens: 68_000,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+        }],
+      }],
+      globalPrompt: '',
+      memory: {
+        useMemories: false,
+        generateMemories: false,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
+      memoryEnabled: false,
+      setsunaStyle: 'developer',
+      approvalPolicy: 'on-request',
+      permissionProfile: 'workspace-write',
+    };
+  }
+
+  async saveConfig(): Promise<RuntimeConfigState> {
+    return this.getConfig();
+  }
+
+  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
+    const config = await this.getConfig();
+    const provider = config.providers[0];
+    return {
+      ...provider,
+      apiKey: 'secret',
+      activeModel: provider.models[0],
+    };
+  }
+}
+
+class StepSnapshotConfigStore implements ConfigStore {
+  getConfigCalls = 0;
+
+  async getConfig() {
+    this.getConfigCalls += 1;
+    const refreshed = this.getConfigCalls > 2;
+    return {
+      configPath: '/tmp/config.json',
+      dataPath: '/tmp',
+      storagePath: '/tmp/memories',
+      activeProviderId: refreshed ? 'test-updated' : 'test',
+      providers: [],
+      globalPrompt: '',
+      memory: {
+        useMemories: false,
+        generateMemories: false,
+        dedicatedTools: false,
+        disableOnExternalContext: true,
+      },
+      memoryEnabled: false,
+      setsunaStyle: 'developer' as const,
+      approvalPolicy: 'on-request' as const,
+      permissionProfile: refreshed ? 'workspace-write' as const : 'read-only' as const,
+      sandboxWorkspaceWrite: {
+        writableRoots: [refreshed ? '/tmp/setsuna-step-writable-2' : '/tmp/setsuna-step-writable'],
+        networkAccess: refreshed,
+      },
+      features: {
+        request_permissions_tool: refreshed,
+        step_snapshot: true,
+        ...(refreshed ? { mid_turn_config_refresh: true } : {}),
+      },
     };
   }
 
@@ -6070,6 +8296,24 @@ function hookContext(): ToolExecutionContext & { turnId: string } {
 
 function hookEnvironment() {
   return { id: 'local', cwd: '/tmp' };
+}
+
+function stepSnapshotSkillRegistry(): SkillRegistry {
+  return {
+    selectedSkillInjections: async (skillIds?: string[]) => (skillIds?.includes('skill_step')
+      ? [{ id: 'skill_step', name: 'Step Skill', content: 'Use the step snapshot fixture.' }]
+      : []),
+  } as SkillRegistry;
+}
+
+function stepSnapshotMcpStore(): Pick<McpStore, 'listServerInputs'> {
+  return {
+    listServerInputs: async () => [
+      { key: 'zeta', transport: 'stdio', command: 'zeta-mcp', enabled: true },
+      { key: 'disabled', transport: 'stdio', command: 'disabled-mcp', enabled: false },
+      { key: 'alpha', transport: 'streamableHttp', url: 'https://mcp.example.test', enabled: true },
+    ],
+  };
 }
 
 function hookEventCapture() {

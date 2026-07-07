@@ -15,6 +15,7 @@ type PendingDecision = {
 export class InMemoryApprovalGate implements ApprovalGate {
   private readonly approvals = new Map<string, RuntimeApprovalRequest>();
   private readonly pending = new Map<string, PendingDecision>();
+  private readonly resolvedAnswers = new Map<string, AnswerRuntimeApprovalInput>();
 
   constructor(
     private readonly clock: Clock,
@@ -35,8 +36,12 @@ export class InMemoryApprovalGate implements ApprovalGate {
   async waitForDecision(approvalId: string): Promise<AnswerRuntimeApprovalInput> {
     const approval = this.approvals.get(approvalId);
     if (!approval) throw new Error(`Approval not found: ${approvalId}`);
-    if (approval.status === 'approved') return { decision: approval.decision ?? 'approve', message: approval.message };
-    if (approval.status === 'rejected') return { decision: approval.decision ?? 'reject', message: approval.message };
+    if (approval.status === 'approved') {
+      return this.resolvedAnswers.get(approvalId) ?? { decision: approval.decision ?? 'approve', message: approval.message };
+    }
+    if (approval.status === 'rejected') {
+      return this.resolvedAnswers.get(approvalId) ?? { decision: approval.decision ?? 'reject', message: approval.message };
+    }
     return new Promise((resolve, reject) => {
       this.pending.set(approvalId, { resolve, reject });
     });
@@ -55,6 +60,7 @@ export class InMemoryApprovalGate implements ApprovalGate {
       message: input.message,
     };
     this.approvals.set(approvalId, next);
+    this.resolvedAnswers.set(approvalId, input);
     const pending = this.pending.get(approvalId);
     this.pending.delete(approvalId);
     pending?.resolve(input);

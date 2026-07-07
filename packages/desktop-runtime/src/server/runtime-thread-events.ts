@@ -48,6 +48,12 @@ export async function cancelRuntimeTurn(runtime: RuntimeFactory, threadId: strin
 
 function activeTurnIdsInThread(thread: RuntimeThread): string[] {
   const turnIds = new Set<string>();
+  if (thread.activeTurnId) turnIds.add(thread.activeTurnId);
+  for (const turn of thread.turns ?? []) {
+    if (turn.status === 'in_progress' || turn.items.some((item) => item.status === 'in_progress')) {
+      turnIds.add(turn.id);
+    }
+  }
   for (const message of thread.messages) {
     if (!message.turnId) continue;
     if (message.status === 'streaming' || message.toolRuns?.some(isActiveRuntimeToolRun)) {
@@ -71,162 +77,7 @@ export async function runAppServerThreadShellCommand(
   command: string,
   activeTurnId: string | null = null,
 ): Promise<void> {
-  const turnId = activeTurnId ?? randomRuntimeId('turn_shell');
-  const toolCallId = randomRuntimeId('call_shell');
-  const startedAtMs = Date.now();
-  const startedAt = new Date(startedAtMs).toISOString();
-  const argumentsPreview = JSON.stringify({ command, risk_level: 'low', yield_time_ms: 0 });
-  const deltaPublishes: Promise<void>[] = [];
-  const standaloneTurn = !activeTurnId;
-  const holderMessageId = threadHasAssistantForTurn(thread, turnId) ? null : randomRuntimeId('msg_shell');
-
-  if (standaloneTurn) {
-    await appendAndPublishRuntimeEvent(runtime, thread.id, {
-      id: randomRuntimeId('event'),
-      threadId: thread.id,
-      turnId,
-      type: 'turn.started',
-      createdAt: startedAt,
-      payload: { input: command },
-    });
-  }
-  if (holderMessageId) {
-    await appendAndPublishRuntimeEvent(runtime, thread.id, {
-      id: randomRuntimeId('event'),
-      threadId: thread.id,
-      turnId,
-      type: 'message.created',
-      createdAt: startedAt,
-      payload: {
-        message: {
-          id: holderMessageId,
-          turnId,
-          role: 'assistant',
-          content: '',
-          createdAt: startedAt,
-          status: 'streaming',
-        },
-      },
-    });
-  }
-  await appendAndPublishRuntimeEvent(runtime, thread.id, {
-    id: randomRuntimeId('event'),
-    threadId: thread.id,
-    turnId,
-    type: 'tool.started',
-    createdAt: startedAt,
-    payload: {
-      toolCallId,
-      toolName: 'run_shell_command',
-      source: 'userShell',
-      argumentsPreview,
-    },
-  });
-
-  let status: 'success' | 'error' = 'success';
-  let content = '';
-  let data: unknown;
-  try {
-    const result = await runtime.toolHost.runTool('run_shell_command', {
-      command,
-      risk_level: 'low',
-      yield_time_ms: 0,
-    }, {
-      threadId: thread.id,
-      projectId: thread.projectId,
-      turnId,
-      toolCallId,
-      permissionProfile: 'danger-full-access',
-      onToolOutputDelta: (delta) => {
-        const publish = appendAndPublishRuntimeEvent(runtime, thread.id, {
-          id: randomRuntimeId('event'),
-          threadId: thread.id,
-          turnId,
-          type: 'tool.output_delta',
-          createdAt: new Date().toISOString(),
-          payload: {
-            toolCallId,
-            toolName: 'run_shell_command',
-            source: 'userShell',
-            delta: delta.delta,
-            stream: delta.stream,
-            processId: delta.processId,
-          },
-        }).then(() => undefined, () => undefined);
-        deltaPublishes.push(publish);
-      },
-    });
-    content = result.content;
-    data = result.data;
-  } catch (error) {
-    status = 'error';
-    content = error instanceof Error ? error.message : String(error);
-  }
-
-  await Promise.all(deltaPublishes);
-  const completedAt = new Date();
-  await appendAndPublishRuntimeEvent(runtime, thread.id, {
-    id: randomRuntimeId('event'),
-    threadId: thread.id,
-    turnId,
-    type: 'tool.completed',
-    createdAt: completedAt.toISOString(),
-    payload: {
-      toolCallId,
-      toolName: 'run_shell_command',
-      source: 'userShell',
-      status,
-      content,
-      argumentsPreview,
-      data,
-      durationMs: Math.max(0, completedAt.getTime() - startedAtMs),
-    },
-  });
-  if (holderMessageId) {
-    await appendAndPublishRuntimeEvent(runtime, thread.id, {
-      id: randomRuntimeId('event'),
-      threadId: thread.id,
-      turnId,
-      type: 'message.completed',
-      createdAt: completedAt.toISOString(),
-      payload: { messageId: holderMessageId },
-    });
-  }
-  if (activeTurnId) {
-    await appendAndPublishRuntimeEvent(runtime, thread.id, {
-      id: randomRuntimeId('event'),
-      threadId: thread.id,
-      turnId,
-      type: 'message.created',
-      createdAt: new Date().toISOString(),
-      payload: {
-        message: {
-          id: randomRuntimeId('msg_shell'),
-          turnId,
-          role: 'tool',
-          toolCallId,
-          toolName: 'run_shell_command',
-          content,
-          createdAt: new Date().toISOString(),
-          status: 'complete',
-        },
-      },
-    });
-  }
-  if (standaloneTurn) {
-    await appendAndPublishRuntimeEvent(runtime, thread.id, {
-      id: randomRuntimeId('event'),
-      threadId: thread.id,
-      turnId,
-      type: 'turn.completed',
-      createdAt: new Date().toISOString(),
-      payload: {},
-    });
-  }
-}
-
-function threadHasAssistantForTurn(thread: RuntimeThread, turnId: string): boolean {
-  return thread.messages.some((message) => message.turnId === turnId && message.role === 'assistant');
+  await runtime.agentLoop.runUserShellCommand(thread.id, command, activeTurnId);
 }
 
 export async function appendAndPublishRuntimeEvent(
@@ -313,6 +164,7 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    planMode: message.planMode ? { ...message.planMode } : undefined,
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),

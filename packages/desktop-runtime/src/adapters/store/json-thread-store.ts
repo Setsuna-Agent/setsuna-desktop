@@ -42,9 +42,12 @@ export class JsonThreadStore implements ThreadStore {
   async listThreads(query: ThreadQuery = {}): Promise<RuntimeThreadSummary[]> {
     const index = await this.readIndex();
     const search = query.search?.trim().toLowerCase();
+    const parentMap = new Map(index.threads.map((thread) => [thread.id, thread.parentThreadId]));
     return index.threads
       .map(normalizeThreadSummary)
       .filter((thread) => query.includeArchived || !thread.archived)
+      .filter((thread) => !query.parentThreadId || thread.parentThreadId === query.parentThreadId)
+      .filter((thread) => !query.ancestorThreadId || threadHasAncestor(thread.id, query.ancestorThreadId, parentMap))
       .filter((thread) => {
         if (query.projectId) return thread.projectId === query.projectId;
         if (query.scope === 'global') return !thread.projectId;
@@ -67,6 +70,7 @@ export class JsonThreadStore implements ThreadStore {
     const thread: RuntimeThread = {
       id: this.ids.id('thread'),
       forkedFromId: input.forkedFromId?.trim() || undefined,
+      parentThreadId: input.parentThreadId?.trim() || undefined,
       projectId: input.projectId?.trim() || undefined,
       title: input.title?.trim() || 'New thread',
       createdAt: now,
@@ -313,6 +317,7 @@ function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
     id: thread.id,
     activeTurnId: thread.activeTurnId,
     forkedFromId: thread.forkedFromId,
+    parentThreadId: thread.parentThreadId,
     projectId: thread.projectId,
     title: thread.title,
     createdAt: thread.createdAt,
@@ -329,6 +334,9 @@ function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
 function normalizeThreadSnapshot(thread: RuntimeThread): RuntimeThread {
   return {
     ...thread,
+    parentThreadId: typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
+      ? (thread as { parentThreadId: string }).parentThreadId
+      : undefined,
     memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
   };
 }
@@ -336,8 +344,22 @@ function normalizeThreadSnapshot(thread: RuntimeThread): RuntimeThread {
 function normalizeThreadSummary(thread: RuntimeThreadSummary): RuntimeThreadSummary {
   return {
     ...thread,
+    parentThreadId: typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
+      ? (thread as { parentThreadId: string }).parentThreadId
+      : undefined,
     memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
   };
+}
+
+function threadHasAncestor(threadId: string, ancestorThreadId: string, parentMap: Map<string, string | undefined>): boolean {
+  const seen = new Set<string>();
+  let current = parentMap.get(threadId);
+  while (current && !seen.has(current)) {
+    if (current === ancestorThreadId) return true;
+    seen.add(current);
+    current = parentMap.get(current);
+  }
+  return false;
 }
 
 function normalizeThreadMemoryMode(mode: unknown): RuntimeThreadMemoryMode {

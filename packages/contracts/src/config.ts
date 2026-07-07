@@ -16,6 +16,7 @@ export type ProviderModelConfig = {
   name: string;
   code: string;
   enabled: boolean;
+  contextWindowTokens?: number;
   maxOutputTokens: number;
   thinkingEnabled: boolean;
   thinkingEfforts: string[];
@@ -176,6 +177,7 @@ export type RuntimeAvailableModel = {
   id: string;
   name: string;
   maxOutputTokens?: number;
+  contextWindowTokens?: number;
   thinkingEnabled?: boolean;
   thinkingEfforts?: string[];
   defaultThinkingEffort?: string;
