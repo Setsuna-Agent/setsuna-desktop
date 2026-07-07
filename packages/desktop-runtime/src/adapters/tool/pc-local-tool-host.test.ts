@@ -97,6 +97,148 @@ describe('pc local tool host', () => {
     expect(disabledTools.map((tool) => tool.name)).toContain('exec_command');
   });
 
+  it('accepts path aliases for direct file tools before executing pc local tools', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    await mkdir(path.join(projectDir, 'src'), { recursive: true });
+    await writeFile(path.join(projectDir, 'src', 'existing.txt'), 'old\n', 'utf8');
+
+    const read = await host.runTool('read_file', { path: 'src/existing.txt' }, context);
+    expect(read.content).toContain('old');
+
+    await host.runTool('plan_file_changes', {
+      files: [{ file_path: 'src/path-alias.txt', action: 'create' }],
+    }, context);
+    await host.runTool('begin_file_change', { file_path: 'src/path-alias.txt', action: 'create' }, context);
+    await host.runTool('write_file', { path: 'src/path-alias.txt', content: 'created through path\n' }, context);
+
+    await expect(readFile(path.join(projectDir, 'src', 'path-alias.txt'), 'utf8'))
+      .resolves.toBe('created through path\n');
+  });
+
+  it('builds streaming write previews when partial tool arguments use path aliases', async () => {
+    const { host } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    const preview = await host.previewPartialToolCall?.(
+      'write_file',
+      '{"path":"src/stream-path.txt","content":"one\\ntwo\\n"',
+      context,
+    );
+
+    expect(preview?.resultPreview).toContain('src/stream-path.txt');
+    expect(JSON.parse(preview?.resultPreview ?? '{}')).toMatchObject({
+      diff: {
+        path: 'src/stream-path.txt',
+        additions: 2,
+        deletions: 0,
+      },
+    });
+  });
+
+  it('builds streaming apply_patch previews with running change counts', async () => {
+    const { host } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    const preview = await host.previewPartialToolCall?.(
+      'apply_patch',
+      '{"patch":"*** Begin Patch\\n*** Update File: src/index.css\\n@@\\n-body { color: red; }\\n+body { color: blue; }\\n+.app { display: grid; }',
+      context,
+    );
+
+    expect(JSON.parse(preview?.resultPreview ?? '{}')).toMatchObject({
+      diff: {
+        path: 'src/index.css',
+        additions: 2,
+        deletions: 1,
+        partial: true,
+      },
+    });
+  });
+
+  it('accepts a single-file apply_patch for the active planned file', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const tools = await host.listTools(context);
+
+    await mkdir(path.join(projectDir, 'src'), { recursive: true });
+    await writeFile(path.join(projectDir, 'src', 'index.css'), 'body { color: red; }\n', 'utf8');
+
+    await host.runTool('plan_file_changes', {
+      files: [{ file_path: 'src/index.css', action: 'edit' }],
+    }, context);
+    await host.runTool('begin_file_change', { file_path: 'src/index.css', action: 'edit' }, context);
+
+    const patched = await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: src/index.css',
+        '@@',
+        '-body { color: red; }',
+        '+body { color: blue; }',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    expect(JSON.parse(patched.preview ?? '{}')).toMatchObject({
+      diff: {
+        path: 'src/index.css',
+        action: 'Edited',
+      },
+    });
+    await expect(readFile(path.join(projectDir, 'src', 'index.css'), 'utf8'))
+      .resolves.toBe('body { color: blue; }\n');
+    await expect(host.toolChoice?.(context, { tools, messages: [] }))
+      .resolves.toBeNull();
+  });
+
+  it('rejects active apply_patch calls that touch more than the active file', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    await mkdir(path.join(projectDir, 'src'), { recursive: true });
+    await writeFile(path.join(projectDir, 'src', 'index.css'), 'body { color: red; }\n', 'utf8');
+
+    await host.runTool('plan_file_changes', {
+      files: [{ file_path: 'src/index.css', action: 'edit' }],
+    }, context);
+    await host.runTool('begin_file_change', { file_path: 'src/index.css', action: 'edit' }, context);
+
+    await expect(host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: src/index.css',
+        '@@',
+        '-body { color: red; }',
+        '+body { color: blue; }',
+        '*** Add File: src/extra.css',
+        '+.extra { color: green; }',
+        '*** End Patch',
+      ].join('\n'),
+    }, context)).rejects.toThrow('must target exactly one file');
+  });
+
+  it('keeps file change plans scoped to the active turn and clears them on cleanup', async () => {
+    const { host } = await createHost();
+    const turnOne = { threadId: 'thread_1', turnId: 'turn_1' };
+    const turnTwo = { threadId: 'thread_1', turnId: 'turn_2' };
+    const tools = await host.listTools(turnOne);
+
+    await host.runTool('plan_file_changes', {
+      files: [{ file_path: 'src/stale.txt', action: 'create' }],
+    }, turnOne);
+
+    await expect(host.toolChoice?.(turnOne, { tools, messages: [] }))
+      .resolves.toEqual({ type: 'tool', name: 'begin_file_change' });
+    await expect(host.toolChoice?.(turnTwo, { tools, messages: [] }))
+      .resolves.toBeNull();
+
+    await host.cleanupTurn?.(turnOne, { status: 'cancelled' });
+    await expect(host.toolChoice?.(turnOne, { tools, messages: [] }))
+      .resolves.toBeNull();
+  });
+
   it('uses pc shell risk classification for approval', async () => {
     const { host } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

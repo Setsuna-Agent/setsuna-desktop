@@ -485,7 +485,10 @@ describe('provider model adapters', () => {
           'data: {"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_1","name":"workspace_read_file"}}',
           '',
           'event: response.function_call_arguments.delta',
-          'data: {"type":"response.function_call_arguments.delta","call_id":"call_1","delta":"{\\"path\\":\\"README.md\\"}"}',
+          'data: {"type":"response.function_call_arguments.delta","call_id":"call_1","delta":"{\\"path\\":\\""}',
+          '',
+          'event: response.function_call_arguments.delta',
+          'data: {"type":"response.function_call_arguments.delta","call_id":"call_1","delta":"README.md\\"}"}',
           '',
           'event: response.output_item.done',
           'data: {"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}"}}',
@@ -551,6 +554,24 @@ describe('provider model adapters', () => {
         toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '' },
       },
     });
+    expect(events.filter((event) => event.type === 'tool_call_delta')).toEqual([
+      {
+        type: 'tool_call_delta',
+        call: {
+          id: 'call_1',
+          name: 'workspace_read_file',
+          argumentsDelta: '{"path":"',
+        },
+      },
+      {
+        type: 'tool_call_delta',
+        call: {
+          id: 'call_1',
+          name: 'workspace_read_file',
+          argumentsDelta: 'README.md"}',
+        },
+      },
+    ]);
     expect(events.find((event) => event.type === 'item_completed')).toEqual({
       type: 'item_completed',
       item: {
@@ -561,6 +582,78 @@ describe('provider model adapters', () => {
       },
     });
     expect(events.some((event) => event.type === 'tool_calls')).toBe(false);
+  });
+
+  it('interleaves OpenAI Responses function call outputs with their calls', async () => {
+    const captured: CapturedRequest = {};
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
+    );
+
+    await collect(client, {
+      messages: [
+        ...request.messages,
+        {
+          id: 'assistant-tools',
+          role: 'assistant',
+          content: '',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          toolCalls: [
+            { id: 'call_read', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+            { id: 'call_search', name: 'workspace_search_text', arguments: '{"query":"TODO"}' },
+          ],
+        },
+        {
+          id: 'hidden-boundary',
+          role: 'user',
+          content: 'Hidden boundary',
+          createdAt: '2026-06-25T00:00:02.500Z',
+          visibility: 'model',
+        },
+        {
+          id: 'tool-search',
+          role: 'tool',
+          content: 'search result',
+          createdAt: '2026-06-25T00:00:03.000Z',
+          toolCallId: 'call_search',
+          toolName: 'workspace_search_text',
+        },
+        {
+          id: 'tool-read',
+          role: 'tool',
+          content: 'read result',
+          createdAt: '2026-06-25T00:00:04.000Z',
+          toolCallId: 'call_read',
+          toolName: 'workspace_read_file',
+        },
+        {
+          id: 'tool-read-duplicate',
+          role: 'tool',
+          content: 'duplicate read result',
+          createdAt: '2026-06-25T00:00:04.500Z',
+          toolCallId: 'call_read',
+          toolName: 'workspace_read_file',
+        },
+        {
+          id: 'tool-orphan',
+          role: 'tool',
+          content: 'orphan result',
+          createdAt: '2026-06-25T00:00:05.000Z',
+          toolCallId: 'call_missing',
+          toolName: 'missing_tool',
+        },
+      ],
+    });
+
+    expect(expectBody(captured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      { type: 'function_call', call_id: 'call_read', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+      { type: 'function_call_output', call_id: 'call_read', output: 'read result\n\nduplicate read result' },
+      { type: 'function_call', call_id: 'call_search', name: 'workspace_search_text', arguments: '{"query":"TODO"}' },
+      { type: 'function_call_output', call_id: 'call_search', output: 'search result' },
+      { role: 'user', content: 'Hidden boundary' },
+    ]);
   });
 
   it('streams Anthropic Messages content deltas', async () => {
@@ -1055,6 +1148,24 @@ describe('provider model adapters', () => {
         toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '' },
       },
     });
+    expect(events.filter((event) => event.type === 'tool_call_delta')).toEqual([
+      {
+        type: 'tool_call_delta',
+        call: {
+          id: 'call_1',
+          name: 'workspace_read_file',
+          argumentsDelta: '{"path":"',
+        },
+      },
+      {
+        type: 'tool_call_delta',
+        call: {
+          id: 'call_1',
+          name: 'workspace_read_file',
+          argumentsDelta: 'README.md"}',
+        },
+      },
+    ]);
     expect(events.find((event) => event.type === 'item_completed')).toEqual({
       type: 'item_completed',
       item: {

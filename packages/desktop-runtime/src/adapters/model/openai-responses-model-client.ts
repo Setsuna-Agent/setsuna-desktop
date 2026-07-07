@@ -145,7 +145,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
             toolCallsYielded = true;
             yield { type: 'tool_calls' as const, toolCalls: [toolCall] };
           }
-        } else if (!nativeToolCallsCompleted && !nativeToolItemIds.has(toolCallId)) {
+        } else if (!nativeToolCallsCompleted) {
           const toolCall = toolCalls.get(toolCallId);
           if (toolCall) {
             yield {

@@ -139,6 +139,7 @@ export function nonSystemChatMessages(messages: RuntimeMessage[]): Array<{ role:
 
 export function toOpenAiResponsesInput(messages: RuntimeMessage[]): unknown[] {
   const output: unknown[] = [];
+  const toolOutputsByCallId = openAiResponsesToolOutputsByCallId(messages);
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
     if (message.role === 'user') {
@@ -152,16 +153,31 @@ export function toOpenAiResponsesInput(messages: RuntimeMessage[]): unknown[] {
           name: toolCall.name,
           arguments: toolCall.arguments,
         });
+        const toolOutput = toolOutputsByCallId.get(toolCall.id);
+        if (toolOutput) output.push(toolOutput);
       }
-    } else if (message.role === 'tool' && message.toolCallId) {
-      output.push({
-        type: 'function_call_output',
-        call_id: message.toolCallId,
-        output: message.content,
-      });
     }
   }
   return output;
+}
+
+function openAiResponsesToolOutputsByCallId(messages: RuntimeMessage[]): Map<string, unknown> {
+  const outputTextByCallId = new Map<string, string[]>();
+  for (const message of messages) {
+    if (message.visibility === 'transcript') continue;
+    if (message.role !== 'tool' || !message.toolCallId) continue;
+    const outputs = outputTextByCallId.get(message.toolCallId) ?? [];
+    outputs.push(message.content);
+    outputTextByCallId.set(message.toolCallId, outputs);
+  }
+  return new Map([...outputTextByCallId].map(([callId, outputs]) => [
+    callId,
+    {
+      type: 'function_call_output',
+      call_id: callId,
+      output: outputs.join('\n\n'),
+    },
+  ]));
 }
 
 export function toOpenAiResponsesTools(tools: RuntimeToolDefinition[] = []): unknown[] {

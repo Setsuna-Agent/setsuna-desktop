@@ -72,6 +72,7 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
     });
 
     const toolCalls = new Map<string, PendingToolCall>();
+    const toolInputsStreamed = new Set<string>();
     let toolCallsYielded = false;
     let finishReason: FinishReason | undefined;
     let usage: LanguageModelUsage | undefined;
@@ -86,13 +87,25 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
         const toolCall = upsertToolCall(toolCalls, part.id, { name: part.toolName });
         yield* aiSdkToolItemStarted(streamItems, toolCall);
       } else if (part.type === 'tool-input-delta') {
-        upsertToolCall(toolCalls, part.id, { argumentsDelta: part.delta });
+        const toolCall = upsertToolCall(toolCalls, part.id, { argumentsDelta: part.delta });
+        toolInputsStreamed.add(part.id);
+        yield {
+          type: 'tool_call_delta',
+          call: { id: toolCall.id, name: toolCall.name, argumentsDelta: part.delta },
+        };
       } else if (part.type === 'tool-call') {
+        const input = stringifyToolInput(part.input);
         const toolCall = upsertToolCall(toolCalls, part.toolCallId, {
           name: part.toolName,
-          arguments: stringifyToolInput(part.input),
+          arguments: input,
         });
         yield* aiSdkToolItemStarted(streamItems, toolCall);
+        if (!toolInputsStreamed.has(part.toolCallId)) {
+          yield {
+            type: 'tool_call_delta',
+            call: { id: toolCall.id, name: toolCall.name, argumentsDelta: input },
+          };
+        }
         yield* aiSdkToolItemCompleted(streamItems, toolCall);
       } else if (part.type === 'finish-step') {
         finishReason = part.finishReason;

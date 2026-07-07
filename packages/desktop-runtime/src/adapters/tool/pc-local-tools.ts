@@ -805,7 +805,8 @@ export function parsePartialWriteFileArguments(rawArguments) {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return {
-        file_path: String(parsed.file_path || ''),
+        file_path: String(parsed.file_path || parsed.path || ''),
+        ...(Object.hasOwn(parsed, 'path') ? { path: parsed.path } : {}),
         content: String(parsed.content ?? ''),
         complete: true,
       };
@@ -814,11 +815,12 @@ export function parsePartialWriteFileArguments(rawArguments) {
     // Tool arguments stream in as partial JSON; fall through to the scanner.
   }
 
-  const filePath = findJsonStringValue(raw, 'file_path');
+  const filePath = findJsonFilePathValue(raw);
   const content = findJsonStringValue(raw, 'content');
   if (!filePath && !content) return null;
   return {
-    file_path: filePath?.value || '',
+    file_path: filePath?.match.value || '',
+    ...(filePath?.usedPathAlias ? { path: filePath.match.value || '' } : {}),
     content: content?.value || '',
     complete: false,
   };
@@ -866,7 +868,8 @@ export function parsePartialDeleteFileArguments(rawArguments) {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return {
-        file_path: String(parsed.file_path || ''),
+        file_path: String(parsed.file_path || parsed.path || ''),
+        ...(Object.hasOwn(parsed, 'path') ? { path: parsed.path } : {}),
         complete: true,
       };
     }
@@ -874,10 +877,11 @@ export function parsePartialDeleteFileArguments(rawArguments) {
     // Tool arguments stream in as partial JSON; fall through to the scanner.
   }
 
-  const filePath = findJsonStringValue(raw, 'file_path');
+  const filePath = findJsonFilePathValue(raw);
   if (!filePath) return null;
   return {
-    file_path: filePath.value || '',
+    file_path: filePath.match.value || '',
+    ...(filePath.usedPathAlias ? { path: filePath.match.value || '' } : {}),
     complete: false,
   };
 }
@@ -888,7 +892,8 @@ export function parsePartialEditFileArguments(rawArguments) {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return {
-        file_path: String(parsed.file_path || ''),
+        file_path: String(parsed.file_path || parsed.path || ''),
+        ...(Object.hasOwn(parsed, 'path') ? { path: parsed.path } : {}),
         old_string: String(parsed.old_string ?? ''),
         new_string: String(parsed.new_string ?? ''),
         replace_all: Boolean(parsed.replace_all),
@@ -904,18 +909,19 @@ export function parsePartialEditFileArguments(rawArguments) {
     // Tool arguments stream in as partial JSON; fall through to the scanner.
   }
 
-  const filePath = findJsonStringValue(raw, 'file_path');
+  const filePath = findJsonFilePathValue(raw);
   const oldString = findJsonStringValue(raw, 'old_string');
   const newString = findJsonStringValue(raw, 'new_string');
   if (!filePath && !oldString && !newString) return null;
   return {
-    file_path: filePath?.value || '',
+    file_path: filePath?.match.value || '',
+    ...(filePath?.usedPathAlias ? { path: filePath.match.value || '' } : {}),
     old_string: oldString?.value || '',
     new_string: newString?.value || '',
     replace_all: false,
     has_old_string: Boolean(oldString),
     has_new_string: Boolean(newString),
-    file_path_closed: Boolean(filePath?.closed),
+    file_path_closed: Boolean(filePath?.match.closed),
     old_string_closed: Boolean(oldString?.closed),
     new_string_closed: Boolean(newString?.closed),
     complete: false,
@@ -997,16 +1003,23 @@ export function parsePartialFileChangePlanArguments(rawArguments) {
 
 function applyPatchPreviewFiles(patch) {
   const files = [];
-  const seen = new Set();
+  const byPath = new Map();
   const pushFile = (filePath, action) => {
     const normalizedPath = String(filePath || '').trim();
-    if (!normalizedPath || seen.has(normalizedPath)) return;
-    seen.add(normalizedPath);
-    files.push({
+    if (!normalizedPath) return null;
+    const existing = byPath.get(normalizedPath);
+    if (existing) return existing;
+    const file = {
       file_path: normalizedPath,
       action: normalizeFileChangePlanAction(action),
-    });
+      additions: 0,
+      deletions: 0,
+    };
+    byPath.set(normalizedPath, file);
+    files.push(file);
+    return file;
   };
+  let currentFile = null;
 
   String(patch || '')
     .replace(/\r\n/g, '\n')
@@ -1015,11 +1028,15 @@ function applyPatchPreviewFiles(patch) {
     .forEach((line) => {
       const trimmed = line.trimEnd();
       if (trimmed.startsWith('*** Add File: ')) {
-        pushFile(trimmed.slice('*** Add File: '.length), 'create');
+        currentFile = pushFile(trimmed.slice('*** Add File: '.length), 'create');
       } else if (trimmed.startsWith('*** Update File: ')) {
-        pushFile(trimmed.slice('*** Update File: '.length), 'edit');
+        currentFile = pushFile(trimmed.slice('*** Update File: '.length), 'edit');
       } else if (trimmed.startsWith('*** Delete File: ')) {
-        pushFile(trimmed.slice('*** Delete File: '.length), 'delete');
+        currentFile = pushFile(trimmed.slice('*** Delete File: '.length), 'delete');
+      } else if (currentFile && trimmed.startsWith('+')) {
+        currentFile.additions += 1;
+      } else if (currentFile && trimmed.startsWith('-')) {
+        currentFile.deletions += 1;
       }
     });
 
@@ -1764,8 +1781,8 @@ function fileChangePlanPreviewFromFiles(files) {
       type: 'file_diff',
       action: fileChangePlanDiffAction(file.action),
       path: String(file.file_path).replace(/\\/g, '/'),
-      additions: 0,
-      deletions: 0,
+      additions: Number(file.additions || 0),
+      deletions: Number(file.deletions || 0),
       truncated: false,
       partial: true,
       planned: true,
@@ -4533,6 +4550,13 @@ function findJsonStringValue(raw, key) {
   const match = matcher.exec(raw);
   if (!match) return null;
   return readJsonStringAt(raw, match.index + match[0].length - 1);
+}
+
+function findJsonFilePathValue(raw) {
+  const match = findJsonStringValue(raw, 'file_path');
+  if (match) return { match, usedPathAlias: false };
+  const pathMatch = findJsonStringValue(raw, 'path');
+  return pathMatch ? { match: pathMatch, usedPathAlias: true } : null;
 }
 
 function findJsonStringValues(raw, key, limit = 40) {

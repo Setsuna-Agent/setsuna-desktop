@@ -13,14 +13,19 @@ type FileChangeEntry = {
   reason?: string;
 };
 
+type FileChangeState = {
+  // plan_file_changes 产出的队列，把多文件变更拆成可审计的单文件步骤。
+  fileChangePlanQueue: FileChangeEntry[];
+  // begin_file_change 后当前唯一允许写入的文件。
+  activeFileChange: FileChangeEntry | null;
+};
+
 type ProjectToolState = {
   root: string;
   toolState: PcToolState;
-  // plan_file_changes 产出的队列，把多文件变更拆成可审计的单文件步骤。
-  fileChangePlanQueue: FileChangeEntry[];
   baseShellPolicyRules: unknown[];
-  // begin_file_change 后当前唯一允许写入的文件。
-  activeFileChange: FileChangeEntry | null;
+  // 文件变更计划只在当前 turn 内有效，避免失败/取消后污染同项目后续请求。
+  fileChangeStates: Map<string, FileChangeState>;
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
@@ -29,6 +34,7 @@ const FILE_CHANGE_BEGIN_TOOL_NAME = 'begin_file_change';
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 const ACTUAL_FILE_MUTATION_TOOLS = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_MUTATION_TOOLS = new Set([FILE_CHANGE_PLAN_TOOL_NAME, FILE_CHANGE_BEGIN_TOOL_NAME, ...ACTUAL_FILE_MUTATION_TOOLS]);
+const FILE_PATH_ARGUMENT_TOOLS = new Set(['read_file', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
   {
     name: 'request_permissions',
@@ -223,7 +229,8 @@ export class PcLocalToolHost implements ToolHost {
   async toolChoice(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> {
     const availableToolNames = new Set(request.tools.map((tool) => tool.name));
     const projectState = await this.projectStateFor(context);
-    const forcedToolName = this.forcedToolName(projectState);
+    const fileChangeState = this.fileChangeStateFor(projectState, context);
+    const forcedToolName = this.forcedToolName(projectState, fileChangeState);
     // 有未完成文件计划时强制下一步工具，防止模型跳过 begin/read 直接写文件。
     if (!forcedToolName || !availableToolNames.has(forcedToolName)) return null;
     return { type: 'tool', name: forcedToolName };
@@ -293,7 +300,7 @@ export class PcLocalToolHost implements ToolHost {
     const normalizedName = this.normalizeToolName(name);
     if (EXCLUDED_PC_TOOLS.has(normalizedName)) return null;
     const projectState = await this.projectStateFor(context);
-    const partialArgs = parsePartialArguments(normalizedName, rawArguments);
+    const partialArgs = normalizePartialToolArgs(normalizedName, parsePartialArguments(normalizedName, rawArguments));
     if (!partialArgs) return null;
     const preview = partialArgs.preview ?? await previewForTool(normalizedName, partialArgs, projectState.toolState);
     return {
@@ -318,7 +325,8 @@ export class PcLocalToolHost implements ToolHost {
 
     const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
     // 真正执行前再次校验文件变更顺序，避免模型绕过 preview 阶段的约束。
-    this.validateFileChangeSequence(projectState, normalized.name, normalized.args, preview);
+    const fileChangeState = this.fileChangeStateFor(projectState, context);
+    this.validateFileChangeSequence(projectState, fileChangeState, normalized.name, normalized.args, preview);
 
     const previousOsSandbox = Boolean(projectState.toolState.osSandbox);
     const previousSandboxWorkspaceWrite = projectState.toolState.sandboxWorkspaceWrite ?? {};
@@ -355,7 +363,7 @@ export class PcLocalToolHost implements ToolHost {
       });
     }
 
-    this.recordFileChangeProgress(projectState, normalized.name, normalized.args, result, preview);
+    this.recordFileChangeProgress(projectState, fileChangeState, normalized.name, normalized.args, result, preview);
     return {
       content: stringArg(result.content || result.display),
       preview: result.diff ? previewPayload(result) : preview ? previewPayload(preview) : undefined,
@@ -372,13 +380,15 @@ export class PcLocalToolHost implements ToolHost {
   async cleanupTurn(context: ToolExecutionContext, _outcome: ToolTurnCleanupOutcome): Promise<void> {
     if (!context.turnId) return;
     const states = await this.projectStatesForCleanup(context);
-    await Promise.all(states.map((projectState) =>
-      pcTools.cleanupLocalToolTurn(projectState.toolState, {
+    const fileChangeStateKey = fileChangeStateKeyForContext(context);
+    await Promise.all(states.map(async (projectState) => {
+      await pcTools.cleanupLocalToolTurn(projectState.toolState, {
         threadId: context.threadId,
         turnId: context.turnId,
         toolCallId: context.toolCallId,
-      })
-    ));
+      });
+      projectState.fileChangeStates.delete(fileChangeStateKey);
+    }));
   }
 
   /**
@@ -404,8 +414,7 @@ export class PcLocalToolHost implements ToolHost {
       root,
       toolState,
       baseShellPolicyRules: [...(Array.isArray(toolState.shellPolicyRules) ? toolState.shellPolicyRules : [])],
-      fileChangePlanQueue: [],
-      activeFileChange: null,
+      fileChangeStates: new Map(),
     };
     await this.refreshPolicyAmendments(created);
     this.projectStates.set(root, created);
@@ -479,8 +488,9 @@ export class PcLocalToolHost implements ToolHost {
       };
     }
     const alias = TOOL_ALIASES[name];
-    if (!alias) return { name, args };
-    return { name: alias.name, args: alias.args(args) };
+    if (!alias) return { name, args: normalizeDirectToolArgs(name, args) };
+    const normalized = alias.args(args);
+    return { name: alias.name, args: normalizeDirectToolArgs(alias.name, normalized) };
   }
 
   /**
@@ -492,13 +502,26 @@ export class PcLocalToolHost implements ToolHost {
     return TOOL_ALIASES[name]?.name ?? name;
   }
 
+  private fileChangeStateFor(projectState: ProjectToolState, context: ToolExecutionContext): FileChangeState {
+    const key = fileChangeStateKeyForContext(context);
+    const existing = projectState.fileChangeStates.get(key);
+    if (existing) return existing;
+    const created: FileChangeState = {
+      fileChangePlanQueue: [],
+      activeFileChange: null,
+    };
+    projectState.fileChangeStates.set(key, created);
+    return created;
+  }
+
   /**
-   * 根据文件变更状态决定是否强制下一步工具。
+   * 根据当前 turn 的文件变更状态决定是否强制下一步工具。
    *
    * @param projectState 当前项目的工具状态。
+   * @param fileChangeState 当前 turn 的文件变更状态。
    */
-  private forcedToolName(projectState: ProjectToolState): string {
-    const active = projectState.activeFileChange;
+  private forcedToolName(projectState: ProjectToolState, fileChangeState: FileChangeState): string {
+    const active = fileChangeState.activeFileChange;
     if (active) {
       // edit 前要求先读文件，让模型基于当前内容生成变更，而不是凭空覆盖。
       if (active.action === 'create') return 'write_file';
@@ -506,7 +529,7 @@ export class PcLocalToolHost implements ToolHost {
       if (active.action === 'delete') return 'delete_file';
       return pcTools.hasRememberedReadForFile({ file_path: active.file_path }, projectState.toolState) ? '' : 'read_file';
     }
-    return projectState.fileChangePlanQueue.length ? FILE_CHANGE_BEGIN_TOOL_NAME : '';
+    return fileChangeState.fileChangePlanQueue.length ? FILE_CHANGE_BEGIN_TOOL_NAME : '';
   }
 
   /**
@@ -517,13 +540,13 @@ export class PcLocalToolHost implements ToolHost {
    * @param args 归一化后的工具参数。
    * @param preview 工具执行前生成的预览结果。
    */
-  private validateFileChangeSequence(projectState: ProjectToolState, name: string, args: Record<string, unknown>, preview: unknown): void {
+  private validateFileChangeSequence(projectState: ProjectToolState, fileChangeState: FileChangeState, name: string, args: Record<string, unknown>, preview: unknown): void {
     // 模型必须先声明文件，再只写这个文件，防止一次工具调用里静默修改多个文件。
     if (name === FILE_CHANGE_BEGIN_TOOL_NAME) {
       const file = normalizeFileChangeEntry(args, projectState) ?? normalizeFileChangeEntry(preview, projectState);
       if (!file?.file_path) throw new Error('begin_file_change must include exactly one file_path before file content generation.');
-      if (projectState.activeFileChange) throw new Error(`Finish the current active file first: ${projectState.activeFileChange.file_path}.`);
-      const next = projectState.fileChangePlanQueue[0];
+      if (fileChangeState.activeFileChange) throw new Error(`Finish the current active file first: ${fileChangeState.activeFileChange.file_path}.`);
+      const next = fileChangeState.fileChangePlanQueue[0];
       if (!next) return;
       if (!sameRuntimeFilePath(file.file_path, next.file_path)) {
         throw new Error(`The next queued file is ${next.file_path}. Call begin_file_change for that file before any other file.`);
@@ -536,15 +559,30 @@ export class PcLocalToolHost implements ToolHost {
 
     if (!ACTUAL_FILE_MUTATION_TOOLS.has(name)) return;
     if (name === 'apply_patch') {
-      if (projectState.activeFileChange || projectState.fileChangePlanQueue.length) {
+      const active = fileChangeState.activeFileChange;
+      if (!active) {
+        if (fileChangeState.fileChangePlanQueue.length) {
+          throw new Error('Finish the current planned single-file change before applying a patch.');
+        }
+        return;
+      }
+      const paths = mutationPathsForActiveValidation(projectState, name, args, preview);
+      if (paths.length !== 1) {
+        throw new Error('A patch used during a planned file change must target exactly one file. Split the work into one begin_file_change plus one single-file mutation per file.');
+      }
+      const targetPath = paths[0];
+      if (!sameRuntimeFilePath(targetPath, active.file_path)) {
+        throw new Error(`The active file is ${active.file_path}. The mutation target was ${targetPath}. Finish the active file before moving to another file.`);
+      }
+      if (!applyPatchPreviewMatchesAction(preview, active.action)) {
         throw new Error('Finish the current planned single-file change before applying a patch.');
       }
       return;
     }
 
-    const active = projectState.activeFileChange;
+    const active = fileChangeState.activeFileChange;
     if (!active) {
-      const next = projectState.fileChangePlanQueue[0];
+      const next = fileChangeState.fileChangePlanQueue[0];
       throw new Error(
         next
           ? `Call begin_file_change for ${next.file_path} before generating or writing file content. Do not batch file writes.`
@@ -573,25 +611,25 @@ export class PcLocalToolHost implements ToolHost {
    * @param result 工具实际执行结果。
    * @param preview 工具执行前生成的预览结果。
    */
-  private recordFileChangeProgress(projectState: ProjectToolState, name: string, args: Record<string, unknown>, result: Record<string, unknown>, preview: unknown): void {
+  private recordFileChangeProgress(projectState: ProjectToolState, fileChangeState: FileChangeState, name: string, args: Record<string, unknown>, result: Record<string, unknown>, preview: unknown): void {
     if (name === FILE_CHANGE_PLAN_TOOL_NAME) {
       // 新计划会替换旧计划，确保模型重新规划后不会继续执行过期队列。
-      projectState.fileChangePlanQueue = normalizeFileChangeEntries(result.planned_file_changes, projectState);
-      projectState.activeFileChange = null;
+      fileChangeState.fileChangePlanQueue = normalizeFileChangeEntries(result.planned_file_changes, projectState);
+      fileChangeState.activeFileChange = null;
       return;
     }
     if (name === FILE_CHANGE_BEGIN_TOOL_NAME) {
-      projectState.activeFileChange =
-        projectState.fileChangePlanQueue[0] ?? normalizeFileChangeEntry(result.current_file_change, projectState) ?? normalizeFileChangeEntry(args, projectState) ?? normalizeFileChangeEntry(preview, projectState);
+      fileChangeState.activeFileChange =
+        fileChangeState.fileChangePlanQueue[0] ?? normalizeFileChangeEntry(result.current_file_change, projectState) ?? normalizeFileChangeEntry(args, projectState) ?? normalizeFileChangeEntry(preview, projectState);
       return;
     }
-    if (!ACTUAL_FILE_MUTATION_TOOLS.has(name) || name === 'apply_patch') return;
-    const active = projectState.activeFileChange;
+    if (!ACTUAL_FILE_MUTATION_TOOLS.has(name)) return;
+    const active = fileChangeState.activeFileChange;
     const paths = mutationPathsForActiveValidation(projectState, name, args, result.diff ?? preview);
     if (active && paths.length === 1 && sameRuntimeFilePath(paths[0], active.file_path)) {
-      const index = projectState.fileChangePlanQueue.findIndex((item) => sameRuntimeFilePath(item.file_path, active.file_path));
-      if (index >= 0) projectState.fileChangePlanQueue.splice(index, 1);
-      projectState.activeFileChange = null;
+      const index = fileChangeState.fileChangePlanQueue.findIndex((item) => sameRuntimeFilePath(item.file_path, active.file_path));
+      if (index >= 0) fileChangeState.fileChangePlanQueue.splice(index, 1);
+      fileChangeState.activeFileChange = null;
     }
   }
 }
@@ -609,6 +647,22 @@ function toRuntimeToolDefinition(tool: unknown): RuntimeToolDefinition | null {
 
 function recordInput(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function normalizeDirectToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (!FILE_PATH_ARGUMENT_TOOLS.has(name) || args.file_path !== undefined || args.path === undefined) return args;
+  return {
+    ...args,
+    file_path: args.path,
+  };
+}
+
+function normalizePartialToolArgs(name: string, args: Record<string, unknown> | null): Record<string, unknown> | null {
+  return args ? normalizeDirectToolArgs(name, args) : null;
+}
+
+function fileChangeStateKeyForContext(context: ToolExecutionContext): string {
+  return [context.threadId || 'thread', context.turnId || 'turn'].join('\0');
 }
 
 async function previewForTool(name: string, args: Record<string, unknown>, state: PcToolState): Promise<unknown> {
@@ -715,6 +769,16 @@ function fileMutationToolMatchesAction(name: string, action: string): boolean {
   if (action === 'append') return name === 'append_file';
   if (action === 'delete') return name === 'delete_file';
   return name === 'edit' || name === 'edit_file' || name === 'write_file';
+}
+
+function applyPatchPreviewMatchesAction(preview: unknown, action: FileChangeEntry['action']): boolean {
+  if (action === 'append') return false;
+  const record = recordInput(preview);
+  const diff = recordInput(record.diff ?? record);
+  const diffAction = String(diff.action || record.action || '').trim().toLowerCase();
+  if (action === 'create') return diffAction === 'created';
+  if (action === 'delete') return diffAction === 'deleted';
+  return diffAction === 'edited';
 }
 
 function toolEnabledForContext(name: string, context: ToolExecutionContext): boolean {

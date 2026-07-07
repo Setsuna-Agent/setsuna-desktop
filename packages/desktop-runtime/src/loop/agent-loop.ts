@@ -1452,8 +1452,8 @@ export class AgentLoop {
           renderPlanDeltas: planOnly,
         });
         const roundMirror = createLegacyModelStreamMirrorState();
-        const requestTools = planOnly ? undefined : stepContext.tools;
         const requestToolChoice = planOnly ? 'none' : stepContext.toolChoice;
+        const requestTools = planOnly ? undefined : toolsForModelRequest(stepContext.tools, requestToolChoice);
         const requestSnapshot = planOnly ? noToolStepSnapshot(stepContext.snapshot) : stepContext.snapshot;
         await this.publishSamplingStepSnapshot(threadId, turnId, requestSnapshot);
         // reasoning_delta 统一包进 <think>，renderer 后续只需要解析一种思考标记。
@@ -3854,6 +3854,12 @@ function modelFacingTools(
     merged.push(tool);
   }
   return merged.length ? merged : undefined;
+}
+
+function toolsForModelRequest(tools: RuntimeToolDefinition[] | undefined, toolChoice: ModelRequest['toolChoice']): RuntimeToolDefinition[] | undefined {
+  if (!tools?.length || !toolChoice || toolChoice === 'auto' || toolChoice === 'none') return tools;
+  const forcedTool = tools.find((tool) => tool.name === toolChoice.name);
+  return forcedTool ? [forcedTool] : tools;
 }
 
 async function samplingToolRuntimes(

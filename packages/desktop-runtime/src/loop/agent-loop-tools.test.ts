@@ -1528,6 +1528,7 @@ describe('agent loop tools', () => {
     await loop.sendTurn(thread.id, { input: 'continue file change' });
 
     expect(modelClient.requests[0].toolChoice).toEqual({ type: 'tool', name: 'begin_file_change' });
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['begin_file_change']);
   });
 
   it('publishes streaming tool-call previews from tool argument deltas', async () => {
@@ -6338,6 +6339,15 @@ class ForcedToolChoiceHost implements ToolHost {
           type: 'object',
           properties: { file_path: { type: 'string' } },
           required: ['file_path'],
+        },
+      },
+      {
+        name: 'write_file',
+        description: 'Write a file',
+        inputSchema: {
+          type: 'object',
+          properties: { file_path: { type: 'string' }, content: { type: 'string' } },
+          required: ['file_path', 'content'],
         },
       },
     ];
