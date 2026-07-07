@@ -33,6 +33,7 @@
 }
 
 .chat-main-conversation--with-bottom-sender {
+  --chat-message-bottom-gap: 66px;
   padding-top: 0;
 }
 
@@ -51,13 +52,14 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scroll-padding-bottom: var(--chat-message-bottom-gap, 18px);
+  scrollbar-color: transparent transparent;
   scrollbar-gutter: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-/* The app has global scrollbar styling; chat content keeps scroll behavior but should not draw nested bars. */
-.chat-messages,
+/* The transcript owns the scrollbar; nested message content should not draw secondary bars. */
 .chat-messages * {
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
@@ -93,8 +95,6 @@
   background: transparent !important;
 }
 
-.chat-messages::-webkit-scrollbar-track,
-.chat-messages::-webkit-scrollbar-thumb,
 .chat-messages *::-webkit-scrollbar-track,
 .chat-messages *::-webkit-scrollbar-thumb {
   border: 0 !important;
@@ -114,22 +114,23 @@
 .chat-delete-bar__inner,
 .chat-scroll-bottom,
 .chat-sender:not(.chat-sender--starter) .ant-sender,
-.chat-sender:not(.chat-sender--starter) > .chat-command-menu,
-.chat-sender:not(.chat-sender--starter) .chat-image-attachments {
+.chat-sender:not(.chat-sender--starter) > .chat-command-menu {
   transition: transform 260ms cubic-bezier(0.2, 0.82, 0.2, 1);
 }
 
 /* Shift only enough content to keep the floating overview in the available right gutter.
-   Command menus inside the sender footer already move with .ant-sender, so only direct menus are shifted. */
+   Command menus keep their own centering transform and receive the same offset through a variable. */
 .chat-main-conversation--overview-shifted .chat-content-frame,
 .chat-main-conversation--overview-shifted .chat-action-error,
 .chat-main-conversation--overview-shifted .chat-delete-bar__inner,
 .chat-main-conversation--overview-shifted .chat-scroll-bottom,
-.chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) .ant-sender,
-.chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-command-menu,
-.chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) .chat-image-attachments {
+.chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) .ant-sender {
   --chat-overview-expanded-shift: 152px;
   transform: translateX(calc(0px - var(--chat-overview-expanded-shift)));
+}
+
+.chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-command-menu {
+  --chat-command-menu-shift: -152px;
 }
 
 .chat-messages--starter {
@@ -147,6 +148,17 @@
   gap: 14px;
   width: 100%;
   min-width: 0;
+}
+
+.chat-bubble-list__bottom-spacer {
+  display: none;
+  flex: 0 0 auto;
+  height: 0;
+}
+
+.chat-main-conversation--with-bottom-sender .chat-bubble-list__bottom-spacer {
+  display: block;
+  height: var(--chat-message-bottom-gap);
 }
 
 .chat-bubble-item {
@@ -295,7 +307,9 @@
   border: 1px solid color-mix(in srgb, var(--app-text) 8%, var(--app-border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--app-surface) 86%, transparent);
-  transition: border-color 0.16s ease, background 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
 }
 
 .chat-bubble-item--selecting.is-selected-for-delete {
@@ -705,6 +719,34 @@
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
   transform: translateY(-1px);
+}
+
+.chat-scrollbar-overlay {
+  position: absolute;
+  right: 0;
+  z-index: 7;
+  width: var(--chat-scrollbar-width);
+  pointer-events: none;
+}
+
+.chat-scrollbar-overlay__thumb {
+  box-sizing: border-box;
+  width: var(--chat-scrollbar-width);
+  margin-left: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--chat-scrollbar-thumb);
+  background-clip: content-box;
+  cursor: default;
+  pointer-events: auto;
+  transition: background 120ms ease;
+}
+
+.chat-scrollbar-overlay:hover .chat-scrollbar-overlay__thumb,
+.chat-scrollbar-overlay__thumb:hover,
+.chat-scrollbar-overlay__thumb:active {
+  background: color-mix(in srgb, var(--app-muted) 48%, transparent);
+  background-clip: content-box;
 }
 
 .chat-conversation-overview {

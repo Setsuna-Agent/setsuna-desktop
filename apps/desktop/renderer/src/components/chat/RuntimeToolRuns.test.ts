@@ -40,19 +40,51 @@ describe('RuntimeToolRuns default expansion', () => {
   });
 
   it('summarizes adjacent file planning and mutation runs without raw JSON details', () => {
-    const text = renderedText([
+    const runs = [
       toolRun('plan', 'plan_file_changes', { summary: 'create selection and edit merge' }),
       toolRun('begin_create', 'begin_file_change', { file_path: 'selection_sort.py', action: 'create' }),
       fileRun('write_selection', 'write_file', 'selection_sort.py', 'Created'),
       toolRun('begin_edit', 'begin_file_change', { file_path: 'merge_sort.py', action: 'edit' }),
       fileRun('edit_merge', 'edit_file', 'merge_sort.py', 'Modified'),
-    ]);
+    ];
+    const text = renderedText(runs);
+    const html = renderedHtml(runs);
 
     expect(text).toContain('已创建 1 个文件，已编辑 1 个文件');
     expect(text).toContain('创建selection_sort.py');
     expect(text).toContain('编辑merge_sort.py');
+    expect(html).toContain('<span class="chat-tool-run__title">已创建 1 个文件，已编辑 1 个文件</span>');
+    expect(html).not.toContain('<span class="chat-tool-run__title">已创建 1 个文件，已编辑 1 个文件</span><span class="chat-change-counts"');
     expect(text).not.toContain('参数');
     expect(text).not.toContain('结果');
+  });
+
+  it('shows change counts next to a concrete single edited file instead of an aggregate count', () => {
+    const html = renderedHtml([
+      toolRun('begin_edit', 'begin_file_change', { file_path: 'merge_sort.py', action: 'edit' }),
+      fileRun('edit_merge', 'edit_file', 'merge_sort.py', 'Modified'),
+    ]);
+
+    expect(html).toContain('<span class="chat-tool-run__title">已编辑</span><span class="chat-tool-run__target">merge_sort.py</span><span class="chat-change-counts"');
+  });
+
+  it('renders planned multi-file changes as file rows without zero aggregate counts', () => {
+    const html = renderedHtml([
+      toolRun('plan', 'plan_file_changes', {
+        files: [
+          { file_path: 'src/a.ts', action: 'edit', additions: 0, deletions: 0 },
+          { file_path: 'src/b.ts', action: 'create', additions: 0, deletions: 0 },
+          { file_path: 'src/c.ts', action: 'delete', additions: 0, deletions: 0 },
+        ],
+      }),
+    ]);
+    const text = renderedTextFromHtml(html);
+
+    expect(html).toContain('<span class="chat-tool-run__title">已规划 3 个文件改动</span>');
+    expect(text).toContain('编辑src/a.ts');
+    expect(text).toContain('创建src/b.ts');
+    expect(text).toContain('删除src/c.ts');
+    expect(text).not.toContain('+0-0');
   });
 
   it('shows running file operation target and change counts in compact rows', () => {
@@ -244,6 +276,7 @@ describe('RuntimeToolRuns default expansion', () => {
     }));
 
     expect(html).toContain('hljs-selector-class');
+    expect(html).toContain('<span class="chat-file-changes__title">已编辑 main.css</span><span class="chat-change-counts"');
     expect(html).toContain('<details class="chat-file-changes__item">');
     expect(html).not.toContain('open=""');
   });

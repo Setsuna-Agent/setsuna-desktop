@@ -79,6 +79,15 @@ function hasHookRuns(run: RuntimeToolRun): boolean {
 function renderToolRunDisplayGroup(group: ToolRunDisplayGroup, onAnswerApproval: AnswerApprovalHandler): JSX.Element {
   if (group.type === 'mixed') return <MixedToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />;
   if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
+    if (fileOperationEntries([group.run]).length > 1) {
+      return (
+        <ToolRunGroupPanel
+          key={group.run.id}
+          group={{ type: 'group', id: `${group.run.id}:files`, kind: 'fileMutation', runs: [group.run] }}
+          onAnswerApproval={onAnswerApproval}
+        />
+      );
+    }
     return <FileMutationRunRow key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />;
   }
   if (group.type === 'single' && isFlatInspectionRun(group.run) && !hasHookRuns(group.run)) return <FlatToolRunRow key={group.run.id} run={group.run} />;
@@ -131,6 +140,9 @@ function ToolRunGroupPanel({
   const shellGroup = group.kind === 'shell';
   const fileOperationGroup = group.kind === 'fileMutation';
   const fileOperationSummary = fileOperationGroup ? fileOperationGroupSummary(group.runs) : null;
+  const fileOperationSummaryChangeCounts = fileOperationSummary?.target && isConcreteFileOperationTarget(fileOperationSummary.target)
+    ? fileOperationSummary.changeCounts
+    : undefined;
   return (
     <details className={`chat-tool-run chat-tool-run--group chat-tool-run--${group.kind} chat-tool-run--${status}`} open={open}>
       <summary className="chat-tool-run__summary">
@@ -138,11 +150,11 @@ function ToolRunGroupPanel({
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{summary.title}</span>
           {summary.target ? <span className="chat-tool-run__target">{summary.target}</span> : null}
-          {fileOperationSummary?.changeCounts ? (
+          {fileOperationSummaryChangeCounts ? (
             <ChangeCounts
-              additions={fileOperationSummary.changeCounts.additions}
-              deletions={fileOperationSummary.changeCounts.deletions}
-              showZero={fileOperationSummary.changeCounts.showZero}
+              additions={fileOperationSummaryChangeCounts.additions}
+              deletions={fileOperationSummaryChangeCounts.deletions}
+              showZero={fileOperationSummaryChangeCounts.showZero}
             />
           ) : null}
         </span>
@@ -205,6 +217,9 @@ function MixedToolRunGroupPanel({
   const visibleGroups = hasPendingApproval ? group.groups.map(onlyPendingApprovalGroup).filter(isToolRunGroup) : group.groups;
   const open = toolRunGroupDefaultOpen('generic', status, hasPendingApproval);
   const compactSummary = mixedToolRunGroupSummary(group.groups, group.summaryMode);
+  const compactSummaryChangeCounts = compactSummary.target && isConcreteFileOperationTarget(compactSummary.target)
+    ? compactSummary.changeCounts
+    : undefined;
   return (
     <details className={`chat-tool-run chat-tool-run--group chat-tool-run--mixed chat-tool-run--${status}`} open={open}>
       <summary className="chat-tool-run__summary">
@@ -212,11 +227,11 @@ function MixedToolRunGroupPanel({
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{compactSummary.title}</span>
           {compactSummary.target ? <span className="chat-tool-run__target">{compactSummary.target}</span> : null}
-          {compactSummary.changeCounts ? (
+          {compactSummaryChangeCounts ? (
             <ChangeCounts
-              additions={compactSummary.changeCounts.additions}
-              deletions={compactSummary.changeCounts.deletions}
-              showZero={compactSummary.changeCounts.showZero}
+              additions={compactSummaryChangeCounts.additions}
+              deletions={compactSummaryChangeCounts.deletions}
+              showZero={compactSummaryChangeCounts.showZero}
             />
           ) : null}
         </span>
@@ -323,6 +338,7 @@ export function FileChangesSummaryCard({
   const [discarded, setDiscarded] = useState(false);
   const [discardError, setDiscardError] = useState<string | null>(null);
   const fileCount = summary.files.length;
+  const singleFile = fileCount === 1 ? summary.files[0] : undefined;
   const filePaths = useMemo(() => [...new Set(summary.files.map((file) => file.path).filter(Boolean))], [summary.files]);
   const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
   const [openFilePaths, setOpenFilePaths] = useState<Set<string>>(() => new Set());
@@ -354,8 +370,10 @@ export function FileChangesSummaryCard({
           <FileText size={14} />
         </span>
         <span className="chat-file-changes__summary">
-          <span className="chat-file-changes__title">已编辑 {fileCount} 个文件</span>
-          <ChangeCounts additions={summary.additions} deletions={summary.deletions} showZero />
+          <span className="chat-file-changes__title">
+            {singleFile ? `${completedFileOperationActionLabel(normalizeFileOperationAction(singleFile.action))} ${pathBaseName(singleFile.path)}` : `已编辑 ${fileCount} 个文件`}
+          </span>
+          {singleFile ? <ChangeCounts additions={singleFile.additions} deletions={singleFile.deletions} showZero /> : null}
         </span>
         {onOpenReview || onDiscardChanges ? (
           <span className="chat-file-changes__actions">
@@ -521,7 +539,7 @@ function fileOperationChangeTotals(run: RuntimeToolRun): { additions: number; de
   if (resultTotals) return { ...resultTotals, showZero: true };
   const argumentTotals = fileOperationChangeTotalsFromArguments(run);
   if (argumentTotals) return { ...argumentTotals, showZero: true };
-  return run.status === 'running' || run.status === 'pending_approval' ? { additions: 0, deletions: 0, showZero: true } : null;
+  return null;
 }
 
 function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: number; deletions: number; showZero: boolean } | null {
@@ -537,8 +555,7 @@ function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: nu
     deletions += entry.deletions ?? 0;
   }
   if (hasTotals) return { additions, deletions, showZero: showZero || additions !== 0 || deletions !== 0 };
-  const active = runs.some((run) => run.status === 'running' || run.status === 'pending_approval');
-  return active ? { additions: 0, deletions: 0, showZero: true } : null;
+  return null;
 }
 
 function fileOperationChangeTotalsFromArguments(run: RuntimeToolRun): { additions: number; deletions: number } | null {
@@ -1052,7 +1069,7 @@ function mixedToolRunGroupAggregateTitle(groups: ToolRunGroup[]): string {
 
 function mixedToolRunBucketSummary(kind: ToolRunGroupKind | 'webContent', runs: RuntimeToolRun[]): string {
   const status = toolRunGroupStatus(runs);
-  if (kind === 'fileMutation') return fileOperationGroupSummary(runs).title;
+  if (kind === 'fileMutation') return fileOperationAggregateTitle(runs);
   if (kind === 'inspection') {
     const parts = inspectionSummaryParts(inspectionEntries(runs));
     return parts.length ? parts.join('，') : inspectionGroupSummary(runs).title;
@@ -1070,7 +1087,7 @@ function mixedToolRunGroupPart(group: ToolRunGroup): string {
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
   const status = toolRunGroupStatus(runs);
-  if (kind === 'fileMutation') return fileOperationGroupSummary(runs).title;
+  if (kind === 'fileMutation') return fileOperationAggregateTitle(runs);
   if (kind === 'shell') return shellCountSummary(runs, status);
   if (kind === 'inspection') return inspectionGroupSummary(runs).title;
   if (kind === 'search') return searchCountSummary(runs, status);
@@ -1352,6 +1369,34 @@ function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSumm
       : { title: '已规划文件改动', target: entries[0]?.path, changeCounts };
   }
 
+  const singleEntry = entries.length === 1 ? entries[0] : undefined;
+  if (singleEntry) {
+    return {
+      title: completedFileOperationActionLabel(singleEntry.action),
+      target: singleEntry.path,
+      changeCounts: singleEntry.hasChangeCounts
+        ? {
+            additions: singleEntry.additions ?? 0,
+            deletions: singleEntry.deletions ?? 0,
+            showZero: true,
+          }
+        : undefined,
+    };
+  }
+
+  return { title: completedFileOperationAggregateTitle(entries, runs.length) };
+}
+
+function fileOperationAggregateTitle(runs: RuntimeToolRun[]): string {
+  const status = toolRunGroupStatus(runs);
+  const hasAppliedMutation = runs.some(isRuntimeFileMutationRun);
+  if (status === 'success' && hasAppliedMutation) {
+    return completedFileOperationAggregateTitle(fileOperationEntries(runs), runs.length);
+  }
+  return fileOperationGroupSummary(runs).title;
+}
+
+function completedFileOperationAggregateTitle(entries: FileOperationEntry[], runCount: number): string {
   const counts = entries.reduce(
     (result, entry) => {
       result[entry.action] += 1;
@@ -1364,7 +1409,7 @@ function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSumm
     counts.modified ? `已编辑 ${counts.modified} 个文件` : '',
     counts.deleted ? `已删除 ${counts.deleted} 个文件` : '',
   ].filter(Boolean);
-  return { title: parts.length ? parts.join('，') : `已处理 ${runs.length} 个文件操作`, changeCounts };
+  return parts.length ? parts.join('，') : `已处理 ${runCount} 个文件操作`;
 }
 
 type FileOperationAction = 'created' | 'modified' | 'deleted';
@@ -1393,7 +1438,7 @@ function fileOperationEntries(runs: RuntimeToolRun[]): FileOperationEntry[] {
           path: change.path,
           priority,
         }))
-      : [fileOperationEntryFromRun(run, priority)];
+      : plannedFileOperationEntriesFromRun(run, priority);
 
     for (const entry of entries) {
       if (!entry.path) continue;
@@ -1403,6 +1448,28 @@ function fileOperationEntries(runs: RuntimeToolRun[]): FileOperationEntry[] {
     }
   }
   return [...byPath.values()];
+}
+
+function plannedFileOperationEntriesFromRun(run: RuntimeToolRun, priority: number): FileOperationEntry[] {
+  const args = recordFromJson(run.argumentsPreview);
+  const plannedItems = [
+    ...(Array.isArray(args.files) ? args.files : []),
+    ...(Array.isArray(args.changes) ? args.changes : []),
+    ...(isRecord(args.current_file_change) ? [args.current_file_change] : []),
+  ];
+  const entries = plannedItems
+    .map((item): FileOperationEntry | null => {
+      if (!isRecord(item)) return null;
+      const path = stringField(item.file_path ?? item.path ?? item.target_path ?? item.file);
+      if (!path) return null;
+      return {
+        action: normalizeFileOperationAction(item.action),
+        path,
+        priority,
+      };
+    })
+    .filter((entry): entry is FileOperationEntry => Boolean(entry));
+  return entries.length ? entries : [fileOperationEntryFromRun(run, priority)];
 }
 
 function fileOperationEntryFromRun(run: RuntimeToolRun, priority: number): FileOperationEntry {
@@ -1437,10 +1504,21 @@ function normalizeFileOperationPath(value: string): string {
   return value.trim().replace(/\\/g, '/').replace(/\/+$/u, '').toLowerCase();
 }
 
+function isConcreteFileOperationTarget(value: string): boolean {
+  const target = value.trim();
+  return Boolean(target && !/^\d+\s*个文件$/u.test(target));
+}
+
 function fileOperationActionLabel(action: FileOperationAction): string {
   if (action === 'created') return '创建';
   if (action === 'deleted') return '删除';
   return '编辑';
+}
+
+function completedFileOperationActionLabel(action: FileOperationAction): string {
+  if (action === 'created') return '已创建';
+  if (action === 'deleted') return '已删除';
+  return '已编辑';
 }
 
 function pathBaseName(path: string): string {

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
-import { Button, Dropdown } from 'antd';
-import { ArrowUp, Boxes, Check, Paperclip, Sparkles, Square, X } from 'lucide-react';
+import { Button, Dropdown, Image } from 'antd';
+import { ArrowUp, Boxes, Check, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
 import type { RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
@@ -72,6 +72,7 @@ export function ChatComposer({
   const [entries, setEntries] = useState<WorkspaceEntrySearchItem[]>([]);
   const [focused, setFocused] = useState(false);
   const [imageAttachments, setImageAttachments] = useState<RuntimeMessageAttachment[]>([]);
+  const [removingImageAttachmentIds, setRemovingImageAttachmentIds] = useState<Set<string>>(() => new Set());
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(false);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);
@@ -80,8 +81,10 @@ export function ChatComposer({
   const [thinkingEffort, setThinkingEffort] = useState('');
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
   const [planModeEnabled, setPlanModeEnabled] = useState(false);
+  const [slashMenuForcedOpen, setSlashMenuForcedOpen] = useState(false);
   const [cursorOffset, setCursorOffset] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const removingImageTimersRef = useRef<Map<string, number>>(new Map());
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
@@ -90,13 +93,17 @@ export function ChatComposer({
   const slashCommand = useMemo(() => parseSlashCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
   const mentionQuery = mentionCommand?.query ?? '';
   const commandOpen = Boolean(focused && mentionCommand && dismissedCommandValue !== draft);
-  const skillCommandOpen = Boolean(!activeTurnId && focused && slashCommand && dismissedSlashValue !== draft && !commandOpen);
+  const skillCommandOpen = Boolean(!activeTurnId && focused && !commandOpen && (slashCommand ? dismissedSlashValue !== draft : slashMenuForcedOpen));
   const selectedSkillIds = useMemo(() => new Set(selectedSkills.map((skill) => skill.id)), [selectedSkills]);
+  const sendableImageAttachments = useMemo(
+    () => imageAttachments.filter((attachment) => !removingImageAttachmentIds.has(attachment.id)),
+    [imageAttachments, removingImageAttachmentIds],
+  );
   const skillQuery = slashCommand?.query.trim().toLowerCase() ?? '';
   const supportsImageInput = activeModelSupportsImages(config);
   const thinkingConfig = useMemo(() => activeModelThinkingConfig(config), [config]);
-  const attachmentOnlyReady = imageAttachments.length > 0 && !draft.trim();
-  const activeSteerReady = Boolean(activeTurnId && (draft.trim() || imageAttachments.length));
+  const attachmentOnlyReady = sendableImageAttachments.length > 0 && !draft.trim();
+  const activeSteerReady = Boolean(activeTurnId && (draft.trim() || sendableImageAttachments.length));
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const memoryMode = threadMemoryMode ?? 'enabled';
   const memoryGenerationEnabled = config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
@@ -214,6 +221,10 @@ export function ChatComposer({
   }, [skillQuery]);
 
   useEffect(() => {
+    if (activeTurnId && slashMenuForcedOpen) setSlashMenuForcedOpen(false);
+  }, [activeTurnId, slashMenuForcedOpen]);
+
+  useEffect(() => {
     if (activeTurnId) return;
     if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
     const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
@@ -229,8 +240,17 @@ export function ChatComposer({
   }, [activeTurnId, onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
 
   useEffect(() => {
-    if (!supportsImageInput && imageAttachments.length) setImageAttachments([]);
+    if (!supportsImageInput && imageAttachments.length) {
+      clearRemovingImageTimers(removingImageTimersRef.current);
+      setRemovingImageAttachmentIds(new Set());
+      setImageAttachments([]);
+    }
   }, [imageAttachments.length, supportsImageInput]);
+
+  useEffect(() => {
+    const timers = removingImageTimersRef.current;
+    return () => clearRemovingImageTimers(timers);
+  }, []);
 
   useEffect(() => {
     if (!thinkingConfig.supported) {
@@ -258,20 +278,23 @@ export function ChatComposer({
 
   const selectSkill = (skill?: RuntimeSkillSummary) => {
     const command = slashCommand ?? parseSlashCommand(draft, commandCursorOffset);
-    if (!command || !skill) return;
+    if (!skill || (!command && !slashMenuForcedOpen)) return;
     senderRef.current?.insert?.(
       [createSelectedSkillSlot(skill), createTextSlot(' ')],
       'cursor',
-      draft.slice(command.start, command.end),
+      command ? draft.slice(command.start, command.end) : undefined,
       true,
     );
     setDismissedSlashValue('');
+    setSlashMenuForcedOpen(false);
+    setFocused(true);
     setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
   };
 
   const handleChange = (value: string, _event?: unknown, slotConfig?: SlotConfigType[]) => {
     if (dismissedCommandValue && dismissedCommandValue !== value) setDismissedCommandValue('');
     if (dismissedSlashValue && dismissedSlashValue !== value) setDismissedSlashValue('');
+    if (slashMenuForcedOpen) setSlashMenuForcedOpen(false);
     setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
     syncSelectedSkillsFromSlots(slotConfig);
     onDraftChange(value);
@@ -315,6 +338,7 @@ export function ChatComposer({
       event.preventDefault();
       event.stopPropagation();
       setDismissedSlashValue(draft);
+      setSlashMenuForcedOpen(false);
       return false;
     }
     if (!slashEntries.length) return undefined;
@@ -345,6 +369,7 @@ export function ChatComposer({
       selectSkill(item.skill);
       return;
     }
+    setSlashMenuForcedOpen(false);
     if (item.kind === 'action' && item.type === 'memory-mode') {
       if (!item.disabled) void onThreadMemoryModeChange(nextThreadMemoryMode(memoryMode));
       setFocused(true);
@@ -379,13 +404,15 @@ export function ChatComposer({
     const steering = Boolean(activeTurnId);
     const thinking = !steering && thinkingConfig.supported && thinkingEnabled;
     onSend(value, {
-      attachments: supportsImageInput ? imageAttachments : [],
+      attachments: supportsImageInput ? sendableImageAttachments : [],
       ...(!steering ? { skillIds: selectedSkills.map((skill) => skill.id) } : {}),
       ...(!steering ? { thinking } : {}),
       ...(!steering && thinking && thinkingEffort ? { thinkingEffort } : {}),
       ...(!steering && planModeEnabled ? { collaborationMode: 'plan' as const } : {}),
     });
     setSelectedSkills([]);
+    clearRemovingImageTimers(removingImageTimersRef.current);
+    setRemovingImageAttachmentIds(new Set());
     setImageAttachments([]);
     setPlanModeEnabled(false);
     senderRef.current?.clear?.();
@@ -412,7 +439,7 @@ export function ChatComposer({
     if (!supportsImageInput) return;
     const nextFiles = files.filter((file) => file.type.startsWith('image/'));
     if (!nextFiles.length) return;
-    const available = maxImageAttachments - imageAttachments.length;
+    const available = maxImageAttachments - sendableImageAttachments.length;
     if (available <= 0) return;
     const attachments = await Promise.all(nextFiles.slice(0, available).filter((file) => file.size <= maxImageSize).map(readImageAttachment));
     setImageAttachments((current) => [...current, ...attachments]);
@@ -420,7 +447,27 @@ export function ChatComposer({
   };
 
   const removeImageAttachment = (id: string) => {
-    setImageAttachments((current) => current.filter((item) => item.id !== id));
+    if (removingImageAttachmentIds.has(id)) return;
+    setRemovingImageAttachmentIds((current) => new Set(current).add(id));
+    const timer = window.setTimeout(() => {
+      removingImageTimersRef.current.delete(id);
+      setImageAttachments((current) => current.filter((item) => item.id !== id));
+      setRemovingImageAttachmentIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    }, imageAttachmentExitAnimationMs);
+    removingImageTimersRef.current.set(id, timer);
+  };
+
+  const openSlashMenu = () => {
+    if (activeTurnId) return;
+    setActiveSkillIndex(0);
+    setDismissedSlashValue('');
+    setSlashMenuForcedOpen((open) => !open);
+    setFocused(true);
+    senderRef.current?.focus?.({ preventScroll: true });
   };
 
   return (
@@ -456,19 +503,6 @@ export function ChatComposer({
           onSelect={selectSlashEntry}
         />
       ) : null}
-      {imageAttachments.length ? (
-        <div className="chat-image-attachments" aria-label="图片附件">
-          {imageAttachments.map((attachment) => (
-            <div className="chat-image-attachment" key={attachment.id}>
-              <img src={attachment.url} alt={attachment.name} />
-              <span>{attachment.name}</span>
-              <button type="button" aria-label={`移除 ${attachment.name}`} onClick={() => removeImageAttachment(attachment.id)}>
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
       <Sender
         ref={senderRef}
         value={draft}
@@ -477,7 +511,10 @@ export function ChatComposer({
         placeholder="输入消息（输入 / 唤起命令）"
         autoSize={{ minRows: 2, maxRows: 6 }}
         suffix={false}
-        onBlur={() => setFocused(false)}
+        onBlur={() => {
+          setFocused(false);
+          setSlashMenuForcedOpen(false);
+        }}
         onChange={handleChange}
         onFocus={() => {
           setFocused(true);
@@ -490,9 +527,27 @@ export function ChatComposer({
         }}
         onSubmit={submitDraft}
         onCancel={onCancelActiveTurn}
+        header={
+          <ChatImageAttachmentTray
+            attachments={imageAttachments}
+            removingIds={removingImageAttachmentIds}
+            onRemove={removeImageAttachment}
+          />
+        }
         footer={(actions) => (
           <div className="chat-sender__footer">
             <div className="chat-sender__left-actions">
+              <button
+                className={`chat-sender-icon-button chat-sender-command-button ${slashMenuForcedOpen ? 'is-active' : ''}`}
+                type="button"
+                aria-label="打开命令菜单"
+                title="打开命令菜单"
+                disabled={Boolean(activeTurnId)}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={openSlashMenu}
+              >
+                <Plus size={14} />
+              </button>
               <ChatThinkingMenu
                 disabled={Boolean(activeTurnId)}
                 enabled={thinkingEnabled}
@@ -508,6 +563,13 @@ export function ChatComposer({
                 policy={config?.approvalPolicy ?? 'on-request'}
                 onChange={onApprovalPolicyChange}
               />
+              {planModeEnabled ? (
+                <button className="chat-sender-plan-badge" type="button" aria-label="关闭计划模式" title="关闭计划模式" onClick={() => setPlanModeEnabled(false)}>
+                  <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
+                  <span className="chat-sender-plan-badge__label">计划</span>
+                  <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
+                </button>
+              ) : null}
             </div>
             <div className="chat-sender__right-actions">
               {supportsImageInput ? (
@@ -517,7 +579,7 @@ export function ChatComposer({
                     type="button"
                     aria-label="上传图片"
                     title="上传图片"
-                    disabled={Boolean(activeTurnId) || imageAttachments.length >= maxImageAttachments}
+                    disabled={Boolean(activeTurnId) || sendableImageAttachments.length >= maxImageAttachments}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Paperclip size={13} />
@@ -553,6 +615,44 @@ export function ChatComposer({
           </div>
         )}
       />
+    </div>
+  );
+}
+
+function ChatImageAttachmentTray({
+  attachments,
+  removingIds,
+  onRemove,
+}: {
+  attachments: RuntimeMessageAttachment[];
+  removingIds: Set<string>;
+  onRemove: (id: string) => void;
+}) {
+  const open = attachments.length > 0;
+  return (
+    <div className={`chat-image-attachment-tray ${open ? 'is-open' : ''}`}>
+      <div className="chat-image-attachment-tray__clip">
+        <Image.PreviewGroup>
+          <div className="chat-image-attachments" aria-label="图片附件">
+            {attachments.map((attachment) => {
+              const removing = removingIds.has(attachment.id);
+              return (
+                <div className={`chat-image-attachment ${removing ? 'is-removing' : ''}`} key={attachment.id} title={attachment.name}>
+                  <Image
+                    src={attachment.url}
+                    alt={attachment.name}
+                    className="chat-image-attachment__image"
+                    preview={{ mask: null }}
+                  />
+                  <button className="chat-image-attachment__remove" type="button" aria-label={`移除 ${attachment.name}`} disabled={removing} onClick={() => onRemove(attachment.id)}>
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </Image.PreviewGroup>
+      </div>
     </div>
   );
 }
@@ -786,6 +886,12 @@ function normalizeThinkingEfforts(value: unknown): string[] {
 
 const maxImageAttachments = 8;
 const maxImageSize = 8 * 1024 * 1024;
+const imageAttachmentExitAnimationMs = 180;
+
+function clearRemovingImageTimers(timers: Map<string, number>): void {
+  timers.forEach((timer) => window.clearTimeout(timer));
+  timers.clear();
+}
 
 function readImageAttachment(file: File): Promise<RuntimeMessageAttachment> {
   return new Promise((resolve, reject) => {
