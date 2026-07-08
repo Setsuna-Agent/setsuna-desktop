@@ -270,14 +270,6 @@ describe('createAssistantRunTimeline', () => {
         status: 'streaming',
       },
       {
-        id: 'assistant_begin',
-        role: 'assistant',
-        content: '',
-        createdAt: '2026-06-27T00:00:01.000Z',
-        status: 'streaming',
-        toolRuns: [{ id: 'call_begin', name: 'begin_file_change', status: 'success' }],
-      },
-      {
         id: 'assistant_patch',
         role: 'assistant',
         content: '',
@@ -293,7 +285,7 @@ describe('createAssistantRunTimeline', () => {
     expect(work.items.map((item) => item.type)).toEqual(['toolRuns']);
     expect(work.items[0]).toMatchObject({
       type: 'toolRuns',
-      toolRuns: [{ id: 'call_begin' }, { id: 'call_patch' }],
+      toolRuns: [{ id: 'call_patch' }],
     });
   });
 

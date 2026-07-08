@@ -11,14 +11,12 @@ import { PcLocalToolHost } from './pc-local-tool-host.js';
 import { shellSandboxProfile, shellSandboxUnavailableReason } from './pc-local-tools.js';
 
 describe('pc local tool host', () => {
-  it('exposes the pc SWE tool contract and enforces begin-before-write sequencing', async () => {
+  it('exposes the pc SWE tool contract and writes files directly', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
 
     const tools = await host.listTools(context);
     expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
-      'plan_file_changes',
-      'begin_file_change',
       'apply_patch',
       'write_file',
       'append_file',
@@ -39,33 +37,12 @@ describe('pc local tool host', () => {
     expect((execTool?.inputSchema?.properties as Record<string, unknown>)?.sandbox_permissions).toMatchObject({
       enum: expect.arrayContaining(['with_additional_permissions', 'require_escalated']),
     });
-    await expect(host.approvalForTool('plan_file_changes', {
-      files: [{ file_path: 'src/generated.txt', action: 'create' }],
-    }, context)).resolves.toBeNull();
 
-    await expect(host.runTool('write_file', { file_path: 'src/generated.txt', content: 'nope\n' }, context))
-      .rejects.toThrow('Call begin_file_change');
-
-    const plan = await host.runTool('plan_file_changes', {
-      files: [{ file_path: 'src/generated.txt', action: 'create' }],
-    }, context);
-    expect(plan.content).toContain('src/generated.txt');
-    await expect(host.toolChoice?.(context, { tools, messages: [] }))
-      .resolves.toEqual({ type: 'tool', name: 'begin_file_change' });
-
-    await expect(host.runTool('begin_file_change', { file_path: 'src/other.txt', action: 'create' }, context))
-      .rejects.toThrow('next queued file');
-
-    await host.runTool('begin_file_change', { file_path: 'src/generated.txt', action: 'create' }, context);
-    await expect(host.toolChoice?.(context, { tools, messages: [] }))
-      .resolves.toEqual({ type: 'tool', name: 'write_file' });
     await expect(host.approvalForTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context))
       .resolves.toBeNull();
     await expect(host.approvalForTool('delete_file', { file_path: 'src/generated.txt' }, context))
       .resolves.toBeNull();
     const written = await host.runTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context);
-    await expect(host.toolChoice?.(context, { tools, messages: [] }))
-      .resolves.toBeNull();
 
     expect(JSON.parse(written.preview ?? '{}')).toMatchObject({
       diff: {
@@ -107,10 +84,6 @@ describe('pc local tool host', () => {
     const read = await host.runTool('read_file', { path: 'src/existing.txt' }, context);
     expect(read.content).toContain('old');
 
-    await host.runTool('plan_file_changes', {
-      files: [{ file_path: 'src/path-alias.txt', action: 'create' }],
-    }, context);
-    await host.runTool('begin_file_change', { file_path: 'src/path-alias.txt', action: 'create' }, context);
     await host.runTool('write_file', { path: 'src/path-alias.txt', content: 'created through path\n' }, context);
 
     await expect(readFile(path.join(projectDir, 'src', 'path-alias.txt'), 'utf8'))
@@ -157,18 +130,12 @@ describe('pc local tool host', () => {
     });
   });
 
-  it('accepts a single-file apply_patch for the active planned file', async () => {
+  it('accepts apply_patch directly', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
-    const tools = await host.listTools(context);
 
     await mkdir(path.join(projectDir, 'src'), { recursive: true });
     await writeFile(path.join(projectDir, 'src', 'index.css'), 'body { color: red; }\n', 'utf8');
-
-    await host.runTool('plan_file_changes', {
-      files: [{ file_path: 'src/index.css', action: 'edit' }],
-    }, context);
-    await host.runTool('begin_file_change', { file_path: 'src/index.css', action: 'edit' }, context);
 
     const patched = await host.runTool('apply_patch', {
       patch: [
@@ -189,23 +156,16 @@ describe('pc local tool host', () => {
     });
     await expect(readFile(path.join(projectDir, 'src', 'index.css'), 'utf8'))
       .resolves.toBe('body { color: blue; }\n');
-    await expect(host.toolChoice?.(context, { tools, messages: [] }))
-      .resolves.toBeNull();
   });
 
-  it('rejects active apply_patch calls that touch more than the active file', async () => {
+  it('accepts multi-file apply_patch calls', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
 
     await mkdir(path.join(projectDir, 'src'), { recursive: true });
     await writeFile(path.join(projectDir, 'src', 'index.css'), 'body { color: red; }\n', 'utf8');
 
-    await host.runTool('plan_file_changes', {
-      files: [{ file_path: 'src/index.css', action: 'edit' }],
-    }, context);
-    await host.runTool('begin_file_change', { file_path: 'src/index.css', action: 'edit' }, context);
-
-    await expect(host.runTool('apply_patch', {
+    const patched = await host.runTool('apply_patch', {
       patch: [
         '*** Begin Patch',
         '*** Update File: src/index.css',
@@ -216,27 +176,20 @@ describe('pc local tool host', () => {
         '+.extra { color: green; }',
         '*** End Patch',
       ].join('\n'),
-    }, context)).rejects.toThrow('must target exactly one file');
-  });
+    }, context);
 
-  it('keeps file change plans scoped to the active turn and clears them on cleanup', async () => {
-    const { host } = await createHost();
-    const turnOne = { threadId: 'thread_1', turnId: 'turn_1' };
-    const turnTwo = { threadId: 'thread_1', turnId: 'turn_2' };
-    const tools = await host.listTools(turnOne);
-
-    await host.runTool('plan_file_changes', {
-      files: [{ file_path: 'src/stale.txt', action: 'create' }],
-    }, turnOne);
-
-    await expect(host.toolChoice?.(turnOne, { tools, messages: [] }))
-      .resolves.toEqual({ type: 'tool', name: 'begin_file_change' });
-    await expect(host.toolChoice?.(turnTwo, { tools, messages: [] }))
-      .resolves.toBeNull();
-
-    await host.cleanupTurn?.(turnOne, { status: 'cancelled' });
-    await expect(host.toolChoice?.(turnOne, { tools, messages: [] }))
-      .resolves.toBeNull();
+    expect(JSON.parse(patched.preview ?? '{}')).toMatchObject({
+      diff: {
+        diffs: [
+          { path: 'src/index.css', action: 'Edited' },
+          { path: 'src/extra.css', action: 'Created' },
+        ],
+      },
+    });
+    await expect(readFile(path.join(projectDir, 'src', 'index.css'), 'utf8'))
+      .resolves.toBe('body { color: blue; }\n');
+    await expect(readFile(path.join(projectDir, 'src', 'extra.css'), 'utf8'))
+      .resolves.toBe('.extra { color: green; }\n');
   });
 
   it('uses pc shell risk classification for approval', async () => {
@@ -441,10 +394,6 @@ describe('pc local tool host', () => {
     await expect(host.runTool('list_directory', { path: 'blocked' }, context))
       .rejects.toThrow('deny');
 
-    await host.runTool('plan_file_changes', {
-      files: [{ file_path: 'blocked/generated.txt', action: 'create' }],
-    }, context);
-    await host.runTool('begin_file_change', { file_path: 'blocked/generated.txt', action: 'create' }, context);
     await expect(host.runTool('write_file', { file_path: 'blocked/generated.txt', content: 'nope\n' }, context))
       .rejects.toThrow('deny');
   });

@@ -115,7 +115,7 @@ REST 路由覆盖：
 - 被动 memory 失败不能影响主回答完成。
 - usage 只在模型返回 usage 时记录，不伪造。
 - 达到工具轮次上限后禁用 toolChoice 再生成最终回答。
-- 只读检查工具可以批处理，文件写入必须遵守文件变更计划。
+- 只读检查工具可以批处理，文件写入必须通过 mutation 工具的预览、审批和权限预检。
 
 ## Context Compaction
 
@@ -252,8 +252,7 @@ REST 路由覆盖：
 - 暴露 list/read/search/diff/shell/apply/write/edit 等本地工具。
 - 维护每个项目独立 tool state，shell process store 可复用。
 - 支持 `workspace_*` 别名。
-- 文件变更必须经过 `plan_file_changes -> begin_file_change -> read/write/edit/delete` 的顺序控制。
-- edit 前要求先 read file。
+- 文件变更通过 `apply_patch` 或单文件 write/edit/append/delete 工具直接执行，审批和预览由 tool orchestrator 统一处理。
 - shell 风险由 `shellCommandRisk()` 决定是否审批。
 - `previewPartialToolCall()` 支持流式文件变更预览。
 

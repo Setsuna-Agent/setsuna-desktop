@@ -140,11 +140,9 @@ export const LOCAL_TOOL_SYSTEM_PROMPT = `You are Setsuna Agent running inside th
 Local tools operate directly in the selected desktop workspace. Use them only when the user's request depends on current workspace files, Git state, or a local command result.
 - For conceptual or how-to questions, answer directly without local tools.
 - For questions about current workspace contents, inspect with read-only tools first.
-- For every task that will create, edit, append, delete, generate, or save local workspace files, either use apply_patch for a concise patch or first call plan_file_changes with the target file list when using the single-file tools. plan_file_changes does not modify files; it lets the desktop runtime build a single-file queue.
-- After plan_file_changes succeeds, call begin_file_change for exactly one file, then use the matching write_file/edit/append_file/delete_file tool for only that same file. For new files or full-file rewrites, generate the exact file content directly inside write_file.content so the desktop UI can stream live + and - counts. Do not first emit the generated file body as normal assistant text. Repeat begin_file_change and the matching single-file mutation for each remaining file.
+- For code edits, prefer apply_patch so the desktop runtime can preview, approve, and apply the whole patch as a single file-change item.
 - apply_patch may create, update, or delete multiple files in one app-server-style patch. Keep patches targeted and easy to review.
-- Never batch file creation or writing with write_file/edit/append_file/delete_file. A single write_file/edit/append_file/delete_file call must target exactly one file, and you must not generate content for later files before the current file is written.
-- If the user asks you to create, write, generate, rewrite, or save a local file with single-file tools, call plan_file_changes first, then begin_file_change for the current file, then call write_file with only that file's exact content in the tool arguments.
+- write_file/edit/append_file/delete_file each modify exactly one file. Use write_file for new generated files or full-file rewrites when apply_patch would be awkward, and put the exact raw file content directly inside write_file.content.
 - If the user asks you to append to a file, inspect only the context you need, then call append_file or apply_patch. Do not simulate a pure append with edit unless you need an exact replacement.
 - If the user asks you to delete or remove a workspace file, verify the target path and references as needed, then call delete_file or apply_patch. Do not use rm, unlink, rmdir, or shell commands for workspace file deletion.
 - If the user asks you to delete or remove a workspace directory/folder, inspect that directory first with list_directory. If the directory is empty, call run_shell_command with an rmdir command. If the directory is non-empty and the user explicitly asked to remove its contents, call run_shell_command with an rm -r command. Do not stop after saying a shell command is needed.
@@ -504,62 +502,8 @@ export const LOCAL_TOOL_DEFINITIONS = [
     ['key'],
   ),
   localTool(
-    'plan_file_changes',
-    'Declare the local workspace files you plan to create, edit, append to, or delete before generating/applying content. This does not modify files; call it first for every file mutation task so the desktop runtime can build a single-file queue.',
-    {
-      summary: {
-        type: 'string',
-        description: 'Short natural-language summary of the planned file changes.',
-      },
-      files: {
-        type: 'array',
-        description: 'Target workspace files for this change plan.',
-        items: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'File path, absolute or relative to the workspace root.',
-            },
-            action: {
-              type: 'string',
-              enum: ['create', 'edit', 'append', 'delete'],
-              description: 'Planned operation for this file.',
-            },
-            reason: {
-              type: 'string',
-              description: 'Optional short reason this file is included.',
-            },
-          },
-          required: ['file_path', 'action'],
-        },
-      },
-    },
-    ['files'],
-  ),
-  localTool(
-    'begin_file_change',
-    'Declare the single current workspace file you are about to generate or edit. This does not modify files. For new files, call it immediately before write_file.',
-    {
-      file_path: {
-        type: 'string',
-        description: 'The single file path that the next file mutation will target.',
-      },
-      action: {
-        type: 'string',
-        enum: ['create', 'edit', 'append', 'delete'],
-        description: 'The operation that will be performed for this one file.',
-      },
-      reason: {
-        type: 'string',
-        description: 'Optional short reason this file is now the active file.',
-      },
-    },
-    ['file_path', 'action'],
-  ),
-  localTool(
     'write_file',
-    'Create or completely overwrite a UTF-8 text file in the local workspace. Use after begin_file_change for new files or full-file rewrites; use edit for small targeted replacements.',
+    'Create or completely overwrite one UTF-8 text file in the local workspace. Use for new generated files or full-file rewrites; use edit or apply_patch for small targeted replacements.',
     {
       file_path: {
         type: 'string',
@@ -731,15 +675,6 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
   };
 }
 
-export function hasRememberedReadForFile(args, state = createLocalToolState()) {
-  try {
-    const filePath = resolveWorkspacePath(args?.file_path ?? args?.path, state.root);
-    return Boolean(state.reads?.has(filePath));
-  } catch {
-    return false;
-  }
-}
-
 export async function rememberContextFileRead(args, state = createLocalToolState()) {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
   const expectedContent = String(args?.content ?? '');
@@ -833,7 +768,7 @@ export function parsePartialApplyPatchArguments(rawArguments) {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       const files = applyPatchPreviewFiles(String(parsed.patch || ''));
       const currentFile = files[files.length - 1] || null;
-      const preview = fileChangePlanPreviewFromFiles(files);
+      const preview = partialPatchPreviewFromFiles(files);
       return {
         file_path: currentFile?.file_path || '',
         files,
@@ -849,7 +784,7 @@ export function parsePartialApplyPatchArguments(rawArguments) {
   const files = applyPatchPreviewFiles(patch?.value || raw);
   if (!files.length) return null;
   const currentFile = files[files.length - 1] || null;
-  const preview = fileChangePlanPreviewFromFiles(files);
+  const preview = partialPatchPreviewFromFiles(files);
   return {
     file_path: currentFile?.file_path || '',
     files,
@@ -928,79 +863,6 @@ export function parsePartialEditFileArguments(rawArguments) {
   };
 }
 
-export function parsePartialBeginFileChangeArguments(rawArguments) {
-  const raw = String(rawArguments || '');
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const filePath = String(parsed.file_path || parsed.path || '');
-      return {
-        file_path: filePath,
-        action: normalizeFileChangePlanAction(parsed.action),
-        reason: typeof parsed.reason === 'string' ? parsed.reason : '',
-        complete: true,
-        preview: fileChangePlanPreviewFromFiles(filePath ? [{
-          file_path: filePath,
-          action: normalizeFileChangePlanAction(parsed.action),
-        }] : []),
-      };
-    }
-  } catch {
-    // Tool arguments stream in as partial JSON; fall through to the scanner.
-  }
-
-  const filePath = findJsonStringValue(raw, 'file_path') || findJsonStringValue(raw, 'path');
-  if (!filePath) return null;
-  const action = findJsonStringValue(raw, 'action');
-  const file = {
-    file_path: filePath.value || '',
-    action: normalizeFileChangePlanAction(action?.value || 'edit'),
-  };
-  return {
-    ...file,
-    complete: false,
-    preview: fileChangePlanPreviewFromFiles(file.file_path ? [file] : []),
-  };
-}
-
-export function parsePartialFileChangePlanArguments(rawArguments) {
-  const raw = String(rawArguments || '');
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const files = normalizeFileChangePlanFiles(parsed, null, { strict: false });
-      const preview = fileChangePlanPreviewFromFiles(files);
-      return {
-        summary: String(parsed.summary || ''),
-        files,
-        file_path: files[0]?.file_path || '',
-        complete: true,
-        preview,
-      };
-    }
-  } catch {
-    // Tool arguments stream in as partial JSON; fall through to the scanner.
-  }
-
-  const paths = findJsonStringValues(raw, 'file_path', 80);
-  if (!paths.length) return null;
-  const actions = findJsonStringValues(raw, 'action', 80);
-  const files = paths
-    .map((item, index) => ({
-      file_path: item.value || '',
-      action: normalizeFileChangePlanAction(actions[index]?.value || 'edit'),
-    }))
-    .filter((item) => item.file_path);
-  if (!files.length) return null;
-  const preview = fileChangePlanPreviewFromFiles(files);
-  return {
-    files,
-    file_path: files[0]?.file_path || '',
-    complete: false,
-    preview,
-  };
-}
-
 function applyPatchPreviewFiles(patch) {
   const files = [];
   const byPath = new Map();
@@ -1011,7 +873,7 @@ function applyPatchPreviewFiles(patch) {
     if (existing) return existing;
     const file = {
       file_path: normalizedPath,
-      action: normalizeFileChangePlanAction(action),
+      action: normalizePatchPreviewAction(action),
       additions: 0,
       deletions: 0,
     };
@@ -1099,16 +961,6 @@ export function shellSandboxCapability(platform = process.platform, hasMacSandbo
 }
 
 export function summarizeToolCall(name, args, state = createLocalToolState()) {
-  if (name === 'plan_file_changes') {
-    const files = normalizeFileChangePlanFiles(args, state, { strict: false });
-    return files.length > 1
-      ? `准备变更 ${files.length} 个文件`
-      : `准备变更 ${relativeLabel(files[0]?.file_path || '文件')}`;
-  }
-  if (name === 'begin_file_change') {
-    const filePath = resolvePathForDisplay(args?.file_path, state.root);
-    return `开始处理 ${relativeLabel(filePath || '文件')}`;
-  }
   if (isEditToolName(name)) return `编辑 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
   if (name === 'apply_patch') return '应用补丁';
   if (name === 'write_file') return `写入 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
@@ -1229,14 +1081,6 @@ export async function previewApplyPatchDiff(args, state = createLocalToolState()
     : null;
 }
 
-export function previewFileChangePlan(args, state = createLocalToolState()) {
-  return fileChangePlanPreviewFromFiles(normalizeFileChangePlanFiles(args, state, { strict: false }));
-}
-
-export function previewBeginFileChange(args, state = createLocalToolState()) {
-  return fileChangePlanPreviewFromFiles(normalizeBeginFileChange(args, state, { strict: false }));
-}
-
 export async function previewMcpServerConfig(args, state = createLocalToolState()) {
   const result = await calculateMcpServerConfig(args, state);
   if (!result.ok) return { error: result.error };
@@ -1283,8 +1127,6 @@ export async function executeLocalTool(name, args, state = createLocalToolState(
     if (name === 'update_plan') return updatePlan(args);
     if (name === 'remember_memory') return await rememberMemory(args, state);
     if (name === 'configure_mcp_server') return await configureMcpServer(args, state);
-    if (name === 'plan_file_changes') return planFileChanges(args, state);
-    if (name === 'begin_file_change') return beginFileChange(args, state);
     if (name === 'apply_patch') return await applyLocalPatch(args, state);
     if (name === 'write_file') return await writeLocalFile(args, state);
     if (name === 'append_file') return await appendLocalFile(args, state);
@@ -1437,27 +1279,6 @@ function localTool(name, description, properties, required = []) {
       },
     },
   };
-}
-
-function planFileChanges(args, state) {
-  const files = normalizeFileChangePlanFiles(args, state, { strict: true });
-  if (!files.length) return errorResult('请提供至少一个要变更的文件路径。');
-  const preview = fileChangePlanPreviewFromFiles(files);
-  const lines = files.map((file) => {
-    const reason = file.reason ? ` - ${file.reason}` : '';
-    return `- ${file.action}: ${file.file_path}${reason}`;
-  });
-  return okResult(
-    [
-      args?.summary ? `Plan: ${String(args.summary).trim()}` : 'Planned local file changes:',
-      ...lines,
-    ].join('\n'),
-    files.length > 1 ? `准备变更 ${files.length} 个文件` : `准备变更 ${files[0].file_path}`,
-    {
-      diff: preview,
-      planned_file_changes: files,
-    },
-  );
 }
 
 function updatePlan(args) {
@@ -1693,80 +1514,7 @@ function planStatusMarker(status) {
   return '[ ]';
 }
 
-function beginFileChange(args, state) {
-  const files = normalizeBeginFileChange(args, state, { strict: true });
-  const file = files[0];
-  if (!file) return errorResult('请提供当前要处理的单个文件路径。');
-  const preview = fileChangePlanPreviewFromFiles(files);
-  const reason = file.reason ? `\nReason: ${file.reason}` : '';
-  return okResult(
-    [
-      `Current file: ${file.file_path}`,
-      `Action: ${file.action}`,
-      file.action === 'create'
-        ? 'Now call write_file for this file only, with the exact raw file content in content.'
-        : 'Apply changes only for this file before moving to the next file.',
-      reason,
-    ].filter(Boolean).join('\n'),
-    `开始处理 ${file.file_path}`,
-    {
-      diff: preview,
-      current_file_change: file,
-    },
-  );
-}
-
-function normalizeBeginFileChange(args, state, options = {}) {
-  const rawPath = String(args?.file_path || args?.path || '').trim();
-  if (!rawPath) return [];
-  const filePath = state
-    ? normalizeFileChangePlanPath(rawPath, state, options.strict === true)
-    : rawPath.replace(/\\/g, '/');
-  if (!filePath) return [];
-  return [{
-    file_path: filePath,
-    action: normalizeFileChangePlanAction(args?.action),
-    ...(typeof args?.reason === 'string' && args.reason.trim()
-      ? { reason: args.reason.trim().slice(0, 240) }
-      : {}),
-  }];
-}
-
-function normalizeFileChangePlanFiles(args, state, options = {}) {
-  const strict = options.strict === true;
-  const items = Array.isArray(args?.files) ? args.files : [];
-  const files = [];
-  const seen = new Set();
-  for (const item of items) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const rawPath = String(item.file_path || item.path || '').trim();
-    if (!rawPath) continue;
-    const filePath = state
-      ? normalizeFileChangePlanPath(rawPath, state, strict)
-      : rawPath.replace(/\\/g, '/');
-    if (!filePath) continue;
-    const key = filePath.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    files.push({
-      file_path: filePath,
-      action: normalizeFileChangePlanAction(item.action),
-      ...(typeof item.reason === 'string' && item.reason.trim()
-        ? { reason: item.reason.trim().slice(0, 240) }
-        : {}),
-    });
-  }
-  return files.slice(0, 120);
-}
-
-function normalizeFileChangePlanPath(rawPath, state, strict) {
-  if (strict) {
-    return workspaceRelativePath(resolveWorkspacePath(rawPath, state.root), state.root);
-  }
-  return resolvePathForDisplay(rawPath, state.root).replace(/\\/g, '/');
-}
-
-function normalizeFileChangePlanAction(value) {
+function normalizePatchPreviewAction(value) {
   const action = String(value || '').trim().toLowerCase();
   if (action === 'create' || action === 'edit' || action === 'append' || action === 'delete') {
     return action;
@@ -1774,18 +1522,17 @@ function normalizeFileChangePlanAction(value) {
   return 'edit';
 }
 
-function fileChangePlanPreviewFromFiles(files) {
+function partialPatchPreviewFromFiles(files) {
   const diffs = (files || [])
     .filter((file) => file?.file_path)
     .map((file) => ({
       type: 'file_diff',
-      action: fileChangePlanDiffAction(file.action),
+      action: patchPreviewDiffAction(file.action),
       path: String(file.file_path).replace(/\\/g, '/'),
       additions: Number(file.additions || 0),
       deletions: Number(file.deletions || 0),
       truncated: false,
       partial: true,
-      planned: true,
       lines: [],
     }));
   if (!diffs.length) return null;
@@ -1797,7 +1544,6 @@ function fileChangePlanPreviewFromFiles(files) {
     additions: 0,
     deletions: 0,
     partial: true,
-    planned: true,
     diffs,
   };
 }
@@ -1816,7 +1562,7 @@ function patchDiffFromDiffs(diffs) {
   };
 }
 
-function fileChangePlanDiffAction(action) {
+function patchPreviewDiffAction(action) {
   if (action === 'create') return 'Created';
   if (action === 'delete') return 'Deleted';
   return 'Edited';

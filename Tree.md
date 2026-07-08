@@ -2511,12 +2511,8 @@ memory 工具 host。
 - 排除由 runtime 独立实现的工具：
   - `remember_memory`
   - `configure_mcp_server`
-- 增加文件变更计划工具：
-  - `plan_file_changes`
-  - `begin_file_change`
 - 管理每个项目的 tool state。
 - 解析 partial arguments，生成 tool preview。
-- 跟踪文件变更计划与实际 mutation 的对应关系。
 - 将工具输出转换为 RuntimeToolRun 需要的 preview/summary。
 
 ### `adapters/tool/pc-local-tools.ts`

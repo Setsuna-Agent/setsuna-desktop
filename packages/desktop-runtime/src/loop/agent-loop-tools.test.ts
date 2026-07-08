@@ -1527,8 +1527,8 @@ describe('agent loop tools', () => {
 
     await loop.sendTurn(thread.id, { input: 'continue file change' });
 
-    expect(modelClient.requests[0].toolChoice).toEqual({ type: 'tool', name: 'begin_file_change' });
-    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['begin_file_change']);
+    expect(modelClient.requests[0].toolChoice).toEqual({ type: 'tool', name: 'write_file' });
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['write_file']);
   });
 
   it('publishes streaming tool-call previews from tool argument deltas', async () => {
@@ -6333,15 +6333,6 @@ class ForcedToolChoiceHost implements ToolHost {
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
       {
-        name: 'begin_file_change',
-        description: 'Begin a file change',
-        inputSchema: {
-          type: 'object',
-          properties: { file_path: { type: 'string' } },
-          required: ['file_path'],
-        },
-      },
-      {
         name: 'write_file',
         description: 'Write a file',
         inputSchema: {
@@ -6354,7 +6345,7 @@ class ForcedToolChoiceHost implements ToolHost {
   }
 
   toolChoice() {
-    return { type: 'tool' as const, name: 'begin_file_change' };
+    return { type: 'tool' as const, name: 'write_file' };
   }
 
   async runTool() {

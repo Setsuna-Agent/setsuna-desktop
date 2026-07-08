@@ -69,7 +69,6 @@ export function RuntimeHookRuns({ runs }: { runs?: RuntimeHookRun[] }) {
 
 export function isDisplayableRuntimeToolRun(run: RuntimeToolRun): boolean {
   if (run.status === 'error') return false;
-  if (run.name === 'begin_file_change') return false;
   return Boolean(run.name || run.status || run.argumentsPreview || run.resultPreview);
 }
 
@@ -1124,7 +1123,7 @@ function isShellRun(run: RuntimeToolRun): boolean {
 }
 
 function isFileOperationRun(run: RuntimeToolRun): boolean {
-  return isRuntimeFileMutationRun(run) || run.name === 'plan_file_changes' || run.name === 'begin_file_change';
+  return isRuntimeFileMutationRun(run);
 }
 
 function isPendingApprovalRun(run: RuntimeToolRun): boolean {
@@ -1309,24 +1308,16 @@ function fileOperationTargetFromArguments(run: RuntimeToolRun): string {
   const direct = stringField(args.path ?? args.file_path ?? args.target_path ?? args.file);
   if (direct) return direct;
 
-  const currentFile = args.current_file_change;
-  if (isRecord(currentFile)) {
-    const currentPath = stringField(currentFile.file_path ?? currentFile.path);
-    if (currentPath) return currentPath;
-  }
-
-  const plannedFiles = Array.isArray(args.files) ? args.files : Array.isArray(args.changes) ? args.changes : [];
-  const plannedPaths = plannedFiles
+  const argumentFiles = Array.isArray(args.files) ? args.files : Array.isArray(args.changes) ? args.changes : [];
+  const argumentPaths = argumentFiles
     .map((item) => (isRecord(item) ? stringField(item.file_path ?? item.path) : ''))
     .filter(Boolean);
-  if (plannedPaths.length === 1) return plannedPaths[0];
-  if (plannedPaths.length > 1) return `${plannedPaths.length} 个文件`;
+  if (argumentPaths.length === 1) return argumentPaths[0];
+  if (argumentPaths.length > 1) return `${argumentPaths.length} 个文件`;
   return '';
 }
 
 function fileOperationVerb(run: RuntimeToolRun): string {
-  if (run.name === 'plan_file_changes') return runningAware(run, '规划文件改动', '已规划文件改动');
-  if (run.name === 'begin_file_change') return runningAware(run, '准备写入', '已准备写入');
   const action = fileOperationAction(run);
   const created = action === 'created';
   const deleted = action === 'deleted';
@@ -1357,18 +1348,6 @@ function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSumm
   }
   if (status === 'error') return { title: '文件操作失败', target: fallbackTarget, changeCounts };
   if (status === 'rejected') return { title: '已拒绝文件操作', target: fallbackTarget, changeCounts };
-
-  const hasAppliedMutation = runs.some(isRuntimeFileMutationRun);
-  if (!hasAppliedMutation) {
-    if (runs.some((run) => run.name === 'begin_file_change')) {
-      return entries.length > 1
-        ? { title: `已准备写入 ${entries.length} 个文件`, changeCounts }
-        : { title: '已准备写入', target: entries[0]?.path, changeCounts };
-    }
-    return entries.length > 1
-      ? { title: `已规划 ${entries.length} 个文件改动`, changeCounts }
-      : { title: '已规划文件改动', target: entries[0]?.path, changeCounts };
-  }
 
   const appliedEntries = entries.filter((entry) => entry.applied);
   const singleEntry = appliedEntries.length === 1 ? appliedEntries[0] : undefined;
@@ -1429,7 +1408,7 @@ type FileOperationEntry = {
 function fileOperationEntries(runs: RuntimeToolRun[], options: { appliedOnlyWhenCompletedMutation?: boolean } = {}): FileOperationEntry[] {
   const byPath = new Map<string, FileOperationEntry>();
   for (const run of runs) {
-    const priority = isRuntimeFileMutationRun(run) ? 2 : run.name === 'begin_file_change' ? 1 : 0;
+    const priority = isRuntimeFileMutationRun(run) ? 1 : 0;
     const changes = fileChangesFromToolRun(run);
     const entries = changes.length
       ? changes.map((change) => ({
@@ -1442,7 +1421,7 @@ function fileOperationEntries(runs: RuntimeToolRun[], options: { appliedOnlyWhen
           path: change.path,
           priority,
         }))
-      : plannedFileOperationEntriesFromRun(run, priority);
+      : fileOperationEntriesFromArguments(run, priority);
 
     for (const entry of entries) {
       if (!entry.path) continue;
@@ -1458,14 +1437,13 @@ function fileOperationEntries(runs: RuntimeToolRun[], options: { appliedOnlyWhen
   return entries;
 }
 
-function plannedFileOperationEntriesFromRun(run: RuntimeToolRun, priority: number): FileOperationEntry[] {
+function fileOperationEntriesFromArguments(run: RuntimeToolRun, priority: number): FileOperationEntry[] {
   const args = recordFromJson(run.argumentsPreview);
-  const plannedItems = [
+  const argumentItems = [
     ...(Array.isArray(args.files) ? args.files : []),
     ...(Array.isArray(args.changes) ? args.changes : []),
-    ...(isRecord(args.current_file_change) ? [args.current_file_change] : []),
   ];
-  const entries = plannedItems
+  const entries = argumentItems
     .map((item): FileOperationEntry | null => {
       if (!isRecord(item)) return null;
       const path = stringField(item.file_path ?? item.path ?? item.target_path ?? item.file);

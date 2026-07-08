@@ -251,5 +251,5 @@ function isActiveWorkToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number
 }
 
 function isFileChangeWorkflowRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
-  return run.name === 'plan_file_changes' || run.name === 'begin_file_change' || isRuntimeFileMutationRun(run);
+  return isRuntimeFileMutationRun(run);
 }

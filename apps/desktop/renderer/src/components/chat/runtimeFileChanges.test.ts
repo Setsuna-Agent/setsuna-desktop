@@ -133,19 +133,19 @@ describe('runtime file changes', () => {
     });
   });
 
-  it('ignores planning-only file tools in applied change summaries', () => {
+  it('ignores non-file tools in applied change summaries', () => {
     const runs: RuntimeToolRun[] = [
       {
-        id: 'call_plan',
-        name: 'plan_file_changes',
+        id: 'call_read',
+        name: 'read_file',
         status: 'success',
         resultPreview: JSON.stringify({
           diff: { path: 'merge_sort.py', action: 'Modified', additions: 9, deletions: 59, truncated: false, lines: [] },
         }),
       },
       {
-        id: 'call_begin',
-        name: 'begin_file_change',
+        id: 'call_shell',
+        name: 'run_shell_command',
         status: 'success',
         resultPreview: JSON.stringify({
           diff: { path: 'merge_sort.py', action: 'Modified', additions: 9, deletions: 59, truncated: false, lines: [] },
