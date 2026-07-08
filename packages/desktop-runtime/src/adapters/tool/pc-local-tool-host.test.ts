@@ -398,6 +398,18 @@ describe('pc local tool host', () => {
       .rejects.toThrow('deny');
   });
 
+  it('normalizes configured denied roots that use Windows separators', async () => {
+    const { host, projectDir } = await createHost();
+    await mkdir(path.join(projectDir, 'blocked', 'nested'), { recursive: true });
+    await writeFile(path.join(projectDir, 'blocked', 'nested', 'secret.txt'), 'blocked\n', 'utf8');
+
+    await expect(host.runTool('read_file', { file_path: 'blocked/nested/secret.txt' }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      sandboxWorkspaceWrite: { deniedRoots: ['blocked\\nested'] },
+    })).rejects.toThrow('deny');
+  });
+
   it('denies file reads and searches matching configured denied glob patterns', async () => {
     const { host, projectDir } = await createHost();
     await mkdir(path.join(projectDir, 'app'), { recursive: true });

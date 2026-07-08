@@ -4276,8 +4276,10 @@ function shellWorkspaceWriteRoots(state, options = {}) {
 }
 
 function isPathInsideRoot(filePath, root) {
-  const relative = path.relative(normalizePolicyPath(root), normalizePolicyPath(filePath)).replace(/\\/g, '/');
-  return relative === '' || (!relative.startsWith('../') && relative !== '..' && !path.isAbsolute(relative));
+  const rootKey = normalizePolicyPathKey(root);
+  const fileKey = normalizePolicyPathKey(filePath);
+  if (fileKey === rootKey) return true;
+  return fileKey.startsWith(rootKey.endsWith('/') ? rootKey : `${rootKey}/`);
 }
 
 function shellCandidateToPath(raw) {
@@ -4289,6 +4291,13 @@ function shellCandidateToPath(raw) {
 function normalizePolicyPath(value) {
   const normalized = stripWindowsExtendedPathPrefix(path.resolve(String(value || '')));
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function normalizePolicyPathKey(value) {
+  const normalized = normalizePolicyPath(value).replace(/\\/g, '/');
+  if (normalized === '/') return normalized;
+  if (/^[a-z]:\/$/i.test(normalized)) return normalized;
+  return normalized.replace(/\/+$/, '');
 }
 
 function stripWindowsExtendedPathPrefix(value) {
