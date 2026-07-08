@@ -3115,8 +3115,7 @@ describe('agent loop tools', () => {
       { type: 'approve_exec_policy_amendment', proposedExecPolicyAmendment: ['git', 'status'] },
       { type: 'reject' },
     ]);
-    const pendingThread = await threadStore.getThread(thread.id);
-    const approvalRun = pendingThread?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.approvalId === pendingApproval.id);
+    const approvalRun = await waitForApprovalToolRun(threadStore, thread.id, pendingApproval.id);
     expect(approvalRun?.proposedExecPolicyAmendment).toEqual(['git', 'status']);
     expect(approvalRun?.availableApprovalDecisions).toEqual(pendingApproval.availableDecisions);
     await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_exec_policy_amendment' });
@@ -3736,8 +3735,7 @@ describe('agent loop tools', () => {
       { type: 'approve_network_policy_amendment', networkPolicyAmendment: { host: 'api.example.com', action: 'deny' } },
       { type: 'reject' },
     ]);
-    const pendingThread = await threadStore.getThread(thread.id);
-    const approvalRun = pendingThread?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.approvalId === pendingApproval.id);
+    const approvalRun = await waitForApprovalToolRun(threadStore, thread.id, pendingApproval.id);
     expect(approvalRun?.networkApprovalContext).toEqual(pendingApproval.networkApprovalContext);
     expect(approvalRun?.proposedNetworkPolicyAmendments).toEqual(pendingApproval.proposedNetworkPolicyAmendments);
     expect(approvalRun?.availableApprovalDecisions).toEqual(pendingApproval.availableDecisions);
@@ -8285,6 +8283,16 @@ async function waitForPendingApproval(approvalGate: InMemoryApprovalGate) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('Timed out waiting for approval');
+}
+
+async function waitForApprovalToolRun(threadStore: ThreadStore, threadId: string, approvalId: string) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const thread = await threadStore.getThread(threadId);
+    const run = thread?.messages.flatMap((message) => message.toolRuns ?? []).find((item) => item.approvalId === approvalId);
+    if (run) return run;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for approval tool run ${approvalId}`);
 }
 
 async function waitForModelRequest(modelClient: { requests: ModelRequest[] }) {
