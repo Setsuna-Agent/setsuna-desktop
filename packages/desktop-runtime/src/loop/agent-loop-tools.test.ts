@@ -3115,7 +3115,12 @@ describe('agent loop tools', () => {
       { type: 'approve_exec_policy_amendment', proposedExecPolicyAmendment: ['git', 'status'] },
       { type: 'reject' },
     ]);
-    const approvalRun = await waitForApprovalToolRun(threadStore, thread.id, pendingApproval.id);
+    const approvalRun = await waitForApprovalToolRun(
+      threadStore,
+      thread.id,
+      pendingApproval.id,
+      (run) => Array.isArray(run.proposedExecPolicyAmendment),
+    );
     expect(approvalRun?.proposedExecPolicyAmendment).toEqual(['git', 'status']);
     expect(approvalRun?.availableApprovalDecisions).toEqual(pendingApproval.availableDecisions);
     await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_exec_policy_amendment' });
@@ -3735,7 +3740,12 @@ describe('agent loop tools', () => {
       { type: 'approve_network_policy_amendment', networkPolicyAmendment: { host: 'api.example.com', action: 'deny' } },
       { type: 'reject' },
     ]);
-    const approvalRun = await waitForApprovalToolRun(threadStore, thread.id, pendingApproval.id);
+    const approvalRun = await waitForApprovalToolRun(
+      threadStore,
+      thread.id,
+      pendingApproval.id,
+      (run) => Boolean(run.networkApprovalContext && run.proposedNetworkPolicyAmendments && run.availableApprovalDecisions),
+    );
     expect(approvalRun?.networkApprovalContext).toEqual(pendingApproval.networkApprovalContext);
     expect(approvalRun?.proposedNetworkPolicyAmendments).toEqual(pendingApproval.proposedNetworkPolicyAmendments);
     expect(approvalRun?.availableApprovalDecisions).toEqual(pendingApproval.availableDecisions);
@@ -7276,8 +7286,7 @@ class CancellableModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    yield { type: 'text_delta', text: 'partial response' };
-    await new Promise<void>((resolve) => {
+    const abortWait = new Promise<void>((resolve) => {
       const signal = request.signal;
       if (!signal) {
         this.abortListenerReadyResolve();
@@ -7300,6 +7309,8 @@ class CancellableModelClient implements ModelClient {
       );
       this.abortListenerReadyResolve();
     });
+    yield { type: 'text_delta', text: 'partial response' };
+    await abortWait;
     request.signal?.throwIfAborted();
     yield { type: 'text_delta', text: ' should not appear' };
     yield { type: 'done', finishReason: 'stop' };
@@ -7320,11 +7331,11 @@ class NonCooperativeCancellationModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    yield { type: 'text_delta', text: 'partial response' };
     request.signal?.addEventListener('abort', () => {
       this.aborted = true;
     }, { once: true });
     this.abortListenerReadyResolve();
+    yield { type: 'text_delta', text: 'partial response' };
     await new Promise<never>(() => undefined);
   }
 
@@ -8307,11 +8318,16 @@ async function waitForPendingApproval(approvalGate: InMemoryApprovalGate) {
   throw new Error('Timed out waiting for approval');
 }
 
-async function waitForApprovalToolRun(threadStore: ThreadStore, threadId: string, approvalId: string) {
+async function waitForApprovalToolRun(
+  threadStore: ThreadStore,
+  threadId: string,
+  approvalId: string,
+  predicate: (run: NonNullable<RuntimeMessage['toolRuns']>[number]) => boolean = () => true,
+) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const thread = await threadStore.getThread(threadId);
     const run = thread?.messages.flatMap((message) => message.toolRuns ?? []).find((item) => item.approvalId === approvalId);
-    if (run) return run;
+    if (run && predicate(run)) return run;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`Timed out waiting for approval tool run ${approvalId}`);
