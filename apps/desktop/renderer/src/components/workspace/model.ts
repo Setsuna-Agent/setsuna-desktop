@@ -119,6 +119,11 @@ export type DesktopDiffSummary = {
   deletions: number;
 };
 
+export type DesktopReviewFocusRequest = {
+  path: string;
+  version: number;
+};
+
 export type DesktopReviewBranch = {
   name: string;
   current: boolean;

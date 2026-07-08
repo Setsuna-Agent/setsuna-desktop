@@ -2,7 +2,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
-import type { DesktopDiffSummary, DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp } from './model.js';
+import type { DesktopDiffSummary, DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp } from './model.js';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 export function BottomToolsPanel({
@@ -11,6 +11,7 @@ export function BottomToolsPanel({
   activeProject,
   latestReviewSummary,
   reviewError,
+  reviewFocusRequest,
   reviewLoading,
   reviewState,
   selectedWorkspaceApp,
@@ -35,6 +36,7 @@ export function BottomToolsPanel({
   activeProject?: WorkspaceProject;
   latestReviewSummary: DesktopDiffSummary | null;
   reviewError: string | null;
+  reviewFocusRequest: DesktopReviewFocusRequest | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
@@ -107,6 +109,7 @@ export function BottomToolsPanel({
           <DesktopReviewPanel
             activeProject={activeProject}
             error={reviewError}
+            focusRequest={reviewFocusRequest}
             latestSummary={latestReviewSummary}
             loading={reviewLoading}
             reviewState={reviewState}

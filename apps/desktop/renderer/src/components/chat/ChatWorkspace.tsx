@@ -78,7 +78,7 @@ export function ChatWorkspace({
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenFilesPanel: () => void;
-  onOpenFileReview?: () => void;
+  onOpenFileReview?: (filePath?: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
@@ -924,7 +924,7 @@ function MessageItem({
   onCancelEdit: () => void;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onEditDraftChange: (value: string) => void;
-  onOpenFileReview?: () => void;
+  onOpenFileReview?: (filePath?: string) => void;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onStartEdit: (message: RuntimeMessage) => void;
   onStartDelete: (itemId: string) => void;
@@ -1071,7 +1071,7 @@ function AssistantRunItem({
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
-  onOpenFileReview?: () => void;
+  onOpenFileReview?: (filePath?: string) => void;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onStartDelete: (itemId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
@@ -1318,7 +1318,7 @@ function AssistantRunContent({
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
-  onOpenFileReview?: () => void;
+  onOpenFileReview?: (filePath?: string) => void;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
 }) {

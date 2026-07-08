@@ -227,7 +227,7 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(text).toContain('已运行 pnpm test');
   });
 
-  it('highlights final file change previews', () => {
+  it('renders final file changes as review links with file icons', () => {
     const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, {
       summary: {
         additions: 1,
@@ -249,15 +249,42 @@ describe('RuntimeToolRuns default expansion', () => {
           },
         ],
       },
+      onOpenReview: () => undefined,
     }));
 
-    expect(html).toContain('hljs-selector-class');
     expect(html).toContain('<span class="chat-file-changes__title">已编辑 main.css</span><span class="chat-change-counts"');
-    expect(html).toContain('<details class="chat-file-changes__item">');
-    expect(html).not.toContain('open=""');
+    expect(html).toContain('class="chat-file-changes__file-icon"');
+    expect(html).toContain('<button class="chat-file-changes__row"');
+    expect(html).not.toContain('<details');
+    expect(html).not.toContain('chat-file-changes__row-chevron');
+    expect(html).not.toContain('chat-file-review__');
   });
 
-  it('renders final file change row prefixes and add/delete classes', () => {
+  it('keeps multi-file change summaries scannable by previewing the first rows', () => {
+    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, {
+      summary: {
+        additions: 15,
+        deletions: 10,
+        files: Array.from({ length: 5 }, (_, index) => ({
+          path: `src/file-${index + 1}.ts`,
+          additions: index + 1,
+          deletions: index,
+          truncated: false,
+          lines: [],
+        })),
+      },
+    }));
+    const text = renderedTextFromHtml(html);
+
+    expect(text).toContain('已编辑 5 个文件');
+    expect(text).toContain('+15-10');
+    expect(text).toContain('再显示 2 个文件');
+    expect(html.match(/class="chat-file-changes__item"/gu)).toHaveLength(3);
+    expect(html).toContain('src/file-3.ts');
+    expect(html).not.toContain('src/file-4.ts');
+  });
+
+  it('keeps normalized final file changes available for review panels', () => {
     const summary = fileChangeSummaryFromRuns([
       {
         id: 'call_edit',
@@ -283,14 +310,12 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(summary).not.toBeNull();
     const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, { summary: summary! }));
 
-    expect(html).toContain('chat-file-review__line--del');
-    expect(html).toContain('chat-file-review__line--add');
-    expect(html).toContain('chat-file-review__prefix"></span>');
-    expect(html).not.toContain('chat-file-review__prefix">-</span>');
-    expect(html).not.toContain('chat-file-review__prefix">+</span>');
-    expect(html).toContain('chat-file-review__line--gap');
-    expect(html).toContain('6 unmodified lines');
-    expect(html).toContain('hljs-keyword');
+    expect(summary?.files[0]?.lines).toEqual([
+      { type: 'removed', lineNumber: 66, oldLine: 66, newLine: undefined, content: 'const now = new Date()' },
+      { type: 'added', lineNumber: 66, oldLine: undefined, newLine: 66, content: 'const today = new Date()' },
+      { type: 'gap', lineNumber: undefined, oldLine: undefined, newLine: undefined, content: '6 unmodified lines' },
+    ]);
+    expect(html).not.toContain('chat-file-review__');
   });
 
   it('infers omitted file change gap rows from skipped diff line numbers', () => {
@@ -316,10 +341,10 @@ describe('RuntimeToolRuns default expansion', () => {
     ]);
 
     expect(summary).not.toBeNull();
-    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, { summary: summary! }));
-
-    expect(html).toContain('chat-file-review__line--gap');
-    expect(html).toContain('7 unmodified lines');
+    expect(summary?.files[0]?.lines).toContainEqual({
+      type: 'gap',
+      content: '7 unmodified lines',
+    });
   });
 
   it('folds dense unchanged context between changed file diff blocks', () => {
@@ -352,15 +377,14 @@ describe('RuntimeToolRuns default expansion', () => {
     ]);
 
     expect(summary).not.toBeNull();
-    const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, { summary: summary! }));
-    const text = renderedTextFromHtml(html);
+    const lines = summary?.files[0]?.lines.map((line) => line.content);
 
-    expect(html).toContain('9 unmodified lines');
-    expect(text).toContain('line 3');
-    expect(text).toContain('line 5');
-    expect(text).not.toContain('line 6');
-    expect(text).toContain('line 15');
-    expect(text).toContain('line 17');
+    expect(lines).toContain('9 unmodified lines');
+    expect(lines).toContain('line 3');
+    expect(lines).toContain('line 5');
+    expect(lines).not.toContain('line 6');
+    expect(lines).toContain('line 15');
+    expect(lines).toContain('line 17');
   });
 });
 

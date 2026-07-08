@@ -8,7 +8,7 @@ import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
-import type { DesktopDiffSummary, DesktopPanelTab, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp, ProjectTreeNode } from './model.js';
+import type { DesktopDiffSummary, DesktopPanelTab, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp, ProjectTreeNode } from './model.js';
 
 export function WorkspacePanel({
   activePanel,
@@ -16,6 +16,7 @@ export function WorkspacePanel({
   filePreview,
   latestReviewSummary,
   reviewError,
+  reviewFocusRequest,
   reviewLoading,
   reviewState,
   selectedWorkspaceApp,
@@ -41,6 +42,7 @@ export function WorkspacePanel({
   filePreview: WorkspaceFileRead | null;
   latestReviewSummary: DesktopDiffSummary | null;
   reviewError: string | null;
+  reviewFocusRequest: DesktopReviewFocusRequest | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
@@ -243,6 +245,7 @@ export function WorkspacePanel({
       <DesktopReviewPanel
         activeProject={activeProject}
         error={reviewError}
+        focusRequest={reviewFocusRequest}
         latestSummary={latestReviewSummary}
         loading={reviewLoading}
         reviewState={reviewState}

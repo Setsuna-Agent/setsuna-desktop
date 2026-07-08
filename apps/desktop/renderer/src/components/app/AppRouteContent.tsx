@@ -1,4 +1,4 @@
-import type { Dispatch, PointerEvent as ReactPointerEvent, SetStateAction } from 'react';
+import { useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { CapabilitiesPage } from '../pages/CapabilitiesPage.js';
 import { SettingsPage } from '../pages/SettingsPage.js';
@@ -60,8 +60,15 @@ export function AppRouteContent({
   workspaceWidth: number;
 }) {
   const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
-  const openFileReviewPanel = () => {
+  const [reviewFocusRequest, setReviewFocusRequest] = useState<{ path: string; version: number } | null>(null);
+  const openFileReviewPanel = (filePath?: string) => {
     if (!activeProject) return;
+    const normalizedFilePath = filePath?.trim();
+    setReviewFocusRequest((current) => (
+      normalizedFilePath
+        ? { path: normalizedFilePath, version: (current?.version ?? 0) + 1 }
+        : null
+    ));
     workspacePanels.closeDesktopPanelItem('bottom', 'review');
     workspacePanels.openDesktopPanel('side', 'review');
     void workspacePanels.loadReviewState();
@@ -136,6 +143,7 @@ export function AppRouteContent({
       filePreview={projectWorkspace.filePreview}
       skillSelectionRequest={skillSelectionRequest}
       reviewError={workspacePanels.reviewError}
+      reviewFocusRequest={reviewFocusRequest}
       reviewLoading={workspacePanels.reviewLoading}
       reviewState={workspacePanels.reviewState}
       selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}

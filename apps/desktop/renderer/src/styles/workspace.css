@@ -754,6 +754,8 @@
 
 .desktop-review-panel {
   --desktop-review-panel-x-padding: 8px;
+  --desktop-review-focus: #2563eb;
+  --desktop-review-focus-ring: rgba(37, 99, 235, 0.14);
 
   display: flex;
   flex-direction: column;
@@ -1282,6 +1284,12 @@
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);
   background: var(--app-surface);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.desktop-review-file-card.is-focused {
+  border-color: color-mix(in srgb, var(--desktop-review-focus) 58%, var(--app-border));
+  box-shadow: 0 0 0 3px var(--desktop-review-focus-ring);
 }
 
 .desktop-review-file-card__summary {

@@ -5,7 +5,6 @@ import {
   ChevronDown,
   Clock3,
   FileText,
-  PanelRightOpen,
   Pencil,
   Play,
   Search,
@@ -16,15 +15,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { AnswerRuntimeApprovalInput, RuntimeApprovalAvailableDecision, RuntimeHookRun, RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { fileLanguage, highlightedCodeLinesHtml } from '../workspace/codeHighlight.js';
+import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
 import {
   fileChangeFromToolRun,
   fileChangesFromToolRun,
   fileMutationDisplayPath,
   isRuntimeFileMutationRun,
-  type RuntimeFileChange,
   type RuntimeFileChangeSummary,
-  type RuntimeFileDiffLine,
 } from './runtimeFileChanges.js';
 
 export type ToolRunGroup =
@@ -38,6 +35,7 @@ type ToolRunDisplayGroup =
 export type ToolRunGroupKind = 'inspection' | 'search' | 'shell' | 'fileMutation' | 'generic';
 export type ToolRunSummaryMode = 'aggregate' | 'latest';
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
+const fileChangePreviewLimit = 3;
 
 export function RuntimeToolRuns({
   runs,
@@ -332,7 +330,7 @@ export function FileChangesSummaryCard({
 }: {
   summary: RuntimeFileChangeSummary;
   onDiscardChanges?: (filePaths: string[]) => void | Promise<void>;
-  onOpenReview?: () => void;
+  onOpenReview?: (filePath?: string) => void;
 }) {
   const [discarding, setDiscarding] = useState(false);
   const [discarded, setDiscarded] = useState(false);
@@ -341,15 +339,14 @@ export function FileChangesSummaryCard({
   const singleFile = fileCount === 1 ? summary.files[0] : undefined;
   const filePaths = useMemo(() => [...new Set(summary.files.map((file) => file.path).filter(Boolean))], [summary.files]);
   const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
-  const [openFilePaths, setOpenFilePaths] = useState<Set<string>>(() => new Set());
+  const [showAllFiles, setShowAllFiles] = useState(false);
   const canDiscard = Boolean(onDiscardChanges && filePaths.length && !discarded);
+  const hasMoreFiles = fileCount > fileChangePreviewLimit;
+  const visibleFiles = showAllFiles || !hasMoreFiles ? summary.files : summary.files.slice(0, fileChangePreviewLimit);
+  const hiddenFileCount = Math.max(0, fileCount - fileChangePreviewLimit);
   useEffect(() => {
-    const nextFilePaths = new Set(filePaths);
-    setOpenFilePaths((current) => {
-      const next = new Set([...current].filter((path) => nextFilePaths.has(path)));
-      return setsEqual(current, next) ? current : next;
-    });
-  }, [filePathKey, filePaths]);
+    setShowAllFiles(false);
+  }, [filePathKey]);
   const discardChanges = async () => {
     if (!canDiscard || discarding || !onDiscardChanges) return;
     setDiscarding(true);
@@ -373,16 +370,14 @@ export function FileChangesSummaryCard({
           <span className="chat-file-changes__title">
             {singleFile ? `${completedFileOperationActionLabel(normalizeFileOperationAction(singleFile.action))} ${pathBaseName(singleFile.path)}` : `已编辑 ${fileCount} 个文件`}
           </span>
-          {singleFile ? <ChangeCounts additions={singleFile.additions} deletions={singleFile.deletions} showZero /> : null}
+          <ChangeCounts
+            additions={singleFile ? singleFile.additions : summary.additions}
+            deletions={singleFile ? singleFile.deletions : summary.deletions}
+            showZero
+          />
         </span>
         {onOpenReview || onDiscardChanges ? (
           <span className="chat-file-changes__actions">
-            {onOpenReview ? (
-              <button className="chat-file-changes__action" type="button" onClick={onOpenReview}>
-                <PanelRightOpen size={13} />
-                <span>审核</span>
-              </button>
-            ) : null}
             {onDiscardChanges ? (
               <button
                 className="chat-file-changes__action chat-file-changes__action--danger"
@@ -394,66 +389,46 @@ export function FileChangesSummaryCard({
                 <span>{discarding ? '撤销中' : discarded ? '已撤销' : '撤销'}</span>
               </button>
             ) : null}
+            {onOpenReview ? (
+              <button className="chat-file-changes__action chat-file-changes__action--review" type="button" onClick={() => onOpenReview()}>
+                <span>审核</span>
+              </button>
+            ) : null}
           </span>
         ) : null}
       </div>
       {discardError ? <div className="chat-file-changes__error">{discardError}</div> : null}
       <div className="chat-file-changes__list">
-        {summary.files.map((file) => (
-          <details className="chat-file-changes__item" key={file.path} open={openFilePaths.has(file.path)}>
-            <summary
+        {visibleFiles.map((file) => (
+          <div className="chat-file-changes__item" key={file.path}>
+            <button
               className="chat-file-changes__row"
-              onClick={(event) => {
-                event.preventDefault();
-                setOpenFilePaths((current) => {
-                  const next = new Set(current);
-                  if (next.has(file.path)) next.delete(file.path);
-                  else next.add(file.path);
-                  return next;
-                });
-              }}
+              type="button"
+              disabled={!onOpenReview}
+              title={file.path}
+              onClick={() => onOpenReview?.(file.path)}
             >
+              <WorkspaceFileIcon className="chat-file-changes__file-icon" path={file.path} type="file" />
               <span className="chat-file-changes__path" title={file.path}>
                 {file.path}
               </span>
               <ChangeCounts additions={file.additions} deletions={file.deletions} showZero />
-              <ChevronDown className="chat-file-changes__row-chevron" size={13} />
-            </summary>
-            <FileDiffPreview file={file} />
-          </details>
+            </button>
+          </div>
         ))}
+        {hasMoreFiles ? (
+          <button
+            className="chat-file-changes__more"
+            type="button"
+            aria-expanded={showAllFiles}
+            onClick={() => setShowAllFiles((current) => !current)}
+          >
+            <span>{showAllFiles ? '收起文件列表' : `再显示 ${hiddenFileCount} 个文件`}</span>
+            <ChevronDown className="chat-file-changes__more-chevron" size={13} />
+          </button>
+        ) : null}
       </div>
     </section>
-  );
-}
-
-function FileDiffPreview({ file }: { file: RuntimeFileChange }) {
-  const lines = file.lines.slice(0, 120);
-  const highlightableSource = useMemo(() => lines.map((line) => (line.type === 'gap' ? '' : line.content)).join('\n'), [lines]);
-  const language = fileLanguage(file.path);
-  const highlightedLines = useMemo(() => highlightedCodeLinesHtml(highlightableSource, language), [highlightableSource, language]);
-  if (!lines.length) return <div className="chat-file-review__empty">暂无可展示的 diff 内容。</div>;
-  return (
-    <div className="chat-file-review__diff">
-      {lines.map((line, index) => {
-        const highlighted = line.type === 'gap' ? undefined : highlightedLines[index];
-        return (
-          <div
-            className={`chat-file-review__line chat-file-review__line--${diffLineClass(line)}`}
-            key={`${file.path}:${index}:${line.type}`}
-          >
-            <span className="chat-file-review__prefix">{linePrefix(line)}</span>
-            <span className="chat-file-review__line-number">{lineNumber(line)}</span>
-            {highlighted !== undefined ? (
-              <code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />
-            ) : (
-              <code>{line.content || ' '}</code>
-            )}
-          </div>
-        );
-      })}
-      {file.truncated ? <div className="chat-file-review__empty">diff 过大，已截断展示。</div> : null}
-    </div>
   );
 }
 
@@ -604,31 +579,6 @@ function fileOperationDiffTotalsFromValue(value: unknown): { additions: number; 
     }
   }
   return hasDiff ? { additions, deletions } : null;
-}
-
-function diffLineClass(line: RuntimeFileDiffLine): string {
-  if (line.type === 'added') return 'add';
-  if (line.type === 'removed') return 'del';
-  return line.type;
-}
-
-function linePrefix(line: RuntimeFileDiffLine): string {
-  if (line.type === 'added' || line.type === 'removed') return '';
-  if (line.type === 'gap') return '...';
-  return ' ';
-}
-
-function lineNumber(line: RuntimeFileDiffLine): string {
-  const value = line.type === 'removed' ? line.oldLine : line.newLine ?? line.oldLine;
-  return value ? String(value) : '';
-}
-
-function setsEqual<T>(left: Set<T>, right: Set<T>): boolean {
-  if (left.size !== right.size) return false;
-  for (const item of left) {
-    if (!right.has(item)) return false;
-  }
-  return true;
 }
 
 function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {

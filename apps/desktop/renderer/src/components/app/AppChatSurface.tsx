@@ -19,6 +19,7 @@ import type {
   DesktopPanelSlotState,
   DesktopPanelTab,
   DesktopPanelDropPlacement,
+  DesktopReviewFocusRequest,
   DesktopReviewLoadOptions,
   DesktopReviewState,
   DesktopTerminalSession,
@@ -42,6 +43,7 @@ export function AppChatSurface({
   filePreview,
   skillSelectionRequest,
   reviewError,
+  reviewFocusRequest,
   reviewLoading,
   reviewState,
   selectedWorkspaceApp,
@@ -103,6 +105,7 @@ export function AppChatSurface({
   filePreview: WorkspaceFileRead | null;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   reviewError: string | null;
+  reviewFocusRequest: DesktopReviewFocusRequest | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
@@ -131,7 +134,7 @@ export function AppChatSurface({
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
   onOpenFilesPanel: () => void;
-  onOpenFileReviewPanel?: () => void;
+  onOpenFileReviewPanel?: (filePath?: string) => void;
   onOpenSideTerminalPanel: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
@@ -195,6 +198,7 @@ export function AppChatSurface({
           activeProject={activeProject}
           filePreview={filePreview}
           reviewError={reviewError}
+          reviewFocusRequest={reviewFocusRequest}
           latestReviewSummary={latestReviewSummary}
           reviewLoading={reviewLoading}
           reviewState={reviewState}
@@ -222,6 +226,7 @@ export function AppChatSurface({
           activePanel={bottomActivePanel}
           panels={bottomPanelSlot.panels}
           reviewError={reviewError}
+          reviewFocusRequest={reviewFocusRequest}
           latestReviewSummary={latestReviewSummary}
           reviewLoading={reviewLoading}
           reviewState={reviewState}

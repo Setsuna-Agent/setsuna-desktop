@@ -6,7 +6,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
-import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState, DesktopWorkspaceApp } from './model.js';
+import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopWorkspaceApp } from './model.js';
 
 export type DesktopReviewSource = 'unstaged' | 'staged' | 'branch' | 'latest';
 type DesktopReviewDiffLayout = 'unified' | 'split';
@@ -94,6 +94,7 @@ function ReviewActionTip({ children, title }: { children: ReactNode; title: stri
 export function DesktopReviewPanel({
   activeProject,
   error,
+  focusRequest,
   latestSummary,
   loading,
   reviewState,
@@ -104,6 +105,7 @@ export function DesktopReviewPanel({
 }: {
   activeProject?: WorkspaceProject;
   error: string | null;
+  focusRequest?: DesktopReviewFocusRequest | null;
   latestSummary: DesktopDiffSummary | null;
   loading: boolean;
   reviewState: DesktopReviewState | null;
@@ -151,6 +153,15 @@ export function DesktopReviewPanel({
     : '当前：自动换行已关闭，点击开启';
   const reviewRefreshing = loading || refreshFeedbackVisible;
   const reviewRefreshTip = reviewRefreshing ? '正在刷新审查信息' : '刷新审查信息';
+  const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
+  const focusTargetSource = useMemo(
+    () => focusRequest?.path ? reviewSourceForFocusPath(focusRequest.path, {
+      activeSource,
+      latestSummary,
+      reviewState,
+    }) : null,
+    [activeSource, focusRequest?.path, latestSummary, reviewState],
+  );
 
   useEffect(() => {
     if (activeSource !== 'branch') return;
@@ -172,6 +183,17 @@ export function DesktopReviewPanel({
   useEffect(() => () => {
     if (refreshFeedbackTimerRef.current) clearTimeout(refreshFeedbackTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!focusRequest?.path || !focusTargetSource) return;
+    if (focusTargetSource !== activeSource && reviewSourceStorageKey) {
+      setReviewSourceByKey((current) => (
+        current[reviewSourceStorageKey] === focusTargetSource ? current : { ...current, [reviewSourceStorageKey]: focusTargetSource }
+      ));
+      writeReviewSourcePreference(reviewSourceStorageKey, focusTargetSource);
+    }
+    setFileExpansionRequest((current) => ({ expanded: true, version: current.version + 1 }));
+  }, [activeSource, focusRequest?.path, focusRequest?.version, focusTargetSource, reviewSourceStorageKey]);
 
   if (!activeProject) {
     return (
@@ -195,7 +217,6 @@ export function DesktopReviewPanel({
     );
   }
 
-  const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
   const hasReviewFiles = Boolean(activeSummary?.files.length);
   const reviewFileExpansionTip = fileExpansionRequest.expanded ? '折叠所有文件改动' : '展开所有文件改动';
   const pathContext: ReviewPathContext = {
@@ -352,6 +373,7 @@ export function DesktopReviewPanel({
           emptyText={reviewEmptyText[activeSource]}
           diffLayout={reviewDiffLayout}
           fileExpansionRequest={fileExpansionRequest}
+          focusRequest={focusTargetSource === activeSource ? focusRequest : null}
           lineWrap={reviewLineWrap}
           pathContext={pathContext}
           summary={activeSummary}
@@ -374,6 +396,35 @@ function reviewSummaryForSource(
   if (source === 'staged') return reviewState?.stagedSummary ?? null;
   if (source === 'branch') return reviewState?.branchSummary ?? null;
   return null;
+}
+
+function reviewSourceForFocusPath(
+  filePath: string,
+  {
+    activeSource,
+    latestSummary,
+    reviewState,
+  }: {
+    activeSource: DesktopReviewSource;
+    latestSummary: DesktopDiffSummary | null;
+    reviewState: DesktopReviewState | null;
+  },
+): DesktopReviewSource | null {
+  const sourceOrder = uniqueReviewSources([activeSource, 'unstaged', 'staged', 'branch', 'latest']);
+  return sourceOrder.find((source) => reviewSummaryHasPath(reviewSummaryForSource(reviewState, source, latestSummary), filePath)) ?? null;
+}
+
+function uniqueReviewSources(sources: DesktopReviewSource[]): DesktopReviewSource[] {
+  return sources.filter((source, index) => sources.indexOf(source) === index);
+}
+
+function reviewSummaryHasPath(summary: DesktopDiffSummary | null, filePath: string): boolean {
+  const normalizedTarget = normalizeReviewFocusPath(filePath);
+  return Boolean(normalizedTarget && summary?.files.some((file) => normalizeReviewFocusPath(file.path) === normalizedTarget));
+}
+
+function normalizeReviewFocusPath(value: string): string | null {
+  return normalizeRelativeReviewPath(value)?.toLowerCase() ?? null;
 }
 
 function ReviewChangeCounts({ additions, deletions }: { additions: number; deletions: number }) {
@@ -729,6 +780,7 @@ function ReviewSummarySection({
   diffLayout,
   emptyText,
   fileExpansionRequest,
+  focusRequest,
   lineWrap,
   pathContext,
   summary,
@@ -739,6 +791,7 @@ function ReviewSummarySection({
   diffLayout: DesktopReviewDiffLayout;
   emptyText: { title: string; description: string };
   fileExpansionRequest: ReviewFileExpansionRequest;
+  focusRequest?: DesktopReviewFocusRequest | null;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
   summary: DesktopDiffSummary | null;
@@ -756,6 +809,7 @@ function ReviewSummarySection({
               diffLayout={diffLayout}
               fileExpansionRequest={fileExpansionRequest}
               file={file}
+              focusRequest={focusRequest}
               key={file.path}
               lineWrap={lineWrap}
               pathContext={pathContext}
@@ -779,6 +833,7 @@ function ReviewFileCard({
   diffLayout,
   fileExpansionRequest,
   file,
+  focusRequest,
   lineWrap,
   pathContext,
   workspaceApp,
@@ -788,6 +843,7 @@ function ReviewFileCard({
   diffLayout: DesktopReviewDiffLayout;
   fileExpansionRequest: ReviewFileExpansionRequest;
   file: DesktopDiffFile;
+  focusRequest?: DesktopReviewFocusRequest | null;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
   workspaceApp?: DesktopWorkspaceApp | null;
@@ -795,11 +851,17 @@ function ReviewFileCard({
   onOpenProjectFile: (filePath: string) => void;
 }) {
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
+  const [focusHighlightVersion, setFocusHighlightVersion] = useState<number | null>(null);
   const [diffHeightExpanded, setDiffHeightExpanded] = useState(false);
   const [lineContextMenu, setLineContextMenu] = useState<ReviewLineContextMenuState | null>(null);
+  const fileCardRef = useRef<HTMLElement | null>(null);
   const lineContextMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
   const canOpenFile = Boolean(workspaceFilePath);
+  const focusedByRequest = Boolean(
+    focusRequest
+      && normalizeReviewFocusPath(file.path) === normalizeReviewFocusPath(focusRequest.path),
+  );
   const visibleLines = file.lines;
   const language = fileLanguage(file.path);
   const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
@@ -817,6 +879,22 @@ function ReviewFileCard({
   useEffect(() => {
     setExpanded(fileExpansionRequest.expanded);
   }, [fileExpansionRequest.expanded, fileExpansionRequest.version]);
+
+  useEffect(() => {
+    if (!focusedByRequest || focusRequest?.version === undefined) return undefined;
+    setExpanded(true);
+    setFocusHighlightVersion(focusRequest.version);
+    const frame = window.requestAnimationFrame(() => {
+      fileCardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    const timer = window.setTimeout(() => {
+      setFocusHighlightVersion((current) => (current === focusRequest.version ? null : current));
+    }, 1400);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [focusedByRequest, focusRequest?.version]);
 
   const openDiffLine = (line: DesktopDiffFile['lines'][number], preferredLine?: number) => {
     if (!workspaceFilePath) return;
@@ -852,7 +930,14 @@ function ReviewFileCard({
 
   return (
     <>
-      <article className={`desktop-review-file-card ${expanded ? 'is-open' : ''}`}>
+      <article
+        className={[
+          'desktop-review-file-card',
+          expanded ? 'is-open' : '',
+          focusHighlightVersion === focusRequest?.version ? 'is-focused' : '',
+        ].filter(Boolean).join(' ')}
+        ref={fileCardRef}
+      >
         <header className="desktop-review-file-card__summary">
           <button
             className="desktop-review-file-card__path-main"
