@@ -79,7 +79,6 @@ describe('file policy amendment store', () => {
     const store = new FilePolicyAmendmentStore(dataDir);
 
     const append = store.appendExecPolicyAmendment(['git', 'status']);
-    await new Promise((resolve) => setTimeout(resolve, 30));
     await rm(lockDir, { recursive: true, force: true });
     await append;
 

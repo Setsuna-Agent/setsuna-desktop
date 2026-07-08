@@ -50,7 +50,7 @@ describe('shell tool host', () => {
     const run = await host.runTool(
       'run_shell_command',
       {
-        command: `${nodeCommand()} -e "setTimeout(() => console.log('persisted output'), 40)"`,
+        command: `${nodeCommand()} -e "console.log('persisted output'); setInterval(() => {}, 1000)"`,
         risk_level: 'low',
         yield_time_ms: 1,
         persist: true,
@@ -60,12 +60,16 @@ describe('shell tool host', () => {
     );
     const processId = (run.data as { process_id: string }).process_id;
 
-    const read = await host.runTool('read_shell_process', { process_id: processId, wait_ms: 500 }, context());
-    const listed = await host.runTool('list_shell_processes', {}, context());
+    try {
+      const read = await host.runTool('read_shell_process', { process_id: processId, wait_ms: 500 }, context());
+      const listed = await host.runTool('list_shell_processes', {}, context());
 
-    expect(run.content).toContain('Process is still running');
-    expect(read.content).toContain('persisted output');
-    expect(listed.content).toContain(processId);
+      expect(run.content).toContain('Process is still running');
+      expect(read.content).toContain('persisted output');
+      expect(listed.content).toContain(processId);
+    } finally {
+      await host.runTool('terminate_shell_process', { process_id: processId }, context()).catch(() => undefined);
+    }
   });
 
   it('terminates foreground commands when the turn signal aborts', async () => {
@@ -73,12 +77,12 @@ describe('shell tool host', () => {
     const controller = new AbortController();
     const abortError = new Error('test cancellation');
     abortError.name = 'AbortError';
-    setTimeout(() => controller.abort(abortError), 30);
+    setImmediate(() => controller.abort(abortError));
 
     const result = await host.runTool(
       'run_shell_command',
       {
-        command: `${nodeCommand()} -e "setTimeout(() => console.log('late output'), 5000)"`,
+        command: `${nodeCommand()} -e "setInterval(() => {}, 1000)"`,
         risk_level: 'low',
         yield_time_ms: 30_000,
       },

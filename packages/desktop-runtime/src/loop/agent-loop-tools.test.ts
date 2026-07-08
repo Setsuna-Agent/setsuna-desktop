@@ -4460,10 +4460,7 @@ describe('agent loop tools', () => {
 
     expect(turnId).toBeTruthy();
     await expect(loop.cancelTurn(thread.id, turnId!)).resolves.toBe(true);
-    await expect(Promise.race([
-      running.then(() => 'finished'),
-      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 500)),
-    ])).resolves.toBe('finished');
+    await expect(running).resolves.toBeUndefined();
     expect(loop.activeTurnId(thread.id)).toBeNull();
     toolHost.release();
     await toolHost.done;
@@ -4488,13 +4485,13 @@ describe('agent loop tools', () => {
       toolHost,
     });
 
-    const running = loop.runUserShellCommand(thread.id, 'node -e "setTimeout(() => {}, 10000)"');
+    const running = loop.runUserShellCommand(thread.id, 'node -e "setInterval(() => {}, 1000)"');
     await toolHost.started;
     const turnId = loop.activeTurnId(thread.id);
 
     expect(turnId).toBeTruthy();
     expect(toolHost.calls).toEqual([{
-      command: 'node -e "setTimeout(() => {}, 10000)"',
+      command: 'node -e "setInterval(() => {}, 1000)"',
       projectId: 'project_1',
       turnId,
     }]);
@@ -4544,7 +4541,7 @@ describe('agent loop tools', () => {
       toolHost,
     });
 
-    const running = loop.runUserShellCommand(thread.id, 'node -e "setTimeout(() => {}, 10000)"');
+    const running = loop.runUserShellCommand(thread.id, 'node -e "setInterval(() => {}, 1000)"');
     await toolHost.started;
     const shellTurnId = loop.activeTurnId(thread.id);
     expect(shellTurnId).toBeTruthy();

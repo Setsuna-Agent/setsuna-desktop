@@ -128,24 +128,30 @@ describe('file skill registry', () => {
   it('notifies subscribers when watched skill files change', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
-    const changed = nextSkillChange(registry);
+    const changes = skillChangeQueue(registry);
 
-    await sleep(75);
-    await writeFile(
-      path.join(builtinDir, 'presentation-mcp', 'SKILL.md'),
-      [
-        '---',
-        'name: presentation-mcp',
-        'description: Updated externally',
-        '---',
-        '',
-        '# Presentation MCP',
-        '',
-        'Changed outside the registry API.',
-      ].join('\n'),
-    );
+    try {
+      await registry.setExtraRoots([]);
+      await expect(changes.next()).resolves.toBe(true);
 
-    await expect(changed).resolves.toBe(true);
+      await writeFile(
+        path.join(builtinDir, 'presentation-mcp', 'SKILL.md'),
+        [
+          '---',
+          'name: presentation-mcp',
+          'description: Updated externally',
+          '---',
+          '',
+          '# Presentation MCP',
+          '',
+          'Changed outside the registry API.',
+        ].join('\n'),
+      );
+
+      await expect(changes.next()).resolves.toBe(true);
+    } finally {
+      changes.close();
+    }
   });
 
   it('keeps built-in skill content read-only', async () => {
@@ -200,23 +206,37 @@ describe('file skill registry', () => {
   });
 });
 
-function nextSkillChange(registry: FileSkillRegistry): Promise<boolean> {
-  return new Promise((resolve) => {
-    let unsubscribe = () => {};
-    const timeout = setTimeout(() => {
-      unsubscribe();
-      resolve(false);
-    }, 2000);
-    unsubscribe = registry.subscribeChanges(() => {
-      clearTimeout(timeout);
-      unsubscribe();
-      resolve(true);
-    });
+function skillChangeQueue(registry: FileSkillRegistry): { next(): Promise<boolean>; close(): void } {
+  const waiters: Array<(value: boolean) => void> = [];
+  let pending = 0;
+  const unsubscribe = registry.subscribeChanges(() => {
+    const resolve = waiters.shift();
+    if (resolve) resolve(true);
+    else pending += 1;
   });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return {
+    next() {
+      if (pending > 0) {
+        pending -= 1;
+        return Promise.resolve(true);
+      }
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          const index = waiters.indexOf(resolve);
+          if (index !== -1) waiters.splice(index, 1);
+          resolve(false);
+        }, 2000);
+        waiters.push((value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        });
+      });
+    },
+    close() {
+      unsubscribe();
+      for (const resolve of waiters.splice(0)) resolve(false);
+    },
+  };
 }
 
 class CapturingModelClient implements ModelClient {

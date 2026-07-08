@@ -710,7 +710,7 @@ describe('pc local tool host', () => {
     const interactive = await host.runTool(
       'exec_command',
       {
-        cmd: `${nodeCommand()} -e "process.stdin.once('data', d => { process.stdout.write('stdin:' + d.toString()); process.exit(0); }); setTimeout(() => {}, 10000)"`,
+        cmd: `${nodeCommand()} -e "process.stdin.once('data', d => { process.stdout.write('stdin:' + d.toString()); process.exit(0); }); setInterval(() => {}, 1000)"`,
         yield_time_ms: 1,
       },
       { threadId: 'thread_1', turnId: 'turn_1' },
