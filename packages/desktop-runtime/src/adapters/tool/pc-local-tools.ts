@@ -3763,7 +3763,8 @@ function pathCandidatesForGlob(filePath) {
 }
 
 function normalizeGlobPath(value) {
-  return String(value || '').replace(/\\/g, '/');
+  const normalized = stripWindowsExtendedPathPrefix(String(value || '')).replace(/\\/g, '/');
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 function fileMutationPathCandidates(name, args) {
@@ -4162,11 +4163,7 @@ function firstPathOutsideWorkspaceWriteRoots(command, state, options = {}) {
   const workspaceRoot = path.resolve(state?.root || process.cwd());
   const allowedRoots = shellWorkspaceWriteRoots(state, options);
   for (const raw of shellWritePathCandidates(command)) {
-    const candidate = raw.startsWith('~/')
-      ? path.join(process.env.HOME || '', raw.slice(2))
-        : raw.startsWith('/')
-          ? raw
-          : raw;
+    const candidate = shellCandidateToPath(raw);
     const resolved = path.resolve(workspaceRoot, candidate);
     if (allowedRoots.some((root) => isPathInsideRoot(resolved, root))) continue;
     return raw;
@@ -4177,11 +4174,7 @@ function firstPathOutsideWorkspaceWriteRoots(command, state, options = {}) {
 function firstDeniedShellWritePath(command, state) {
   const workspaceRoot = path.resolve(state?.root || process.cwd());
   for (const raw of shellWritePathCandidates(command)) {
-    const candidate = raw.startsWith('~/')
-      ? path.join(process.env.HOME || '', raw.slice(2))
-      : raw.startsWith('/')
-        ? raw
-        : raw;
+    const candidate = shellCandidateToPath(raw);
     const resolved = path.resolve(workspaceRoot, candidate);
     if (deniedSandboxRuleForPath(resolved, state)) return raw;
   }
@@ -4191,11 +4184,7 @@ function firstDeniedShellWritePath(command, state) {
 function firstDeniedShellAccessPath(command, state) {
   const workspaceRoot = path.resolve(state?.root || process.cwd());
   for (const raw of shellPathCandidates(command)) {
-    const candidate = raw.startsWith('~/')
-      ? path.join(process.env.HOME || '', raw.slice(2))
-      : raw.startsWith('/')
-        ? raw
-        : raw;
+    const candidate = shellCandidateToPath(raw);
     const resolved = path.resolve(workspaceRoot, candidate);
     if (deniedSandboxRuleForPath(resolved, state)) return raw;
   }
@@ -4205,10 +4194,10 @@ function firstDeniedShellAccessPath(command, state) {
 function shellWritePathCandidates(command) {
   const candidates = [];
   const text = String(command || '');
-  const pathMatcher = /(?:^|[\s"'=])((?:\/|~\/|\.\.?\/)[^\s"'`$<>|;&]+)/g;
+  const pathMatcher = /(?:^|[\s"'=])((?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/])[^\s"'`$<>|;&]+)/g;
   for (const match of text.matchAll(pathMatcher)) candidates.push(match[1]);
-  const redirectMatcher = /(?:^|[^<=>])>{1,2}\s*([^\s"'`$<>|;&]+)/g;
-  for (const match of text.matchAll(redirectMatcher)) candidates.push(match[1]);
+  const redirectMatcher = /(?:^|[^<=>])>{1,2}\s*(?:"([^"]+)"|'([^']+)'|([^\s"'`$<>|;&]+))/g;
+  for (const match of text.matchAll(redirectMatcher)) candidates.push(match[1] || match[2] || match[3]);
 
   const words = parseShellWords(text);
   const commandName = path.basename(words[0] || '');
@@ -4287,8 +4276,25 @@ function shellWorkspaceWriteRoots(state, options = {}) {
 }
 
 function isPathInsideRoot(filePath, root) {
-  const relative = path.relative(path.resolve(root), path.resolve(filePath)).replace(/\\/g, '/');
+  const relative = path.relative(normalizePolicyPath(root), normalizePolicyPath(filePath)).replace(/\\/g, '/');
   return relative === '' || (!relative.startsWith('../') && relative !== '..' && !path.isAbsolute(relative));
+}
+
+function shellCandidateToPath(raw) {
+  const value = String(raw || '').trim();
+  if (value.startsWith('~/')) return path.join(process.env.HOME || '', value.slice(2));
+  return value;
+}
+
+function normalizePolicyPath(value) {
+  const normalized = stripWindowsExtendedPathPrefix(path.resolve(String(value || '')));
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function stripWindowsExtendedPathPrefix(value) {
+  return value
+    .replace(/^\\\\\?\\UNC\\/i, '\\\\')
+    .replace(/^\\\\\?\\/i, '');
 }
 
 function findJsonStringValue(raw, key) {
