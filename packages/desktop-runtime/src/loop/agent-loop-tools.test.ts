@@ -8406,7 +8406,7 @@ function hookContext(): ToolExecutionContext & { turnId: string } {
 }
 
 function hookEnvironment() {
-  return { id: 'local', cwd: '/tmp' };
+  return { id: 'local', cwd: tmpdir() };
 }
 
 function stepSnapshotSkillRegistry(): SkillRegistry {

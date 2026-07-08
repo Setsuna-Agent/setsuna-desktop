@@ -1,6 +1,7 @@
 export function powershellCommand(command: string): string {
   const normalized = normalizeLeadingJsonQuotedWindowsExecutable(command);
-  return /^"[a-zA-Z]:\\[^"]+"\s+/.test(normalized) ? `& ${normalized}` : normalized;
+  const commandText = /^"[a-zA-Z]:\\[^"]+"\s+/.test(normalized) ? `& ${normalized}` : normalized;
+  return `${commandText}; if ($global:LASTEXITCODE -ne $null) { exit $global:LASTEXITCODE }`;
 }
 
 function normalizeLeadingJsonQuotedWindowsExecutable(command: string): string {
