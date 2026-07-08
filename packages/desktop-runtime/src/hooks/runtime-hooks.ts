@@ -14,6 +14,7 @@ import type {
   RuntimeToolCall,
 } from '@setsuna-desktop/contracts';
 import type { ToolExecutionContext, ToolExecutionEnvironment, ToolExecutionResult } from '../ports/tool-host.js';
+import { powershellCommand } from '../utils/windows-shell.js';
 
 export type RuntimeHookDiscoveryEvent = {
   configName: RuntimeHookEventName;
@@ -1362,7 +1363,12 @@ function canonicalJson(value: unknown): unknown {
 }
 
 function shellCommand(command: string): { file: string; args: string[] } {
-  if (process.platform === 'win32') return { file: 'cmd.exe', args: ['/d', '/s', '/c', command] };
+  if (process.platform === 'win32') {
+    return {
+      file: process.env.SETSUNA_WINDOWS_SHELL || process.env.SHELL || 'powershell.exe',
+      args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', powershellCommand(command)],
+    };
+  }
   return { file: '/bin/sh', args: ['-lc', command] };
 }
 

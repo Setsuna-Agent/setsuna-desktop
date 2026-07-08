@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import { powershellCommand } from '../../utils/windows-shell.js';
 import { booleanArg, boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
 
 const DEFAULT_SHELL_TIMEOUT_MS = 120_000;
@@ -533,17 +534,6 @@ function shellSpawnSpec(command: string): { command: string; args: string[] } {
     };
   }
   return { command: process.env.SHELL || '/bin/sh', args: ['-lc', command] };
-}
-
-function powershellCommand(command: string): string {
-  const normalized = normalizeLeadingJsonQuotedWindowsExecutable(command);
-  return /^"[a-zA-Z]:\\[^"]+"\s+/.test(normalized) ? `& ${normalized}` : normalized;
-}
-
-function normalizeLeadingJsonQuotedWindowsExecutable(command: string): string {
-  return command.replace(/^"([a-zA-Z]:\\\\[^"]+)"(\s+.*)?$/u, (_match, executable: string, rest = '') =>
-    `"${executable.replace(/\\\\/g, '\\')}"${rest}`
-  );
 }
 
 function shellEnvironment(): NodeJS.ProcessEnv {

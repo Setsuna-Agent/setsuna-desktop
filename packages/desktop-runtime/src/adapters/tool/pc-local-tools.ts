@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -2696,7 +2696,7 @@ function resolveShellDirectoryPath(value, state) {
   const raw = String(value || '').trim();
   if (!raw) return state.root;
   const workspaceRoot = realWorkspaceRoot(state.root);
-  const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(workspaceRoot, raw);
+  const resolved = resolvePolicyPath(raw, workspaceRoot);
   if (normalizePermissionProfile(state?.permissionProfile) === 'danger-full-access') return resolved;
   const target = realPathIfExists(resolved);
   const allowedRoots = shellWorkspaceWriteRoots(state).map(realPathIfExists);
@@ -3618,9 +3618,9 @@ function readableRootsForState(state) {
   for (const rawRoot of configuredRoots) {
     const text = String(rawRoot || '').trim();
     if (!text) continue;
-    roots.push(path.isAbsolute(text) ? text : path.resolve(state?.root || process.cwd(), text));
+    roots.push(resolvePolicyPath(text, state?.root || process.cwd()));
   }
-  return [...new Set(roots.map((root) => path.resolve(root)))];
+  return [...new Set(roots.map((root) => resolvePolicyPath(root)))];
 }
 
 function deniedRootsForState(state) {
@@ -3631,9 +3631,9 @@ function deniedRootsForState(state) {
   for (const rawRoot of configuredRoots) {
     const text = String(rawRoot || '').trim();
     if (!text) continue;
-    roots.push(path.isAbsolute(text) ? text : path.resolve(state?.root || process.cwd(), text));
+    roots.push(...policyPathVariants(resolvePolicyPath(text, state?.root || process.cwd()), state?.root));
   }
-  return [...new Set(roots.map((root) => realPathIfExists(root)))];
+  return [...new Set(roots)];
 }
 
 function deniedGlobPatternsForState(state) {
@@ -3648,17 +3648,33 @@ function deniedGlobPatternsForState(state) {
     if (text.startsWith('~/')) {
       pattern = path.resolve(homedir(), text.slice(2));
     } else {
-      pattern = path.isAbsolute(text) ? path.resolve(text) : path.resolve(state?.root || process.cwd(), text);
+      pattern = resolvePolicyPath(text, state?.root || process.cwd());
     }
     patterns.push(pattern);
     const canonicalPattern = canonicalGlobPattern(pattern);
     if (canonicalPattern !== pattern) patterns.push(canonicalPattern);
+    const equivalentPattern = workspaceEquivalentGlobPattern(pattern, state?.root);
+    if (equivalentPattern && equivalentPattern !== pattern) patterns.push(equivalentPattern);
   }
   return [...new Set(patterns)];
 }
 
+function workspaceEquivalentGlobPattern(pattern, workspaceRoot) {
+  if (!workspaceRoot) return '';
+  const normalized = resolvePolicyPath(pattern);
+  const pathApi = policyPathApi(normalized);
+  const globIndex = normalized.search(/[*?[]/);
+  if (globIndex < 0) return workspaceEquivalentPath(normalized, workspaceRoot);
+  const fixedPrefix = normalized.slice(0, globIndex);
+  const fixedRoot = /[\\/]$/.test(fixedPrefix) ? fixedPrefix.slice(0, -1) : pathApi.dirname(fixedPrefix);
+  if (!fixedRoot) return '';
+  const suffix = normalized.slice(fixedRoot.length);
+  const equivalentRoot = workspaceEquivalentPath(fixedRoot, workspaceRoot);
+  return equivalentRoot ? `${equivalentRoot}${suffix}` : '';
+}
+
 function canonicalGlobPattern(pattern: string) {
-  const normalized = path.resolve(pattern);
+  const normalized = resolvePolicyPath(pattern);
   const globIndex = normalized.search(/[*?[]/);
   if (globIndex < 0) return realPathIfExists(normalized);
   const fixedPrefix = normalized.slice(0, globIndex);
@@ -3800,10 +3816,22 @@ function realWorkspaceRoot(root) {
 }
 
 function realPathIfExists(filePath) {
+  const resolved = resolvePolicyPath(filePath);
+  if (isWindowsAbsolutePolicyPath(resolved) && process.platform !== 'win32') return resolved;
   try {
-    return realpathSync(path.resolve(filePath));
+    return realpathSync(resolved);
   } catch {
-    return path.resolve(filePath);
+    return resolved;
+  }
+}
+
+function nativeRealPathIfExists(filePath) {
+  const resolved = resolvePolicyPath(filePath);
+  if (isWindowsAbsolutePolicyPath(resolved) && process.platform !== 'win32') return resolved;
+  try {
+    return realpathSync.native(resolved);
+  } catch {
+    return resolved;
   }
 }
 
@@ -4160,11 +4188,11 @@ function normalizePermissionProfile(value) {
 }
 
 function firstPathOutsideWorkspaceWriteRoots(command, state, options = {}) {
-  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   const allowedRoots = shellWorkspaceWriteRoots(state, options);
   for (const raw of shellWritePathCandidates(command)) {
     const candidate = shellCandidateToPath(raw);
-    const resolved = path.resolve(workspaceRoot, candidate);
+    const resolved = resolvePolicyPath(candidate, workspaceRoot);
     if (allowedRoots.some((root) => isPathInsideRoot(resolved, root))) continue;
     return raw;
   }
@@ -4172,20 +4200,20 @@ function firstPathOutsideWorkspaceWriteRoots(command, state, options = {}) {
 }
 
 function firstDeniedShellWritePath(command, state) {
-  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   for (const raw of shellWritePathCandidates(command)) {
     const candidate = shellCandidateToPath(raw);
-    const resolved = path.resolve(workspaceRoot, candidate);
+    const resolved = resolvePolicyPath(candidate, workspaceRoot);
     if (deniedSandboxRuleForPath(resolved, state)) return raw;
   }
   return '';
 }
 
 function firstDeniedShellAccessPath(command, state) {
-  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   for (const raw of shellPathCandidates(command)) {
     const candidate = shellCandidateToPath(raw);
-    const resolved = path.resolve(workspaceRoot, candidate);
+    const resolved = resolvePolicyPath(candidate, workspaceRoot);
     if (deniedSandboxRuleForPath(resolved, state)) return raw;
   }
   return '';
@@ -4241,11 +4269,11 @@ function isShellNonPathToken(value) {
 }
 
 function firstProtectedWorkspaceMetadataShellPath(command, state) {
-  const workspaceRoot = path.resolve(state?.root || process.cwd());
+  const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   const metadataMatches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\.git|\.agents|\.codex)(?:\/[^\s"'`$<>|;&]*)?)/g);
   for (const match of metadataMatches) {
     const raw = match[1];
-    const protectedPath = protectedWorkspaceMetadataPathForPath(path.resolve(workspaceRoot, raw), state?.permissionProfile);
+    const protectedPath = protectedWorkspaceMetadataPathForPath(resolvePolicyPath(raw, workspaceRoot), state?.permissionProfile);
     if (protectedPath) return raw;
   }
   const matches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\/|~\/|\.\.?\/)[^\s"'`$<>|;&]+)/g);
@@ -4255,7 +4283,7 @@ function firstProtectedWorkspaceMetadataShellPath(command, state) {
       ? path.join(process.env.HOME || '', raw.slice(2))
         : raw.startsWith('/')
           ? raw
-          : path.resolve(workspaceRoot, raw);
+          : resolvePolicyPath(raw, workspaceRoot);
     const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, state?.permissionProfile);
     if (protectedPath) return raw;
   }
@@ -4270,9 +4298,56 @@ function shellWorkspaceWriteRoots(state, options = {}) {
   for (const rawRoot of configuredRoots) {
     const text = String(rawRoot || '').trim();
     if (!text) continue;
-    roots.push(path.isAbsolute(text) ? text : path.resolve(state?.root || process.cwd(), text));
+    roots.push(resolvePolicyPath(text, state?.root || process.cwd()));
   }
-  return [...new Set(roots.map((root) => path.resolve(root)))];
+  return [...new Set(roots.map((root) => resolvePolicyPath(root)))];
+}
+
+function policyPathVariants(filePath, workspaceRoot) {
+  const resolved = resolvePolicyPath(filePath);
+  const variants = [
+    resolved,
+    realPathIfExists(resolved),
+    nativeRealPathIfExists(resolved),
+  ];
+  // Windows temp paths can arrive as short names while the workspace store keeps
+  // the canonical root; map an existing configured path back through workspace root.
+  const equivalent = workspaceEquivalentPath(resolved, workspaceRoot);
+  if (equivalent) {
+    variants.push(equivalent, realPathIfExists(equivalent), nativeRealPathIfExists(equivalent));
+  }
+  return [...new Set(variants.map((item) => resolvePolicyPath(item)))];
+}
+
+function workspaceEquivalentPath(filePath, workspaceRoot) {
+  if (!workspaceRoot) return '';
+  const resolved = resolvePolicyPath(filePath);
+  const pathApi = policyPathApi(resolved);
+  const root = realWorkspaceRoot(workspaceRoot);
+  if (sameExistingPath(resolved, root)) return root;
+  const parts = [];
+  let current = resolved;
+  const parsedRoot = pathApi.parse(current).root;
+  while (current && current !== parsedRoot) {
+    const next = pathApi.dirname(current);
+    if (next === current) break;
+    parts.push(pathApi.basename(current));
+    current = next;
+    if (sameExistingPath(current, root)) {
+      return path.join(root, ...parts.reverse());
+    }
+  }
+  return '';
+}
+
+function sameExistingPath(left, right) {
+  try {
+    const leftStat = statSync(left);
+    const rightStat = statSync(right);
+    return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
+  } catch {
+    return normalizePolicyPathKey(left) === normalizePolicyPathKey(right);
+  }
 }
 
 function isPathInsideRoot(filePath, root) {
@@ -4289,8 +4364,29 @@ function shellCandidateToPath(raw) {
 }
 
 function normalizePolicyPath(value) {
-  const normalized = stripWindowsExtendedPathPrefix(path.resolve(String(value || '')));
+  const normalized = stripWindowsExtendedPathPrefix(resolvePolicyPath(String(value || '')));
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function resolvePolicyPath(value, base = process.cwd()) {
+  const text = stripWindowsExtendedPathPrefix(String(value || '').trim());
+  if (!text) return path.resolve(base);
+  if (text.startsWith('~/')) return path.resolve(homedir(), text.slice(2));
+  if (isWindowsAbsolutePolicyPath(text) && !path.isAbsolute(text)) return path.win32.normalize(text);
+  if (isAbsolutePolicyPath(text)) return path.resolve(text);
+  return path.resolve(base, text);
+}
+
+function isAbsolutePolicyPath(value) {
+  return path.isAbsolute(value) || isWindowsAbsolutePolicyPath(value);
+}
+
+function isWindowsAbsolutePolicyPath(value) {
+  return /^(?:[a-z]:[\\/]|\\\\[^\\]+\\[^\\]+)/i.test(String(value || ''));
+}
+
+function policyPathApi(value) {
+  return isWindowsAbsolutePolicyPath(value) && !path.isAbsolute(value) ? path.win32 : path;
 }
 
 function normalizePolicyPathKey(value) {
