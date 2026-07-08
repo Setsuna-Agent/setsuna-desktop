@@ -7821,7 +7821,8 @@ async function appendCompletedExchange(
 }
 
 function nodeEvalHook(script: string): string {
-  return `node -e ${JSON.stringify(script)}`;
+  const encoded = Buffer.from(script, 'utf8').toString('base64');
+  return `${JSON.stringify(process.execPath)} -e ${JSON.stringify(`eval(Buffer.from('${encoded}','base64').toString('utf8'))`)}`;
 }
 
 function hasToolMessage(messages: RuntimeMessage[], toolName: string): boolean {
