@@ -28,7 +28,9 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   });
   // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
   await settleStaleRuntimeTurns(runtime);
-  const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus);
+  const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus, {
+    ptyFactory: options.commandExecPtyFactory,
+  });
   const fsManager = createAppServerFsManager(runtime.appServerNotificationBus);
   const appServerConnections = createAppServerConnectionRegistry();
   const unsubscribeSkillChanges = runtime.skillRegistry.subscribeChanges(() => {

@@ -1,8 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import * as pty from 'node-pty';
-import type { IDisposable, IPty } from 'node-pty';
+import * as nodePty from 'node-pty';
+import type { IDisposable } from 'node-pty';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import { AppServerRpcError } from './errors.js';
 import { hasOwn, numericInput, recordInput, requiredArray, requiredRawString, requiredString } from './input.js';
@@ -16,6 +16,27 @@ type AppServerCommandExecResponse = {
   exitCode: number;
   stdout: string;
   stderr: string;
+};
+
+type AppServerPtySpawnOptions = {
+  cols: number;
+  cwd: string;
+  encoding: 'utf8';
+  env: NodeJS.ProcessEnv;
+  name: string;
+  rows: number;
+};
+
+export type AppServerPtyProcess = {
+  kill(): void;
+  onData(listener: (text: string) => void): IDisposable;
+  onExit(listener: (event: { exitCode: number }) => void): IDisposable;
+  resize(cols: number, rows: number): void;
+  write(data: string): void;
+};
+
+export type AppServerPtyFactory = {
+  spawn(command: string, args: string[], options: AppServerPtySpawnOptions): AppServerPtyProcess;
 };
 
 type AppServerCommandExecParams = {
@@ -87,7 +108,7 @@ type AppServerCommandExecSession = {
   connectionId: string;
   dataDisposable?: IDisposable;
   exitDisposable?: IDisposable;
-  ptyProcess?: IPty;
+  ptyProcess?: AppServerPtyProcess;
   processId: string;
   streamStdin: boolean;
   stdinClosed: boolean;
@@ -101,7 +122,7 @@ type AppServerProcessSession = {
   cwd: string;
   dataDisposable?: IDisposable;
   exitDisposable?: IDisposable;
-  ptyProcess?: IPty;
+  ptyProcess?: AppServerPtyProcess;
   processHandle: string;
   streamStdin: boolean;
   stdinClosed: boolean;
@@ -125,12 +146,33 @@ type AppServerCommandExecOutputBuffer = {
   capReached: boolean;
 };
 
-export function createAppServerCommandExecManager(notificationBus: AppServerNotificationBus): AppServerCommandExecManager {
+type AppServerCommandExecManagerOptions = {
+  ptyFactory?: AppServerPtyFactory;
+};
+
+const nodePtyFactory: AppServerPtyFactory = {
+  spawn: (command, args, options) => {
+    const ptyProcess = nodePty.spawn(command, args, options);
+    return {
+      kill: () => ptyProcess.kill(),
+      onData: (listener) => ptyProcess.onData(listener),
+      onExit: (listener) => ptyProcess.onExit(({ exitCode }) => listener({ exitCode })),
+      resize: (cols, rows) => ptyProcess.resize(cols, rows),
+      write: (data) => ptyProcess.write(data),
+    };
+  },
+};
+
+export function createAppServerCommandExecManager(
+  notificationBus: AppServerNotificationBus,
+  options: AppServerCommandExecManagerOptions = {},
+): AppServerCommandExecManager {
   const sessions = new Map<string, AppServerCommandExecSession>();
   const processSessions = new Map<string, AppServerProcessSession>();
+  const ptyFactory = options.ptyFactory ?? nodePtyFactory;
 
   return {
-    exec: (params, connectionId) => execAppServerCommand(params, appServerConnectionId(connectionId), sessions, notificationBus),
+    exec: (params, connectionId) => execAppServerCommand(params, appServerConnectionId(connectionId), sessions, notificationBus, ptyFactory),
     write: async (params, connectionId) => {
       const normalizedConnectionId = appServerConnectionId(connectionId);
       const input = recordInput(params);
@@ -188,7 +230,7 @@ export function createAppServerCommandExecManager(notificationBus: AppServerNoti
       session.ptyProcess.resize(size.cols, size.rows);
       return {};
     },
-    processSpawn: async (params, connectionId) => spawnAppServerProcess(params, appServerConnectionId(connectionId), processSessions, notificationBus),
+    processSpawn: async (params, connectionId) => spawnAppServerProcess(params, appServerConnectionId(connectionId), processSessions, notificationBus, ptyFactory),
     processWriteStdin: async (params, connectionId) => {
       const normalizedConnectionId = appServerConnectionId(connectionId);
       const input = recordInput(params);
@@ -308,6 +350,7 @@ async function execAppServerCommand(
   connectionId: string,
   sessions: Map<string, AppServerCommandExecSession>,
   notificationBus: AppServerNotificationBus,
+  ptyFactory: AppServerPtyFactory,
 ): Promise<AppServerCommandExecResponse> {
   const params = appServerCommandExecParams(rawParams);
   if (params.command.length === 0) throw new AppServerRpcError(-32600, 'command must not be empty');
@@ -360,9 +403,9 @@ async function execAppServerCommand(
 
     if (params.tty) {
       const terminalSize = appServerTerminalSize(params.size, 'command/exec');
-      let ptyProcess: IPty;
+      let ptyProcess: AppServerPtyProcess;
       try {
-        ptyProcess = pty.spawn(spawnSpec.command, spawnSpec.args, {
+        ptyProcess = ptyFactory.spawn(spawnSpec.command, spawnSpec.args, {
           cols: terminalSize.cols,
           cwd,
           encoding: 'utf8',
@@ -480,6 +523,7 @@ async function spawnAppServerProcess(
   connectionId: string,
   sessions: Map<string, AppServerProcessSession>,
   notificationBus: AppServerNotificationBus,
+  ptyFactory: AppServerPtyFactory,
 ): Promise<Record<string, never>> {
   const params = appServerProcessSpawnParams(rawParams);
   if (params.command.length === 0) throw new AppServerRpcError(-32600, 'command must not be empty');
@@ -504,9 +548,9 @@ async function spawnAppServerProcess(
 
   if (params.tty) {
     const terminalSize = appServerTerminalSize(params.size, 'process/spawn');
-    let ptyProcess: IPty;
+    let ptyProcess: AppServerPtyProcess;
     try {
-      ptyProcess = pty.spawn(program, args, {
+      ptyProcess = ptyFactory.spawn(program, args, {
         cols: terminalSize.cols,
         cwd: params.cwd,
         encoding: 'utf8',
@@ -966,7 +1010,7 @@ function strictBase64Decode(value: unknown, name: string): Buffer {
   return decoded;
 }
 
-function writePtyEof(ptyProcess: IPty): void {
+function writePtyEof(ptyProcess: AppServerPtyProcess): void {
   ptyProcess.write(process.platform === 'win32' ? '\x1a\r' : '\x04');
 }
 

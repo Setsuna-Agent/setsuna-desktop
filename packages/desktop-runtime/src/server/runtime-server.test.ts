@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { appServerCommandSandboxProfile } from './app-server/command-exec.js';
+import type { AppServerPtyFactory } from './app-server/command-exec.js';
 import { createRuntimeServer, type RuntimeServer } from './runtime-server.js';
 
 describe('runtime server', () => {
@@ -3883,7 +3884,13 @@ describe('runtime server', () => {
   });
 
   async function startRuntimeServer(dataDir: string): Promise<void> {
-    server = await createRuntimeServer({ dataDir, token, version: 'test' });
+    server = await createRuntimeServer({
+      dataDir,
+      token,
+      version: 'test',
+      // Windows CI can lack an attachable ConPTY console; keep these protocol tests off real node-pty there.
+      commandExecPtyFactory: process.platform === 'win32' ? createTestAppServerPtyFactory() : undefined,
+    });
     await server.listen(0);
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Expected TCP address');
@@ -4343,6 +4350,54 @@ type AppServerStreamNotification = {
   method?: string;
   params?: Record<string, any>;
 };
+
+class TestAppServerPtyProcess {
+  private readonly dataListeners = new Set<(text: string) => void>();
+  private readonly exitListeners = new Set<(event: { exitCode: number }) => void>();
+  private exited = false;
+
+  constructor(private readonly initialOutput: string) {
+    setImmediate(() => {
+      if (!this.exited) this.emitData(this.initialOutput);
+    });
+  }
+
+  kill(): void {
+    if (this.exited) return;
+    this.exited = true;
+    setImmediate(() => {
+      for (const listener of this.exitListeners) listener({ exitCode: 0 });
+    });
+  }
+
+  onData(listener: (text: string) => void): { dispose(): void } {
+    this.dataListeners.add(listener);
+    return { dispose: () => this.dataListeners.delete(listener) };
+  }
+
+  onExit(listener: (event: { exitCode: number }) => void): { dispose(): void } {
+    this.exitListeners.add(listener);
+    return { dispose: () => this.exitListeners.delete(listener) };
+  }
+
+  resize(_cols: number, _rows: number): void {
+    // The AppServer tests assert that resize reaches the PTY boundary without needing a real terminal.
+  }
+
+  write(_data: string): void {
+    // The fake PTY only needs to support lifecycle and output notifications for these protocol tests.
+  }
+
+  private emitData(text: string): void {
+    for (const listener of this.dataListeners) listener(text);
+  }
+}
+
+function createTestAppServerPtyFactory(): AppServerPtyFactory {
+  return {
+    spawn: () => new TestAppServerPtyProcess('tty:true\nready:test-pty\n'),
+  };
+}
 
 function persistentPtyScript(label: string): string {
   return [
