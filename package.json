@@ -1,6 +1,6 @@
 {
   "name": "setsuna-desktop",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Local-first desktop runtime and workbench for Setsuna Agent workflows.",
   "author": {
     "name": "Setsuna Agent",
