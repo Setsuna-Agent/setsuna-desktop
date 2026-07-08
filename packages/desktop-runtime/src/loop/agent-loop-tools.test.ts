@@ -4366,6 +4366,7 @@ describe('agent loop tools', () => {
 
     const started = await loop.startTurn(thread.id, { input: 'keep going until cancelled' });
     await waitForModelRequest(modelClient);
+    await modelClient.waitUntilAbortListenerReady();
 
     await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
     const events = await waitForTurnCancelled(threadStore, thread.id);
@@ -4408,6 +4409,7 @@ describe('agent loop tools', () => {
 
     const started = await loop.startTurn(thread.id, { input: 'start and hang' });
     await waitForModelRequest(modelClient);
+    await modelClient.waitUntilAbortListenerReady();
 
     await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
 
@@ -7267,6 +7269,10 @@ class RepeatedHostNetworkShellModelClient implements ModelClient {
 class CancellableModelClient implements ModelClient {
   requests: ModelRequest[] = [];
   aborted = false;
+  private abortListenerReadyResolve: () => void = () => undefined;
+  private readonly abortListenerReady = new Promise<void>((resolve) => {
+    this.abortListenerReadyResolve = resolve;
+  });
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
@@ -7274,11 +7280,13 @@ class CancellableModelClient implements ModelClient {
     await new Promise<void>((resolve) => {
       const signal = request.signal;
       if (!signal) {
+        this.abortListenerReadyResolve();
         resolve();
         return;
       }
       if (signal.aborted) {
         this.aborted = true;
+        this.abortListenerReadyResolve();
         resolve();
         return;
       }
@@ -7290,16 +7298,25 @@ class CancellableModelClient implements ModelClient {
         },
         { once: true },
       );
+      this.abortListenerReadyResolve();
     });
     request.signal?.throwIfAborted();
     yield { type: 'text_delta', text: ' should not appear' };
     yield { type: 'done', finishReason: 'stop' };
+  }
+
+  async waitUntilAbortListenerReady(): Promise<void> {
+    await this.abortListenerReady;
   }
 }
 
 class NonCooperativeCancellationModelClient implements ModelClient {
   requests: ModelRequest[] = [];
   aborted = false;
+  private abortListenerReadyResolve: () => void = () => undefined;
+  private readonly abortListenerReady = new Promise<void>((resolve) => {
+    this.abortListenerReadyResolve = resolve;
+  });
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
@@ -7307,7 +7324,12 @@ class NonCooperativeCancellationModelClient implements ModelClient {
     request.signal?.addEventListener('abort', () => {
       this.aborted = true;
     }, { once: true });
+    this.abortListenerReadyResolve();
     await new Promise<never>(() => undefined);
+  }
+
+  async waitUntilAbortListenerReady(): Promise<void> {
+    await this.abortListenerReady;
   }
 }
 
