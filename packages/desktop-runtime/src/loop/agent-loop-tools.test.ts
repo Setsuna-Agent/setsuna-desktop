@@ -1,3 +1,5 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type {
@@ -7826,9 +7828,14 @@ async function appendCompletedExchange(
   });
 }
 
+const hookScriptDir = mkdtempSync(path.join(tmpdir(), 'setsuna-agent-loop-hook-'));
+let hookScriptCounter = 0;
+
 function nodeEvalHook(script: string): string {
-  const encoded = Buffer.from(script, 'utf8').toString('base64');
-  return `node -e ${JSON.stringify(`eval(Buffer.from('${encoded}','base64').toString('utf8'))`)}`;
+  const scriptPath = path.join(hookScriptDir, `hook-${hookScriptCounter}.cjs`);
+  hookScriptCounter += 1;
+  writeFileSync(scriptPath, script, 'utf8');
+  return `node ${JSON.stringify(scriptPath)}`;
 }
 
 function hasToolMessage(messages: RuntimeMessage[], toolName: string): boolean {
