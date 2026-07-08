@@ -3296,7 +3296,7 @@ describe('agent loop tools', () => {
         ]),
       },
     });
-    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes(expectedGrantedRoot))).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && contentIncludesPath(message.content, expectedGrantedRoot))).toBe(true);
     expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('"scope":"turn"'))).toBe(true);
   });
 
@@ -3372,8 +3372,12 @@ describe('agent loop tools', () => {
     expect(toolHost.contexts[0].sandboxWorkspaceWrite?.writableRoots).toEqual([requestedRoot]);
     expect(toolHost.contexts[0].sandboxWorkspaceWrite?.readableRoots).toEqual([requestedRoot]);
     expect(toolHost.contexts[0].sandboxWorkspaceWrite?.networkAccess).toBe(true);
-    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes(requestedRoot))).toBe(true);
-    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes(environmentCwd) && !message.content.includes(requestedRoot))).toBe(false);
+    expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && contentIncludesPath(message.content, requestedRoot))).toBe(true);
+    expect(modelClient.requests[1].messages.some((message) =>
+      message.role === 'tool'
+      && contentIncludesPath(message.content, environmentCwd)
+      && !contentIncludesPath(message.content, requestedRoot)
+    )).toBe(false);
   });
 
   it('enables strict auto review for later tools in the same request_permissions turn', async () => {
@@ -3469,7 +3473,7 @@ describe('agent loop tools', () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Session request permissions loop', projectId: 'project_1' });
-    const grantedRoot = '/tmp/setsuna-request-permissions-session';
+    const grantedRoot = path.join(await mkDataDir(), 'setsuna-request-permissions-session');
     const modelClient = new SessionRequestPermissionsModelClient(grantedRoot);
     const toolHost = new RequestPermissionsExecToolHost();
     const approvalGate = new InMemoryApprovalGate(systemClock, ids);
@@ -4388,6 +4392,7 @@ describe('agent loop tools', () => {
       && event.payload.message.content.includes('<turn_aborted>'));
     const cancelledIndex = events.findIndex((event) => event.type === 'turn.cancelled' && event.turnId === started.turnId);
 
+    await waitForModelAbort(modelClient);
     expect(modelClient.aborted).toBe(true);
     expect(events.some((event) => event.type === 'turn.cancelled' && event.turnId === started.turnId)).toBe(true);
     expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
@@ -4425,6 +4430,7 @@ describe('agent loop tools', () => {
 
     const events = await threadStore.listEvents(thread.id, 0);
     const saved = await threadStore.getThread(thread.id);
+    await waitForModelAbort(modelClient);
     expect(modelClient.aborted).toBe(true);
     expect(events.filter((event) => event.type === 'turn.cancelled' && event.turnId === started.turnId)).toHaveLength(1);
     expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
@@ -7822,11 +7828,15 @@ async function appendCompletedExchange(
 
 function nodeEvalHook(script: string): string {
   const encoded = Buffer.from(script, 'utf8').toString('base64');
-  return `${JSON.stringify(process.execPath)} -e ${JSON.stringify(`eval(Buffer.from('${encoded}','base64').toString('utf8'))`)}`;
+  return `node -e ${JSON.stringify(`eval(Buffer.from('${encoded}','base64').toString('utf8'))`)}`;
 }
 
 function hasToolMessage(messages: RuntimeMessage[], toolName: string): boolean {
   return messages.some((message) => message.role === 'tool' && message.toolName === toolName);
+}
+
+function contentIncludesPath(content: string, filePath: string): boolean {
+  return content.includes(filePath) || content.includes(JSON.stringify(filePath).slice(1, -1));
 }
 
 function childThreadIdFromCollaborationToolMessages(messages: RuntimeMessage[]): string {
@@ -8332,6 +8342,14 @@ async function waitForApprovalToolRun(
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`Timed out waiting for approval tool run ${approvalId}`);
+}
+
+async function waitForModelAbort(modelClient: { aborted: boolean }) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (modelClient.aborted) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for model abort');
 }
 
 async function waitForModelRequest(modelClient: { requests: ModelRequest[] }) {
