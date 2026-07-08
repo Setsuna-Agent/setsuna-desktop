@@ -2556,6 +2556,9 @@ describe('runtime server', () => {
       method: 'POST',
       body: JSON.stringify({ title: 'AppServer SWE context compaction' }),
     });
+    // Keep the setup turn below the initial auto-compact threshold, then lower the
+    // budget before the follow-up so the compaction event belongs to compactingTurn.
+    await configureSmokeProviderContextWindow(400_000);
     const oversizedHistory = 'older context '.repeat(90_000);
     const initialTurn = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
       method: 'POST',
@@ -2563,6 +2566,8 @@ describe('runtime server', () => {
     });
     await expect(readRuntimeEvent(thread.id, 0, 'turn.completed', { timeoutMs: 10_000 })).resolves.toBe(true);
     const beforeCompaction = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`) as RuntimeThread;
+    expect(beforeCompaction.messages.some((message) => message.contextCompaction)).toBe(false);
+    await configureSmokeProviderContextWindow(256_000);
     const compactingTurn = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
       method: 'POST',
       body: JSON.stringify({ input: 'Continue after compaction.' }),
@@ -4043,6 +4048,37 @@ describe('runtime server', () => {
                 thinkingEnabled: false,
                 thinkingEfforts: [],
                 ...modelOverrides,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+  }
+
+  async function configureSmokeProviderContextWindow(contextWindowTokens: number) {
+    await runtimeFetch('/v1/config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        activeProviderId: 'local-test',
+        providers: [
+          {
+            id: 'local-test',
+            name: 'Local test provider',
+            provider: 'openai-compatible',
+            baseUrl: 'http://127.0.0.1:11434/v1',
+            enabled: true,
+            models: [
+              {
+                id: 'local-runtime-smoke',
+                name: 'Local runtime smoke',
+                code: 'local-runtime-smoke',
+                enabled: true,
+                contextWindowTokens,
+                maxOutputTokens: 1000,
+                thinkingEnabled: false,
+                thinkingEfforts: [],
+                supportsImages: false,
               },
             ],
           },
