@@ -12,9 +12,15 @@ type PendingDecision = {
   reject: (error: Error) => void;
 };
 
+type PendingApprovalWaiter = {
+  resolve: (approval: RuntimeApprovalRequest) => void;
+  reject: (error: Error) => void;
+};
+
 export class InMemoryApprovalGate implements ApprovalGate {
   private readonly approvals = new Map<string, RuntimeApprovalRequest>();
   private readonly pending = new Map<string, PendingDecision>();
+  private readonly pendingApprovalWaiters = new Set<PendingApprovalWaiter>();
   private readonly resolvedAnswers = new Map<string, AnswerRuntimeApprovalInput>();
 
   constructor(
@@ -30,7 +36,16 @@ export class InMemoryApprovalGate implements ApprovalGate {
       ...input,
     };
     this.approvals.set(approval.id, approval);
+    this.resolvePendingApprovalWaiters(approval);
     return approval;
+  }
+
+  waitForPendingApproval(): Promise<RuntimeApprovalRequest> {
+    const pending = this.pendingApproval();
+    if (pending) return Promise.resolve(pending);
+    return new Promise((resolve, reject) => {
+      this.pendingApprovalWaiters.add({ resolve, reject });
+    });
   }
 
   async waitForDecision(approvalId: string): Promise<AnswerRuntimeApprovalInput> {
@@ -76,5 +91,20 @@ export class InMemoryApprovalGate implements ApprovalGate {
   rejectPending(error: Error): void {
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
+    for (const waiter of this.pendingApprovalWaiters) waiter.reject(error);
+    this.pendingApprovalWaiters.clear();
+  }
+
+  private pendingApproval(): RuntimeApprovalRequest | undefined {
+    return [...this.approvals.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .find((approval) => approval.status === 'pending');
+  }
+
+  private resolvePendingApprovalWaiters(approval: RuntimeApprovalRequest): void {
+    if (!this.pendingApprovalWaiters.size) return;
+    const waiters = [...this.pendingApprovalWaiters];
+    this.pendingApprovalWaiters.clear();
+    for (const waiter of waiters) waiter.resolve(approval);
   }
 }

@@ -8324,13 +8324,7 @@ async function mkDataDir(): Promise<string> {
 }
 
 async function waitForPendingApproval(approvalGate: InMemoryApprovalGate) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const approvals = await approvalGate.listApprovals();
-    const pending = approvals.approvals.find((approval) => approval.status === 'pending');
-    if (pending) return pending;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('Timed out waiting for approval');
+  return approvalGate.waitForPendingApproval();
 }
 
 async function waitForApprovalToolRun(
