@@ -11,7 +11,7 @@ import {
   type ToolSet,
   type UserContent,
 } from 'ai';
-import type { ModelRequest, ModelStreamEvent, RuntimeMessage, RuntimeStreamItem, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { ModelRequest, ModelStreamEvent, RuntimeMessage, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {

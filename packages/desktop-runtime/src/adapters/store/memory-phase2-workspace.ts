@@ -67,8 +67,6 @@ async function removeWorkspaceDiff(root: string): Promise<void> {
   await rm(path.join(root, PHASE2_WORKSPACE_DIFF_FILE), { force: true });
 }
 
-async function git(cwd: string, args: string): Promise<string>;
-async function git(cwd: string, args: string[]): Promise<string>;
 async function git(cwd: string, args: string | string[]): Promise<string> {
   const list = Array.isArray(args) ? args : [args];
   const { stdout } = await execFileAsync('git', list, {

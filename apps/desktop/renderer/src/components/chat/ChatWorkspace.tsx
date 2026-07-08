@@ -420,7 +420,7 @@ export function ChatWorkspace({
                         item={item}
                         onAnswerApproval={onAnswerApproval}
                         onCancelEdit={cancelEditingMessage}
-                        onDiscardFileChanges={onDiscardFileChanges}
+                        onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
                         onEditDraftChange={setEditingDraft}
                         onOpenFileReview={onOpenFileReview}
                         onPlanDecision={onPlanDecision}
@@ -1385,7 +1385,11 @@ function AssistantRunContent({
       })}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
-          <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
+          <FileChangesSummaryCard
+            summary={fileChangeSummary}
+            onDiscardChanges={onDiscardFileChanges}
+            onOpenReview={onOpenFileReview}
+          />
         </div>
       ) : null}
     </div>
@@ -2051,7 +2055,6 @@ const markdownStyle = {
   fontWeight: 400,
   lineHeight: 1.72,
   textRendering: 'optimizeLegibility',
-  WebkitFontSmoothing: 'antialiased',
 } as CSSProperties;
 
 const codeLanguageAliases: Record<string, string> = {

@@ -1,4 +1,4 @@
-import type { RuntimeHookEventName, RuntimeHookInput } from '@setsuna-desktop/contracts';
+import type { RuntimeHookInput } from '@setsuna-desktop/contracts';
 
 export type HookPresetCategory = 'security' | 'review' | 'context' | 'workflow';
 

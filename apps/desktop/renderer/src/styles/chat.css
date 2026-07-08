@@ -1942,9 +1942,9 @@
 
 .chat-file-changes__title {
   color: var(--app-text);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
 }
 
 .chat-file-changes__actions {

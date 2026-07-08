@@ -4305,18 +4305,6 @@ function findJsonFilePathValue(raw) {
   return pathMatch ? { match: pathMatch, usedPathAlias: true } : null;
 }
 
-function findJsonStringValues(raw, key, limit = 40) {
-  const matcher = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*"`, 'g');
-  const values = [];
-  let match;
-  while ((match = matcher.exec(raw)) && values.length < limit) {
-    const value = readJsonStringAt(raw, match.index + match[0].length - 1);
-    if (value) values.push(value);
-    matcher.lastIndex = Math.max(matcher.lastIndex, match.index + match[0].length);
-  }
-  return values;
-}
-
 function readJsonStringAt(raw, quoteIndex) {
   let value = '';
   let escaped = false;

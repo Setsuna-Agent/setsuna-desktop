@@ -478,6 +478,7 @@ function normalizeCommitMessage(value: string | null | undefined): string {
 }
 
 function stripInvisibleCommitMessageChars(value: string): string {
+  // eslint-disable-next-line no-control-regex -- Commit messages can include hidden control characters copied from model output.
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/gu, '');
 }
 

@@ -4660,16 +4660,6 @@ function passiveMemoryExtractionFromModelText(value: string, projectId: string |
   };
 }
 
-/**
- * 从模型输出中解析并去重被动记忆候选。
- *
- * @param value 模型原始输出文本。
- * @param projectId 当前线程项目 ID，用于校正 project scope。
- */
-function passiveMemoryCandidatesFromModelText(value: string, projectId: string | undefined): PassiveMemoryCandidate[] {
-  return passiveMemoryExtractionFromModelText(value, projectId).candidates;
-}
-
 function passiveMemoryStage1FromModelText(value: string, parsed: Record<string, unknown> | null, candidates: PassiveMemoryCandidate[]): PassiveMemoryStage1Result | null {
   const text = stripMarkdownFence(value).trim();
   if (!text) return { status: 'succeeded_no_output' };

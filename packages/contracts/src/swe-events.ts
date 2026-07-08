@@ -1424,13 +1424,6 @@ function messageInProgress(message: RuntimeMessage): boolean {
   return message.status === 'streaming' || Boolean(message.toolRuns?.some((run) => run.status === 'running' || run.status === 'pending_approval'));
 }
 
-function compareRuntimeMessageEntries(
-  left: { index: number; message: RuntimeMessage },
-  right: { index: number; message: RuntimeMessage },
-): number {
-  return compareNullableMs(toEpochMs(left.message.createdAt), toEpochMs(right.message.createdAt)) || left.index - right.index;
-}
-
 function compareRuntimeSweTurnEntries(left: RuntimeSweTurnEntry, right: RuntimeSweTurnEntry): number {
   return compareNullableMs(toEpochMs(left.createdAt), toEpochMs(right.createdAt)) || left.index - right.index;
 }
