@@ -1,6 +1,6 @@
 {
   "name": "setsuna-desktop",
-  "version": "0.1.4.fix1",
+  "version": "0.1.4-fix.1",
   "description": "Local-first desktop runtime and workbench for Setsuna Agent workflows.",
   "author": {
     "name": "Setsuna Agent",
@@ -21,16 +21,17 @@
     "build:renderer": "vite build",
     "clean": "node scripts/clean.mjs",
     "lint": "eslint . --max-warnings=0",
-    "package": "pnpm build && electron-builder --dir",
-    "package:linux:x64": "pnpm build && electron-builder --linux --x64 --publish never",
-    "package:mac:arm64": "pnpm build && electron-builder --mac --arm64 --publish never",
-    "package:mac:x64": "pnpm build && electron-builder --mac --x64 --publish never",
-    "package:win:x64": "pnpm build && electron-builder --win --x64 --publish never --config.npmRebuild=false",
+    "package": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --dir",
+    "package:linux:x64": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --linux --x64 --publish never",
+    "package:mac:arm64": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --mac --arm64 --publish never",
+    "package:mac:x64": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --mac --x64 --publish never",
+    "package:win:x64": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --win --x64 --publish never --config.npmRebuild=false",
     "postinstall": "node scripts/prepare-node-pty.mjs",
-    "release:dry-run": "pnpm build && node scripts/release-dry-run.mjs",
+    "release:dry-run": "node scripts/validate-release-version.mjs && pnpm build && node scripts/release-dry-run.mjs",
     "start": "electron .",
     "test": "vitest run",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "validate:release-version": "node scripts/validate-release-version.mjs"
   },
   "dependencies": {
     "@ant-design/x": "^2.5.0",

@@ -15,6 +15,7 @@ describe('desktop update metadata', () => {
     expect(compareVersions('0.1.0', 'v0.1.0')).toBe(0);
     expect(isNewerVersion('v0.2.0', '0.1.9')).toBe(true);
     expect(isNewerVersion('v0.1.0', '0.1.0')).toBe(false);
+    expect(isNewerVersion('v0.1.4-fix.1', '0.1.4')).toBe(true);
   });
 
   it('selects the preferred installer for the current platform and architecture', () => {

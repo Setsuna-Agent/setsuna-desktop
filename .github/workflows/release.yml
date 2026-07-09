@@ -30,8 +30,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-release:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate package version and tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+        run: node scripts/validate-release-version.mjs
+
   package:
     name: Package ${{ matrix.label }}
+    needs: validate-release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
