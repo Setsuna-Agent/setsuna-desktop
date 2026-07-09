@@ -25,6 +25,24 @@ jobs:
       - run: node scripts/configure-node-gyp-python.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test:release
       - run: pnpm build
       - run: pnpm release:dry-run
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 7.33.7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: node scripts/configure-node-gyp-python.mjs
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration

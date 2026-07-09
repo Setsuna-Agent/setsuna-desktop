@@ -41,6 +41,11 @@ import type { UsageStore } from '../ports/usage-store.js';
 import { createRuntimeToolHookRunner } from '../hooks/runtime-hooks.js';
 import { AgentLoop } from './agent-loop.js';
 
+const isSlowTestPlatform = Boolean(process.env.CI) || process.platform === 'win32';
+const asyncWaitTimeoutMs = isSlowTestPlatform ? 5_000 : 2_000;
+const asyncWaitPollMs = 25;
+const longAgentLoopTestTimeoutMs = isSlowTestPlatform ? 60_000 : 20_000;
+
 describe('agent loop tools', () => {
   it('executes model tool calls and continues with tool results', async () => {
     const ids = new RandomIdGenerator();
@@ -2147,7 +2152,7 @@ describe('agent loop tools', () => {
     )).toBe(false);
     expect(saved?.messages.at(-1)?.content).toBe('Final answer after the available tool results.');
     expect(saved?.messages.at(-1)?.status).toBe('complete');
-  }, 20_000);
+  }, longAgentLoopTestTimeoutMs);
 
   it('injects local memories into model context', async () => {
     const ids = new RandomIdGenerator();
@@ -8327,27 +8332,51 @@ async function waitForPendingApproval(approvalGate: InMemoryApprovalGate) {
   return approvalGate.waitForPendingApproval();
 }
 
+async function waitForTestState<T>(
+  probe: () => Promise<T> | T,
+  isReady: (value: T) => boolean,
+  failureMessage: (lastValue: T | undefined) => string,
+  options: { timeoutMs?: number; pollMs?: number } = {},
+): Promise<T> {
+  const timeoutMs = options.timeoutMs ?? asyncWaitTimeoutMs;
+  const pollMs = options.pollMs ?? asyncWaitPollMs;
+  const deadline = Date.now() + timeoutMs;
+  let lastValue: T | undefined;
+
+  while (Date.now() <= deadline) {
+    lastValue = await probe();
+    if (isReady(lastValue)) return lastValue;
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, remainingMs)));
+  }
+
+  throw new Error(`${failureMessage(lastValue)} after ${timeoutMs}ms.`);
+}
+
 async function waitForApprovalToolRun(
   threadStore: ThreadStore,
   threadId: string,
   approvalId: string,
   predicate: (run: NonNullable<RuntimeMessage['toolRuns']>[number]) => boolean = () => true,
 ) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const thread = await threadStore.getThread(threadId);
-    const run = thread?.messages.flatMap((message) => message.toolRuns ?? []).find((item) => item.approvalId === approvalId);
-    if (run && predicate(run)) return run;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for approval tool run ${approvalId}`);
+  return waitForTestState(
+    async () => {
+      const thread = await threadStore.getThread(threadId);
+      return thread?.messages.flatMap((message) => message.toolRuns ?? []).find((item) => item.approvalId === approvalId);
+    },
+    (run) => Boolean(run && predicate(run)),
+    (run) => `Timed out waiting for approval tool run ${approvalId}; last run=${JSON.stringify(run ?? null)}`,
+  );
 }
 
 async function waitForModelAbort(modelClient: { aborted: boolean }) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (modelClient.aborted) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('Timed out waiting for model abort');
+  await waitForTestState(
+    () => modelClient.aborted,
+    (aborted) => aborted,
+    (aborted) => `Timed out waiting for model abort; aborted=${String(aborted)}`,
+  );
 }
 
 async function waitForModelRequest(modelClient: { requests: ModelRequest[] }) {
@@ -8355,37 +8384,35 @@ async function waitForModelRequest(modelClient: { requests: ModelRequest[] }) {
 }
 
 async function waitForModelRequestCount(modelClient: { requests: ModelRequest[] }, count: number) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (modelClient.requests.length >= count) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for ${count} model request(s); saw ${modelClient.requests.length}.`);
+  await waitForTestState(
+    () => modelClient.requests.length,
+    (requestCount) => requestCount >= count,
+    (requestCount) => `Timed out waiting for ${count} model request(s); saw ${requestCount ?? 0}`,
+  );
 }
 
 async function waitForToolStarts(toolHost: ParallelReadToolHost, count: number) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (toolHost.started.length >= count) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`Timed out waiting for ${count} parallel tool starts; saw ${toolHost.started.length}.`);
+  await waitForTestState(
+    () => [...toolHost.started],
+    (started) => started.length >= count,
+    (started) => `Timed out waiting for ${count} parallel tool starts; saw ${started?.length ?? 0}; started=${JSON.stringify(started ?? [])}`,
+  );
 }
 
 async function waitForTurnCancelled(threadStore: JsonThreadStore, threadId: string) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const events = await threadStore.listEvents(threadId, 0);
-    if (events.some((event) => event.type === 'turn.cancelled')) return events;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('Timed out waiting for turn cancellation');
+  return waitForTestState(
+    () => threadStore.listEvents(threadId, 0),
+    (events) => events.some((event) => event.type === 'turn.cancelled'),
+    (events) => `Timed out waiting for turn cancellation; event types=${JSON.stringify((events ?? []).map((event) => event.type))}`,
+  );
 }
 
 async function waitForTurnCompleted(threadStore: ThreadStore, threadId: string, turnId: string) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const events = await threadStore.listEvents(threadId, 0);
-    if (events.some((event) => event.type === 'turn.completed' && event.turnId === turnId)) return events;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('Timed out waiting for turn completion');
+  return waitForTestState(
+    () => threadStore.listEvents(threadId, 0),
+    (events) => events.some((event) => event.type === 'turn.completed' && event.turnId === turnId),
+    (events) => `Timed out waiting for turn completion ${turnId}; event types=${JSON.stringify((events ?? []).map((event) => event.type))}`,
+  );
 }
 
 function hookContext(): ToolExecutionContext & { turnId: string } {

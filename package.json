@@ -29,7 +29,11 @@
     "postinstall": "node scripts/prepare-node-pty.mjs",
     "release:dry-run": "node scripts/validate-release-version.mjs && pnpm build && node scripts/release-dry-run.mjs",
     "start": "electron .",
-    "test": "vitest run",
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:all": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:release": "vitest run --config vitest.release.config.ts",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
     "typecheck": "tsc -b --pretty false",
     "validate:release-version": "node scripts/validate-release-version.mjs"
   },

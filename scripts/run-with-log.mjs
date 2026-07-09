@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -35,8 +35,25 @@ function envNumber(name) {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+function formatCommand() {
+  return [command, ...args].join(' ');
+}
+
+function terminateChildTree() {
+  if (process.platform === 'win32' && child.pid) {
+    spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
+    return;
+  }
+
+  child.kill('SIGTERM');
+  setTimeout(() => child.kill('SIGKILL'), 10_000).unref?.();
+}
+
 const heartbeatSeconds = envNumber('RUN_WITH_LOG_HEARTBEAT_SECONDS');
 const timeoutMinutes = envNumber('RUN_WITH_LOG_TIMEOUT_MINUTES');
+
+writeProgress(`starting; command=${formatCommand()} cwd=${process.cwd()} platform=${process.platform} node=${process.version}`);
+
 const child = spawn(command, args, {
   env: process.env,
   shell: process.platform === 'win32',
@@ -50,7 +67,7 @@ const heartbeatTimer = heartbeatSeconds
     const heartbeatMs = heartbeatSeconds * 1000;
     if (quietMs >= heartbeatMs) {
       writeProgress(
-        `still running; elapsed=${formatDuration(now - startedAt)} quiet=${formatDuration(quietMs)} command=${[command, ...args].join(' ')}`,
+        `still running; elapsed=${formatDuration(now - startedAt)} quiet=${formatDuration(quietMs)} command=${formatCommand()}`,
       );
       lastOutputAt = now;
     }
@@ -62,9 +79,8 @@ heartbeatTimer?.unref?.();
 const timeoutTimer = timeoutMinutes
   ? setTimeout(() => {
     timedOut = true;
-    writeProgress(`timeout after ${formatDuration(timeoutMinutes * 60 * 1000)}; terminating command=${[command, ...args].join(' ')}`);
-    child.kill('SIGTERM');
-    setTimeout(() => child.kill('SIGKILL'), 10_000).unref?.();
+    writeProgress(`timeout after ${formatDuration(timeoutMinutes * 60 * 1000)}; terminating command=${formatCommand()}`);
+    terminateChildTree();
   }, timeoutMinutes * 60 * 1000)
   : null;
 
@@ -93,6 +109,7 @@ const exitCode = await new Promise((resolve) => {
 
 if (heartbeatTimer) clearInterval(heartbeatTimer);
 if (timeoutTimer) clearTimeout(timeoutTimer);
+writeProgress(`finished; exitCode=${Number(exitCode)} timedOut=${timedOut} elapsed=${formatDuration(Date.now() - startedAt)} command=${formatCommand()}`);
 await new Promise((resolve) => logStream.end(resolve));
 
 process.exit(timedOut ? 124 : Number(exitCode));

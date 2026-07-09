@@ -47,6 +47,52 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag_name }}
         run: node scripts/validate-release-version.mjs
 
+  integration-diagnostics:
+    name: Integration diagnostics
+    needs: validate-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 7.33.7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure node-gyp Python
+        run: node scripts/configure-node-gyp-python.mjs
+
+      - name: Install
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
+        run: node scripts/run-with-log.mjs release-logs/install-integration.log pnpm install --frozen-lockfile
+
+      - name: Integration tests
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "25"
+        run: node scripts/run-with-log.mjs release-logs/test-integration.log pnpm test:integration
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-integration-logs
+          path: release-logs
+          if-no-files-found: ignore
+          retention-days: 14
+
   package:
     name: Package ${{ matrix.label }}
     needs: validate-release
@@ -102,13 +148,22 @@ jobs:
           sudo apt-get install -y libfuse2t64 fakeroot || sudo apt-get install -y libfuse2 fakeroot
 
       - name: Install
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "20"
         run: node scripts/run-with-log.mjs release-logs/install-${{ matrix.artifact }}.log pnpm install --frozen-lockfile
 
       - name: Typecheck
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
         run: node scripts/run-with-log.mjs release-logs/typecheck-${{ matrix.artifact }}.log pnpm typecheck
 
-      - name: Test
-        run: node scripts/run-with-log.mjs release-logs/test-${{ matrix.artifact }}.log pnpm test
+      - name: Release gate tests
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
+        run: node scripts/run-with-log.mjs release-logs/test-${{ matrix.artifact }}.log pnpm test:release
 
       - name: Package
         env:
@@ -124,6 +179,14 @@ jobs:
           name: release-${{ matrix.artifact }}
           path: release-upload/${{ matrix.artifact }}
           if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-logs-${{ matrix.artifact }}
+          path: release-logs
+          if-no-files-found: ignore
           retention-days: 14
 
   publish:

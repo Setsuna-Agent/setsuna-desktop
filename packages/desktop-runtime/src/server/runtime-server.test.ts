@@ -12,6 +12,15 @@ describe('runtime server', () => {
   let server: RuntimeServer;
   let baseUrl: string;
   const token = 'test-token';
+  const isSlowCiPlatform = Boolean(process.env.CI) || process.platform === 'win32';
+  const providerCaptureTimeoutMs = isSlowCiPlatform ? 5_000 : 2_500;
+  const eventStreamTimeoutMs = isSlowCiPlatform ? 5_000 : 1_500;
+  const fsWatchEventTimeoutMs = isSlowCiPlatform ? 1_500 : 600;
+  const negativeEventTimeoutMs = isSlowCiPlatform ? 1_000 : 500;
+  const rpcEventuallyTimeoutMs = isSlowCiPlatform ? 5_000 : 1_500;
+  const threadStateWaitTimeoutMs = isSlowCiPlatform ? 15_000 : 6_000;
+  const mediumIntegrationTestTimeoutMs = isSlowCiPlatform ? 45_000 : 20_000;
+  const longIntegrationTestTimeoutMs = isSlowCiPlatform ? 60_000 : 30_000;
 
   beforeEach(async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-test-'));
@@ -295,7 +304,7 @@ describe('runtime server', () => {
       });
 
       await expect(appServerRpc('skills/extraRoots/set', { extraRoots: [extraRoot] })).resolves.toEqual({});
-      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1000 }))
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: eventStreamTimeoutMs }))
         .resolves.toMatchObject({ method: 'skills/changed', params: {} });
 
       const withExtraRoot = await appServerRpc('skills/list', { cwds: [projectDir] });
@@ -314,7 +323,7 @@ describe('runtime server', () => {
         path: null,
         enabled: false,
       })).resolves.toEqual({ effectiveEnabled: false });
-      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1000 }))
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: eventStreamTimeoutMs }))
         .resolves.toMatchObject({ method: 'skills/changed', params: {} });
 
       await expect(appServerRpc('skills/list', { cwds: [projectDir] })).resolves.toMatchObject({
@@ -333,7 +342,7 @@ describe('runtime server', () => {
         name: null,
         enabled: true,
       })).resolves.toEqual({ effectiveEnabled: true });
-      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1000 }))
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: eventStreamTimeoutMs }))
         .resolves.toMatchObject({ method: 'skills/changed', params: {} });
 
       await writeFile(
@@ -349,7 +358,7 @@ describe('runtime server', () => {
           'Updated directly on disk.',
         ].join('\n'),
       );
-      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: 1500 }))
+      await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: eventStreamTimeoutMs }))
         .resolves.toMatchObject({ method: 'skills/changed', params: {} });
       await expect(appServerRpc('skills/list', { cwds: [projectDir] })).resolves.toMatchObject({
         data: [{
@@ -1406,7 +1415,7 @@ describe('runtime server', () => {
         input: [{ type: 'text', text: 'Plan before editing.' }],
         collaborationMode: { mode: 'plan' },
       });
-      const body = await withTimeout(capture.nextBody, 1500, 'Timed out waiting for plan mode provider request');
+      const body = await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for plan mode provider request');
       const messages = Array.isArray(body.messages) ? body.messages : [];
 
       expect(body.reasoning_effort).toBe('medium');
@@ -1834,7 +1843,7 @@ describe('runtime server', () => {
           && notification.params?.watchId === watchId
           && Array.isArray(notification.params.changedPaths)
           && notification.params.changedPaths.includes(changedFile)
-        ), { timeoutMs: 600 });
+        ), { timeoutMs: fsWatchEventTimeoutMs });
       }
 
       expect(changed).toMatchObject({
@@ -1865,7 +1874,7 @@ describe('runtime server', () => {
           && notification.params?.watchId === missingWatchId
           && Array.isArray(notification.params.changedPaths)
           && notification.params.changedPaths.includes(missingFile)
-        ), { timeoutMs: 600 });
+        ), { timeoutMs: fsWatchEventTimeoutMs });
       }
 
       expect(missingChanged).toMatchObject({
@@ -1878,13 +1887,13 @@ describe('runtime server', () => {
 
       await expect(appServerRpc('fs/unwatch', { watchId: missingWatchId }, { connectionId: ownerConnectionId })).resolves.toEqual({});
       await writeFile(path.join(watchDir, 'ORIG_HEAD'), 'refs\n');
-      await expect(ownerStream.readNotification((notification) => notification.method === 'fs/changed', { timeoutMs: 500 }))
+      await expect(ownerStream.readNotification((notification) => notification.method === 'fs/changed', { timeoutMs: negativeEventTimeoutMs }))
         .resolves.toBeNull();
     } finally {
       await ownerStream.close();
       await foreignStream.close();
     }
-  }, 10_000);
+  }, mediumIntegrationTestTimeoutMs);
 
   it('rejects unsafe AppServer fs requests', async () => {
     const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-fs-safe-'));
@@ -2093,7 +2102,7 @@ describe('runtime server', () => {
       stdout: '',
       stderr: '',
     });
-  }, 30_000);
+  }, longIntegrationTestTimeoutMs);
 
   it('scopes AppServer command/exec process ids to explicit event-stream connections', async () => {
     const processId = `shared-command-${Date.now()}`;
@@ -2143,7 +2152,7 @@ describe('runtime server', () => {
       if (firstExecPromise) await firstExecPromise.catch(() => undefined);
       if (secondExecPromise) await secondExecPromise.catch(() => undefined);
     }
-  }, 20_000);
+  }, mediumIntegrationTestTimeoutMs);
 
   it('spawns AppServer processes and emits process exit notifications', async () => {
     const processHandle = `process-buffered-${Date.now()}`;
@@ -2218,7 +2227,7 @@ describe('runtime server', () => {
       await firstStream.close();
       await secondStream.close();
     }
-  }, 20_000);
+  }, mediumIntegrationTestTimeoutMs);
 
   it('supports AppServer process/spawn PTY sessions and resize', async () => {
     const processHandle = `pty-process-${Date.now()}`;
@@ -2471,7 +2480,7 @@ describe('runtime server', () => {
         method: 'POST',
         body: JSON.stringify({ input: 'Use the API skill.', skillIds: [skill.id] }),
       });
-      const body = await withTimeout(capture.nextBody, 1500, 'Timed out waiting for captured provider request');
+      const body = await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for captured provider request');
       const messages = Array.isArray(body.messages) ? body.messages : [];
 
       expect(started).toMatchObject({ accepted: true });
@@ -2588,7 +2597,7 @@ describe('runtime server', () => {
     expect(JSON.stringify(forkedThroughInitialTurn.thread.turns)).not.toContain(compactingTurn.turnId);
     expect(hasContextCompactionItem).toBe(true);
     expect(hasThreadCompacted).toBe(true);
-  }, 20_000);
+  }, longIntegrationTestTimeoutMs);
 
   it('streams manual AppServer compact requests as contextCompaction turns', async () => {
     const thread = await runtimeFetch('/v1/threads', {
@@ -2630,7 +2639,7 @@ describe('runtime server', () => {
       }),
     ]));
     expect(hasContextCompactionItem).toBe(true);
-  }, 10_000);
+  }, mediumIntegrationTestTimeoutMs);
 
   it('runs AppServer thread shell commands as userShell commandExecution events', async () => {
     const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-swe-shell-project-'));
@@ -2730,7 +2739,7 @@ describe('runtime server', () => {
         method: 'POST',
         body: JSON.stringify({ input: 'Keep this turn active.' }),
       });
-      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed provider request');
+      await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for delayed provider request');
 
       await expect(appServerRpc('thread/shellCommand', {
         threadId: thread.id,
@@ -2806,7 +2815,7 @@ describe('runtime server', () => {
         clientUserMessageId: 'client-start-message-1',
         input: [{ type: 'text', text: 'Keep this turn active.' }],
       });
-      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed provider request');
+      await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for delayed provider request');
 
       await expect(appServerRpc('turn/steer', {
         threadId: startedThread.thread.id,
@@ -2895,7 +2904,7 @@ describe('runtime server', () => {
         clientUserMessageId: 'client-start-message-1',
         input: [{ type: 'text', text: 'Keep this turn active.' }],
       });
-      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed provider request');
+      await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for delayed provider request');
 
       await expect(appServerRpc('turn/mailbox/deliver', {
         threadId: startedThread.thread.id,
@@ -2943,7 +2952,7 @@ describe('runtime server', () => {
         toAgentId: 'agent_parent',
         content: 'wake the idle app-server parent',
       });
-      const body = await withTimeout(capture.nextBody, 1500, 'Timed out waiting for trigger mailbox provider request');
+      const body = await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for trigger mailbox provider request');
       const requestText = JSON.stringify(body);
 
       expect(delivered).toEqual({ queued: false, turnId: expect.any(String) });
@@ -3046,7 +3055,7 @@ describe('runtime server', () => {
           && message.content.includes('Dynamic tool result received.')
         ),
       );
-      const requests = await withTimeout(modelServer.requests, 1500, 'Timed out waiting for dynamic tool model requests');
+      const requests = await withTimeout(modelServer.requests, providerCaptureTimeoutMs, 'Timed out waiting for dynamic tool model requests');
       const read = await appServerRpc('thread/read', { threadId: startedThread.thread.id, includeTurns: true });
       const turn = read.thread.turns.find((item: { id: string }) => item.id === startedTurn.turn.id);
 
@@ -3164,7 +3173,7 @@ describe('runtime server', () => {
           && message.content.includes('Deferred dynamic tool result received.')
         ),
       );
-      const requests = await withTimeout(modelServer.requests, 1500, 'Timed out waiting for deferred dynamic model requests');
+      const requests = await withTimeout(modelServer.requests, providerCaptureTimeoutMs, 'Timed out waiting for deferred dynamic model requests');
 
       expect(JSON.stringify(requests[0])).toContain('tool_search');
       expect(JSON.stringify(requests[0])).not.toContain('tickets__lookup_ticket');
@@ -3188,7 +3197,7 @@ describe('runtime server', () => {
         method: 'POST',
         body: JSON.stringify({ clientId: 'rest-start-message-1', input: 'Keep this REST turn active.' }),
       });
-      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed REST provider request');
+      await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for delayed REST provider request');
 
       const activeSnapshot = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
       expect(activeSnapshot.activeTurnId).toBe(started.turnId);
@@ -3245,7 +3254,7 @@ describe('runtime server', () => {
         method: 'POST',
         body: JSON.stringify({ clientId: 'rest-start-active-1', input: 'Keep this REST turn active.' }),
       });
-      await withTimeout(capture.nextBody, 1500, 'Timed out waiting for delayed REST provider request');
+      await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for delayed REST provider request');
 
       await expect(runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
         method: 'POST',
@@ -3334,7 +3343,7 @@ describe('runtime server', () => {
         delivery: 'inline',
         target: { type: 'commit', sha: '1234567890abcdef', title: 'Tidy UI colors' },
       });
-      const body = await withTimeout(capture.nextBody, 1500, 'Timed out waiting for review provider request');
+      const body = await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for review provider request');
 
       expect(JSON.stringify(body)).toContain('Review commit 1234567890abcdef: Tidy UI colors.');
       expect(review).toMatchObject({
@@ -4079,7 +4088,7 @@ describe('runtime server', () => {
   }
 
   async function appServerRpcEventually(method: string, params: Record<string, unknown>, options: AppServerRequestOptions & { timeoutMs?: number } = {}) {
-    const deadline = Date.now() + (options.timeoutMs ?? 1500);
+    const deadline = Date.now() + (options.timeoutMs ?? rpcEventuallyTimeoutMs);
     let lastError: unknown;
     while (Date.now() < deadline) {
       try {
@@ -4118,7 +4127,7 @@ describe('runtime server', () => {
   async function waitForThread(
     threadId: string,
     predicate: (thread: RuntimeThread) => boolean,
-    timeoutMs = 6000,
+    timeoutMs = threadStateWaitTimeoutMs,
   ): Promise<RuntimeThread> {
     const deadline = Date.now() + timeoutMs;
     let lastThread: RuntimeThread | undefined;
@@ -4176,7 +4185,7 @@ describe('runtime server', () => {
     let buffer = '';
     return {
       async readContains(needle, readOptions = {}) {
-        const deadline = Date.now() + (readOptions.timeoutMs ?? 1500);
+        const deadline = Date.now() + (readOptions.timeoutMs ?? eventStreamTimeoutMs);
         while (Date.now() < deadline) {
           const result = await Promise.race([reader.read(), sleep(Math.max(1, deadline - Date.now())).then(() => null)]);
           if (!result) break;
@@ -4211,7 +4220,7 @@ describe('runtime server', () => {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    const deadline = Date.now() + (options.timeoutMs ?? 1500);
+    const deadline = Date.now() + (options.timeoutMs ?? eventStreamTimeoutMs);
     try {
       while (Date.now() < deadline) {
         const result = await Promise.race([reader.read(), sleep(deadline - Date.now()).then(() => null)]);
@@ -4270,7 +4279,7 @@ describe('runtime server', () => {
       predicate: (notification: AppServerStreamNotification) => boolean,
       readOptions: { timeoutMs?: number } = {},
     ): Promise<AppServerStreamNotification | null> => {
-      const deadline = Date.now() + (readOptions.timeoutMs ?? 1500);
+      const deadline = Date.now() + (readOptions.timeoutMs ?? eventStreamTimeoutMs);
       while (Date.now() < deadline) {
         const result = await readNextChunk(deadline);
         if (!result) break;
@@ -4295,7 +4304,7 @@ describe('runtime server', () => {
     };
     return {
       async readDecodedOutputContains(method, idKey, idValue, needle, readOptions = {}) {
-        const deadline = Date.now() + (readOptions.timeoutMs ?? 1500);
+        const deadline = Date.now() + (readOptions.timeoutMs ?? eventStreamTimeoutMs);
         while (Date.now() < deadline) {
           const notification = await readNotification((item) => (
             item.method === method

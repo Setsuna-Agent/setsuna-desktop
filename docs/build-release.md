@@ -39,7 +39,11 @@ corepack pnpm@7.33.7 <command>
 - `pnpm build:electron`：运行 `scripts/build-electron.ts`。
 - `pnpm build:renderer`：Vite build。
 - `pnpm typecheck`：TypeScript project references。
-- `pnpm test`：Vitest。
+- `pnpm test`：先跑稳定单元/轻量测试，再串行跑重集成测试。
+- `pnpm test:all`：用默认全量 Vitest 配置一次性跑全部测试，配置上仍保持串行重链路。
+- `pnpm test:unit`：排除重集成文件的 Vitest 测试层。
+- `pnpm test:integration`：agent loop、runtime server、真实 git/shell/PTY、文件 watcher 等重集成测试，串行执行。
+- `pnpm test:release`：发版包矩阵使用的确定性测试门禁，范围同 unit，限制 CI worker 数。
 - `pnpm lint`：ESLint。
 - `pnpm package:*`：按平台打包。
 - `pnpm release:dry-run`：生成 release manifest 和校验预览。
@@ -126,9 +130,11 @@ dev 启动流程：
 5. `node scripts/configure-node-gyp-python.mjs`。
 6. `pnpm install --frozen-lockfile`。
 7. `pnpm typecheck`。
-8. `pnpm test`。
+8. `pnpm test:release`。
 9. `pnpm build`。
 10. `pnpm release:dry-run`。
+
+重集成测试由独立 Ubuntu job 跑 `pnpm test:integration`。这样平台矩阵继续验证跨平台构建和轻量逻辑，agent/runtime 的慢异步链路不会把每个平台的构建稳定性绑在一起。
 
 ## Release Workflow
 
@@ -145,10 +151,12 @@ package job matrix：
 
 1. 安装依赖。
 2. typecheck。
-3. test。
+3. `test:release`。
 4. package。
 5. collect release assets。
 6. upload artifact。
+
+release 另有 `Integration diagnostics` job，在 Ubuntu 上跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。该 job 是诊断信号，不阻塞 package/publish；正式发布资产只从 `release-*` package artifacts 收集。
 
 publish job：
 
@@ -185,7 +193,8 @@ runtime/server/contract：
 
 ```bash
 pnpm typecheck
-pnpm test
+pnpm test:unit
+pnpm test:integration
 pnpm build:runtime
 ```
 
@@ -193,7 +202,7 @@ renderer/UI：
 
 ```bash
 pnpm typecheck
-pnpm test
+pnpm test:unit
 pnpm build:renderer
 ```
 
