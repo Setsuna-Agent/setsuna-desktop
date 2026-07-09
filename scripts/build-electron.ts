@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const electronMainExternals = ['electron', 'node-pty'];
+export const electronMainExternals = ['electron', 'node-pty'];
+export const runtimeExternals = ['node-pty'];
 
 export async function buildElectron(): Promise<void> {
   await mkdir(resolve(rootDir, 'dist/electron/main'), { recursive: true });
@@ -40,6 +41,10 @@ export async function buildElectron(): Promise<void> {
       target: 'node22',
       format: 'cjs',
       sourcemap: true,
+      // node-pty loads native prebuilds relative to its package directory. Bundling
+      // it into dist/runtime breaks packaged app startup because that directory
+      // does not contain the unpacked native module tree.
+      external: runtimeExternals,
     }),
   ]);
 }
