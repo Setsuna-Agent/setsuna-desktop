@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Brain, ChevronRight, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Pencil, Plus, RefreshCw, SlidersHorizontal, Sun, Trash2, Type, X } from 'lucide-react';
+import { Brain, ChevronRight, Code2, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, Pencil, Plus, RefreshCw, SlidersHorizontal, Sun, Trash2, Type, X } from 'lucide-react';
 import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeUsageBucket, RuntimeUsageResponse } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { fontFamilyOptions, fontSizeOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode } from '../../hooks/useAppearancePreferences.js';
+import { codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, useCodeAppearancePreferences, type CodeFontFamilyMode, type CodeHighlightTheme } from '../../hooks/useCodeAppearancePreferences.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 
@@ -176,10 +177,14 @@ function MemorySettingToggle({ checked, description, label, onChange }: MemorySe
 
 function GeneralSettings() {
   const { fontFamily, fontSize, setFontFamily, setFontSize } = useAppearancePreferences();
+  const { codeFontFamily, codeHighlightTheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const availableFontFamilyOptions = getFontFamilyOptionsForPlatform();
+  const availableCodeFontFamilyOptions = getCodeFontFamilyOptionsForPlatform();
   const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
+  const selectedCodeFont = availableCodeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? codeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? availableCodeFontFamilyOptions[0] ?? codeFontFamilyOptions[0];
   const fontFamilySelectOptions = availableFontFamilyOptions.some((item) => item.value === selectedFont.value) ? availableFontFamilyOptions : [selectedFont, ...availableFontFamilyOptions];
+  const codeFontFamilySelectOptions = availableCodeFontFamilyOptions.some((item) => item.value === selectedCodeFont.value) ? availableCodeFontFamilyOptions : [selectedCodeFont, ...availableCodeFontFamilyOptions];
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
   const scaleMarkMaxIndex = Math.max(fontSizeOptions.length - 1, 1);
   const fontSizeProgress = `${(fontSizeIndex / scaleMarkMaxIndex) * 100}%`;
@@ -232,6 +237,38 @@ function GeneralSettings() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="chat-user-settings__section-block">
+        <div className="chat-user-settings__group-title">代码</div>
+        <div className="chat-user-settings__group chat-user-settings__general-section">
+          <label className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <Code2 size={14} />
+              <span>代码字体</span>
+            </span>
+            <SelectField aria-label="代码字体" className="settings-local-control" value={selectedCodeFont.value} style={{ fontFamily: selectedCodeFont.css }} onChange={(event) => setCodeFontFamily(event.currentTarget.value as CodeFontFamilyMode)}>
+              {codeFontFamilySelectOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectField>
+          </label>
+          <label className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <Palette size={14} />
+              <span>高亮主题</span>
+            </span>
+            <SelectField aria-label="代码高亮主题" className="settings-local-control" value={codeHighlightTheme} onChange={(event) => setCodeHighlightTheme(event.currentTarget.value as CodeHighlightTheme)}>
+              {codeHighlightThemeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectField>
+          </label>
         </div>
       </div>
 

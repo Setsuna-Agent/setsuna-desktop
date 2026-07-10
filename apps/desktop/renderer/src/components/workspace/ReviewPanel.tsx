@@ -81,6 +81,7 @@ const REVIEW_DIFF_VIRTUALIZE_THRESHOLD = 80;
 const REVIEW_DIFF_ROW_OVERSCAN = 12;
 const REVIEW_DIFF_LINE_HEIGHT_PX = 18;
 const REVIEW_DIFF_GAP_HEIGHT_PX = 22;
+const DEFAULT_REVIEW_LINE_WRAP = true;
 const useReviewLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 function ReviewActionTip({ children, title }: { children: ReactNode; title: string }) {
@@ -137,8 +138,8 @@ export function DesktopReviewPanel({
     ? reviewDiffLayoutByKey[reviewDiffLayoutStorageKey] ?? storedReviewDiffLayout ?? 'unified'
     : 'unified';
   const reviewLineWrap = reviewLineWrapStorageKey
-    ? reviewLineWrapByKey[reviewLineWrapStorageKey] ?? storedReviewLineWrap ?? false
-    : false;
+    ? reviewLineWrapByKey[reviewLineWrapStorageKey] ?? storedReviewLineWrap ?? DEFAULT_REVIEW_LINE_WRAP
+    : DEFAULT_REVIEW_LINE_WRAP;
   const activeSource = hasGit ? reviewSource : 'latest';
   const availableBaseRefs = reviewState?.baseRefs ?? [];
   const pendingBranchBaseRef = branchBaseRefStorageKey ? branchBaseRefByKey[branchBaseRefStorageKey] : undefined;
@@ -308,56 +309,60 @@ export function DesktopReviewPanel({
           <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
         </div>
         <div className="desktop-review-panel__actions">
-          <ReviewActionTip title={reviewFileExpansionTip}>
-            <IconButton
-              aria-pressed={!fileExpansionRequest.expanded}
-              className={`desktop-review-panel__file-expansion-toggle ${fileExpansionRequest.expanded ? '' : 'is-collapsed'}`}
-              disabled={!hasReviewFiles}
-              label={reviewFileExpansionTip}
-              title=""
-              variant="ghost"
-              onClick={handleReviewFileExpansionToggle}
-            >
-              {fileExpansionRequest.expanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
-            </IconButton>
-          </ReviewActionTip>
-          <ReviewActionTip title={reviewLayoutToggleTip}>
-            <IconButton
-              aria-pressed={reviewDiffLayout === 'split'}
-              className={`desktop-review-panel__layout-toggle ${reviewDiffLayout === 'split' ? 'is-active' : ''}`}
-              label={reviewLayoutToggleTip}
-              title=""
-              variant="ghost"
-              onClick={handleReviewDiffLayoutToggle}
-            >
-              {reviewDiffLayout === 'split' ? <Rows3 size={14} /> : <Columns2 size={14} />}
-            </IconButton>
-          </ReviewActionTip>
-          <ReviewActionTip title={reviewLineWrapToggleTip}>
-            <IconButton
-              aria-pressed={reviewLineWrap}
-              className={`desktop-review-panel__wrap-toggle ${reviewLineWrap ? 'is-active' : ''}`}
-              label={reviewLineWrapToggleTip}
-              title=""
-              variant="ghost"
-              onClick={handleReviewLineWrapToggle}
-            >
-              <WrapText size={14} />
-            </IconButton>
-          </ReviewActionTip>
-          <ReviewActionTip title={reviewRefreshTip}>
-            <IconButton
-              aria-disabled={reviewRefreshing}
-              aria-busy={reviewRefreshing}
-              className={`desktop-review-panel__refresh ${reviewRefreshing ? 'is-refreshing' : ''}`}
-              label={reviewRefreshTip}
-              title=""
-              variant="ghost"
-              onClick={handleReviewRefresh}
-            >
-              <RefreshCw className="desktop-review-panel__refresh-icon" size={14} />
-            </IconButton>
-          </ReviewActionTip>
+          <div className="desktop-review-panel__action-group" role="group" aria-label="差异显示">
+            <ReviewActionTip title={reviewFileExpansionTip}>
+              <IconButton
+                aria-pressed={!fileExpansionRequest.expanded}
+                className={`desktop-review-panel__file-expansion-toggle ${fileExpansionRequest.expanded ? '' : 'is-collapsed'}`}
+                disabled={!hasReviewFiles}
+                label={reviewFileExpansionTip}
+                title=""
+                variant="ghost"
+                onClick={handleReviewFileExpansionToggle}
+              >
+                {fileExpansionRequest.expanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+              </IconButton>
+            </ReviewActionTip>
+            <ReviewActionTip title={reviewLayoutToggleTip}>
+              <IconButton
+                aria-pressed={reviewDiffLayout === 'split'}
+                className={`desktop-review-panel__layout-toggle ${reviewDiffLayout === 'split' ? 'is-active' : ''}`}
+                label={reviewLayoutToggleTip}
+                title=""
+                variant="ghost"
+                onClick={handleReviewDiffLayoutToggle}
+              >
+                {reviewDiffLayout === 'split' ? <Rows3 size={14} /> : <Columns2 size={14} />}
+              </IconButton>
+            </ReviewActionTip>
+            <ReviewActionTip title={reviewLineWrapToggleTip}>
+              <IconButton
+                aria-pressed={reviewLineWrap}
+                className={`desktop-review-panel__wrap-toggle ${reviewLineWrap ? 'is-active' : ''}`}
+                label={reviewLineWrapToggleTip}
+                title=""
+                variant="ghost"
+                onClick={handleReviewLineWrapToggle}
+              >
+                <WrapText size={14} />
+              </IconButton>
+            </ReviewActionTip>
+          </div>
+          <div className="desktop-review-panel__action-group" role="group" aria-label="审查操作">
+            <ReviewActionTip title={reviewRefreshTip}>
+              <IconButton
+                aria-disabled={reviewRefreshing}
+                aria-busy={reviewRefreshing}
+                className={`desktop-review-panel__refresh ${reviewRefreshing ? 'is-refreshing' : ''}`}
+                label={reviewRefreshTip}
+                title=""
+                variant="ghost"
+                onClick={handleReviewRefresh}
+              >
+                <RefreshCw className="desktop-review-panel__refresh-icon" size={14} />
+              </IconButton>
+            </ReviewActionTip>
+          </div>
         </div>
       </header>
       {activeSource === 'branch' && hasGit ? (

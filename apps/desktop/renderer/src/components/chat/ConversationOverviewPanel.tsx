@@ -61,7 +61,12 @@ export function ConversationOverviewPanel({
         </button>
       </div>
       <div className="chat-conversation-overview-panel__actions">
-        <button type="button" className="chat-conversation-overview-panel__row" disabled={!onOpenReview} onClick={onOpenReview}>
+        <button
+          type="button"
+          className="chat-conversation-overview-panel__row"
+          disabled={!onOpenReview}
+          onClick={() => onOpenReview?.()}
+        >
           <span className="chat-conversation-overview-panel__icon">
             <FileText size={14} />
           </span>

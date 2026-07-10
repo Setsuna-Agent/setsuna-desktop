@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTermTerminal, type ILink, type ILinkProvider, type ITheme } from '@xterm/xterm';
 import { Terminal } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
+import { CODE_APPEARANCE_CHANGE_EVENT_NAME } from '../../hooks/useCodeAppearancePreferences.js';
 import type { DesktopTerminalEvent, DesktopTerminalSession } from './model.js';
 
 const terminalRestoreBuffers = new Map<string, string>();
@@ -53,8 +54,13 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       fitAddon.fit();
       void terminalApi.resize(session.sessionId, terminal.cols, terminal.rows).catch(() => undefined);
     };
+    const handleCodeAppearanceChange = () => {
+      terminal.options.fontFamily = terminalFontFamily();
+      fitTerminal();
+    };
     const resizeObserver = new ResizeObserver(() => fitTerminal());
     resizeObserver.observe(container);
+    window.addEventListener(CODE_APPEARANCE_CHANGE_EVENT_NAME, handleCodeAppearanceChange);
     fitTerminal();
     terminal.focus();
     const restored = terminalRestoreBuffers.get(session.sessionId);
@@ -99,6 +105,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       dataDisposable.dispose();
       linkProviderDisposable.dispose();
       resizeObserver.disconnect();
+      window.removeEventListener(CODE_APPEARANCE_CHANGE_EVENT_NAME, handleCodeAppearanceChange);
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -175,7 +182,7 @@ function terminalTheme(): ITheme {
 
 function terminalFontFamily(): string {
   const codeFont = window.getComputedStyle(document.documentElement).getPropertyValue('--app-code-font-family').trim();
-  return `"Geist Mono", ${codeFont || 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'}`;
+  return codeFont || 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
 }
 
 function writeTerminalSystemLine(terminal: XTermTerminal, text: string, sessionId?: string) {

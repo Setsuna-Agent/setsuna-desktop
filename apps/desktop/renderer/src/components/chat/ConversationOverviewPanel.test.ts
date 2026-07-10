@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopDiffSummary, DesktopReviewState } from '../workspace/model.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
@@ -25,6 +25,21 @@ describe('ConversationOverviewPanel', () => {
     expect(expandedHtml).toContain('+71');
     expect(expandedHtml).toContain('-247');
     expect(expandedHtml).not.toContain('无变更');
+  });
+
+  it('does not forward the React click event to the review callback', () => {
+    const onOpenReview = vi.fn();
+    const panel = ConversationOverviewPanel({
+      ...baseProps,
+      compact: false,
+      onOpenReview,
+    });
+    const actions = panel.props.children[1];
+    const reviewButton = actions.props.children[0];
+
+    reviewButton.props.onClick({ type: 'click' });
+
+    expect(onOpenReview).toHaveBeenCalledWith();
   });
 });
 

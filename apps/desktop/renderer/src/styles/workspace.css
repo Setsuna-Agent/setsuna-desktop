@@ -561,8 +561,8 @@
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
-  min-height: 36px;
-  padding: 3px var(--desktop-review-panel-x-padding);
+  min-height: 42px;
+  padding: 5px var(--desktop-review-panel-x-padding);
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
   background: var(--app-bg);
 }
@@ -697,7 +697,19 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 2px;
+  gap: 4px;
+}
+
+.desktop-review-panel__action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.desktop-review-panel__actions .sd-icon-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
 }
 
 .desktop-review-action-tip {
@@ -1387,7 +1399,7 @@
 
 .desktop-review-diff-line--added::before,
 .desktop-review-diff-split-cell--added::before {
-  background: #E7F4E7;
+  background: color-mix(in srgb, var(--app-success) 12%, var(--code-highlight-background));
 }
 
 .desktop-review-diff-line--added::after,
@@ -1402,15 +1414,13 @@
 }
 
 .desktop-review-diff-line--added .desktop-review-diff-line__prefix,
-.desktop-review-diff-line--added .desktop-review-diff-code,
-.desktop-review-diff-split-cell--added .desktop-review-diff-line__prefix,
-.desktop-review-diff-split-cell--added .desktop-review-diff-code {
+.desktop-review-diff-split-cell--added .desktop-review-diff-line__prefix {
   color: var(--app-success);
 }
 
 .desktop-review-diff-line--removed::before,
 .desktop-review-diff-split-cell--removed::before {
-  background: #FFE9E3;
+  background: color-mix(in srgb, var(--app-danger) 12%, var(--code-highlight-background));
 }
 
 .desktop-review-diff-line--removed::after,
@@ -1425,9 +1435,7 @@
 }
 
 .desktop-review-diff-line--removed .desktop-review-diff-line__prefix,
-.desktop-review-diff-line--removed .desktop-review-diff-code,
-.desktop-review-diff-split-cell--removed .desktop-review-diff-line__prefix,
-.desktop-review-diff-split-cell--removed .desktop-review-diff-code {
+.desktop-review-diff-split-cell--removed .desktop-review-diff-line__prefix {
   color: var(--app-danger);
 }
 

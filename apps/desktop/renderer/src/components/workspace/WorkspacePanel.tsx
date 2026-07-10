@@ -417,7 +417,7 @@ export function WorkspacePanel({
   );
 }
 
-function WorkspaceOverviewPanel({
+export function WorkspaceOverviewPanel({
   activeProject,
   latestReviewSummary,
   onOpenFilesPanel,
@@ -440,7 +440,7 @@ function WorkspaceOverviewPanel({
       meta: reviewMeta,
       icon: <FileText size={15} />,
       disabled: !activeProject || !onOpenReviewPanel,
-      onClick: onOpenReviewPanel ?? (() => undefined),
+      onClick: () => onOpenReviewPanel?.(),
     },
     {
       key: 'files',

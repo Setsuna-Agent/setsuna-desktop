@@ -6,6 +6,7 @@ import '@fontsource/geist-sans/600.css';
 import '@fontsource/geist-mono/400.css';
 import 'antd/dist/reset.css';
 import { App } from './App.js';
+import { initializeCodeAppearancePreference } from './hooks/useCodeAppearancePreferences.js';
 import { initializeThemePreference } from './hooks/useThemeTransition.js';
 import { applyDesktopPlatformAttribute } from './utils/desktopPlatform.js';
 import './styles/tokens.css';
@@ -20,9 +21,11 @@ import './styles/capabilities.css';
 import './styles/chat.css';
 import './styles/chat-composer.css';
 import './styles/sidebar-search.css';
+import './styles/code-theme.css';
 
 applyDesktopPlatformAttribute();
 initializeThemePreference();
+initializeCodeAppearancePreference();
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

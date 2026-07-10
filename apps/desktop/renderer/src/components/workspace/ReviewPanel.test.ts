@@ -158,7 +158,10 @@ describe('DesktopReviewPanel', () => {
   });
 
   it('restores the split diff layout for the active project', () => {
-    withWindowLocalStorage({ 'setsuna-desktop:review-diff-layout:project_1': 'split' }, () => {
+    withWindowLocalStorage({
+      'setsuna-desktop:review-diff-layout:project_1': 'split',
+      'setsuna-desktop:review-line-wrap:project_1': 'nowrap',
+    }, () => {
       const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
         activeProject: project,
         error: null,
@@ -183,10 +186,9 @@ describe('DesktopReviewPanel', () => {
     });
   });
 
-  it('restores wrapped review lines for the active project', () => {
+  it('wraps review lines by default when the project has no saved preference', () => {
     withWindowLocalStorage({
       'setsuna-desktop:review-diff-layout:project_1': 'split',
-      'setsuna-desktop:review-line-wrap:project_1': 'wrap',
     }, () => {
       const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
         activeProject: project,

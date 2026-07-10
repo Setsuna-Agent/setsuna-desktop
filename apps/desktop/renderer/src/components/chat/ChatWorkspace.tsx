@@ -2007,6 +2007,7 @@ function MarkdownCode({ block, children, className, lang }: XMarkdownComponentPr
           margin: 0,
           padding: '16px',
         },
+        useInlineStyles: false,
       }}
       lang={normalizeCodeLanguage(language)}
       prismLightMode={false}

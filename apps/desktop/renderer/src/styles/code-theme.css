@@ -1,0 +1,162 @@
+:root {
+  --code-highlight-background: var(--app-bg);
+  --code-highlight-text: #24292f;
+  --code-highlight-comment: #6e7781;
+  --code-highlight-keyword: #cf222e;
+  --code-highlight-string: #0a3069;
+  --code-highlight-number: #0550ae;
+  --code-highlight-title: #8250df;
+  --code-highlight-type: #953800;
+  --code-highlight-attribute: #116329;
+  --code-highlight-meta: #57606a;
+  --code-highlight-addition: #1a7f37;
+  --code-highlight-deletion: #cf222e;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-theme='dark'][data-code-highlight-theme='github'] {
+  --code-highlight-background: #161b22;
+  --code-highlight-text: #c9d1d9;
+  --code-highlight-comment: #8b949e;
+  --code-highlight-keyword: #ff7b72;
+  --code-highlight-string: #a5d6ff;
+  --code-highlight-number: #79c0ff;
+  --code-highlight-title: #d2a8ff;
+  --code-highlight-type: #ffa657;
+  --code-highlight-attribute: #7ee787;
+  --code-highlight-meta: #8b949e;
+  --code-highlight-addition: #7ee787;
+  --code-highlight-deletion: #ffa198;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='oneDark'] {
+  --code-highlight-background: #282c34;
+  --code-highlight-text: #abb2bf;
+  --code-highlight-comment: #5c6370;
+  --code-highlight-keyword: #c678dd;
+  --code-highlight-string: #98c379;
+  --code-highlight-number: #d19a66;
+  --code-highlight-title: #61aeee;
+  --code-highlight-type: #e6c07b;
+  --code-highlight-attribute: #56b6c2;
+  --code-highlight-meta: #61aeee;
+  --code-highlight-addition: #98c379;
+  --code-highlight-deletion: #e06c75;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='monokai'] {
+  --code-highlight-background: #272822;
+  --code-highlight-text: #f8f8f2;
+  --code-highlight-comment: #75715e;
+  --code-highlight-keyword: #f92672;
+  --code-highlight-string: #e6db74;
+  --code-highlight-number: #ae81ff;
+  --code-highlight-title: #a6e22e;
+  --code-highlight-type: #66d9ef;
+  --code-highlight-attribute: #a6e22e;
+  --code-highlight-meta: #fd971f;
+  --code-highlight-addition: #a6e22e;
+  --code-highlight-deletion: #f92672;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+.desktop-code-editor,
+.desktop-review-diff {
+  background: var(--code-highlight-background);
+}
+
+.desktop-code-line code,
+.desktop-review-diff-code,
+.chat-code-highlighter pre,
+.chat-code-highlighter code {
+  color: var(--code-highlight-text);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-comment, .hljs-quote) {
+  color: var(--code-highlight-comment);
+  font-style: italic;
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-doctag, .hljs-keyword, .hljs-formula, .hljs-selector-tag, .hljs-literal) {
+  color: var(--code-highlight-keyword);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-string, .hljs-regexp, .hljs-attribute, .hljs-meta-string) {
+  color: var(--code-highlight-string);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-link) {
+  color: var(--code-highlight-number);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-title, .hljs-section, .hljs-selector-id),
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-class .hljs-title {
+  color: var(--code-highlight-title);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-type, .hljs-built_in, .hljs-builtin-name, .hljs-name, .hljs-tag) {
+  color: var(--code-highlight-type);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-attr, .hljs-variable, .hljs-template-variable, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo) {
+  color: var(--code-highlight-attribute);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-meta, .hljs-template-tag) {
+  color: var(--code-highlight-meta);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-addition {
+  color: var(--code-highlight-addition);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-deletion {
+  color: var(--code-highlight-deletion);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.comment, .token.prolog, .token.doctype, .token.cdata) {
+  color: var(--code-highlight-comment);
+  font-style: italic;
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.atrule, .token.keyword, .token.rule, .token.important) {
+  color: var(--code-highlight-keyword);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.string, .token.char, .token.regex, .token.url, .token.inserted) {
+  color: var(--code-highlight-string);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.boolean, .token.number, .token.constant, .token.symbol) {
+  color: var(--code-highlight-number);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.function, .token.class-name) {
+  color: var(--code-highlight-title);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.builtin, .token.namespace) {
+  color: var(--code-highlight-type);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.property, .token.tag, .token.selector, .token.attr-name, .token.attr-value, .token.variable) {
+  color: var(--code-highlight-attribute);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.operator, .token.entity, .token.punctuation) {
+  color: var(--code-highlight-meta);
+}
+
+.chat-markdown .chat-code-highlighter .token.deleted {
+  color: var(--code-highlight-deletion);
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.bold, .token.important) {
+  font-weight: 600;
+}
+
+.chat-markdown .chat-code-highlighter :is(.token.italic, .token.entity) {
+  font-style: italic;
+}
