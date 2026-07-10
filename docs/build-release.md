@@ -4,11 +4,11 @@
 
 ## 环境
 
-- Node.js `>=22`
+- Node.js `>=22.12.0`
 - pnpm `>=7`
 - CI 固定 pnpm `7.33.7`
 - 原生依赖：`node-pty`
-- Electron：`33.x`
+- Electron：`43.x`
 
 如果本地 pnpm 版本过高导致 lockfile 或 modules-dir 兼容问题，优先使用：
 

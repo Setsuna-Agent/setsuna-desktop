@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-black.svg"></a>
-  <img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D22-43853d.svg">
+  <img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D22.12.0-43853d.svg">
   <img alt="pnpm" src="https://img.shields.io/badge/pnpm-%3E%3D7-f69220.svg">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-desktop-2f3241.svg">
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black.svg">
@@ -88,7 +88,7 @@ Setsuna Desktop 把本地对话、项目工作区、文件审查、MCP、Skills 
 
 ### 环境要求
 
-- Node.js `22+`
+- Node.js `>=22.12.0`
 - pnpm `7+`
 
 ### 本地运行
