@@ -29,6 +29,9 @@ const codeHighlighterStyles = {
   },
 };
 
+const maxHighlightedCodeCharacters = 24_000;
+const maxHighlightedCodeLines = 500;
+
 const codeLanguageAliases: Record<string, string> = {
   cjs: 'javascript',
   cs: 'csharp',
@@ -56,15 +59,20 @@ const codeLanguageAliases: Record<string, string> = {
 export function MarkdownCodeBlock({ code, language = '' }: MarkdownCodeBlockProps) {
   const copiedCode = code.replace(/\n$/, '');
   const normalizedLanguage = normalizeMarkdownCodeLanguage(language);
+  if (!shouldSyntaxHighlightMarkdownCode(copiedCode)) {
+    return (
+      <div className="chat-code-highlighter chat-code-highlighter--plain">
+        <CodeBlockHeader code={copiedCode} language={language} />
+        <div className="ant-codeHighlighter-code">
+          <pre><code>{copiedCode}</code></pre>
+        </div>
+      </div>
+    );
+  }
   return (
     <CodeHighlighter
       className="chat-code-highlighter"
-      header={
-        <div className="chat-code-highlighter__header">
-          <span className="chat-code-highlighter__language">{codeLanguageLabel(language)}</span>
-          <CodeCopyButton code={copiedCode} />
-        </div>
-      }
+      header={<CodeBlockHeader code={copiedCode} language={language} />}
       highlightProps={codeHighlighterHighlightProps}
       lang={normalizedLanguage}
       prismLightMode={false}
@@ -73,6 +81,15 @@ export function MarkdownCodeBlock({ code, language = '' }: MarkdownCodeBlockProp
     >
       {copiedCode}
     </CodeHighlighter>
+  );
+}
+
+function CodeBlockHeader({ code, language }: { code: string; language: string }) {
+  return (
+    <div className="chat-code-highlighter__header">
+      <span className="chat-code-highlighter__language">{codeLanguageLabel(language)}</span>
+      <CodeCopyButton code={code} />
+    </div>
   );
 }
 
@@ -114,4 +131,15 @@ function codeLanguageLabel(language: string): string {
 export function normalizeMarkdownCodeLanguage(language: string): string {
   const normalized = language.trim().toLowerCase();
   return codeLanguageAliases[normalized] || normalized;
+}
+
+export function shouldSyntaxHighlightMarkdownCode(code: string): boolean {
+  if (code.length > maxHighlightedCodeCharacters) return false;
+  let lineCount = 1;
+  for (let index = 0; index < code.length; index += 1) {
+    if (code.charCodeAt(index) !== 10) continue;
+    lineCount += 1;
+    if (lineCount > maxHighlightedCodeLines) return false;
+  }
+  return true;
 }

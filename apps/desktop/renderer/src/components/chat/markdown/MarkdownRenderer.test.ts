@@ -2,8 +2,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MarkdownNavigationProvider } from './MarkdownNavigationProvider.js';
-import { normalizeMarkdownCodeLanguage } from './MarkdownCodeBlock.js';
+import { normalizeMarkdownCodeLanguage, shouldSyntaxHighlightMarkdownCode } from './MarkdownCodeBlock.js';
 import { MarkdownRenderer } from './MarkdownRenderer.js';
+import { estimateMarkdownBlockHeight, shouldVirtualizeMarkdownBlocks } from './MarkdownVirtualBlock.js';
 
 function renderMarkdown(content: string, streaming = false): string {
   const children = createElement(MarkdownRenderer, { content, streaming });
@@ -52,5 +53,25 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('const answer = 42;');
     expect(normalizeMarkdownCodeLanguage('TSX')).toBe('typescript');
     expect(normalizeMarkdownCodeLanguage('')).toBe('');
+  });
+
+  it('skips token-by-token highlighting for very large code blocks', () => {
+    const code = Array.from({ length: 501 }, (_, index) => `line ${index}`).join('\n');
+    const html = renderMarkdown(`\`\`\`text\n${code}\n\`\`\``);
+
+    expect(shouldSyntaxHighlightMarkdownCode(code)).toBe(false);
+    expect(html).toContain('chat-code-highlighter--plain');
+    expect(html).toContain('line 500');
+    expect(html).toContain('aria-label="复制代码"');
+  });
+
+  it('enables block virtualization only for costly markdown documents', () => {
+    const shortBlocks = [{ content: 'Short paragraph.' }];
+    const manyBlocks = Array.from({ length: 24 }, (_, index) => ({ content: `Paragraph ${index}` }));
+
+    expect(shouldVirtualizeMarkdownBlocks(shortBlocks)).toBe(false);
+    expect(shouldVirtualizeMarkdownBlocks(manyBlocks)).toBe(true);
+    expect(shouldVirtualizeMarkdownBlocks([{ content: 'x'.repeat(16_000) }])).toBe(true);
+    expect(estimateMarkdownBlockHeight('```ts\nconst value = 1;\n```')).toBeGreaterThan(60);
   });
 });

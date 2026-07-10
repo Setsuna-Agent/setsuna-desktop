@@ -7,6 +7,7 @@ import { ChatTimelineDivider } from './ChatTimelineDivider.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { MarkdownRenderer } from './markdown/MarkdownRenderer.js';
+import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
 import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
@@ -396,53 +397,55 @@ export function ChatWorkspace({
             onTouchMoveCapture={handleScrollTouchMove}
             onWheelCapture={handleScrollWheel}
           >
-            <div className="chat-content-frame" ref={contentRef}>
-              {showEmptyStarter ? (
-                <div className="chat-starter">
-                  <h1>{starterTitle}</h1>
-                  {composer(true)}
-                </div>
-              ) : (
-                <div className="chat-bubble-list" ref={listRef}>
-                  {renderWindow.hiddenItemCount ? (
-                    <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} />
-                  ) : null}
-                  {renderedDisplayItems.map((item) => (
-                    <Fragment key={item.id}>
-                      <MessageItem
-                        activeAssistantItemId={activeAssistantItemId}
-                        activeTurnId={activeTurnId}
-                        assistantItemIdByTurnId={assistantItemIdByTurnId}
-                        deleteMode={deleteMode}
-                        editingDraft={editingDraft}
-                        editingMessageId={editingMessageId}
-                        editingSubmitting={editingSubmitting}
-                        expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
-                        item={item}
-                        onAnswerApproval={onAnswerApproval}
-                        onCancelEdit={cancelEditingMessage}
-                        onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
-                        onEditDraftChange={setEditingDraft}
-                        onOpenFileReview={onOpenFileReview}
-                        onPlanDecision={onPlanDecision}
-                        onStartEdit={startEditingMessage}
-                        onStartDelete={startDeleteSelection}
-                        onSubmitEdit={submitEditingMessage}
-                        onToggleDelete={toggleDeleteSelection}
-                        onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
-                        selectedForDelete={selectedDeleteItemIds.has(item.id)}
-                      />
-                      {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
-                        <ActiveWorkPlaceholder segments={[item.message]} />
-                      ) : null}
-                    </Fragment>
-                  ))}
-                  {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
-                  {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
-                  <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
-                </div>
-              )}
-            </div>
+            <MarkdownViewportProvider scrollRef={scrollRef}>
+              <div className="chat-content-frame" ref={contentRef}>
+                {showEmptyStarter ? (
+                  <div className="chat-starter">
+                    <h1>{starterTitle}</h1>
+                    {composer(true)}
+                  </div>
+                ) : (
+                  <div className="chat-bubble-list" ref={listRef}>
+                    {renderWindow.hiddenItemCount ? (
+                      <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} />
+                    ) : null}
+                    {renderedDisplayItems.map((item) => (
+                      <Fragment key={item.id}>
+                        <MessageItem
+                          activeAssistantItemId={activeAssistantItemId}
+                          activeTurnId={activeTurnId}
+                          assistantItemIdByTurnId={assistantItemIdByTurnId}
+                          deleteMode={deleteMode}
+                          editingDraft={editingDraft}
+                          editingMessageId={editingMessageId}
+                          editingSubmitting={editingSubmitting}
+                          expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
+                          item={item}
+                          onAnswerApproval={onAnswerApproval}
+                          onCancelEdit={cancelEditingMessage}
+                          onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
+                          onEditDraftChange={setEditingDraft}
+                          onOpenFileReview={onOpenFileReview}
+                          onPlanDecision={onPlanDecision}
+                          onStartEdit={startEditingMessage}
+                          onStartDelete={startDeleteSelection}
+                          onSubmitEdit={submitEditingMessage}
+                          onToggleDelete={toggleDeleteSelection}
+                          onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
+                          selectedForDelete={selectedDeleteItemIds.has(item.id)}
+                        />
+                        {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
+                          <ActiveWorkPlaceholder segments={[item.message]} />
+                        ) : null}
+                      </Fragment>
+                    ))}
+                    {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
+                    {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
+                    <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
+                  </div>
+                )}
+              </div>
+            </MarkdownViewportProvider>
           </div>
           <ChatScrollOverlay disabled={showEmptyStarter} scrollRef={scrollRef} scrollSignal={scrollSignal} />
           {conversationOverview ? (

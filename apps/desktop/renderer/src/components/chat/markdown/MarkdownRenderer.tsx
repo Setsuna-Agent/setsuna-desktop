@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { splitThinkingContent } from '../chatThinkingContent.js';
-import { MarkdownContentBlock } from './MarkdownContentBlock.js';
+import { MarkdownVirtualBlock, shouldVirtualizeMarkdownBlocks } from './MarkdownVirtualBlock.js';
 import { createMarkdownRenderBlocks } from './streamingMarkdown.js';
 
 export function MarkdownRenderer({ content, streaming }: { content: string; streaming: boolean }) {
@@ -16,7 +16,10 @@ export function MarkdownRenderer({ content, streaming }: { content: string; stre
         blocks: createMarkdownRenderBlocks(segment.content, activeStreaming),
         key: `markdown-${index}`,
       }];
-    });
+    }).map((segment) => ({
+      ...segment,
+      virtualized: shouldVirtualizeMarkdownBlocks(segment.blocks),
+    }));
   }, [content, streaming]);
 
   return (
@@ -28,13 +31,13 @@ export function MarkdownRenderer({ content, streaming }: { content: string; stre
         >
           {/* Parser block positions are append-only; index keys keep the mutable tail mounted as its content grows. */}
           {segment.blocks.map((block, index) => (
-            <div
-              className={`chat-markdown__block${block.mutable ? ' is-mutable' : ''}`}
-              data-markdown-block={block.mutable ? 'mutable' : 'stable'}
+            <MarkdownVirtualBlock
+              content={block.content}
+              forceRender={block.mutable}
               key={`${segment.key}-block-${index}`}
-            >
-              <MarkdownContentBlock content={block.content} />
-            </div>
+              mutable={block.mutable}
+              virtualized={segment.virtualized}
+            />
           ))}
           {segment.activeStreaming && !segment.blocks.length ? (
             <span className="chat-markdown__empty-tail" aria-hidden="true" />

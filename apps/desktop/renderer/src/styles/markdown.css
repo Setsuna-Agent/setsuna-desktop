@@ -23,6 +23,12 @@
   display: none;
 }
 
+.chat-markdown__block.is-virtual-placeholder {
+  display: block;
+  min-height: 1px;
+  pointer-events: none;
+}
+
 .chat-markdown :where(p, ul, ol, blockquote, pre) {
   margin: 0 0 0.9em;
 }
@@ -342,6 +348,11 @@
   border: 0;
   border-radius: 0;
   background: var(--chat-code-highlighter-bg);
+}
+
+.chat-code-highlighter--plain pre {
+  padding: 18px 16px;
+  white-space: pre;
 }
 
 .chat-code-highlighter pre {
