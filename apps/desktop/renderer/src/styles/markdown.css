@@ -164,6 +164,12 @@
   line-height: inherit;
 }
 
+.chat-markdown .katex-display {
+  margin: 0.9em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .chat-markdown pre code {
   padding: 0;
   background: transparent;

@@ -33,7 +33,7 @@ export function createMarkdownRenderBlocks(markdown: string, streaming: boolean)
     ? remend(markdown, {
         linkMode: 'text-only',
         inlineKatex: false,
-        katex: false,
+        katex: true,
       })
     : markdown;
   const blocks = parseMarkdownBlocks(renderSource);

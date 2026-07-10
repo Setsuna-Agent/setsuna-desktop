@@ -5,6 +5,7 @@ import '@fontsource/geist-sans/500.css';
 import '@fontsource/geist-sans/600.css';
 import '@fontsource/geist-mono/400.css';
 import 'antd/dist/reset.css';
+import 'katex/dist/katex.min.css';
 import { App } from './App.js';
 import { initializeCodeAppearancePreference } from './hooks/useCodeAppearancePreferences.js';
 import { initializeThemePreference } from './hooks/useThemeTransition.js';

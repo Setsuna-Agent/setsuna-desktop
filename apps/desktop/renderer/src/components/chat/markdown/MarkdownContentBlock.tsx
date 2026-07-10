@@ -1,6 +1,8 @@
 import { Children, isValidElement, memo, type MouseEvent, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
 import { markdownUrlTransform, resolveMarkdownLinkTarget } from './markdownLinks.js';
@@ -12,12 +14,14 @@ type MarkdownContentBlockProps = {
 type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> = JSX.IntrinsicElements[Tag] & ExtraProps;
 type MarkdownCodeChildProps = { children?: ReactNode; className?: string };
 
-const remarkPlugins = [remarkGfm];
+const rehypePlugins = [rehypeKatex];
+const remarkPlugins = [remarkGfm, remarkMath];
 
 export const MarkdownContentBlock = memo(function MarkdownContentBlock({ content }: MarkdownContentBlockProps) {
   return (
     <ReactMarkdown
       components={markdownComponents}
+      rehypePlugins={rehypePlugins}
       remarkPlugins={remarkPlugins}
       skipHtml
       urlTransform={markdownUrlTransform}

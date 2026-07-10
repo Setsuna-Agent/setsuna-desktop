@@ -36,6 +36,24 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('chat-markdown is-streaming');
   });
 
+  it('renders inline and display math with KaTeX', () => {
+    const html = renderMarkdown('Inline $x^2$\n\n$$\n\\lim_{x \\to 0} \\frac{\\sin 3x}{\\sin 5x}\n$$');
+    const compactMathHtml = renderMarkdown('$$\\lim_{x \\to 0} \\frac{\\sin 3x}{\\sin 5x}$$');
+
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('class="katex-display"');
+    expect(html).not.toContain('$$');
+    expect(compactMathHtml).toContain('class="katex"');
+    expect(compactMathHtml).not.toContain('$$');
+  });
+
+  it('repairs incomplete display math while streaming', () => {
+    const html = renderMarkdown('$$\n\\frac{1}{2}', true);
+
+    expect(html).toContain('class="katex-display"');
+    expect(html).not.toContain('$$');
+  });
+
   it('maps workspace links and does not render raw HTML', () => {
     const html = renderMarkdown('[source](./src/main.ts:12)\n\n<script>alert(1)</script>');
 
