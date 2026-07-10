@@ -222,7 +222,7 @@
   flex: 0 0 auto;
   padding: 10px;
   background: color-mix(in srgb, var(--app-sidebar-bg) 88%, transparent);
-  box-shadow: 0 -18px 28px color-mix(in srgb, var(--app-sidebar-bg) 72%, transparent);
+  box-shadow: 0 -8px 16px color-mix(in srgb, var(--app-sidebar-bg) 32%, transparent);
   backdrop-filter: blur(18px) saturate(1.35);
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
 }
@@ -232,9 +232,9 @@
   right: 0;
   bottom: 100%;
   left: 0;
-  height: 36px;
+  height: 20px;
   pointer-events: none;
-  background: linear-gradient(to top, color-mix(in srgb, var(--app-sidebar-bg) 92%, transparent), transparent);
+  background: linear-gradient(to top, color-mix(in srgb, var(--app-sidebar-bg) 72%, transparent), transparent);
   content: "";
 }
 

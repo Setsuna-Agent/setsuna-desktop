@@ -79,7 +79,7 @@ REST 路由覆盖：
 
 ## Agent Loop
 
-`src/loop/agent-loop.ts` 负责完整 turn 生命周期。
+`src/loop/agent-loop.ts` 负责完整 turn 生命周期的编排。memory、context compaction、模型采样/流事件、工具执行和用户 shell 分别下沉到同目录的 coordinator、sampler、publisher、executor 和 runner 模块。
 
 主要阶段：
 

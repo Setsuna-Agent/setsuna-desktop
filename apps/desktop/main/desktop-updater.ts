@@ -1,56 +1,28 @@
 import { app, BrowserWindow, dialog, shell } from 'electron';
+import type {
+  DesktopUpdateActionResult,
+  DesktopUpdateDownloadSource,
+  DesktopUpdateDownloadSourceInput,
+  DesktopUpdateInfo,
+  DesktopUpdateInstallMode,
+  DesktopUpdateProgress,
+  DesktopUpdateState,
+} from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  GITHUB_DIRECT_DOWNLOAD_SOURCE,
+  resolveUpdateDownloadUrl,
+  UpdateDownloadSourceStore,
+} from './update-download-sources.js';
 import { checksumForAsset, isNewerVersion, parseSha256Sums, selectUpdateAsset, type ReleaseAsset, type ReleaseInfo } from './update-metadata.js';
-
-export type DesktopUpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'not-available' | 'downloaded' | 'error' | 'unsupported';
-export type DesktopUpdateInstallMode = 'run-installer' | 'open-finder' | 'open-file' | 'unsupported';
-
-export type DesktopUpdateProgress = {
-  percent: number;
-  transferred: number;
-  total: number;
-  bytesPerSecond: number;
-};
-
-export type DesktopUpdateInfo = {
-  version?: string;
-  releaseDate?: string;
-  releaseName?: string;
-};
-
-export type DesktopUpdateState = {
-  status: DesktopUpdateStatus;
-  currentVersion: string;
-  platform: NodeJS.Platform;
-  arch: string;
-  installMode: DesktopUpdateInstallMode;
-  canUpdate: boolean;
-  feedUrl: string | null;
-  availableVersion?: string;
-  downloadedVersion?: string;
-  releaseUrl?: string;
-  manualInstall: boolean;
-  progress?: DesktopUpdateProgress | null;
-  updateInfo?: DesktopUpdateInfo | null;
-  assetName?: string;
-  downloadedFilePath?: string;
-  downloadedAt?: string;
-  error?: string;
-};
-
-export type DesktopUpdateActionResult = {
-  ok: boolean;
-  action: 'none' | 'opened-installer' | 'opened-folder' | 'unsupported';
-  state: DesktopUpdateState;
-  error?: string;
-};
 
 type DesktopUpdaterOptions = {
   currentVersion: string;
   repository: string;
   downloadsDir: string;
+  sourceConfigPath: string;
   enabled: boolean;
   checkIntervalMs?: number;
 };
@@ -66,14 +38,19 @@ export class DesktopUpdater {
   private readonly downloadsDir: string;
   private readonly enabled: boolean;
   private readonly latestReleaseUrl: string;
+  private readonly sourceStore: UpdateDownloadSourceStore;
+  private activeTransferController: AbortController | null = null;
   private checkTimer: NodeJS.Timeout | null = null;
+  private restartRequested = false;
   private runningCheck: Promise<DesktopUpdateState> | null = null;
+  private sourceRevision = 0;
 
   constructor(options: DesktopUpdaterOptions) {
     this.downloadsDir = options.downloadsDir;
     this.enabled = options.enabled;
     this.checkIntervalMs = options.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS;
     this.latestReleaseUrl = `https://api.github.com/repos/${options.repository}/releases/latest`;
+    this.sourceStore = new UpdateDownloadSourceStore(options.sourceConfigPath);
     this.state = {
       status: 'idle',
       currentVersion: options.currentVersion,
@@ -82,14 +59,21 @@ export class DesktopUpdater {
       installMode: updateInstallMode(process.platform),
       canUpdate: options.enabled,
       feedUrl: `https://github.com/${options.repository}/releases/latest`,
+      activeDownloadSourceId: GITHUB_DIRECT_DOWNLOAD_SOURCE.id,
+      downloadSources: [{ ...GITHUB_DIRECT_DOWNLOAD_SOURCE }],
       manualInstall: process.platform === 'darwin',
       progress: null,
       updateInfo: null,
     };
   }
 
+  async initialize(): Promise<void> {
+    await this.sourceStore.load();
+    this.applySourceConfig(this.sourceStore.getConfig(), false);
+  }
+
   getState(): DesktopUpdateState {
-    return { ...this.state };
+    return { ...this.state, downloadSources: this.state.downloadSources.map((source) => ({ ...source })) };
   }
 
   start(): void {
@@ -103,17 +87,37 @@ export class DesktopUpdater {
   stop(): void {
     if (this.checkTimer) clearInterval(this.checkTimer);
     this.checkTimer = null;
+    this.activeTransferController?.abort(new Error('Desktop updater stopped.'));
+    this.activeTransferController = null;
   }
 
   checkAndDownload(): Promise<DesktopUpdateState> {
     if (this.runningCheck) return this.runningCheck;
     if (this.state.status === 'downloaded') return Promise.resolve(this.getState());
 
-    this.runningCheck = this.runCheckAndDownload().finally(() => {
+    this.runningCheck = this.runChecksUntilStable().finally(() => {
       this.runningCheck = null;
     });
 
     return this.runningCheck;
+  }
+
+  async addDownloadSource(input: DesktopUpdateDownloadSourceInput): Promise<DesktopUpdateState> {
+    const config = await this.sourceStore.add(input);
+    this.applySourceConfig(config, true);
+    return this.getState();
+  }
+
+  async selectDownloadSource(sourceId: string): Promise<DesktopUpdateState> {
+    const config = await this.sourceStore.select(sourceId);
+    this.applySourceConfig(config, true);
+    return this.getState();
+  }
+
+  async removeDownloadSource(sourceId: string): Promise<DesktopUpdateState> {
+    const config = await this.sourceStore.remove(sourceId);
+    this.applySourceConfig(config, true);
+    return this.getState();
   }
 
   async promptReady(window: BrowserWindow | null): Promise<DesktopUpdateActionResult> {
@@ -139,15 +143,25 @@ export class DesktopUpdater {
     return this.openReadyUpdate();
   }
 
+  private async runChecksUntilStable(): Promise<DesktopUpdateState> {
+    do {
+      this.restartRequested = false;
+      await this.runCheckAndDownload();
+    } while (this.restartRequested);
+    return this.getState();
+  }
+
   private async runCheckAndDownload(): Promise<DesktopUpdateState> {
     if (!this.enabled) {
       this.setState({ status: 'unsupported', error: '当前环境不支持在线更新。', progress: null });
       return this.getState();
     }
 
+    const sourceRevision = this.sourceRevision;
     try {
       this.setState({ status: 'checking', error: undefined, progress: null });
       const release = await fetchJson<ReleaseInfo>(this.latestReleaseUrl);
+      this.ensureSourceUnchanged(sourceRevision);
       const availableVersion = release.tag_name;
 
       if (!isNewerVersion(availableVersion, this.state.currentVersion)) {
@@ -195,8 +209,13 @@ export class DesktopUpdater {
         downloadedAt: undefined,
       });
 
-      const expectedSha256 = await this.fetchExpectedChecksum(release.assets, asset);
-      const downloadedFilePath = await this.downloadAsset(asset, availableVersion);
+      const downloadSource = this.sourceStore.getActiveSource();
+      const transferController = new AbortController();
+      this.activeTransferController = transferController;
+      const expectedSha256 = await this.fetchExpectedChecksum(release.assets, asset, downloadSource, transferController.signal);
+      this.ensureSourceUnchanged(sourceRevision);
+      const downloadedFilePath = await this.downloadAsset(asset, availableVersion, downloadSource, transferController.signal);
+      this.ensureSourceUnchanged(sourceRevision);
 
       if (expectedSha256) {
         const actualSha256 = await sha256File(downloadedFilePath);
@@ -215,25 +234,34 @@ export class DesktopUpdater {
         error: undefined,
       });
     } catch (error) {
+      if (error instanceof UpdateDownloadSourceChangedError) return this.getState();
       this.setState({
         status: 'error',
         error: error instanceof Error ? error.message : String(error),
         progress: null,
       });
+    } finally {
+      this.activeTransferController = null;
     }
 
     return this.getState();
   }
 
-  private async fetchExpectedChecksum(assets: ReleaseAsset[], selectedAsset: ReleaseAsset): Promise<string | null> {
+  private async fetchExpectedChecksum(
+    assets: ReleaseAsset[],
+    selectedAsset: ReleaseAsset,
+    source: DesktopUpdateDownloadSource,
+    signal: AbortSignal,
+  ): Promise<string | null> {
     const checksumAsset = assets.find((asset) => asset.name === 'SHA256SUMS');
     if (!checksumAsset) return null;
 
     const checksumText = await fetchWithTimeout(
-      checksumAsset.browser_download_url,
+      resolveUpdateDownloadUrl(source, checksumAsset.browser_download_url),
       METADATA_REQUEST_TIMEOUT_MS,
       `Timed out while fetching checksums for ${selectedAsset.name}.`,
       async (response) => (response.ok ? response.text() : null),
+      signal,
     );
     if (!checksumText) return null;
 
@@ -241,7 +269,7 @@ export class DesktopUpdater {
     return checksumForAsset(checksums, selectedAsset.name);
   }
 
-  private async downloadAsset(asset: ReleaseAsset, version: string): Promise<string> {
+  private async downloadAsset(asset: ReleaseAsset, version: string, source: DesktopUpdateDownloadSource, signal: AbortSignal): Promise<string> {
     const versionDir = path.join(this.downloadsDir, version.replace(/[^\w.-]/gu, '_'));
     await mkdir(versionDir, { recursive: true });
 
@@ -250,8 +278,9 @@ export class DesktopUpdater {
     await rm(tempDestination, { force: true });
 
     try {
-      await downloadFile(asset.browser_download_url, tempDestination, {
+      await downloadFile(resolveUpdateDownloadUrl(source, asset.browser_download_url), tempDestination, {
         assetName: asset.name,
+        signal,
         onProgress: (progress) => {
           this.setState({ status: 'downloading', progress });
         },
@@ -263,6 +292,26 @@ export class DesktopUpdater {
     }
 
     return destination;
+  }
+
+  private applySourceConfig(config: { activeSourceId: string; sources: DesktopUpdateDownloadSource[] }, restartActiveTransfer: boolean): void {
+    const sourceChanged = this.state.activeDownloadSourceId !== config.activeSourceId;
+    this.setState({
+      activeDownloadSourceId: config.activeSourceId,
+      downloadSources: config.sources.map((source) => ({ ...source })),
+    });
+    if (!sourceChanged) return;
+
+    this.sourceRevision += 1;
+    if (restartActiveTransfer && this.runningCheck) {
+      // A source switch must take effect immediately, including during an automatic startup download.
+      this.restartRequested = true;
+      this.activeTransferController?.abort(new UpdateDownloadSourceChangedError());
+    }
+  }
+
+  private ensureSourceUnchanged(revision: number): void {
+    if (revision !== this.sourceRevision) throw new UpdateDownloadSourceChangedError();
   }
 
   private async openReadyUpdate(): Promise<DesktopUpdateActionResult> {
@@ -294,6 +343,13 @@ export class DesktopUpdater {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send('desktop-updater:state-change', this.getState());
     }
+  }
+}
+
+class UpdateDownloadSourceChangedError extends Error {
+  constructor() {
+    super('Download source changed.');
+    this.name = 'UpdateDownloadSourceChangedError';
   }
 }
 
@@ -370,30 +426,44 @@ async function fetchWithTimeout<T>(
   timeoutMs: number,
   timeoutMessage: string,
   readResponse: (response: Response) => Promise<T>,
+  externalSignal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new Error(timeoutMessage)), timeoutMs);
+  let timedOut = false;
+  const unlinkExternalSignal = forwardAbortSignal(externalSignal, controller);
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error(timeoutMessage));
+  }, timeoutMs);
 
   try {
     const response = await fetch(url, requestInit(controller.signal));
     return await readResponse(response);
   } catch (error) {
-    if (controller.signal.aborted) throw new Error(timeoutMessage, { cause: error });
+    if (externalSignal?.aborted) throw abortReason(externalSignal, error);
+    if (timedOut) throw new Error(timeoutMessage, { cause: error });
     throw error;
   } finally {
     clearTimeout(timeout);
+    unlinkExternalSignal();
   }
 }
 
 type DownloadFileOptions = {
   assetName: string;
+  signal?: AbortSignal;
   onProgress: (progress: DesktopUpdateProgress) => void;
 };
 
 async function downloadFile(url: string, destination: string, options: DownloadFileOptions): Promise<void> {
   const controller = new AbortController();
   const stallMessage = `Download stalled while fetching ${options.assetName}.`;
-  const resetStallTimer = createResettableTimeout(() => controller.abort(new Error(stallMessage)), DOWNLOAD_STALL_TIMEOUT_MS);
+  let stalled = false;
+  const unlinkExternalSignal = forwardAbortSignal(options.signal, controller);
+  const resetStallTimer = createResettableTimeout(() => {
+    stalled = true;
+    controller.abort(new Error(stallMessage));
+  }, DOWNLOAD_STALL_TIMEOUT_MS);
 
   try {
     resetStallTimer.reset();
@@ -407,10 +477,12 @@ async function downloadFile(url: string, destination: string, options: DownloadF
       resetStallTimer: resetStallTimer.reset,
     });
   } catch (error) {
-    if (controller.signal.aborted) throw new Error(stallMessage, { cause: error });
+    if (options.signal?.aborted) throw abortReason(options.signal, error);
+    if (stalled) throw new Error(stallMessage, { cause: error });
     throw error;
   } finally {
     resetStallTimer.clear();
+    unlinkExternalSignal();
   }
 }
 
@@ -498,4 +570,16 @@ function createResettableTimeout(callback: () => void, timeoutMs: number): { res
     },
     clear,
   };
+}
+
+function forwardAbortSignal(signal: AbortSignal | undefined, controller: AbortController): () => void {
+  if (!signal) return () => undefined;
+  const abort = () => controller.abort(signal.reason);
+  if (signal.aborted) abort();
+  else signal.addEventListener('abort', abort, { once: true });
+  return () => signal.removeEventListener('abort', abort);
+}
+
+function abortReason(signal: AbortSignal, cause: unknown): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('Request aborted.', { cause });
 }

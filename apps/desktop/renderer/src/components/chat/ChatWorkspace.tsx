@@ -987,6 +987,7 @@ function MessageItem({
       />
     );
   }
+  const hasAttachments = Boolean(message.attachments?.length);
   return (
     <article
       className={[
@@ -1007,7 +1008,7 @@ function MessageItem({
       ) : null}
       <div className="chat-user-turn">
         <Bubble
-          className="chat-user-bubble"
+          className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
           footer={
             <MessageFooter
@@ -1037,7 +1038,6 @@ function MessageItem({
 function UserMessageContent({ message, streaming }: { message: RuntimeMessage; streaming: boolean }) {
   return (
     <div className="chat-user-message-content">
-      {message.content ? <div className="chat-user-message-content__text">{message.content}</div> : streaming ? '...' : null}
       {message.attachments?.length ? (
         <div className="chat-user-message-attachments">
           {message.attachments.map((attachment) => (
@@ -1045,6 +1045,7 @@ function UserMessageContent({ message, streaming }: { message: RuntimeMessage; s
           ))}
         </div>
       ) : null}
+      {message.content || streaming ? <div className="chat-user-message-content__text">{message.content || '...'}</div> : null}
     </div>
   );
 }

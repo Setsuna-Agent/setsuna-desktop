@@ -887,6 +887,93 @@
   padding: 0 10px;
 }
 
+.desktop-settings-panel .chat-user-settings__download-source-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-copy strong {
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-copy span,
+.desktop-settings-panel .chat-user-settings__download-source-help,
+.desktop-settings-panel .chat-user-settings__download-source-current {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-actions,
+.desktop-settings-panel .chat-user-settings__download-source-form-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-actions .settings-local-control {
+  width: 190px;
+  min-width: 140px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-actions .sd-button,
+.desktop-settings-panel .chat-user-settings__download-source-actions .sd-icon-button,
+.desktop-settings-panel .chat-user-settings__download-source-form-actions .sd-button {
+  min-height: 30px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-current code {
+  color: var(--app-text-muted);
+  font-family: var(--app-font-mono);
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(220px, 1fr) auto;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-help {
+  grid-column: 1 / -1;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-error {
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 28%, transparent);
+  border-radius: 7px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, var(--app-surface));
+  font-size: 11px;
+  line-height: 17px;
+}
+
 .desktop-settings-panel .chat-user-settings__memory-preview-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 42%);
@@ -1776,6 +1863,31 @@
   .desktop-settings-panel .chat-user-settings__local-storage-control,
   .desktop-settings-panel .chat-user-settings__memory-preview-summary {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-settings-panel .chat-user-settings__update-panel,
+  .desktop-settings-panel .chat-user-settings__download-source-main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .desktop-settings-panel .chat-user-settings__update-actions,
+  .desktop-settings-panel .chat-user-settings__download-source-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .desktop-settings-panel .chat-user-settings__download-source-actions .settings-local-control {
+    flex: 1 1 180px;
+    width: auto;
+  }
+
+  .desktop-settings-panel .chat-user-settings__download-source-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-settings-panel .chat-user-settings__download-source-help {
+    grid-column: auto;
   }
 
   .desktop-settings-panel .chat-user-settings__font-preview {

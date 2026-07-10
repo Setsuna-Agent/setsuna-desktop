@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { RuntimeEvent, RuntimeRequestInput } from '@setsuna-desktop/contracts';
+import type {
+  DesktopUpdateActionResult,
+  DesktopUpdateDownloadSourceInput,
+  DesktopUpdateState,
+  RuntimeEvent,
+  RuntimeRequestInput,
+} from '@setsuna-desktop/contracts';
 
 type DesktopTerminalSession = {
   sessionId: string;
@@ -33,39 +39,6 @@ type DesktopReviewCommitInput = {
   includeUnstaged?: boolean;
   message: string;
   push?: boolean;
-};
-
-type DesktopUpdaterStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
-
-type DesktopUpdaterProgress = {
-  percent: number;
-  transferred: number;
-  total: number;
-  bytesPerSecond: number;
-};
-
-type DesktopUpdaterState = {
-  status: DesktopUpdaterStatus;
-  currentVersion: string;
-  platform: string;
-  arch: string;
-  availableVersion?: string | null;
-  downloadedVersion?: string | null;
-  error?: string | null;
-  progress?: DesktopUpdaterProgress | null;
-  canUpdate?: boolean;
-  feedUrl?: string | null;
-  manualInstall?: boolean;
-  downloadedFilePath?: string | null;
-  releaseUrl?: string | null;
-  assetName?: string | null;
-};
-
-type DesktopUpdateActionResult = {
-  ok: boolean;
-  action: 'none' | 'opened-installer' | 'opened-folder' | 'unsupported';
-  state: DesktopUpdaterState;
-  error?: string;
 };
 
 type RuntimeApi = {
@@ -105,6 +78,11 @@ const windowControls = {
   toggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window-control:toggle-maximize'),
   close: (): Promise<boolean> => ipcRenderer.invoke('window-control:close'),
   isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window-control:is-maximized'),
+  onMaximizedChange(callback: (maximized: boolean) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
+    ipcRenderer.on('window-control:maximized-change', listener);
+    return () => ipcRenderer.off('window-control:maximized-change', listener);
+  },
   setTitlebarScale: (scale: number): Promise<boolean> => ipcRenderer.invoke('window-control:set-titlebar-scale', { scale }),
 };
 
@@ -113,13 +91,16 @@ const links = {
 };
 
 const updater = {
-  getState: (): Promise<DesktopUpdaterState> => ipcRenderer.invoke('desktop-updater:get-state'),
-  checkForUpdates: (): Promise<DesktopUpdaterState> => ipcRenderer.invoke('desktop-updater:check'),
-  downloadUpdate: (): Promise<DesktopUpdaterState> => ipcRenderer.invoke('desktop-updater:download'),
+  getState: (): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:get-state'),
+  checkForUpdates: (): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:check'),
+  downloadUpdate: (): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:download'),
+  addDownloadSource: (input: DesktopUpdateDownloadSourceInput): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:add-download-source', input),
+  selectDownloadSource: (sourceId: string): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:select-download-source', sourceId),
+  removeDownloadSource: (sourceId: string): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:remove-download-source', sourceId),
   quitAndInstall: (): Promise<DesktopUpdateActionResult> => ipcRenderer.invoke('desktop-updater:quit-and-install'),
   promptReadyUpdate: (): Promise<DesktopUpdateActionResult> => ipcRenderer.invoke('desktop-updater:prompt-ready'),
-  onStateChange(callback: (state: DesktopUpdaterState) => void): () => void {
-    const listener = (_event: Electron.IpcRendererEvent, state: DesktopUpdaterState) => callback(state);
+  onStateChange(callback: (state: DesktopUpdateState) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => callback(state);
     ipcRenderer.on('desktop-updater:state-change', listener);
     return () => ipcRenderer.off('desktop-updater:state-change', listener);
   },

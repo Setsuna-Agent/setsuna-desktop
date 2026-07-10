@@ -73,8 +73,10 @@ async function createWindow(): Promise<void> {
     currentVersion: app.getVersion(),
     repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',
     downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
+    sourceConfigPath: path.join(app.getPath('userData'), 'update-download-sources.json'),
     enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
   });
+  await desktopUpdater.initialize();
   terminalStore = new DesktopTerminalStore((payload) => {
     mainWindow?.webContents.send('terminal:event', payload);
   });
@@ -92,6 +94,14 @@ async function createWindow(): Promise<void> {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+  const publishWindowMaximizedState = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('window-control:maximized-change', isWindowMaximized(mainWindow));
+  };
+  mainWindow.on('maximize', publishWindowMaximizedState);
+  mainWindow.on('unmaximize', publishWindowMaximizedState);
+  mainWindow.on('enter-full-screen', publishWindowMaximizedState);
+  mainWindow.on('leave-full-screen', publishWindowMaximizedState);
 
   const devServerUrl = process.env.SETSUNA_DESKTOP_DEV_SERVER_URL;
   if (devServerUrl) {
@@ -150,6 +160,9 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('desktop-updater:get-state');
   ipcMain.removeHandler('desktop-updater:check');
   ipcMain.removeHandler('desktop-updater:download');
+  ipcMain.removeHandler('desktop-updater:add-download-source');
+  ipcMain.removeHandler('desktop-updater:select-download-source');
+  ipcMain.removeHandler('desktop-updater:remove-download-source');
   ipcMain.removeHandler('desktop-updater:prompt-ready');
   ipcMain.removeHandler('desktop-updater:quit-and-install');
   ipcMain.removeHandler('window-control:minimize');
@@ -201,6 +214,12 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.handle('desktop-updater:get-state', async () => updater.getState());
   ipcMain.handle('desktop-updater:check', async () => updater.checkAndDownload());
   ipcMain.handle('desktop-updater:download', async () => updater.checkAndDownload());
+  ipcMain.handle('desktop-updater:add-download-source', async (_event, input) => updater.addDownloadSource({
+    name: String(input?.name ?? ''),
+    urlTemplate: String(input?.urlTemplate ?? ''),
+  }));
+  ipcMain.handle('desktop-updater:select-download-source', async (_event, sourceId) => updater.selectDownloadSource(String(sourceId ?? '')));
+  ipcMain.handle('desktop-updater:remove-download-source', async (_event, sourceId) => updater.removeDownloadSource(String(sourceId ?? '')));
   ipcMain.handle('desktop-updater:prompt-ready', async () => updater.promptReady(mainWindow));
   ipcMain.handle('desktop-updater:quit-and-install', async () => updater.installReady());
   ipcMain.handle('window-control:minimize', (event) => {
@@ -221,7 +240,10 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
     BrowserWindow.fromWebContents(event.sender)?.close();
     return true;
   });
-  ipcMain.handle('window-control:is-maximized', (event) => Boolean(BrowserWindow.fromWebContents(event.sender)?.isMaximized()));
+  ipcMain.handle('window-control:is-maximized', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return window ? isWindowMaximized(window) : false;
+  });
   ipcMain.handle('window-control:set-titlebar-scale', (event, input) => {
     if (process.platform !== 'darwin') return false;
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -277,6 +299,10 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
     terminal.resize(String(input?.sessionId ?? ''), Number(input?.cols ?? 100), Number(input?.rows ?? 24)),
   );
   ipcMain.handle('terminal:close', async (_event, input) => terminal.close(String(input?.sessionId ?? '')));
+}
+
+function isWindowMaximized(window: BrowserWindow): boolean {
+  return window.isMaximized() || window.isFullScreen();
 }
 
 function getDesktopUserProfile(): { username: string; displayName: string; homeDir: string | null; shell: string | null; hostName: string | null } {

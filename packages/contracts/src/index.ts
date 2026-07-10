@@ -9,5 +9,6 @@ export * from './provider.js';
 export * from './skills.js';
 export * from './threads.js';
 export * from './thread-events.js';
+export * from './updater.js';
 export * from './usage.js';
 export * from './workspace.js';

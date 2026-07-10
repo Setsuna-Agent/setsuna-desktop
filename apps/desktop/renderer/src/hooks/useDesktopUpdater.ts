@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type DesktopUpdaterApi = NonNullable<Window['setsunaDesktop']>['updater'];
+type DesktopDownloadSourceInput = Parameters<DesktopUpdaterApi['addDownloadSource']>[0];
 export type DesktopUpdaterBridgeState = Awaited<ReturnType<DesktopUpdaterApi['getState']>>;
 export type DesktopUpdateBridgeActionResult = Awaited<ReturnType<DesktopUpdaterApi['quitAndInstall']>>;
 
@@ -16,6 +17,9 @@ export type DesktopUpdaterStateView = {
   statusText: string;
   installButtonText: string;
   checkForUpdates: () => Promise<DesktopUpdaterBridgeState | null>;
+  addDownloadSource: (input: DesktopDownloadSourceInput) => Promise<DesktopUpdaterBridgeState | null>;
+  selectDownloadSource: (sourceId: string) => Promise<DesktopUpdaterBridgeState | null>;
+  removeDownloadSource: (sourceId: string) => Promise<DesktopUpdaterBridgeState | null>;
   installReadyUpdate: () => Promise<DesktopUpdateBridgeActionResult | null>;
   promptReadyUpdate: () => Promise<DesktopUpdateBridgeActionResult | null>;
 };
@@ -59,6 +63,27 @@ export function useDesktopUpdater(): DesktopUpdaterStateView {
     }
   }, [api]);
 
+  const addDownloadSource = useCallback(async (input: DesktopDownloadSourceInput) => {
+    if (!api) return null;
+    const nextState = await api.addDownloadSource(input);
+    setState(nextState);
+    return nextState;
+  }, [api]);
+
+  const selectDownloadSource = useCallback(async (sourceId: string) => {
+    if (!api) return null;
+    const nextState = await api.selectDownloadSource(sourceId);
+    setState(nextState);
+    return nextState;
+  }, [api]);
+
+  const removeDownloadSource = useCallback(async (sourceId: string) => {
+    if (!api) return null;
+    const nextState = await api.removeDownloadSource(sourceId);
+    setState(nextState);
+    return nextState;
+  }, [api]);
+
   const installReadyUpdate = useCallback(async () => {
     if (!api) return null;
     setInstalling(true);
@@ -100,10 +125,13 @@ export function useDesktopUpdater(): DesktopUpdaterStateView {
       statusText: updateStatusText(state, Boolean(api), checking),
       installButtonText: state?.manualInstall ? '打开访达' : state?.platform === 'linux' ? '打开下载目录' : '重启安装',
       checkForUpdates,
+      addDownloadSource,
+      selectDownloadSource,
+      removeDownloadSource,
       installReadyUpdate,
       promptReadyUpdate,
     };
-  }, [api, checkForUpdates, checking, installReadyUpdate, installing, promptReadyUpdate, state]);
+  }, [addDownloadSource, api, checkForUpdates, checking, installReadyUpdate, installing, promptReadyUpdate, removeDownloadSource, selectDownloadSource, state]);
 }
 
 function updateStatusTitle(state: DesktopUpdaterBridgeState | null, checking: boolean): string {

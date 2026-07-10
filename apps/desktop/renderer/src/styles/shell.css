@@ -1,4 +1,6 @@
 .app-shell {
+  --app-topbar-divider-width: 1px;
+
   display: grid;
   grid-template-rows: var(--app-topbar-height) minmax(0, 1fr);
   width: 100%;
@@ -6,6 +8,10 @@
   overflow: hidden;
   background: var(--app-window-bg);
   font-weight: 400;
+}
+
+.app-shell--window-maximized {
+  --app-topbar-divider-width: 0px;
 }
 
 .app-topbar {
@@ -16,8 +22,28 @@
   min-width: 0;
   height: var(--app-topbar-height);
   background: var(--app-window-bg);
-  border-bottom: 1px solid var(--app-border);
+  border-bottom: 0;
   -webkit-app-region: drag;
+}
+
+.app-topbar::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: var(--app-topbar-sidebar-width, var(--app-sidebar-width));
+  height: var(--app-topbar-divider-width);
+  background: var(--app-border);
+  content: '';
+  pointer-events: none;
+}
+
+.desktop-agent-page--sidebar-collapsed .app-topbar::after {
+  left: 0;
+}
+
+.app-shell--window-maximized.app-shell--inspector-open .app-topbar::after {
+  right: var(--desktop-agent-workspace-width);
+  height: 1px;
 }
 
 .app-topbar__brand,
@@ -34,7 +60,7 @@
 }
 
 .app-topbar__brand {
-  padding: 0 10px 0 72px;
+  padding: 0 10px 0 82px;
   color: var(--app-sidebar-text);
   background: var(--app-sidebar-bg);
   font-weight: 500;
@@ -207,9 +233,7 @@
   display: inline-flex;
 }
 
-.desktop-agent-page--settings-open .app-topbar .app-topbar__new-chat,
-.desktop-agent-page--sidebar-collapsed .app-topbar .app-topbar__history-button,
-.desktop-agent-page--settings-open .app-topbar .app-topbar__history-button {
+.desktop-agent-page--settings-open .app-topbar .app-topbar__new-chat {
   display: none;
 }
 
@@ -227,7 +251,12 @@
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
   padding-right: 0;
   background: var(--app-titlebar-bg);
-  border-bottom-color: color-mix(in srgb, var(--app-border) 70%, transparent);
+  border-bottom: var(--app-topbar-divider-width) solid color-mix(in srgb, var(--app-border) 70%, transparent);
+}
+
+:root[data-desktop-platform='win32'] .app-topbar::after,
+:root[data-desktop-platform='linux'] .app-topbar::after {
+  display: none;
 }
 
 :root[data-desktop-platform='win32'] .app-topbar__brand,
@@ -377,6 +406,11 @@
   z-index: 15;
 }
 
+:root[data-desktop-platform='win32'] .app-shell--inspector-open .app-workbench__main-title,
+:root[data-desktop-platform='linux'] .app-shell--inspector-open .app-workbench__main-title {
+  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+}
+
 :root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-workbench__main-title,
 :root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-workbench__main-title {
   display: none;
@@ -391,7 +425,7 @@
   min-width: 0;
   height: var(--desktop-workspace-toolbar-height);
   border-left: 1px solid var(--desktop-agent-subtle-divider);
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  border-bottom: var(--app-topbar-divider-width) solid var(--desktop-agent-subtle-divider);
   background: var(--desktop-agent-main-bg);
   z-index: 14;
 }

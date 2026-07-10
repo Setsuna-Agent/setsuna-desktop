@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Maximize2, Minus, PanelLeft, Plus, X } from 'lucide-react';
+import { Maximize2, Minus, PanelLeft, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type Ref } from 'react';
 import { IconButton } from '../primitives.js';
 import { usesCustomFrameLayout } from '../../utils/desktopPlatform.js';
@@ -58,14 +58,24 @@ export function ShellFrame({
   inspectorOpen?: boolean;
 }) {
   const customFrame = usesCustomFrameLayout();
+  const windowMaximized = useWindowMaximizedState();
   const sidebarToggleAction = showSidebarToggle ? onToggleSidebar : undefined;
   const topbarMenuActions = useMemo(
     () => ({ ...menuActions, onToggleSidebar: sidebarToggleAction }),
     [menuActions, sidebarToggleAction],
   );
+  const rootClassName = [
+    'app-shell',
+    'desktop-agent-page',
+    windowMaximized ? 'app-shell--window-maximized' : '',
+    inspectorOpen ? 'app-shell--inspector-open' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <div ref={rootRef} className={`app-shell desktop-agent-page ${className}`} style={style}>
+    <div ref={rootRef} className={rootClassName} style={style}>
       <header className="app-topbar">
         <div className="app-topbar__brand">
           <TitlebarNavigation
@@ -102,6 +112,32 @@ export function ShellFrame({
   );
 }
 
+function useWindowMaximizedState(): boolean {
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    const controls = window.setsunaDesktop?.windowControls;
+    if (!controls) return undefined;
+
+    let active = true;
+    let receivedChange = false;
+    const unsubscribe = controls.onMaximizedChange((nextMaximized) => {
+      receivedChange = true;
+      setMaximized(nextMaximized);
+    });
+    void controls.isMaximized().then((initialMaximized) => {
+      if (active && !receivedChange) setMaximized(initialMaximized);
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  return maximized;
+}
+
 function TitlebarNavigation({
   onNewChat,
   sidebarCollapsed,
@@ -129,12 +165,6 @@ function TitlebarNavigation({
           <Plus size={15} />
         </IconButton>
       ) : null}
-      <IconButton label="后退" className="app-topbar__history-button" disabled>
-        <ArrowLeft size={15} />
-      </IconButton>
-      <IconButton label="前进" className="app-topbar__history-button" disabled>
-        <ArrowRight size={15} />
-      </IconButton>
     </div>
   );
 }

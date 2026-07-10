@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
 import { Brain, ChevronRight, Code2, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, Pencil, Plus, RefreshCw, SlidersHorizontal, Sun, Trash2, Type, X } from 'lucide-react';
@@ -377,9 +377,110 @@ function AboutSettings({ updater }: { updater: DesktopUpdaterStateView }) {
             ) : null}
           </div>
         </div>
+        <UpdateDownloadSourceSettings updater={updater} />
       </div>
     </div>
   );
+}
+
+function UpdateDownloadSourceSettings({ updater }: { updater: DesktopUpdaterStateView }) {
+  const [adding, setAdding] = useState(false);
+  const [sourceName, setSourceName] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [sourceBusy, setSourceBusy] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const sources = updater.state?.downloadSources ?? [];
+  const activeSourceId = updater.state?.activeDownloadSourceId ?? sources[0]?.id ?? '';
+  const activeSource = sources.find((source) => source.id === activeSourceId) ?? sources[0] ?? null;
+
+  const runSourceAction = async (action: () => Promise<unknown>) => {
+    setSourceBusy(true);
+    setSourceError(null);
+    try {
+      await action();
+      return true;
+    } catch (error) {
+      setSourceError(formatUpdaterError(error));
+      return false;
+    } finally {
+      setSourceBusy(false);
+    }
+  };
+
+  const addSource = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const saved = await runSourceAction(() => updater.addDownloadSource({ name: sourceName, urlTemplate: sourceUrl }));
+    if (!saved) return;
+    setSourceName('');
+    setSourceUrl('');
+    setAdding(false);
+  };
+
+  const selectSource = async (sourceId: string) => {
+    if (!sourceId || sourceId === activeSourceId) return;
+    await runSourceAction(() => updater.selectDownloadSource(sourceId));
+  };
+
+  const removeActiveSource = async () => {
+    if (!activeSource || activeSource.builtIn) return;
+    await runSourceAction(() => updater.removeDownloadSource(activeSource.id));
+  };
+
+  return (
+    <div className="chat-user-settings__group chat-user-settings__download-source-panel">
+      <div className="chat-user-settings__download-source-main">
+        <div className="chat-user-settings__download-source-copy">
+          <strong>下载源</strong>
+          <span>版本检查仍使用 GitHub API，安装包和校验文件从所选源下载。</span>
+        </div>
+        <div className="chat-user-settings__download-source-actions">
+          <SelectField aria-label="下载源" className="settings-local-control" disabled={sourceBusy || sources.length === 0} value={activeSourceId} onChange={(event) => void selectSource(event.currentTarget.value)}>
+            {sources.map((source) => (
+              <option key={source.id} value={source.id}>{source.name}</option>
+            ))}
+          </SelectField>
+          <Button icon={<Plus size={14} />} disabled={sourceBusy || !updater.api} onClick={() => {
+            setAdding((current) => !current);
+            setSourceError(null);
+          }}>
+            添加源
+          </Button>
+          {activeSource && !activeSource.builtIn ? (
+            <Popconfirm title={`删除“${activeSource.name}”？`} description="删除当前源后会自动切回 GitHub 直连。" placement="topRight" okText="删除" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={() => void removeActiveSource()}>
+              <IconButton label={`删除下载源 ${activeSource.name}`} variant="danger" disabled={sourceBusy}>
+                <Trash2 size={14} />
+              </IconButton>
+            </Popconfirm>
+          ) : null}
+        </div>
+      </div>
+
+      {activeSource ? (
+        <div className="chat-user-settings__download-source-current" title={activeSource.urlTemplate}>
+          当前规则：<code>{activeSource.urlTemplate === '{url}' ? 'GitHub 原始下载地址' : activeSource.urlTemplate}</code>
+        </div>
+      ) : null}
+
+      {adding ? (
+        <form className="chat-user-settings__download-source-form" onSubmit={(event) => void addSource(event)}>
+          <TextField aria-label="下载源名称" disabled={sourceBusy} maxLength={40} placeholder="名称，例如：公司镜像" value={sourceName} onChange={(event) => setSourceName(event.currentTarget.value)} />
+          <TextField aria-label="下载源地址" disabled={sourceBusy} placeholder="地址或模板，例如：https://ghfast.example/" value={sourceUrl} onChange={(event) => setSourceUrl(event.currentTarget.value)} />
+          <div className="chat-user-settings__download-source-form-actions">
+            <Button type="submit" variant="primary" disabled={sourceBusy || !sourceName.trim() || !sourceUrl.trim()}>添加并使用</Button>
+            <Button disabled={sourceBusy} onClick={() => setAdding(false)}>取消</Button>
+          </div>
+          <span className="chat-user-settings__download-source-help">只填地址时会自动追加原始下载 URL；高级用法可在模板中使用 {'{url}'} 或 {'{encodedUrl}'}。</span>
+        </form>
+      ) : null}
+
+      {sourceError ? <div className="chat-user-settings__download-source-error" role="alert">{sourceError}</div> : null}
+    </div>
+  );
+}
+
+function formatUpdaterError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return error.message.replace(/^Error invoking remote method '[^']+':\s*/u, '');
 }
 
 function updateBadgeTone(state: DesktopUpdaterBridgeState | null): 'neutral' | 'success' | 'warning' | 'danger' {

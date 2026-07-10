@@ -1932,7 +1932,7 @@ server 测试。
 
 ### `agent-loop.ts`
 
-本地 agent loop。
+本地 agent loop 编排入口。
 
 职责：
 
@@ -1947,12 +1947,10 @@ server 测试。
   - compact thread context
 - 构造模型请求消息。
 - 注入 Skill。
-- 注入 memory。
+- 协调 memory 注入和生成。
 - 管理 active turn 状态。
 - 执行工具调用。
-- 支持工具参数 delta 合并。
-- 支持 parallel read-only tool batch。
-- 管理工具调用预算和工具轮次上限。
+- 调度工具调用、parallel read-only batch 和审批流程。
 - 处理审批 gate。
 - 发布 runtime events：
   - turn started/completed/cancelled
@@ -1965,7 +1963,39 @@ server 测试。
 - 支持 thinking/reasoning options。
 - 对 prompt 注入内容做 tag neutralize，避免用户内容伪造 `<skill>` / `<memory>` / personalization 标签。
 
-这是 runtime 的核心业务循环。模型协议、工具协议、context compaction、memory/skill 注入变化通常都要看这里。
+这是 runtime 的核心业务循环。具体的 memory、context compaction、模型流事件和工具纯策略分别下沉到同目录模块，`AgentLoop` 保留 turn 生命周期和跨模块编排。
+
+### `runtime-memory-coordinator.ts`
+
+长期记忆协调器。负责 memory context、主动/被动记忆生成、启动回扫、phase-2 调度和外部上下文污染门禁。
+
+### `runtime-context-compactor.ts`
+
+上下文压缩协调器。负责压缩预算、摘要生成、压缩事件和 sampling context-window 投影。
+
+### `runtime-model-stream-event-publisher.ts`
+
+模型流事件发布器。负责 message/item/reasoning/token 事件的落盘投影，并兼容 legacy stream 事件。
+
+### `runtime-model-sampler.ts`
+
+单次模型采样器。统一普通 sampling 和禁用工具后的最终 sampling，归一化模型流、reasoning、tool call 和 usage 输出。
+
+### `runtime-tool-call-executor.ts`
+
+工具调用执行器。持有动态工具、deferred tool 和审批状态，负责并行批次、工具路由、协作工具执行及工具事件投影。
+
+### `runtime-user-shell-runner.ts`
+
+用户 shell 命令执行器。复用标准工具生命周期事件，并处理 standalone/active turn、流式输出、取消和 cleanup。
+
+### `agent-loop-tool-utils.ts`
+
+工具调用纯策略和解析 helper，包括动态工具响应、工具预算、参数 delta、并行读取去重和 diff 预览。
+
+### `prompt-utils.ts`
+
+prompt 文本、标签转义和模型 JSON 输出解析的共享纯函数。
 
 ### `context-compaction.ts`
 

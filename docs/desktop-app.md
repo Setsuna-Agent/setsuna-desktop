@@ -80,12 +80,13 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 - 只能打开当前 workspace 内的文件。
 - 跨平台启动参数要分别维护，不要用单一 shell 命令拼接。
 
-### `desktop-updater.ts` / `update-metadata.ts`
+### `desktop-updater.ts` / `update-metadata.ts` / `update-download-sources.ts`
 
 职责：
 
 - 查询 GitHub latest release。
 - 选择当前平台/架构匹配的资产。
+- 管理并持久化下载源；默认使用 GitHub 直连，自定义源支持 URL 前缀或 `{url}` / `{encodedUrl}` 模板。
 - 下载到用户 Downloads 下的 Setsuna Desktop Updates。
 - 校验 `SHA256SUMS`。
 - macOS/Linux 打开文件夹，Windows 打开 installer。
@@ -93,6 +94,8 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 约束：
 
 - updater 默认只在 packaged 或显式 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用。
+- 版本元数据固定从 GitHub API 获取；选中的下载源只改写安装包和 `SHA256SUMS` 请求。
+- 下载期间切换源会取消当前传输，并使用新源重新执行本次更新。
 - asset 命名、平台匹配和 checksum 逻辑要同步 release workflow。
 
 ## `apps/desktop/preload`

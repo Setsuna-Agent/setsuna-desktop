@@ -425,11 +425,12 @@
   border-radius: var(--app-radius-lg);
   background: var(--desktop-agent-main-surface);
   box-shadow: var(--desktop-agent-input-shadow) !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .chat-sender .ant-sender:focus-within {
-  border-color: color-mix(in srgb, var(--app-text) 34%, var(--desktop-agent-panel-border));
-  box-shadow: var(--app-focus-ring), var(--desktop-agent-input-shadow) !important;
+  border-color: color-mix(in srgb, var(--app-text) 24%, var(--desktop-agent-panel-border));
+  box-shadow: var(--desktop-agent-input-shadow) !important;
 }
 
 .chat-sender .ant-sender-content,
