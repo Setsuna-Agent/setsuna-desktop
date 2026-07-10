@@ -389,6 +389,11 @@
   max-width: 100%;
 }
 
+.chat-user-bubble .ant-bubble-body {
+  align-items: flex-end;
+  min-width: 0;
+}
+
 .chat-message-select {
   display: inline-flex;
   align-items: center;
@@ -470,6 +475,7 @@
 }
 
 .chat-user-bubble .ant-bubble-content {
+  width: fit-content;
   min-width: 0;
   max-width: min(680px, 100%);
   border: 1px solid var(--app-border);
@@ -663,6 +669,7 @@
   place-items: center;
   height: 20px;
   line-height: 20px;
+  transform: translateY(1px);
 }
 
 .chat-bubble-item:hover .chat-message-footer,
