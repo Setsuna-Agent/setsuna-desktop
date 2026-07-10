@@ -54,6 +54,9 @@ describe('provider model adapters', () => {
     expect(body.model).toBe('model-code');
     expect(body.max_tokens).toBe(1234);
     expect(events.filter((event) => event.type === 'text_delta').map((event) => event.text).join('')).toBe('Hello');
+    expect(events.find((event) => event.type === 'usage')).toMatchObject({
+      usage: { providerId: 'provider-1', provider: 'Provider 1', totalTokens: 5 },
+    });
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'stop' });
   });
 
@@ -251,7 +254,8 @@ describe('provider model adapters', () => {
     expect(result).toMatchObject({
       summary: 'Provider compact summary.',
       usage: {
-        provider: 'openai-responses',
+        providerId: 'provider-1',
+        provider: 'Provider 1',
         model: 'model-code',
         inputTokens: 10,
         outputTokens: 2,
@@ -685,6 +689,9 @@ describe('provider model adapters', () => {
     expect(headers['anthropic-version']).toBe('2023-06-01');
     expect(body.system).toBe('System prompt');
     expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Claude' });
+    expect(events.find((event) => event.type === 'usage')).toMatchObject({
+      usage: { providerId: 'provider-1', provider: 'Provider 1', totalTokens: 8 },
+    });
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'end_turn' });
   });
 

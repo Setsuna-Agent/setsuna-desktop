@@ -2,6 +2,9 @@ export type RuntimeUsage = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  /** Stable ID of the configured vendor entry that handled the request. */
+  providerId?: string;
+  /** Display name of the configured vendor, not its transport protocol. */
   provider?: string;
   model?: string;
 };

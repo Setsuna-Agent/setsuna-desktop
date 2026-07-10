@@ -82,7 +82,17 @@ export class OpenAiChatModelClient implements ModelClient {
       const toolCalls = [...toolCallsByIndex.values()].filter((call) => call.name);
       if (toolCalls.length) yield { type: 'tool_calls' as const, toolCalls };
     }
-    if (usage) yield { type: 'usage' as const, usage: { ...usage, provider: this.provider.provider, model: activeModel?.code } };
+    if (usage) {
+      yield {
+        type: 'usage' as const,
+        usage: {
+          ...usage,
+          providerId: this.provider.id,
+          provider: this.provider.name,
+          model: activeModel?.code,
+        },
+      };
+    }
     yield doneEvent(finishReason);
   }
 }

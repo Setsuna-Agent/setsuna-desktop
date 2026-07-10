@@ -138,7 +138,8 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
           totalTokens: usage.totalTokens,
-          provider: this.provider.provider,
+          providerId: this.provider.id,
+          provider: this.provider.name,
           model: modelId,
         },
       };

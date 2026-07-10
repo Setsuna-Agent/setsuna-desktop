@@ -47,11 +47,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const persistedThreadStore = new JsonThreadStore(runtimeDataDir, clock, ids);
   const eventWriter = new RuntimeEventWriter(persistedThreadStore, eventBus);
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter);
-  const usageStore = new FileUsageStore(runtimeDataDir, ids);
+  const configStore = new FileConfigStore(runtimeDataDir);
+  const usageStore = new FileUsageStore(runtimeDataDir, ids, async () => (await configStore.getConfig()).providers);
   const mcpStore = new FileMcpStore(runtimeDataDir);
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
   const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir, mcpStore);
-  const configStore = new FileConfigStore(runtimeDataDir);
   // memory 的实际存储根会跟随用户配置变化，因此这里用延迟读取的 storagePath。
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids, async () => (await configStore.getConfig()).storagePath);
   const builtinSkillsDir =

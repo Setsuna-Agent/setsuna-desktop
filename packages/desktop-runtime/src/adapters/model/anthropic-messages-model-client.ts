@@ -140,7 +140,17 @@ export class AnthropicMessagesModelClient implements ModelClient {
       const calls = [...toolCalls.values()].filter((call) => call.name);
       if (calls.length) yield { type: 'tool_calls' as const, toolCalls: calls };
     }
-    if (usage) yield { type: 'usage' as const, usage: { ...usage, provider: this.provider.provider, model: activeModel?.code } };
+    if (usage) {
+      yield {
+        type: 'usage' as const,
+        usage: {
+          ...usage,
+          providerId: this.provider.id,
+          provider: this.provider.name,
+          model: activeModel?.code,
+        },
+      };
+    }
     yield doneEvent(finishReason);
   }
 }

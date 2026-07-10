@@ -46,4 +46,43 @@ describe('file usage store', () => {
     expect(threadOnly.records).toHaveLength(1);
     expect(threadOnly.summary).toMatchObject({ totalTokens: 30, recordCount: 1 });
   });
+
+  it('resolves legacy protocol labels to configured provider names', async () => {
+    const store = new FileUsageStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-usage-legacy-test-')),
+      new RandomIdGenerator(),
+      async () => [
+        {
+          id: 'dashscope',
+          name: '阿里云百炼',
+          provider: 'openai-compatible',
+          models: [{
+            id: 'qwen',
+            name: 'Qwen',
+            code: 'qwen3-coder-plus',
+            enabled: true,
+            maxOutputTokens: 8192,
+            thinkingEnabled: false,
+            thinkingEfforts: [],
+          }],
+        },
+      ],
+    );
+
+    await store.recordUsage({
+      threadId: 'thread_legacy',
+      turnId: 'turn_legacy',
+      createdAt: '2026-06-25T00:00:00.000Z',
+      provider: 'openai-compatible',
+      model: 'qwen3-coder-plus',
+      totalTokens: 30,
+    });
+
+    const usage = await store.getUsage();
+
+    expect(usage.records[0]).toMatchObject({ providerId: 'dashscope', provider: '阿里云百炼' });
+    expect(usage.summary.byProvider).toMatchObject([
+      { key: '阿里云百炼', totalTokens: 30, recordCount: 1 },
+    ]);
+  });
 });
