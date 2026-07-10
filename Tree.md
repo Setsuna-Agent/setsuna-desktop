@@ -1945,25 +1945,63 @@ server 测试。
   - cancel turn
   - steer active turn
   - compact thread context
-- 构造模型请求消息。
-- 注入 Skill。
-- 协调 memory 注入和生成。
+- 决定模型采样、工具循环和终态收尾的阶段顺序。
 - 管理 active turn 状态。
-- 执行工具调用。
-- 调度工具调用、parallel read-only batch 和审批流程。
-- 处理审批 gate。
-- 发布 runtime events：
+- 委托专职 coordinator/builder/executor 处理 hooks、sampling context、标题、memory、工具和终态事件。
+- 发布或协调 runtime events：
   - turn started/completed/cancelled
   - message appended/updated
   - tool started/completed
   - approval requested/resolved
   - context compacting/compacted
   - runtime error
-- 记录 usage。
 - 支持 thinking/reasoning options。
-- 对 prompt 注入内容做 tag neutralize，避免用户内容伪造 `<skill>` / `<memory>` / personalization 标签。
 
-这是 runtime 的核心业务循环。具体的 memory、context compaction、模型流事件和工具纯策略分别下沉到同目录模块，`AgentLoop` 保留 turn 生命周期和跨模块编排。
+这是 runtime 的核心业务循环和 Facade。`AgentLoop` 只保留 turn 生命周期与跨模块编排；新增横切逻辑不应继续直接塞入该文件。
+
+### `runtime-agent-turn-runner.ts`
+
+单个 agent turn 的核心执行器。负责多轮模型采样、steer/mailbox drain、工具结果回填、Stop hook、最终回答和错误/取消分支。
+
+### `runtime-turn-input-coordinator.ts`
+
+turn 输入协调器。负责 steer、active/idle mailbox 队列、输入写入同步和 mailbox 模型消息转换。
+
+### `runtime-compaction-turn-coordinator.ts`
+
+显式 context compaction turn 协调器。负责 task 登记、Pre/PostCompact hooks、压缩事件、usage 和取消终态。
+
+### `runtime-model-input-guard.ts`
+
+模型输入能力守卫。统一校验当前模型是否允许图片附件。
+
+### `runtime-hook-coordinator.ts`
+
+Hook 生命周期协调器。维护 SessionStart 状态，运行 turn start、Stop 和 Compact hooks，并构造 hook 附加上下文。
+
+### `runtime-sampling-context-builder.ts`
+
+单次模型采样上下文 Builder。负责 provider config、compaction、memory、Skill、工具路由、MCP 与 step snapshot 的一致性组装。
+
+### `runtime-thread-title-coordinator.ts` / `runtime-thread-title-generator.ts`
+
+线程标题策略与模型生成。负责首轮资格判断、当前模型调用、输出归一化、fallback、usage 和手动改名保护。
+
+### `runtime-turn-finalizer.ts`
+
+成功 turn 的固定收尾模板，保持 message、title、review、memory、usage 和 `turn.completed` 的事件顺序。
+
+### `runtime-turn-run-factory.ts`
+
+turn 入口 Factory。统一普通、review、mailbox-triggered、regenerate turn 的校验、输入准备和任务登记，再交给 `AgentLoop` 执行。
+
+### `runtime-turn-termination-coordinator.ts`
+
+取消/终态幂等协调器。负责 aborted marker 和 `turn.cancelled` 的串行写入，避免重复 terminal event。
+
+### `runtime-turn-errors.ts`
+
+turn 取消错误和 AbortSignal 归一化 helper，供 runner 与 compaction coordinator 共用。
 
 ### `runtime-memory-coordinator.ts`
 

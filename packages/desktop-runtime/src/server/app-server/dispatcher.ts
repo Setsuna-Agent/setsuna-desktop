@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { RuntimeCollaborationMode, RuntimePlanDecision, ThreadQuery } from '@setsuna-desktop/contracts';
+import { DEFAULT_THREAD_TITLE, type RuntimeCollaborationMode, type RuntimePlanDecision, type ThreadQuery } from '@setsuna-desktop/contracts';
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
 import {
   callMcpServerToolResponse,
@@ -321,7 +321,7 @@ export async function dispatchAppServerRpcRequest(
     if (hasAppServerDynamicToolsInput(input)) requireExperimentalAppServerApi(connectionRegistry, connectionId, 'dynamicTools');
     const dynamicTools = appServerDynamicToolsInput(input.dynamicTools ?? input.dynamic_tools);
     const thread = await runtime.threadStore.createThread({
-      title: stringInput(input.name) || stringInput(input.threadName) || path.basename(cwd) || 'New thread',
+      title: stringInput(input.name) || stringInput(input.threadName) || path.basename(cwd) || DEFAULT_THREAD_TITLE,
       projectId: stringInput(input.projectId),
     });
     if (dynamicTools !== undefined) {

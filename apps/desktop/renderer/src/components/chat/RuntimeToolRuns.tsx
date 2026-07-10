@@ -1120,6 +1120,14 @@ function toolRunGroupStatus(runs: RuntimeToolRun[]): RuntimeToolRun['status'] {
   return 'success';
 }
 
+function activeToolRunOrLast(runs: RuntimeToolRun[]): RuntimeToolRun | undefined {
+  for (let index = runs.length - 1; index >= 0; index -= 1) {
+    const run = runs[index];
+    if (run && (run.status === 'running' || run.status === 'pending_approval')) return run;
+  }
+  return runs.at(-1);
+}
+
 function toolRunGroupSummary(group: Extract<ToolRunGroup, { type: 'group' }>): { title: string; target?: string } {
   if (group.kind === 'inspection') return inspectionGroupSummary(group.runs);
   if (group.kind === 'shell') return shellGroupSummary(group.runs);
@@ -1136,7 +1144,7 @@ function toolRunGroupSummary(group: Extract<ToolRunGroup, { type: 'group' }>): {
 
 function inspectionGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
-  const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
+  const active = activeToolRunOrLast(runs);
   const activeEntry = active ? inspectionEntryFromRun(active) : null;
   const activeTarget = activeEntry?.target ?? '';
   if (status === 'running' || status === 'pending_approval') {
@@ -1150,7 +1158,7 @@ function inspectionGroupSummary(runs: RuntimeToolRun[]): { title: string; target
 
 function shellGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
-  const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
+  const active = activeToolRunOrLast(runs);
   const command = active ? shellCommand(active) : '';
   if (status === 'running' || status === 'pending_approval') return { title: command ? `正在运行 ${command}` : '正在运行命令' };
   if (status === 'error') return { title: command ? `命令运行失败 ${command}` : '命令运行失败' };
@@ -1159,7 +1167,7 @@ function shellGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: st
 
 function searchGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
-  const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
+  const active = activeToolRunOrLast(runs);
   const query = active ? toolRunTarget(active) : '';
   if (status === 'running' || status === 'pending_approval') return { title: '正在搜索代码', target: query };
   if (status === 'error') return { title: '搜索代码失败', target: query };
@@ -1170,7 +1178,7 @@ function searchGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: s
 function webContentGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } | null {
   if (!runs.length || runs.some((run) => !isWebContentRun(run))) return null;
   const status = toolRunGroupStatus(runs);
-  const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
+  const active = activeToolRunOrLast(runs);
   const target = active ? toolRunTarget(active) : '';
   if (status === 'running' || status === 'pending_approval') return { title: '正在获取网页', target };
   if (status === 'error') return { title: '获取网页失败', target };
@@ -1293,7 +1301,7 @@ type FileOperationRunSummary = {
 
 function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSummary {
   const status = toolRunGroupStatus(runs);
-  const active = runs.findLast((run) => run.status === 'running' || run.status === 'pending_approval') ?? runs.at(-1);
+  const active = activeToolRunOrLast(runs);
   const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
   const activeTarget = active ? fileOperationTarget(active) : '';
   const fallbackTarget = activeTarget || (entries.length === 1 ? entries[0]?.path : entries.length > 1 ? `${entries.length} 个文件` : '');

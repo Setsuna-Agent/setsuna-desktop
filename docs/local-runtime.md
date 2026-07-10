@@ -79,7 +79,22 @@ REST 路由覆盖：
 
 ## Agent Loop
 
-`src/loop/agent-loop.ts` 负责完整 turn 生命周期的编排。memory、context compaction、模型采样/流事件、工具执行和用户 shell 分别下沉到同目录的 coordinator、sampler、publisher、executor 和 runner 模块。
+`src/loop/agent-loop.ts` 是 turn 生命周期的薄编排器。它决定阶段顺序和分支，但不再负责构造每个阶段的内部细节：memory、hooks、context compaction、sampling context、模型采样/流事件、工具执行、标题、终态写入和用户 shell 分别下沉到同目录的 coordinator、builder、sampler、publisher、executor 和 runner。
+
+内部协作者按职责划分：
+
+- `RuntimeAgentTurnRunner`：执行单个 turn 的多轮 sampling/tool loop，处理 steer drain、Stop hook、最终回答与错误/取消分支。
+- `RuntimeTurnInputCoordinator`：管理 steer、active/idle mailbox 队列、持久化和模型消息转换。
+- `RuntimeCompactionTurnCoordinator`：管理显式 compact turn 的任务登记、hooks、事件与取消生命周期。
+- `RuntimeModelInputGuard`：统一校验当前模型的附件能力。
+- `RuntimeHookCoordinator`：维护 SessionStart source，并统一运行 SessionStart、UserPromptSubmit、Stop、Pre/PostCompact hooks。
+- `RuntimeSamplingContextBuilder`：使用 Builder 模式，在每个 sampling step 重新捕获 provider config、压缩后的对话、memory、Skill、工具路由和 world-state snapshot。
+- `RuntimeThreadTitleCoordinator`：管理首轮自动标题策略、模型生成、fallback 资格、usage 和手动改名竞争保护。
+- `RuntimeTurnRunFactory`：使用 Factory 模式统一创建普通、review、mailbox-triggered 和 regenerate turn，把输入准备与任务登记移出主循环。
+- `RuntimeTurnFinalizer`：按固定模板依次结算 usage、完成消息、提交标题、退出 review、保存 memory、发布 `turn.completed`。
+- `RuntimeTurnTerminationCoordinator`：串行化取消终态和 aborted marker，确保一个 turn 最多只有一个 terminal event。
+
+`AgentLoop` 本身只保留依赖装配、公开 Facade 和窄事件桥接。新增横切能力时优先判断属于哪个协作者；只有需要暴露新的顶层 runtime 动作时才应修改 `AgentLoop`。
 
 主要阶段：
 

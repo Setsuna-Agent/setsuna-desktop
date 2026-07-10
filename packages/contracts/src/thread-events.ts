@@ -1,5 +1,6 @@
 import type { RuntimeEvent } from './events.js';
 import type { RuntimeHookRun, RuntimeMessage, RuntimeThread, RuntimeThreadTurn, RuntimeToolRun, RuntimeToolRunStatus } from './threads.js';
+import { DEFAULT_THREAD_TITLE, fallbackThreadTitle } from './thread-title.js';
 
 const TOOL_OUTPUT_PREVIEW_MAX_LENGTH = 12000;
 
@@ -104,8 +105,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     attachPendingHookRunsToMessage(next, message, event.createdAt);
     next.messages.push(message);
     refreshThreadSummary(next);
-    if (isTranscriptVisibleMessage(event.payload.message) && next.title === 'New thread' && event.payload.message.role === 'user') {
-      next.title = preview(event.payload.message.content || attachmentPreview(event.payload.message)) || next.title;
+    if (isTranscriptVisibleMessage(event.payload.message) && next.title === DEFAULT_THREAD_TITLE && event.payload.message.role === 'user') {
+      next.title = fallbackThreadTitle(event.payload.message.content, event.payload.message.attachments?.length) || next.title;
     }
     return next;
   }
@@ -168,8 +169,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       message.content = event.payload.content;
       message.status = 'complete';
       refreshThreadSummary(next);
-      if (next.title === 'New thread' && message.role === 'user') {
-        next.title = preview(message.content || attachmentPreview(message)) || next.title;
+      if (next.title === DEFAULT_THREAD_TITLE && message.role === 'user') {
+        next.title = fallbackThreadTitle(message.content, message.attachments?.length) || next.title;
       }
     }
     return next;

@@ -6,15 +6,13 @@ import { normalizeMarkdownCodeLanguage } from './MarkdownCodeBlock.js';
 import { MarkdownRenderer } from './MarkdownRenderer.js';
 
 function renderMarkdown(content: string, streaming = false): string {
+  const children = createElement(MarkdownRenderer, { content, streaming });
   return renderToStaticMarkup(
-    createElement(
-      MarkdownNavigationProvider,
-      {
-        onOpenWorkspaceFile: () => undefined,
-        workspaceRoot: '/Users/dev/project',
-      },
-      createElement(MarkdownRenderer, { content, streaming }),
-    ),
+    createElement(MarkdownNavigationProvider, {
+      children,
+      onOpenWorkspaceFile: () => undefined,
+      workspaceRoot: '/Users/dev/project',
+    }),
   );
 }
 

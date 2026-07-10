@@ -12,7 +12,7 @@ import type {
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
-import { applyRuntimeEventToThread } from '@setsuna-desktop/contracts';
+import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
@@ -127,7 +127,7 @@ export class JsonThreadStore implements ThreadStore {
       forkedFromId,
       parentThreadId,
       projectId: input.projectId?.trim() || undefined,
-      title: input.title?.trim() || 'New thread',
+      title: input.title?.trim() || DEFAULT_THREAD_TITLE,
       createdAt: now,
       updatedAt: now,
       archived: false,

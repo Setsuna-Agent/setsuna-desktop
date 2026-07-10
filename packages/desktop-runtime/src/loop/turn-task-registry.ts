@@ -116,6 +116,12 @@ export class RuntimeTurnTaskRegistry {
     if (!task || task.turnId !== turnId) return;
     task.acceptingSteers = false;
   }
+
+  async waitForFinalizingRegularTurn(threadId: string): Promise<void> {
+    const active = this.activeForThread(threadId);
+    if (active?.taskKind !== 'regular' || active.acceptingSteers || !active.done) return;
+    await active.done.catch(() => undefined);
+  }
 }
 
 function turnTaskKey(threadId: string, turnId: string): string {

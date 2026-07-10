@@ -41,7 +41,8 @@ export function useChatTurnActions({
       try {
         let thread = currentThread;
         if (!thread) {
-          thread = await client.createThread({ title: (input || '图片对话').slice(0, 48), projectId: activeProjectId ?? undefined });
+          // 首条消息事件会先投影出本地 fallback；runtime 随后用当前模型生成正式标题。
+          thread = await client.createThread({ projectId: activeProjectId ?? undefined });
           if (activeProjectId) {
             expandProject(activeProjectId);
           }
