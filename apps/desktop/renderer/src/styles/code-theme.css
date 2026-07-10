@@ -1,5 +1,5 @@
 :root {
-  --code-highlight-background: var(--app-bg);
+  --code-highlight-background: #f7f8fa;
   --code-highlight-text: #24292f;
   --code-highlight-comment: #6e7781;
   --code-highlight-keyword: #cf222e;

@@ -47,7 +47,8 @@ describe('MarkdownRenderer', () => {
     const html = renderMarkdown('```ts\nconst answer = 42;\n```');
 
     expect(html).toContain('chat-code-highlighter');
-    expect(html).toContain('TS');
+    expect(html).toContain('>ts</span>');
+    expect(html).toContain('aria-label="复制代码"');
     expect(html).toContain('const answer = 42;');
     expect(normalizeMarkdownCodeLanguage('TSX')).toBe('typescript');
     expect(normalizeMarkdownCodeLanguage('')).toBe('');

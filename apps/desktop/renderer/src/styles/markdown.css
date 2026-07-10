@@ -272,7 +272,10 @@
   max-width: 100%;
   margin: 12px 0;
   overflow: hidden;
-  border-radius: var(--app-radius-md);
+  border: 1px solid color-mix(in srgb, var(--code-highlight-text) 13%, var(--chat-code-highlighter-bg));
+  border-radius: var(--app-radius-lg);
+  background: var(--chat-code-highlighter-bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--app-text) 4%, transparent);
   box-sizing: border-box;
 }
 
@@ -281,13 +284,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 36px;
-  padding: 6px 10px 6px 8px;
-  border: 1px solid var(--app-border);
-  border-bottom: 0;
-  border-radius: var(--app-radius-md) var(--app-radius-md) 0 0;
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-muted) 16%, transparent);
+  min-height: 38px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--code-highlight-text) 11%, var(--chat-code-highlighter-bg));
+  color: var(--code-highlight-text);
+  background: color-mix(in srgb, var(--chat-code-highlighter-bg) 94%, var(--code-highlight-text));
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 18px;
@@ -296,27 +297,50 @@
 .chat-code-highlighter__language {
   min-width: 0;
   overflow: hidden;
-  color: inherit;
-  font-weight: 500;
+  color: color-mix(in srgb, var(--code-highlight-text) 68%, transparent);
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-code-highlighter__header .ant-typography-copy {
+.chat-code-highlighter__copy {
   flex: 0 0 auto;
-  color: var(--app-text-muted);
-  font-size: 12px;
+  min-width: 46px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
+  color: color-mix(in srgb, var(--code-highlight-text) 62%, transparent);
+  background: transparent;
+  font-family: var(--app-font-family);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 24px;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
 }
 
-.chat-code-highlighter__header .ant-typography-copy:hover {
-  color: var(--app-text);
+.chat-code-highlighter__copy:hover {
+  border-color: color-mix(in srgb, var(--code-highlight-text) 10%, transparent);
+  color: var(--code-highlight-text);
+  background: color-mix(in srgb, var(--code-highlight-text) 7%, transparent);
+}
+
+.chat-code-highlighter__copy:focus-visible {
+  outline: none;
+  box-shadow: var(--app-focus-ring);
+}
+
+.chat-code-highlighter__copy.is-copied {
+  color: var(--app-success);
 }
 
 .chat-code-highlighter .ant-codeHighlighter-code {
   overflow: auto;
-  border: 1px solid var(--app-border);
-  border-top: 0;
-  border-radius: 0 0 var(--app-radius-md) var(--app-radius-md);
+  border: 0;
+  border-radius: 0;
   background: var(--chat-code-highlighter-bg);
 }
 
@@ -346,11 +370,8 @@
   max-width: none;
 }
 
-:root[data-theme='dark'] .chat-code-highlighter__header {
-  background: color-mix(in srgb, var(--app-muted) 18%, transparent);
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .chat-code-highlighter__copy,
   .chat-markdown.is-streaming .chat-markdown__block:last-child > :last-child::after,
   .chat-markdown.is-streaming .chat-markdown__empty-tail::after {
     animation: none;

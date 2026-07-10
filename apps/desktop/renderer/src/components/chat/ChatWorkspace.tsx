@@ -16,6 +16,7 @@ import { hasThinkingSegments } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
+import { copyTextToClipboard } from '../../utils/clipboard.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 
 const scrollBottomThresholdPx = 96;
@@ -1879,7 +1880,7 @@ function MessageFooter({
   const copyMessage = async () => {
     if (!message.content) return;
     try {
-      await copyText(message.content);
+      await copyTextToClipboard(message.content);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {
@@ -1963,21 +1964,4 @@ function formatDurationMs(value: number | null): string {
   const hours = Math.floor(minutes / 60);
   const restMinutes = minutes % 60;
   return restMinutes ? `${hours}小时${restMinutes}分` : `${hours}小时`;
-}
-
-async function copyText(value: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  document.body.removeChild(textarea);
-  if (!copied) throw new Error('Copy failed');
 }
