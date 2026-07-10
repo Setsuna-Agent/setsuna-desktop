@@ -1,6 +1,7 @@
-import type { RuntimeMessage, RuntimeStreamItemKind, RuntimeUsage } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeUsage } from '@setsuna-desktop/contracts';
 import { DEFAULT_THREAD_TITLE, THREAD_TITLE_MAX_LENGTH } from '@setsuna-desktop/contracts';
 import type { ModelClient } from '../ports/model-client.js';
+import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 
 const TITLE_SOURCE_MAX_LENGTH = 6_000;
 const TITLE_GENERATION_TIMEOUT_MS = 12_000;
@@ -26,9 +27,7 @@ export async function generateThreadTitle({
   userContent: string;
 }): Promise<GeneratedThreadTitle> {
   const titleSignal = AbortSignal.any([signal, AbortSignal.timeout(TITLE_GENERATION_TIMEOUT_MS)]);
-  const itemKinds = new Map<string, RuntimeStreamItemKind>();
-  const itemIdsWithDeltas = new Set<string>();
-  let output = '';
+  const output = createModelStreamTextCollector();
   let usage: RuntimeUsage | undefined;
 
   for await (const event of modelClient.stream({
@@ -39,22 +38,13 @@ export async function generateThreadTitle({
     thinking: false,
     signal: titleSignal,
   })) {
-    if (event.type === 'item_started') {
-      itemKinds.set(event.item.id, event.item.kind);
-    } else if (event.type === 'item_delta' && itemKinds.get(event.itemId) === 'agent_message') {
-      itemIdsWithDeltas.add(event.itemId);
-      output += event.delta;
-    } else if (event.type === 'item_completed' && event.item.kind === 'agent_message') {
-      itemKinds.set(event.item.id, event.item.kind);
-      if (!itemIdsWithDeltas.has(event.item.id)) output += event.item.content ?? '';
-    } else if (event.type === 'text_delta') {
-      output += event.text;
-    } else if (event.type === 'usage' || event.type === 'token_count') {
+    output.consume(event);
+    if (event.type === 'usage' || event.type === 'token_count') {
       usage = event.usage;
     }
   }
 
-  return { title: normalizeGeneratedThreadTitle(output), usage };
+  return { title: normalizeGeneratedThreadTitle(output.text()), usage };
 }
 
 export function normalizeGeneratedThreadTitle(value: string): string | null {

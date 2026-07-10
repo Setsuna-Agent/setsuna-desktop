@@ -187,57 +187,6 @@
   min-width: 0;
 }
 
-.chat-context-compact-item {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.chat-context-compact-divider {
-  display: grid;
-  grid-template-columns: minmax(20px, 1fr) auto minmax(20px, 1fr);
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 4px 0;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.chat-context-compact-divider__line {
-  height: 1px;
-  background: color-mix(in srgb, var(--app-text-muted) 18%, transparent);
-}
-
-.chat-context-compact-divider__text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-context-compact-divider__button {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.chat-context-compact-divider__button:hover {
-  color: var(--app-text);
-}
-
-.chat-context-compact-divider__text--active {
-  color: var(--app-primary);
-}
-
 .chat-review-mode-marker {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);

@@ -19,6 +19,8 @@ import './styles/bottom-panel.css';
 import './styles/settings.css';
 import './styles/capabilities.css';
 import './styles/chat.css';
+import './styles/chat-timeline-divider.css';
+import './styles/loading-indicators.css';
 import './styles/markdown.css';
 import './styles/chat-composer.css';
 import './styles/sidebar-search.css';

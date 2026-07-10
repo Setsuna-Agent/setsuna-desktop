@@ -5,6 +5,7 @@ import type { IdGenerator } from '../ports/id-generator.js';
 import type { ModelClient } from '../ports/model-client.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { UsageStore } from '../ports/usage-store.js';
+import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 import type { RuntimeCompactHookTrigger } from '../hooks/runtime-hooks.js';
 import {
   createRuntimeContextCompactionCandidate,
@@ -94,22 +95,25 @@ export class RuntimeContextCompactor {
     if (remoteSummary) return remoteSummary;
 
     try {
-      let text = '';
+      const output = createModelStreamTextCollector();
       let usage: RuntimeUsage | undefined;
       for await (const item of this.options.modelClient.stream({
         model: 'context-compaction',
         messages: this.contextCompactionPromptMessages(candidate),
         maxOutputTokens: 1600,
         temperature: 0,
+        thinking: false,
         toolChoice: 'none',
         signal,
       })) {
         throwIfAborted(signal);
-        if (item.type === 'text_delta') text += item.text;
-        if (item.type === 'usage') usage = item.usage;
+        output.consume(item);
+        if (item.type === 'usage' || item.type === 'token_count') usage = item.usage;
       }
-      const parsed = compactedSummaryFromModelText(text);
+      const parsed = compactedSummaryFromModelText(output.text());
       if (parsed) return { source: 'local', text: parsed, ...(usage ? { usage } : {}) };
+      const fallback = fallbackContextCompactionSummary(candidate);
+      if (fallback) return { source: 'local', text: fallback, ...(usage ? { usage } : {}) };
     } catch (error) {
       if (signal?.aborted) throw error;
       throw new Error(`Context compaction model request failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -327,6 +331,11 @@ function compactedSummaryFromModelText(value: string): string {
   if (alreadySaid) lines.push(`已经说明过：\n${alreadySaid}`);
   if (openItems.length) lines.push(`未决事项：\n${openItems.map((item) => `- ${item}`).join('\n')}`);
   return compactForPrompt(lines.join('\n\n') || text, 12_000);
+}
+
+function fallbackContextCompactionSummary(candidate: RuntimeContextCompactionCandidate): string {
+  const source = messagesAsCompactionSource(candidate.olderMessages).trim();
+  return source ? compactForPrompt(`较早对话记录：\n${source}`, 12_000) : '';
 }
 
 function stripContextCompactionTags(value: string): string {

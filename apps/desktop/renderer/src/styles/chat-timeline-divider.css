@@ -1,0 +1,77 @@
+.chat-context-compaction-status {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-timeline-divider {
+  display: grid;
+  grid-template-columns: minmax(20px, 1fr) auto minmax(20px, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-timeline-divider__line {
+  height: 1px;
+  background: color-mix(in srgb, var(--app-text-muted) 18%, transparent);
+}
+
+.chat-timeline-divider.is-loading .chat-timeline-divider__line {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--app-text-muted) 14%, transparent) 0%,
+    color-mix(in srgb, var(--app-primary) 48%, transparent) 48%,
+    color-mix(in srgb, var(--app-text-muted) 14%, transparent) 100%
+  );
+  background-size: 220% 100%;
+  animation: chat-timeline-divider-sweep 1.45s linear infinite;
+}
+
+.chat-timeline-divider__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-timeline-divider.is-loading .chat-timeline-divider__label {
+  color: var(--app-primary);
+}
+
+.chat-timeline-divider__action {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-timeline-divider__action:hover {
+  color: var(--app-text);
+}
+
+@keyframes chat-timeline-divider-sweep {
+  from {
+    background-position: 110% 0;
+  }
+
+  to {
+    background-position: -110% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-timeline-divider.is-loading .chat-timeline-divider__line {
+    animation: none;
+  }
+}

@@ -329,7 +329,11 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     try {
       // 手动压缩会立刻置本地 loading，最终状态仍以 runtime 返回的 thread 为准。
       const compacted = await client.compactThreadContext(currentThread.id);
-      setCurrentThread(compacted);
+      setCurrentThread((thread) => (
+        !thread || thread.id !== compacted.id || compacted.lastSeq >= thread.lastSeq
+          ? compacted
+          : thread
+      ));
       await reloadThreads();
       return compacted;
     } catch (unknownError) {

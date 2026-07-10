@@ -3,7 +3,9 @@ import { Bubble } from '@ant-design/x';
 import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
 import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
+import { ChatTimelineDivider } from './ChatTimelineDivider.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
+import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { MarkdownRenderer } from './markdown/MarkdownRenderer.js';
 import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
 import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
@@ -179,7 +181,7 @@ export function ChatWorkspace({
     () => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'user' && item.message.turnId === activeTurnId)),
     [activeTurnId, renderedDisplayItems],
   );
-  const showActiveTurnPlaceholder = Boolean(activeTurnId && !activeAssistantVisible);
+  const showActiveTurnPlaceholder = Boolean(activeTurnId && !contextCompactionRunning && !activeAssistantVisible);
   const activePlaceholderUserItemId = useMemo(() => {
     if (!showActiveTurnPlaceholder || !activeTurnId) return null;
     return [...renderedDisplayItems].reverse().find((item) => item.type === 'user' && item.message.turnId === activeTurnId)?.id ?? null;
@@ -436,7 +438,7 @@ export function ChatWorkspace({
                     </Fragment>
                   ))}
                   {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
-                  {contextCompactionRunning ? <ContextCompactionDivider active usage={contextUsage} /> : null}
+                  {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
                   <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
                 </div>
               )}
@@ -951,12 +953,7 @@ function MessageItem({
     );
   }
   if (item.type === 'context') {
-    return (
-      <div className="chat-context-compact-item">
-        <ContextCompactionDivider message={item.message} />
-        <RuntimeHookRuns runs={item.message.hookRuns} />
-      </div>
-    );
+    return <ContextCompactionStatus message={item.message} />;
   }
   if (item.type === 'review') {
     return <ReviewModeMarker message={item.message} />;
@@ -1202,33 +1199,6 @@ function MessageSelectionControl({
   );
 }
 
-function ContextCompactionDivider({
-  active = false,
-  message,
-  usage,
-}: {
-  active?: boolean;
-  message?: RuntimeMessage;
-  usage?: ChatContextTokenUsage;
-}) {
-  const notice = message?.contextCompaction;
-  const count = notice?.compactedMessageCount ?? 0;
-  const percentValue = usage ? Math.min(100, Math.max(0, Number(usage.visiblePercent || usage.percent || 0))) : 0;
-  const percentLabel = percentValue > 0 ? `${percentValue.toFixed(percentValue > 0 && percentValue < 1 ? 1 : 0)}%` : '';
-  const label = active
-    ? `正在压缩上下文${percentLabel ? ` · ${percentLabel}` : ''}`
-    : count > 0 ? `已压缩 ${count} 条上下文` : '已压缩上下文';
-  return (
-    <div className="chat-context-compact-divider" aria-label="上下文压缩">
-      <span className="chat-context-compact-divider__line" />
-      <span className={['chat-context-compact-divider__text', active ? 'chat-context-compact-divider__text--active' : ''].filter(Boolean).join(' ')}>
-        {label}
-      </span>
-      <span className="chat-context-compact-divider__line" />
-    </div>
-  );
-}
-
 function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
   const notice = message.reviewMode;
   if (!notice) return null;
@@ -1244,13 +1214,11 @@ function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
 function TranscriptWindowDivider({ hiddenMessageCount, onShowAll }: { hiddenMessageCount: number; onShowAll: () => void }) {
   const count = Math.max(0, hiddenMessageCount);
   return (
-    <div className="chat-context-compact-divider chat-transcript-window-divider" aria-label="较早记录已折叠">
-      <span className="chat-context-compact-divider__line" />
-      <button className="chat-context-compact-divider__button" type="button" onClick={onShowAll}>
-        {count > 0 ? `已折叠较早的 ${count} 条消息` : '已折叠较早的消息'}
-      </button>
-      <span className="chat-context-compact-divider__line" />
-    </div>
+    <ChatTimelineDivider
+      accessibilityLabel="较早记录已折叠"
+      label={count > 0 ? `已折叠较早的 ${count} 条消息` : '已折叠较早的消息'}
+      onClick={onShowAll}
+    />
   );
 }
 

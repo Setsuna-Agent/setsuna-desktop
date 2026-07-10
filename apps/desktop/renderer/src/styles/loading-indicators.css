@@ -1,0 +1,20 @@
+.chat-loading-text {
+  animation: chat-loading-text-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes chat-loading-text-breathe {
+  0%,
+  100% {
+    opacity: 0.58;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-loading-text {
+    animation: none;
+  }
+}

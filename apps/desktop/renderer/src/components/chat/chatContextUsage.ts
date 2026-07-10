@@ -55,6 +55,8 @@ export function formatTokenCount(value: number): string {
 function estimateRuntimeMessagesTokens(messages: RuntimeMessage[]): number {
   if (!messages.length) return 0;
   const payload = messages
+    // 压缩后的旧消息仍保留给用户查看，但 transcript 不会进入后续模型请求。
+    .filter((message) => message.visibility !== 'transcript')
     .filter((message) => Boolean(message.content.trim() || message.attachments?.length || message.contextCompaction))
     .map((message) => ({
       attachments: message.attachments?.map((attachment) => ({

@@ -12,7 +12,6 @@ import type {
   RuntimeMcpServerPatch,
   RuntimeMemoryQuery,
   RuntimeMessage,
-  ModelStreamEvent,
   RuntimeConfigState,
   RuntimeThread,
   RuntimeThreadSummary,
@@ -26,6 +25,7 @@ import type {
 import { fetchMcpServerTools } from '../adapters/mcp/mcp-tool-discovery.js';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
+import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 import { stringInput } from './app-server/input.js';
 import { isRuntimeMessageAttachment, memoryScope, optionalNumber, readBody, sendJson, threadScope } from './http-utils.js';
 import { RuntimeHttpError } from './http-error.js';
@@ -504,35 +504,6 @@ async function generateCommitMessage(runtime: RuntimeFactory, input: unknown): P
   const text = streamText.text();
   const message = normalizeGeneratedCommitMessage(text);
   return message || fallbackGeneratedCommitMessage(status, diff);
-}
-
-function createModelStreamTextCollector() {
-  let text = '';
-  const agentItemIds = new Set<string>();
-  const itemsWithDeltas = new Set<string>();
-  return {
-    consume(item: ModelStreamEvent) {
-      if (item.type === 'text_delta') {
-        text += item.text;
-        return;
-      }
-      if (item.type === 'item_started') {
-        if (item.item.kind === 'agent_message') agentItemIds.add(item.item.id);
-        return;
-      }
-      if (item.type === 'item_delta') {
-        if (!agentItemIds.size || agentItemIds.has(item.itemId)) {
-          text += item.delta;
-          itemsWithDeltas.add(item.itemId);
-        }
-        return;
-      }
-      if (item.type === 'item_completed' && item.item.kind === 'agent_message' && item.item.content && !itemsWithDeltas.has(item.item.id)) {
-        text += item.item.content;
-      }
-    },
-    text: () => text,
-  };
 }
 
 function collaborationModeInput(value: unknown): SendTurnInput['collaborationMode'] {
