@@ -12,6 +12,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { ChatWorkspace } from '../chat/ChatWorkspace.js';
+import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationProvider.js';
 import { BottomToolsPanel } from '../workspace/BottomToolsPanel.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
@@ -161,37 +162,39 @@ export function AppChatSurface({
 
   return (
     <>
-      <ChatWorkspace
-        activeTurnId={activeTurnId}
-        activeProject={activeProject}
-        canClearContext={canClearContext}
-        contextCompacting={contextCompacting}
-        config={config}
-        currentThread={currentThread}
-        draft={draft}
-        reviewLoading={reviewLoading}
-        reviewState={reviewState}
-        skillSelectionRequest={skillSelectionRequest}
-        skills={skills}
-        onCancelActiveTurn={onCancelActiveTurn}
-        onApprovalPolicyChange={onApprovalPolicyChange}
-        onAnswerApproval={onAnswerApproval}
-        onCompactContext={onCompactContext}
-        onClearContext={onClearContext}
-        onThreadMemoryModeChange={onThreadMemoryModeChange}
-        onDeleteMessages={onDeleteMessages}
-        onDiscardFileChanges={onDiscardFileChanges}
-        onDraftChange={onDraftChange}
-        onEditUserMessage={onEditUserMessage}
-        onOpenFilesPanel={onOpenFilesPanel}
-        onOpenFileReview={onOpenFileReviewPanel}
-        onSelectModel={onSelectModel}
-        onSearchProjectEntries={onSearchProjectEntries}
-        onSend={onSend}
-        onPlanDecision={onPlanDecision}
-        onReviewRefresh={onReviewRefresh}
-        onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
-      />
+      <MarkdownNavigationProvider workspaceRoot={activeProject?.path} onOpenWorkspaceFile={onOpenProjectFile}>
+        <ChatWorkspace
+          activeTurnId={activeTurnId}
+          activeProject={activeProject}
+          canClearContext={canClearContext}
+          contextCompacting={contextCompacting}
+          config={config}
+          currentThread={currentThread}
+          draft={draft}
+          reviewLoading={reviewLoading}
+          reviewState={reviewState}
+          skillSelectionRequest={skillSelectionRequest}
+          skills={skills}
+          onCancelActiveTurn={onCancelActiveTurn}
+          onApprovalPolicyChange={onApprovalPolicyChange}
+          onAnswerApproval={onAnswerApproval}
+          onCompactContext={onCompactContext}
+          onClearContext={onClearContext}
+          onThreadMemoryModeChange={onThreadMemoryModeChange}
+          onDeleteMessages={onDeleteMessages}
+          onDiscardFileChanges={onDiscardFileChanges}
+          onDraftChange={onDraftChange}
+          onEditUserMessage={onEditUserMessage}
+          onOpenFilesPanel={onOpenFilesPanel}
+          onOpenFileReview={onOpenFileReviewPanel}
+          onSelectModel={onSelectModel}
+          onSearchProjectEntries={onSearchProjectEntries}
+          onSend={onSend}
+          onPlanDecision={onPlanDecision}
+          onReviewRefresh={onReviewRefresh}
+          onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
+        />
+      </MarkdownNavigationProvider>
       {sidePanelVisible && sideActivePanel ? (
         <WorkspacePanel
           activePanel={sideActivePanel}

@@ -183,7 +183,7 @@ export function AppRouteContent({
       onOpenFileReviewPanel={openFileReviewPanel}
       onOpenSideTerminalPanel={() => workspacePanels.openDesktopPanel('side', 'terminal')}
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
-      onOpenProjectFile={(filePath) => void projectWorkspace.openProjectFile(filePath)}
+      onOpenProjectFile={projectWorkspace.openProjectFile}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
       onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
       onSend={(value, options) => void chatActions.sendInput(value, options)}
