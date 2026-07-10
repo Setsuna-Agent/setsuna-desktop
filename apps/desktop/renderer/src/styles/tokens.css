@@ -16,7 +16,6 @@
   --app-surface: #ffffff;
   --app-surface-subtle: #fafafa;
   --app-surface-muted: #f5f5f5;
-  --app-hover: #f2f2f2;
   --app-border: #eaeaea;
   --app-border-strong: #d4d4d4;
   --app-text: #171717;
@@ -25,6 +24,9 @@
   --app-text-subtle: #a3a3a3;
   --app-muted: #a3a3a3;
   --app-focus: rgba(0, 0, 0, 0.12);
+  --app-focus-ring: 0 0 0 3px var(--app-focus);
+  --app-shadow-popover: 0 14px 42px color-mix(in srgb, #000000 12%, transparent), 0 2px 8px color-mix(in srgb, #000000 6%, transparent);
+  --app-shadow-modal: 0 24px 64px color-mix(in srgb, #000000 18%, transparent), 0 4px 16px color-mix(in srgb, #000000 8%, transparent);
   --app-primary: #15171a;
   --app-primary-hover: #24272c;
   --app-primary-text: #ffffff;
@@ -42,7 +44,6 @@
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --app-titlebar-control-width: 140px;
   --app-sidebar-width: 240px;
-  --app-inspector-width: 336px;
   --desktop-agent-main-min-width: 420px;
   --desktop-agent-workspace-width: clamp(520px, 37vw, 760px);
   --app-bottom-panel-height: 228px;
@@ -50,8 +51,6 @@
   --desktop-settings-nav-width: var(--app-sidebar-width);
   --desktop-agent-main-radius: 10px;
   --desktop-agent-panel-bg: var(--app-surface);
-  --desktop-agent-toolbar-bg: var(--app-surface-subtle);
-  --desktop-agent-window-bg: var(--app-window-bg);
   --desktop-agent-main-bg: var(--app-bg);
   --desktop-agent-main-surface: var(--app-surface);
   --desktop-agent-divider: #eaeaea;
@@ -68,19 +67,16 @@
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
   --desktop-agent-button-hover-bg: color-mix(in srgb, var(--app-text) 4%, transparent);
   --chat-message-user-bg: #f5f5f5;
-  --chat-message-assistant-bg: transparent;
   --chat-code-bg: #fafafa;
   --chat-code-highlighter-bg: #fafafa;
   --chat-content-max-width: 750px;
   --chat-content-inline-padding: 28px;
   --chat-message-footer-gap: 3px;
-  --chat-input-shadow: none;
   --chat-scrollbar-width: 8px;
   --chat-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 34%, transparent);
   --chat-send-bg: #15171a;
   --chat-send-bg-hover: #24272c;
   --chat-send-bg-active: #000000;
-  --chat-send-shadow: rgba(15, 23, 42, 0.16);
 }
 
 :root[data-font-size='80'] {
@@ -138,7 +134,6 @@
   --app-surface: #0a0a0a;
   --app-surface-subtle: #111111;
   --app-surface-muted: #171717;
-  --app-hover: #171717;
   --app-border: #262626;
   --app-border-strong: #3f3f46;
   --app-text: #ededed;
@@ -157,7 +152,6 @@
   --app-titlebar-bg: var(--app-sidebar-bg);
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
-  --desktop-agent-window-bg: var(--app-window-bg);
   --desktop-agent-main-bg: var(--app-bg);
   --desktop-agent-main-surface: var(--app-surface);
   --desktop-agent-divider: #262626;
@@ -178,66 +172,10 @@
   --chat-send-bg: #f4f4f5;
   --chat-send-bg-hover: #ffffff;
   --chat-send-bg-active: #e4e4e7;
-  --chat-send-shadow: rgba(255, 255, 255, 0.08);
 }
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 220ms;
   animation-timing-function: ease-out;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    color-scheme: dark;
-    --app-bg: #000000;
-    --app-window-bg: #0a0a0a;
-    --app-sidebar-bg: #0a0a0a;
-    --app-sidebar-text: #d4d4d4;
-    --app-sidebar-text-secondary: #8f8f8f;
-    --app-surface: #0a0a0a;
-    --app-surface-subtle: #111111;
-    --app-surface-muted: #171717;
-    --app-hover: #171717;
-    --app-border: #262626;
-    --app-border-strong: #3f3f46;
-    --app-text: #ededed;
-    --app-text-muted: #a3a3a3;
-    --app-text-secondary: var(--app-text-muted);
-    --app-text-subtle: #737373;
-    --app-muted: #737373;
-    --app-focus: rgba(255, 255, 255, 0.14);
-    --app-primary: #f4f4f5;
-    --app-primary-hover: #ffffff;
-    --app-primary-text: #181818;
-    --app-danger: #f87171;
-    --app-danger-bg: rgba(248, 113, 113, 0.11);
-    --app-success: #62c779;
-    --app-warning: #facc15;
-    --app-titlebar-bg: var(--app-sidebar-bg);
-    --app-titlebar-text: var(--app-sidebar-text-secondary);
-    --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
-    --desktop-agent-window-bg: var(--app-window-bg);
-    --desktop-agent-main-bg: var(--app-bg);
-    --desktop-agent-main-surface: var(--app-surface);
-    --desktop-agent-divider: #262626;
-    --desktop-agent-subtle-divider: #1a1a1a;
-    --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, transparent);
-    --desktop-agent-input-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
-    --desktop-agent-sidebar-hover-bg: #171717;
-    --desktop-agent-sidebar-active-bg: #111111;
-    --desktop-agent-sidebar-active-text: #fafafa;
-    --desktop-agent-accent: var(--app-primary);
-    --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
-    --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
-    --desktop-agent-button-hover-bg: color-mix(in srgb, var(--app-text) 8%, transparent);
-    --chat-message-user-bg: #171717;
-    --chat-code-bg: #111111;
-    --chat-code-highlighter-bg: #111111;
-    --chat-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 34%, transparent);
-    --chat-send-bg: #f4f4f5;
-    --chat-send-bg-hover: #ffffff;
-    --chat-send-bg-active: #e4e4e7;
-    --chat-send-shadow: rgba(255, 255, 255, 0.08);
-  }
 }

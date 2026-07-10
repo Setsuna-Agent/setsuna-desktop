@@ -1154,23 +1154,6 @@
   line-height: 15px;
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-
-.desktop-settings-panel .chat-user-settings__local-provider-toolbar > span {
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .desktop-settings-panel .chat-user-settings__local-provider-card {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1315,14 +1298,6 @@
   font-family: var(--app-code-font-family);
   font-size: 11px;
   line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-settings-panel .settings-local-protocol {
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1718,56 +1693,6 @@
   line-height: 18px;
 }
 
-.desktop-capabilities-panel .settings-section,
-.settings-section {
-  display: grid;
-  width: min(860px, 100%);
-  min-width: 0;
-  margin-right: auto;
-  margin-bottom: 18px;
-  margin-left: auto;
-  border: 1px solid var(--desktop-agent-panel-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
-  overflow: hidden;
-}
-
-.settings-section__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-  min-height: 48px;
-  padding: 8px 12px 8px 14px;
-  border-bottom: 1px solid var(--desktop-agent-panel-border);
-  background: color-mix(in srgb, var(--app-surface) 98%, var(--app-bg));
-}
-
-.settings-section__header div {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-}
-
-.settings-section__header h3 {
-  margin: 0;
-  color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.settings-section__header span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 15px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @media (max-width: 1180px) {
   .desktop-settings-panel .chat-user-settings__local-provider-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -1879,7 +1804,6 @@
   }
 
   .desktop-settings-panel .chat-user-settings__local-provider-head,
-  .desktop-settings-panel .chat-user-settings__local-provider-toolbar,
   .desktop-settings-panel .settings-model-list__head {
     align-items: stretch;
     flex-direction: column;

@@ -16,7 +16,7 @@
   border: 1px solid var(--desktop-agent-subtle-divider);
   border-radius: var(--app-radius-lg);
   background: var(--app-surface);
-  box-shadow: var(--desktop-agent-shadow);
+  box-shadow: var(--app-shadow-modal);
 }
 
 .desktop-agent-modal header {
@@ -228,8 +228,8 @@
 }
 
 .sd-icon-button {
-  width: 30px;
-  height: 30px;
+  width: var(--app-control-height);
+  height: var(--app-control-height);
   padding: 0;
 }
 
@@ -368,4 +368,50 @@
 
 .sd-status--danger {
   color: var(--app-danger);
+}
+
+.sd-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sd-check input {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 999px;
+  appearance: none;
+  background: var(--app-surface-muted);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.sd-check input::before {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--app-surface);
+  content: "";
+  transition: transform 140ms ease;
+}
+
+.sd-check input:checked {
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+}
+
+.sd-check input:checked::before {
+  transform: translateX(12px);
+}
+
+.sd-check input:disabled {
+  opacity: 0.45;
 }

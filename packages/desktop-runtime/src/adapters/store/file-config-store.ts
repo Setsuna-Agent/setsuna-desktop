@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ProviderConfigInput,
@@ -12,6 +12,7 @@ import type {
   RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
+import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 68000;
@@ -50,67 +51,70 @@ export class FileConfigStore implements ConfigStore {
   }
 
   async getConfig(): Promise<RuntimeConfigState> {
-    const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-    const secrets = await this.readSecrets();
-    return this.toState(stored, secrets);
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const secrets = await this.readSecrets();
+      return this.toState(stored, secrets);
+    });
   }
 
   async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-    const secrets = await this.readSecrets();
-    const provider =
-      stored.providers.find((item) => item.id === stored.activeProviderId && item.enabled) ??
-      stored.providers.find((item) => item.enabled) ??
-      stored.providers[0];
-    if (!provider) return null;
-    return {
-      ...provider,
-      apiKey: secrets.providerApiKeys[provider.id] ?? '',
-      activeModel: provider.models.find((model) => model.enabled) ?? provider.models[0],
-    };
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const secrets = await this.readSecrets();
+      const provider =
+        stored.providers.find((item) => item.id === stored.activeProviderId && item.enabled) ??
+        stored.providers.find((item) => item.enabled) ??
+        stored.providers[0];
+      if (!provider) return null;
+      return {
+        ...provider,
+        apiKey: secrets.providerApiKeys[provider.id] ?? '',
+        activeModel: provider.models.find((model) => model.enabled) ?? provider.models[0],
+      };
+    });
   }
 
   async saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState> {
-    await mkdir(this.dataDir, { recursive: true });
-    const previous = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-    const secrets = await this.readSecrets();
-    const providers = normalizeProviders(input.providers ?? previous.providers, previous.providers, secrets);
-    const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
-    const memory = memorySettingsForSave(input, previous);
+    return withFileStateUpdate(this.configPath, async () => {
+      await mkdir(this.dataDir, { recursive: true });
+      const previous = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const secrets = await this.readSecrets();
+      const providers = normalizeProviders(input.providers ?? previous.providers, previous.providers, secrets);
+      const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
+      const memory = memorySettingsForSave(input, previous);
 
-    const stored: StoredConfig = {
-      activeProviderId,
-      globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
-      storagePath: normalizeStoragePath(input.storagePath ?? previous.storagePath),
-      memory,
-      memoryEnabled: memory.useMemories || memory.generateMemories,
-      setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
-      approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
-      permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
-      sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite),
-      hooks: normalizeHooksConfig(input.hooks ?? previous.hooks),
-      bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
-      features: normalizeFeatureFlags(input.features ?? previous.features),
-      desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
-      providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
-    };
+      const stored: StoredConfig = {
+        activeProviderId,
+        globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
+        storagePath: normalizeStoragePath(input.storagePath ?? previous.storagePath),
+        memory,
+        memoryEnabled: memory.useMemories || memory.generateMemories,
+        setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
+        approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
+        permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
+        sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite),
+        hooks: normalizeHooksConfig(input.hooks ?? previous.hooks),
+        bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
+        features: normalizeFeatureFlags(input.features ?? previous.features),
+        desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
+        providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
+      };
 
-    await writeJsonFile(this.configPath, stored);
-    await this.writeSecrets(secrets);
-    return this.toState(stored, secrets);
+      // Secrets first is fail-safe: a config commit can reference the new key only
+      // after the private file has been durably replaced.
+      await this.writeSecrets(secrets);
+      await writeJsonFile(this.configPath, stored);
+      return this.toState(stored, secrets);
+    });
   }
 
   private async readSecrets(): Promise<StoredSecrets> {
-    try {
-      const text = await readFile(this.secretsPath, 'utf8');
-      return normalizeSecrets(JSON.parse(text));
-    } catch {
-      return { providerApiKeys: {} };
-    }
+    return normalizeSecrets(await readJsonFile<StoredSecrets>(this.secretsPath, { providerApiKeys: {} }));
   }
 
   private async writeSecrets(secrets: StoredSecrets): Promise<void> {
-    await writeFile(this.secretsPath, `${JSON.stringify(secrets, null, 2)}\n`, { mode: 0o600 });
+    await writeJsonFile(this.secretsPath, secrets, { mode: 0o600 });
     await chmod(this.secretsPath, 0o600).catch(() => undefined);
   }
 

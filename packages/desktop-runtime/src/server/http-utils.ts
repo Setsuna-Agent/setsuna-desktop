@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SendTurnInput, ThreadQuery } from '@setsuna-desktop/contracts';
+import { RuntimeHttpError } from './http-error.js';
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
 
@@ -13,14 +14,18 @@ export async function readBody<T = unknown>(request: IncomingMessage, fallback?:
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     total += buffer.byteLength;
-    if (total > MAX_BODY_BYTES) throw new Error('Request body too large');
+    if (total > MAX_BODY_BYTES) throw new RuntimeHttpError(413, 'Request body too large', 'body_too_large');
     chunks.push(buffer);
   }
   if (!chunks.length) {
     if (fallback !== undefined) return fallback;
     return {} as T;
   }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
+  } catch (error) {
+    throw new RuntimeHttpError(400, error instanceof Error ? `Invalid JSON body: ${error.message}` : 'Invalid JSON body', 'invalid_json');
+  }
 }
 
 export function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {

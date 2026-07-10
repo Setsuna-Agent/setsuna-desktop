@@ -17,8 +17,10 @@ import type { RuntimeToolExecutionContext, ToolExecutionContext, ToolExecutionEn
 import type { UsageStore } from '../ports/usage-store.js';
 import { createRuntimeToolHookRunner, type RuntimeCompactHookTrigger, type RuntimeSessionStartSource } from '../hooks/runtime-hooks.js';
 import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction, type RuntimeContextCompactionBudget, type RuntimeContextCompactionCandidate, runtimeContextTokenUsageForMessages } from './context-compaction.js';
+import { COLLABORATION_TOOL_DEFINITIONS, collaborationToolsEnabled, isCollaborationToolName, RuntimeCollaborationCoordinator } from './collaboration-coordinator.js';
 import { runMemoryConsolidationAgent } from './memory-consolidation-agent.js';
-import { MemoryCitationStreamParser, parseMemoryCitationBodies } from './memory-citation.js';
+import { createAssistantItemStreamBridge, createAssistantOutputAccumulator, createLegacyModelStreamMirrorState, type LegacyModelStreamMirrorState } from './model-stream-output.js';
+import { RuntimeEventWriter } from './runtime-event-writer.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
 import { RuntimeToolRouter } from './tool-router.js';
 import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
@@ -39,6 +41,7 @@ export type AgentLoopOptions = {
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
+  eventWriter?: RuntimeEventWriter;
   maxToolRounds?: number;
 };
 
@@ -79,70 +82,6 @@ const TURN_ABORTED_MODEL_GUIDANCE = [
   'The user interrupted the previous turn on purpose. Any running shell commands may still be running in the background. If any tools or commands were aborted, they may have partially executed.',
   '</turn_aborted>',
 ].join('\n');
-const COLLABORATION_TOOL_NAMES = new Set(['spawn_agent', 'send_input', 'resume_agent', 'wait', 'close_agent']);
-const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
-  {
-    name: 'spawn_agent',
-    description: 'Start a child agent thread for a focused subtask and return its thread and turn identifiers.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        prompt: { type: 'string', description: 'Task prompt for the child agent.' },
-        title: { type: 'string', description: 'Optional child thread title.' },
-      },
-      required: ['prompt'],
-    },
-  },
-  {
-    name: 'send_input',
-    description: 'Queue a mailbox message for another agent thread without forcing it to resume immediately.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Receiver thread id.' },
-        content: { type: 'string', description: 'Mailbox message content.' },
-      },
-      required: ['thread_id', 'content'],
-    },
-  },
-  {
-    name: 'resume_agent',
-    description: 'Deliver a mailbox message and start the receiver agent if it is idle.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Receiver thread id.' },
-        content: { type: 'string', description: 'Resume prompt or mailbox message content.' },
-      },
-      required: ['thread_id', 'content'],
-    },
-  },
-  {
-    name: 'wait',
-    description: 'Wait briefly for another agent thread to finish its current turn and return its status.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Thread id to wait on.' },
-        timeout_ms: { type: 'number', description: 'Maximum wait time in milliseconds, capped by the runtime.' },
-      },
-      required: ['thread_id'],
-    },
-  },
-  {
-    name: 'close_agent',
-    description: 'Stop tracking a child agent thread; cancels its active turn if one is still running.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        thread_id: { type: 'string', description: 'Child thread id to close.' },
-        reason: { type: 'string', description: 'Optional close reason.' },
-      },
-      required: ['thread_id'],
-    },
-  },
-];
-
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 type PassiveMemoryStage1Result = {
   status: RuntimeMemoryStage1Status;
@@ -160,15 +99,6 @@ type ToolBudget = {
   readFileCallCount: number;
   inspectionCallCount: number;
   fileMutationCallCount: number;
-};
-type LegacyModelStreamMirrorState = {
-  agentItemStarted: boolean;
-  agentText: string;
-  reasoningItemStarted: boolean;
-  reasoningText: string;
-  toolCalls: Map<string, RuntimeToolCall>;
-  completedToolCallIds: Set<string>;
-  tokenCountPublished: boolean;
 };
 type ToolBudgetBlock = {
   content: string;
@@ -197,7 +127,6 @@ type PendingAppServerDynamicToolCall = {
   reject(error: Error): void;
   resolve(result: RuntimeDynamicToolCallResult): void;
 };
-type AssistantOutputAccumulator = ReturnType<typeof createAssistantOutputAccumulator>;
 type ReviewTurnInput = {
   displayText: string;
   prompt: string;
@@ -248,8 +177,42 @@ export class AgentLoop {
   private readonly revealedDeferredToolNamesByTurn = new Map<string, Set<string>>();
   private readonly appServerDynamicToolsByThread = new Map<string, AppServerDynamicToolRegistration>();
   private readonly pendingAppServerDynamicToolCalls = new Map<string, PendingAppServerDynamicToolCall>();
+  private readonly terminalEventWrites = new Set<string>();
+  private readonly eventWriter: RuntimeEventWriter;
+  private readonly collaborationCoordinator: RuntimeCollaborationCoordinator;
+  private shuttingDown = false;
 
-  constructor(private readonly options: AgentLoopOptions) {}
+  constructor(private readonly options: AgentLoopOptions) {
+    this.eventWriter = options.eventWriter ?? new RuntimeEventWriter(options.threadStore, options.eventBus);
+    this.collaborationCoordinator = new RuntimeCollaborationCoordinator({
+      threadStore: options.threadStore,
+      activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
+      cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
+      deliverMailbox: (threadId, input) => this.deliverMailboxInput(threadId, input),
+      startTurn: (threadId, input) => this.startTurn(threadId, { input }),
+    });
+  }
+
+  flushEvents(): Promise<void> {
+    return this.eventWriter.flushAll();
+  }
+
+  async shutdown(reason = 'Desktop runtime is shutting down.', timeoutMs = 5_000): Promise<boolean> {
+    this.shuttingDown = true;
+    const error = new TurnCancelledError(reason);
+    const tasks = this.turnTasks.cancelAll(error);
+    this.options.approvalGate?.rejectPending?.(error);
+    for (const pending of this.pendingAppServerDynamicToolCalls.values()) pending.reject(error);
+    this.pendingAppServerDynamicToolCalls.clear();
+    this.appServerDynamicToolsByThread.clear();
+    this.idleMailboxByThread.clear();
+    await Promise.allSettled(tasks.map((task) =>
+      this.publishTurnCancelledOnce(task.threadId, task.turnId, task.taskKind, reason, { marker: true }),
+    ));
+    const drained = await this.turnTasks.drain(timeoutMs);
+    await this.eventWriter.flushAll();
+    return drained;
+  }
 
   /**
    * 启动时回扫近期 idle 线程，补抽历史对话的长期记忆候选。
@@ -308,6 +271,7 @@ export class AgentLoop {
    * @param input 用户输入、附件、skill 选择和客户端消息 ID。
    */
   async startTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse> {
+    this.assertAcceptingWork();
     const active = this.turnTasks.activeForThread(threadId);
     if (active?.taskKind === 'regular' && active.acceptingSteers && !active.controller.signal.aborted) {
       // 防御 renderer/SSE 短暂不同步：active 期间的普通发送必须落回当前 turn 的 steer。
@@ -331,6 +295,7 @@ export class AgentLoop {
    * @param input 可选的新内容、skill 选择和思考参数。
    */
   async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}): Promise<SendTurnResponse> {
+    this.assertAcceptingWork();
     const run = await this.createRegenerateRun(threadId, messageId, input);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
@@ -343,6 +308,7 @@ export class AgentLoop {
    * @param input 用户输入、附件和 skill 选择。
    */
   async sendTurn(threadId: string, input: SendTurnInput): Promise<void> {
+    this.assertAcceptingWork();
     const run = await this.createTurnRun(threadId, input);
     await run.done;
   }
@@ -353,6 +319,7 @@ export class AgentLoop {
    * @param threadId 需要清空上下文的线程 ID。
    */
   async clearThreadContext(threadId: string): Promise<RuntimeThread> {
+    await this.eventWriter.flushThread(threadId);
     const beforeSeq = (await this.options.threadStore.getThread(threadId))?.lastSeq ?? 0;
     const thread = await this.options.threadStore.clearThreadMessages(threadId);
     this.queueSessionStartSource(threadId, 'clear');
@@ -367,6 +334,7 @@ export class AgentLoop {
    * @param input review 的用户可见文本和模型实际 prompt。
    */
   async startReview(threadId: string, input: ReviewTurnInput): Promise<SendTurnResponse> {
+    this.assertAcceptingWork();
     const run = await this.createReviewRun(threadId, input);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
@@ -522,18 +490,26 @@ export class AgentLoop {
     reason: string,
     options: { marker?: boolean } = {},
   ): Promise<boolean> {
-    if (await this.turnHasTerminalEvent(threadId, turnId)) return false;
-    if (options.marker) await this.publishTurnAbortedMarker(threadId, turnId);
-    if (await this.turnHasTerminalEvent(threadId, turnId)) return false;
-    await this.appendAndPublish(threadId, {
-      id: this.options.ids.id('event'),
-      threadId,
-      turnId,
-      type: 'turn.cancelled',
-      createdAt: this.options.clock.now().toISOString(),
-      payload: { reason, taskKind },
-    });
-    return true;
+    const key = `${threadId}:${turnId}`;
+    if (this.terminalEventWrites.has(key)) return false;
+    this.terminalEventWrites.add(key);
+    try {
+      await this.eventWriter.flushThread(threadId);
+      if (await this.turnHasTerminalEvent(threadId, turnId)) return false;
+      if (options.marker) await this.publishTurnAbortedMarker(threadId, turnId);
+      if (await this.turnHasTerminalEvent(threadId, turnId)) return false;
+      await this.appendAndPublish(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'turn.cancelled',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { reason, taskKind },
+      });
+      return true;
+    } finally {
+      this.terminalEventWrites.delete(key);
+    }
   }
 
   private async turnHasTerminalEvent(threadId: string, turnId: string): Promise<boolean> {
@@ -605,6 +581,7 @@ export class AgentLoop {
    * @param input mailbox 内容和可选来源。
    */
   async deliverMailboxInput(threadId: string, input: DeliverMailboxInput): Promise<DeliverMailboxResponse> {
+    this.assertAcceptingWork();
     const content = input.content.trim();
     if (!content) throw new Error('mailbox content must not be empty');
     const active = this.turnTasks.activeForThread(threadId);
@@ -677,6 +654,7 @@ export class AgentLoop {
   }
 
   async runUserShellCommand(threadId: string, command: string, activeTurnId: string | null = null): Promise<void> {
+    this.assertAcceptingWork();
     const text = command.trim();
     if (!text) throw new Error('command must not be empty');
     const thread = await this.options.threadStore.getThread(threadId);
@@ -719,7 +697,16 @@ export class AgentLoop {
    * @param threadId 需要压缩上下文的线程 ID。
    * @param force 是否忽略 token 阈值强制压缩。
    */
-  async compactThreadContext(threadId: string, force = true): Promise<RuntimeThread> {
+  compactThreadContext(threadId: string, force = true): Promise<RuntimeThread> {
+    const compacting = this.createCompactThreadContext(threadId, force);
+    // Cancellation can reject before an HTTP/command caller gets its response
+    // and attaches a handler. Keep the public promise marked as observed while
+    // still returning the original rejection to the caller.
+    void compacting.catch(() => undefined);
+    return compacting;
+  }
+
+  private async createCompactThreadContext(threadId: string, force: boolean): Promise<RuntimeThread> {
     await this.waitForFinalizingRegularTurn(threadId);
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
@@ -1185,6 +1172,7 @@ export class AgentLoop {
    */
   private async createRegenerateRun(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }): Promise<{ turnId: string; done: Promise<void> }> {
     await this.waitForFinalizingRegularTurn(threadId);
+    await this.eventWriter.flushThread(threadId);
     const originalThread = await this.options.threadStore.getThread(threadId);
     if (!originalThread) throw new Error(`Thread not found: ${threadId}`);
     const originalMessage = originalThread.messages.find((message) => message.id === messageId);
@@ -2581,8 +2569,11 @@ export class AgentLoop {
    */
   private async appendAndPublish(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void> {
     // 先落盘再发布，订阅端按 seq 重放时才能得到和存储一致的事件顺序。
-    const stored = await this.options.threadStore.appendEvent(threadId, event);
-    this.options.eventBus.publish(stored);
+    await this.eventWriter.append(threadId, event);
+  }
+
+  private assertAcceptingWork(): void {
+    if (this.shuttingDown) throw new Error('Desktop runtime is shutting down and cannot accept new work.');
   }
 
   /**
@@ -3280,7 +3271,7 @@ export class AgentLoop {
   private async runCollaborationToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<{ content: string }> {
     const startedAtMs = this.options.clock.now().getTime();
     await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
-    const execution = await this.executeCollaborationToolCall(toolCall.name, parsedArguments, context);
+    const execution = await this.collaborationCoordinator.execute(toolCall.name, parsedArguments, context);
     await this.publishCollaborationItem(context.threadId, context.turnId, toolCall.id, execution.collabToolCall, 'in_progress');
     await this.publishCollaborationItem(context.threadId, context.turnId, toolCall.id, {
       ...execution.collabToolCall,
@@ -3292,147 +3283,6 @@ export class AgentLoop {
       startedAtMs,
     });
     return { content: execution.content };
-  }
-
-  private async executeCollaborationToolCall(name: string, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<{ collabToolCall: RuntimeCollabToolCall; content: string; data: Record<string, unknown>; preview: string }> {
-    const input = isPlainRecord(parsedArguments) ? parsedArguments : {};
-    if (name === 'spawn_agent') {
-      const prompt = requiredCollaborationString(input, ['prompt', 'task', 'input'], 'prompt');
-      const parent = await this.options.threadStore.getThread(context.threadId);
-      if (!parent) throw new Error(`Thread not found: ${context.threadId}`);
-      const child = await this.options.threadStore.createThread({
-        title: collaborationTitle(input, prompt),
-        projectId: parent.projectId,
-        parentThreadId: context.threadId,
-        memoryMode: parent.memoryMode,
-      });
-      const started = await this.startTurn(child.id, { input: prompt });
-      const data = {
-        tool: name,
-        senderThreadId: context.threadId,
-        newThreadId: child.id,
-        turnId: started.turnId,
-        prompt,
-        status: 'running',
-      };
-      return {
-        collabToolCall: {
-          tool: 'spawn_agent',
-          senderThreadId: context.threadId,
-          newThreadId: child.id,
-          prompt,
-          agentStatus: 'running',
-        },
-        content: JSON.stringify(data),
-        data,
-        preview: `Spawned child agent ${child.id}.`,
-      };
-    }
-
-    if (name === 'send_input' || name === 'resume_agent') {
-      const receiverThreadId = requiredCollaborationString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
-      const content = requiredCollaborationString(input, ['content', 'prompt', 'input'], 'content');
-      const resume = name === 'resume_agent';
-      const delivered = await this.deliverMailboxInput(receiverThreadId, {
-        content,
-        deliveryMode: resume ? 'trigger_turn' : 'queue_only',
-        fromAgentId: context.threadId,
-        fromThreadId: context.threadId,
-        toAgentId: receiverThreadId,
-        triggerTurn: resume,
-      });
-      const data = {
-        tool: name,
-        senderThreadId: context.threadId,
-        receiverThreadId,
-        turnId: delivered.turnId,
-        queued: delivered.queued ?? false,
-        status: delivered.turnId ? 'delivered' : 'queued',
-      };
-      return {
-        collabToolCall: {
-          tool: name,
-          senderThreadId: context.threadId,
-          receiverThreadId,
-          prompt: content,
-          agentStatus: delivered.turnId ? 'delivered' : 'queued',
-        },
-        content: JSON.stringify(data),
-        data,
-        preview: resume ? `Resumed agent ${receiverThreadId}.` : `Queued input for agent ${receiverThreadId}.`,
-      };
-    }
-
-    if (name === 'wait') {
-      const receiverThreadId = requiredCollaborationString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
-      const wait = await this.waitForCollaborationThread(receiverThreadId, context, collaborationTimeoutMs(input));
-      const thread = await this.options.threadStore.getThread(receiverThreadId);
-      const data = {
-        tool: name,
-        senderThreadId: context.threadId,
-        receiverThreadId,
-        activeTurnId: this.activeTurnId(receiverThreadId),
-        status: wait.status,
-        timedOut: wait.timedOut,
-        lastMessagePreview: thread?.lastMessagePreview ?? '',
-      };
-      return {
-        collabToolCall: {
-          tool: 'wait',
-          senderThreadId: context.threadId,
-          receiverThreadId,
-          agentStatus: wait.status,
-        },
-        content: JSON.stringify(data),
-        data,
-        preview: wait.status === 'idle' ? `Agent ${receiverThreadId} is idle.` : `Agent ${receiverThreadId} is still running.`,
-      };
-    }
-
-    if (name === 'close_agent') {
-      const receiverThreadId = requiredCollaborationString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
-      const reason = collaborationOptionalString(input, ['reason']);
-      const active = this.turnTasks.activeForThread(receiverThreadId);
-      const cancelled = active ? this.cancelTurn(receiverThreadId, active.turnId) : false;
-      const data = {
-        tool: name,
-        senderThreadId: context.threadId,
-        receiverThreadId,
-        cancelled,
-        reason: reason || undefined,
-        status: cancelled ? 'cancelled' : 'closed',
-      };
-      return {
-        collabToolCall: {
-          tool: 'close_agent',
-          senderThreadId: context.threadId,
-          receiverThreadId,
-          agentStatus: cancelled ? 'cancelled' : 'closed',
-        },
-        content: JSON.stringify(data),
-        data,
-        preview: cancelled ? `Cancelled agent ${receiverThreadId}.` : `Closed agent ${receiverThreadId}.`,
-      };
-    }
-
-    throw new Error(`Unknown collaboration tool: ${name}`);
-  }
-
-  private async waitForCollaborationThread(threadId: string, context: RuntimeToolExecutionContext, timeoutMs: number): Promise<{ status: 'idle' | 'running' | 'failed'; timedOut: boolean }> {
-    const active = this.turnTasks.activeForThread(threadId);
-    if (!active) {
-      const thread = await this.options.threadStore.getThread(threadId);
-      if (!thread) throw new Error(`Thread not found: ${threadId}`);
-      return { status: 'idle', timedOut: false };
-    }
-    if (active.threadId === context.threadId && active.turnId === context.turnId) {
-      return { status: 'running', timedOut: false };
-    }
-    const wait = await waitForTurnTask(active.done, context.signal, timeoutMs);
-    if (wait === 'failed') return { status: 'failed', timedOut: false };
-    if (wait === 'timeout') return { status: 'running', timedOut: true };
-    const stillActive = this.turnTasks.activeForThread(threadId);
-    return { status: stillActive ? 'running' : 'idle', timedOut: false };
   }
 
   private async publishCollaborationItem(threadId: string, turnId: string, itemId: string, collabToolCall: RuntimeCollabToolCall, status: NonNullable<RuntimeStreamItem['status']>): Promise<void> {
@@ -3887,60 +3737,6 @@ async function samplingToolRuntimes(
   });
 }
 
-function collaborationToolsEnabled(config: RuntimeConfigState | null | undefined): boolean {
-  return config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
-}
-
-function isCollaborationToolName(name: string): boolean {
-  return COLLABORATION_TOOL_NAMES.has(name);
-}
-
-function requiredCollaborationString(record: Record<string, unknown>, keys: string[], label: string): string {
-  const value = collaborationOptionalString(record, keys);
-  if (!value) throw new Error(`${label} is required`);
-  return value;
-}
-
-function collaborationOptionalString(record: Record<string, unknown>, keys: string[]): string {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return '';
-}
-
-function collaborationTitle(record: Record<string, unknown>, prompt: string): string {
-  const title = collaborationOptionalString(record, ['title', 'name']);
-  if (title) return title;
-  const compact = prompt.replace(/\s+/g, ' ').trim().slice(0, 80);
-  return compact ? `Subagent: ${compact}` : 'Subagent';
-}
-
-function collaborationTimeoutMs(record: Record<string, unknown>): number {
-  const value = record.timeout_ms ?? record.timeoutMs;
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 30_000;
-  return Math.max(0, Math.min(30_000, Math.floor(value)));
-}
-
-async function waitForTurnTask(done: Promise<unknown> | undefined, signal: AbortSignal, timeoutMs: number): Promise<'done' | 'failed' | 'timeout'> {
-  if (!done) return 'done';
-  if (signal.aborted) throw signal.reason ?? new TurnCancelledError();
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      done.then(() => 'done' as const, () => 'failed' as const),
-      new Promise<'timeout'>((resolve) => {
-        timeout = setTimeout(() => resolve('timeout'), timeoutMs);
-      }),
-      new Promise<never>((_, reject) => {
-        signal.addEventListener('abort', () => reject(signal.reason ?? new TurnCancelledError()), { once: true });
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
 /**
  * 合并流式工具参数片段，兼容全量覆盖和增量追加两种模型输出方式。
  *
@@ -4029,124 +3825,6 @@ function normalizedMaxToolRounds(value: number | undefined): number {
   return Math.max(1, Math.floor(value));
 }
 
-function createAssistantOutputAccumulator(publishVisibleDelta: (delta: string) => Promise<void>): {
-  append(delta: string): Promise<void>;
-  finish(): Promise<RuntimeMemoryCitation | undefined>;
-  text(): string;
-} {
-  const parser = new MemoryCitationStreamParser();
-  const citationBodies: string[] = [];
-  let visibleText = '';
-  let memoryCitation: RuntimeMemoryCitation | undefined;
-
-  const appendParsed = async (chunk: { visibleText: string; citations: string[] }) => {
-    citationBodies.push(...chunk.citations);
-    if (!chunk.visibleText) return;
-    visibleText += chunk.visibleText;
-    await publishVisibleDelta(chunk.visibleText);
-  };
-
-  return {
-    async append(delta: string) {
-      if (!delta) return;
-      await appendParsed(parser.push(delta));
-    },
-    async finish() {
-      await appendParsed(parser.finish());
-      memoryCitation = parseMemoryCitationBodies(citationBodies);
-      return memoryCitation;
-    },
-    text() {
-      return visibleText;
-    },
-  };
-}
-
-function createLegacyModelStreamMirrorState(): LegacyModelStreamMirrorState {
-  return {
-    agentItemStarted: false,
-    agentText: '',
-    reasoningItemStarted: false,
-    reasoningText: '',
-    toolCalls: new Map(),
-    completedToolCallIds: new Set(),
-    tokenCountPublished: false,
-  };
-}
-
-function createAssistantItemStreamBridge(output: AssistantOutputAccumulator, options: { renderPlanDeltas?: boolean } = {}): {
-  appendAgent(delta: string): Promise<void>;
-  appendReasoning(delta: string): Promise<void>;
-  consume(event: ModelStreamEvent): Promise<void>;
-  finish(): Promise<void>;
-} {
-  const items = new Map<string, RuntimeStreamItem>();
-  const emittedTextItemIds = new Set<string>();
-  let reasoningOpen = false;
-
-  const appendReasoning = async (delta: string) => {
-    if (!delta) return;
-    await output.append(`${reasoningOpen ? '' : '<think>'}${delta}`);
-    reasoningOpen = true;
-  };
-
-  const appendAgent = async (delta: string) => {
-    if (!delta) return;
-    if (reasoningOpen) {
-      await output.append('</think>');
-      reasoningOpen = false;
-    }
-    await output.append(delta);
-  };
-
-  const appendItemText = async (item: RuntimeStreamItem, text: string) => {
-    if (item.kind === 'agent_message') {
-      emittedTextItemIds.add(item.id);
-      await appendAgent(text);
-      return;
-    }
-    if (item.kind === 'reasoning') {
-      emittedTextItemIds.add(item.id);
-      await appendReasoning(text);
-    }
-  };
-
-  return {
-    appendAgent,
-    appendReasoning,
-    async consume(event) {
-      if (event.type === 'item_started') {
-        items.set(event.item.id, event.item);
-        return;
-      }
-      if (event.type === 'item_delta') {
-        const item = items.get(event.itemId);
-        if (item) await appendItemText(item, event.delta);
-        return;
-      }
-      if (event.type === 'item_completed') {
-        items.set(event.item.id, event.item);
-        if (event.item.content && !emittedTextItemIds.has(event.item.id)) await appendItemText(event.item, event.item.content);
-        return;
-      }
-      if (event.type === 'reasoning_summary_delta' || event.type === 'reasoning_raw_delta') {
-        if (event.itemId) emittedTextItemIds.add(event.itemId);
-        await appendReasoning(event.text);
-        return;
-      }
-      if (event.type === 'plan_delta' && options.renderPlanDeltas) {
-        await appendAgent(event.text);
-      }
-    },
-    async finish() {
-      if (reasoningOpen) {
-        await output.append('</think>');
-        reasoningOpen = false;
-      }
-    },
-  };
-}
-
 function toolCallFromModelStreamItem(event: ModelStreamEvent): RuntimeToolCall | null {
   if (event.type !== 'item_started' && event.type !== 'item_completed') return null;
   const { item } = event;
@@ -4195,8 +3873,8 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 class TurnCancelledError extends Error {
-  constructor() {
-    super('Turn cancelled.');
+  constructor(message = 'Turn cancelled.') {
+    super(message);
     this.name = 'AbortError';
   }
 }

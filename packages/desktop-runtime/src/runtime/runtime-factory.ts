@@ -20,7 +20,9 @@ import { PcLocalToolHost } from '../adapters/tool/pc-local-tool-host.js';
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
 import { AgentLoop } from '../loop/agent-loop.js';
+import { RuntimeEventWriter } from '../loop/runtime-event-writer.js';
 import { systemClock } from '../ports/clock.js';
+import { EventCoordinatedThreadStore } from './event-coordinated-thread-store.js';
 
 export type RuntimeFactoryOptions = {
   dataDir: string;
@@ -42,7 +44,9 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const appServerNotificationBus = new InMemoryAppServerNotificationBus();
   const approvalGate = new InMemoryApprovalGate(clock, ids);
   // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
-  const threadStore = new JsonThreadStore(runtimeDataDir, clock, ids);
+  const persistedThreadStore = new JsonThreadStore(runtimeDataDir, clock, ids);
+  const eventWriter = new RuntimeEventWriter(persistedThreadStore, eventBus);
+  const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter);
   const usageStore = new FileUsageStore(runtimeDataDir, ids);
   const mcpStore = new FileMcpStore(runtimeDataDir);
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
@@ -79,6 +83,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     mcpStore,
     policyAmendmentStore,
     persistentToolApprovalStore,
+    eventWriter,
   });
   // Codex 会在 root session 启动时触发 memories startup；桌面端这里做一次轻量历史抽取。
   const memoryStartup = agentLoop.runMemoryStartupExtraction().catch(() => ({ claimed: 0, extracted: 0 }));
@@ -89,6 +94,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     appServerNotificationBus,
     configStore,
     eventBus,
+    eventWriter,
     memoryStore,
     memoryStartup,
     modelClient,

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +7,14 @@ import { RandomIdGenerator } from '../id/random-id-generator.js';
 import { JsonThreadStore } from './json-thread-store.js';
 
 describe('json thread store', () => {
+  it('rejects path-like thread ids at the storage boundary', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+
+    await expect(store.getThread('../escaped')).rejects.toThrow('Thread id is invalid');
+    await expect(store.getThread('..\\escaped')).rejects.toThrow('Thread id is invalid');
+    await expect(store.getThread('/absolute')).rejects.toThrow('Thread id is invalid');
+  });
+
   it('stores global and project-scoped threads locally', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
 
@@ -67,6 +75,74 @@ describe('json thread store', () => {
     const indexedIds = new Set((await store.listThreads({ includeArchived: true })).map((thread) => thread.id));
 
     expect(indexedIds).toEqual(new Set(threads.map((thread) => thread.id)));
+  });
+
+  it('replays uncheckpointed events and rebuilds the index during recovery', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
+    const firstStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await firstStore.createThread({ title: 'Recover me' });
+    const event = {
+      id: 'event_after_checkpoint',
+      seq: thread.lastSeq + 1,
+      threadId: thread.id,
+      type: 'message.created' as const,
+      createdAt: '2026-07-10T00:00:00.000Z',
+      payload: {
+        message: {
+          id: 'msg_recovered',
+          role: 'user' as const,
+          content: 'persisted only in the log',
+          createdAt: '2026-07-10T00:00:00.000Z',
+          status: 'complete' as const,
+        },
+      },
+    };
+    await appendFile(path.join(dataDir, 'threads', `${thread.id}.jsonl`), `${JSON.stringify(event)}\n`, 'utf8');
+    await rm(path.join(dataDir, 'threads', 'index.json'));
+
+    const recoveredStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await recoveredStore.recover();
+
+    await expect(recoveredStore.getThread(thread.id)).resolves.toMatchObject({
+      lastSeq: event.seq,
+      messages: [expect.objectContaining({ id: 'msg_recovered', content: 'persisted only in the log' })],
+    });
+    await expect(recoveredStore.listThreads({ includeArchived: true })).resolves.toEqual([
+      expect.objectContaining({ id: thread.id, lastMessagePreview: 'persisted only in the log' }),
+    ]);
+  });
+
+  it('repairs an incomplete final event line without hiding middle corruption', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
+    const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Tail repair' });
+    const eventsPath = path.join(dataDir, 'threads', `${thread.id}.jsonl`);
+    await appendFile(eventsPath, '{"id":"partial"', 'utf8');
+
+    const recoveredStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await recoveredStore.recover();
+    expect(await readFile(eventsPath, 'utf8')).toBe(`${JSON.stringify((await recoveredStore.listEvents(thread.id))[0])}\n`);
+
+    await appendFile(eventsPath, '{broken}\n', 'utf8');
+    const corruptStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await expect(corruptStore.recover()).rejects.toThrow('Invalid runtime event JSON');
+  });
+
+  it('rejects gaps in the append-only event sequence', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
+    const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Sequence gap' });
+    await appendFile(path.join(dataDir, 'threads', `${thread.id}.jsonl`), `${JSON.stringify({
+      id: 'event_gap',
+      seq: thread.lastSeq + 2,
+      threadId: thread.id,
+      type: 'thread.updated',
+      createdAt: '2026-07-10T00:00:00.000Z',
+      payload: { patch: { title: 'must not apply' } },
+    })}\n`, 'utf8');
+
+    const recoveredStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await expect(recoveredStore.recover()).rejects.toThrow('Invalid runtime event sequence');
   });
 
   it('updates thread metadata through the serialized event log', async () => {

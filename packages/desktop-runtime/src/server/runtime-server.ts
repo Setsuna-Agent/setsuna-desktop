@@ -8,6 +8,7 @@ import { createAppServerFsManager } from './app-server/fs-protocol.js';
 import { handleAppServerRpcRequest } from './app-server/rpc.js';
 import type { AppServerRpcRequest } from './app-server/rpc-types.js';
 import { isAuthorized, readBody, sendJson } from './http-utils.js';
+import { RuntimeHttpError } from './http-error.js';
 import { handleRuntimeRestRequest } from './runtime-rest-routes.js';
 import { handleAppServerNotificationSse, runtimeEventStreamExperimentalApi } from './sse.js';
 import { settleStaleRuntimeTurns } from './runtime-thread-events.js';
@@ -26,6 +27,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     dataDir: options.dataDir,
     builtinSkillsDir: options.builtinSkillsDir,
   });
+  await runtime.threadStore.recover();
   // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
   await settleStaleRuntimeTurns(runtime);
   const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus, {
@@ -33,12 +35,19 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   });
   const fsManager = createAppServerFsManager(runtime.appServerNotificationBus);
   const appServerConnections = createAppServerConnectionRegistry();
+  const sseResponses = new Set<http.ServerResponse>();
+  let shuttingDown = false;
+  let closingPromise: Promise<void> | null = null;
   const unsubscribeSkillChanges = runtime.skillRegistry.subscribeChanges(() => {
     runtime.appServerNotificationBus.publish({ method: 'skills/changed', params: {} });
   });
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      if (shuttingDown) {
+        sendJson(response, 503, { error: 'Runtime is shutting down' });
+        return;
+      }
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, {
           ok: true,
@@ -55,6 +64,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
       }
 
       if (request.method === 'GET' && url.pathname === '/v1/swe/app-server/events') {
+        trackSseResponse(response, sseResponses);
         const explicitConnectionId = appServerConnectionId(request, url);
         const connectionId = explicitConnectionId ?? APP_SERVER_DEFAULT_CONNECTION_ID;
         handleAppServerNotificationSse({
@@ -70,6 +80,10 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           runtime,
         });
         return;
+      }
+
+      if (request.method === 'GET' && /^\/v1\/threads\/[^/]+\/events$/u.test(url.pathname)) {
+        trackSseResponse(response, sseResponses);
       }
 
       // app-server RPC 承载 Codex/SWE bridge 命令，和普通 runtime REST 路由分开处理。
@@ -97,23 +111,44 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
 
       sendJson(response, 404, { error: 'Not found' });
     } catch (error) {
-      sendJson(response, 500, {
+      sendJson(response, error instanceof RuntimeHttpError ? error.statusCode : 500, {
         error: error instanceof Error ? error.message : String(error),
+        ...(error instanceof RuntimeHttpError && error.code ? { code: error.code } : {}),
       });
     }
   });
 
   return {
     listen: (port) => new Promise((resolve) => server.listen(port, '127.0.0.1', resolve)),
-    close: async () => {
-      // server 关闭时必须先停掉 shell/命令执行器，避免子进程脱离 runtime 生命周期。
-      unsubscribeSkillChanges();
-      commandExecManager.terminateAll();
-      fsManager.terminateAll();
-      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    close: () => {
+      if (closingPromise) return closingPromise;
+      shuttingDown = true;
+      closingPromise = (async () => {
+        // Stop accepting requests first, then close long-lived streams so the
+        // server callback can complete while background turns are draining.
+        const serverClosed = server.listening
+          ? new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+          : Promise.resolve();
+        for (const response of sseResponses) response.end();
+        sseResponses.clear();
+        server.closeAllConnections();
+        unsubscribeSkillChanges();
+        commandExecManager.terminateAll();
+        fsManager.terminateAll();
+        await runtime.agentLoop.shutdown();
+        await runtime.eventWriter.flushAll();
+        await runtime.threadStore.flush();
+        await serverClosed;
+      })();
+      return closingPromise;
     },
     address: () => server.address(),
   };
+}
+
+function trackSseResponse(response: http.ServerResponse, responses: Set<http.ServerResponse>): void {
+  responses.add(response);
+  response.once('close', () => responses.delete(response));
 }
 
 function appServerConnectionId(request: http.IncomingMessage, url: URL): string | undefined {

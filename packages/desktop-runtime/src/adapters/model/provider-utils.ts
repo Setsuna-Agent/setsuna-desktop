@@ -39,29 +39,38 @@ export async function* parseSse(response: Response): AsyncGenerator<{ event?: st
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split('\n\n');
-    buffer = chunks.pop() ?? '';
-    for (const chunk of chunks) {
-      const lines = chunk.split('\n');
-      const event = lines.find((line) => line.startsWith('event: '))?.slice(7).trim();
-      const data = lines
-        .filter((line) => line.startsWith('data: '))
-        .map((line) => line.slice(6))
-        .join('\n');
-      if (data) yield { event, data };
+  let completed = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        completed = true;
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() ?? '';
+      for (const chunk of chunks) {
+        const lines = chunk.split('\n');
+        const event = lines.find((line) => line.startsWith('event: '))?.slice(7).trim();
+        const data = lines
+          .filter((line) => line.startsWith('data: '))
+          .map((line) => line.slice(6))
+          .join('\n');
+        if (data) yield { event, data };
+      }
     }
+    const event = buffer.split('\n').find((line) => line.startsWith('event: '))?.slice(7).trim();
+    const data = buffer
+      .split('\n')
+      .filter((line) => line.startsWith('data: '))
+      .map((line) => line.slice(6))
+      .join('\n');
+    if (data) yield { event, data };
+  } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
-  const event = buffer.split('\n').find((line) => line.startsWith('event: '))?.slice(7).trim();
-  const data = buffer
-    .split('\n')
-    .filter((line) => line.startsWith('data: '))
-    .map((line) => line.slice(6))
-    .join('\n');
-  if (data) yield { event, data };
 }
 
 export function parseJson(value: string): unknown | null {

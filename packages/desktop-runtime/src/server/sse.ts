@@ -27,24 +27,47 @@ export async function handleSse({
   response.flushHeaders?.();
 
   const sweMapEvent = format === 'swe' ? createSweNotificationMapper() : null;
-  const existing = await runtime.threadStore.listEvents(threadId, format === 'swe' ? 0 : sinceSeq);
-  for (const event of existing) {
+  const buffered: RuntimeEvent[] = [];
+  let replaying = true;
+  let closed = false;
+  let processedSeq = format === 'swe' ? 0 : sinceSeq;
+  const writeEvent = (event: RuntimeEvent) => {
     if (format === 'swe' && sweMapEvent) {
       const notifications = sweMapEvent(event);
       if (event.seq > sinceSeq) writeSweSse(response, notifications, { experimentalApi });
     } else {
       writeRuntimeSse(response, event);
     }
-  }
-
+    processedSeq = event.seq;
+  };
   const unsubscribe = runtime.eventBus.subscribe(threadId, (event) => {
-    if (format === 'swe' && sweMapEvent) {
-      writeSweSse(response, sweMapEvent(event), { experimentalApi });
-      return;
-    }
-    writeRuntimeSse(response, event);
+    if (closed || event.seq <= processedSeq) return;
+    if (replaying) buffered.push(event);
+    else writeEvent(event);
   });
-  response.on('close', unsubscribe);
+  response.on('close', () => {
+    closed = true;
+    unsubscribe();
+  });
+
+  try {
+    // Subscribe before replay. Events published while the log is being read are
+    // buffered and de-duplicated by seq when replay reaches the live boundary.
+    const existing = await runtime.threadStore.listEvents(threadId, format === 'swe' ? 0 : sinceSeq);
+    if (closed) return;
+    for (const event of existing) {
+      if (event.seq <= processedSeq) continue;
+      writeEvent(event);
+    }
+    for (const event of buffered.sort((left, right) => left.seq - right.seq)) {
+      if (event.seq <= processedSeq) continue;
+      writeEvent(event);
+    }
+    replaying = false;
+  } catch (error) {
+    unsubscribe();
+    response.destroy(error instanceof Error ? error : new Error(String(error)));
+  }
 }
 
 export function handleAppServerNotificationSse({

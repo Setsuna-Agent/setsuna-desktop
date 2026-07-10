@@ -37,6 +37,11 @@ export type ToolRunSummaryMode = 'aggregate' | 'latest';
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 const fileChangePreviewLimit = 3;
 
+export function toolRunGroupKindClassName(kind: ToolRunGroupKind): string {
+  const modifier = kind === 'fileMutation' ? 'file-mutation' : kind;
+  return `chat-tool-run--${modifier}`;
+}
+
 export function RuntimeToolRuns({
   runs,
   onAnswerApproval,
@@ -106,7 +111,7 @@ function ToolRunPanel({
   if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
   const open = toolRunPanelDefaultOpen(run);
   return (
-    <details className={`chat-tool-run chat-tool-run--panel chat-tool-run--${toolRunGroupKind(run)} chat-tool-run--${run.status}`} open={open}>
+    <details className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(toolRunGroupKind(run))} chat-tool-run--${run.status}`} open={open}>
       <summary className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">
@@ -142,7 +147,7 @@ function ToolRunGroupPanel({
     ? fileOperationSummary.changeCounts
     : undefined;
   return (
-    <details className={`chat-tool-run chat-tool-run--group chat-tool-run--${group.kind} chat-tool-run--${status}`} open={open}>
+    <details className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`} open={open}>
       <summary className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunGroupIcon(group)}</span>
         <span className="chat-tool-run__summary-text">
@@ -276,7 +281,7 @@ function isToolRunGroup(group: ToolRunGroup | null): group is ToolRunGroup {
 function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
   const summary = toolRunSummary(run);
   return (
-    <div className={`chat-tool-run chat-tool-run--flat chat-tool-run--${toolRunGroupKind(run)} chat-tool-run--${run.status}`}>
+    <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName(toolRunGroupKind(run))} chat-tool-run--${run.status}`}>
       <div className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">
@@ -301,7 +306,7 @@ function FileMutationRunRow({
   const error = run.status === 'error' ? formatPreview(run.resultPreview ?? '') : '';
   const totals = fileOperationChangeTotals(run);
   return (
-    <div className={`chat-tool-run chat-tool-run--flat chat-tool-run--file-mutation chat-tool-run--${run.status}`}>
+    <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName('fileMutation')} chat-tool-run--${run.status}`}>
       <div className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">

@@ -16,6 +16,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
 const MAX_LIST_ENTRIES = 200;
@@ -50,29 +51,33 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const projectPath = await normalizeProjectPath(input.path);
     const projectStat = await stat(projectPath);
     if (!projectStat.isDirectory()) throw new Error('Project path must be a directory.');
-    const now = this.clock.now().toISOString();
-    const index = await this.readIndex();
-    const existing = index.projects.find((project) => project.path === projectPath);
-    const project: WorkspaceProject = {
-      id: existing?.id ?? `project_${randomUUID().replaceAll('-', '').slice(0, 20)}`,
-      name: input.name?.trim() || existing?.name || path.basename(projectPath) || projectPath,
-      path: projectPath,
-      gitRoot: await findGitRoot(projectPath),
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    };
-    await this.writeIndex({
-      version: 1,
-      projects: [project, ...index.projects.filter((item) => item.id !== project.id && item.path !== project.path)],
+    return withFileStateUpdate(this.indexPath, async () => {
+      const now = this.clock.now().toISOString();
+      const index = await this.readIndex();
+      const existing = index.projects.find((project) => project.path === projectPath);
+      const project: WorkspaceProject = {
+        id: existing?.id ?? `project_${randomUUID().replaceAll('-', '').slice(0, 20)}`,
+        name: input.name?.trim() || existing?.name || path.basename(projectPath) || projectPath,
+        path: projectPath,
+        gitRoot: await findGitRoot(projectPath),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      await this.writeIndex({
+        version: 1,
+        projects: [project, ...index.projects.filter((item) => item.id !== project.id && item.path !== project.path)],
+      });
+      return project;
     });
-    return project;
   }
 
   async removeProject(projectId: string): Promise<void> {
-    const index = await this.readIndex();
-    await this.writeIndex({
-      version: 1,
-      projects: index.projects.filter((project) => project.id !== projectId),
+    await withFileStateUpdate(this.indexPath, async () => {
+      const index = await this.readIndex();
+      await this.writeIndex({
+        version: 1,
+        projects: index.projects.filter((project) => project.id !== projectId),
+      });
     });
   }
 

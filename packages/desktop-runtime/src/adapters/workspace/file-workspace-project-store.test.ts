@@ -6,6 +6,19 @@ import { systemClock } from '../../ports/clock.js';
 import { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
 
 describe('file workspace project store', () => {
+  it('serializes concurrent project additions', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const dataDir = path.join(root, 'data');
+    const alpha = path.join(root, 'alpha');
+    const beta = path.join(root, 'beta');
+    await Promise.all([mkdir(alpha), mkdir(beta)]);
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+
+    await Promise.all([store.addProject({ path: alpha }), store.addProject({ path: beta })]);
+
+    expect((await store.listProjects()).projects.map((project) => project.name).sort()).toEqual(['alpha', 'beta']);
+  });
+
   it('adds a project and exposes local file operations', async () => {
     const fixture = await createWorkspaceFixture();
     const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);

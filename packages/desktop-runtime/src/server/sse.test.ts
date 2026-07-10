@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import type { RuntimeEvent } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
+import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { handleSse, runtimeEventStreamExperimentalApi } from './sse.js';
 import type { RuntimeFactory } from './types.js';
 
@@ -25,11 +26,23 @@ describe('runtime SSE', () => {
     expect(runtimeEventStreamExperimentalApi('false')).toBe(false);
     expect(runtimeEventStreamExperimentalApi(null)).toBe(false);
   });
+
+  it('buffers events published while historical replay is loading', async () => {
+    const eventBus = new InMemoryEventBus();
+    const event = commandApprovalRequestedEvent();
+    const { output } = await renderSweSse([], false, {
+      eventBus,
+      beforeHistoryReturns: () => eventBus.publish(event),
+    });
+
+    expect(output()).toContain('"method":"item/commandExecution/requestApproval"');
+  });
 });
 
 async function renderSweSse(
   events: RuntimeEvent[],
   experimentalApi = false,
+  options: { eventBus?: InMemoryEventBus; beforeHistoryReturns?: () => void } = {},
 ): Promise<{ output: () => string }> {
   const chunks: string[] = [];
   const response = {
@@ -39,14 +52,16 @@ async function renderSweSse(
       return true;
     },
     on: () => response,
+    destroy: () => response,
   } as unknown as ServerResponse;
   const runtime = {
     threadStore: {
-      listEvents: async () => events,
+      listEvents: async () => {
+        options.beforeHistoryReturns?.();
+        return events;
+      },
     },
-    eventBus: {
-      subscribe: () => () => undefined,
-    },
+    eventBus: options.eventBus ?? { subscribe: () => () => undefined },
   } as unknown as RuntimeFactory;
 
   await handleSse({

@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path';
 import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillKind, RuntimeSkillList, RuntimeSkillPatch, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import type { SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
+import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
 type SkillStateFile = {
@@ -46,20 +47,22 @@ export class FileSkillRegistry implements SkillRegistry {
   }
 
   async createSkill(input: RuntimeSkillInput): Promise<RuntimeSkillDetail> {
-    const id = skillId(input.id || input.name);
-    if (!id) throw new Error('Skill id is required');
-    const existing = await this.readSkills();
-    if (existing.some((skill) => skill.id === id)) throw new Error(`Skill already exists: ${id}`);
-    const skillPath = await this.writeUserSkill(id, input);
-    const state = await this.readState();
-    state.states[id] = {
-      enabled: input.enabled ?? true,
-      selected: input.selected ?? false,
-    };
-    await this.writeState(state);
-    const content = await readFile(skillPath, 'utf8');
-    this.queueChangeNotification();
-    return toDetail(parseSkill(id, 'user', skillPath, content), state);
+    return withFileStateUpdate(this.statePath, async () => {
+      const id = skillId(input.id || input.name);
+      if (!id) throw new Error('Skill id is required');
+      const existing = await this.readSkills();
+      if (existing.some((skill) => skill.id === id)) throw new Error(`Skill already exists: ${id}`);
+      const state = await this.readState();
+      state.states[id] = {
+        enabled: input.enabled ?? true,
+        selected: input.selected ?? false,
+      };
+      await this.writeState(state);
+      const skillPath = await this.writeUserSkill(id, input);
+      const content = await readFile(skillPath, 'utf8');
+      this.queueChangeNotification();
+      return toDetail(parseSkill(id, 'user', skillPath, content), state);
+    });
   }
 
   async getSkill(skillId: string): Promise<RuntimeSkillDetail | null> {
@@ -69,47 +72,51 @@ export class FileSkillRegistry implements SkillRegistry {
   }
 
   async updateSkill(skillId: string, patch: RuntimeSkillPatch): Promise<RuntimeSkillDetail> {
-    const skills = await this.readSkills();
-    const skill = skills.find((item) => item.id === skillId);
-    if (!skill) throw new Error(`Skill not found: ${skillId}`);
-    const contentPatch = patch.name !== undefined || patch.description !== undefined || patch.content !== undefined;
-    if (contentPatch && skill.kind !== 'user') throw new Error(`Built-in skill is read-only: ${skillId}`);
+    return withFileStateUpdate(this.statePath, async () => {
+      const skills = await this.readSkills();
+      const skill = skills.find((item) => item.id === skillId);
+      if (!skill) throw new Error(`Skill not found: ${skillId}`);
+      const contentPatch = patch.name !== undefined || patch.description !== undefined || patch.content !== undefined;
+      if (contentPatch && skill.kind !== 'user') throw new Error(`Built-in skill is read-only: ${skillId}`);
 
-    const state = await this.readState();
-    state.states[skillId] = {
-      ...state.states[skillId],
-      enabled: patch.enabled ?? state.states[skillId]?.enabled,
-      selected: patch.selected ?? state.states[skillId]?.selected,
-    };
-    await this.writeState(state);
-    if (!contentPatch) {
+      const state = await this.readState();
+      state.states[skillId] = {
+        ...state.states[skillId],
+        enabled: patch.enabled ?? state.states[skillId]?.enabled,
+        selected: patch.selected ?? state.states[skillId]?.selected,
+      };
+      await this.writeState(state);
+      if (!contentPatch) {
+        this.queueChangeNotification();
+        return toDetail(skill, state);
+      }
+
+      const nextInput: RuntimeSkillInput = {
+        name: patch.name ?? skill.name,
+        description: patch.description ?? skill.description,
+        content: patch.content ?? skill.content,
+        enabled: state.states[skillId]?.enabled,
+        selected: state.states[skillId]?.selected,
+      };
+      const skillPath = await this.writeUserSkill(skillId, nextInput);
+      const content = await readFile(skillPath, 'utf8');
       this.queueChangeNotification();
-      return toDetail(skill, state);
-    }
-
-    const nextInput: RuntimeSkillInput = {
-      name: patch.name ?? skill.name,
-      description: patch.description ?? skill.description,
-      content: patch.content ?? skill.content,
-      enabled: state.states[skillId]?.enabled,
-      selected: state.states[skillId]?.selected,
-    };
-    const skillPath = await this.writeUserSkill(skillId, nextInput);
-    const content = await readFile(skillPath, 'utf8');
-    this.queueChangeNotification();
-    return toDetail(parseSkill(skillId, 'user', skillPath, content), state);
+      return toDetail(parseSkill(skillId, 'user', skillPath, content), state);
+    });
   }
 
   async deleteSkill(skillId: string): Promise<void> {
-    const skills = await this.readSkills();
-    const skill = skills.find((item) => item.id === skillId);
-    if (!skill) return;
-    if (skill.kind !== 'user') throw new Error(`Built-in skill is read-only: ${skillId}`);
-    await rm(path.join(this.userSkillsDir, skillId), { recursive: true, force: true });
-    const state = await this.readState();
-    delete state.states[skillId];
-    await this.writeState(state);
-    this.queueChangeNotification();
+    await withFileStateUpdate(this.statePath, async () => {
+      const skills = await this.readSkills();
+      const skill = skills.find((item) => item.id === skillId);
+      if (!skill) return;
+      if (skill.kind !== 'user') throw new Error(`Built-in skill is read-only: ${skillId}`);
+      await rm(path.join(this.userSkillsDir, skillId), { recursive: true, force: true });
+      const state = await this.readState();
+      delete state.states[skillId];
+      await this.writeState(state);
+      this.queueChangeNotification();
+    });
   }
 
   async selectedSkillInjections(skillIds: string[] = []): Promise<SkillInjection[]> {

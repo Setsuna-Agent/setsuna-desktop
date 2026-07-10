@@ -9,15 +9,19 @@ const WINDOWS_RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400];
 export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(await readFile(filePath, 'utf8')) as T;
-  } catch {
-    return fallback;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return fallback;
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid JSON in ${filePath}: ${error.message}`, { cause: error });
+    }
+    throw error;
   }
 }
 
-export async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
+export async function writeJsonFile(filePath: string, value: unknown, options: { mode?: number } = {}): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: options.mode });
   try {
     await renameWithRetry(tempPath, filePath);
   } catch (error) {
@@ -58,4 +62,8 @@ function errorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
   const code = (error as { code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }

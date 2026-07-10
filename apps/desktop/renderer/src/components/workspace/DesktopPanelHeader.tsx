@@ -238,7 +238,7 @@ export function DesktopPanelHeader({
   );
 
   return (
-    <div className={['chat-file-review-panel__header', dragOverlay ? 'is-reordering-tabs' : ''].filter(Boolean).join(' ')}>
+    <div className={['desktop-panel-chrome', 'chat-file-review-panel__header', dragOverlay ? 'is-reordering-tabs' : ''].filter(Boolean).join(' ')}>
       <div className="chat-file-review-panel__heading">
         <span className="chat-file-review-panel__tabs" ref={tabsRef}>
           {tabPanels.map((panel) => (

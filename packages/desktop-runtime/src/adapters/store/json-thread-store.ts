@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   CreateThreadInput,
@@ -16,18 +16,24 @@ import { applyRuntimeEventToThread } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import { parseJsonLine, readJsonFile, writeJsonFile } from './json-file.js';
+import { assertSafeRuntimeId, resolveRuntimeStoragePath } from '../../security/runtime-id.js';
+import { readJsonFile, writeJsonFile } from './json-file.js';
 
 type ThreadIndex = {
   threads: RuntimeThreadSummary[];
 };
 
 const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
+const STREAM_CHECKPOINT_DELAY_MS = 100;
 
 export class JsonThreadStore implements ThreadStore {
   private readonly threadsDir: string;
   private readonly indexPath: string;
   private readonly threadWriteQueues = new Map<string, Promise<void>>();
+  private readonly threadCache = new Map<string, RuntimeThread>();
+  private readonly checkpointTimers = new Map<string, NodeJS.Timeout>();
+  private readonly checkpointTasks = new Set<Promise<void>>();
+  private checkpointFailure: Error | null = null;
   private indexWriteQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -59,18 +65,67 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   async getThread(threadId: string): Promise<RuntimeThread | null> {
-    const snapshot = await readJsonFile<RuntimeThread | null>(this.snapshotPath(threadId), null);
-    if (!snapshot) return null;
-    return this.hydrateMessageCompletionTimes(threadId, normalizeThreadSnapshot(snapshot));
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    const cached = this.threadCache.get(safeThreadId);
+    if (cached) return cloneThread(cached);
+    const recovered = await this.loadAndRecoverThread(safeThreadId, true);
+    if (!recovered) return null;
+    this.threadCache.set(safeThreadId, recovered);
+    return cloneThread(recovered);
+  }
+
+  /** Replay uncheckpointed events and rebuild the summary index at startup. */
+  async recover(): Promise<void> {
+    await mkdir(this.threadsDir, { recursive: true });
+    const entries = await readdir(this.threadsDir, { withFileTypes: true });
+    const snapshotIds = entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.json') && entry.name !== 'index.json')
+      .map((entry) => entry.name.slice(0, -'.json'.length));
+    const eventLogIds = entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
+      .map((entry) => entry.name.slice(0, -'.jsonl'.length));
+    for (const threadId of eventLogIds) {
+      assertSafeRuntimeId(threadId, 'Thread id');
+      if (!snapshotIds.includes(threadId)) {
+        throw new Error(`Thread event log has no seed snapshot: ${threadId}`);
+      }
+    }
+
+    const threads: RuntimeThread[] = [];
+    for (const threadId of snapshotIds) {
+      const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+      const thread = await this.loadAndRecoverThread(safeThreadId, false);
+      if (!thread) continue;
+      this.threadCache.set(safeThreadId, thread);
+      threads.push(thread);
+    }
+    await this.enqueueIndexWrite(() => writeJsonFile(this.indexPath, {
+      threads: threads.map(toSummary).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    }));
+  }
+
+  /** Flush delayed streaming checkpoints before runtime shutdown or tests inspect disk state. */
+  async flush(): Promise<void> {
+    const pendingThreadIds = [...this.checkpointTimers.keys()];
+    for (const timer of this.checkpointTimers.values()) clearTimeout(timer);
+    this.checkpointTimers.clear();
+    const flushes = pendingThreadIds.map((threadId) =>
+      this.enqueueThreadWrite(threadId, () => this.persistCachedThreadUnlocked(threadId)),
+    );
+    await Promise.all([...this.checkpointTasks, ...flushes]);
+    if (this.checkpointFailure) throw this.checkpointFailure;
   }
 
   async createThread(input: CreateThreadInput = {}): Promise<RuntimeThread> {
     await mkdir(this.threadsDir, { recursive: true });
     const now = this.clock.now().toISOString();
+    const threadId = assertSafeRuntimeId(this.ids.id('thread'), 'Thread id');
+    const forkedFromId = optionalSafeRuntimeId(input.forkedFromId, 'Forked thread id');
+    const parentThreadId = optionalSafeRuntimeId(input.parentThreadId, 'Parent thread id');
     const thread: RuntimeThread = {
-      id: this.ids.id('thread'),
-      forkedFromId: input.forkedFromId?.trim() || undefined,
-      parentThreadId: input.parentThreadId?.trim() || undefined,
+      id: threadId,
+      forkedFromId,
+      parentThreadId,
       projectId: input.projectId?.trim() || undefined,
       title: input.title?.trim() || 'New thread',
       createdAt: now,
@@ -84,6 +139,7 @@ export class JsonThreadStore implements ThreadStore {
     };
     await writeJsonFile(this.snapshotPath(thread.id), thread);
     await this.writeIndexWithThread(thread);
+    this.threadCache.set(thread.id, thread);
     await this.appendEvent(thread.id, {
       id: this.ids.id('event'),
       threadId: thread.id,
@@ -95,11 +151,14 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   async deleteThread(threadId: string): Promise<void> {
+    assertSafeRuntimeId(threadId, 'Thread id');
     return this.enqueueThreadWrite(threadId, async () => {
+      this.cancelCheckpoint(threadId);
       if (!await this.getThread(threadId)) throw new Error(`Thread not found: ${threadId}`);
       await this.removeThreadFromIndex(threadId);
       await rm(this.snapshotPath(threadId), { force: true });
       await rm(this.eventsPath(threadId), { force: true });
+      this.threadCache.delete(threadId);
     });
   }
 
@@ -208,10 +267,13 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   async appendEvent(threadId: string, eventWithoutSeq: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent> {
+    assertSafeRuntimeId(threadId, 'Thread id');
+    if (eventWithoutSeq.threadId !== threadId) throw new Error('Runtime event thread id does not match its storage thread.');
     return this.enqueueThreadWrite(threadId, () => this.appendEventUnlocked(threadId, eventWithoutSeq));
   }
 
   private async appendEventUnlocked(threadId: string, eventWithoutSeq: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent> {
+    if (this.checkpointFailure) throw this.checkpointFailure;
     const thread = await this.requireThread(threadId);
     const event = {
       ...eventWithoutSeq,
@@ -220,9 +282,45 @@ export class JsonThreadStore implements ThreadStore {
     await mkdir(this.threadsDir, { recursive: true });
     await appendFile(this.eventsPath(threadId), `${JSON.stringify(event)}\n`, 'utf8');
     const nextThread = applyRuntimeEventToThread(thread, event);
-    await writeJsonFile(this.snapshotPath(threadId), nextThread);
-    await this.writeIndexWithThread(nextThread);
+    this.threadCache.set(threadId, nextThread);
+    if (eventCanUseDelayedCheckpoint(event)) {
+      this.scheduleCheckpoint(threadId);
+    } else {
+      this.cancelCheckpoint(threadId);
+      await this.persistCachedThreadUnlocked(threadId);
+    }
     return event;
+  }
+
+  private scheduleCheckpoint(threadId: string): void {
+    if (this.checkpointTimers.has(threadId)) return;
+    const timer = setTimeout(() => {
+      this.checkpointTimers.delete(threadId);
+      const task = this.enqueueThreadWrite(threadId, () => this.persistCachedThreadUnlocked(threadId));
+      this.checkpointTasks.add(task);
+      void task.then(
+        () => this.checkpointTasks.delete(task),
+        (error) => {
+          this.checkpointTasks.delete(task);
+          this.checkpointFailure = error instanceof Error ? error : new Error(String(error));
+        },
+      );
+    }, STREAM_CHECKPOINT_DELAY_MS);
+    timer.unref();
+    this.checkpointTimers.set(threadId, timer);
+  }
+
+  private cancelCheckpoint(threadId: string): void {
+    const timer = this.checkpointTimers.get(threadId);
+    if (timer) clearTimeout(timer);
+    this.checkpointTimers.delete(threadId);
+  }
+
+  private async persistCachedThreadUnlocked(threadId: string): Promise<void> {
+    const thread = this.threadCache.get(threadId);
+    if (!thread) return;
+    await writeJsonFile(this.snapshotPath(threadId), thread);
+    await this.writeIndexWithThread(thread);
   }
 
   private async enqueueThreadWrite<T>(threadId: string, task: () => Promise<T>): Promise<T> {
@@ -240,15 +338,8 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   async listEvents(threadId: string, sinceSeq = 0): Promise<RuntimeEvent[]> {
-    try {
-      const text = await readFile(this.eventsPath(threadId), 'utf8');
-      return text
-        .split('\n')
-        .map((line) => parseJsonLine<RuntimeEvent>(line))
-        .filter((event): event is RuntimeEvent => Boolean(event && event.seq > sinceSeq));
-    } catch {
-      return [];
-    }
+    assertSafeRuntimeId(threadId, 'Thread id');
+    return (await this.readEventLog(threadId, false)).filter((event) => event.seq > sinceSeq);
   }
 
   private async requireThread(threadId: string): Promise<RuntimeThread> {
@@ -285,17 +376,81 @@ export class JsonThreadStore implements ThreadStore {
   }
 
   private snapshotPath(threadId: string): string {
-    return path.join(this.threadsDir, `${threadId}.json`);
+    return resolveRuntimeStoragePath(this.threadsDir, `${assertSafeRuntimeId(threadId, 'Thread id')}.json`);
   }
 
   private eventsPath(threadId: string): string {
-    return path.join(this.threadsDir, `${threadId}.jsonl`);
+    return resolveRuntimeStoragePath(this.threadsDir, `${assertSafeRuntimeId(threadId, 'Thread id')}.jsonl`);
   }
 
-  private async hydrateMessageCompletionTimes(threadId: string, thread: RuntimeThread): Promise<RuntimeThread> {
-    if (thread.messages.every((message) => message.completedAt || message.status !== 'complete')) return thread;
+  private async loadAndRecoverThread(threadId: string, updateIndex: boolean): Promise<RuntimeThread | null> {
+    const snapshot = await readJsonFile<RuntimeThread | null>(this.snapshotPath(threadId), null);
+    const events = await this.readEventLog(threadId, true);
+    if (!snapshot) {
+      if (events.length) throw new Error(`Thread event log has no seed snapshot: ${threadId}`);
+      return null;
+    }
+    assertThreadSnapshot(snapshot, threadId);
+    let thread = normalizeThreadSnapshot(snapshot);
+    const highestSeq = events.at(-1)?.seq ?? 0;
+    if (thread.lastSeq > highestSeq) {
+      throw new Error(`Thread snapshot is ahead of its event log: ${threadId}`);
+    }
+    let recovered = false;
+    for (const event of events) {
+      if (event.seq <= thread.lastSeq) continue;
+      thread = applyRuntimeEventToThread(thread, event);
+      recovered = true;
+    }
+    thread = await this.hydrateMessageCompletionTimesFromEvents(thread, events);
+    if (recovered) {
+      await writeJsonFile(this.snapshotPath(threadId), thread);
+      if (updateIndex) await this.writeIndexWithThread(thread);
+    }
+    return thread;
+  }
+
+  private async readEventLog(threadId: string, repairIncompleteTail: boolean): Promise<RuntimeEvent[]> {
+    let text: string;
+    try {
+      text = await readFile(this.eventsPath(threadId), 'utf8');
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return [];
+      throw error;
+    }
+    const lines = text.split('\n');
+    const events: RuntimeEvent[] = [];
+    const eventIds = new Set<string>();
+    let incompleteTail = false;
+    for (const [index, line] of lines.entries()) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let event: RuntimeEvent;
+      try {
+        event = JSON.parse(trimmed) as RuntimeEvent;
+      } catch (error) {
+        if (index === lines.length - 1 && !text.endsWith('\n')) {
+          incompleteTail = true;
+          break;
+        }
+        throw new Error(`Invalid runtime event JSON at ${this.eventsPath(threadId)}:${index + 1}`, { cause: error });
+      }
+      const expectedSeq = events.length + 1;
+      if (!event || event.threadId !== threadId || event.seq !== expectedSeq || !event.id || eventIds.has(event.id)) {
+        throw new Error(`Invalid runtime event sequence at ${this.eventsPath(threadId)}:${index + 1}`);
+      }
+      eventIds.add(event.id);
+      events.push(event);
+    }
+    if (repairIncompleteTail && (incompleteTail || (text && !text.endsWith('\n')))) {
+      await writeFile(this.eventsPath(threadId), events.map((event) => JSON.stringify(event)).join('\n') + (events.length ? '\n' : ''), 'utf8');
+    }
+    return events;
+  }
+
+  private async hydrateMessageCompletionTimesFromEvents(thread: RuntimeThread, events: RuntimeEvent[]): Promise<RuntimeThread> {
     const completedAtByMessageId = new Map<string, string>();
-    for (const event of await this.listEvents(threadId)) {
+    for (const event of events) {
       if (event.type === 'message.completed') {
         completedAtByMessageId.set(event.payload.messageId, event.createdAt);
       }
@@ -310,6 +465,40 @@ export class JsonThreadStore implements ThreadStore {
     });
     return changed ? { ...thread, messages } : thread;
   }
+}
+
+function optionalSafeRuntimeId(value: string | undefined, label: string): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? assertSafeRuntimeId(normalized, label) : undefined;
+}
+
+function assertThreadSnapshot(thread: RuntimeThread, expectedThreadId: string): void {
+  if (
+    !thread
+    || thread.id !== expectedThreadId
+    || !Array.isArray(thread.messages)
+    || !Number.isInteger(thread.lastSeq)
+    || thread.lastSeq < 0
+  ) {
+    throw new Error(`Invalid thread snapshot: ${expectedThreadId}`);
+  }
+}
+
+function cloneThread(thread: RuntimeThread): RuntimeThread {
+  return structuredClone(thread);
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
+function eventCanUseDelayedCheckpoint(event: RuntimeEvent): boolean {
+  return event.type === 'message.delta'
+    || event.type === 'item.delta'
+    || event.type === 'reasoning.summary_delta'
+    || event.type === 'reasoning.raw_delta'
+    || event.type === 'plan.delta'
+    || event.type === 'tool.output_delta';
 }
 
 function toSummary(thread: RuntimeThread): RuntimeThreadSummary {

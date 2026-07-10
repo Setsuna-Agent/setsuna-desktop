@@ -30,4 +30,5 @@ export type ApprovalGate = {
   waitForDecision(approvalId: string): Promise<AnswerRuntimeApprovalInput>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<RuntimeApprovalRequest>;
   listApprovals(): Promise<RuntimeApprovalList>;
+  rejectPending?(error: Error): void;
 };

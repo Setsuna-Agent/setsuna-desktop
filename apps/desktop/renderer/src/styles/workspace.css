@@ -123,7 +123,7 @@
   border-radius: 10px;
   background: var(--app-surface);
   overflow-y: auto;
-  box-shadow: 0 14px 42px color-mix(in srgb, #000000 12%, transparent);
+  box-shadow: var(--app-shadow-popover);
 }
 
 .desktop-workspace-launcher-menu button,
@@ -205,59 +205,21 @@
   height: 14px;
 }
 
-.desktop-workspace-launcher__glyph--vscode,
-.desktop-workspace-launcher__glyph--vscode-insiders {
-  color: #1677ff;
-}
-
-.desktop-workspace-launcher__glyph--cursor,
-.desktop-workspace-launcher__glyph--terminal {
-  color: #2f3437;
-}
-
-.desktop-workspace-launcher__glyph--finder,
-.desktop-workspace-launcher__glyph--explorer {
-  color: #4f86e8;
-}
-
-.desktop-workspace-launcher__glyph--intellij-idea {
-  color: #ec4899;
-}
-
-.desktop-workspace-launcher__glyph-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #111827 0%, #111827 38%, #ec4899 38%, #ec4899 64%, #22c55e 64%);
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.desktop-workspace-launcher__glyph--pycharm .desktop-workspace-launcher__glyph-badge {
-  background: linear-gradient(135deg, #111827 0%, #111827 38%, #16a34a 38%, #16a34a 64%, #facc15 64%);
-}
-
-.desktop-workspace-launcher__glyph--webstorm .desktop-workspace-launcher__glyph-badge {
-  background: linear-gradient(135deg, #111827 0%, #111827 38%, #2563eb 38%, #2563eb 64%, #22d3ee 64%);
-}
-
 .desktop-workspace-toolbar .chat-file-review-panel__header {
   flex: 1 1 auto;
   width: 100%;
-  min-width: 0;
-  min-height: 0;
   height: 100%;
   padding: 7px 8px 5px;
-  border-bottom: 0;
   background: transparent;
 }
 
-.desktop-workspace-toolbar .chat-file-review-panel__heading {
+.desktop-workspace-toolbar--overview .chat-file-review-panel__header {
+  min-width: 0;
+  min-height: 0;
+  border-bottom: 0;
+}
+
+.desktop-workspace-toolbar--overview .chat-file-review-panel__heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -266,188 +228,26 @@
   height: 28px;
 }
 
-.desktop-workspace-toolbar .chat-file-review-panel__tabs {
-  display: flex;
+.desktop-workspace-toolbar--overview .chat-file-review-panel__tabs {
   flex: 1 1 auto;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  overscroll-behavior-inline: contain;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title {
-  position: relative;
-  flex: 0 1 auto;
-  min-width: 72px;
-  max-width: 150px;
-  height: 28px;
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: transparent;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title:hover,
-.desktop-workspace-toolbar .chat-file-review-panel__title--active {
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title--sortable {
-  cursor: grab;
-  touch-action: none;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title--sortable:active,
-.desktop-workspace-toolbar .chat-file-review-panel__title.is-dragging {
-  cursor: grabbing;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__header.is-reordering-tabs {
-  user-select: none;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title.is-dragging {
-  opacity: 0.24;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title--drag-preview {
-  position: fixed;
-  z-index: 1200;
-  display: inline-flex;
-  min-width: 0;
-  max-width: none;
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-text) 6%);
-  box-shadow: 0 10px 24px rgb(15 23 42 / 16%), 0 1px 3px rgb(15 23 42 / 12%);
-  opacity: 0.98;
-  pointer-events: none;
-  cursor: grabbing;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title--drag-preview .chat-file-review-panel__tab-close {
-  opacity: 1;
-  pointer-events: none;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-  height: 100%;
-  padding: 0 9px;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  line-height: inherit;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title--closable .chat-file-review-panel__tab-button {
-  padding-right: 24px;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-button svg,
-.desktop-workspace-toolbar .chat-file-review-panel__tab-button .iconify {
-  flex: 0 0 auto;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-label {
-  min-width: 0;
-  overflow: hidden;
-  color: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 999px;
-  color: transparent;
-  background: #9ca3af;
-  font-size: 0;
-  line-height: 0;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-50%);
-  transition: opacity 120ms ease, background 120ms ease;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__title:hover .chat-file-review-panel__tab-close,
-.desktop-workspace-toolbar .chat-file-review-panel__title:focus-within .chat-file-review-panel__tab-close {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close:hover {
-  background: #8f969f;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph,
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph::before,
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph::after {
-  position: absolute;
-  display: block;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph {
-  inset: 0;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph::before,
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph::after {
-  top: 6.2px;
-  left: 3.8px;
-  width: 6.4px;
-  height: 1.2px;
-  border-radius: 999px;
-  background: #ffffff;
-  content: "";
-  transform-origin: center;
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph::before {
-  transform: rotate(45deg);
-}
-
-.desktop-workspace-toolbar .chat-file-review-panel__tab-close-glyph::after {
-  transform: rotate(-45deg);
 }
 
 .desktop-workspace-toolbar .chat-file-review-panel__heading-actions {
-  position: relative;
-  z-index: 2;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
   gap: 4px;
   margin-left: auto;
 }
 
-.desktop-workspace-toolbar .chat-file-review-panel__heading-action,
-.desktop-workspace-toolbar .chat-file-review-panel__close {
+.desktop-workspace-toolbar--overview .chat-file-review-panel__heading-actions {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.desktop-workspace-toolbar--overview .chat-file-review-panel__heading-action,
+.desktop-workspace-toolbar--overview .chat-file-review-panel__close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -461,25 +261,14 @@
   background: transparent;
 }
 
-.desktop-workspace-toolbar .chat-file-review-panel__heading-action:hover,
-.desktop-workspace-toolbar .chat-file-review-panel__close:hover,
+.desktop-workspace-toolbar--overview .chat-file-review-panel__heading-action:hover,
+.desktop-workspace-toolbar--overview .chat-file-review-panel__close:hover,
 .desktop-workspace-toolbar .chat-file-review-panel__close--active {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
 }
 
-.desktop-workspace-toolbar .desktop-panel-launcher {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-}
-
-:root[data-theme='dark'] .desktop-workspace-toolbar .chat-file-review-panel__tab-close {
-  background: #737373;
-}
-
-:root[data-theme='dark'] .desktop-workspace-toolbar .chat-file-review-panel__tab-close:hover {
+:root[data-theme='dark'] .desktop-workspace-toolbar .desktop-panel-chrome .chat-file-review-panel__tab-close:hover {
   background: #8a8a8a;
 }
 
@@ -695,54 +484,54 @@
   white-space: pre;
 }
 
-.desktop-code-line .hljs-keyword,
-.desktop-code-line .hljs-selector-tag,
-.desktop-code-line .hljs-built_in,
-.desktop-code-line .hljs-name,
-.desktop-code-line .hljs-tag {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-keyword,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-selector-tag,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-built_in,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-name,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-tag {
   color: #7c3aed;
 }
 
-.desktop-code-line .hljs-string,
-.desktop-code-line .hljs-attr,
-.desktop-code-line .hljs-symbol,
-.desktop-code-line .hljs-bullet,
-.desktop-code-line .hljs-template-variable,
-.desktop-code-line .hljs-addition {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-string,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-attr,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-symbol,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-bullet,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-template-variable,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-addition {
   color: var(--app-success);
 }
 
-.desktop-code-line .hljs-comment,
-.desktop-code-line .hljs-quote {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-comment,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-quote {
   color: var(--app-text-subtle);
   font-style: italic;
 }
 
-.desktop-code-line .hljs-number,
-.desktop-code-line .hljs-literal,
-.desktop-code-line .hljs-variable,
-.desktop-code-line .hljs-template-tag {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-number,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-literal,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-variable,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-template-tag {
   color: #b45309;
 }
 
-.desktop-code-line .hljs-title,
-.desktop-code-line .hljs-section,
-.desktop-code-line .hljs-selector-id {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-title,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-section,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-selector-id {
   color: #0f6ab4;
 }
 
-.desktop-code-line .hljs-type,
-.desktop-code-line .hljs-class .hljs-title,
-.desktop-code-line .hljs-selector-class {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-type,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-class .hljs-title,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-selector-class {
   color: #047857;
 }
 
-.desktop-code-line .hljs-meta,
-.desktop-code-line .hljs-doctag {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-meta,
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-doctag {
   color: #2563eb;
 }
 
-.desktop-code-line .hljs-deletion {
+:is(.desktop-code-line, .desktop-review-diff-code) .hljs-deletion {
   color: var(--app-danger);
 }
 
@@ -841,7 +630,7 @@
   border: 1px solid var(--app-border);
   border-radius: 9px;
   background: var(--app-surface);
-  box-shadow: var(--app-shadow);
+  box-shadow: var(--app-shadow-popover);
 }
 
 .chat-file-review-panel__source-menu .ant-dropdown-menu-item {
@@ -1073,7 +862,7 @@
   border: 1px solid var(--app-border);
   border-radius: 10px;
   background: var(--app-surface);
-  box-shadow: var(--app-shadow);
+  box-shadow: var(--app-shadow-popover);
 }
 
 .desktop-review-branch-menu__search {
@@ -1139,77 +928,6 @@
   font-size: 12px;
 }
 
-.desktop-review-panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  min-height: 42px;
-  padding: 6px var(--desktop-review-panel-x-padding);
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-}
-
-.desktop-review-panel__head div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.desktop-review-panel__head span,
-.desktop-review-panel__head em {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-review-panel__head span {
-  color: var(--app-text);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
-.desktop-review-panel__head em {
-  color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
-  font-size: 11px;
-  font-style: normal;
-  line-height: 14px;
-}
-
-.desktop-review-panel__summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: 34px;
-  padding: 0 var(--desktop-review-panel-x-padding);
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-}
-
-.desktop-review-panel__summary span {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 7px;
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  color: var(--app-text-muted);
-  background: var(--app-surface);
-  font-family: var(--app-code-font-family);
-  font-size: 11px;
-  line-height: 1;
-}
-
-.desktop-review-panel__summary span:nth-child(2) {
-  color: var(--app-success);
-}
-
-.desktop-review-panel__summary span:nth-child(3) {
-  color: var(--app-danger);
-}
-
 .desktop-review-panel__sections {
   display: grid;
   align-content: start;
@@ -1222,52 +940,6 @@
 .desktop-review-section {
   display: grid;
   min-width: 0;
-}
-
-.desktop-review-section > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  min-height: 32px;
-  padding: 0 var(--desktop-review-panel-x-padding);
-  color: var(--app-text);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.desktop-review-section > header > div:first-child {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.desktop-review-section > header > div:first-child span,
-.desktop-review-section > header em {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.desktop-review-section > header > div:first-child span {
-  white-space: nowrap;
-}
-
-.desktop-review-section > header em {
-  color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 400;
-  white-space: nowrap;
-}
-
-.desktop-review-section__actions {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 2px;
 }
 
 .desktop-review-file-list {
@@ -1759,57 +1431,6 @@
   color: var(--app-danger);
 }
 
-.desktop-review-diff-code .hljs-keyword,
-.desktop-review-diff-code .hljs-selector-tag,
-.desktop-review-diff-code .hljs-built_in,
-.desktop-review-diff-code .hljs-name,
-.desktop-review-diff-code .hljs-tag {
-  color: #7c3aed;
-}
-
-.desktop-review-diff-code .hljs-string,
-.desktop-review-diff-code .hljs-attr,
-.desktop-review-diff-code .hljs-symbol,
-.desktop-review-diff-code .hljs-bullet,
-.desktop-review-diff-code .hljs-template-variable,
-.desktop-review-diff-code .hljs-addition {
-  color: var(--app-success);
-}
-
-.desktop-review-diff-code .hljs-comment,
-.desktop-review-diff-code .hljs-quote {
-  color: var(--app-text-subtle);
-  font-style: italic;
-}
-
-.desktop-review-diff-code .hljs-number,
-.desktop-review-diff-code .hljs-literal,
-.desktop-review-diff-code .hljs-variable,
-.desktop-review-diff-code .hljs-template-tag {
-  color: #b45309;
-}
-
-.desktop-review-diff-code .hljs-title,
-.desktop-review-diff-code .hljs-section,
-.desktop-review-diff-code .hljs-selector-id {
-  color: #0f6ab4;
-}
-
-.desktop-review-diff-code .hljs-type,
-.desktop-review-diff-code .hljs-class .hljs-title,
-.desktop-review-diff-code .hljs-selector-class {
-  color: #047857;
-}
-
-.desktop-review-diff-code .hljs-meta,
-.desktop-review-diff-code .hljs-doctag {
-  color: #2563eb;
-}
-
-.desktop-review-diff-code .hljs-deletion {
-  color: var(--app-danger);
-}
-
 .desktop-review-empty,
 .desktop-review-truncated {
   padding: 8px var(--desktop-review-panel-x-padding);
@@ -1926,47 +1547,9 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   font-size: 12px;
 }
 
-.desktop-search-results {
-  display: grid;
-  max-height: 148px;
-  overflow: auto;
-  border-bottom: 1px solid var(--app-border);
-}
-
-.desktop-search-results button {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  padding: 7px 10px;
-  border: 0;
-  border-bottom: 1px solid var(--app-border);
-  color: var(--app-text);
-  background: transparent;
-  text-align: left;
-}
-
-.desktop-search-results button:hover,
 .desktop-file-row:hover,
 .desktop-file-explorer__project button:hover {
   background: var(--desktop-agent-control-hover-bg);
-}
-
-.desktop-search-results span,
-.desktop-search-results em {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-search-results span {
-  font-family: var(--app-code-font-family);
-  font-size: 11px;
-}
-
-.desktop-search-results em {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  font-style: normal;
 }
 
 .desktop-file-explorer__project {
@@ -2093,7 +1676,7 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);
   background: var(--app-surface);
-  box-shadow: 0 14px 42px color-mix(in srgb, #000000 12%, transparent);
+  box-shadow: var(--app-shadow-popover);
 }
 
 .desktop-file-context-menu button {

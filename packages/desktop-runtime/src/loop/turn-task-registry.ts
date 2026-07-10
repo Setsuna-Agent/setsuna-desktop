@@ -74,8 +74,41 @@ export class RuntimeTurnTaskRegistry {
   cancel(threadId: string, turnId: string, reason?: unknown): boolean {
     const task = this.tasksByKey.get(turnTaskKey(threadId, turnId));
     if (!task || task.controller.signal.aborted) return false;
+    if (task.done) void task.done.catch(() => undefined);
     task.controller.abort(reason);
     return true;
+  }
+
+  activeTasks(): RuntimeTurnTask[] {
+    return [...this.tasksByKey.values()].filter((task) => !task.controller.signal.aborted);
+  }
+
+  cancelAll(reason?: unknown): RuntimeTurnTask[] {
+    const cancelled: RuntimeTurnTask[] = [];
+    for (const task of this.tasksByKey.values()) {
+      if (task.controller.signal.aborted) continue;
+      if (task.done) void task.done.catch(() => undefined);
+      task.controller.abort(reason);
+      cancelled.push(task);
+    }
+    return cancelled;
+  }
+
+  async drain(timeoutMs: number): Promise<boolean> {
+    const tasks = [...this.tasksByKey.values()];
+    if (!tasks.length) return true;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.allSettled(tasks.map((task) => task.done ?? Promise.resolve())).then(() => true),
+        new Promise<boolean>((resolve) => {
+          timeout = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
+          timeout.unref();
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 
   stopAcceptingSteers(threadId: string, turnId: string): void {

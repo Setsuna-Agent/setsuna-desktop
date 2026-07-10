@@ -30,6 +30,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { MemoryStore } from '../../ports/memory-store.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
+import { withFileStateUpdate } from './file-state-coordinator.js';
 import { prepareMemoryPhase2Workspace, resetMemoryPhase2WorkspaceBaseline, syncMemoryPhase2Workspace } from './memory-phase2-workspace.js';
 
 type StoredMemoryRecord = RuntimeMemoryRecord & {
@@ -187,30 +188,32 @@ export class FileMemoryStore implements MemoryStore {
     const now = this.clock.now().toISOString();
     let updated = 0;
     for (const root of await this.memoryStoreRoots()) {
-      const index = await this.readIndex(root);
-      let changed = false;
-      const memories = index.memories.map((memory) => {
-        if (isInactiveMemory(memory) || !memoryMatchesRolloutIds(memory, rolloutIds)) return memory;
-        changed = true;
-        updated += 1;
-        return {
-          ...memory,
-          usageCount: normalizedUsageCount(memory.usageCount) + 1,
-          lastUsedAt: now,
-        };
+      await withFileStateUpdate(this.memoryPath(root), async () => {
+        const index = await this.readIndex(root);
+        let changed = false;
+        const memories = index.memories.map((memory) => {
+          if (isInactiveMemory(memory) || !memoryMatchesRolloutIds(memory, rolloutIds)) return memory;
+          changed = true;
+          updated += 1;
+          return {
+            ...memory,
+            usageCount: normalizedUsageCount(memory.usageCount) + 1,
+            lastUsedAt: now,
+          };
+        });
+        const stage1Outputs = normalizeStage1Outputs(index.stage1Outputs).map((output) => {
+          if (!isRenderableStage1Output(output) || !stage1OutputMatchesRolloutIds(output, rolloutIds)) return output;
+          changed = true;
+          updated += 1;
+          return {
+            ...output,
+            usageCount: normalizedUsageCount(output.usageCount) + 1,
+            lastUsedAt: now,
+            updatedAt: now,
+          };
+        });
+        if (changed) await this.writeIndex({ ...index, memories, stage1Outputs }, root);
       });
-      const stage1Outputs = normalizeStage1Outputs(index.stage1Outputs).map((output) => {
-        if (!isRenderableStage1Output(output) || !stage1OutputMatchesRolloutIds(output, rolloutIds)) return output;
-        changed = true;
-        updated += 1;
-        return {
-          ...output,
-          usageCount: normalizedUsageCount(output.usageCount) + 1,
-          lastUsedAt: now,
-          updatedAt: now,
-        };
-      });
-      if (changed) await this.writeIndex({ ...index, memories, stage1Outputs }, root);
     }
 
     return { updated, rolloutIds };
@@ -259,120 +262,119 @@ export class FileMemoryStore implements MemoryStore {
       updatedAt: now,
     };
     const root = await this.activeMemoryRoot();
-    const index = await this.readIndex(root);
-    const existingOutputs = normalizeStage1Outputs(index.stage1Outputs);
-    const existingIndex = existingOutputs.findIndex((item) => !isInactiveStage1Output(item) && stage1OutputDedupeKey(item) === stage1OutputDedupeKey(output));
-    if (existingIndex >= 0) {
-      const existing = existingOutputs[existingIndex];
-      const updated = {
-        ...existing,
-        ...output,
-        id: existing.id || output.id,
-        createdAt: existing.createdAt || output.createdAt,
-        usageCount: existing.usageCount,
-        lastUsedAt: existing.lastUsedAt,
-      };
-      existingOutputs[existingIndex] = updated;
-      await this.writeIndex({ ...index, stage1Outputs: existingOutputs }, root);
-      return stage1OutputForRead(updated);
-    }
-    const stage1Outputs = [output, ...existingOutputs];
-    await this.writeIndex({ ...index, stage1Outputs }, root);
-    return output;
+    return withFileStateUpdate(this.memoryPath(root), async () => {
+      const index = await this.readIndex(root);
+      const existingOutputs = normalizeStage1Outputs(index.stage1Outputs);
+      const existingIndex = existingOutputs.findIndex((item) => !isInactiveStage1Output(item) && stage1OutputDedupeKey(item) === stage1OutputDedupeKey(output));
+      if (existingIndex >= 0) {
+        const existing = existingOutputs[existingIndex];
+        const updated = {
+          ...existing,
+          ...output,
+          id: existing.id || output.id,
+          createdAt: existing.createdAt || output.createdAt,
+          usageCount: existing.usageCount,
+          lastUsedAt: existing.lastUsedAt,
+        };
+        existingOutputs[existingIndex] = updated;
+        await this.writeIndex({ ...index, stage1Outputs: existingOutputs }, root);
+        return stage1OutputForRead(updated);
+      }
+      const stage1Outputs = [output, ...existingOutputs];
+      await this.writeIndex({ ...index, stage1Outputs }, root);
+      return output;
+    });
   }
 
   async claimPhase2Job(input: { ownerId: string; leaseSeconds: number; retryDelaySeconds: number }): Promise<RuntimeMemoryPhase2JobClaim> {
     const ownerId = optionalText(input.ownerId) ?? 'runtime';
     const root = await this.activeMemoryRoot();
-    const index = await this.readIndex(root);
-    const nowMs = this.clock.now().getTime();
-    const phase2Job = normalizePhase2Job(index.phase2Job);
-    const inputWatermark = phase2InputWatermark(index.stage1Outputs);
-    const completedWatermark = normalizedWatermark(phase2Job.completedWatermark);
+    return withFileStateUpdate(this.memoryPath(root), async () => {
+      const index = await this.readIndex(root);
+      const nowMs = this.clock.now().getTime();
+      const phase2Job = normalizePhase2Job(index.phase2Job);
+      const inputWatermark = phase2InputWatermark(index.stage1Outputs);
+      const completedWatermark = normalizedWatermark(phase2Job.completedWatermark);
 
-    if (inputWatermark <= completedWatermark) {
-      return { status: 'skipped_no_input', inputWatermark };
-    }
-    if (phase2Job.status === 'running' && futureTimestampMs(phase2Job.leaseExpiresAt, nowMs)) {
-      return { status: 'skipped_running', inputWatermark };
-    }
-    if (futureTimestampMs(phase2Job.retryAfter, nowMs)) {
-      return { status: 'skipped_cooldown', inputWatermark };
-    }
+      if (inputWatermark <= completedWatermark) return { status: 'skipped_no_input', inputWatermark };
+      if (phase2Job.status === 'running' && futureTimestampMs(phase2Job.leaseExpiresAt, nowMs)) return { status: 'skipped_running', inputWatermark };
+      if (futureTimestampMs(phase2Job.retryAfter, nowMs)) return { status: 'skipped_cooldown', inputWatermark };
 
-    const now = new Date(nowMs).toISOString();
-    const ownershipToken = this.ids.id('phase2');
-    const nextJob: StoredMemoryPhase2Job = {
-      status: 'running',
-      ownerId,
-      ownershipToken,
-      inputWatermark,
-      completedWatermark,
-      leaseExpiresAt: new Date(nowMs + Math.max(1, Math.floor(input.leaseSeconds)) * 1000).toISOString(),
-      createdAt: phase2Job.createdAt ?? now,
-      updatedAt: now,
-    };
-    await this.writeIndex({ ...index, phase2Job: nextJob }, root);
-    return { status: 'claimed', ownershipToken, inputWatermark };
+      const now = new Date(nowMs).toISOString();
+      const ownershipToken = this.ids.id('phase2');
+      const nextJob: StoredMemoryPhase2Job = {
+        status: 'running', ownerId, ownershipToken, inputWatermark, completedWatermark,
+        leaseExpiresAt: new Date(nowMs + Math.max(1, Math.floor(input.leaseSeconds)) * 1000).toISOString(),
+        createdAt: phase2Job.createdAt ?? now, updatedAt: now,
+      };
+      await this.writeIndex({ ...index, phase2Job: nextJob }, root);
+      return { status: 'claimed', ownershipToken, inputWatermark };
+    });
   }
 
   async heartbeatPhase2Job(input: { ownershipToken: string; leaseSeconds: number }): Promise<boolean> {
     const root = await this.activeMemoryRoot();
-    const index = await this.readIndex(root);
-    const phase2Job = normalizePhase2Job(index.phase2Job);
-    const nowMs = this.clock.now().getTime();
-    if (phase2Job.status !== 'running' || phase2Job.ownershipToken !== input.ownershipToken || !futureTimestampMs(phase2Job.leaseExpiresAt, nowMs)) return false;
-    const now = new Date(nowMs).toISOString();
-    await this.writeIndex({
-      ...index,
-      phase2Job: {
-        ...phase2Job,
-        leaseExpiresAt: new Date(nowMs + Math.max(1, Math.floor(input.leaseSeconds)) * 1000).toISOString(),
-        updatedAt: now,
-      },
-    }, root);
-    return true;
+    return withFileStateUpdate(this.memoryPath(root), async () => {
+      const index = await this.readIndex(root);
+      const phase2Job = normalizePhase2Job(index.phase2Job);
+      const nowMs = this.clock.now().getTime();
+      if (phase2Job.status !== 'running' || phase2Job.ownershipToken !== input.ownershipToken || !futureTimestampMs(phase2Job.leaseExpiresAt, nowMs)) return false;
+      const now = new Date(nowMs).toISOString();
+      await this.writeIndex({
+        ...index,
+        phase2Job: {
+          ...phase2Job,
+          leaseExpiresAt: new Date(nowMs + Math.max(1, Math.floor(input.leaseSeconds)) * 1000).toISOString(),
+          updatedAt: now,
+        },
+      }, root);
+      return true;
+    });
   }
 
   async markPhase2JobSucceeded(input: { ownershipToken: string; completionWatermark: number }): Promise<boolean> {
     const root = await this.activeMemoryRoot();
-    const index = await this.readIndex(root);
-    const phase2Job = normalizePhase2Job(index.phase2Job);
-    if (phase2Job.status !== 'running' || phase2Job.ownershipToken !== input.ownershipToken) return false;
-    const now = this.clock.now().toISOString();
-    await this.writeIndex({
-      ...index,
-      phase2Job: {
-        status: 'succeeded',
-        inputWatermark: phase2Job.inputWatermark,
-        completedWatermark: Math.max(normalizedWatermark(input.completionWatermark), normalizedWatermark(phase2Job.inputWatermark)),
-        createdAt: phase2Job.createdAt ?? now,
-        updatedAt: now,
-      },
-    }, root);
-    return true;
+    return withFileStateUpdate(this.memoryPath(root), async () => {
+      const index = await this.readIndex(root);
+      const phase2Job = normalizePhase2Job(index.phase2Job);
+      if (phase2Job.status !== 'running' || phase2Job.ownershipToken !== input.ownershipToken) return false;
+      const now = this.clock.now().toISOString();
+      await this.writeIndex({
+        ...index,
+        phase2Job: {
+          status: 'succeeded',
+          inputWatermark: phase2Job.inputWatermark,
+          completedWatermark: Math.max(normalizedWatermark(input.completionWatermark), normalizedWatermark(phase2Job.inputWatermark)),
+          createdAt: phase2Job.createdAt ?? now,
+          updatedAt: now,
+        },
+      }, root);
+      return true;
+    });
   }
 
   async markPhase2JobFailed(input: { ownershipToken: string; reason: string; retryDelaySeconds: number }): Promise<boolean> {
     const root = await this.activeMemoryRoot();
-    const index = await this.readIndex(root);
-    const phase2Job = normalizePhase2Job(index.phase2Job);
-    if (phase2Job.status !== 'running' || phase2Job.ownershipToken !== input.ownershipToken) return false;
-    const nowMs = this.clock.now().getTime();
-    const now = new Date(nowMs).toISOString();
-    await this.writeIndex({
-      ...index,
-      phase2Job: {
-        ...phase2Job,
-        status: 'failed',
-        ownershipToken: undefined,
-        leaseExpiresAt: undefined,
-        retryAfter: new Date(nowMs + Math.max(1, Math.floor(input.retryDelaySeconds)) * 1000).toISOString(),
-        lastFailureReason: optionalText(input.reason, MAX_PHASE2_FAILURE_REASON_CHARS),
-        updatedAt: now,
-      },
-    }, root);
-    return true;
+    return withFileStateUpdate(this.memoryPath(root), async () => {
+      const index = await this.readIndex(root);
+      const phase2Job = normalizePhase2Job(index.phase2Job);
+      if (phase2Job.status !== 'running' || phase2Job.ownershipToken !== input.ownershipToken) return false;
+      const nowMs = this.clock.now().getTime();
+      const now = new Date(nowMs).toISOString();
+      await this.writeIndex({
+        ...index,
+        phase2Job: {
+          ...phase2Job,
+          status: 'failed',
+          ownershipToken: undefined,
+          leaseExpiresAt: undefined,
+          retryAfter: new Date(nowMs + Math.max(1, Math.floor(input.retryDelaySeconds)) * 1000).toISOString(),
+          lastFailureReason: optionalText(input.reason, MAX_PHASE2_FAILURE_REASON_CHARS),
+          updatedAt: now,
+        },
+      }, root);
+      return true;
+    });
   }
 
   async preparePhase2Workspace(): Promise<RuntimeMemoryPhase2Workspace> {
@@ -429,29 +431,35 @@ export class FileMemoryStore implements MemoryStore {
       updatedAt: now,
     };
     const root = await this.activeMemoryRoot();
-    const index = await this.readIndex(root);
-    const existing = index.memories.find((item) => !isInactiveMemory(item) && memoryDedupeKey(item) === memoryDedupeKey(memory));
-    if (existing) return { ...existing, kind: normalizeMemoryKind(existing.kind) };
-    await this.writeIndex({
-      ...index,
-      memories: [memory, ...index.memories],
-    }, root);
-    return memory;
+    return withFileStateUpdate(this.memoryPath(root), async () => {
+      const index = await this.readIndex(root);
+      const existing = index.memories.find((item) => !isInactiveMemory(item) && memoryDedupeKey(item) === memoryDedupeKey(memory));
+      if (existing) return { ...existing, kind: normalizeMemoryKind(existing.kind) };
+      await this.writeIndex({
+        ...index,
+        memories: [memory, ...index.memories],
+      }, root);
+      return memory;
+    });
   }
 
   async deleteMemory(memoryId: string): Promise<void> {
     await Promise.all(
       (await this.memoryStoreRoots()).map(async (root) => {
-        const index = await this.readIndex(root);
-        const memories = index.memories.filter((memory) => memory.id !== memoryId);
-        if (memories.length === index.memories.length) return;
-        await this.writeIndex({ ...index, memories }, root);
+        await withFileStateUpdate(this.memoryPath(root), async () => {
+          const index = await this.readIndex(root);
+          const memories = index.memories.filter((memory) => memory.id !== memoryId);
+          if (memories.length === index.memories.length) return;
+          await this.writeIndex({ ...index, memories }, root);
+        });
       }),
     );
   }
 
   async clearMemories(): Promise<void> {
-    await Promise.all((await this.memoryStoreRoots()).map(clearMemoryRootContents));
+    await Promise.all((await this.memoryStoreRoots()).map((root) =>
+      withFileStateUpdate(this.memoryPath(root), () => clearMemoryRootContents(root)),
+    ));
   }
 
   private async readMergedMemoryEntries(roots?: string[]): Promise<Array<{ memory: StoredMemoryRecord; root: string; sourceLocation?: RuntimeMemorySourceLocation }>> {
@@ -550,7 +558,8 @@ export class FileMemoryStore implements MemoryStore {
       : await this.readMergedMemoryIndexWithoutLocations();
     const artifacts = renderMemoryArtifacts(mergedIndex);
     const root = await this.activeMemoryRoot();
-    await this.writeMemoryArtifacts(artifacts, root);
+    // Read APIs render a merged in-memory view. Persisted artifacts are only
+    // refreshed by mutations so a stale reader cannot overwrite newer output.
     return overlayStoredMemoryArtifacts(artifacts, root);
   }
 

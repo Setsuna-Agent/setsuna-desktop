@@ -10,6 +10,7 @@ import type {
   RuntimeMcpTransport,
 } from '@setsuna-desktop/contracts';
 import type { McpStore } from '../../ports/mcp-store.js';
+import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -111,61 +112,69 @@ export class FileMcpStore implements McpStore {
   }
 
   async upsertServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList> {
-    const key = normalizeKey(input.key);
-    const { config } = await this.readConfig();
-    const previous = config.mcpServers?.[key] ?? {};
-    const next = applyServerInput(previous, input);
-    validateStoredServer(key, next);
-    config.mcpServers = {
-      ...(config.mcpServers ?? {}),
-      [key]: pruneTransportFields(next),
-    };
-    await this.writeConfig(config);
-    return this.listServers();
+    return withFileStateUpdate(this.configPath, async () => {
+      const key = normalizeKey(input.key);
+      const { config } = await this.readConfig();
+      const previous = config.mcpServers?.[key] ?? {};
+      const next = applyServerInput(previous, input);
+      validateStoredServer(key, next);
+      config.mcpServers = {
+        ...(config.mcpServers ?? {}),
+        [key]: pruneTransportFields(next),
+      };
+      await this.writeConfig(config);
+      return this.listServers();
+    });
   }
 
   async updateServer(keyInput: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList> {
-    const key = normalizeKey(keyInput);
-    const { config } = await this.readConfig();
-    if (!config.mcpServers?.[key]) throw new Error(`MCP server not found: ${key}`);
-    const next = applyServerInput(config.mcpServers[key], { ...patch, key });
-    validateStoredServer(key, next);
-    config.mcpServers = {
-      ...config.mcpServers,
-      [key]: pruneTransportFields(next),
-    };
-    await this.writeConfig(config);
-    return this.listServers();
+    return withFileStateUpdate(this.configPath, async () => {
+      const key = normalizeKey(keyInput);
+      const { config } = await this.readConfig();
+      if (!config.mcpServers?.[key]) throw new Error(`MCP server not found: ${key}`);
+      const next = applyServerInput(config.mcpServers[key], { ...patch, key });
+      validateStoredServer(key, next);
+      config.mcpServers = {
+        ...config.mcpServers,
+        [key]: pruneTransportFields(next),
+      };
+      await this.writeConfig(config);
+      return this.listServers();
+    });
   }
 
   async setToolApprovalMode(keyInput: string, toolNameInput: string, approvalMode: RuntimeMcpRequireApproval): Promise<RuntimeMcpServerList> {
-    const key = normalizeKey(keyInput);
-    const toolName = nonEmpty(toolNameInput);
-    if (!toolName) throw new Error('MCP tool name is required.');
-    const { config } = await this.readConfig();
-    const server = config.mcpServers?.[key];
-    if (!server) throw new Error(`MCP server not found: ${key}`);
-    const normalizedApprovalMode = normalizeRequireApproval(approvalMode);
-    const next: StoredMcpServer = {
-      ...server,
-      tools: withToolApprovalMode(server.tools, toolName, normalizedApprovalMode),
-    };
-    validateStoredServer(key, next);
-    config.mcpServers = {
-      ...config.mcpServers,
-      [key]: pruneTransportFields(next),
-    };
-    await this.writeConfig(config);
-    return this.listServers();
+    return withFileStateUpdate(this.configPath, async () => {
+      const key = normalizeKey(keyInput);
+      const toolName = nonEmpty(toolNameInput);
+      if (!toolName) throw new Error('MCP tool name is required.');
+      const { config } = await this.readConfig();
+      const server = config.mcpServers?.[key];
+      if (!server) throw new Error(`MCP server not found: ${key}`);
+      const normalizedApprovalMode = normalizeRequireApproval(approvalMode);
+      const next: StoredMcpServer = {
+        ...server,
+        tools: withToolApprovalMode(server.tools, toolName, normalizedApprovalMode),
+      };
+      validateStoredServer(key, next);
+      config.mcpServers = {
+        ...config.mcpServers,
+        [key]: pruneTransportFields(next),
+      };
+      await this.writeConfig(config);
+      return this.listServers();
+    });
   }
 
   async deleteServer(keyInput: string): Promise<void> {
-    const key = normalizeKey(keyInput);
-    const { config } = await this.readConfig();
-    if (!config.mcpServers?.[key]) return;
-    const { [key]: _deleted, ...rest } = config.mcpServers;
-    config.mcpServers = rest;
-    await this.writeConfig(config);
+    await withFileStateUpdate(this.configPath, async () => {
+      const key = normalizeKey(keyInput);
+      const { config } = await this.readConfig();
+      if (!config.mcpServers?.[key]) return;
+      const { [key]: _deleted, ...rest } = config.mcpServers;
+      config.mcpServers = rest;
+      await this.writeConfig(config);
+    });
   }
 
   private async readConfig(): Promise<{ config: NormalizedStoredMcpConfig; errors: string[] }> {

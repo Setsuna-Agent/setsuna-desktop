@@ -31,6 +31,20 @@ describe('runtime server', () => {
     await server.close();
   });
 
+  it('returns 400 for malformed request JSON', async () => {
+    const response = await fetch(`${baseUrl}/v1/threads`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{broken',
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ code: 'invalid_json' });
+  });
+
   it('creates and lists local and project threads', async () => {
     const created = await runtimeFetch('/v1/threads', {
       method: 'POST',
@@ -74,6 +88,31 @@ describe('runtime server', () => {
     expect(archived).toMatchObject({ id: created.id, archived: true });
     expect(defaultList.threads).toEqual([]);
     expect(archivedList.threads).toMatchObject([{ id: created.id, title: 'Renamed title', archived: true }]);
+  });
+
+  it('rejects encoded path separators in thread ids', async () => {
+    const response = await fetch(`${baseUrl}/v1/threads/..%2Fescaped`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title: 'must not escape' }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ code: 'invalid_runtime_id' });
+  });
+
+  it('closes active SSE connections during runtime shutdown', async () => {
+    const thread = await runtimeFetch('/v1/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Shutdown stream' }),
+    });
+    const stream = await openRuntimeEventStream(thread.id, thread.lastSeq);
+
+    await expect(withTimeout(server.close(), 2_000, 'Runtime close timed out with an active SSE stream')).resolves.toBeUndefined();
+    await stream.close();
   });
 
   it('updates thread memory mode through the runtime API', async () => {

@@ -99,7 +99,7 @@
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);
   background: var(--app-surface);
-  box-shadow: 0 14px 42px color-mix(in srgb, #000000 12%, transparent);
+  box-shadow: var(--app-shadow-popover);
 }
 
 .app-topbar__menu-popover button {
@@ -401,41 +401,6 @@
   padding-top: var(--desktop-workspace-toolbar-height);
 }
 
-.app-view-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 100%;
-  margin-right: auto;
-  padding: 0;
-  background: transparent;
-}
-
-.app-view-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 96px;
-  height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--app-radius-md);
-  color: var(--app-text-muted);
-  background: transparent;
-  font-size: 13px;
-  line-height: 1;
-}
-
-.app-view-tab:hover,
-.app-view-tab--active {
-  color: var(--app-text);
-  background: var(--desktop-agent-sidebar-hover-bg);
-}
-
-.app-view-tab--active {
-  background: var(--app-surface);
-}
-
 .app-workbench {
   display: grid;
   position: relative;
@@ -606,11 +571,6 @@ body.desktop-terminal-resizing {
     display: none;
   }
 
-}
-
-:root[data-desktop-platform='win32'] .app-topbar,
-:root[data-desktop-platform='linux'] .app-topbar {
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
 }
 
 :root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-topbar,

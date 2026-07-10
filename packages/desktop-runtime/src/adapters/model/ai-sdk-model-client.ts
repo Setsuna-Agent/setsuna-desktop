@@ -69,6 +69,9 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
       ...(thinkingProviderOptions ? { providerOptions: thinkingProviderOptions } : {}),
       abortSignal: request.signal,
       maxRetries: 0,
+      // Errors are surfaced through fullStream below. Avoid the SDK's default
+      // console.error side effect, which otherwise duplicates runtime errors.
+      onError: () => undefined,
     });
 
     const toolCalls = new Map<string, PendingToolCall>();

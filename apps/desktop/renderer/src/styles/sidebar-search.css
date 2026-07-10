@@ -18,7 +18,7 @@
   border: 1px solid color-mix(in srgb, var(--app-border) 64%, transparent);
   border-radius: var(--app-radius-lg);
   background: color-mix(in srgb, var(--app-surface) 96%, transparent);
-  box-shadow: 0 24px 64px color-mix(in srgb, #000000 18%, transparent);
+  box-shadow: var(--app-shadow-modal);
 }
 
 .desktop-agent-search-popover__input {
@@ -130,7 +130,7 @@
 
 .desktop-agent-search-result:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px var(--app-focus);
+  box-shadow: var(--app-focus-ring);
 }
 
 .desktop-agent-search-result__status {

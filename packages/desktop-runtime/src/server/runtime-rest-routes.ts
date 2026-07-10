@@ -25,8 +25,10 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { fetchMcpServerTools } from '../adapters/mcp/mcp-tool-discovery.js';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
+import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { stringInput } from './app-server/input.js';
 import { isRuntimeMessageAttachment, memoryScope, optionalNumber, readBody, sendJson, threadScope } from './http-utils.js';
+import { RuntimeHttpError } from './http-error.js';
 import { cancelRuntimeTurn } from './runtime-thread-events.js';
 import { handleSse, publishThreadEventsSince, runtimeEventStreamExperimentalApi, runtimeEventStreamFormat } from './sse.js';
 import type { RuntimeFactory } from './types.js';
@@ -290,7 +292,7 @@ export async function handleRuntimeRestRequest(
 
   const threadMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)$/);
   if (threadMatch && request.method === 'GET') {
-    const thread = await runtime.threadStore.getThread(decodeURIComponent(threadMatch[1]));
+    const thread = await runtime.threadStore.getThread(decodeRuntimeId(threadMatch[1], 'Thread id'));
     if (!thread) {
       sendJson(response, 404, { error: 'Thread not found' });
       return true;
@@ -301,7 +303,7 @@ export async function handleRuntimeRestRequest(
 
   if (threadMatch && request.method === 'PATCH') {
     const thread = await runtime.threadStore.updateThread(
-      decodeURIComponent(threadMatch[1]),
+      decodeRuntimeId(threadMatch[1], 'Thread id'),
       await readBody<ThreadPatch>(request),
     );
     sendJson(response, 200, withActiveTurn(runtime, thread));
@@ -312,7 +314,7 @@ export async function handleRuntimeRestRequest(
   if (threadMemoryModeMatch && request.method === 'PATCH') {
     const input = await readBody<ThreadMemoryModePatch>(request);
     const thread = await runtime.threadStore.updateThreadMemoryMode(
-      decodeURIComponent(threadMemoryModeMatch[1]),
+      decodeRuntimeId(threadMemoryModeMatch[1], 'Thread id'),
       threadMemoryModeFromInput(input.mode),
       'user_request',
     );
@@ -322,7 +324,7 @@ export async function handleRuntimeRestRequest(
 
   const messageMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/messages\/([^/]+)$/);
   if (messageMatch && request.method === 'PATCH') {
-    const threadId = decodeURIComponent(messageMatch[1]);
+    const threadId = decodeRuntimeId(messageMatch[1], 'Thread id');
     const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
     const thread = await runtime.threadStore.updateMessage(
       threadId,
@@ -336,7 +338,7 @@ export async function handleRuntimeRestRequest(
 
   const messagesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/messages$/);
   if (messagesMatch && request.method === 'DELETE') {
-    const threadId = decodeURIComponent(messagesMatch[1]);
+    const threadId = decodeRuntimeId(messagesMatch[1], 'Thread id');
     const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
     const thread = await runtime.threadStore.deleteMessages(threadId, await readBody<MessageDeleteInput>(request));
     await publishThreadEventsSince(runtime, threadId, beforeSeq);
@@ -346,7 +348,7 @@ export async function handleRuntimeRestRequest(
 
   const regenerateMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/messages\/([^/]+)\/regenerate$/);
   if (regenerateMatch && request.method === 'POST') {
-    const threadId = decodeURIComponent(regenerateMatch[1]);
+    const threadId = decodeRuntimeId(regenerateMatch[1], 'Thread id');
     const input = await readBody<RegenerateMessageInput>(request, {});
     sendJson(
       response,
@@ -363,7 +365,7 @@ export async function handleRuntimeRestRequest(
 
   const clearContextMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/context$/);
   if (clearContextMatch && request.method === 'DELETE') {
-    const threadId = decodeURIComponent(clearContextMatch[1]);
+    const threadId = decodeRuntimeId(clearContextMatch[1], 'Thread id');
     const thread = await runtime.agentLoop.clearThreadContext(threadId);
     sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
@@ -371,14 +373,14 @@ export async function handleRuntimeRestRequest(
 
   const compactContextMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/context\/compact$/);
   if (compactContextMatch && request.method === 'POST') {
-    const threadId = decodeURIComponent(compactContextMatch[1]);
+    const threadId = decodeRuntimeId(compactContextMatch[1], 'Thread id');
     sendJson(response, 200, withActiveTurn(runtime, await runtime.agentLoop.compactThreadContext(threadId, true)));
     return true;
   }
 
   const turnMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/turns$/);
   if (turnMatch && request.method === 'POST') {
-    const threadId = decodeURIComponent(turnMatch[1]);
+    const threadId = decodeRuntimeId(turnMatch[1], 'Thread id');
     const input = await readBody<{ attachments?: unknown; clientId?: unknown; collaborationMode?: unknown; collaboration_mode?: unknown; input?: unknown; planDecision?: unknown; plan_decision?: unknown; skillIds?: unknown; thinking?: unknown; thinkingEffort?: unknown; thinking_effort?: unknown }>(request);
     const text = typeof input.input === 'string' ? input.input : '';
     const skillIds = Array.isArray(input.skillIds) ? input.skillIds.filter((item): item is string => typeof item === 'string') : [];
@@ -400,8 +402,8 @@ export async function handleRuntimeRestRequest(
 
   const steerTurnMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/turns\/([^/]+)\/steer$/);
   if (steerTurnMatch && request.method === 'POST') {
-    const threadId = decodeURIComponent(steerTurnMatch[1]);
-    const turnId = decodeURIComponent(steerTurnMatch[2]);
+    const threadId = decodeRuntimeId(steerTurnMatch[1], 'Thread id');
+    const turnId = decodeRuntimeId(steerTurnMatch[2], 'Turn id');
     const input = await readBody<{ attachments?: unknown; clientId?: unknown; expectedTurnId?: unknown; input?: unknown }>(request);
     const expectedTurnId = stringInput(input.expectedTurnId) ?? turnId;
     const attachments: SteerTurnInput['attachments'] = Array.isArray(input.attachments)
@@ -420,8 +422,8 @@ export async function handleRuntimeRestRequest(
   if (cancelTurnMatch && request.method === 'POST') {
     const cancelled = await cancelRuntimeTurn(
       runtime,
-      decodeURIComponent(cancelTurnMatch[1]),
-      decodeURIComponent(cancelTurnMatch[2]),
+      decodeRuntimeId(cancelTurnMatch[1], 'Thread id'),
+      decodeRuntimeId(cancelTurnMatch[2], 'Turn id'),
     );
     sendJson(response, 200, { ok: true, cancelled });
     return true;
@@ -429,7 +431,7 @@ export async function handleRuntimeRestRequest(
 
   const eventsMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/events$/);
   if (eventsMatch && request.method === 'GET') {
-    const threadId = decodeURIComponent(eventsMatch[1]);
+    const threadId = decodeRuntimeId(eventsMatch[1], 'Thread id');
     const sinceSeq = Number(url.searchParams.get('sinceSeq') ?? '0') || 0;
     const format = runtimeEventStreamFormat(url.searchParams.get('format'));
     const experimentalApi = runtimeEventStreamExperimentalApi(
@@ -617,4 +619,12 @@ function withActiveTurn<TThread extends RuntimeThread | RuntimeThreadSummary>(
     ...thread,
     activeTurnId: runtime.agentLoop.activeTurnId(thread.id),
   };
+}
+
+function decodeRuntimeId(value: string, label: string): string {
+  try {
+    return assertSafeRuntimeId(decodeURIComponent(value), label);
+  } catch {
+    throw new RuntimeHttpError(400, `${label} is invalid.`, 'invalid_runtime_id');
+  }
 }

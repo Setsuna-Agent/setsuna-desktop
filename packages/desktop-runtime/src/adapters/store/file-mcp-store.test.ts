@@ -5,6 +5,17 @@ import { describe, expect, it } from 'vitest';
 import { FileMcpStore } from './file-mcp-store.js';
 
 describe('file mcp store', () => {
+  it('serializes concurrent server upserts without losing either server', async () => {
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')));
+
+    await Promise.all([
+      store.upsertServer({ key: 'alpha', transport: 'stdio', command: 'alpha-server' }),
+      store.upsertServer({ key: 'beta', transport: 'stdio', command: 'beta-server' }),
+    ]);
+
+    expect((await store.listServers()).servers.map((server) => server.key).sort()).toEqual(['alpha', 'beta']);
+  });
+
   it('stores local MCP servers and only exposes secret key names', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
     const store = new FileMcpStore(dataDir);

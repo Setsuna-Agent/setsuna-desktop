@@ -85,8 +85,8 @@ export async function appendAndPublishRuntimeEvent(
   threadId: string,
   event: Omit<RuntimeEvent, 'seq'>,
 ): Promise<RuntimeEvent> {
-  const saved = await runtime.threadStore.appendEvent(threadId, event);
-  runtime.eventBus.publish(saved);
+  const saved = await runtime.eventWriter.append(threadId, event);
+  if (!saved) throw new Error('Lifecycle events must not be buffered.');
   return saved;
 }
 
@@ -95,6 +95,7 @@ export async function copyRuntimeMessagesToThread(
   threadId: string,
   messages: RuntimeMessage[],
 ): Promise<void> {
+  await runtime.eventWriter.flushThread(threadId);
   let index = 0;
   for (const message of messages) {
     index += 1;

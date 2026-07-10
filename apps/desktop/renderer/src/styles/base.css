@@ -78,7 +78,6 @@ button {
 .chat-file-review-panel__tab-close:focus-visible,
 .chat-file-review-panel__heading-action:focus-visible,
 .chat-file-review-panel__close:focus-visible,
-.app-view-tab:focus-visible,
 .sd-page-back:focus-visible,
 .chat-user-settings__tabs button:focus-visible,
 .chat-user-settings__option-button:focus-visible,
@@ -90,7 +89,7 @@ button {
 .sd-field:focus-visible,
 .sd-textarea:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px var(--app-focus);
+  box-shadow: var(--app-focus-ring);
 }
 
 @media (prefers-reduced-motion: reduce) {

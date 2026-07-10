@@ -7,6 +7,22 @@ import { RandomIdGenerator } from '../id/random-id-generator.js';
 import { FileMemoryStore } from './file-memory-store.js';
 
 describe('file memory store', () => {
+  it('serializes concurrent memory writes without losing records', async () => {
+    const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-test-')), systemClock, new RandomIdGenerator());
+
+    await Promise.all([
+      store.rememberMemory({ content: 'Concurrent memory alpha.' }),
+      store.rememberMemory({ content: 'Concurrent memory beta.' }),
+    ]);
+
+    await expect(store.listMemories()).resolves.toMatchObject({
+      memories: expect.arrayContaining([
+        expect.objectContaining({ content: 'Concurrent memory alpha.' }),
+        expect.objectContaining({ content: 'Concurrent memory beta.' }),
+      ]),
+    });
+  });
+
   it('stores global and project memories locally', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-test-'));
     const memoryRoot = path.join(dataDir, 'memories');
@@ -310,6 +326,25 @@ describe('file memory store', () => {
       status: 'claimed',
       inputWatermark: 1767225720,
     });
+  });
+
+  it('allows only one concurrent phase-2 lease claim', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-test-'));
+    const store = new FileMemoryStore(dataDir, mutableClock('2026-01-01T00:00:00.000Z'), new RandomIdGenerator());
+    await store.recordStage1Output({
+      threadId: 'thread_phase2_race',
+      sourceUpdatedAt: '2026-01-01T00:00:10.000Z',
+      rawMemory: 'Concurrent phase two input.',
+      rolloutSummary: 'Concurrent phase two summary.',
+    });
+
+    const claims = await Promise.all([
+      store.claimPhase2Job({ ownerId: 'owner_alpha', leaseSeconds: 60, retryDelaySeconds: 60 }),
+      store.claimPhase2Job({ ownerId: 'owner_beta', leaseSeconds: 60, retryDelaySeconds: 60 }),
+    ]);
+
+    expect(claims.filter((claim) => claim.status === 'claimed')).toHaveLength(1);
+    expect(claims.filter((claim) => claim.status === 'skipped_running')).toHaveLength(1);
   });
 
   it('preserves phase-2 consolidated artifacts and exposes skill files', async () => {

@@ -12,6 +12,23 @@ import type { ModelClient } from '../../ports/model-client.js';
 import { FileSkillRegistry } from './file-skill-registry.js';
 
 describe('file skill registry', () => {
+  it('serializes concurrent skill state writes', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await Promise.all([
+      registry.createSkill({ name: 'Alpha Skill', content: 'alpha', selected: true }),
+      registry.createSkill({ name: 'Beta Skill', content: 'beta', enabled: false }),
+    ]);
+
+    await expect(registry.listSkills()).resolves.toMatchObject({
+      skills: expect.arrayContaining([
+        expect.objectContaining({ id: 'alpha-skill', selected: true }),
+        expect.objectContaining({ id: 'beta-skill', enabled: false }),
+      ]),
+    });
+  });
+
   it('lists built-in skills and persists selected state', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);

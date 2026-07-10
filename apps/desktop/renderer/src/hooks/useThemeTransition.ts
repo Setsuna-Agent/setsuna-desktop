@@ -76,6 +76,11 @@ export function useThemeTransition() {
   return { mode, setThemeMode, setThemeModeWithTransition, toggleWithTransition };
 }
 
+export function initializeThemePreference(): void {
+  // Resolve the system mode before the first paint so CSS has one theme source of truth.
+  applyThemeModePreference(getInitialThemeMode());
+}
+
 function getInitialThemeMode(): ThemeMode {
   const saved = window.localStorage.getItem(storageKey);
   if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;

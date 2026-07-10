@@ -1,0 +1,258 @@
+.desktop-panel-chrome {
+  min-width: 0;
+  min-height: 0;
+  border-bottom: 0;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  height: 28px;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 72px;
+  max-width: 150px;
+  height: 28px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title:hover,
+.desktop-panel-chrome .chat-file-review-panel__title--active {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 9px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  line-height: inherit;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title--closable .chat-file-review-panel__tab-button {
+  padding-right: 24px;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-button svg,
+.desktop-panel-chrome .chat-file-review-panel__tab-button .iconify {
+  flex: 0 0 auto;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-label {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-close {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  color: transparent;
+  background: #9ca3af;
+  font-size: 0;
+  line-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title:hover .chat-file-review-panel__tab-close,
+.desktop-panel-chrome .chat-file-review-panel__title:focus-within .chat-file-review-panel__tab-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-close:hover {
+  background: #8f969f;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph,
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::before,
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::after {
+  position: absolute;
+  display: block;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph {
+  inset: 0;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::before,
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::after {
+  top: 6.2px;
+  left: 3.8px;
+  width: 6.4px;
+  height: 1.2px;
+  border-radius: 999px;
+  background: #ffffff;
+  content: "";
+  transform-origin: center;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::before {
+  transform: rotate(45deg);
+}
+
+.desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::after {
+  transform: rotate(-45deg);
+}
+
+.desktop-panel-chrome .chat-file-review-panel__heading-actions {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__heading-action,
+.desktop-panel-chrome .chat-file-review-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__heading-action:hover,
+.desktop-panel-chrome .chat-file-review-panel__close:hover {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-panel-chrome .desktop-panel-launcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.desktop-panel-launcher-menu--native {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  box-sizing: border-box;
+  min-width: 156px;
+  padding: 6px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+}
+
+.desktop-panel-launcher-menu--native button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.desktop-panel-launcher-menu--native button:hover {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title--sortable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title--sortable:active,
+.desktop-panel-chrome .chat-file-review-panel__title.is-dragging {
+  cursor: grabbing;
+}
+
+.desktop-panel-chrome.is-reordering-tabs {
+  user-select: none;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title.is-dragging {
+  opacity: 0.24;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title--drag-preview {
+  position: fixed;
+  z-index: 1200;
+  display: inline-flex;
+  min-width: 0;
+  max-width: none;
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-text) 6%);
+  box-shadow: var(--app-shadow-popover);
+  opacity: 0.98;
+  pointer-events: none;
+  cursor: grabbing;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title--drag-preview .chat-file-review-panel__tab-close {
+  opacity: 1;
+  pointer-events: none;
+}
+
+:root[data-theme='dark'] .desktop-panel-chrome .chat-file-review-panel__tab-close {
+  background: #737373;
+}

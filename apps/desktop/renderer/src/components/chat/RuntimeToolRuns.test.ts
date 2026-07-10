@@ -2,8 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { FileChangesSummaryCard, RuntimeToolRuns, groupToolRuns, toolRunGroupDefaultOpen, toolRunPanelDefaultOpen } from './RuntimeToolRuns.js';
+import { FileChangesSummaryCard, RuntimeToolRuns, groupToolRuns, toolRunGroupDefaultOpen, toolRunGroupKindClassName, toolRunPanelDefaultOpen } from './RuntimeToolRuns.js';
 import { fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
+
+describe('RuntimeToolRuns kind class names', () => {
+  it('maps fileMutation to its kebab-case CSS modifier and preserves other kinds', () => {
+    expect(toolRunGroupKindClassName('fileMutation')).toBe('chat-tool-run--file-mutation');
+    expect(toolRunGroupKindClassName('inspection')).toBe('chat-tool-run--inspection');
+    expect(toolRunGroupKindClassName('search')).toBe('chat-tool-run--search');
+    expect(toolRunGroupKindClassName('shell')).toBe('chat-tool-run--shell');
+    expect(toolRunGroupKindClassName('generic')).toBe('chat-tool-run--generic');
+  });
+});
 
 describe('RuntimeToolRuns default expansion', () => {
   it('keeps running and successful shell details collapsed by default', () => {

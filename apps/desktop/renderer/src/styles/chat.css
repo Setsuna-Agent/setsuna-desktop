@@ -289,7 +289,7 @@
   max-width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: var(--chat-message-user-bg);
   box-sizing: border-box;
@@ -456,7 +456,7 @@
   min-width: 0;
   max-width: min(680px, 100%);
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: var(--chat-message-user-bg);
   box-shadow: none;
@@ -472,7 +472,7 @@
   box-sizing: border-box;
   padding: 9px 11px;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-lg);
   background: var(--chat-message-user-bg);
 }
 
@@ -835,7 +835,7 @@
   border-radius: 16px;
   color: var(--app-text);
   background: var(--app-surface);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.11);
+  box-shadow: var(--app-shadow-popover);
 }
 
 @keyframes chat-conversation-overview-enter {
@@ -990,7 +990,7 @@
   border: 1px solid var(--app-border);
   color: var(--app-text);
   background: var(--app-surface);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+  box-shadow: var(--app-shadow-popover);
 }
 
 .chat-git-branch-menu {
@@ -1186,7 +1186,7 @@
   padding: 0 8px;
   border: 1px solid var(--app-border);
   border-radius: 6px;
-  background: var(--desktop-agent-control-bg);
+  background: var(--app-surface);
 }
 
 .chat-git-branch-menu__create-form--compact input {
@@ -1602,7 +1602,7 @@
 }
 
 .chat-work-history.is-toggleable .chat-work-history__summary:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-accent) 52%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--desktop-agent-accent) 52%, transparent);
   outline-offset: 2px;
 }
 
@@ -1631,12 +1631,6 @@
   display: grid;
   gap: 10px;
   min-width: 0;
-}
-
-.chat-assistant-placeholder {
-  color: var(--app-text-muted);
-  font-size: 14px;
-  line-height: 1.7;
 }
 
 .chat-assistant-loading {
@@ -2779,57 +2773,6 @@
 
 :root[data-theme='dark'] .chat-code-highlighter__header {
   background: color-mix(in srgb, var(--app-muted) 18%, transparent);
-}
-
-.message {
-  display: grid;
-  gap: 4px;
-  width: min(100%, 780px);
-}
-
-.message--user {
-  align-self: flex-end;
-  width: min(100%, 680px);
-}
-
-.message__role {
-  color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
-  font-size: 11px;
-  line-height: 15px;
-  text-transform: uppercase;
-}
-
-.message--user .message__role {
-  text-align: right;
-}
-
-.message__body {
-  min-width: 0;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
-  background: var(--chat-message-assistant-bg);
-  color: var(--app-text);
-  font-size: 14px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.message--user .message__body {
-  padding: 9px 11px;
-  border-color: var(--app-border);
-  background: var(--chat-message-user-bg);
-}
-
-.message--system .message__body,
-.message--tool .message__body {
-  padding: 9px 11px;
-  border-color: var(--app-border);
-  background: var(--app-surface-subtle);
-  font-family: var(--app-code-font-family);
-  font-size: 12px;
 }
 
 .chat-plan-card {

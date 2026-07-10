@@ -7,6 +7,7 @@ import { OpenAiChatModelClient } from './openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from './openai-responses-model-client.js';
 import { TestModelClient } from './test-model-client.js';
 import type { FetchImpl } from './provider-utils.js';
+import { runWithModelTimeout, streamWithModelTimeout, type ModelRequestTimeoutOptions } from './model-request-timeout.js';
 import { thinkingRequestDefaults } from './provider-thinking.js';
 
 export class ConfiguredModelClient implements ModelClient {
@@ -14,6 +15,7 @@ export class ConfiguredModelClient implements ModelClient {
     private readonly configStore: ConfigStore,
     private readonly fetchImpl: FetchImpl = globalThis.fetch,
     private readonly fallback: ModelClient = new TestModelClient(),
+    private readonly timeoutOptions: ModelRequestTimeoutOptions = {},
   ) {}
 
   async *stream(request: ModelRequest) {
@@ -26,12 +28,13 @@ export class ConfiguredModelClient implements ModelClient {
 
     const requestModel = requestProvider.activeModel?.code || request.model;
     const client = providerModelClient(requestProvider, this.fetchImpl);
-    yield* client.stream({
+    yield* streamWithModelTimeout((signal) => client.stream({
       ...request,
+      signal,
       model: requestModel,
       maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
       ...thinkingRequestDefaults(requestProvider, { ...request, model: requestModel }),
-    });
+    }), request.signal, this.timeoutOptions);
   }
 
   async compactConversation(request: ModelCompactionRequest): Promise<ModelCompactionResult> {
@@ -45,11 +48,12 @@ export class ConfiguredModelClient implements ModelClient {
     const requestModel = requestProvider.activeModel?.code || request.model;
     const client = providerModelClient(requestProvider, this.fetchImpl);
     if (!client.compactConversation) throw new Error(`Remote context compaction is not supported by provider ${requestProvider.provider}.`);
-    return client.compactConversation({
+    return runWithModelTimeout((signal) => client.compactConversation!({
       ...request,
+      signal,
       model: requestModel,
       maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
-    });
+    }), request.signal, this.timeoutOptions);
   }
 }
 

@@ -103,6 +103,31 @@ describe('RuntimeTurnTaskRegistry', () => {
     deferred.resolve(undefined);
     await run.done;
   });
+
+  it('cancels and drains every active task during shutdown', async () => {
+    const registry = new RuntimeTurnTaskRegistry();
+    const first = registry.run({
+      acceptingSteers: true,
+      taskKind: 'regular',
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+    }, async (task) => {
+      await new Promise<void>((resolve) => task.controller.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const second = registry.run({
+      acceptingSteers: false,
+      taskKind: 'review',
+      threadId: 'thread_2',
+      turnId: 'turn_2',
+    }, async (task) => {
+      await new Promise<void>((resolve) => task.controller.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+
+    expect(registry.cancelAll(new Error('shutdown'))).toHaveLength(2);
+    await expect(registry.drain(1_000)).resolves.toBe(true);
+    await Promise.all([first.done, second.done]);
+    expect(registry.activeTasks()).toEqual([]);
+  });
 });
 
 function createDeferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void; resolve: (value: T | PromiseLike<T>) => void } {
