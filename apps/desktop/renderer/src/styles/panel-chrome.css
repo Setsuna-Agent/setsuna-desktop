@@ -44,10 +44,15 @@
   line-height: 20px;
 }
 
-.desktop-panel-chrome .chat-file-review-panel__title:hover,
-.desktop-panel-chrome .chat-file-review-panel__title--active {
+.desktop-panel-chrome .chat-file-review-panel__title:hover {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title--active {
+  color: var(--app-text);
+  background: var(--app-accent-soft);
+  box-shadow: inset 0 -2px 0 var(--app-primary);
 }
 
 .desktop-panel-chrome .chat-file-review-panel__tab-button {

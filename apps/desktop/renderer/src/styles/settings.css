@@ -72,7 +72,8 @@
 }
 
 .desktop-settings-panel .chat-user-settings__tabs button.is-active {
-  background: var(--desktop-agent-sidebar-active-bg);
+  background: var(--app-accent-subtle);
+  box-shadow: inset 2px 0 0 var(--app-primary);
 }
 
 .desktop-settings-panel .chat-user-settings__tabs svg {
@@ -568,8 +569,8 @@
   border-radius: 999px;
   background: linear-gradient(
     90deg,
-    var(--app-text) 0,
-    var(--app-text) var(--settings-scale-progress),
+    var(--app-primary) 0,
+    var(--app-primary) var(--settings-scale-progress),
     color-mix(in srgb, var(--app-border) 72%, transparent) var(--settings-scale-progress),
     color-mix(in srgb, var(--app-border) 72%, transparent) 100%
   );
@@ -582,7 +583,7 @@
   margin-top: -6px;
   border: 3px solid var(--app-surface);
   border-radius: 999px;
-  background: var(--app-text);
+  background: var(--app-primary);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 14%, transparent), 0 2px 5px rgb(0 0 0 / 14%);
 }
 
@@ -595,7 +596,7 @@
 .desktop-settings-panel .chat-user-settings__slider input::-moz-range-progress {
   height: 4px;
   border-radius: 999px;
-  background: var(--app-text);
+  background: var(--app-primary);
 }
 
 .desktop-settings-panel .chat-user-settings__slider input::-moz-range-thumb {
@@ -612,7 +613,7 @@
 }
 
 .desktop-settings-panel .chat-user-settings__slider input:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-text) 12%, transparent), 0 2px 5px rgb(0 0 0 / 14%);
+  box-shadow: var(--app-focus-ring), 0 2px 5px rgb(0 0 0 / 14%);
 }
 
 .desktop-settings-panel .settings-scale-control__marks {
@@ -758,16 +759,39 @@
 }
 
 .desktop-settings-panel .chat-user-settings__option-button:hover,
-.desktop-settings-panel .chat-user-settings__option-button:focus-visible,
-.desktop-settings-panel .chat-user-settings__option-button.is-active {
+.desktop-settings-panel .chat-user-settings__option-button:focus-visible {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-settings-panel .chat-user-settings__option-button.is-active {
+  color: var(--app-text);
+  background: var(--app-accent-soft);
 }
 
 .desktop-settings-panel .chat-user-settings__option-icon {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   width: 14px;
+}
+
+.desktop-settings-panel .chat-user-settings__accent-swatch {
+  width: 11px;
+  height: 11px;
+  border: 1px solid color-mix(in srgb, var(--app-text) 14%, transparent);
+  border-radius: 999px;
+  background: var(--settings-accent-swatch-light);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-surface) 84%, transparent);
+}
+
+:root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__accent-swatch {
+  background: var(--settings-accent-swatch-dark);
+}
+
+.desktop-settings-panel .chat-user-settings__accent-row .chat-user-settings__option-button.is-active {
+  color: var(--app-text);
+  background: var(--app-accent-soft);
 }
 
 .desktop-settings-panel .chat-user-settings__font-preview {

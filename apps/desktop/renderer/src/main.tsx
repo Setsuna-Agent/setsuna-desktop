@@ -7,6 +7,7 @@ import '@fontsource/geist-mono/400.css';
 import 'antd/dist/reset.css';
 import 'katex/dist/katex.min.css';
 import { App } from './App.js';
+import { initializeAccentColorPreference } from './hooks/useAccentColorPreference.js';
 import { initializeCodeAppearancePreference } from './hooks/useCodeAppearancePreferences.js';
 import { initializeThemePreference } from './hooks/useThemeTransition.js';
 import { applyDesktopPlatformAttribute } from './utils/desktopPlatform.js';
@@ -29,6 +30,7 @@ import './styles/code-theme.css';
 
 applyDesktopPlatformAttribute();
 initializeThemePreference();
+initializeAccentColorPreference();
 initializeCodeAppearancePreference();
 
 createRoot(document.getElementById('root') as HTMLElement).render(

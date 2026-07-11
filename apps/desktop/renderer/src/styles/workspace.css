@@ -75,6 +75,7 @@
 .desktop-browser-tab.is-active {
   color: var(--app-text);
   background: var(--desktop-agent-main-bg);
+  box-shadow: inset 0 -2px 0 var(--app-primary);
 }
 
 .desktop-browser-tab__select {
@@ -293,9 +294,12 @@
 }
 
 .desktop-workspace-launcher__main:not(:disabled):hover,
-.desktop-workspace-launcher__trigger:not(:disabled):hover,
-.desktop-workspace-launcher__trigger.is-active {
+.desktop-workspace-launcher__trigger:not(:disabled):hover {
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-workspace-launcher__trigger.is-active {
+  background: var(--app-accent-soft);
 }
 
 .desktop-workspace-launcher__main:disabled,
@@ -335,12 +339,12 @@
   text-align: left;
 }
 
-.desktop-workspace-launcher-menu button:hover,
-.desktop-workspace-launcher-menu button.is-selected {
+.desktop-workspace-launcher-menu button:hover {
   background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-workspace-launcher-menu button.is-selected {
+  background: var(--app-accent-soft);
   font-weight: 500;
 }
 
@@ -629,10 +633,14 @@
   background: transparent;
 }
 
-.desktop-editor__tree-toggle:hover,
-.desktop-editor__tree-toggle.is-active {
+.desktop-editor__tree-toggle:hover {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-editor__tree-toggle.is-active {
+  color: var(--app-text);
+  background: var(--app-accent-soft);
 }
 
 .desktop-code-editor {
@@ -832,10 +840,14 @@
   color: var(--app-text-secondary);
 }
 
-.chat-file-review-panel__source-menu .ant-dropdown-menu-item-selected,
 .chat-file-review-panel__source-menu .ant-dropdown-menu-item:hover {
   color: var(--app-text) !important;
   background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+}
+
+.chat-file-review-panel__source-menu .ant-dropdown-menu-item-selected {
+  color: var(--app-text) !important;
+  background: var(--app-accent-soft) !important;
 }
 
 .chat-file-review-panel__source-menu .ant-dropdown-menu-item-selected :where(.ant-dropdown-menu-title-content, .chat-file-review-panel__source-menu-item) {
@@ -943,7 +955,7 @@
 .desktop-review-panel__file-expansion-toggle.is-collapsed,
 .desktop-review-panel__wrap-toggle.is-active {
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+  background: var(--app-accent-soft);
 }
 
 .desktop-review-panel__refresh {
@@ -1049,10 +1061,14 @@
   color: var(--app-text-secondary);
 }
 
-.desktop-review-branch-dropdown .ant-dropdown-menu-item-selected,
 .desktop-review-branch-dropdown .ant-dropdown-menu-item:hover {
   color: var(--app-text) !important;
   background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+}
+
+.desktop-review-branch-dropdown .ant-dropdown-menu-item-selected {
+  color: var(--app-text) !important;
+  background: var(--app-accent-soft) !important;
 }
 
 .desktop-review-branch-dropdown .ant-dropdown-menu-item-disabled {
@@ -1196,7 +1212,7 @@
 
 .desktop-review-file-card__height-toggle.is-active {
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+  background: var(--app-accent-soft);
 }
 
 .desktop-review-file-card__path-main {
@@ -1809,8 +1825,13 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
 }
 
 .desktop-file-row-shell:hover,
-.desktop-file-row-shell.is-active {
+.desktop-file-row-shell:hover {
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-file-row-shell.is-active {
+  background: var(--app-accent-subtle);
+  box-shadow: inset 2px 0 0 var(--app-primary);
 }
 
 .desktop-file-row-shell.is-active .desktop-file-row {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeContextCompactionNotice, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
-import { contextTokenUsageFromThread } from './chatContextUsage.js';
+import type { RuntimeConfigState, RuntimeContextCompactionNotice, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './chatContextUsage.js';
 
 describe('chat context usage', () => {
   it('ignores transcript-only history immediately after compaction', () => {
@@ -23,7 +23,64 @@ describe('chat context usage', () => {
 
     expect(contextTokenUsageFromThread(withFollowUp).usedTokens).toBeGreaterThan(compactedUsage.usedTokens);
   });
+
+  it('uses the configured model context window instead of the 256k display fallback', () => {
+    expect(contextTokenUsageFromThread(null, 1_000_000).totalTokens).toBe(1_000_000);
+  });
+
+  it('uses the selected model context window over a stale thread compaction limit', () => {
+    const thread = compactedThread('archived');
+
+    expect(contextTokenUsageFromThread(thread, 1_000_000).totalTokens).toBe(1_000_000);
+  });
+
+  it('reads the context window from the active provider model', () => {
+    expect(activeModelContextWindowTokens(configWithContextWindow(1_000_000))).toBe(1_000_000);
+  });
 });
+
+function configWithContextWindow(contextWindowTokens: number): RuntimeConfigState {
+  return {
+    configPath: '/tmp/config.json',
+    dataPath: '/tmp/setsuna',
+    storagePath: '',
+    activeProviderId: 'minimax',
+    globalPrompt: '',
+    memory: {
+      useMemories: true,
+      generateMemories: true,
+      dedicatedTools: false,
+      disableOnExternalContext: true,
+    },
+    memoryEnabled: true,
+    setsunaStyle: 'developer',
+    approvalPolicy: 'on-request',
+    permissionProfile: 'workspace-write',
+    providers: [
+      {
+        id: 'minimax',
+        name: 'MiniMax',
+        provider: 'openai-compatible',
+        baseUrl: 'https://example.com/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [
+          {
+            id: 'minimax-m3',
+            name: 'MiniMax-M3',
+            code: 'MiniMax-M3',
+            enabled: true,
+            contextWindowTokens,
+            maxOutputTokens: 4096,
+            thinkingEnabled: false,
+            thinkingEfforts: [],
+          },
+        ],
+      },
+    ],
+  };
+}
 
 function compactedThread(transcriptContent: string): RuntimeThread {
   const notice: RuntimeContextCompactionNotice = {

@@ -314,9 +314,13 @@
   text-align: left;
 }
 
-.chat-command-menu__item:hover,
-.chat-command-menu__item.is-active {
+.chat-command-menu__item:hover {
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.chat-command-menu__item.is-active {
+  background: var(--app-accent-soft);
+  box-shadow: inset 2px 0 0 var(--app-primary);
 }
 
 .chat-command-menu__item:disabled {
@@ -463,10 +467,10 @@
   max-width: 240px;
   height: 26px;
   padding: 0 4px 0 8px;
-  border: 1px solid var(--desktop-agent-button-border);
+  border: 1px solid var(--app-accent-border);
   border-radius: var(--app-radius-sm);
   color: var(--app-text);
-  background: var(--app-surface);
+  background: var(--app-accent-subtle);
   font-size: 12px;
   line-height: 1;
 }
@@ -508,7 +512,7 @@
 }
 
 .chat-sender .ant-sender:focus-within {
-  border-color: color-mix(in srgb, var(--app-text) 24%, var(--desktop-agent-panel-border));
+  border-color: color-mix(in srgb, var(--app-primary) 42%, var(--desktop-agent-panel-border));
   box-shadow: var(--desktop-agent-input-shadow) !important;
 }
 
@@ -697,19 +701,30 @@
   flex: 0 0 auto;
 }
 
-.chat-sender-icon-button.is-active,
 .chat-sender-icon-button:hover {
   color: var(--app-text);
   background: var(--desktop-agent-button-hover-bg);
   border-color: var(--desktop-agent-button-hover-border);
 }
 
+.chat-sender-icon-button.is-active {
+  color: var(--app-text);
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+}
+
 .chat-sender-command-button:hover,
-.chat-sender-command-button:focus-visible,
-.chat-sender-command-button.is-active {
+.chat-sender-command-button:focus-visible {
   border-color: transparent;
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  box-shadow: none;
+}
+
+.chat-sender-command-button.is-active {
+  border-color: var(--app-accent-border);
+  color: var(--app-text);
+  background: var(--app-accent-soft);
   box-shadow: none;
 }
 
@@ -1007,12 +1022,16 @@
   line-height: 18px;
 }
 
-.chat-thinking-menu-root .ant-dropdown-menu-item-selected,
 .chat-thinking-menu-root .ant-dropdown-menu-item:hover,
-.chat-authorization-menu-root .ant-dropdown-menu-item-selected,
 .chat-authorization-menu-root .ant-dropdown-menu-item:hover {
   color: var(--app-text) !important;
   background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+}
+
+.chat-thinking-menu-root .ant-dropdown-menu-item-selected,
+.chat-authorization-menu-root .ant-dropdown-menu-item-selected {
+  color: var(--app-text) !important;
+  background: var(--app-accent-soft) !important;
 }
 
 .chat-thinking-menu-root .ant-dropdown-menu-item-selected :where(.ant-dropdown-menu-title-content, .chat-thinking-menu__item),

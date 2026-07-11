@@ -205,11 +205,16 @@
   font-size: 13px;
 }
 
-.desktop-capabilities-tabs button:hover,
-.desktop-capabilities-tabs button.is-active {
+.desktop-capabilities-tabs button:hover {
   color: var(--app-text);
   border-color: var(--desktop-agent-panel-border);
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-capabilities-tabs button.is-active {
+  color: var(--app-text);
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
 }
 
 .desktop-capabilities-tabs span {

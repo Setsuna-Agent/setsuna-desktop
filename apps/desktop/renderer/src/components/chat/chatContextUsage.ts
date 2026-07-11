@@ -1,4 +1,4 @@
-import type { RuntimeContextCompactionNotice, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeContextCompactionNotice, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
 
 const DEFAULT_CONTEXT_TOKENS_K = 256;
 const DEFAULT_CONTEXT_TOKENS = DEFAULT_CONTEXT_TOKENS_K * 1000;
@@ -14,12 +14,12 @@ export type ChatContextTokenUsage = {
   visiblePercent: number;
 };
 
-export function contextTokenUsageFromThread(thread: RuntimeThread | null): ChatContextTokenUsage {
+export function contextTokenUsageFromThread(thread: RuntimeThread | null, configuredMaxContextTokens?: number): ChatContextTokenUsage {
   const notice = latestContextCompactionNotice(thread);
   const state = thread?.contextCompaction;
   const totalTokens = Math.max(
     0,
-    Math.round(Number(notice?.maxContextTokens ?? state?.maxContextTokens ?? DEFAULT_CONTEXT_TOKENS)),
+    Math.round(Number(positiveTokenLimit(configuredMaxContextTokens) ?? notice?.maxContextTokens ?? state?.maxContextTokens ?? DEFAULT_CONTEXT_TOKENS)),
   );
   const recomputedTokens = estimateRuntimeMessagesTokens(thread?.messages ?? []);
   const stateTokens = Math.round(Number(state?.usedTokens || 0));
@@ -39,6 +39,15 @@ export function contextTokenUsageFromThread(thread: RuntimeThread | null): ChatC
     usedTokens,
     visiblePercent: rawPercent > 0 && rawPercent < 0.1 ? 0.1 : rawPercent,
   };
+}
+
+export function activeModelContextWindowTokens(config: RuntimeConfigState | null): number | undefined {
+  if (!config) return undefined;
+  const provider = config.providers.find((item) => item.id === config.activeProviderId && item.enabled)
+    ?? config.providers.find((item) => item.enabled)
+    ?? config.providers[0];
+  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
+  return positiveTokenLimit(model?.contextWindowTokens);
 }
 
 export function latestContextCompactionNotice(thread: RuntimeThread | null): RuntimeContextCompactionNotice | undefined {
@@ -77,6 +86,10 @@ function estimateStringTokens(value: string): number {
 
 function positiveNumber(...values: number[]): number {
   return values.find((value) => Number.isFinite(value) && value > 0) ?? 0;
+}
+
+function positiveTokenLimit(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
 function stripContextTags(value: string): string {

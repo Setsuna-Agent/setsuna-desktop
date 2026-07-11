@@ -12,7 +12,7 @@ import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayable
 import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
-import { contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
+import { activeModelContextWindowTokens, contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
 import { canFitConversationOverviewPanel, needsConversationOverviewContentShift, shouldCompactConversationOverview, shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
@@ -112,7 +112,10 @@ export function ChatWorkspace({
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const requestedReviewProjectRef = useRef<string | null>(null);
-  const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread), [currentThread]);
+  const contextUsage = useMemo(
+    () => contextTokenUsageFromThread(currentThread, activeModelContextWindowTokens(config)),
+    [config, currentThread],
+  );
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(
     () => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null),

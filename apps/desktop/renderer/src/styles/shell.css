@@ -195,7 +195,7 @@
 
 .app-topbar__right .sd-icon-button.is-active {
   color: var(--app-primary);
-  background: var(--desktop-agent-control-hover-bg);
+  background: var(--app-accent-soft);
 }
 
 .app-topbar-update-alert {
@@ -312,11 +312,15 @@
 }
 
 :root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:hover:not(:disabled),
-:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button:hover:not(:disabled),
-:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button.is-active,
-:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button.is-active {
+:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button:hover:not(:disabled) {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text) 7%, transparent);
+}
+
+:root[data-desktop-platform='win32'] .app-topbar .sd-icon-button.is-active,
+:root[data-desktop-platform='linux'] .app-topbar .sd-icon-button.is-active {
+  color: var(--app-primary);
+  background: var(--app-accent-soft);
 }
 
 :root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:disabled,
@@ -386,11 +390,15 @@
 }
 
 :root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button:hover,
-:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button:hover,
-:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button.is-active,
-:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button.is-active {
+:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button:hover {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button.is-active,
+:root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button.is-active {
+  color: var(--app-primary);
+  background: var(--app-accent-soft);
 }
 
 :root[data-desktop-platform='win32'] .app-workbench__main-title,

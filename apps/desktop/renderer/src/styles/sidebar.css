@@ -36,7 +36,8 @@
 
 .desktop-agent-command.is-active {
   color: var(--app-text);
-  background: var(--desktop-agent-sidebar-active-bg);
+  background: var(--app-accent-subtle);
+  box-shadow: inset 2px 0 0 var(--app-primary);
 }
 
 .desktop-agent-command__icon {
@@ -362,8 +363,8 @@
 
 .desktop-agent-session.is-active {
   color: var(--desktop-agent-sidebar-active-text);
-  border-color: var(--desktop-agent-divider);
-  background: var(--desktop-agent-sidebar-active-bg);
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-subtle);
   box-shadow: var(--desktop-agent-sidebar-active-shadow);
 }
 

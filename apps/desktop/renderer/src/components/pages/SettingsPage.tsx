@@ -5,6 +5,7 @@ import { Archive, ArchiveRestore, BadgeCheck, Brain, ChevronRight, Code2, Cpu, D
 import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
+import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
 import { fontFamilyOptions, fontSizeOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode } from '../../hooks/useAppearancePreferences.js';
 import { codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, useCodeAppearancePreferences, type CodeFontFamilyMode, type CodeHighlightTheme } from '../../hooks/useCodeAppearancePreferences.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
@@ -47,6 +48,20 @@ const themeModeOptions: Array<SettingsChoiceOption<ThemeMode>> = [
   { value: 'dark', label: '深色', icon: <Moon size={14} /> },
   { value: 'system', label: '系统', icon: <Monitor size={14} /> },
 ];
+
+const accentColorChoiceOptions: Array<SettingsChoiceOption<AccentColor>> = accentColorOptions.map((option) => ({
+  value: option.value,
+  label: option.label,
+  icon: (
+    <span
+      className="chat-user-settings__accent-swatch"
+      style={{
+        '--settings-accent-swatch-light': option.lightSwatch,
+        '--settings-accent-swatch-dark': option.darkSwatch,
+      } as CSSProperties}
+    />
+  ),
+}));
 
 const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsunaStyle']>> = [
   { value: 'developer', label: '开发', icon: <Cpu size={14} /> },
@@ -279,6 +294,7 @@ function GeneralSettings() {
   const { fontFamily, fontSize, setFontFamily, setFontSize } = useAppearancePreferences();
   const { codeFontFamily, codeHighlightTheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
+  const { accentColor, setAccentColor } = useAccentColorPreference();
   const availableFontFamilyOptions = getFontFamilyOptionsForPlatform();
   const availableCodeFontFamilyOptions = getCodeFontFamilyOptionsForPlatform();
   const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
@@ -403,9 +419,16 @@ function GeneralSettings() {
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Sun size={14} />
-              <span>主题色彩</span>
+              <span>外观模式</span>
             </span>
-            <SettingsChoiceGroup ariaLabel="主题色彩" options={themeModeOptions} value={mode} onChange={setThemeModeWithTransition} />
+            <SettingsChoiceGroup ariaLabel="外观模式" options={themeModeOptions} value={mode} onChange={setThemeModeWithTransition} />
+          </div>
+          <div className="chat-user-settings__row chat-user-settings__accent-row">
+            <span className="chat-user-settings__row-label">
+              <Palette size={14} />
+              <span>强调色</span>
+            </span>
+            <SettingsChoiceGroup ariaLabel="强调色" options={accentColorChoiceOptions} value={accentColor} onChange={setAccentColor} />
           </div>
         </div>
       </div>
