@@ -2931,8 +2931,8 @@ describe('agent loop tools', () => {
 
     expect(modelClient.requests).toHaveLength(1);
     expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).toContain('concise verification notes');
-    expect((modelClient.requests[0].tools ?? []).map((tool) => tool.name)).toEqual(expect.arrayContaining(['recall_memory', 'list_memory_files', 'read_memory_file', 'search_memory_files']));
-    expect((modelClient.requests[0].tools ?? []).map((tool) => tool.name)).not.toContain('remember_memory');
+    const toolNames = (modelClient.requests[0].tools ?? []).map((tool) => tool.name);
+    expect(toolNames).toEqual(['recall_memory']);
     await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 1 });
   });
 
