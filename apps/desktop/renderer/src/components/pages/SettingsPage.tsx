@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Archive, ArchiveRestore, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, Pencil, Plus, RefreshCw, SlidersHorizontal, Sun, Trash2, Type, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BadgeCheck, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
 import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
@@ -19,7 +19,7 @@ const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: Reac
   { id: 'localLlm', label: '本地模型', icon: <HardDrive size={14} /> },
   { id: 'usage', label: '用量', icon: <Database size={14} /> },
   { id: 'archives', label: '归档对话', icon: <Archive size={14} /> },
-  { id: 'runtime', label: '高级设置', icon: <Cpu size={14} /> },
+  { id: 'runtime', label: '高级设置', icon: <Wrench size={14} /> },
   { id: 'about', label: '关于', icon: <Info size={14} /> },
 ];
 
@@ -64,6 +64,7 @@ export function SettingsPage({
   archivedThreads,
   config,
   projects,
+  skillExtraRoots,
   updater,
   usage,
   memoryPreview,
@@ -78,10 +79,12 @@ export function SettingsPage({
   onDeleteAllArchivedThreads,
   onDeleteArchivedThread,
   onRestoreArchivedThread,
+  onSetSkillExtraRoots,
 }: {
   archivedThreads: RuntimeThreadSummary[];
   config: RuntimeConfigState | null;
   projects: WorkspaceProject[];
+  skillExtraRoots: string[];
   updater: DesktopUpdaterStateView;
   usage: RuntimeUsageResponse | null;
   memoryPreview: RuntimeMemoryPreview | null;
@@ -96,6 +99,7 @@ export function SettingsPage({
   onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
   onDeleteArchivedThread: (threadId: string) => Promise<void>;
   onRestoreArchivedThread: (threadId: string) => Promise<RuntimeThread>;
+  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
   const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
@@ -121,7 +125,7 @@ export function SettingsPage({
     ) : activeSection === 'about' ? (
       <AboutSettings updater={updater} />
     ) : config ? (
-      <RuntimePolicySettings config={config} onSave={onSaveRuntimePreferences} />
+      <RuntimePolicySettings config={config} skillExtraRoots={skillExtraRoots} onSave={onSaveRuntimePreferences} onSetSkillExtraRoots={onSetSkillExtraRoots} />
     ) : (
       <EmptyState title="Config unavailable" />
     );
@@ -299,7 +303,7 @@ function GeneralSettings() {
               <Type size={14} />
               <span>界面字体</span>
             </span>
-            <SelectField className="settings-local-control" value={selectedFont.value} style={{ fontFamily: selectedFont.css }} onChange={(event) => setFontFamily(event.currentTarget.value as FontFamilyMode)}>
+            <SelectField className="settings-local-control" value={selectedFont.value} style={{ fontFamily: selectedFont.css }} onValueChange={(nextValue) => setFontFamily(nextValue as FontFamilyMode)}>
               {fontFamilySelectOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -344,7 +348,7 @@ function GeneralSettings() {
               <Code2 size={14} />
               <span>代码字体</span>
             </span>
-            <SelectField aria-label="代码字体" className="settings-local-control" value={selectedCodeFont.value} style={{ fontFamily: selectedCodeFont.css }} onChange={(event) => setCodeFontFamily(event.currentTarget.value as CodeFontFamilyMode)}>
+            <SelectField aria-label="代码字体" className="settings-local-control" value={selectedCodeFont.value} style={{ fontFamily: selectedCodeFont.css }} onValueChange={(nextValue) => setCodeFontFamily(nextValue as CodeFontFamilyMode)}>
               {codeFontFamilySelectOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -357,7 +361,7 @@ function GeneralSettings() {
               <Palette size={14} />
               <span>高亮主题</span>
             </span>
-            <SelectField aria-label="代码高亮主题" className="settings-local-control" value={codeHighlightTheme} onChange={(event) => setCodeHighlightTheme(event.currentTarget.value as CodeHighlightTheme)}>
+            <SelectField aria-label="代码高亮主题" className="settings-local-control" value={codeHighlightTheme} onValueChange={(nextValue) => setCodeHighlightTheme(nextValue as CodeHighlightTheme)}>
               {codeHighlightThemeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -530,7 +534,7 @@ function UpdateDownloadSourceSettings({ updater }: { updater: DesktopUpdaterStat
           <span>版本检查仍使用 GitHub API，安装包和校验文件从所选源下载。</span>
         </div>
         <div className="chat-user-settings__download-source-actions">
-          <SelectField aria-label="下载源" className="settings-local-control" disabled={sourceBusy || sources.length === 0} value={activeSourceId} onChange={(event) => void selectSource(event.currentTarget.value)}>
+          <SelectField aria-label="下载源" className="settings-local-control" disabled={sourceBusy || sources.length === 0} value={activeSourceId} onValueChange={(nextValue) => void selectSource(nextValue)}>
             {sources.map((source) => (
               <option key={source.id} value={source.id}>{source.name}</option>
             ))}
@@ -596,15 +600,19 @@ function updateBadgeText(state: DesktopUpdaterBridgeState | null): string {
   return '自动';
 }
 
-function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState; onSave: (input: RuntimePreferenceInput) => Promise<void> }) {
+function RuntimePolicySettings({
+  config,
+  skillExtraRoots,
+  onSave,
+  onSetSkillExtraRoots,
+}: {
+  config: RuntimeConfigState;
+  skillExtraRoots: string[];
+  onSave: (input: RuntimePreferenceInput) => Promise<void>;
+  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
+}) {
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [localPathError, setLocalPathError] = useState<string | null>(null);
-  const [featureFlagsDraft, setFeatureFlagsDraft] = useState(() => JSON.stringify(config.features ?? {}, null, 2));
-  const [advancedError, setAdvancedError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setFeatureFlagsDraft(JSON.stringify(config.features ?? {}, null, 2));
-  }, [config.features]);
 
   const openRuntimePath = async (targetPath: string, label: string) => {
     const normalizedPath = targetPath.trim();
@@ -638,23 +646,29 @@ function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState;
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">策略</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
-          <label className="chat-user-settings__row">
-            <span className="chat-user-settings__row-label">
-              <SlidersHorizontal size={14} />
-              <span>审批策略</span>
+          <label className="chat-user-settings__row chat-user-settings__runtime-policy-row">
+            <span className="chat-user-settings__runtime-policy-copy">
+              <BadgeCheck size={14} />
+              <span>
+                <strong>审批策略</strong>
+                <small>控制工具执行操作前何时需要向你确认</small>
+              </span>
             </span>
-            <SelectField className="settings-local-control" value={config.approvalPolicy} onChange={(event) => void onSave({ approvalPolicy: event.currentTarget.value as RuntimeConfigState['approvalPolicy'] })}>
+            <SelectField aria-label="审批策略" className="settings-local-control chat-user-settings__runtime-policy-control" value={config.approvalPolicy} onValueChange={(nextValue) => void onSave({ approvalPolicy: nextValue as RuntimeConfigState['approvalPolicy'] })}>
               <option value="strict">严格授权</option>
               <option value="on-request">智能授权</option>
               <option value="full">完全授权</option>
             </SelectField>
           </label>
-          <label className="chat-user-settings__row">
-            <span className="chat-user-settings__row-label">
-              <SlidersHorizontal size={14} />
-              <span>权限范围</span>
+          <label className="chat-user-settings__row chat-user-settings__runtime-policy-row">
+            <span className="chat-user-settings__runtime-policy-copy">
+              <FolderLock size={14} />
+              <span>
+                <strong>文件访问范围</strong>
+                <small>限制工具能够读取或修改本机文件的范围</small>
+              </span>
             </span>
-            <SelectField className="settings-local-control" value={config.permissionProfile} onChange={(event) => void onSave({ permissionProfile: event.currentTarget.value as RuntimeConfigState['permissionProfile'] })}>
+            <SelectField aria-label="文件访问范围" className="settings-local-control chat-user-settings__runtime-policy-control" value={config.permissionProfile} onValueChange={(nextValue) => void onSave({ permissionProfile: nextValue as RuntimeConfigState['permissionProfile'] })}>
               <option value="read-only">只读</option>
               <option value="workspace-write">工作区写入</option>
               <option value="danger-full-access">完全访问</option>
@@ -663,91 +677,12 @@ function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState;
         </div>
       </div>
 
-      <details className="chat-user-settings__section-block chat-user-settings__advanced-disclosure">
-        <summary className="chat-user-settings__group-title chat-user-settings__advanced-summary">
-          <span>高级安全与实验功能</span>
-          <ChevronRight className="chat-user-settings__advanced-chevron" size={15} />
-        </summary>
-        <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
-          <MemorySettingToggle
-            checked={config.sandboxWorkspaceWrite?.networkAccess === true}
-            description="允许 workspace-write 沙箱中的工具访问网络。"
-            label="沙箱网络访问"
-            onChange={(networkAccess) => void onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), networkAccess } })}
-          />
-          <MemorySettingToggle
-            checked={config.bypassHookTrust === true}
-            description="跳过本地 Hook hash 信任检查，仅应在受控环境中开启。"
-            label="绕过 Hook 信任"
-            onChange={(bypassHookTrust) => void onSave({ bypassHookTrust })}
-          />
-          <RuntimeRootListField
-            label="额外可读目录"
-            value={config.sandboxWorkspaceWrite?.readableRoots ?? []}
-            onSave={(readableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), readableRoots } })}
-          />
-          <RuntimeRootListField
-            label="额外可写目录"
-            value={config.sandboxWorkspaceWrite?.writableRoots ?? []}
-            onSave={(writableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), writableRoots } })}
-          />
-          <RuntimeRootListField
-            label="拒绝访问目录"
-            value={config.sandboxWorkspaceWrite?.deniedRoots ?? []}
-            onSave={(deniedRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedRoots } })}
-          />
-          <RuntimeRootListField
-            label="拒绝 Glob"
-            value={config.sandboxWorkspaceWrite?.deniedGlobPatterns ?? []}
-            onSave={(deniedGlobPatterns) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedGlobPatterns } })}
-          />
-          <div className="chat-user-settings__runtime-json-field">
-            <span>Feature flags（JSON）</span>
-            <TextArea rows={6} value={featureFlagsDraft} onChange={(event) => setFeatureFlagsDraft(event.currentTarget.value)} />
-            <Button onClick={() => {
-              try {
-                const parsed = JSON.parse(featureFlagsDraft) as unknown;
-                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Feature flags 必须是 JSON 对象。');
-                const flags = Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
-                setAdvancedError(null);
-                void onSave({ features: flags });
-              } catch (unknownError) {
-                setAdvancedError(errorMessage(unknownError, 'Feature flags 格式无效。'));
-              }
-            }}>保存 Feature flags</Button>
-          </div>
-          <div className="chat-user-settings__runtime-memory-tuning">
-            <strong>记忆整理参数</strong>
-            <TextField
-              defaultValue={config.memory.consolidationModel ?? ''}
-              placeholder="整理模型（留空跟随当前模型）"
-              onBlur={(event) => void onSave({ memory: { consolidationModel: event.currentTarget.value.trim() || undefined } })}
-            />
-            <TextField
-              type="number"
-              min="1"
-              defaultValue={config.memory.maxRolloutsPerStartup ?? ''}
-              placeholder="每次启动最多处理 Rollouts"
-              onBlur={(event) => void onSave({ memory: { maxRolloutsPerStartup: optionalPositiveNumber(event.currentTarget.value) } })}
-            />
-            <TextField
-              type="number"
-              min="1"
-              defaultValue={config.memory.maxRawMemoriesForConsolidation ?? ''}
-              placeholder="整理前最大原始记忆数"
-              onBlur={(event) => void onSave({ memory: { maxRawMemoriesForConsolidation: optionalPositiveNumber(event.currentTarget.value) } })}
-            />
-          </div>
-        </div>
-        {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
-      </details>
-
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">本地存储</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
-              <Cpu size={14} />
+              <FileCog size={14} />
               <span>配置文件</span>
             </span>
             <div className="chat-user-settings__path-control">
@@ -772,27 +707,289 @@ function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState;
         </div>
         {localPathError ? <div className="chat-user-settings__runtime-error">{localPathError}</div> : null}
       </div>
+
+      <RuntimeAdvancedSettings
+        config={config}
+        skillExtraRoots={skillExtraRoots}
+        onSave={onSave}
+        onSetSkillExtraRoots={onSetSkillExtraRoots}
+      />
     </div>
   );
 }
 
-function RuntimeRootListField({ label, value, onSave }: { label: string; value: string[]; onSave: (items: string[]) => Promise<void> }) {
+function RuntimeAdvancedSettings({
+  config,
+  skillExtraRoots,
+  onSave,
+  onSetSkillExtraRoots,
+}: {
+  config: RuntimeConfigState;
+  skillExtraRoots: string[];
+  onSave: (input: RuntimePreferenceInput) => Promise<void>;
+  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
+}) {
+  const [featureFlagsDraft, setFeatureFlagsDraft] = useState(() => JSON.stringify(config.features ?? {}, null, 2));
+  const [advancedError, setAdvancedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFeatureFlagsDraft(JSON.stringify(config.features ?? {}, null, 2));
+  }, [config.features]);
+
   return (
-    <label className="chat-user-settings__runtime-list-field">
-      <span>{label}</span>
-      <TextArea
-        key={value.join('\n')}
-        rows={3}
-        defaultValue={value.join('\n')}
-        placeholder="每行一个绝对路径或 Glob"
-        onBlur={(event) => void onSave(splitNonEmptyLines(event.currentTarget.value))}
-      />
-    </label>
+    <details className="chat-user-settings__section-block chat-user-settings__advanced-disclosure">
+      <summary className="chat-user-settings__advanced-summary">
+        <span className="chat-user-settings__advanced-icon" aria-hidden="true">
+          <ShieldCheck size={16} />
+        </span>
+        <span className="chat-user-settings__advanced-copy">
+          <strong>高级安全与实验功能</strong>
+          <small>沙箱目录、Hook 信任、额外 Skill 与实验开关</small>
+        </span>
+        <span className="chat-user-settings__advanced-toggle" aria-hidden="true">
+          <ChevronRight className="chat-user-settings__advanced-chevron" size={15} />
+        </span>
+      </summary>
+      <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
+        <MemorySettingToggle
+          checked={config.sandboxWorkspaceWrite?.networkAccess === true}
+          description="允许 workspace-write 沙箱中的工具访问网络。"
+          label="沙箱网络访问"
+          onChange={(networkAccess) => void onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), networkAccess } })}
+        />
+        <MemorySettingToggle
+          checked={config.bypassHookTrust === true}
+          description="跳过本地 Hook hash 信任检查，仅应在受控环境中开启。"
+          label="绕过 Hook 信任"
+          onChange={(bypassHookTrust) => void onSave({ bypassHookTrust })}
+        />
+        <RuntimeDirectoryListField
+          description="允许 workspace-write 沙箱额外读取这些目录。"
+          label="额外可读目录"
+          value={config.sandboxWorkspaceWrite?.readableRoots ?? []}
+          onSave={(readableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), readableRoots } })}
+        />
+        <RuntimeDirectoryListField
+          description="允许 workspace-write 沙箱额外写入这些目录。"
+          label="额外可写目录"
+          value={config.sandboxWorkspaceWrite?.writableRoots ?? []}
+          onSave={(writableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), writableRoots } })}
+        />
+        <RuntimeDirectoryListField
+          description="无论其他权限如何，都禁止访问这些目录。"
+          label="拒绝访问目录"
+          value={config.sandboxWorkspaceWrite?.deniedRoots ?? []}
+          onSave={(deniedRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedRoots } })}
+        />
+        <RuntimeTextListField
+          description="逐条添加需要拒绝的 Glob 表达式。"
+          label="拒绝 Glob"
+          value={config.sandboxWorkspaceWrite?.deniedGlobPatterns ?? []}
+          onSave={(deniedGlobPatterns) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedGlobPatterns } })}
+        />
+        <RuntimeDirectoryListField
+          description="从默认位置之外加载 Skill；仅当前 runtime 会话有效。"
+          label="额外 Skill 目录"
+          value={skillExtraRoots}
+          onSave={onSetSkillExtraRoots}
+        />
+        <div className="chat-user-settings__runtime-json-field">
+          <span>Feature flags（JSON）</span>
+          <TextArea rows={6} value={featureFlagsDraft} onChange={(event) => setFeatureFlagsDraft(event.currentTarget.value)} />
+          <Button onClick={() => {
+            try {
+              const parsed = JSON.parse(featureFlagsDraft) as unknown;
+              if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Feature flags 必须是 JSON 对象。');
+              const flags = Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
+              setAdvancedError(null);
+              void onSave({ features: flags });
+            } catch (unknownError) {
+              setAdvancedError(errorMessage(unknownError, 'Feature flags 格式无效。'));
+            }
+          }}>保存 Feature flags</Button>
+        </div>
+        <div className="chat-user-settings__runtime-memory-tuning">
+          <strong>记忆整理参数</strong>
+          <TextField
+            defaultValue={config.memory.consolidationModel ?? ''}
+            placeholder="整理模型（留空跟随当前模型）"
+            onBlur={(event) => void onSave({ memory: { consolidationModel: event.currentTarget.value.trim() || undefined } })}
+          />
+          <TextField
+            type="number"
+            min="1"
+            defaultValue={config.memory.maxRolloutsPerStartup ?? ''}
+            placeholder="每次启动最多处理 Rollouts"
+            onBlur={(event) => void onSave({ memory: { maxRolloutsPerStartup: optionalPositiveNumber(event.currentTarget.value) } })}
+          />
+          <TextField
+            type="number"
+            min="1"
+            defaultValue={config.memory.maxRawMemoriesForConsolidation ?? ''}
+            placeholder="整理前最大原始记忆数"
+            onBlur={(event) => void onSave({ memory: { maxRawMemoriesForConsolidation: optionalPositiveNumber(event.currentTarget.value) } })}
+          />
+        </div>
+      </div>
+      {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
+    </details>
   );
 }
 
-function splitNonEmptyLines(value: string): string[] {
-  return [...new Set(value.split(/\r?\n/u).map((item) => item.trim()).filter(Boolean))];
+function RuntimeDirectoryListField({
+  description,
+  label,
+  value,
+  onSave,
+}: {
+  description: string;
+  label: string;
+  value: string[];
+  onSave: (items: string[]) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const commit = async (items: string[]) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave(items);
+      return true;
+    } catch (unknownError) {
+      setError(errorMessage(unknownError, `${label}保存失败。`));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addDirectory = async () => {
+    const api = window.setsunaDesktop?.desktop;
+    if (!api?.selectDirectory) {
+      setError('当前环境不支持选择目录。');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const selected = await api.selectDirectory({ title: `选择${label}` });
+      if (selected && !value.includes(selected)) await onSave([...value, selected]);
+    } catch (unknownError) {
+      setError(errorMessage(unknownError, `${label}添加失败。`));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <RuntimeListEditor
+      action={<Button icon={<FolderOpen size={14} />} disabled={busy} onClick={() => void addDirectory()}>{busy ? '处理中' : '添加目录'}</Button>}
+      busy={busy}
+      description={description}
+      error={error}
+      items={value}
+      label={label}
+      onRemove={(item) => void commit(value.filter((current) => current !== item))}
+    />
+  );
+}
+
+function RuntimeTextListField({
+  description,
+  label,
+  value,
+  onSave,
+}: {
+  description: string;
+  label: string;
+  value: string[];
+  onSave: (items: string[]) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const commit = async (items: string[]) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave(items);
+      return true;
+    } catch (unknownError) {
+      setError(errorMessage(unknownError, `${label}保存失败。`));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const item = draft.trim();
+    if (!item || value.includes(item)) return;
+    if (await commit([...value, item])) setDraft('');
+  };
+
+  return (
+    <RuntimeListEditor
+      action={(
+        <form className="chat-user-settings__runtime-list-add" onSubmit={(event) => void addItem(event)}>
+          <TextField aria-label={`添加${label}`} disabled={busy} placeholder="输入一条规则" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
+          <Button icon={<Plus size={14} />} disabled={busy || !draft.trim()} type="submit">添加</Button>
+        </form>
+      )}
+      busy={busy}
+      description={description}
+      error={error}
+      items={value}
+      label={label}
+      onRemove={(item) => void commit(value.filter((current) => current !== item))}
+    />
+  );
+}
+
+function RuntimeListEditor({
+  action,
+  busy,
+  description,
+  error,
+  items,
+  label,
+  onRemove,
+}: {
+  action: ReactNode;
+  busy: boolean;
+  description: string;
+  error: string | null;
+  items: string[];
+  label: string;
+  onRemove: (item: string) => void;
+}) {
+  return (
+    <div className="chat-user-settings__runtime-list-editor">
+      <div className="chat-user-settings__runtime-list-head">
+        <span className="chat-user-settings__runtime-list-copy">
+          <strong>{label}</strong>
+          <small>{description}</small>
+        </span>
+        {action}
+      </div>
+      {items.length ? (
+        <div className="chat-user-settings__runtime-list-items">
+          {items.map((item) => (
+            <div className="chat-user-settings__runtime-list-item" key={item}>
+              <code title={item}>{item}</code>
+              <IconButton label={`移除 ${item}`} disabled={busy} onClick={() => onRemove(item)}><X size={14} /></IconButton>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <span className="chat-user-settings__runtime-list-empty">暂未添加</span>
+      )}
+      {error ? <span className="chat-user-settings__runtime-list-error" role="alert">{error}</span> : null}
+    </div>
+  );
 }
 
 function optionalPositiveNumber(value: string): number | undefined {
@@ -1073,8 +1270,8 @@ function MemoryExtractModelField({ config, onSavePreferences }: { config: Runtim
       <SelectField
         className="settings-local-control chat-user-settings__memory-model-select"
         value={value}
-        onChange={(event) => {
-          const extractModel = event.currentTarget.value.trim() || undefined;
+        onValueChange={(nextValue) => {
+          const extractModel = nextValue.trim() || undefined;
           void onSavePreferences({ memory: { extractModel } });
         }}
       >
@@ -1471,8 +1668,8 @@ function ProviderSettings({
                     <SelectField
                       className="settings-local-control"
                       value={selectedProvider.provider}
-                      onChange={(event) => {
-                        const provider = normalizeProviderKind(event.currentTarget.value);
+                      onValueChange={(nextValue) => {
+                        const provider = normalizeProviderKind(nextValue);
                         setFetchStateByProviderId((current) => ({ ...current, [selectedProvider.id]: emptyModelFetchState() }));
                         updateProvider(selectedProvider.id, (item) => ({ ...item, provider }));
                       }}

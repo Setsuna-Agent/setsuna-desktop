@@ -90,6 +90,7 @@ export function AppRouteContent({
           archivedThreads={runtime.archivedThreads}
           config={runtime.config}
           projects={runtime.projects}
+          skillExtraRoots={runtime.skillExtraRoots}
           updater={updater}
           usage={runtime.usage}
           memoryPreview={runtime.memoryPreview}
@@ -104,6 +105,7 @@ export function AppRouteContent({
         onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
         onDeleteArchivedThread={runtime.permanentlyDeleteThread}
         onRestoreArchivedThread={runtime.restoreArchivedThread}
+        onSetSkillExtraRoots={runtime.setSkillExtraRoots}
       />
     );
   }
@@ -138,7 +140,6 @@ export function AppRouteContent({
           if (!runtime.currentThread) return Promise.reject(new Error('请先打开一个对话。'));
           return runtime.client.callMcpServerTool(runtime.currentThread.id, server, tool, args);
         }}
-        onSetSkillExtraRoots={(roots) => runtime.client.setSkillExtraRoots(roots)}
       />
     );
   }

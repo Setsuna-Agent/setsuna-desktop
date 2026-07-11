@@ -908,33 +908,6 @@
   gap: 14px;
 }
 
-.desktop-capabilities-extra-roots {
-  display: grid;
-  grid-template-columns: minmax(180px, .7fr) minmax(260px, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  background: var(--app-surface);
-}
-
-.desktop-capabilities-extra-roots > div {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.desktop-capabilities-extra-roots span {
-  color: var(--app-text-muted);
-  font-size: 11px;
-}
-
-.desktop-capabilities-extra-roots__error {
-  grid-column: 1 / -1;
-  color: var(--app-danger) !important;
-}
-
 .desktop-capabilities-mcp-diagnostics__grid > section,
 .desktop-capabilities-mcp-diagnostics__result {
   display: flex;

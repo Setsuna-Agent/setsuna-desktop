@@ -185,6 +185,9 @@ export class RuntimeTurnRunFactory {
       threadId,
       turnId,
       options: {
+        // Keep the synthetic continuation out of the transcript, but include it as the
+        // user message required by OpenAI-compatible providers alongside system instructions.
+        includeUserMessageInModel: true,
         publishUserMessage: false,
         runtimeContextMessages,
         taskKind: 'goal',

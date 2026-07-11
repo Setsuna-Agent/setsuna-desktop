@@ -23,9 +23,11 @@
 
 .desktop-agent-search-popover__input {
   display: flex;
+  flex: 0 0 36px;
   align-items: center;
   gap: 8px;
   height: 36px;
+  min-height: 36px;
   padding: 0 10px;
   border-radius: var(--app-radius-md);
   color: var(--app-text-muted);

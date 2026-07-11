@@ -63,6 +63,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [memoryPreview, setMemoryPreview] = useState<RuntimeMemoryPreview | null>(null);
   const [memoryPreviewLoading, setMemoryPreviewLoading] = useState(false);
   const [skills, setSkills] = useState<RuntimeSkillSummary[]>([]);
+  const [skillExtraRoots, setSkillExtraRootsState] = useState<string[]>([]);
   const [mcpState, setMcpState] = useState<RuntimeMcpServerList | null>(null);
   const [hookState, setHookState] = useState<RuntimeHookListResponse | null>(null);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
@@ -518,6 +519,14 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     [client],
   );
 
+  const setSkillExtraRoots = useCallback(async (roots: string[]) => {
+    const normalizedRoots = [...new Set(roots.map((root) => root.trim()).filter(Boolean))];
+    await client.setSkillExtraRoots(normalizedRoots);
+    const skillList = await client.listSkills();
+    setSkillExtraRootsState(normalizedRoots);
+    setSkills(skillList.skills);
+  }, [client]);
+
   const saveMcpServer = useCallback(
     async (input: RuntimeMcpServerInput) => {
       const next = await client.upsertMcpServer(input);
@@ -738,6 +747,8 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setCurrentThread,
     setError,
     setProjects,
+    setSkillExtraRoots,
+    skillExtraRoots,
     skills,
     terminalTurnIdsRef,
     threadUsage,

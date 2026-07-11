@@ -177,13 +177,16 @@
 
 .chat-markdown__table-scroll {
   width: 100%;
-  margin: 0.95em 0 1.05em;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
+  margin: 1em 0 1.15em;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-color: var(--chat-scrollbar-thumb) transparent;
   scrollbar-width: thin !important;
+}
+
+.chat-markdown__table-scroll:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--app-primary) 46%, transparent);
+  outline-offset: 4px;
 }
 
 .chat-markdown__table-scroll::-webkit-scrollbar {
@@ -203,32 +206,33 @@
   width: max-content;
   min-width: 100%;
   border-collapse: collapse;
-  font-size: 0.94em;
+  font-size: 1em;
+  line-height: 1.62;
 }
 
 .chat-markdown th {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--app-border);
+  padding: 0.56em 2.25em 0.56em 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 5%, var(--app-surface));
-  font-weight: 600;
+  background: transparent;
+  font-weight: 650;
   text-align: left;
   white-space: nowrap;
 }
 
 .chat-markdown td {
-  padding: 7px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 56%, transparent);
+  padding: 0.72em 2.25em 0.72em 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 52%, transparent);
   color: var(--app-text);
   vertical-align: top;
 }
 
-.chat-markdown tr:last-child td {
-  border-bottom: 0;
+.chat-markdown :where(th, td):last-child {
+  padding-right: 0;
 }
 
-.chat-markdown tbody tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--app-text) 2%, transparent);
+.chat-markdown tr:last-child td {
+  border-bottom: 0;
 }
 
 .chat-markdown img {

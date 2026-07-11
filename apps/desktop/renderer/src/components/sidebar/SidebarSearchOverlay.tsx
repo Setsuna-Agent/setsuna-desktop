@@ -36,6 +36,7 @@ export function SidebarSearchOverlay({
   const [detailsByThreadId, setDetailsByThreadId] = useState<Record<string, RuntimeThread>>({});
   const [detailsLoading, setDetailsLoading] = useState(false);
   const loadingThreadIdsRef = useRef<Set<string>>(new Set());
+  const hasKeyword = Boolean(query.trim());
   const projectNameById = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const results = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -75,12 +76,21 @@ export function SidebarSearchOverlay({
   }, [query]);
 
   useEffect(() => {
+    // Recent conversations only need summary data. Loading full transcripts is reserved
+    // for an actual keyword search so opening the popover stays lightweight.
+    if (!hasKeyword) {
+      setDetailsLoading(false);
+      return undefined;
+    }
     let cancelled = false;
     const missingThreads = threads.filter((thread) => {
       const detail = detailsByThreadId[thread.id];
       return detail?.updatedAt !== thread.updatedAt && !loadingThreadIdsRef.current.has(thread.id);
     });
-    if (!missingThreads.length) return undefined;
+    if (!missingThreads.length) {
+      setDetailsLoading(false);
+      return undefined;
+    }
     missingThreads.forEach((thread) => loadingThreadIdsRef.current.add(thread.id));
     setDetailsLoading(true);
 
@@ -97,7 +107,7 @@ export function SidebarSearchOverlay({
     return () => {
       cancelled = true;
     };
-  }, [detailsByThreadId, onLoadThread, threads]);
+  }, [detailsByThreadId, hasKeyword, onLoadThread, threads]);
 
   useEffect(() => {
     setActiveIndex((current) => Math.min(current, Math.max(results.length - 1, 0)));
@@ -163,8 +173,6 @@ export function SidebarSearchOverlay({
   };
 
   const activeResultId = results[activeIndex] ? `desktop-agent-search-result-${activeIndex}` : undefined;
-  const hasKeyword = Boolean(query.trim());
-
   return createPortal(
     <div
       className="desktop-agent-search-overlay"
@@ -198,7 +206,7 @@ export function SidebarSearchOverlay({
         </div>
         <div className="desktop-agent-search-popover__heading">
           <span>{hasKeyword ? '搜索结果' : '近期对话'}</span>
-          {detailsLoading ? (
+          {detailsLoading && hasKeyword ? (
             <span className="desktop-agent-search-popover__loading" aria-label="索引中">
               <LoaderCircle className="is-spinning" size={13} />
             </span>

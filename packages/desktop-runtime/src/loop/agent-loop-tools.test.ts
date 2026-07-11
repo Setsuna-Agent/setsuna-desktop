@@ -84,6 +84,10 @@ describe('agent loop tools', () => {
       role: 'system',
       content: expect.stringContaining('Inspect the project and finish the requested change'),
     }));
+    expect(modelClient.requests[0].messages).toContainEqual(expect.objectContaining({
+      role: 'user',
+      content: 'Continue goal: Inspect the project and finish the requested change',
+    }));
     expect(saved?.messages.some((message) => message.role === 'user')).toBe(false);
     expect(saved?.messages.filter((message) => message.role === 'assistant').map((message) => message.content)).toEqual(expect.arrayContaining([
       'First goal chunk complete.',

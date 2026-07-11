@@ -1,5 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+export { SelectField } from './SelectField.js';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -35,14 +36,6 @@ export function TextField({ className = '', ...props }: InputHTMLAttributes<HTML
 
 export function TextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={`sd-textarea ${className}`} {...props} />;
-}
-
-export function SelectField({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select className={`sd-field sd-select ${className}`} {...props}>
-      {children}
-    </select>
-  );
 }
 
 export function Panel({ title, meta, actions, children, className = '' }: { title: string; meta?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {

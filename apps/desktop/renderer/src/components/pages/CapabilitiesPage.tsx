@@ -119,7 +119,6 @@ export function CapabilitiesPage({
   onCallMcpTool,
   onListMcpServerStatuses,
   onReadMcpResource,
-  onSetSkillExtraRoots,
 }: {
   skills: RuntimeSkillSummary[];
   selectedSkillCount: number;
@@ -145,7 +144,6 @@ export function CapabilitiesPage({
   onCallMcpTool: (server: string, tool: string, args?: unknown) => Promise<RuntimeMcpToolCallResult>;
   onListMcpServerStatuses: () => Promise<RuntimeMcpServerStatusList>;
   onReadMcpResource: (server: string, uri: string) => Promise<RuntimeMcpResourceReadResult>;
-  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
@@ -166,9 +164,6 @@ export function CapabilitiesPage({
   const [skillDetailLoading, setSkillDetailLoading] = useState(false);
   const [skillDetailError, setSkillDetailError] = useState<string | null>(null);
   const [skillSaving, setSkillSaving] = useState(false);
-  const [skillExtraRootsDraft, setSkillExtraRootsDraft] = useState('');
-  const [skillExtraRootsSaving, setSkillExtraRootsSaving] = useState(false);
-  const [skillExtraRootsError, setSkillExtraRootsError] = useState('');
   const servers = mcpState?.servers ?? [];
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
@@ -454,7 +449,7 @@ export function CapabilitiesPage({
               <McpFormField className="desktop-capabilities-hook-form__full" label="触发时机">
                 <SelectField
                   value={hookDraft.eventName}
-                  onChange={(event) => setHookDraftField(setHookDraft, 'eventName', event.currentTarget.value as RuntimeHookEventName)}
+                  onValueChange={(nextValue) => setHookDraftField(setHookDraft, 'eventName', nextValue as RuntimeHookEventName)}
                 >
                   {hookEventOptions.map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
@@ -648,30 +643,6 @@ export function CapabilitiesPage({
           </span>
         </div>
 
-        {capabilityFilter === 'skills' ? (
-          <div className="desktop-capabilities-extra-roots">
-            <div>
-              <strong>额外 Skill 目录</strong>
-              <span>每行一个绝对路径；应用到当前 runtime 会话并立即刷新 Skill 列表。</span>
-            </div>
-            <TextArea rows={3} value={skillExtraRootsDraft} placeholder="/absolute/path/to/skills" onChange={(event) => setSkillExtraRootsDraft(event.currentTarget.value)} />
-            <Button
-              icon={skillExtraRootsSaving ? <Loader2 className="is-spinning" size={14} /> : <Save size={14} />}
-              disabled={skillExtraRootsSaving}
-              onClick={() => {
-                const roots = splitList(skillExtraRootsDraft);
-                setSkillExtraRootsSaving(true);
-                setSkillExtraRootsError('');
-                void onSetSkillExtraRoots(roots)
-                  .then(onRefresh)
-                  .catch((unknownError) => setSkillExtraRootsError(unknownError instanceof Error ? unknownError.message : String(unknownError)))
-                  .finally(() => setSkillExtraRootsSaving(false));
-              }}
-            >应用目录</Button>
-            {skillExtraRootsError ? <span className="desktop-capabilities-extra-roots__error">{skillExtraRootsError}</span> : null}
-          </div>
-        ) : null}
-
         <div className="desktop-capabilities-grid">
           {capabilityFilter === 'hooks'
             ? visibleHookPresets.map((preset) => (
@@ -745,7 +716,7 @@ export function CapabilitiesPage({
                       <SelectField
                         value={server.requireApproval}
                         disabled={server.readOnly}
-                        onChange={(event) => void onUpdateMcpServer(server, { requireApproval: event.currentTarget.value as RuntimeMcpRequireApproval })}
+                        onValueChange={(nextValue) => void onUpdateMcpServer(server, { requireApproval: nextValue as RuntimeMcpRequireApproval })}
                       >
                         <option value="auto">自动判断</option>
                         <option value="prompt">每次确认</option>
@@ -998,7 +969,7 @@ function CapabilitiesMcpDiagnostics({
         </section>
         <section>
           <header><Play size={14} /><strong>测试工具调用</strong><span>{tools.length}</span></header>
-          <SelectField value={toolName} onChange={(event) => setToolName(event.currentTarget.value)}>
+          <SelectField value={toolName} onValueChange={setToolName}>
             <option value="">选择工具</option>
             {tools.map((tool) => <option key={tool.name} value={tool.name}>{tool.name}</option>)}
           </SelectField>
@@ -1122,7 +1093,7 @@ function CapabilitiesMcpEditor({
         <McpFormField label="传输方式">
           <SelectField
             value={draft.transport}
-            onChange={(event) => setDraftField(setDraft, 'transport', event.currentTarget.value as RuntimeMcpTransport)}
+            onValueChange={(nextValue) => setDraftField(setDraft, 'transport', nextValue as RuntimeMcpTransport)}
           >
             <option value="stdio">stdio</option>
             <option value="streamableHttp">streamable HTTP</option>
@@ -1131,7 +1102,7 @@ function CapabilitiesMcpEditor({
         <McpFormField label="授权策略" help="自动判断会根据 MCP 工具注解判断；每次确认会在每次调用前请求确认；无需确认会直接调用。">
           <SelectField
             value={draft.requireApproval}
-            onChange={(event) => setDraftField(setDraft, 'requireApproval', event.currentTarget.value as RuntimeMcpRequireApproval)}
+            onValueChange={(nextValue) => setDraftField(setDraft, 'requireApproval', nextValue as RuntimeMcpRequireApproval)}
           >
             <option value="auto">自动判断</option>
             <option value="prompt">每次确认</option>
