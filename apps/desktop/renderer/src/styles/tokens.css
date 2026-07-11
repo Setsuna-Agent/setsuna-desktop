@@ -10,7 +10,7 @@
   --app-scaled-viewport-height: calc(var(--app-visual-viewport-height, 100dvh) / var(--app-page-scale));
   --app-bg: #ffffff;
   --app-window-bg: #fafafa;
-  --app-sidebar-bg: #fafafa;
+  --app-sidebar-bg: #f7f7f7;
   --app-sidebar-text: #404040;
   --app-sidebar-text-secondary: #737373;
   --app-surface: #ffffff;
@@ -39,6 +39,7 @@
   --app-radius-md: 8px;
   --app-radius-lg: 10px;
   --app-topbar-height: 42px;
+  --app-topbar-collapsed-sidebar-width: 164px;
   --desktop-workspace-toolbar-height: 42px;
   --app-titlebar-bg: var(--app-sidebar-bg);
   --app-titlebar-text: var(--app-sidebar-text-secondary);
@@ -62,6 +63,7 @@
   --desktop-agent-sidebar-active-bg: #ffffff;
   --desktop-agent-sidebar-active-text: #111111;
   --desktop-agent-sidebar-active-shadow: none;
+  --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 72%, transparent);
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
@@ -161,6 +163,7 @@
   --desktop-agent-sidebar-hover-bg: #171717;
   --desktop-agent-sidebar-active-bg: #111111;
   --desktop-agent-sidebar-active-text: #fafafa;
+  --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 68%, transparent);
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));

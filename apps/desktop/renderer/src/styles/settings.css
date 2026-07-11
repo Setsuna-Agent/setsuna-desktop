@@ -24,7 +24,7 @@
   min-width: 0;
   min-height: 0;
   padding: 12px 12px 20px;
-  border-right: 1px solid color-mix(in srgb, var(--app-border) 62%, transparent);
+  border-right: 1px solid var(--desktop-agent-sidebar-edge);
   background: color-mix(in srgb, var(--app-sidebar-bg) 86%, var(--app-bg) 14%);
 }
 

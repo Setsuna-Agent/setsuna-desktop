@@ -53,14 +53,20 @@ export function useDesktopAppController() {
 
   const workspacePanels = useDesktopWorkspacePanels({ activeProject: activeWorkspace, activeView, setError });
   const {
+    bottomActivePanel,
     bottomPanelVisible,
     closeWorkspaceMenus,
     openFilePanel,
     panelLauncherMenuOpen,
     resetPanelSlots,
+    sideActivePanel,
     sidePanelVisible,
     workspaceAppMenuOpen,
   } = workspacePanels;
+  // Settings covers the whole workbench. Keep the chat panel tracks behind it so
+  // returning does not animate every saved width from zero back to its prior size.
+  const workspacePanelReservesLayout = sidePanelVisible || (activeView === 'settings' && Boolean(sideActivePanel));
+  const bottomPanelReservesLayout = bottomPanelVisible || (activeView === 'settings' && Boolean(bottomActivePanel));
 
   const {
     handleSidebarResizeStep,
@@ -81,13 +87,13 @@ export function useDesktopAppController() {
     workspaceMinWidth,
     workspaceWidth,
   } = useDesktopPanelResize(shellRef, {
-    bottomPanelVisible,
-    workspaceVisible: sidePanelVisible,
+    bottomPanelVisible: bottomPanelReservesLayout,
+    workspaceVisible: workspacePanelReservesLayout,
   });
   const sidebarCanExpand = useDesktopSidebarAutoCollapse({
     shellRef,
     sidebarWidth,
-    workspaceVisible: sidePanelVisible,
+    workspaceVisible: workspacePanelReservesLayout,
     workspaceWidth: workspaceLayoutWidth,
   });
   const sidebarCollapsed = shouldCollapseSidebar({
@@ -95,7 +101,7 @@ export function useDesktopAppController() {
     manuallyCollapsed: sidebarManuallyCollapsed,
     manuallyExpanded: sidebarManuallyExpanded,
   });
-  const sidebarReservesLayout = activeView !== 'settings' && !sidebarCollapsed;
+  const sidebarReservesLayout = !sidebarCollapsed;
   const setSidebarCollapsed = useCallback((value: SetStateAction<boolean>) => {
     const nextCollapsed = typeof value === 'function' ? value(sidebarCollapsed) : value;
     if (nextCollapsed) {
@@ -178,11 +184,11 @@ export function useDesktopAppController() {
 
   const shellStyle = {
     '--app-sidebar-width': sidebarReservesLayout ? `${sidebarWidth}px` : '0px',
-    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarReservesLayout ? `${sidebarWidth}px` : '150px',
+    '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarReservesLayout ? `${sidebarWidth}px` : 'var(--app-topbar-collapsed-sidebar-width)',
     '--desktop-agent-sidebar-visual-width': `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
-    '--desktop-agent-workspace-width': sidePanelVisible ? `${workspaceLayoutWidth}px` : '0px',
-    '--app-bottom-panel-height': bottomPanelVisible ? `${terminalHeight}px` : '0px',
+    '--desktop-agent-workspace-width': workspacePanelReservesLayout ? `${workspaceLayoutWidth}px` : '0px',
+    '--app-bottom-panel-height': bottomPanelReservesLayout ? `${terminalHeight}px` : '0px',
   } as CSSProperties;
 
   const shellClassName = [
@@ -232,6 +238,7 @@ export function useDesktopAppController() {
     threadsByProjectId,
     toolbarTitle,
     updater,
+    workspacePanelReservesLayout,
     workspaceMaxWidth,
     workspaceMinWidth,
     workspacePanels,

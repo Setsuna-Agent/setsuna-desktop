@@ -47,6 +47,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     toolbarTitle,
     workspaceMaxWidth,
     workspaceMinWidth,
+    workspacePanelReservesLayout,
     workspaceWidth,
     workspacePanels,
   } = controller;
@@ -66,7 +67,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   return (
     <ShellFrame
       rootRef={shellRef}
-      inspectorOpen={workspacePanels.sidePanelVisible}
+      inspectorOpen={workspacePanelReservesLayout}
       style={shellStyle}
       sidebarCollapsed={sidebarCollapsed}
       onToggleSidebar={handleToggleSidebar}
