@@ -33,6 +33,7 @@ import type {
   DesktopWorkspaceApp,
 } from '../workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../workspace/runtimeReviewSummary.js';
+import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 
@@ -42,6 +43,7 @@ export function AppChatSurface({
   bottomActivePanel,
   bottomPanelSlot,
   bottomPanelVisible,
+  browserOpenRequest,
   canClearContext,
   config,
   contextCompacting,
@@ -116,6 +118,7 @@ export function AppChatSurface({
   bottomActivePanel?: DesktopPanelTab | null;
   bottomPanelSlot: DesktopPanelSlotState;
   bottomPanelVisible: boolean;
+  browserOpenRequest: BrowserOpenRequest | null;
   canClearContext: boolean;
   config: RuntimeConfigState | null;
   contextCompacting: boolean;
@@ -260,6 +263,7 @@ export function AppChatSurface({
         <BrowserPanel
           hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
           key={panel.id}
+          openRequest={browserOpenRequest}
           onResizeStep={onWorkspaceResizeStep}
           onResizeStart={onWorkspaceResizeStart}
           resizeMax={workspaceMaxWidth}

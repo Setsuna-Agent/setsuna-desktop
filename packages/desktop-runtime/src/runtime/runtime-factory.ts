@@ -13,6 +13,7 @@ import { ConfiguredModelClient } from '../adapters/model/configured-model-client
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
+import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host.js';
 import { McpRuntimeToolHost } from '../adapters/tool/mcp-runtime-tool-host.js';
@@ -60,6 +61,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
+    new BrowserToolHost(),
     new McpManagementToolHost(mcpStore),
     new McpRuntimeToolHost(mcpStore),
     new PcLocalToolHost(workspaceProjects, policyAmendmentStore),

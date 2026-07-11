@@ -12,6 +12,11 @@ describe('runtime factory tool wiring', () => {
 
     const tools = await runtime.toolHost.listTools(context);
     expect(tools.filter((tool) => tool.name === 'configure_skill')).toHaveLength(1);
+    expect(tools.filter((tool) => tool.name === 'open_browser')).toHaveLength(1);
+
+    await expect(runtime.toolHost.runTool('open_browser', { url: 'https://www.baidu.com' }, context)).resolves.toMatchObject({
+      data: { kind: 'browser.open', url: 'https://www.baidu.com/' },
+    });
 
     const created = await runtime.toolHost.runTool('configure_skill', {
       name: 'Factory Skill',

@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { CapabilitiesPage } from '../pages/CapabilitiesPage.js';
 import { SettingsPage } from '../pages/SettingsPage.js';
@@ -9,6 +9,7 @@ import type { DesktopWorkspacePanelsState } from '../../hooks/useDesktopWorkspac
 import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../hooks/useRuntimeClientState.js';
 import type { ChatSkillSelectionRequest, MainView } from '../../types/app.js';
+import { latestBrowserOpenRequest, type BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
 export function AppRouteContent({
   activeProject,
@@ -63,6 +64,20 @@ export function AppRouteContent({
 }) {
   const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
   const [reviewFocusRequest, setReviewFocusRequest] = useState<{ path: string; version: number } | null>(null);
+  const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
+  const handledBrowserOpenRequestIdRef = useRef<string | null>(null);
+  const pendingBrowserOpenRequest = useMemo(
+    () => latestBrowserOpenRequest(runtime.activityEvents),
+    [runtime.activityEvents],
+  );
+  const { openDesktopPanel } = workspacePanels;
+
+  useEffect(() => {
+    if (!pendingBrowserOpenRequest || handledBrowserOpenRequestIdRef.current === pendingBrowserOpenRequest.id) return;
+    handledBrowserOpenRequestIdRef.current = pendingBrowserOpenRequest.id;
+    setBrowserOpenRequest(pendingBrowserOpenRequest);
+    openDesktopPanel('side', 'browser');
+  }, [openDesktopPanel, pendingBrowserOpenRequest]);
   const openFileReviewPanel = (filePath?: string) => {
     if (!activeProject) return;
     const normalizedFilePath = filePath?.trim();
@@ -151,6 +166,7 @@ export function AppRouteContent({
       bottomActivePanel={workspacePanels.bottomActivePanel}
       bottomPanelSlot={workspacePanels.bottomPanelSlot}
       bottomPanelVisible={workspacePanels.bottomPanelVisible}
+      browserOpenRequest={browserOpenRequest}
       canClearContext={Boolean(runtime.currentThread?.messages.length)}
       config={runtime.config}
       contextCompacting={runtime.contextCompacting}

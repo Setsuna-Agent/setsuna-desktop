@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerE
 import { ArrowLeft, ArrowRight, ExternalLink, Globe2, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
 import type { DidFailLoadEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
+import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
 const browserHomeUrl = 'https://www.bing.com/';
 const browserPartition = 'persist:setsuna-desktop-browser';
@@ -23,6 +24,7 @@ type BrowserTab = {
 
 export function BrowserPanel({
   hidden,
+  openRequest,
   onResizeStep,
   onResizeStart,
   resizeMax,
@@ -30,15 +32,17 @@ export function BrowserPanel({
   resizeValue,
 }: {
   hidden: boolean;
+  openRequest?: BrowserOpenRequest | null;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   resizeMax: number;
   resizeMin: number;
   resizeValue: number;
 }) {
-  const tabSequenceRef = useRef(0);
+  const tabSequenceRef = useRef(1);
+  const handledOpenRequestIdRef = useRef(openRequest?.id ?? null);
   const webviewsRef = useRef<Map<string, WebviewTag>>(new Map());
-  const [tabs, setTabs] = useState<BrowserTab[]>(() => [createBrowserTab(1)]);
+  const [tabs, setTabs] = useState<BrowserTab[]>(() => [createBrowserTab(1, openRequest?.url)]);
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id ?? '');
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
 
@@ -46,19 +50,22 @@ export function BrowserPanel({
     setTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)));
   }, []);
 
-  useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url }) => {
+  const openTab = useCallback((url = browserHomeUrl) => {
     tabSequenceRef.current += 1;
-    const tab = createBrowserTab(tabSequenceRef.current + 1, url);
+    const tab = createBrowserTab(tabSequenceRef.current, url);
     setTabs((current) => [...current, tab]);
     setActiveTabId(tab.id);
-  }), []);
+  }, []);
 
-  const addTab = () => {
-    tabSequenceRef.current += 1;
-    const tab = createBrowserTab(tabSequenceRef.current + 1);
-    setTabs((current) => [...current, tab]);
-    setActiveTabId(tab.id);
-  };
+  useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url }) => openTab(url)), [openTab]);
+
+  useEffect(() => {
+    if (!openRequest || handledOpenRequestIdRef.current === openRequest.id) return;
+    handledOpenRequestIdRef.current = openRequest.id;
+    openTab(openRequest.url);
+  }, [openRequest, openTab]);
+
+  const addTab = () => openTab();
 
   const closeTab = (tabId: string) => {
     setTabs((current) => {
@@ -66,7 +73,7 @@ export function BrowserPanel({
       const remaining = current.filter((tab) => tab.id !== tabId);
       if (!remaining.length) {
         tabSequenceRef.current += 1;
-        const replacement = createBrowserTab(tabSequenceRef.current + 1);
+        const replacement = createBrowserTab(tabSequenceRef.current);
         setActiveTabId(replacement.id);
         return [replacement];
       }

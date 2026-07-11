@@ -34,4 +34,19 @@ describe('BrowserPanel', () => {
 
     expect(html).toContain('allowpopups="true"');
   });
+
+  it('uses an AI browser request as the initial tab URL', () => {
+    const html = renderToStaticMarkup(createElement(BrowserPanel, {
+      hidden: false,
+      openRequest: { id: 'event_1', url: 'https://www.baidu.com/' },
+      onResizeStart: () => undefined,
+      onResizeStep: () => undefined,
+      resizeMax: 960,
+      resizeMin: 320,
+      resizeValue: 640,
+    }));
+
+    expect(html).toContain('src="https://www.baidu.com/"');
+    expect(html).not.toContain('src="https://www.bing.com/"');
+  });
 });
