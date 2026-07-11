@@ -13,6 +13,9 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
+  RuntimeMcpServerStatusList,
+  RuntimeMcpResourceReadResult,
+  RuntimeMcpToolCallResult,
   RuntimeMcpToolList,
   RuntimeConfigInput,
   RuntimeConfigState,
@@ -25,7 +28,10 @@ import type {
   RuntimeSkillInput,
   RuntimeSkillList,
   RuntimeSkillPatch,
+  RuntimeReviewTarget,
   RuntimeThread,
+  RuntimeThreadGoal,
+  RuntimeThreadGoalPatch,
   RuntimeUsageQuery,
   RuntimeUsageResponse,
   SendTurnInput,
@@ -54,6 +60,15 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
 
   // request 是唯一底层出口，所有业务方法只负责拼受控路径和请求体。
   const request = <T = unknown>(input: RuntimeRequestInput): Promise<T> => bridge.request<T>(input);
+  const appServerRequest = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+    const envelope = await request<RuntimeAppServerEnvelope<T>>({
+      path: '/v1/swe/app-server',
+      method: 'POST',
+      body: { id: method, method, params },
+    });
+    if ('error' in envelope) throw new Error(envelope.error.message);
+    return envelope.result;
+  };
 
   return {
     request,
@@ -61,6 +76,8 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       const params = new URLSearchParams();
       if (query.search) params.set('search', query.search);
       if (query.includeArchived) params.set('includeArchived', 'true');
+      if (query.ancestorThreadId) params.set('ancestorThreadId', query.ancestorThreadId);
+      if (query.parentThreadId) params.set('parentThreadId', query.parentThreadId);
       if (query.scope) params.set('scope', query.scope);
       if (query.projectId) params.set('projectId', query.projectId);
       const suffix = params.size ? `?${params}` : '';
@@ -78,6 +95,17 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         method: 'PATCH',
         body: patch,
       });
+    },
+    deleteThread(threadId: string) {
+      return appServerRequest<void>('thread/delete', { threadId });
+    },
+    async setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch) {
+      const result = await appServerRequest<{ goal: RuntimeThreadGoal }>('thread/goal/set', { threadId, ...patch });
+      return result.goal;
+    },
+    async clearThreadGoal(threadId: string) {
+      const result = await appServerRequest<{ cleared: boolean }>('thread/goal/clear', { threadId });
+      return result.cleared;
     },
     updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch) {
       return request<RuntimeThread>({
@@ -139,6 +167,10 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         method: 'POST',
       });
     },
+    async startReview(threadId: string, target: RuntimeReviewTarget) {
+      const result = await appServerRequest<{ turn: { id: string } }>('review/start', { threadId, target });
+      return { accepted: true, turnId: result.turn.id };
+    },
     subscribeEvents(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void) {
       return bridge.startSse(threadId, sinceSeq, onEvent);
     },
@@ -151,18 +183,8 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     fetchProviderModels(input: RuntimeFetchModelsInput) {
       return request<RuntimeAvailableModelsResponse>({ path: '/v1/config/models', method: 'POST', body: input });
     },
-    async listHooks(cwds: string[] = []) {
-      const envelope = await request<RuntimeAppServerEnvelope<RuntimeHookListResponse>>({
-        path: '/v1/swe/app-server',
-        method: 'POST',
-        body: {
-          id: 'hooks/list',
-          method: 'hooks/list',
-          params: { cwds },
-        },
-      });
-      if ('error' in envelope) throw new Error(envelope.error.message);
-      return envelope.result;
+    listHooks(cwds: string[] = []) {
+      return appServerRequest<RuntimeHookListResponse>('hooks/list', { cwds });
     },
     listSkills() {
       return request<RuntimeSkillList>({ path: '/v1/skills' });
@@ -268,6 +290,23 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     deleteMcpServer(key: string) {
       return request<void>({ path: `/v1/mcp/servers/${encodeURIComponent(key)}`, method: 'DELETE' });
+    },
+    listMcpServerStatuses() {
+      return appServerRequest<RuntimeMcpServerStatusList>('mcpServerStatus/list', { detail: 'full' });
+    },
+    readMcpServerResource(threadId: string, server: string, uri: string) {
+      return appServerRequest<RuntimeMcpResourceReadResult>('mcpServer/resource/read', { threadId, server, uri });
+    },
+    callMcpServerTool(threadId: string, server: string, tool: string, args?: unknown) {
+      return appServerRequest<RuntimeMcpToolCallResult>('mcpServer/tool/call', {
+        threadId,
+        server,
+        tool,
+        arguments: args ?? {},
+      });
+    },
+    setSkillExtraRoots(extraRoots: string[]) {
+      return appServerRequest<void>('skills/extraRoots/set', { extraRoots });
     },
     listApprovals() {
       return request<RuntimeApprovalList>({ path: '/v1/approvals' });

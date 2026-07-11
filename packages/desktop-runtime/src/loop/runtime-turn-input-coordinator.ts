@@ -59,7 +59,7 @@ export class RuntimeTurnInputCoordinator {
 
     const active = this.options.turnTasks.activeForThread(threadId);
     if (!active || active.controller.signal.aborted) throw new Error('no active turn to steer');
-    if (active.taskKind !== 'regular') throw new Error(`cannot steer a ${active.taskKind} turn`);
+    if (!turnTaskAcceptsInteractiveInput(active)) throw new Error(`cannot steer a ${active.taskKind} turn`);
     if (active.turnId !== input.expectedTurnId) {
       throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active.turnId}\``);
     }
@@ -217,5 +217,9 @@ export class RuntimeTurnInputCoordinator {
 }
 
 function turnTaskCanReceiveMailbox(task: RuntimeTurnTask): boolean {
-  return task.taskKind === 'regular' && task.acceptingSteers && !task.controller.signal.aborted;
+  return turnTaskAcceptsInteractiveInput(task) && task.acceptingSteers && !task.controller.signal.aborted;
+}
+
+function turnTaskAcceptsInteractiveInput(task: RuntimeTurnTask): boolean {
+  return task.taskKind === 'regular' || task.taskKind === 'goal';
 }

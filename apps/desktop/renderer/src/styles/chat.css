@@ -37,6 +37,48 @@
   padding-top: 0;
 }
 
+.chat-memory-citations {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-muted);
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.chat-memory-citations > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-memory-citations__list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--app-border);
+}
+
+.chat-memory-citations__list > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chat-memory-citations__list code {
+  overflow: hidden;
+  color: var(--app-text);
+  font-family: var(--app-code-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 :root[data-desktop-platform='win32'] .chat-main-conversation--with-bottom-sender,
 :root[data-desktop-platform='linux'] .chat-main-conversation--with-bottom-sender {
   padding-top: var(--app-topbar-height);
@@ -1398,6 +1440,67 @@
 .chat-conversation-overview-panel__divider {
   height: 1px;
   background: var(--app-border);
+}
+
+.chat-conversation-overview-panel__agents {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chat-conversation-overview-panel__agents-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 7px 3px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.chat-conversation-overview-panel__agents-title > span:last-child {
+  min-width: 16px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-conversation-overview-panel__agents > button {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-conversation-overview-panel__agents > button:hover {
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+}
+
+.chat-conversation-overview-panel__agents > button > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-muted);
+}
+
+.chat-conversation-overview-panel__agents > button > span.is-running {
+  background: var(--app-success);
+}
+
+.chat-conversation-overview-panel__agents strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-conversation-overview-panel__plan {

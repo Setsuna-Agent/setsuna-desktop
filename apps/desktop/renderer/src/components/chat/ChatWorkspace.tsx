@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { Bubble } from '@ant-design/x';
-import { ArrowDown, Copy, Pencil, Trash2 } from 'lucide-react';
-import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { ArrowDown, BookOpen, Copy, Pencil, Trash2 } from 'lucide-react';
+import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatTimelineDivider } from './ChatTimelineDivider.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
@@ -17,6 +17,7 @@ import { canFitConversationOverviewPanel, needsConversationOverviewContentShift,
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
+import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
@@ -39,23 +40,29 @@ export function ChatWorkspace({
   draft,
   skillSelectionRequest,
   skills,
+  threadUsage,
+  threads,
   onCancelActiveTurn,
   onApprovalPolicyChange,
   onAnswerApproval,
   onCompactContext,
   onClearContext,
+  onClearThreadGoal,
   onThreadMemoryModeChange,
   onDeleteMessages,
   onDiscardFileChanges,
   onDraftChange,
   onEditUserMessage,
   onOpenFilesPanel,
+  onOpenThread,
   onOpenFileReview,
   onSelectModel,
   onSearchProjectEntries,
   onSend,
   onPlanDecision,
   onReviewRefresh,
+  onSetMultiAgentEnabled,
+  onStartThreadReview,
   onSkillSelectionRequestConsumed,
   reviewLoading = false,
   reviewState = null,
@@ -69,23 +76,29 @@ export function ChatWorkspace({
   draft: string;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   skills: RuntimeSkillSummary[];
+  threadUsage: RuntimeUsageResponse | null;
+  threads: RuntimeThreadSummary[];
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
+  onClearThreadGoal: () => void | Promise<unknown>;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenFilesPanel: () => void;
+  onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReview?: (filePath?: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
+  onStartThreadReview: () => void | Promise<unknown>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   reviewLoading?: boolean;
   reviewState?: DesktopReviewState | null;
@@ -97,7 +110,7 @@ export function ChatWorkspace({
   const requestedReviewProjectRef = useRef<string | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread), [currentThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const conversationOverview = useMemo(() => (activeProject ? conversationOverviewFromMessages(messages) : null), [activeProject, messages]);
+  const conversationOverview = useMemo(() => (currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages]);
   const overviewLayout = useConversationOverviewAutoExpand(conversationRef, contentRef);
   const overviewCanExpand = overviewLayout.canExpand;
   const [overviewManuallyCollapsed, setOverviewManuallyCollapsed] = useState(false);
@@ -336,19 +349,25 @@ export function ChatWorkspace({
       contextCompacting={contextCompactionRunning}
       contextUsage={contextUsage}
       config={config}
+      currentThread={currentThread}
       draft={draft}
       skillSelectionRequest={skillSelectionRequest}
       skills={skills}
+      threadUsage={threadUsage}
+      threads={threads}
       starter={starter}
       threadMemoryMode={currentThread?.memoryMode}
       onCancelActiveTurn={onCancelActiveTurn}
       onApprovalPolicyChange={onApprovalPolicyChange}
       onCompactContext={onCompactContext}
       onClearContext={onClearContext}
+      onClearThreadGoal={onClearThreadGoal}
       onDraftChange={onDraftChange}
       onSelectModel={onSelectModel}
       onSearchProjectEntries={onSearchProjectEntries}
+      onSetMultiAgentEnabled={onSetMultiAgentEnabled}
       onSend={onSend}
+      onStartThreadReview={onStartThreadReview}
       onThreadMemoryModeChange={onThreadMemoryModeChange}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
     />
@@ -448,7 +467,7 @@ export function ChatWorkspace({
             </MarkdownViewportProvider>
           </div>
           <ChatScrollOverlay disabled={showEmptyStarter} scrollRef={scrollRef} scrollSignal={scrollSignal} />
-          {conversationOverview ? (
+          {conversationOverview && currentThread ? (
             <div className="chat-conversation-overview">
               <ConversationOverviewPanel
                 activeProject={activeProject}
@@ -466,9 +485,13 @@ export function ChatWorkspace({
                   setOverviewManuallyCollapsed(false);
                   setOverviewManuallyExpanded(!overviewCanExpand);
                 }}
-                onOpenFiles={onOpenFilesPanel}
+                onOpenFiles={activeProject ? onOpenFilesPanel : undefined}
+                onOpenThread={onOpenThread}
                 onOpenReview={onOpenFileReview}
                 onReviewRefresh={onReviewRefresh}
+                currentThread={currentThread}
+                threadUsage={threadUsage}
+                threads={threads}
               />
             </div>
           ) : null}
@@ -1328,6 +1351,7 @@ function AssistantRunContent({
     if (active || !hasFinalAnswerContent) return null;
     return fileChangeSummaryFromRuns(toolRuns);
   }, [active, hasFinalAnswerContent, toolRuns]);
+  const memoryCitations = useMemo(() => memoryCitationEntriesFromMessages(displaySegments), [displaySegments]);
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
     return active ? (
       <div className="chat-assistant-run">
@@ -1363,7 +1387,27 @@ function AssistantRunContent({
           />
         </div>
       ) : null}
+      {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}
     </div>
+  );
+}
+
+function MemoryCitationCard({ entries }: { entries: NonNullable<RuntimeMessage['memoryCitation']>['entries'] }) {
+  return (
+    <details className="chat-memory-citations">
+      <summary>
+        <BookOpen size={13} />
+        <span>本回答使用了 {entries.length} 条记忆</span>
+      </summary>
+      <div className="chat-memory-citations__list">
+        {entries.map((entry) => (
+          <div key={`${entry.path}:${entry.lineStart}:${entry.lineEnd}`}>
+            <code>{entry.path}:{entry.lineStart}{entry.lineEnd !== entry.lineStart ? `-${entry.lineEnd}` : ''}</code>
+            <span>{entry.note}</span>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 

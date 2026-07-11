@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { LoaderCircle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Archive, LoaderCircle, MoreHorizontal, Pencil } from 'lucide-react';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 
@@ -24,6 +24,9 @@ export function SidebarThreadRow({
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
 }) {
+  // Thread-list snapshots carry runtime-wide activity; the explicit prop remains a fallback
+  // for the currently open thread while its debounced sidebar snapshot is catching up.
+  const isRunning = running || Boolean(thread.activeTurnId);
   const menuTriggerRef = useRef<HTMLSpanElement | null>(null);
   const handleMenuClick = (event: ReactMouseEvent<HTMLSpanElement>) => {
     event.stopPropagation();
@@ -51,17 +54,17 @@ export function SidebarThreadRow({
         <span>重命名</span>
       </button>
       <button type="button" role="menuitem" className="is-danger" onClick={() => onArchive(thread)}>
-        <Trash2 size={13} />
-        <span>删除</span>
+        <Archive size={13} />
+        <span>归档</span>
       </button>
     </SidebarFloatingMenu>
   );
-  const className = ['desktop-agent-session', `desktop-agent-session--${variant}`, selected ? 'is-active' : '', running ? 'is-running' : '']
+  const className = ['desktop-agent-session', `desktop-agent-session--${variant}`, selected ? 'is-active' : '', isRunning ? 'is-running' : '']
     .filter(Boolean)
     .join(' ');
   const meta = (
     <span className="desktop-agent-session__meta">
-      {running ? (
+      {isRunning ? (
         <span className="desktop-agent-session__running" aria-label="对话进行中" title="对话进行中">
           <LoaderCircle className="is-spinning" size={13} />
         </span>

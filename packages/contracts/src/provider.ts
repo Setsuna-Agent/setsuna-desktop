@@ -72,7 +72,7 @@ export type RuntimeModelRequestContextWindow = {
 
 export type RuntimeModelRequestToolRuntime = {
   name: string;
-  source: 'host' | 'router' | 'dynamic' | 'collaboration';
+  source: 'host' | 'router' | 'dynamic' | 'collaboration' | 'goal';
   exposure: 'direct' | 'deferred' | 'hidden';
   supportsParallel: boolean;
   waitsForRuntimeCancellation: boolean;

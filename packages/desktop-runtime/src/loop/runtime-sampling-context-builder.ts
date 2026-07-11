@@ -117,9 +117,10 @@ export class RuntimeSamplingContextBuilder {
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
         })
       : null;
-    const tools = modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, revealedDeferredToolNames);
+    const threadHasGoal = Boolean(thread.goal);
+    const tools = modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, revealedDeferredToolNames, threadHasGoal);
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
-    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig);
+    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, threadHasGoal);
     const skillContext = await this.skillContextMessages(skillIds);
     // Prompt ordering is intentional: durable policy -> temporary capabilities -> current conversation.
     const messages: RuntimeMessage[] = [

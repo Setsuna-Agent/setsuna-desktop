@@ -2,7 +2,9 @@ import type {
   ModelRequest,
   RuntimeMessage,
   RuntimePlanDecision,
+  RuntimeTaskKind,
   RuntimeThread,
+  RuntimeThreadGoal,
   SendTurnInput,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../ports/clock.js';
@@ -27,7 +29,8 @@ export type RuntimeTurnExecutionOptions = {
   planOnly?: boolean;
   publishUserMessage?: boolean;
   review?: { displayText: string };
-  taskKind?: 'regular' | 'review';
+  runtimeContextMessages?: RuntimeMessage[];
+  taskKind?: RuntimeTaskKind;
   userMessage?: RuntimeMessage;
 };
 
@@ -156,6 +159,35 @@ export class RuntimeTurnRunFactory {
           createdAt: this.options.clock.now().toISOString(),
           status: 'complete',
         },
+      },
+    }));
+    return { turnId, done: run.done };
+  }
+
+  async createGoalContinuation(
+    threadId: string,
+    goal: RuntimeThreadGoal,
+    runtimeContextMessages: RuntimeMessage[],
+  ): Promise<{ turnId: string; done: Promise<void> }> {
+    const thread = await this.requireThread(threadId);
+    const turnId = this.options.ids.id('turn_goal');
+    const run = this.options.turnTasks.run({
+      turnId,
+      threadId,
+      taskKind: 'goal',
+      acceptingSteers: true,
+    }, (task) => this.options.runTurn({
+      attachments: [],
+      signal: task.controller.signal,
+      skillIds: [],
+      text: `Continue goal: ${goal.objective}`,
+      thread,
+      threadId,
+      turnId,
+      options: {
+        publishUserMessage: false,
+        runtimeContextMessages,
+        taskKind: 'goal',
       },
     }));
     return { turnId, done: run.done };

@@ -3,7 +3,7 @@ import type { RuntimeModelRequestStepSnapshot, RuntimeModelVerification, Runtime
 import type { RuntimeGitInfo, RuntimeHookRun, RuntimeMessage, RuntimeThreadGoal, RuntimeThreadMemoryMode } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 
-export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'user_shell';
+export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell';
 
 export type RuntimeMailboxDelivery = {
   id: string;

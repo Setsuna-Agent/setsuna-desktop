@@ -1,5 +1,7 @@
 import type { RuntimeToolExecutionContext } from '../ports/tool-host.js';
 import type { ThreadStore } from '../ports/thread-store.js';
+import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
+import { systemClock } from '../ports/clock.js';
 import { describe, expect, it, vi } from 'vitest';
 import { RuntimeCollaborationCoordinator } from './collaboration-coordinator.js';
 
@@ -40,6 +42,40 @@ describe('runtime collaboration coordinator', () => {
     });
     expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
+
+  it('returns the complete child assistant output when wait reaches idle', async () => {
+    const fullOutput = `Research result start.\n${'Detailed evidence. '.repeat(40)}\nResearch result end.`;
+    const coordinator = createCoordinator({
+      threadStore: {
+        getThread: vi.fn(async () => ({
+          id: 'thread_child',
+          title: 'Research child',
+          createdAt: '2026-07-11T00:00:00.000Z',
+          updatedAt: '2026-07-11T00:00:01.000Z',
+          archived: false,
+          messageCount: 1,
+          lastMessagePreview: 'Research result start...',
+          messages: [{
+            id: 'message_child_result',
+            turnId: 'turn_child',
+            role: 'assistant',
+            content: fullOutput,
+            createdAt: '2026-07-11T00:00:01.000Z',
+            status: 'complete',
+          }],
+          turns: [{ id: 'turn_child', items: [], status: 'completed' }],
+          lastSeq: 3,
+        })),
+      } as unknown as ThreadStore,
+      activeTask: () => null,
+    });
+
+    const result = await coordinator.execute('wait', { thread_id: 'thread_child' }, toolContext());
+
+    expect(result.data).toMatchObject({ status: 'idle', output: fullOutput });
+    expect(result.content).toContain('Research result end.');
+    expect(result.content.length).toBeGreaterThan(fullOutput.length);
+  });
 });
 
 function createCoordinator(overrides: Partial<ConstructorParameters<typeof RuntimeCollaborationCoordinator>[0]> = {}): RuntimeCollaborationCoordinator {
@@ -50,6 +86,8 @@ function createCoordinator(overrides: Partial<ConstructorParameters<typeof Runti
     deliverMailbox: async () => ({ turnId: null }),
     startTurn: async () => ({ turnId: 'turn_started' }),
     ...overrides,
+    clock: overrides.clock ?? systemClock,
+    ids: overrides.ids ?? new RandomIdGenerator(),
   });
 }
 

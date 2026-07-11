@@ -53,6 +53,38 @@ export type RuntimeMcpToolList = {
   errors: string[];
 };
 
+export type RuntimeMcpResource = {
+  uri: string;
+  name?: string;
+  description?: string;
+  mimeType?: string;
+  [key: string]: unknown;
+};
+
+export type RuntimeMcpResourceTemplate = {
+  uriTemplate: string;
+  name?: string;
+  description?: string;
+  mimeType?: string;
+  [key: string]: unknown;
+};
+
+export type RuntimeMcpServerStatus = {
+  name: string;
+  authStatus: RuntimeMcpAuthStatus;
+  resources: RuntimeMcpResource[];
+  resourceTemplates: RuntimeMcpResourceTemplate[];
+  tools: Record<string, RuntimeMcpToolInfo>;
+};
+
+export type RuntimeMcpServerStatusList = {
+  data: RuntimeMcpServerStatus[];
+  nextCursor: string | null;
+};
+
+export type RuntimeMcpResourceReadResult = Record<string, unknown>;
+export type RuntimeMcpToolCallResult = Record<string, unknown>;
+
 export type RuntimeMcpServerInput = {
   key: string;
   label?: string;

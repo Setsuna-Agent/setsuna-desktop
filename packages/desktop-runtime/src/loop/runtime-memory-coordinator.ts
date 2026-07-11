@@ -47,6 +47,7 @@ const MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS = 3_600;
 const HOURS_TO_MS = 60 * 60 * 1000;
 const DAYS_TO_MS = 24 * HOURS_TO_MS;
 const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
+const SHARED_MEMORY_FILES_FEATURE = 'memory_unscoped_files';
 
 type PassiveMemoryStage1Result = {
   status: RuntimeMemoryStage1Status;
@@ -186,9 +187,14 @@ export class RuntimeMemoryCoordinator {
     if (!canUseMemories(config)) return [];
     const memories = await this.options.memoryStore?.listMemories(projectId ? { projectId, limit: 8 } : { scope: 'global', limit: 8 });
     if (!memories?.memories.length) return [];
-    const memorySummary = await this.options.memoryStore?.readMemoryFile({ path: 'memory_summary.md' })
-      .then((file) => truncateMemorySummary(file.content))
-      .catch(() => '');
+    // Phase-2 summary files merge every project. They stay behind an explicit debug flag;
+    // normal global and project threads only receive their structurally filtered records.
+    const allowSharedMemoryFiles = !projectId && config?.features?.[SHARED_MEMORY_FILES_FEATURE] === true;
+    const memorySummary = allowSharedMemoryFiles
+      ? await this.options.memoryStore?.readMemoryFile({ path: 'memory_summary.md' })
+        .then((file) => truncateMemorySummary(file.content))
+        .catch(() => '')
+      : '';
     // 只取少量高相关 memory 注入系统消息，避免长期记忆把用户当前上下文挤出窗口。
     return [{
       id: 'memory_context',
@@ -198,7 +204,7 @@ export class RuntimeMemoryCoordinator {
         ...memories.memories.map(memoryContextItem),
         '</memory_context>',
         '',
-        ...memoryReadPathInstructions(memorySummary),
+        ...memoryReadPathInstructions(memorySummary, projectId, allowSharedMemoryFiles),
       ].join('\n'),
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
@@ -436,7 +442,20 @@ function threadAllowsMemoryGeneration(thread: RuntimeThread): boolean {
   return (thread.memoryMode ?? 'enabled') === 'enabled';
 }
 
-function memoryReadPathInstructions(memorySummary: string | undefined): string[] {
+function memoryReadPathInstructions(memorySummary: string | undefined, projectId: string | undefined, allowSharedMemoryFiles: boolean): string[] {
+  if (!allowSharedMemoryFiles) {
+    return [
+      '## Memory scope',
+      '',
+      projectId
+        ? `The memory entries above are strictly limited to global memories and the current project (${projectId}).`
+        : 'The memory entries above are strictly limited to global memories.',
+      projectId
+        ? 'Never use or infer project-specific memory from another project. Use recall_memory for additional scoped retrieval when it is available.'
+        : 'Never use or infer project-specific memory in a global thread. Use recall_memory for additional global retrieval when it is available.',
+      ...memoryCitationInstructions(),
+    ];
+  }
   return [
     '## Memory',
     '',
@@ -454,6 +473,17 @@ function memoryReadPathInstructions(memorySummary: string | undefined): string[]
     '3. Open the most relevant rollout_summaries entries only when MEMORY.md points to them or exact evidence is needed.',
     '4. Keep the pass lightweight; stop if no relevant hits appear.',
     '',
+    ...memoryCitationInstructions(),
+    '',
+    '========= MEMORY_SUMMARY BEGINS =========',
+    memorySummary?.trim() || 'No memory summary available.',
+    '========= MEMORY_SUMMARY ENDS =========',
+  ];
+}
+
+function memoryCitationInstructions(): string[] {
+  return [
+    '',
     'If the final assistant answer relies on memory content, append exactly one hidden citation block as the very last content using this structure:',
     '<oai-mem-citation>',
     '<citation_entries>',
@@ -465,10 +495,6 @@ function memoryReadPathInstructions(memorySummary: string | undefined): string[]
     '</rollout_ids>',
     '</oai-mem-citation>',
     'The hidden citation block is for the runtime only; do not mention it in the visible answer.',
-    '',
-    '========= MEMORY_SUMMARY BEGINS =========',
-    memorySummary?.trim() || 'No memory summary available.',
-    '========= MEMORY_SUMMARY ENDS =========',
   ];
 }
 
@@ -488,6 +514,7 @@ function memoryContextItem(memory: RuntimeMemoryRecord): string {
     attributes.push(`source="${escapeSkillAttribute(memorySourceLocationText(memory.sourceLocation))}"`);
     attributes.push(`source_note="${escapeSkillAttribute(memory.sourceLocation.note)}"`);
   }
+  if (memory.projectId) attributes.push(`project_id="${escapeSkillAttribute(memory.projectId)}"`);
   return `<memory ${attributes.join(' ')}>${neutralizeMemoryTags(memory.content)}</memory>`;
 }
 

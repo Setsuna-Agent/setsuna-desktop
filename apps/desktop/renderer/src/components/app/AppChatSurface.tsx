@@ -1,11 +1,14 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import type {
   AnswerRuntimeApprovalInput,
+  RuntimeCollaborationMode,
   RuntimeThread,
   RuntimeConfigState,
   RuntimePlanDecision,
   RuntimeSkillSummary,
   RuntimeThreadMemoryMode,
+  RuntimeThreadSummary,
+  RuntimeUsageResponse,
   WorkspaceEntry,
   WorkspaceEntrySearchItem,
   WorkspaceFileRead,
@@ -49,6 +52,8 @@ export function AppChatSurface({
   reviewState,
   selectedWorkspaceApp,
   skills,
+  threadUsage,
+  threads,
   sideActivePanel,
   sidePanelVisible,
   terminalSessionsByPanelId,
@@ -59,6 +64,7 @@ export function AppChatSurface({
   onAnswerApproval,
   onCompactContext,
   onClearContext,
+  onClearThreadGoal,
   onThreadMemoryModeChange,
   onDeleteMessages,
   onDiscardFileChanges,
@@ -73,12 +79,15 @@ export function AppChatSurface({
   onOpenBottomReviewPanel,
   onOpenBottomTerminalPanel,
   onOpenFilesPanel,
+  onOpenThread,
   onOpenFileReviewPanel,
   onOpenSideTerminalPanel,
   onOpenEntry,
   onOpenProjectFile,
   onReorderBottomPanels,
   onReviewRefresh,
+  onSetMultiAgentEnabled,
+  onStartThreadReview,
   onSend,
   onPlanDecision,
   onSkillSelectionRequestConsumed,
@@ -111,6 +120,8 @@ export function AppChatSurface({
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   skills: RuntimeSkillSummary[];
+  threadUsage: RuntimeUsageResponse | null;
+  threads: RuntimeThreadSummary[];
   sideActivePanel?: DesktopPanelTab | null;
   sidePanelVisible: boolean;
   terminalSessionsByPanelId: Record<string, DesktopTerminalSession>;
@@ -121,6 +132,7 @@ export function AppChatSurface({
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
+  onClearThreadGoal: () => void | Promise<unknown>;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
@@ -135,13 +147,16 @@ export function AppChatSurface({
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
   onOpenFilesPanel: () => void;
+  onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReviewPanel?: (filePath?: string) => void;
   onOpenSideTerminalPanel: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
-  onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; skillIds?: string[] }) => void;
+  onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
+  onStartThreadReview: () => void | Promise<unknown>;
+  onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
@@ -175,23 +190,29 @@ export function AppChatSurface({
           reviewState={reviewState}
           skillSelectionRequest={skillSelectionRequest}
           skills={skills}
+          threadUsage={threadUsage}
+          threads={threads}
           onCancelActiveTurn={onCancelActiveTurn}
           onApprovalPolicyChange={onApprovalPolicyChange}
           onAnswerApproval={onAnswerApproval}
           onCompactContext={onCompactContext}
           onClearContext={onClearContext}
+          onClearThreadGoal={onClearThreadGoal}
           onThreadMemoryModeChange={onThreadMemoryModeChange}
           onDeleteMessages={onDeleteMessages}
           onDiscardFileChanges={onDiscardFileChanges}
           onDraftChange={onDraftChange}
           onEditUserMessage={onEditUserMessage}
           onOpenFilesPanel={onOpenFilesPanel}
+          onOpenThread={onOpenThread}
           onOpenFileReview={onOpenFileReviewPanel}
           onSelectModel={onSelectModel}
           onSearchProjectEntries={onSearchProjectEntries}
           onSend={onSend}
           onPlanDecision={onPlanDecision}
           onReviewRefresh={onReviewRefresh}
+          onSetMultiAgentEnabled={onSetMultiAgentEnabled}
+          onStartThreadReview={onStartThreadReview}
           onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
         />
       </MarkdownNavigationProvider>

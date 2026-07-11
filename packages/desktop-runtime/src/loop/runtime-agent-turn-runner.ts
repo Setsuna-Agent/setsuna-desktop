@@ -23,9 +23,11 @@ import type { RuntimeTurnInputCoordinator } from './runtime-turn-input-coordinat
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';
 import type { RuntimeTurnTaskRegistry } from './turn-task-registry.js';
 import type { RuntimeTurnTerminationCoordinator } from './runtime-turn-termination-coordinator.js';
+import type { RuntimeCollaborationCoordinator } from './collaboration-coordinator.js';
 
 type RuntimeAgentTurnRunnerOptions = {
   clock: Clock;
+  collaborationCoordinator: Pick<RuntimeCollaborationCoordinator, 'collectPendingChildren' | 'pendingChildren'>;
   configStore?: ConfigStore;
   contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
   hooks: Pick<RuntimeHookCoordinator, 'planModeContextMessages' | 'runStopHooks' | 'runTurnStartHooks' | 'stopContinuationMessages'>;
@@ -58,6 +60,7 @@ type RuntimeAgentTurnRunnerOptions = {
 };
 
 const INSPECTION_PROGRESS_NOTE = '我先查看项目结构和第一批关键文件，读完后再继续收敛。\n\n';
+const COLLABORATION_WAIT_NOTE = '\n\n子线程仍在执行；主任务会继续等待，收到调研结果后再统一收口。';
 
 export class RuntimeAgentTurnRunner {
   constructor(private readonly options: RuntimeAgentTurnRunnerOptions) {}
@@ -143,6 +146,7 @@ export class RuntimeAgentTurnRunner {
       return;
     }
     const additionalContextMessages = [
+      ...(options.runtimeContextMessages ?? []),
       ...turnStartHooks.contextMessages,
       ...(planOnly ? this.options.hooks.planModeContextMessages(turnId) : []),
     ];
@@ -279,6 +283,26 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
+        const pendingChildren = this.options.collaborationCoordinator.pendingChildren(threadId);
+        if (pendingChildren.total > 0) {
+          if (pendingChildren.active > 0) {
+            roundText += COLLABORATION_WAIT_NOTE;
+            await this.options.publishAssistantDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
+          }
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { memoryCitation: roundMemoryCitation });
+          activeAssistantMessageId = null;
+          conversationMessages.push({
+            ...assistantMessage,
+            content: roundText,
+            memoryCitation: roundMemoryCitation,
+            status: 'complete',
+          });
+          // Runtime-enforced join: a parent collaboration turn cannot complete while spawned children are outstanding.
+          conversationMessages.push(...await this.options.collaborationCoordinator.collectPendingChildren(threadId, turnId, signal));
+          usage = undefined;
+          continue;
+        }
+
         const stopHookOutcome = await this.options.hooks.runStopHooks({
           context: stepContext.toolContext,
           lastAssistantMessage: roundText,
@@ -307,7 +331,7 @@ export class RuntimeAgentTurnRunner {
           messageId: assistantMessageId,
           usage,
           finalization: {
-            explicitMemory: {
+            explicitMemory: taskKind === 'goal' ? undefined : {
               alreadySaved: memorySavedByTool,
               config: runtimeConfig,
               projectId: thread.projectId,
@@ -381,7 +405,7 @@ export class RuntimeAgentTurnRunner {
           messageId: assistantMessageId,
           usage,
           finalization: {
-            explicitMemory: {
+            explicitMemory: taskKind === 'goal' ? undefined : {
               alreadySaved: memorySavedByTool,
               config: runtimeConfig,
               projectId: thread.projectId,

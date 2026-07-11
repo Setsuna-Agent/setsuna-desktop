@@ -104,7 +104,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       <AppSidebarSurface
         activeProjectId={activeProjectId}
         activeThreadId={runtime.currentThread?.id}
-        runningThreadId={runtime.activeTurnId ? runtime.currentThread?.id ?? null : null}
+        runningThreadId={(runtime.activeTurnId || runtime.currentThread?.activeTurnId) ? runtime.currentThread?.id ?? null : null}
         activeView={activeView}
         globalThreads={globalThreads}
         navigation={navigation}
@@ -135,6 +135,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         updater={controller.updater}
         workspacePanels={workspacePanels}
         onSelectSkillForChat={selectSkillForChat}
+        onSelectThread={navigation.selectThread}
         onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
         onTerminalResizeStart={handleTerminalResizeStart}
         onTerminalResizeStep={handleTerminalResizeStep}

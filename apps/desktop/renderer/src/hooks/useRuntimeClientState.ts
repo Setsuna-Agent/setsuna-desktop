@@ -17,6 +17,7 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpToolList,
+  RuntimeReviewTarget,
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillSummary,
@@ -50,12 +51,14 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [error, setError] = useState<string | null>(null);
   const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
+  const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
   const [config, setConfig] = useState<RuntimeConfigState | null>(null);
   const [contextCompacting, setContextCompacting] = useState(false);
   const [approvals, setApprovals] = useState<RuntimeApprovalRequest[]>([]);
   const [activityEvents, setActivityEvents] = useState<RuntimeEvent[]>([]);
   const [usage, setUsage] = useState<RuntimeUsageResponse | null>(null);
+  const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
   const [memories, setMemories] = useState<RuntimeMemoryRecord[]>([]);
   const [memoryPreview, setMemoryPreview] = useState<RuntimeMemoryPreview | null>(null);
   const [memoryPreviewLoading, setMemoryPreviewLoading] = useState(false);
@@ -73,6 +76,8 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadId = currentThread?.id ?? null;
   const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
+  const hasRunningThreadSummary = threads.some((thread) => Boolean(thread.activeTurnId))
+    || archivedThreads.some((thread) => Boolean(thread.activeTurnId));
   const activeProject = activeProjectId ? projects.find((project) => project.id === activeProjectId) ?? null : null;
   const activeHookCwds = useMemo(() => (activeProject?.path ? [activeProject.path] : []), [activeProject?.path]);
   currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
@@ -80,9 +85,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const refresh = useCallback(async () => {
     setError(null);
     // 首屏需要多个 runtime 域的数据；并行拉取能避免设置页/侧栏/对话区分批闪烁。
-    const [nextConfig, threadList, skillList, mcpList, hookList, projectList, usageSummary, memoryList, approvalList] = await Promise.all([
+    const [nextConfig, threadList, allThreadList, skillList, mcpList, hookList, projectList, usageSummary, memoryList, approvalList] = await Promise.all([
       client.getConfig(),
       client.listThreads(),
+      client.listThreads({ includeArchived: true }),
       client.listSkills(),
       client.listMcpServers(),
       client.listHooks(activeHookCwds),
@@ -93,6 +99,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     ]);
     setConfig(nextConfig);
     setThreads(threadList.threads);
+    setArchivedThreads(allThreadList.threads.filter((thread) => thread.archived));
     setSkills(skillList.skills);
     setMcpState(mcpList);
     setHookState(hookList);
@@ -138,6 +145,36 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
         .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
     }, 120);
   }, [client]);
+
+  useEffect(() => {
+    if (!effectiveActiveTurnId && !hasRunningThreadSummary) return undefined;
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    const pollThreadSummaries = async () => {
+      try {
+        const [visible, all] = await Promise.all([
+          client.listThreads(),
+          client.listThreads({ includeArchived: true }),
+        ]);
+        if (cancelled) return;
+        setThreads(visible.threads);
+        setArchivedThreads(all.threads.filter((thread) => thread.archived));
+        const stillRunning = visible.threads.some((thread) => Boolean(thread.activeTurnId))
+          || all.threads.some((thread) => Boolean(thread.activeTurnId));
+        if (stillRunning || effectiveActiveTurnId) timeoutId = window.setTimeout(pollThreadSummaries, 1000);
+      } catch (unknownError) {
+        if (!cancelled) {
+          setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+          timeoutId = window.setTimeout(pollThreadSummaries, 1000);
+        }
+      }
+    };
+    timeoutId = window.setTimeout(pollThreadSummaries, 250);
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [client, effectiveActiveTurnId, hasRunningThreadSummary]);
 
   const refreshCapabilities = useCallback(() => {
     void Promise.all([client.listSkills(), client.listMcpServers(), client.listHooks(activeHookCwds)])
@@ -190,6 +227,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       if (event.type === 'turn.completed') {
         refreshCapabilities();
         if (event.payload.usage) void client.getUsage().then(setUsage);
+        if (event.payload.usage) void client.getUsage({ threadId: event.threadId }).then(setThreadUsage);
       }
       if (event.type === 'approval.requested') {
         setApprovals((items) => [event.payload.approval, ...items.filter((item) => item.id !== event.payload.approval.id)]);
@@ -222,7 +260,8 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [currentThread?.id]);
 
   useEffect(() => {
-    if (!effectiveActiveTurnId || !currentThreadId) return undefined;
+    const recoveringActiveGoal = currentThread?.goal?.status === 'active';
+    if ((!effectiveActiveTurnId && !recoveringActiveGoal) || !currentThreadId) return undefined;
     let cancelled = false;
     let timeoutId: number | undefined;
     const threadId = currentThreadId;
@@ -230,25 +269,34 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
     // polling 校正线程快照和 activeTurnId；runtime 快照里的 activeTurnId 是终态兜底真源。
     const pollThread = async () => {
+      let continuePolling = true;
       try {
         const nextThread = await client.getThread(threadId);
         if (cancelled) return;
         setCurrentThread((thread) => (thread?.id === threadId && nextThread.lastSeq >= thread.lastSeq ? nextThread : thread));
         refreshThreadsSoon();
         const snapshotActiveTurnId = activeTurnIdFromThreadSnapshot(nextThread, terminalTurnIdsRef.current);
-        if (snapshotActiveTurnId === turnId) return;
-        if (!snapshotActiveTurnId) {
+        if (!turnId) {
+          if (snapshotActiveTurnId) {
+            terminalTurnIdsRef.current.delete(snapshotActiveTurnId);
+            setActiveTurnId(snapshotActiveTurnId);
+          } else {
+            continuePolling = nextThread.goal?.status === 'active';
+          }
+        } else if (!snapshotActiveTurnId) {
           terminalTurnIdsRef.current.add(turnId);
           setActiveTurnId((current) => (current === turnId ? null : current));
           refreshCapabilities();
           void client.getUsage().then(setUsage);
-          return;
+          continuePolling = nextThread.goal?.status === 'active';
+        } else if (snapshotActiveTurnId !== turnId) {
+          terminalTurnIdsRef.current.delete(snapshotActiveTurnId);
+          setActiveTurnId(snapshotActiveTurnId);
         }
-        setActiveTurnId(snapshotActiveTurnId);
       } catch (unknownError) {
         if (!cancelled) setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       }
-      if (!cancelled) timeoutId = window.setTimeout(pollThread, 1000);
+      if (!cancelled && continuePolling) timeoutId = window.setTimeout(pollThread, 1000);
     };
 
     timeoutId = window.setTimeout(pollThread, 250);
@@ -256,7 +304,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       cancelled = true;
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
-  }, [effectiveActiveTurnId, client, currentThreadId, refreshCapabilities, refreshThreadsSoon]);
+  }, [effectiveActiveTurnId, client, currentThread?.goal?.status, currentThreadId, refreshCapabilities, refreshThreadsSoon]);
 
   useEffect(() => {
     client
@@ -266,12 +314,27 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [activeProjectId, client]);
 
   useEffect(() => {
+    if (!currentThreadId) {
+      setThreadUsage(null);
+      return;
+    }
+    client
+      .getUsage({ threadId: currentThreadId })
+      .then(setThreadUsage)
+      .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
+  }, [client, currentThreadId]);
+
+  useEffect(() => {
     refreshHooks().catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
   }, [refreshHooks]);
 
   const reloadThreads = useCallback(async () => {
-    const list = await client.listThreads();
+    const [list, allList] = await Promise.all([
+      client.listThreads(),
+      client.listThreads({ includeArchived: true }),
+    ]);
     setThreads(list.threads);
+    setArchivedThreads(allList.threads.filter((thread) => thread.archived));
     return list.threads;
   }, [client]);
 
@@ -298,7 +361,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   );
 
   const saveRuntimePreferences = useCallback(
-    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>) => {
+    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features'>) => {
       const next = await client.saveConfig(input);
       setConfig(next);
       if (Object.hasOwn(input, 'storagePath')) {
@@ -359,6 +422,48 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     },
     [client, currentThread, reloadThreads],
   );
+
+  const clearCurrentThreadGoal = useCallback(async () => {
+    if (!currentThread) return false;
+    const cleared = await client.clearThreadGoal(currentThread.id);
+    if (cleared) setCurrentThread((thread) => {
+      if (thread?.id !== currentThread.id) return thread;
+      const next = { ...thread };
+      delete next.goal;
+      return next;
+    });
+    await reloadThreads();
+    return cleared;
+  }, [client, currentThread, reloadThreads]);
+
+  const restoreArchivedThread = useCallback(async (threadId: string) => {
+    const restored = await client.updateThread(threadId, { archived: false });
+    await reloadThreads();
+    return restored;
+  }, [client, reloadThreads]);
+
+  const permanentlyDeleteThread = useCallback(async (threadId: string) => {
+    await client.deleteThread(threadId);
+    await reloadThreads();
+  }, [client, reloadThreads]);
+
+  const permanentlyDeleteArchivedThreads = useCallback(async (threadIds: string[]) => {
+    const uniqueThreadIds = [...new Set(threadIds)];
+    if (!uniqueThreadIds.length) return;
+
+    const results = await Promise.allSettled(uniqueThreadIds.map((threadId) => client.deleteThread(threadId)));
+    await reloadThreads();
+
+    const failureCount = results.filter((result) => result.status === 'rejected').length;
+    if (failureCount) throw new Error(`${failureCount} 个归档对话删除失败，请重试。`);
+  }, [client, reloadThreads]);
+
+  const startCurrentThreadReview = useCallback(async (target: RuntimeReviewTarget) => {
+    if (!currentThread) return null;
+    const started = await client.startReview(currentThread.id, target);
+    setActiveTurnId(started.turnId);
+    return started;
+  }, [client, currentThread]);
 
   const selectProviderModel = useCallback(
     async (providerId: string, modelId: string) => {
@@ -589,6 +694,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
   return {
     activeTurnId: effectiveActiveTurnId,
+    archivedThreads,
     activityEvents,
     answerApproval,
     approvals,
@@ -597,6 +703,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     compactCurrentThreadContext,
     contextCompacting,
     clearCurrentThreadContext,
+    clearCurrentThreadGoal,
     clearMemories,
     createHook,
     createSkill,
@@ -620,6 +727,9 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     refresh,
     refreshHooks,
     reloadThreads,
+    permanentlyDeleteArchivedThreads,
+    permanentlyDeleteThread,
+    restoreArchivedThread,
     saveMcpServer,
     saveProviders,
     saveRuntimePreferences,
@@ -630,6 +740,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setProjects,
     skills,
     terminalTurnIdsRef,
+    threadUsage,
     threads,
     updateCurrentThreadMemoryMode,
     updateMcpServer,
@@ -638,6 +749,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     updateHookEnabled,
     updateSkill,
     usage,
+    startCurrentThreadReview,
   };
 }
 

@@ -2,14 +2,25 @@ import type { AnswerRuntimeApprovalInput, RuntimeApprovalList } from './approval
 import type { RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeHookListResponse } from './config.js';
 import type { RuntimeEvent } from './events.js';
 import type { CreateRuntimeMemoryInput, RuntimeMemoryList, RuntimeMemoryPreview, RuntimeMemoryQuery } from './memory.js';
-import type { RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerPatch, RuntimeMcpToolList } from './mcp.js';
+import type {
+  RuntimeMcpResourceReadResult,
+  RuntimeMcpServerInput,
+  RuntimeMcpServerList,
+  RuntimeMcpServerPatch,
+  RuntimeMcpServerStatusList,
+  RuntimeMcpToolCallResult,
+  RuntimeMcpToolList,
+} from './mcp.js';
 import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillList, RuntimeSkillPatch } from './skills.js';
 import type {
   CreateThreadInput,
   MessageDeleteInput,
   MessagePatch,
   RegenerateMessageInput,
+  RuntimeReviewTarget,
   RuntimeThread,
+  RuntimeThreadGoal,
+  RuntimeThreadGoalPatch,
   SendTurnInput,
   SendTurnResponse,
   SteerTurnInput,
@@ -49,6 +60,9 @@ export type DesktopRuntimeClient = {
   getThread(threadId: string): Promise<RuntimeThread>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
+  deleteThread(threadId: string): Promise<void>;
+  setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoal>;
+  clearThreadGoal(threadId: string): Promise<boolean>;
   updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch): Promise<RuntimeThread>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
@@ -58,6 +72,7 @@ export type DesktopRuntimeClient = {
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput): Promise<SendTurnResponse>;
   cancelTurn(threadId: string, turnId: string): Promise<void>;
+  startReview(threadId: string, target: RuntimeReviewTarget): Promise<SendTurnResponse>;
   subscribeEvents(
     threadId: string,
     sinceSeq: number | undefined,
@@ -91,6 +106,10 @@ export type DesktopRuntimeClient = {
   upsertMcpServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;
   updateMcpServer(key: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList>;
   deleteMcpServer(key: string): Promise<void>;
+  listMcpServerStatuses(): Promise<RuntimeMcpServerStatusList>;
+  readMcpServerResource(threadId: string, server: string, uri: string): Promise<RuntimeMcpResourceReadResult>;
+  callMcpServerTool(threadId: string, server: string, tool: string, args?: unknown): Promise<RuntimeMcpToolCallResult>;
+  setSkillExtraRoots(extraRoots: string[]): Promise<void>;
   listApprovals(): Promise<RuntimeApprovalList>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<void>;
 };

@@ -47,6 +47,126 @@ const asyncWaitPollMs = 25;
 const longAgentLoopTestTimeoutMs = isSlowTestPlatform ? 60_000 : 20_000;
 
 describe('agent loop tools', () => {
+  it('continues a persistent goal across idle turns until the model marks it complete', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Persistent goal', projectId: 'project_1' });
+    const modelClient = new PersistentGoalModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new CapturingToolHost(),
+    });
+
+    await loop.setThreadGoal(thread.id, { objective: 'Inspect the project and finish the requested change', status: 'active' });
+    const completedGoal = await waitForTestState(
+      async () => (await threadStore.getThread(thread.id))?.goal,
+      (goal) => goal?.status === 'complete',
+      (goal) => `Timed out waiting for goal completion; goal=${JSON.stringify(goal ?? null)}`,
+    );
+    await waitForModelRequestCount(modelClient, 4);
+    await waitForTestState(
+      () => loop.activeTurnId(thread.id),
+      (turnId) => turnId === null,
+      (turnId) => `Timed out waiting for final goal turn; activeTurnId=${String(turnId)}`,
+    );
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const goalTurns = events.filter((event) => event.type === 'turn.started' && event.payload.taskKind === 'goal');
+
+    expect(goalTurns).toHaveLength(2);
+    expect(modelClient.requests).toHaveLength(4);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['get_goal', 'create_goal', 'update_goal']));
+    expect(modelClient.requests[0].messages).toContainEqual(expect.objectContaining({
+      role: 'system',
+      content: expect.stringContaining('Inspect the project and finish the requested change'),
+    }));
+    expect(saved?.messages.some((message) => message.role === 'user')).toBe(false);
+    expect(saved?.messages.filter((message) => message.role === 'assistant').map((message) => message.content)).toEqual(expect.arrayContaining([
+      'First goal chunk complete.',
+      'Goal verified complete.',
+    ]));
+    expect(completedGoal).toMatchObject({ status: 'complete' });
+    expect(saved?.goal).toMatchObject({ status: 'complete', tokensUsed: 15 });
+    expect(loop.activeTurnId(thread.id)).toBeNull();
+  });
+
+  it('pauses a persistent goal when its active turn is cancelled', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Cancelled goal' });
+    const modelClient = new CancellableModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    await loop.setThreadGoal(thread.id, { objective: 'Keep working until cancelled', status: 'active' });
+    await modelClient.waitUntilAbortListenerReady();
+    const activeTurnId = loop.activeTurnId(thread.id);
+    expect(activeTurnId).toEqual(expect.any(String));
+    await loop.cancelTurn(thread.id, activeTurnId!);
+    await waitForModelAbort(modelClient);
+    const pausedGoal = await waitForTestState(
+      async () => (await threadStore.getThread(thread.id))?.goal,
+      (goal) => goal?.status === 'paused',
+      (goal) => `Timed out waiting for paused goal; goal=${JSON.stringify(goal ?? null)}`,
+    );
+
+    expect(pausedGoal).toMatchObject({ status: 'paused' });
+    expect(modelClient.requests).toHaveLength(1);
+  });
+
+  it('accepts visible user guidance during an active goal turn and samples it next', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Guided goal' });
+    const modelClient = new GoalSteerModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    await loop.setThreadGoal(thread.id, { objective: 'Finish with user guidance', status: 'active' });
+    await waitForModelRequestCount(modelClient, 1);
+    const goalTurnId = loop.activeTurnId(thread.id);
+    expect(goalTurnId).toEqual(expect.any(String));
+
+    await expect(loop.steerTurn(thread.id, {
+      clientId: 'client-goal-steer',
+      expectedTurnId: goalTurnId!,
+      input: 'Use the more detailed approach.',
+    })).resolves.toEqual({ accepted: true, turnId: goalTurnId });
+    expect((await threadStore.getThread(thread.id))?.messages.find((message) => message.clientId === 'client-goal-steer')).toMatchObject({
+      role: 'user',
+      content: 'Use the more detailed approach.',
+      turnId: goalTurnId,
+    });
+
+    modelClient.releaseFirstResponse();
+    await waitForTestState(
+      async () => ({ goal: (await threadStore.getThread(thread.id))?.goal, activeTurnId: loop.activeTurnId(thread.id) }),
+      (state) => state.goal?.status === 'complete' && state.activeTurnId === null,
+      (state) => `Timed out waiting for guided goal completion; state=${JSON.stringify(state)}`,
+    );
+
+    expect(modelClient.requests).toHaveLength(3);
+    expect(modelClient.requests[1].messages.find((message) => message.clientId === 'client-goal-steer')).toMatchObject({
+      role: 'user',
+      content: 'Use the more detailed approach.',
+    });
+    expect((await threadStore.getThread(thread.id))?.messages.at(-1)?.content).toBe('Goal completed with the guidance.');
+  });
+
   it('executes model tool calls and continues with tool results', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -2178,8 +2298,37 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[0].messages[0].content).toContain('local-only runtime answers');
     expect(modelClient.requests[0].messages[0].content).toContain('source="MEMORY.md:');
     expect(modelClient.requests[0].messages[0].content).toContain('<oai-mem-citation>');
-    expect(modelClient.requests[0].messages[0].content).toContain('========= MEMORY_SUMMARY BEGINS =========');
+    expect(modelClient.requests[0].messages[0].content).not.toContain('========= MEMORY_SUMMARY BEGINS =========');
     expect(modelClient.requests[0].messages[0].content).toContain('<rollout_ids>');
+  });
+
+  it('keeps project memory context isolated from other projects and shared summaries', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Project alpha', projectId: 'project_alpha' });
+    await memoryStore.rememberMemory({ content: 'Global preference is safe everywhere.', scope: 'global' });
+    await memoryStore.rememberMemory({ content: 'Project alpha uses pnpm.', scope: 'project', projectId: 'project_alpha' });
+    await memoryStore.rememberMemory({ content: 'Project beta must stay hidden.', scope: 'project', projectId: 'project_beta' });
+    const modelClient = new MemoryCapturingModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'which package manager does this project use?' });
+
+    const memoryContext = modelClient.requests[0].messages[0].content;
+    expect(memoryContext).toContain('Global preference is safe everywhere.');
+    expect(memoryContext).toContain('Project alpha uses pnpm.');
+    expect(memoryContext).toContain('project_id="project_alpha"');
+    expect(memoryContext).not.toContain('Project beta must stay hidden.');
+    expect(memoryContext).not.toContain('========= MEMORY_SUMMARY BEGINS =========');
   });
 
   it('strips hidden memory citations from assistant output and stores citation metadata', async () => {
@@ -4986,7 +5135,48 @@ describe('agent loop tools', () => {
       'trigger_turn',
     ]);
     expect(child?.messages.some((message) => message.role === 'assistant' && message.content.includes('Child resumed with mailbox.'))).toBe(true);
+    const waitResultMessage = modelClient.requests
+      .flatMap((request) => request.messages)
+      .find((message) => message.role === 'tool' && message.toolName === 'wait');
+    expect(waitResultMessage?.content).toContain('Child resumed with mailbox.');
     expect((await threadStore.getThread(parent.id))?.messages.at(-1)?.content).toBe('Parent completed collaboration.');
+  });
+
+  it('keeps the parent turn active until spawned child research is collected', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const parent = await threadStore.createThread({ title: 'Parent waits for research' });
+    const modelClient = new CollaborationJoinModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new MultiAgentConfigStore(),
+    });
+
+    const started = await loop.startTurn(parent.id, { input: 'research this with a child' });
+    await modelClient.childStarted;
+    await waitForTestState(
+      () => modelClient.parentRequests.length,
+      (count) => count >= 2,
+      (count) => `Timed out waiting for premature parent answer; requests=${count}`,
+    );
+    const waitingThread = await threadStore.getThread(parent.id);
+    const waitingEvents = await threadStore.listEvents(parent.id, 0);
+
+    expect(loop.activeTurnId(parent.id)).toBe(started.turnId);
+    expect(waitingEvents.some((event) => event.type === 'turn.completed' && event.turnId === started.turnId)).toBe(false);
+    expect(waitingThread?.messages.some((message) => message.content.includes('主任务会继续等待'))).toBe(true);
+
+    modelClient.finishChild();
+    await waitForTurnCompleted(threadStore, parent.id, started.turnId);
+    const completed = await threadStore.getThread(parent.id);
+
+    expect(modelClient.parentRequests).toHaveLength(3);
+    expect(modelClient.parentRequests[2].messages.some((message) => message.content.includes('<collaboration_results>') && message.content.includes('Detailed child research.'))).toBe(true);
+    expect(completed?.messages.at(-1)?.content).toBe('Parent incorporated the child research.');
   });
 
   it('keeps assistant history populated when the model streams item-based content', async () => {
@@ -5164,6 +5354,71 @@ class ToolCallingModelClient implements ModelClient {
   }
 }
 
+class PersistentGoalModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_read_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield { type: 'text_delta', text: 'First goal chunk complete.' };
+      yield { type: 'usage', usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 } };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 3) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_update_1', name: 'update_goal', arguments: '{"status":"complete"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Goal verified complete.' };
+    yield { type: 'usage', usage: { inputTokens: 4, outputTokens: 3, totalTokens: 7 } };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class GoalSteerModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private releaseFirst: () => void = () => undefined;
+  private readonly firstReleased = new Promise<void>((resolve) => {
+    this.releaseFirst = resolve;
+  });
+
+  releaseFirstResponse(): void {
+    this.releaseFirst();
+  }
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield { type: 'text_delta', text: 'Initial goal work.' };
+      await this.firstReleased;
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_steer_complete', name: 'update_goal', arguments: '{"status":"complete"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Goal completed with the guidance.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class ItemBasedModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -5334,6 +5589,51 @@ class CollaborationToolModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'Parent completed collaboration.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class CollaborationJoinModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  parentRequests: ModelRequest[] = [];
+  private markChildStarted: () => void = () => undefined;
+  private releaseChild: () => void = () => undefined;
+  readonly childStarted = new Promise<void>((resolve) => {
+    this.markChildStarted = resolve;
+  });
+  private readonly childReleased = new Promise<void>((resolve) => {
+    this.releaseChild = resolve;
+  });
+
+  finishChild(): void {
+    this.releaseChild();
+  }
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.messages.some((message) => message.role === 'user' && message.content === 'perform slow child research')) {
+      this.markChildStarted();
+      await this.childReleased;
+      yield { type: 'text_delta', text: 'Detailed child research.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+
+    this.parentRequests.push(request);
+    if (this.parentRequests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_spawn_slow_child', name: 'spawn_agent', arguments: '{"prompt":"perform slow child research","title":"Slow research"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.parentRequests.length === 2) {
+      yield { type: 'text_delta', text: 'The child is still researching, so I will not wait.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Parent incorporated the child research.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

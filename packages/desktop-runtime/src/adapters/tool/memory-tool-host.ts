@@ -4,20 +4,26 @@ import type { MemoryStore } from '../../ports/memory-store.js';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import { numberArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
 
+const SHARED_MEMORY_FILES_FEATURE = 'memory_unscoped_files';
+
 export class MemoryToolHost implements ToolHost {
   constructor(
     private readonly memories: MemoryStore,
     private readonly configStore?: ConfigStore,
   ) {}
 
-  async systemPrompt(): Promise<string | null> {
+  async systemPrompt(context?: ToolExecutionContext): Promise<string | null> {
     const visibility = await this.toolVisibility();
     const lines: string[] = [];
     if (visibility.canRead && visibility.dedicatedTools) {
       lines.push(
         'Memory tools read the local Setsuna memory store.',
-        'Use list_memory_files, read_memory_file, and search_memory_files when an answer needs source-grounded memory details.',
-        'When the final answer relies on memory file content, append a hidden <oai-mem-citation> block at the very end with exact memory file line ranges and rollout_ids when available.',
+        canUseSharedMemoryFiles(context)
+          ? 'Use recall_memory first; list_memory_files, read_memory_file, and search_memory_files are available for source-grounded memory details.'
+          : context?.projectId
+            ? 'Use recall_memory for source-grounded details. Results are restricted to global memories and the current project.'
+            : 'Use recall_memory for source-grounded details. Results are restricted to global memories.',
+        'When the final answer relies on memory content, append a hidden <oai-mem-citation> block at the very end with exact source ranges and rollout_ids when available.',
       );
     }
     if (visibility.canWrite && visibility.dedicatedTools) {
@@ -26,7 +32,7 @@ export class MemoryToolHost implements ToolHost {
     return lines.join('\n') || null;
   }
 
-  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+  async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     const visibility = await this.toolVisibility();
     const tools: RuntimeToolDefinition[] = [];
     if (!visibility.dedicatedTools) return tools;
@@ -39,12 +45,11 @@ export class MemoryToolHost implements ToolHost {
           additionalProperties: false,
           properties: {
             content: { type: 'string', description: 'Concise memory content to save.' },
-            scope: { type: 'string', enum: ['global', 'project'], description: 'Memory scope. Defaults to global unless projectId is provided.' },
+            scope: { type: 'string', enum: ['global', 'project'], description: 'Memory scope. Defaults to the current project in project threads, otherwise global.' },
             kind: { type: 'string', enum: ['preference', 'project_rule', 'fact', 'workflow', 'decision', 'note'], description: 'Durable memory category. Defaults to note.' },
             title: { type: 'string', description: 'Optional short title for the memory.' },
             tags: { type: 'array', items: { type: 'string' }, description: 'Optional searchable tags.' },
             source: { type: 'string', description: 'Optional source label for the memory.' },
-            projectId: { type: 'string', description: 'Optional local project id for project-scoped memory.' },
             workspaceRoot: { type: 'string', description: 'Optional workspace root for project-scoped memory dedupe.' },
           },
           required: ['content'],
@@ -52,21 +57,22 @@ export class MemoryToolHost implements ToolHost {
       });
     }
     if (visibility.canRead) {
-      tools.push(
-        {
-          name: 'recall_memory',
-          description: 'Recall durable local memories, optionally filtered by query or project.',
-          inputSchema: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              query: { type: 'string', description: 'Optional text to search in saved memories.' },
-              scope: { type: 'string', enum: ['global', 'project'], description: 'Optional memory scope filter.' },
-              projectId: { type: 'string', description: 'Optional local project id; global memories are included with project matches.' },
-              limit: { type: 'number', description: 'Maximum number of memories to return.' },
-            },
+      tools.push({
+        name: 'recall_memory',
+        description: 'Recall durable local memories within the current thread scope.',
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            query: { type: 'string', description: 'Optional text to search in saved memories.' },
+            scope: { type: 'string', enum: ['global', 'project'], description: 'Optional memory scope filter.' },
+            limit: { type: 'number', description: 'Maximum number of memories to return.' },
           },
         },
+      });
+      // Raw memory files merge all projects. Keep them behind an explicit debug flag so
+      // normal global and project threads cannot bypass structured scope filtering.
+      if (canUseSharedMemoryFiles(context)) tools.push(
         {
           name: 'list_memory_files',
           description: 'List files in the local memory store. Use this before reading memory files when source locations are needed.',
@@ -134,7 +140,7 @@ export class MemoryToolHost implements ToolHost {
         content: requiredStringArg(args.content, 'content'),
         scope: memoryScope(args.scope),
         kind: memoryKind(args.kind),
-        projectId: optionalStringArg(args.projectId) ?? context.projectId,
+        projectId: context.projectId,
         title: optionalStringArg(args.title),
         tags: stringArrayArg(args.tags),
         source: optionalStringArg(args.source),
@@ -151,14 +157,18 @@ export class MemoryToolHost implements ToolHost {
     if (name === 'recall_memory') {
       const result = await this.memories.listMemories({
         search: optionalStringArg(args.query),
-        scope: memoryScope(args.scope),
-        projectId: optionalStringArg(args.projectId) ?? context.projectId,
+        scope: context.projectId ? memoryScope(args.scope) : 'global',
+        projectId: context.projectId,
         limit: numberArg(args.limit),
       });
       return {
         content: result.memories.map((memory) => `- [${memory.scope}]${memory.sourceLocation ? ` source=${memorySourceLocationText(memory.sourceLocation)}` : ''} ${memory.content}`).join('\n') || 'No matching local memories.',
         data: result,
       };
+    }
+
+    if (!canUseSharedMemoryFiles(context) && (name === 'list_memory_files' || name === 'read_memory_file' || name === 'search_memory_files')) {
+      throw new Error('Shared memory files are unavailable in scoped threads. Use recall_memory instead.');
     }
 
     if (name === 'list_memory_files') {
@@ -217,6 +227,10 @@ function jsonResult(data: unknown): ToolExecutionResult {
     content: JSON.stringify(data, null, 2),
     data,
   };
+}
+
+function canUseSharedMemoryFiles(context: ToolExecutionContext | undefined): boolean {
+  return !context?.projectId && context?.features?.[SHARED_MEMORY_FILES_FEATURE] === true;
 }
 
 function memorySourceLocationText(location: { path: string; lineStart: number; lineEnd: number }): string {

@@ -21,6 +21,7 @@ import type { ThreadStore } from '../ports/thread-store.js';
 import type { RuntimeToolExecutionContext, ToolHost, ToolOutputDelta } from '../ports/tool-host.js';
 import { createRuntimeToolHookRunner } from '../hooks/runtime-hooks.js';
 import { collaborationToolsEnabled, isCollaborationToolName, type RuntimeCollaborationCoordinator } from './collaboration-coordinator.js';
+import { isGoalToolName, type RuntimeGoalCoordinator } from './runtime-goal-coordinator.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
 import { RuntimeToolRouter } from './tool-router.js';
 import type { RuntimeMemoryCoordinator } from './runtime-memory-coordinator.js';
@@ -81,6 +82,7 @@ type RuntimeToolCallExecutorOptions = {
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   toolHost?: ToolHost;
   collaborationCoordinator(): RuntimeCollaborationCoordinator;
+  goalCoordinator(): RuntimeGoalCoordinator;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
   publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
 };
@@ -235,6 +237,13 @@ export class RuntimeToolCallExecutor {
           };
         }
         const execution = await this.runCollaborationToolCall(toolCall, parsedArguments, context);
+        return {
+          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content),
+          processed: true,
+        };
+      }
+      if (isGoalToolName(toolCall.name)) {
+        const execution = await this.runGoalToolCall(toolCall, parsedArguments, context);
         return {
           message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content),
           processed: true,
@@ -409,6 +418,18 @@ export class RuntimeToolCallExecutor {
       ...execution.collabToolCall,
       agentStatus: execution.collabToolCall.agentStatus ?? 'completed',
     }, 'completed');
+    await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', execution.preview, {
+      data: execution.data,
+      resultPreview: execution.preview,
+      startedAtMs,
+    });
+    return { content: execution.content };
+  }
+
+  private async runGoalToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<{ content: string }> {
+    const startedAtMs = this.options.clock.now().getTime();
+    await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
+    const execution = await this.options.goalCoordinator().execute(toolCall.name, parsedArguments, context);
     await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', execution.preview, {
       data: execution.data,
       resultPreview: execution.preview,

@@ -90,7 +90,7 @@ export type RuntimeMailboxDeliveryRecord = {
   triggerTurn?: boolean;
 };
 
-export type RuntimeThreadTurnTaskKind = 'regular' | 'compact' | 'review' | 'user_shell';
+export type RuntimeThreadTurnTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell';
 
 export type RuntimeThreadTurnStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
@@ -146,6 +146,12 @@ export type RuntimeThreadGoal = {
   timeUsedSeconds: number;
   createdAt: number;
   updatedAt: number;
+};
+
+export type RuntimeThreadGoalPatch = {
+  objective?: string;
+  status?: RuntimeThreadGoalStatus;
+  tokenBudget?: number | null;
 };
 
 export type RuntimeGitInfo = {
@@ -311,3 +317,9 @@ export type RegenerateMessageInput = {
   thinking?: boolean;
   thinkingEffort?: string;
 };
+
+export type RuntimeReviewTarget =
+  | { type: 'uncommittedChanges' }
+  | { type: 'baseBranch'; branch: string }
+  | { type: 'commit'; sha: string; title?: string }
+  | { type: 'custom'; instructions: string };

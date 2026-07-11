@@ -23,6 +23,7 @@ export function AppRouteContent({
   updater,
   workspacePanels,
   onSelectSkillForChat,
+  onSelectThread,
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
@@ -47,6 +48,7 @@ export function AppRouteContent({
   updater: DesktopUpdaterStateView;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
+  onSelectThread: (threadId: string) => void | Promise<void>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -85,7 +87,9 @@ export function AppRouteContent({
   if (activeView === 'settings') {
     return (
         <SettingsPage
+          archivedThreads={runtime.archivedThreads}
           config={runtime.config}
+          projects={runtime.projects}
           updater={updater}
           usage={runtime.usage}
           memoryPreview={runtime.memoryPreview}
@@ -97,6 +101,9 @@ export function AppRouteContent({
         onPreviewMemories={runtime.previewMemories}
         onDeleteMemory={runtime.deleteMemory}
         onResetMemories={runtime.clearMemories}
+        onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
+        onDeleteArchivedThread={runtime.permanentlyDeleteThread}
+        onRestoreArchivedThread={runtime.restoreArchivedThread}
       />
     );
   }
@@ -104,6 +111,7 @@ export function AppRouteContent({
   if (activeView === 'capabilities') {
     return (
       <CapabilitiesPage
+        currentThreadId={runtime.currentThread?.id}
         skills={runtime.skills}
         selectedSkillCount={selectedSkillCount}
         mcpState={runtime.mcpState}
@@ -124,6 +132,13 @@ export function AppRouteContent({
         onDeleteHook={runtime.deleteHook}
         onUpdateMcpServer={runtime.updateMcpServer}
         onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
+        onListMcpServerStatuses={() => runtime.client.listMcpServerStatuses()}
+        onReadMcpResource={(server, uri) => runtime.client.readMcpServerResource(runtime.currentThread?.id ?? '', server, uri)}
+        onCallMcpTool={(server, tool, args) => {
+          if (!runtime.currentThread) return Promise.reject(new Error('请先打开一个对话。'));
+          return runtime.client.callMcpServerTool(runtime.currentThread.id, server, tool, args);
+        }}
+        onSetSkillExtraRoots={(roots) => runtime.client.setSkillExtraRoots(roots)}
       />
     );
   }
@@ -148,6 +163,8 @@ export function AppRouteContent({
       reviewState={workspacePanels.reviewState}
       selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
       skills={runtime.skills}
+      threadUsage={runtime.threadUsage}
+      threads={runtime.threads}
       sideActivePanel={workspacePanels.sideActivePanel}
       sidePanelVisible={workspacePanels.sidePanelVisible}
       terminalSessionsByPanelId={workspacePanels.terminalSessionsByPanelId}
@@ -158,6 +175,7 @@ export function AppRouteContent({
       onAnswerApproval={(approvalId, input) => runtime.answerApproval(approvalId, input)}
       onCompactContext={() => void runtime.compactCurrentThreadContext()}
       onClearContext={() => void runtime.clearCurrentThreadContext()}
+      onClearThreadGoal={() => runtime.clearCurrentThreadGoal()}
       onThreadMemoryModeChange={(mode) => void runtime.updateCurrentThreadMemoryMode(mode)}
       onDeleteMessages={(messageIds) => chatActions.deleteMessages(messageIds)}
       onDiscardFileChanges={discardFileChanges}
@@ -180,12 +198,21 @@ export function AppRouteContent({
         projectWorkspace.setFilePreview(null);
         workspacePanels.openDesktopPanel('side', 'files');
       }}
+      onOpenThread={onSelectThread}
       onOpenFileReviewPanel={openFileReviewPanel}
       onOpenSideTerminalPanel={() => workspacePanels.openDesktopPanel('side', 'terminal')}
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={projectWorkspace.openProjectFile}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
       onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
+      onSetMultiAgentEnabled={(enabled) => runtime.saveRuntimePreferences({
+        features: {
+          ...(runtime.config?.features ?? {}),
+          multi_agent: enabled,
+          multi_agent_v2: enabled,
+        },
+      })}
+      onStartThreadReview={() => runtime.startCurrentThreadReview({ type: 'uncommittedChanges' })}
       onSend={(value, options) => void chatActions.sendInput(value, options)}
       onPlanDecision={(decision) => void chatActions.sendInput('', { planDecision: decision })}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}

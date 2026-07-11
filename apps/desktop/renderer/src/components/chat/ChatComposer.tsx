@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ComponentProps, type Compone
 import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import { Button, Dropdown, Image } from 'antd';
-import { ArrowUp, Boxes, Check, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
-import type { RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThreadMemoryMode, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { ArrowUp, Boxes, Check, CircleGauge, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
+import type { RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
@@ -27,18 +27,24 @@ export function ChatComposer({
   canClearContext,
   contextCompacting = false,
   contextUsage,
+  currentThread,
   draft,
   skillSelectionRequest,
   skills,
+  threadUsage,
+  threads,
   starter = false,
   onCancelActiveTurn,
   onApprovalPolicyChange,
   onCompactContext,
   onClearContext,
+  onClearThreadGoal,
   onDraftChange,
   onSelectModel,
   onSearchProjectEntries,
+  onSetMultiAgentEnabled,
   onSend,
+  onStartThreadReview,
   onThreadMemoryModeChange,
   onSkillSelectionRequestConsumed,
   threadMemoryMode,
@@ -49,19 +55,25 @@ export function ChatComposer({
   canClearContext: boolean;
   contextCompacting?: boolean;
   contextUsage: ChatContextTokenUsage;
+  currentThread: RuntimeThread | null;
   draft: string;
   skillSelectionRequest?: ChatSkillSelectionRequest | null;
   skills: RuntimeSkillSummary[];
+  threadUsage: RuntimeUsageResponse | null;
+  threads: RuntimeThreadSummary[];
   starter?: boolean;
   threadMemoryMode?: RuntimeThreadMemoryMode;
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
   onCompactContext: () => void;
   onClearContext: () => void;
+  onClearThreadGoal: () => void | Promise<unknown>;
   onDraftChange: (value: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
+  onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onStartThreadReview: () => void | Promise<unknown>;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
 }) {
@@ -81,6 +93,8 @@ export function ChatComposer({
   const [thinkingEffort, setThinkingEffort] = useState('');
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
   const [planModeEnabled, setPlanModeEnabled] = useState(false);
+  const [goalModeEnabled, setGoalModeEnabled] = useState(false);
+  const [usagePanelOpen, setUsagePanelOpen] = useState(false);
   const [slashMenuForcedOpen, setSlashMenuForcedOpen] = useState(false);
   const [cursorOffset, setCursorOffset] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -107,6 +121,9 @@ export function ChatComposer({
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const memoryMode = threadMemoryMode ?? 'enabled';
   const memoryGenerationEnabled = config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
+  const multiAgentEnabled = config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
+  const activeGoal = currentThread?.goal?.status === 'active' ? currentThread.goal : null;
+  const goalEnabled = goalModeEnabled || Boolean(activeGoal);
   const slashEntries = useMemo(() => {
     const actions: SlashQuickAction[] = [
       {
@@ -124,6 +141,46 @@ export function ChatComposer({
         description: planModeEnabled ? '已开启：模型先给出计划，待确认后执行' : '模型先给出计划，待确认后再执行',
         checked: planModeEnabled,
         scope: planModeEnabled ? '已开启' : '本地',
+      },
+      {
+        key: 'collaboration',
+        kind: 'action',
+        type: 'collaboration',
+        title: '协作模式',
+        description: multiAgentEnabled ? '已开启：允许 Agent 创建和调度子 Agent' : '允许 Agent 把任务拆给子 Agent 并汇总结果',
+        checked: multiAgentEnabled,
+        scope: multiAgentEnabled ? '已开启' : '本地',
+      },
+      {
+        key: 'goal',
+        kind: 'action',
+        type: 'goal',
+        title: '目标模式',
+        description: activeGoal
+          ? `已开启：${activeGoal.objective}`
+          : goalModeEnabled
+            ? '已开启：下一条消息将设为线程目标'
+            : '把下一条消息设为持续目标并开始执行',
+        checked: goalEnabled,
+        scope: goalEnabled ? '已开启' : '当前线程',
+      },
+      {
+        key: 'usage',
+        kind: 'action',
+        type: 'usage',
+        title: '用量与诊断',
+        description: currentThread ? '查看当前线程的 Token、调用次数和最近一轮诊断' : '请先打开一个对话',
+        disabled: !currentThread,
+        scope: '当前线程',
+      },
+      {
+        key: 'review',
+        kind: 'action',
+        type: 'review',
+        title: '审查当前改动',
+        description: activeProject ? '让 Agent 审查当前项目的未提交改动' : '请先选择项目',
+        disabled: !activeProject || !currentThread,
+        scope: '当前项目',
       },
       {
         key: 'memory-mode',
@@ -173,7 +230,7 @@ export function ChatComposer({
       .slice(0, Math.max(0, 8 - visibleActions.length))
       .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
     return [...visibleActions, ...visibleSkills];
-  }, [canClearContext, config, contextCompactPercent, contextCompacting, memoryGenerationEnabled, memoryMode, planModeEnabled, selectedSkillIds, skillQuery, skills]);
+  }, [activeGoal, activeProject, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, memoryGenerationEnabled, memoryMode, multiAgentEnabled, planModeEnabled, selectedSkillIds, skillQuery, skills]);
 
   useEffect(() => {
     if (!commandOpen || !activeProject) {
@@ -219,6 +276,11 @@ export function ChatComposer({
   useEffect(() => {
     setActiveSkillIndex(0);
   }, [skillQuery]);
+
+  useEffect(() => {
+    setGoalModeEnabled(false);
+    setUsagePanelOpen(false);
+  }, [currentThread?.id]);
 
   useEffect(() => {
     if (activeTurnId && slashMenuForcedOpen) setSlashMenuForcedOpen(false);
@@ -391,6 +453,29 @@ export function ChatComposer({
       setFocused(true);
       return;
     }
+    if (item.kind === 'action' && item.type === 'collaboration') {
+      void onSetMultiAgentEnabled(!multiAgentEnabled);
+      setFocused(true);
+      return;
+    }
+    if (item.kind === 'action' && item.type === 'goal') {
+      if (activeGoal) {
+        void onClearThreadGoal();
+        setGoalModeEnabled(false);
+      } else {
+        setGoalModeEnabled((value) => !value);
+      }
+      setFocused(true);
+      return;
+    }
+    if (item.kind === 'action' && item.type === 'usage' && !item.disabled) {
+      setUsagePanelOpen((value) => !value);
+      return;
+    }
+    if (item.kind === 'action' && item.type === 'review' && !item.disabled) {
+      void onStartThreadReview();
+      return;
+    }
     if (item.type === 'clear-context' && !item.disabled) {
       onClearContext();
       return;
@@ -409,12 +494,14 @@ export function ChatComposer({
       ...(!steering ? { thinking } : {}),
       ...(!steering && thinking && thinkingEffort ? { thinkingEffort } : {}),
       ...(!steering && planModeEnabled ? { collaborationMode: 'plan' as const } : {}),
+      ...(!steering && goalModeEnabled ? { goalMode: true } : {}),
     });
     setSelectedSkills([]);
     clearRemovingImageTimers(removingImageTimersRef.current);
     setRemovingImageAttachmentIds(new Set());
     setImageAttachments([]);
     setPlanModeEnabled(false);
+    setGoalModeEnabled(false);
     senderRef.current?.clear?.();
   };
 
@@ -503,6 +590,9 @@ export function ChatComposer({
           onSelect={selectSlashEntry}
         />
       ) : null}
+      {usagePanelOpen && currentThread ? (
+        <ChatUsagePanel currentThread={currentThread} threadUsage={threadUsage} threads={threads} onClose={() => setUsagePanelOpen(false)} />
+      ) : null}
       <Sender
         ref={senderRef}
         value={draft}
@@ -564,12 +654,13 @@ export function ChatComposer({
                 onChange={onApprovalPolicyChange}
               />
               {planModeEnabled ? (
-                <button className="chat-sender-plan-badge" type="button" aria-label="关闭计划模式" title="关闭计划模式" onClick={() => setPlanModeEnabled(false)}>
-                  <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
-                  <span className="chat-sender-plan-badge__label">计划</span>
-                  <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
-                </button>
+                <ChatModeBadge label="计划" onClose={() => setPlanModeEnabled(false)} />
               ) : null}
+              {multiAgentEnabled ? <ChatModeBadge label="协作" onClose={() => void onSetMultiAgentEnabled(false)} /> : null}
+              {goalEnabled ? <ChatModeBadge label={activeGoal && activeTurnId ? '目标进行中' : '目标已开启'} onClose={() => {
+                if (activeGoal) void onClearThreadGoal();
+                setGoalModeEnabled(false);
+              }} /> : null}
             </div>
             <div className="chat-sender__right-actions">
               {supportsImageInput ? (
@@ -617,6 +708,68 @@ export function ChatComposer({
       />
     </div>
   );
+}
+
+function ChatModeBadge({ label, onClose }: { label: string; onClose: () => void }) {
+  return (
+    <button className="chat-sender-plan-badge" type="button" aria-label={`关闭${label}`} title={`关闭${label}`} onClick={onClose}>
+      <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
+      <span className="chat-sender-plan-badge__label">{label}</span>
+      <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
+    </button>
+  );
+}
+
+function ChatUsagePanel({
+  currentThread,
+  threadUsage,
+  threads,
+  onClose,
+}: {
+  currentThread: RuntimeThread;
+  threadUsage: RuntimeUsageResponse | null;
+  threads: RuntimeThreadSummary[];
+  onClose: () => void;
+}) {
+  const summary = threadUsage?.summary;
+  const latestTurn = currentThread.turns?.at(-1);
+  const childCount = threads.filter((thread) => thread.parentThreadId === currentThread.id || thread.forkedFromId === currentThread.id).length;
+  return (
+    <section className="chat-usage-panel" aria-label="当前线程用量与诊断">
+      <header>
+        <span><CircleGauge size={14} /> 用量与诊断</span>
+        <button type="button" aria-label="关闭用量面板" onClick={onClose}><X size={13} /></button>
+      </header>
+      <div className="chat-usage-panel__metrics">
+        <span>总计<strong>{formatUsageTokens(summary?.totalTokens ?? 0)}</strong></span>
+        <span>输入<strong>{formatUsageTokens(summary?.inputTokens ?? 0)}</strong></span>
+        <span>输出<strong>{formatUsageTokens(summary?.outputTokens ?? 0)}</strong></span>
+        <span>调用<strong>{summary?.recordCount ?? 0}</strong></span>
+      </div>
+      <div className="chat-usage-panel__details">
+        <span>子 Agent：{childCount}</span>
+        <span>最近一轮：{turnStatusText(latestTurn?.status)}</span>
+        {latestTurn?.tokenCounts?.at(-1)?.tokensUntilCompaction !== undefined ? <span>距压缩：{formatUsageTokens(latestTurn.tokenCounts.at(-1)?.tokensUntilCompaction ?? 0)}</span> : null}
+        {latestTurn?.modelVerifications?.length ? <span>模型验证：{latestTurn.modelVerifications.length}</span> : null}
+        {latestTurn?.safetyBuffering ? <span>安全缓冲：已启用</span> : null}
+      </div>
+      {latestTurn?.diff ? <details><summary>查看最近 Turn Diff</summary><pre>{latestTurn.diff}</pre></details> : null}
+    </section>
+  );
+}
+
+function formatUsageTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
+
+function turnStatusText(status: NonNullable<RuntimeThread['turns']>[number]['status'] | undefined): string {
+  if (status === 'in_progress') return '运行中';
+  if (status === 'completed') return '已完成';
+  if (status === 'failed') return '失败';
+  if (status === 'cancelled') return '已取消';
+  return '暂无';
 }
 
 function ChatImageAttachmentTray({

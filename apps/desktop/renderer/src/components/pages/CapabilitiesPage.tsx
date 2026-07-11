@@ -1,6 +1,6 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { BookOpen, Boxes, FilePlus2, Info, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
-import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { BookOpen, Boxes, Database, FilePlus2, Info, Loader2, MessageSquare, Pencil, Play, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpResourceReadResult, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerStatusList, RuntimeMcpToolCallResult, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
@@ -17,6 +17,10 @@ type McpDraft = {
   url: string;
   env: string;
   headers: string;
+  envHttpHeaders: string;
+  bearerTokenEnvVar: string;
+  oauthClientId: string;
+  oauthResource: string;
   enabled: boolean;
   required: boolean;
   requireApproval: RuntimeMcpRequireApproval;
@@ -48,6 +52,10 @@ const emptyMcpDraft: McpDraft = {
   url: '',
   env: '',
   headers: '',
+  envHttpHeaders: '',
+  bearerTokenEnvVar: '',
+  oauthClientId: '',
+  oauthResource: '',
   enabled: true,
   required: false,
   requireApproval: 'auto',
@@ -107,6 +115,11 @@ export function CapabilitiesPage({
   onDeleteHook,
   onUpdateMcpServer,
   onDeleteMcpServer,
+  currentThreadId,
+  onCallMcpTool,
+  onListMcpServerStatuses,
+  onReadMcpResource,
+  onSetSkillExtraRoots,
 }: {
   skills: RuntimeSkillSummary[];
   selectedSkillCount: number;
@@ -128,6 +141,11 @@ export function CapabilitiesPage({
   onDeleteHook: (hook: RuntimeHookMetadata) => Promise<void>;
   onUpdateMcpServer: (server: RuntimeMcpServer, patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>) => Promise<void>;
   onDeleteMcpServer: (server: RuntimeMcpServer) => void;
+  currentThreadId?: string;
+  onCallMcpTool: (server: string, tool: string, args?: unknown) => Promise<RuntimeMcpToolCallResult>;
+  onListMcpServerStatuses: () => Promise<RuntimeMcpServerStatusList>;
+  onReadMcpResource: (server: string, uri: string) => Promise<RuntimeMcpResourceReadResult>;
+  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
@@ -140,6 +158,7 @@ export function CapabilitiesPage({
   const [hookEditorOpen, setHookEditorOpen] = useState(false);
   const [editingHook, setEditingHook] = useState<RuntimeHookMetadata | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<RuntimeMcpServer | null>(null);
+  const [inspectingMcpServer, setInspectingMcpServer] = useState<RuntimeMcpServer | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [skillPageMode, setSkillPageMode] = useState<'view' | 'edit' | 'create' | null>(null);
   const [skillDetailSummary, setSkillDetailSummary] = useState<RuntimeSkillSummary | null>(null);
@@ -147,6 +166,9 @@ export function CapabilitiesPage({
   const [skillDetailLoading, setSkillDetailLoading] = useState(false);
   const [skillDetailError, setSkillDetailError] = useState<string | null>(null);
   const [skillSaving, setSkillSaving] = useState(false);
+  const [skillExtraRootsDraft, setSkillExtraRootsDraft] = useState('');
+  const [skillExtraRootsSaving, setSkillExtraRootsSaving] = useState(false);
+  const [skillExtraRootsError, setSkillExtraRootsError] = useState('');
   const servers = mcpState?.servers ?? [];
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
@@ -239,6 +261,10 @@ export function CapabilitiesPage({
       url: server.url ?? '',
       env: '',
       headers: '',
+      envHttpHeaders: '',
+      bearerTokenEnvVar: '',
+      oauthClientId: server.oauthClientId ?? '',
+      oauthResource: server.oauthResource ?? '',
       enabled: server.enabled,
       required: server.required,
       requireApproval: server.requireApproval,
@@ -364,6 +390,23 @@ export function CapabilitiesPage({
             onBack={resetMcpDraft}
             onFetchTools={onFetchMcpTools}
             onSave={submitMcpServer}
+          />
+        </section>
+      </main>
+    );
+  }
+
+  if (inspectingMcpServer) {
+    return (
+      <main className="capabilities-page desktop-capabilities-panel">
+        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
+          <CapabilitiesMcpDiagnostics
+            currentThreadId={currentThreadId}
+            server={inspectingMcpServer}
+            onBack={() => setInspectingMcpServer(null)}
+            onCallTool={onCallMcpTool}
+            onListStatuses={onListMcpServerStatuses}
+            onReadResource={onReadMcpResource}
           />
         </section>
       </main>
@@ -605,6 +648,30 @@ export function CapabilitiesPage({
           </span>
         </div>
 
+        {capabilityFilter === 'skills' ? (
+          <div className="desktop-capabilities-extra-roots">
+            <div>
+              <strong>额外 Skill 目录</strong>
+              <span>每行一个绝对路径；应用到当前 runtime 会话并立即刷新 Skill 列表。</span>
+            </div>
+            <TextArea rows={3} value={skillExtraRootsDraft} placeholder="/absolute/path/to/skills" onChange={(event) => setSkillExtraRootsDraft(event.currentTarget.value)} />
+            <Button
+              icon={skillExtraRootsSaving ? <Loader2 className="is-spinning" size={14} /> : <Save size={14} />}
+              disabled={skillExtraRootsSaving}
+              onClick={() => {
+                const roots = splitList(skillExtraRootsDraft);
+                setSkillExtraRootsSaving(true);
+                setSkillExtraRootsError('');
+                void onSetSkillExtraRoots(roots)
+                  .then(onRefresh)
+                  .catch((unknownError) => setSkillExtraRootsError(unknownError instanceof Error ? unknownError.message : String(unknownError)))
+                  .finally(() => setSkillExtraRootsSaving(false));
+              }}
+            >应用目录</Button>
+            {skillExtraRootsError ? <span className="desktop-capabilities-extra-roots__error">{skillExtraRootsError}</span> : null}
+          </div>
+        ) : null}
+
         <div className="desktop-capabilities-grid">
           {capabilityFilter === 'hooks'
             ? visibleHookPresets.map((preset) => (
@@ -664,6 +731,9 @@ export function CapabilitiesPage({
                       <span>{toolStats.total ? `${toolStats.enabled}/${toolStats.total} 工具启用` : '未获取工具'}</span>
                     </div>
                     <div className="desktop-capability-card__actions desktop-capability-card__actions--mcp">
+                      <Button type="button" variant="ghost" icon={<Database size={13} />} onClick={() => setInspectingMcpServer(server)}>
+                        资源与测试
+                      </Button>
                       <label className="sd-check" title="启用后运行时会加载这个 MCP 服务">
                         <input type="checkbox" checked={server.enabled} disabled={server.readOnly} onChange={(event) => void onUpdateMcpServer(server, { enabled: event.currentTarget.checked })} />
                         <span>启用</span>
@@ -823,6 +893,138 @@ function trustStatusLabel(status: RuntimeHookMetadata['trustStatus']): string {
   }
 }
 
+function CapabilitiesMcpDiagnostics({
+  currentThreadId,
+  server,
+  onBack,
+  onCallTool,
+  onListStatuses,
+  onReadResource,
+}: {
+  currentThreadId?: string;
+  server: RuntimeMcpServer;
+  onBack: () => void;
+  onCallTool: (server: string, tool: string, args?: unknown) => Promise<RuntimeMcpToolCallResult>;
+  onListStatuses: () => Promise<RuntimeMcpServerStatusList>;
+  onReadResource: (server: string, uri: string) => Promise<RuntimeMcpResourceReadResult>;
+}) {
+  const [status, setStatus] = useState<RuntimeMcpServerStatusList['data'][number] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [resultTitle, setResultTitle] = useState('');
+  const [result, setResult] = useState<unknown>(null);
+  const [toolName, setToolName] = useState(server.tools[0]?.name ?? '');
+  const [toolArguments, setToolArguments] = useState('{}');
+  const [calling, setCalling] = useState(false);
+
+  const loadStatus = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await onListStatuses();
+      setStatus(list.data.find((item) => item.name === server.key) ?? null);
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadStatus();
+  }, [server.key]);
+
+  const readResource = async (uri: string) => {
+    setCalling(true);
+    setError('');
+    try {
+      setResultTitle(uri);
+      setResult(await onReadResource(server.key, uri));
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    } finally {
+      setCalling(false);
+    }
+  };
+
+  const callTool = async () => {
+    if (!toolName || !currentThreadId) return;
+    if (!window.confirm(`确认直接调用 MCP 工具「${server.key}.${toolName}」？该调用可能修改外部数据。`)) return;
+    setCalling(true);
+    setError('');
+    try {
+      const args = toolArguments.trim() ? JSON.parse(toolArguments) : {};
+      setResultTitle(`${server.key}.${toolName}`);
+      setResult(await onCallTool(server.key, toolName, args));
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    } finally {
+      setCalling(false);
+    }
+  };
+
+  const resources = status?.resources ?? [];
+  const templates = status?.resourceTemplates ?? [];
+  const tools = status ? Object.values(status.tools) : server.tools;
+
+  return (
+    <section className="desktop-capabilities-detail desktop-capabilities-mcp-diagnostics">
+      <PageHeader
+        title={`${server.label} · 资源与测试`}
+        subtitle={`认证状态：${mcpAuthStatusLabel(status?.authStatus)}`}
+        onBack={onBack}
+        actions={<Button icon={loading ? <Loader2 className="is-spinning" size={14} /> : <RefreshCw size={14} />} disabled={loading} onClick={() => void loadStatus()}>刷新</Button>}
+      />
+      {error ? <div className="desktop-capabilities-errors"><span>{error}</span></div> : null}
+      <div className="desktop-capabilities-mcp-diagnostics__grid">
+        <section>
+          <header><Database size={14} /><strong>Resources</strong><span>{resources.length}</span></header>
+          {loading ? <div className="desktop-capabilities-mcp-tools__empty">正在读取资源…</div> : resources.length ? (
+            <div className="desktop-capabilities-mcp-diagnostics__list">
+              {resources.map((resource) => (
+                <button key={resource.uri} type="button" disabled={calling} onClick={() => void readResource(resource.uri)}>
+                  <strong>{resource.name || resource.uri}</strong>
+                  <small>{resource.description || resource.uri}</small>
+                </button>
+              ))}
+            </div>
+          ) : <div className="desktop-capabilities-mcp-tools__empty">该服务没有公开静态资源。</div>}
+          {templates.length ? (
+            <div className="desktop-capabilities-mcp-diagnostics__templates">
+              <strong>Resource templates</strong>
+              {templates.map((template) => <code key={template.uriTemplate}>{template.uriTemplate}</code>)}
+            </div>
+          ) : null}
+        </section>
+        <section>
+          <header><Play size={14} /><strong>测试工具调用</strong><span>{tools.length}</span></header>
+          <SelectField value={toolName} onChange={(event) => setToolName(event.currentTarget.value)}>
+            <option value="">选择工具</option>
+            {tools.map((tool) => <option key={tool.name} value={tool.name}>{tool.name}</option>)}
+          </SelectField>
+          <TextArea rows={8} value={toolArguments} onChange={(event) => setToolArguments(event.currentTarget.value)} placeholder={'{\n  "query": "example"\n}'} />
+          <Button variant="primary" icon={calling ? <Loader2 className="is-spinning" size={14} /> : <Play size={14} />} disabled={calling || !toolName || !currentThreadId} onClick={() => void callTool()}>
+            {currentThreadId ? '调用工具' : '请先打开一个对话'}
+          </Button>
+        </section>
+      </div>
+      {result !== null ? (
+        <section className="desktop-capabilities-mcp-diagnostics__result">
+          <header><strong>{resultTitle}</strong></header>
+          <pre>{JSON.stringify(result, null, 2)}</pre>
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+function mcpAuthStatusLabel(status: RuntimeMcpServerStatusList['data'][number]['authStatus'] | undefined): string {
+  if (status === 'bearerToken') return 'Bearer Token';
+  if (status === 'oAuth') return 'OAuth';
+  if (status === 'notLoggedIn') return '未登录';
+  return '不需要或不支持认证';
+}
+
 function CapabilitiesMcpEditor({
   draft,
   editingMcpServer,
@@ -972,6 +1174,18 @@ function CapabilitiesMcpEditor({
             </McpFormField>
             <McpFormField className="desktop-capabilities-mcp-form__full" label="请求头" help="一行一个 Header=value。">
               <TextArea value={draft.headers} onChange={(event) => setDraftField(setDraft, 'headers', event.target.value)} placeholder="Authorization=Bearer ..." />
+            </McpFormField>
+            <McpFormField className="desktop-capabilities-mcp-form__full" label="环境变量请求头" help="一行一个 Header=ENV_VAR；发送时从环境变量读取值。">
+              <TextArea value={draft.envHttpHeaders} onChange={(event) => setDraftField(setDraft, 'envHttpHeaders', event.target.value)} placeholder="X-API-Key=API_KEY" />
+            </McpFormField>
+            <McpFormField label="Bearer Token 环境变量">
+              <TextField value={draft.bearerTokenEnvVar} onChange={(event) => setDraftField(setDraft, 'bearerTokenEnvVar', event.target.value)} placeholder="MCP_ACCESS_TOKEN" />
+            </McpFormField>
+            <McpFormField label="OAuth Client ID">
+              <TextField value={draft.oauthClientId} onChange={(event) => setDraftField(setDraft, 'oauthClientId', event.target.value)} placeholder="client-id" />
+            </McpFormField>
+            <McpFormField className="desktop-capabilities-mcp-form__full" label="OAuth Resource">
+              <TextField value={draft.oauthResource} onChange={(event) => setDraftField(setDraft, 'oauthResource', event.target.value)} placeholder="https://resource.example.com" />
             </McpFormField>
           </>
         )}
@@ -1135,6 +1349,10 @@ function mcpDraftToInput(draft: McpDraft, key: string): RuntimeMcpServerInput {
       : {
           url: draft.url.trim(),
           headers: keyValueLines(draft.headers),
+          ...(draft.envHttpHeaders.trim() ? { envHttpHeaders: keyValueLines(draft.envHttpHeaders) } : {}),
+          ...(draft.bearerTokenEnvVar.trim() ? { bearerTokenEnvVar: draft.bearerTokenEnvVar.trim() } : {}),
+          ...(draft.oauthClientId.trim() ? { oauthClientId: draft.oauthClientId.trim() } : {}),
+          ...(draft.oauthResource.trim() ? { oauthResource: draft.oauthResource.trim() } : {}),
         }),
   };
 }

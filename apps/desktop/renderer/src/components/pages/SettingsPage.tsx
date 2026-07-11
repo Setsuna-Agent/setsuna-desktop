@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Brain, ChevronRight, Code2, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, Pencil, Plus, RefreshCw, SlidersHorizontal, Sun, Trash2, Type, X } from 'lucide-react';
-import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeUsageBucket, RuntimeUsageResponse } from '@setsuna-desktop/contracts';
+import { Archive, ArchiveRestore, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileText, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, Pencil, Plus, RefreshCw, SlidersHorizontal, Sun, Trash2, Type, X } from 'lucide-react';
+import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { fontFamilyOptions, fontSizeOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode } from '../../hooks/useAppearancePreferences.js';
@@ -10,15 +10,16 @@ import { codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOpti
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 
-type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'runtime' | 'about';
-type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile'>;
+type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'archives' | 'runtime' | 'about';
+type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features'>;
 
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
   { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
   { id: 'personalization', label: '个性化', icon: <Pencil size={14} /> },
   { id: 'localLlm', label: '本地模型', icon: <HardDrive size={14} /> },
   { id: 'usage', label: '用量', icon: <Database size={14} /> },
-  { id: 'runtime', label: '运行时', icon: <Cpu size={14} /> },
+  { id: 'archives', label: '归档对话', icon: <Archive size={14} /> },
+  { id: 'runtime', label: '高级设置', icon: <Cpu size={14} /> },
   { id: 'about', label: '关于', icon: <Info size={14} /> },
 ];
 
@@ -27,7 +28,8 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
   personalization: '个性化',
   localLlm: '本地模型',
   usage: '用量',
-  runtime: '运行时',
+  archives: '归档对话',
+  runtime: '高级设置',
   about: '关于',
 };
 
@@ -59,7 +61,9 @@ type MemorySettingToggleProps = {
 };
 
 export function SettingsPage({
+  archivedThreads,
   config,
+  projects,
   updater,
   usage,
   memoryPreview,
@@ -71,8 +75,13 @@ export function SettingsPage({
   onPreviewMemories,
   onDeleteMemory,
   onResetMemories,
+  onDeleteAllArchivedThreads,
+  onDeleteArchivedThread,
+  onRestoreArchivedThread,
 }: {
+  archivedThreads: RuntimeThreadSummary[];
   config: RuntimeConfigState | null;
+  projects: WorkspaceProject[];
   updater: DesktopUpdaterStateView;
   usage: RuntimeUsageResponse | null;
   memoryPreview: RuntimeMemoryPreview | null;
@@ -84,6 +93,9 @@ export function SettingsPage({
   onPreviewMemories: () => Promise<RuntimeMemoryPreview>;
   onDeleteMemory: (memoryId: string) => Promise<void>;
   onResetMemories: () => Promise<void>;
+  onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
+  onDeleteArchivedThread: (threadId: string) => Promise<void>;
+  onRestoreArchivedThread: (threadId: string) => Promise<RuntimeThread>;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
   const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
@@ -98,9 +110,11 @@ export function SettingsPage({
       )
     ) : activeSection === 'usage' ? (
       <UsageSettings usage={usage} />
+    ) : activeSection === 'archives' ? (
+      <ArchivedThreadsSettings threads={archivedThreads} onDeleteAll={onDeleteAllArchivedThreads} onDelete={onDeleteArchivedThread} onRestore={onRestoreArchivedThread} />
     ) : activeSection === 'personalization' ? (
       config ? (
-        <PersonalizationSettings config={config} memoryPreview={memoryPreview} memoryPreviewLoading={memoryPreviewLoading} onSavePreferences={onSaveRuntimePreferences} onPreview={onPreviewMemories} onDelete={onDeleteMemory} onReset={onResetMemories} />
+        <PersonalizationSettings config={config} projects={projects} memoryPreview={memoryPreview} memoryPreviewLoading={memoryPreviewLoading} onSavePreferences={onSaveRuntimePreferences} onPreview={onPreviewMemories} onDelete={onDeleteMemory} onReset={onResetMemories} />
       ) : (
         <EmptyState title="Config unavailable" />
       )
@@ -140,6 +154,88 @@ export function SettingsPage({
         </section>
       </div>
     </main>
+  );
+}
+
+export function ArchivedThreadsSettings({
+  threads,
+  onDelete,
+  onDeleteAll,
+  onRestore,
+}: {
+  threads: RuntimeThreadSummary[];
+  onDelete: (threadId: string) => Promise<void>;
+  onDeleteAll: (threadIds: string[]) => Promise<void>;
+  onRestore: (threadId: string) => Promise<RuntimeThread>;
+}) {
+  const [busyThreadId, setBusyThreadId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const runAction = async (threadId: string, action: () => Promise<unknown>) => {
+    setBusyThreadId(threadId);
+    setError(null);
+    try {
+      await action();
+    } catch (unknownError) {
+      setError(errorMessage(unknownError, '归档操作失败。'));
+    } finally {
+      setBusyThreadId(null);
+    }
+  };
+
+  const deleteAll = async () => {
+    setDeletingAll(true);
+    setError(null);
+    try {
+      await onDeleteAll(threads.map((thread) => thread.id));
+    } catch (unknownError) {
+      setError(errorMessage(unknownError, '归档对话全部删除失败。'));
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  return (
+    <div className="chat-user-settings__section chat-user-settings__section--stacked settings-archives-section">
+      <div className="chat-user-settings__section-block">
+        <div className="settings-archives-header">
+          <div className="chat-user-settings__group-title">已归档的对话</div>
+          {threads.length ? (
+            <Popconfirm
+              title={`永久删除全部 ${threads.length} 个归档对话？`}
+              description="此操作不可撤销。"
+              placement="bottomRight"
+              okText="全部删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={deleteAll}
+            >
+              <Button icon={<Trash2 size={14} />} variant="danger" disabled={deletingAll || busyThreadId !== null}>全部删除</Button>
+            </Popconfirm>
+          ) : null}
+        </div>
+        <div className="settings-archives-list">
+          {threads.length ? threads.map((thread) => {
+            const busy = deletingAll || busyThreadId === thread.id;
+            return (
+              <div className="settings-archives-row" key={thread.id}>
+                <span className="settings-archives-row__icon"><Archive size={15} /></span>
+                <span className="settings-archives-row__copy">
+                  <strong title={thread.title}>{thread.title || '未命名对话'}</strong>
+                  <small>{thread.messageCount} 条消息 · 更新于 {formatMemoryDate(thread.updatedAt)}</small>
+                </span>
+                <Button icon={<ArchiveRestore size={14} />} disabled={busy} onClick={() => void runAction(thread.id, () => onRestore(thread.id))}>恢复</Button>
+                <Popconfirm title={`永久删除“${thread.title || '未命名对话'}”？`} description="此操作不可撤销。" placement="topRight" okText="永久删除" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={() => runAction(thread.id, () => onDelete(thread.id))}>
+                  <IconButton label={`永久删除 ${thread.title || '未命名对话'}`} variant="danger" disabled={busy}><Trash2 size={14} /></IconButton>
+                </Popconfirm>
+              </div>
+            );
+          }) : <EmptyState title="暂无归档对话" />}
+        </div>
+        {error ? <div className="settings-archives-error" role="alert">{error}</div> : null}
+      </div>
+    </div>
   );
 }
 
@@ -503,6 +599,12 @@ function updateBadgeText(state: DesktopUpdaterBridgeState | null): string {
 function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState; onSave: (input: RuntimePreferenceInput) => Promise<void> }) {
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [localPathError, setLocalPathError] = useState<string | null>(null);
+  const [featureFlagsDraft, setFeatureFlagsDraft] = useState(() => JSON.stringify(config.features ?? {}, null, 2));
+  const [advancedError, setAdvancedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFeatureFlagsDraft(JSON.stringify(config.features ?? {}, null, 2));
+  }, [config.features]);
 
   const openRuntimePath = async (targetPath: string, label: string) => {
     const normalizedPath = targetPath.trim();
@@ -561,6 +663,85 @@ function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState;
         </div>
       </div>
 
+      <details className="chat-user-settings__section-block chat-user-settings__advanced-disclosure">
+        <summary className="chat-user-settings__group-title chat-user-settings__advanced-summary">
+          <span>高级安全与实验功能</span>
+          <ChevronRight className="chat-user-settings__advanced-chevron" size={15} />
+        </summary>
+        <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
+          <MemorySettingToggle
+            checked={config.sandboxWorkspaceWrite?.networkAccess === true}
+            description="允许 workspace-write 沙箱中的工具访问网络。"
+            label="沙箱网络访问"
+            onChange={(networkAccess) => void onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), networkAccess } })}
+          />
+          <MemorySettingToggle
+            checked={config.bypassHookTrust === true}
+            description="跳过本地 Hook hash 信任检查，仅应在受控环境中开启。"
+            label="绕过 Hook 信任"
+            onChange={(bypassHookTrust) => void onSave({ bypassHookTrust })}
+          />
+          <RuntimeRootListField
+            label="额外可读目录"
+            value={config.sandboxWorkspaceWrite?.readableRoots ?? []}
+            onSave={(readableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), readableRoots } })}
+          />
+          <RuntimeRootListField
+            label="额外可写目录"
+            value={config.sandboxWorkspaceWrite?.writableRoots ?? []}
+            onSave={(writableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), writableRoots } })}
+          />
+          <RuntimeRootListField
+            label="拒绝访问目录"
+            value={config.sandboxWorkspaceWrite?.deniedRoots ?? []}
+            onSave={(deniedRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedRoots } })}
+          />
+          <RuntimeRootListField
+            label="拒绝 Glob"
+            value={config.sandboxWorkspaceWrite?.deniedGlobPatterns ?? []}
+            onSave={(deniedGlobPatterns) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedGlobPatterns } })}
+          />
+          <div className="chat-user-settings__runtime-json-field">
+            <span>Feature flags（JSON）</span>
+            <TextArea rows={6} value={featureFlagsDraft} onChange={(event) => setFeatureFlagsDraft(event.currentTarget.value)} />
+            <Button onClick={() => {
+              try {
+                const parsed = JSON.parse(featureFlagsDraft) as unknown;
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Feature flags 必须是 JSON 对象。');
+                const flags = Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
+                setAdvancedError(null);
+                void onSave({ features: flags });
+              } catch (unknownError) {
+                setAdvancedError(errorMessage(unknownError, 'Feature flags 格式无效。'));
+              }
+            }}>保存 Feature flags</Button>
+          </div>
+          <div className="chat-user-settings__runtime-memory-tuning">
+            <strong>记忆整理参数</strong>
+            <TextField
+              defaultValue={config.memory.consolidationModel ?? ''}
+              placeholder="整理模型（留空跟随当前模型）"
+              onBlur={(event) => void onSave({ memory: { consolidationModel: event.currentTarget.value.trim() || undefined } })}
+            />
+            <TextField
+              type="number"
+              min="1"
+              defaultValue={config.memory.maxRolloutsPerStartup ?? ''}
+              placeholder="每次启动最多处理 Rollouts"
+              onBlur={(event) => void onSave({ memory: { maxRolloutsPerStartup: optionalPositiveNumber(event.currentTarget.value) } })}
+            />
+            <TextField
+              type="number"
+              min="1"
+              defaultValue={config.memory.maxRawMemoriesForConsolidation ?? ''}
+              placeholder="整理前最大原始记忆数"
+              onBlur={(event) => void onSave({ memory: { maxRawMemoriesForConsolidation: optionalPositiveNumber(event.currentTarget.value) } })}
+            />
+          </div>
+        </div>
+        {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
+      </details>
+
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">本地存储</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
@@ -595,8 +776,33 @@ function RuntimePolicySettings({ config, onSave }: { config: RuntimeConfigState;
   );
 }
 
+function RuntimeRootListField({ label, value, onSave }: { label: string; value: string[]; onSave: (items: string[]) => Promise<void> }) {
+  return (
+    <label className="chat-user-settings__runtime-list-field">
+      <span>{label}</span>
+      <TextArea
+        key={value.join('\n')}
+        rows={3}
+        defaultValue={value.join('\n')}
+        placeholder="每行一个绝对路径或 Glob"
+        onBlur={(event) => void onSave(splitNonEmptyLines(event.currentTarget.value))}
+      />
+    </label>
+  );
+}
+
+function splitNonEmptyLines(value: string): string[] {
+  return [...new Set(value.split(/\r?\n/u).map((item) => item.trim()).filter(Boolean))];
+}
+
+function optionalPositiveNumber(value: string): number | undefined {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
 function PersonalizationSettings({
   config,
+  projects,
   memoryPreview,
   memoryPreviewLoading,
   onSavePreferences,
@@ -605,6 +811,7 @@ function PersonalizationSettings({
   onReset,
 }: {
   config: RuntimeConfigState;
+  projects: WorkspaceProject[];
   memoryPreview: RuntimeMemoryPreview | null;
   memoryPreviewLoading: boolean;
   onSavePreferences: (input: RuntimePreferenceInput) => Promise<void>;
@@ -717,7 +924,7 @@ function PersonalizationSettings({
         <div className="chat-user-settings__memory-list" aria-busy={memoryPreviewLoading}>
           {items.length ? (
             items.map((item) => {
-              const meta = [item.origin === 'active' ? '主动沉淀' : '后台沉淀', item.scope === 'global' ? '全局' : '项目范围', item.source, formatMemoryDate(item.updatedAt), `${Number(item.chars || 0).toLocaleString()} 字符`].filter(Boolean);
+              const meta = [item.origin === 'active' ? '主动沉淀' : '后台沉淀', memoryScopeLabel(item, projects), item.source, formatMemoryDate(item.updatedAt), `${Number(item.chars || 0).toLocaleString()} 字符`].filter(Boolean);
 
               return (
                 <div className="chat-user-settings__memory-item" key={item.id}>
@@ -889,6 +1096,12 @@ function MemoryExtractModelField({ config, onSavePreferences }: { config: Runtim
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function memoryScopeLabel(item: RuntimeMemoryPreviewItem, projects: WorkspaceProject[]): string {
+  if (item.scope === 'global') return '全局';
+  const projectName = projects.find((project) => project.id === item.projectId)?.name;
+  return projectName ? `项目：${projectName}` : item.projectId ? `项目：${item.projectId}` : '项目范围';
 }
 
 function formatMemoryDate(value?: string): string {

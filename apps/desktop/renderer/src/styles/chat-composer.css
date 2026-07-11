@@ -197,6 +197,110 @@
   width: 100%;
 }
 
+.chat-usage-panel {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 10px;
+  width: min(var(--chat-content-max-width), calc(100% - var(--chat-content-inline-padding) - var(--chat-content-inline-padding)));
+  max-height: min(320px, 38vh);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--desktop-agent-panel-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--desktop-agent-main-surface);
+  box-shadow: var(--desktop-agent-input-shadow);
+}
+
+.chat-sender--starter > .chat-usage-panel {
+  width: 100%;
+}
+
+.chat-usage-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-usage-panel > header > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chat-usage-panel > header button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-text-muted);
+  cursor: pointer;
+}
+
+.chat-usage-panel > header button:hover {
+  background: var(--desktop-agent-control-hover-bg);
+  color: var(--app-text);
+}
+
+.chat-usage-panel__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.chat-usage-panel__metrics > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--app-surface-muted);
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.chat-usage-panel__metrics strong {
+  overflow: hidden;
+  color: var(--app-text);
+  font-family: var(--app-code-font-family);
+  font-size: 14px;
+  text-overflow: ellipsis;
+}
+
+.chat-usage-panel__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.chat-usage-panel details {
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.chat-usage-panel details pre {
+  max-height: 160px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 7px;
+  background: var(--app-surface-muted);
+  color: var(--app-text-secondary);
+  font: 11px/1.5 var(--app-code-font-family);
+  white-space: pre-wrap;
+}
+
 .chat-command-menu__title {
   padding: 4px 7px 6px;
   color: var(--app-text-muted);

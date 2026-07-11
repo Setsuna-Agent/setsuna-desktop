@@ -13,7 +13,7 @@ describe('memory tool host', () => {
   it('exposes remember and recall tools backed by local memory', async () => {
     const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-tool-test-')), systemClock, new RandomIdGenerator());
     const host = new MemoryToolHost(store);
-    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const context = { threadId: 'thread_1', turnId: 'turn_1', features: { memory_unscoped_files: true } };
 
     const tools = await host.listTools(context);
     const saved = await host.runTool('remember_memory', {
@@ -45,6 +45,35 @@ describe('memory tool host', () => {
     });
   });
 
+  it('enforces the current thread project boundary for memory tools', async () => {
+    const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-tool-scope-test-')), systemClock, new RandomIdGenerator());
+    const host = new MemoryToolHost(store);
+    await store.rememberMemory({ content: 'Global preference.', scope: 'global' });
+    await store.rememberMemory({ content: 'Project alpha convention.', scope: 'project', projectId: 'project_alpha' });
+    await store.rememberMemory({ content: 'Project beta secret.', scope: 'project', projectId: 'project_beta' });
+
+    const projectContext = { threadId: 'thread_alpha', turnId: 'turn_1', projectId: 'project_alpha' };
+    const projectTools = await host.listTools(projectContext);
+    const recalled = await host.runTool('recall_memory', { projectId: 'project_beta' }, projectContext);
+    const saved = await host.runTool('remember_memory', {
+      content: 'Saved into the current project.',
+      scope: 'project',
+      projectId: 'project_beta',
+    }, projectContext);
+
+    expect(projectTools.map((tool) => tool.name)).toEqual(['remember_memory', 'recall_memory']);
+    expect(recalled.content).toContain('Global preference.');
+    expect(recalled.content).toContain('Project alpha convention.');
+    expect(recalled.content).not.toContain('Project beta secret.');
+    expect(saved.data).toMatchObject({ projectId: 'project_alpha' });
+    await expect(host.runTool('read_memory_file', { path: 'MEMORY.md' }, projectContext)).rejects.toThrow('unavailable in scoped threads');
+
+    const globalRecall = await host.runTool('recall_memory', {}, { threadId: 'thread_global', turnId: 'turn_2' });
+    expect(globalRecall.content).toContain('Global preference.');
+    expect(globalRecall.content).not.toContain('Project alpha convention.');
+    expect(globalRecall.content).not.toContain('Project beta secret.');
+  });
+
   it('exposes memory tools according to use and generate settings', async () => {
     const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-tool-test-')), systemClock, new RandomIdGenerator());
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
@@ -56,6 +85,8 @@ describe('memory tool host', () => {
     const readOnly = new MemoryToolHost(store, new StaticConfigStore({ useMemories: true, generateMemories: false, dedicatedTools: true, disableOnExternalContext: true }));
     await expect(readOnly.listTools(context)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'recall_memory' }),
+    ]));
+    await expect(readOnly.listTools(context)).resolves.not.toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'list_memory_files' }),
     ]));
     await expect(readOnly.listTools(context)).resolves.not.toEqual(expect.arrayContaining([

@@ -1,4 +1,4 @@
-import type { RuntimeDynamicToolDefinition, RuntimeMemoryCitation, RuntimeMessage, RuntimeThread, RuntimeToolCall, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
+import type { RuntimeDynamicToolDefinition, RuntimeMemoryCitation, RuntimeMessage, RuntimeThread, RuntimeThreadGoal, RuntimeThreadGoalPatch, RuntimeToolCall, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
 import type { AppServerNotificationBus } from '../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
@@ -34,6 +34,7 @@ import { TurnCancelledError } from './runtime-turn-errors.js';
 import { RuntimeUserShellRunner } from './runtime-user-shell-runner.js';
 import { RuntimeContextCompactor } from './runtime-context-compactor.js';
 import { RuntimeTurnTaskRegistry } from './turn-task-registry.js';
+import { RuntimeGoalCoordinator } from './runtime-goal-coordinator.js';
 
 export type AgentLoopOptions = {
   threadStore: ThreadStore;
@@ -65,6 +66,7 @@ export class AgentLoop {
   private readonly contextCompactor: RuntimeContextCompactor;
   private readonly compactionTurns: RuntimeCompactionTurnCoordinator;
   private readonly collaborationCoordinator: RuntimeCollaborationCoordinator;
+  private readonly goals: RuntimeGoalCoordinator;
   private readonly hooks: RuntimeHookCoordinator;
   private readonly samplingContexts: RuntimeSamplingContextBuilder;
   private readonly threadTitles: RuntimeThreadTitleCoordinator;
@@ -98,6 +100,8 @@ export class AgentLoop {
     });
     this.inputGuard = new RuntimeModelInputGuard(options.configStore);
     this.collaborationCoordinator = new RuntimeCollaborationCoordinator({
+      clock: options.clock,
+      ids: options.ids,
       threadStore: options.threadStore,
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
@@ -114,6 +118,7 @@ export class AgentLoop {
       persistentToolApprovalStore: options.persistentToolApprovalStore,
       toolHost: options.toolHost,
       collaborationCoordinator: () => this.collaborationCoordinator,
+      goalCoordinator: () => this.goals,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       publishMessage: (threadId, turnId, message) => this.publishMessage(threadId, turnId, message),
     });
@@ -203,6 +208,7 @@ export class AgentLoop {
     });
     this.turnRunner = new RuntimeAgentTurnRunner({
       clock: options.clock,
+      collaborationCoordinator: this.collaborationCoordinator,
       configStore: options.configStore,
       contextCompactor: this.contextCompactor,
       hooks: this.hooks,
@@ -234,6 +240,15 @@ export class AgentLoop {
       publishStoredEventsSince: (threadId, sinceSeq) => this.publishStoredEventsSince(threadId, sinceSeq),
       runTurn: (input) => this.turnRunner.run(input),
     });
+    this.goals = new RuntimeGoalCoordinator({
+      clock: options.clock,
+      ids: options.ids,
+      threadStore: options.threadStore,
+      activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
+      cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
+      createContinuation: (threadId, goal, contextMessages) => this.turnRuns.createGoalContinuation(threadId, goal, contextMessages),
+      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
+    });
     this.userShellRunner = new RuntimeUserShellRunner({
       clock: options.clock,
       ids: options.ids,
@@ -252,6 +267,7 @@ export class AgentLoop {
 
   async shutdown(reason = 'Desktop runtime is shutting down.', timeoutMs = 5_000): Promise<boolean> {
     this.shuttingDown = true;
+    this.goals.shutdown();
     const error = new TurnCancelledError(reason);
     const tasks = this.turnTasks.cancelAll(error);
     this.options.approvalGate?.rejectPending?.(error);
@@ -283,7 +299,7 @@ export class AgentLoop {
   async startTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse> {
     this.assertAcceptingWork();
     const active = this.turnTasks.activeForThread(threadId);
-    if (active?.taskKind === 'regular' && active.acceptingSteers && !active.controller.signal.aborted) {
+    if ((active?.taskKind === 'regular' || active?.taskKind === 'goal') && active.acceptingSteers && !active.controller.signal.aborted) {
       // 防御 renderer/SSE 短暂不同步：active 期间的普通发送必须落回当前 turn 的 steer。
       return this.steerTurn(threadId, {
         attachments: input.attachments,
@@ -293,6 +309,7 @@ export class AgentLoop {
       });
     }
     const run = await this.turnRuns.createRegular(threadId, input);
+    this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
   }
@@ -307,6 +324,7 @@ export class AgentLoop {
   async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}): Promise<SendTurnResponse> {
     this.assertAcceptingWork();
     const run = await this.turnRuns.createRegenerate(threadId, messageId, input);
+    this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
   }
@@ -320,6 +338,7 @@ export class AgentLoop {
   async sendTurn(threadId: string, input: SendTurnInput): Promise<void> {
     this.assertAcceptingWork();
     const run = await this.turnRuns.createRegular(threadId, input);
+    this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
     await run.done;
   }
 
@@ -346,6 +365,7 @@ export class AgentLoop {
   async startReview(threadId: string, input: RuntimeReviewTurnInput): Promise<SendTurnResponse> {
     this.assertAcceptingWork();
     const run = await this.turnRuns.createReview(threadId, input);
+    this.goals.observeRun(threadId, run.turnId, 'review', run.done);
     void run.done.catch(() => undefined);
     return { accepted: true, turnId: run.turnId };
   }
@@ -358,6 +378,8 @@ export class AgentLoop {
    */
   async cancelTurn(threadId: string, turnId: string): Promise<boolean> {
     const task = this.turnTasks.taskFor(threadId, turnId);
+    // Pause before aborting so the task's finally/idle observer can never race into another goal turn.
+    if (task?.taskKind === 'goal') await this.goals.pauseForCancellation(threadId);
     const cancelled = this.turnTasks.cancel(threadId, turnId, new TurnCancelledError());
     if (!cancelled) return false;
     // 取消是最高优先级交互：先落终态事件释放 UI，不等待 provider/tool 主动响应 AbortSignal。
@@ -372,6 +394,24 @@ export class AgentLoop {
    */
   activeTurnId(threadId: string): string | null {
     return this.turnTasks.activeForThread(threadId)?.turnId ?? null;
+  }
+
+  getThreadGoal(threadId: string): Promise<RuntimeThreadGoal | null> {
+    return this.goals.getGoal(threadId);
+  }
+
+  setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoal> {
+    this.assertAcceptingWork();
+    return this.goals.setGoal(threadId, patch);
+  }
+
+  clearThreadGoal(threadId: string): Promise<void> {
+    return this.goals.clearGoal(threadId);
+  }
+
+  resumeThreadGoal(threadId: string): Promise<void> {
+    this.assertAcceptingWork();
+    return this.goals.resumeIfActive(threadId);
   }
 
   registerAppServerDynamicTools(threadId: string, tools: RuntimeDynamicToolDefinition[], connectionId: string): void {

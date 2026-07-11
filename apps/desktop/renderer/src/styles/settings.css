@@ -90,7 +90,7 @@
 .desktop-settings-panel .chat-user-settings__content {
   min-width: 0;
   min-height: 0;
-  padding: clamp(34px, 6vh, 58px) 42px 40px;
+  padding: clamp(34px, 6vh, 58px) 42px clamp(72px, 10vh, 96px);
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -103,6 +103,7 @@
   align-content: stretch;
   height: 100%;
   padding-top: 12px;
+  padding-bottom: 12px;
   overflow: hidden;
 }
 
@@ -154,6 +155,73 @@
   display: grid;
   min-width: 0;
   gap: 14px;
+}
+
+.desktop-settings-panel .settings-archives-list {
+  display: grid;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  background: var(--app-surface);
+  overflow: hidden;
+}
+
+.desktop-settings-panel .settings-archives-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.desktop-settings-panel .settings-archives-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+.desktop-settings-panel .settings-archives-row + .settings-archives-row {
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .settings-archives-row__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--app-surface-muted);
+  color: var(--app-text-secondary);
+}
+
+.desktop-settings-panel .settings-archives-row__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.desktop-settings-panel .settings-archives-row__copy strong,
+.desktop-settings-panel .settings-archives-row__copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-archives-row__copy strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.desktop-settings-panel .settings-archives-row__copy small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.desktop-settings-panel .settings-archives-error {
+  color: var(--app-danger);
+  font-size: 12px;
 }
 
 .desktop-settings-panel .chat-user-settings__section-block {
@@ -1808,12 +1876,13 @@
   }
 
   .desktop-settings-panel .chat-user-settings__content {
-    padding: 28px 18px 32px;
+    padding: 28px 18px 56px;
   }
 
   .desktop-settings-panel .chat-user-settings__content--local-llm {
     display: block;
     height: auto;
+    padding-bottom: 20px;
     overflow-y: auto;
   }
 
@@ -1951,5 +2020,73 @@
 
   .settings-model-modal .settings-thinking-input {
     flex-basis: 100%;
+  }
+}
+.chat-user-settings__runtime-advanced {
+  align-items: stretch;
+}
+
+.desktop-settings-panel .chat-user-settings__advanced-disclosure {
+  display: grid;
+}
+
+.desktop-settings-panel .chat-user-settings__advanced-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.desktop-settings-panel .chat-user-settings__advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.desktop-settings-panel .chat-user-settings__advanced-chevron {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  transition: transform 160ms ease;
+}
+
+.desktop-settings-panel .chat-user-settings__advanced-disclosure[open] .chat-user-settings__advanced-chevron {
+  transform: rotate(90deg);
+}
+
+.chat-user-settings__runtime-list-field,
+.chat-user-settings__runtime-json-field,
+.chat-user-settings__runtime-memory-tuning {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--app-border);
+}
+
+.chat-user-settings__runtime-list-field > span,
+.chat-user-settings__runtime-json-field > span,
+.chat-user-settings__runtime-memory-tuning > strong {
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chat-user-settings__runtime-json-field > button {
+  align-self: flex-end;
+}
+
+.chat-user-settings__runtime-memory-tuning {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.chat-user-settings__runtime-memory-tuning > strong {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 780px) {
+  .chat-user-settings__runtime-memory-tuning {
+    grid-template-columns: 1fr;
   }
 }

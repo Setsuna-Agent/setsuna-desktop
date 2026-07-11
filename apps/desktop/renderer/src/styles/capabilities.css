@@ -902,3 +902,117 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+.desktop-capabilities-mcp-diagnostics__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.desktop-capabilities-extra-roots {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(260px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+}
+
+.desktop-capabilities-extra-roots > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.desktop-capabilities-extra-roots span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.desktop-capabilities-extra-roots__error {
+  grid-column: 1 / -1;
+  color: var(--app-danger) !important;
+}
+
+.desktop-capabilities-mcp-diagnostics__grid > section,
+.desktop-capabilities-mcp-diagnostics__result {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+}
+
+.desktop-capabilities-mcp-diagnostics__grid > section > header,
+.desktop-capabilities-mcp-diagnostics__result > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--app-text);
+  font-size: 12px;
+}
+
+.desktop-capabilities-mcp-diagnostics__grid > section > header span {
+  margin-left: auto;
+  color: var(--app-text-muted);
+}
+
+.desktop-capabilities-mcp-diagnostics__list,
+.desktop-capabilities-mcp-diagnostics__templates {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.desktop-capabilities-mcp-diagnostics__list button {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-muted);
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.desktop-capabilities-mcp-diagnostics__list button:hover {
+  border-color: var(--app-primary);
+}
+
+.desktop-capabilities-mcp-diagnostics__list small,
+.desktop-capabilities-mcp-diagnostics__templates code {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-capabilities-mcp-diagnostics__result {
+  margin-top: 14px;
+}
+
+.desktop-capabilities-mcp-diagnostics__result pre {
+  max-height: 360px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 11px/1.5 var(--app-code-font-family);
+}
+
+@media (max-width: 820px) {
+  .desktop-capabilities-mcp-diagnostics__grid {
+    grid-template-columns: 1fr;
+  }
+}

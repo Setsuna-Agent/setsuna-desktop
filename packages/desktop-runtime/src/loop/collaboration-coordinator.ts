@@ -1,4 +1,6 @@
-import type { RuntimeCollabToolCall, RuntimeConfigState, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeCollabToolCall, RuntimeConfigState, RuntimeMessage, RuntimeThread, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { Clock } from '../ports/clock.js';
+import type { IdGenerator } from '../ports/id-generator.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { RuntimeToolExecutionContext } from '../ports/tool-host.js';
 
@@ -16,6 +18,8 @@ export type CollaborationExecutionResult = {
 };
 
 export type RuntimeCollaborationCoordinatorOptions = {
+  clock: Clock;
+  ids: IdGenerator;
   threadStore: ThreadStore;
   activeTask(threadId: string): ActiveCollaborationTask | null;
   cancelTurn(threadId: string, turnId: string): Promise<boolean>;
@@ -71,7 +75,7 @@ export const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
   },
   {
     name: 'wait',
-    description: 'Wait briefly for another agent thread to finish its current turn and return its status.',
+    description: 'Wait briefly for another agent thread. When it finishes, the tool returns the complete assistant output in `output`; when still running, continue useful work or wait again and do not finalize the parent task.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -105,7 +109,52 @@ export function isCollaborationToolName(name: string): boolean {
 
 /** Owns collaboration tool semantics while AgentLoop retains event rendering. */
 export class RuntimeCollaborationCoordinator {
+  private readonly childrenByParentThread = new Map<string, Set<string>>();
+
   constructor(private readonly options: RuntimeCollaborationCoordinatorOptions) {}
+
+  pendingChildren(parentThreadId: string): { active: number; total: number } {
+    const children = this.childrenByParentThread.get(parentThreadId);
+    if (!children?.size) return { active: 0, total: 0 };
+    let active = 0;
+    for (const childThreadId of children) {
+      if (this.options.activeTask(childThreadId)) active += 1;
+    }
+    return { active, total: children.size };
+  }
+
+  /** Waits without a runtime timeout, then returns complete child outputs to the parent model. */
+  async collectPendingChildren(parentThreadId: string, parentTurnId: string, signal: AbortSignal): Promise<RuntimeMessage[]> {
+    const childIds = [...(this.childrenByParentThread.get(parentThreadId) ?? [])];
+    if (!childIds.length) return [];
+    const activeTasks = childIds.map((threadId) => this.options.activeTask(threadId)).filter((task): task is ActiveCollaborationTask => Boolean(task));
+    await Promise.allSettled(activeTasks.map((task) => waitForTaskCompletion(task.done, signal)));
+    if (signal.aborted) throw signal.reason ?? new Error('Turn cancelled.');
+
+    const results = await Promise.all(childIds.map(async (threadId) => {
+      const thread = await this.options.threadStore.getThread(threadId);
+      return {
+        threadId,
+        title: thread?.title ?? threadId,
+        content: childAgentOutput(thread) || thread?.lastMessagePreview.trim() || 'Child finished without a textual result.',
+      };
+    }));
+    this.childrenByParentThread.delete(parentThreadId);
+    return [{
+      id: this.options.ids.id('msg_collaboration_results'),
+      turnId: parentTurnId,
+      role: 'system',
+      visibility: 'model',
+      status: 'complete',
+      createdAt: this.options.clock.now().toISOString(),
+      content: [
+        '<collaboration_results>',
+        ...results.map((result) => `Child ${result.title} (${result.threadId}):\n${result.content}`),
+        '</collaboration_results>',
+        'Use these child results before producing the parent task final answer.',
+      ].join('\n\n'),
+    }];
+  }
 
   async execute(name: string, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<CollaborationExecutionResult> {
     const input = recordInput(parsedArguments);
@@ -129,7 +178,20 @@ export class RuntimeCollaborationCoordinator {
       parentThreadId: context.threadId,
       memoryMode: parent.memoryMode,
     });
-    const started = await this.options.startTurn(child.id, prompt);
+    let children = this.childrenByParentThread.get(context.threadId);
+    if (!children) {
+      children = new Set<string>();
+      this.childrenByParentThread.set(context.threadId, children);
+    }
+    children.add(child.id);
+    let started: { turnId: string };
+    try {
+      started = await this.options.startTurn(child.id, prompt);
+    } catch (error) {
+      children.delete(child.id);
+      if (!children.size) this.childrenByParentThread.delete(context.threadId);
+      throw error;
+    }
     const data = {
       tool: 'spawn_agent',
       senderThreadId: context.threadId,
@@ -198,6 +260,7 @@ export class RuntimeCollaborationCoordinator {
     const wait = await this.waitForThread(receiverThreadId, context, collaborationTimeoutMs(input));
     const thread = await this.options.threadStore.getThread(receiverThreadId);
     const activeTurnId = this.options.activeTask(receiverThreadId)?.turnId ?? null;
+    const output = wait.status === 'running' ? '' : childAgentOutput(thread);
     const data = {
       tool: 'wait',
       senderThreadId: context.threadId,
@@ -206,6 +269,7 @@ export class RuntimeCollaborationCoordinator {
       status: wait.status,
       timedOut: wait.timedOut,
       lastMessagePreview: thread?.lastMessagePreview ?? '',
+      ...(output ? { output } : {}),
     };
     return {
       collabToolCall: {
@@ -228,6 +292,9 @@ export class RuntimeCollaborationCoordinator {
     const reason = optionalString(input, ['reason']);
     const active = this.options.activeTask(receiverThreadId);
     const cancelled = active ? await this.options.cancelTurn(receiverThreadId, active.turnId) : false;
+    const children = this.childrenByParentThread.get(context.threadId);
+    children?.delete(receiverThreadId);
+    if (children && !children.size) this.childrenByParentThread.delete(context.threadId);
     const data = {
       tool: 'close_agent',
       senderThreadId: context.threadId,
@@ -271,6 +338,20 @@ export class RuntimeCollaborationCoordinator {
 
 function recordInput(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function childAgentOutput(thread: RuntimeThread | null): string {
+  if (!thread) return '';
+  const latestTerminalTurn = [...(thread.turns ?? [])].reverse().find((turn) => turn.status && turn.status !== 'in_progress');
+  const turnMessages = latestTerminalTurn
+    ? thread.messages.filter((message) => message.turnId === latestTerminalTurn.id)
+    : thread.messages;
+  const assistantParts = turnMessages
+    .filter((message) => message.role === 'assistant' && message.visibility !== 'model')
+    .map((message) => message.content.trim())
+    .filter(Boolean);
+  if (assistantParts.length) return assistantParts.join('\n\n');
+  return [...thread.messages].reverse().find((message) => message.role === 'assistant' && message.content.trim())?.content.trim() ?? '';
 }
 
 function requiredString(record: Record<string, unknown>, keys: string[], label: string): string {
@@ -323,6 +404,23 @@ async function waitForTask(
     ]);
   } finally {
     if (timeout) clearTimeout(timeout);
+    if (abortListener) signal.removeEventListener('abort', abortListener);
+  }
+}
+
+async function waitForTaskCompletion(done: Promise<unknown> | undefined, signal: AbortSignal): Promise<void> {
+  if (!done) return;
+  if (signal.aborted) throw signal.reason ?? new Error('Turn cancelled.');
+  let abortListener: (() => void) | undefined;
+  try {
+    await Promise.race([
+      done.then(() => undefined, () => undefined),
+      new Promise<never>((_, reject) => {
+        abortListener = () => reject(signal.reason ?? new Error('Turn cancelled.'));
+        signal.addEventListener('abort', abortListener, { once: true });
+      }),
+    ]);
+  } finally {
     if (abortListener) signal.removeEventListener('abort', abortListener);
   }
 }

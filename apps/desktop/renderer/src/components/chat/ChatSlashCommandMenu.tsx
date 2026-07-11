@@ -1,5 +1,5 @@
 import { Progress } from 'antd';
-import { Boxes, CheckSquare, Database, ListChecks, Trash2, Zap } from 'lucide-react';
+import { Boxes, CheckSquare, CircleGauge, Database, ListChecks, ShieldCheck, Target, Trash2, Users, Zap } from 'lucide-react';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 
 export type SlashCommandMenuItem =
@@ -12,7 +12,7 @@ export type SlashCommandMenuItem =
       progressPercent?: number;
       scope?: string;
       title: string;
-      type: 'clear-context' | 'compact-context' | 'memory-mode' | 'plan';
+      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'memory-mode' | 'plan' | 'review' | 'usage';
       checked?: boolean;
     }
   | {
@@ -51,7 +51,7 @@ export function ChatSlashCommandMenu({
             disabled={item.kind === 'action' && item.disabled}
             role="option"
             aria-selected={index === activeIndex}
-            aria-pressed={item.kind === 'action' && (item.type === 'memory-mode' || item.type === 'plan') ? Boolean(item.checked) : undefined}
+            aria-pressed={item.kind === 'action' && isSwitchAction(item.type) ? Boolean(item.checked) : undefined}
             onMouseDown={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -68,7 +68,7 @@ export function ChatSlashCommandMenu({
                 <span className="chat-command-menu__item-desc">{item.description}</span>
               ) : null}
             </span>
-            {item.kind === 'action' && (item.type === 'memory-mode' || item.type === 'plan') ? (
+            {item.kind === 'action' && isSwitchAction(item.type) ? (
               <MemoryCommandSwitch checked={Boolean(item.checked)} disabled={Boolean(item.disabled)} />
             ) : (
               <span className="chat-command-menu__item-scope">
@@ -88,6 +88,10 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.kind === 'skill') return <Boxes className="chat-command-menu__item-icon" size={15} />;
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
   if (item.type === 'plan') return <ListChecks className="chat-command-menu__item-icon" size={15} />;
+  if (item.type === 'collaboration') return <Users className="chat-command-menu__item-icon" size={15} />;
+  if (item.type === 'goal') return <Target className="chat-command-menu__item-icon" size={15} />;
+  if (item.type === 'usage') return <CircleGauge className="chat-command-menu__item-icon" size={15} />;
+  if (item.type === 'review') return <ShieldCheck className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'memory-mode') return <Database className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'compact-context') {
     return (
@@ -119,6 +123,14 @@ function menuTitle(item?: SlashCommandMenuItem): string {
   if (item.kind === 'skill') return '技能';
   if (item.kind === 'model') return '模型选择';
   if (item.type === 'plan') return '计划';
+  if (item.type === 'collaboration') return '协作';
+  if (item.type === 'goal') return '目标';
+  if (item.type === 'usage') return '用量与诊断';
+  if (item.type === 'review') return '审查';
   if (item.type === 'memory-mode') return '记忆';
   return '命令';
+}
+
+function isSwitchAction(type: Extract<SlashCommandMenuItem, { kind: 'action' }>['type']): boolean {
+  return type === 'memory-mode' || type === 'plan' || type === 'collaboration' || type === 'goal';
 }

@@ -32,7 +32,7 @@ export function useChatTurnActions({
   terminalTurnIdsRef: MutableRefObject<Set<string>>;
 }) {
   const sendInput = useCallback(
-    async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
+    async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
       const input = (value ?? draft).trim();
       const attachments = options.attachments ?? [];
       if (!input && !attachments.length && !options.planDecision) return;
@@ -50,6 +50,20 @@ export function useChatTurnActions({
           await reloadThreads();
         }
         const threadId = thread.id;
+        if (options.goalMode && input) {
+          const goal = await client.setThreadGoal(threadId, { objective: input, status: 'active' });
+          // Goal turns are started inside setThreadGoal. Read back the runtime task registry snapshot
+          // so a missed/overlapped SSE turn.started cannot leave the composer without its stop action.
+          const goalThread = await client.getThread(threadId);
+          terminalTurnIdsRef.current.delete(goalThread.activeTurnId ?? '');
+          setCurrentThread((current) => mergeGoalThreadSnapshot(current, goalThread, goal));
+          if (goalThread.activeTurnId) setActiveTurnId(goalThread.activeTurnId);
+          setDraft('');
+          await reloadThreads();
+          // Goal execution is runtime-owned: setting it schedules the first hidden goal turn,
+          // and each idle completion schedules the next one until the goal reaches a terminal status.
+          return;
+        }
         setDraft('');
         const startTurn = () => client.sendTurn(threadId, {
           attachments,
@@ -150,6 +164,21 @@ export type ChatTurnActions = ReturnType<typeof useChatTurnActions>;
 function normalizeRuntimeActionError(error: unknown, notFoundMessage: string): string {
   const message = error instanceof Error ? error.message : String(error);
   return /\bnot found\b/i.test(message) ? notFoundMessage : message;
+}
+
+export function mergeGoalThreadSnapshot(
+  current: RuntimeThread | null,
+  snapshot: RuntimeThread,
+  goal: NonNullable<RuntimeThread['goal']>,
+): RuntimeThread {
+  if (!current || current.id !== snapshot.id || snapshot.lastSeq >= current.lastSeq) {
+    return { ...snapshot, goal: snapshot.goal ?? goal };
+  }
+  return {
+    ...current,
+    goal,
+    activeTurnId: snapshot.activeTurnId ?? current.activeTurnId,
+  };
 }
 
 async function steerActiveTurn({
