@@ -292,13 +292,9 @@ export class ShellToolHost implements ToolHost {
   }
 
   private async projectFor(projectId: unknown): Promise<WorkspaceProject> {
-    const list = await this.projects.listProjects();
-    const project =
-      typeof projectId === 'string' && projectId
-        ? list.projects.find((item) => item.id === projectId)
-        : list.projects[0];
-    if (!project) throw new Error('No local project is registered. Add a project before using shell tools.');
-    return project;
+    const status = await this.projects.getStatus(typeof projectId === 'string' && projectId ? projectId : undefined);
+    if (!status.project) throw new Error('No workspace is available for shell tools.');
+    return status.project;
   }
 
   private resolveProjectId(projectId: unknown, context: ToolExecutionContext): string | undefined {

@@ -67,6 +67,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [mcpState, setMcpState] = useState<RuntimeMcpServerList | null>(null);
   const [hookState, setHookState] = useState<RuntimeHookListResponse | null>(null);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
+  const [temporaryWorkspace, setTemporaryWorkspace] = useState<WorkspaceProject | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const initializedSelectionRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -86,7 +87,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const refresh = useCallback(async () => {
     setError(null);
     // 首屏需要多个 runtime 域的数据；并行拉取能避免设置页/侧栏/对话区分批闪烁。
-    const [nextConfig, threadList, allThreadList, skillList, mcpList, hookList, projectList, usageSummary, memoryList, approvalList] = await Promise.all([
+    const [nextConfig, threadList, allThreadList, skillList, mcpList, hookList, projectList, workspaceStatus, usageSummary, memoryList, approvalList] = await Promise.all([
       client.getConfig(),
       client.listThreads(),
       client.listThreads({ includeArchived: true }),
@@ -94,6 +95,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       client.listMcpServers(),
       client.listHooks(activeHookCwds),
       client.listProjects(),
+      client.getWorkspaceStatus(),
       client.getUsage(),
       client.listMemories({ limit: 20 }),
       client.listApprovals(),
@@ -105,6 +107,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setMcpState(mcpList);
     setHookState(hookList);
     setProjects(projectList.projects);
+    setTemporaryWorkspace(workspaceStatus.project ?? null);
     setUsage(usageSummary);
     setMemories(memoryList.memories);
     setApprovals(approvalList.approvals);
@@ -750,6 +753,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setSkillExtraRoots,
     skillExtraRoots,
     skills,
+    temporaryWorkspace,
     terminalTurnIdsRef,
     threadUsage,
     threads,

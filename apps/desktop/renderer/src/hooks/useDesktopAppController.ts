@@ -49,8 +49,9 @@ export function useDesktopAppController() {
 
   const effectiveProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
   const effectiveProject = effectiveProjectId ? projects.find((project) => project.id === effectiveProjectId) : undefined;
+  const activeWorkspace = effectiveProject ?? runtime.temporaryWorkspace ?? undefined;
 
-  const workspacePanels = useDesktopWorkspacePanels({ activeProject: effectiveProject, activeView, setError });
+  const workspacePanels = useDesktopWorkspacePanels({ activeProject: activeWorkspace, activeView, setError });
   const {
     bottomPanelVisible,
     closeWorkspaceMenus,
@@ -112,7 +113,7 @@ export function useDesktopAppController() {
   }, [sidebarCanExpand]);
 
   const projectWorkspace = useProjectWorkspace({
-    activeProjectId: effectiveProjectId,
+    activeProjectId: activeWorkspace?.id ?? null,
     client,
     onOpenFilePanel: openFilePanel,
     onResetProjectPanels: workspacePanels.resetProjectBoundPanels,
@@ -195,6 +196,7 @@ export function useDesktopAppController() {
 
   return {
     activeProject: effectiveProject,
+    activeWorkspace,
     activeProjectId,
     activeView,
     chatActions,

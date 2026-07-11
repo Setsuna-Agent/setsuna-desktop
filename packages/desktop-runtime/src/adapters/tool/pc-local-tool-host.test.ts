@@ -793,7 +793,7 @@ async function createHost(options: { policyAmendmentStore?: PolicyAmendmentStore
   const projectDir = path.join(root, 'project');
   const dataDir = path.join(root, 'data');
   await mkdir(projectDir, { recursive: true });
-  const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+  const store = new FileWorkspaceProjectStore(dataDir, systemClock, { temporaryWorkspacePath: projectDir });
   const project = await store.addProject({ path: projectDir });
   return { host: new PcLocalToolHost(store, options.policyAmendmentStore), projectDir, projectId: project.id };
 }

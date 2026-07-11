@@ -38,6 +38,22 @@ describe('file workspace project store', () => {
     expect(written).toMatchObject({ path: 'src/generated.txt', created: true });
   });
 
+  it('provides a hidden temporary workspace when no project is selected', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
+
+    const status = await store.getStatus();
+    const written = await store.writeFile(status.project!.id, 'notes/draft.txt', 'temporary\n');
+
+    expect(status).toMatchObject({
+      exists: true,
+      readable: true,
+      project: { id: 'temporary_workspace', name: '临时目录' },
+    });
+    expect((await store.listProjects()).projects).toEqual([]);
+    expect(await store.readFile(status.project!.id, written.path)).toMatchObject({ content: 'temporary\n' });
+  });
+
   it('rejects paths outside the project root', async () => {
     const fixture = await createWorkspaceFixture();
     const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);

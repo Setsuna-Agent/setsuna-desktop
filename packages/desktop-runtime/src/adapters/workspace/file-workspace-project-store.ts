@@ -1,18 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, realpath, stat, writeFile as writeFileFs } from 'node:fs/promises';
 import path from 'node:path';
-import type {
-  AddWorkspaceProjectInput,
-  WorkspaceEntry,
-  WorkspaceEntrySearchResponse,
-  WorkspaceEntryList,
-  WorkspaceFileRead,
-  WorkspaceFileWrite,
-  WorkspaceProject,
-  WorkspaceProjectList,
-  WorkspaceSearchResponse,
-  WorkspaceSearchResult,
-  WorkspaceStatus,
+import {
+  TEMPORARY_WORKSPACE_PROJECT_ID,
+  type AddWorkspaceProjectInput,
+  type WorkspaceEntry,
+  type WorkspaceEntrySearchResponse,
+  type WorkspaceEntryList,
+  type WorkspaceFileRead,
+  type WorkspaceFileWrite,
+  type WorkspaceProject,
+  type WorkspaceProjectList,
+  type WorkspaceSearchResponse,
+  type WorkspaceSearchResult,
+  type WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
@@ -32,14 +33,21 @@ type ProjectIndex = {
   projects: WorkspaceProject[];
 };
 
+type FileWorkspaceProjectStoreOptions = {
+  temporaryWorkspacePath?: string;
+};
+
 export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   private readonly indexPath: string;
+  private readonly temporaryWorkspacePath: string;
 
   constructor(
     dataDir: string,
     private readonly clock: Clock,
+    options: FileWorkspaceProjectStoreOptions = {},
   ) {
     this.indexPath = path.join(dataDir, 'projects.json');
+    this.temporaryWorkspacePath = path.resolve(options.temporaryWorkspacePath ?? path.join(dataDir, 'temporary-workspace'));
   }
 
   async listProjects(): Promise<WorkspaceProjectList> {
@@ -249,8 +257,23 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   private async findProject(projectId?: string): Promise<WorkspaceProject | undefined> {
+    if (!projectId || projectId === TEMPORARY_WORKSPACE_PROJECT_ID) return this.temporaryWorkspace();
     const index = await this.readIndex();
-    return projectId ? index.projects.find((project) => project.id === projectId) : index.projects[0];
+    return index.projects.find((project) => project.id === projectId);
+  }
+
+  private async temporaryWorkspace(): Promise<WorkspaceProject> {
+    await mkdir(this.temporaryWorkspacePath, { recursive: true });
+    const workspacePath = await realpath(this.temporaryWorkspacePath);
+    const workspaceStat = await stat(workspacePath);
+    return {
+      id: TEMPORARY_WORKSPACE_PROJECT_ID,
+      name: '临时目录',
+      path: workspacePath,
+      gitRoot: await findGitRoot(workspacePath),
+      createdAt: workspaceStat.birthtime.toISOString(),
+      updatedAt: workspaceStat.mtime.toISOString(),
+    };
   }
 
   private async requireProject(projectId: string): Promise<WorkspaceProject> {

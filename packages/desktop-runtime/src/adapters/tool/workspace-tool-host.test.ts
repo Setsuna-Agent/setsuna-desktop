@@ -14,7 +14,7 @@ describe('workspace tool host', () => {
     await mkdir(projectDir, { recursive: true });
     await writeFile(path.join(projectDir, 'README.md'), 'tool host needle\n');
 
-    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock, { temporaryWorkspacePath: projectDir });
     await store.addProject({ path: projectDir });
     const host = new WorkspaceToolHost(store);
 

@@ -12,6 +12,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const {
     activeProject,
     activeProjectId,
+    activeWorkspace,
     activeView,
     chatActions,
     clearSkillSelectionRequest,
@@ -71,12 +72,12 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       onToggleSidebar={handleToggleSidebar}
       showSidebarToggle={activeView !== 'settings'}
       toolbarTitle={toolbarTitle}
-      workspaceToolbar={<AppWorkspaceToolbar activeProject={activeProject} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} />}
+      workspaceToolbar={<AppWorkspaceToolbar activeProject={activeWorkspace} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} />}
       menuActions={windowMenuActions}
       className={shellClassName}
       actions={
         <>
-          {activeView === 'chat' && activeProject?.path ? (
+          {activeView === 'chat' && activeWorkspace?.path ? (
             <WorkspaceAppLauncher
               selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
               workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
@@ -92,7 +93,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           <AppTopbarActions
             activeView={activeView}
             updater={controller.updater}
-            hasProject={Boolean(activeProject)}
             bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
             sidePanelVisible={workspacePanels.sidePanelVisible}
             onToggleSidePanel={workspacePanels.toggleSidePanel}
@@ -124,6 +124,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
 
       <AppRouteContent
         activeProject={activeProject}
+        activeWorkspace={activeWorkspace}
         activeView={activeView}
         chatActions={chatActions}
         draft={draft}

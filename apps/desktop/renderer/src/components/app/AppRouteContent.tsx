@@ -13,6 +13,7 @@ import { latestBrowserOpenRequest, type BrowserOpenRequest } from '../../utils/r
 
 export function AppRouteContent({
   activeProject,
+  activeWorkspace,
   activeView,
   chatActions,
   draft,
@@ -38,6 +39,7 @@ export function AppRouteContent({
   workspaceWidth,
 }: {
   activeProject?: WorkspaceProject;
+  activeWorkspace?: WorkspaceProject;
   activeView: MainView;
   chatActions: ChatTurnActions;
   draft: string;
@@ -79,7 +81,7 @@ export function AppRouteContent({
     openDesktopPanel('side', 'browser');
   }, [openDesktopPanel, pendingBrowserOpenRequest]);
   const openFileReviewPanel = (filePath?: string) => {
-    if (!activeProject) return;
+    if (!activeWorkspace) return;
     const normalizedFilePath = filePath?.trim();
     setReviewFocusRequest((current) => (
       normalizedFilePath
@@ -91,8 +93,8 @@ export function AppRouteContent({
     void workspacePanels.loadReviewState();
   };
   const discardFileChanges = async (filePaths: string[]) => {
-    const workspaceRoot = activeProject?.path;
-    if (!workspaceRoot) throw new Error('请先选择项目目录。');
+    const workspaceRoot = activeWorkspace?.path;
+    if (!workspaceRoot) throw new Error('当前工作区不可用。');
     const reviewApi = window.setsunaDesktop?.desktopReview;
     if (!reviewApi) throw new Error('当前环境不支持撤销文件改动。');
     await reviewApi.discardUnstaged(workspaceRoot, filePaths);
@@ -162,6 +164,7 @@ export function AppRouteContent({
   return (
     <AppChatSurface
       activeProject={activeProject}
+      activeWorkspace={activeWorkspace}
       activeTurnId={runtime.activeTurnId}
       bottomActivePanel={workspacePanels.bottomActivePanel}
       bottomPanelSlot={workspacePanels.bottomPanelSlot}

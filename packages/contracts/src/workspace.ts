@@ -1,3 +1,5 @@
+export const TEMPORARY_WORKSPACE_PROJECT_ID = 'temporary_workspace';
+
 export type WorkspaceProject = {
   id: string;
   name: string;

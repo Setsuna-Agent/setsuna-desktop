@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { WorkspaceOverviewPanel } from './WorkspacePanel.js';
 
 describe('WorkspaceOverviewPanel', () => {
@@ -55,6 +55,22 @@ describe('WorkspaceOverviewPanel', () => {
     browserButton.props.onClick();
 
     expect(onOpenBrowser).toHaveBeenCalledOnce();
+  });
+
+  it('在普通对话的临时目录中开放工作区操作', () => {
+    const panel = WorkspaceOverviewPanel({
+      activeProject: { ...project, id: TEMPORARY_WORKSPACE_PROJECT_ID, name: '临时目录' },
+      latestReviewSummary: null,
+      onOpenBrowser: () => undefined,
+      onOpenFilesPanel: () => undefined,
+      onOpenReviewPanel: () => undefined,
+      onOpenSideChat: () => undefined,
+      onOpenTerminalPanel: () => undefined,
+    });
+    const actions = panel.props.children.props.children;
+
+    expect(actions.slice(0, 3).every((action: { props: { disabled: boolean } }) => !action.props.disabled)).toBe(true);
+    expect(actions[2].props.children[1].props.children[1].props.children).toBe('临时目录 Shell');
   });
 });
 

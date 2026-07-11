@@ -134,7 +134,7 @@ async function createHost() {
   const projectDir = path.join(root, 'project');
   const dataDir = path.join(root, 'data');
   await mkdir(projectDir, { recursive: true });
-  const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+  const store = new FileWorkspaceProjectStore(dataDir, systemClock, { temporaryWorkspacePath: projectDir });
   await store.addProject({ path: projectDir });
   return { host: new ShellToolHost(store), projectDir };
 }

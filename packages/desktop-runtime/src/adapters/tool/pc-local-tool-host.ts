@@ -160,7 +160,7 @@ const TOOL_ALIASES: Record<string, { name: string; args: (input: Record<string, 
  * 将 PC local tool 实现适配到桌面 runtime 的 ToolHost 协议。
  */
 export class PcLocalToolHost implements ToolHost {
-  // 每个项目根目录维护独立状态，避免 shell 进程和已读文件串到别的项目。
+  // 每个工作区根目录维护独立状态，避免 shell 进程和已读文件串到其他项目或临时目录。
   private readonly projectStates = new Map<string, ProjectToolState>();
   // shell process store 跨项目状态复用，但执行目录和权限仍由每个 toolState 控制。
   private readonly shellProcessStore = pcTools.createShellProcessStore();
@@ -378,11 +378,8 @@ export class PcLocalToolHost implements ToolHost {
   }
 
   private async projectStatesForCleanup(context: ToolExecutionContext): Promise<ProjectToolState[]> {
-    if (typeof context.projectId !== 'string' || !context.projectId) {
-      return [...this.projectStates.values()];
-    }
-    const list = await this.projects.listProjects().catch(() => ({ projects: [] }));
-    const project = list.projects.find((item) => item.id === context.projectId);
+    const projectId = typeof context.projectId === 'string' && context.projectId ? context.projectId : undefined;
+    const project = await this.projects.getStatus(projectId).then((status) => status.project).catch(() => undefined);
     if (!project) return [];
     const existing = this.projectStates.get(path.resolve(project.path));
     return existing ? [existing] : [];
@@ -416,13 +413,9 @@ export class PcLocalToolHost implements ToolHost {
    * @param projectId 工具上下文中的项目 ID；为空时回落到第一个项目。
    */
   private async projectFor(projectId: unknown): Promise<WorkspaceProject> {
-    const list = await this.projects.listProjects();
-    const project =
-      typeof projectId === 'string' && projectId
-        ? list.projects.find((item) => item.id === projectId)
-        : list.projects[0];
-    if (!project) throw new Error('No local project is registered. Add a project before using local tools.');
-    return project;
+    const status = await this.projects.getStatus(typeof projectId === 'string' && projectId ? projectId : undefined);
+    if (!status.project) throw new Error('No workspace is available for local tools.');
+    return status.project;
   }
 
   /**

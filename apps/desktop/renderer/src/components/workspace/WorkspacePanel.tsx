@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Code2, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
-import type { WorkspaceEntry, WorkspaceEntrySearchItem, WorkspaceFileRead, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState } from '../primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { desktopPanelTitle } from './PanelChrome.js';
@@ -427,6 +427,7 @@ export function WorkspaceOverviewPanel({
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
 }) {
+  const temporaryWorkspace = activeProject?.id === TEMPORARY_WORKSPACE_PROJECT_ID;
   const reviewMeta = latestReviewSummary?.files.length
     ? `${latestReviewSummary.files.length} 个文件  +${latestReviewSummary.additions} -${latestReviewSummary.deletions}`
     : '查看代码变更';
@@ -450,7 +451,7 @@ export function WorkspaceOverviewPanel({
     {
       key: 'terminal',
       label: '终端',
-      meta: activeProject?.path ? '项目 Shell' : '未选择项目',
+      meta: activeProject?.path ? (temporaryWorkspace ? '临时目录 Shell' : '项目 Shell') : '未选择项目',
       icon: <Terminal size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenTerminalPanel,

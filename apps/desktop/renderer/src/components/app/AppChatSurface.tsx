@@ -39,6 +39,7 @@ type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalIn
 
 export function AppChatSurface({
   activeProject,
+  activeWorkspace,
   activeTurnId,
   bottomActivePanel,
   bottomPanelSlot,
@@ -114,6 +115,7 @@ export function AppChatSurface({
   workspaceWidth,
 }: {
   activeProject?: WorkspaceProject;
+  activeWorkspace?: WorkspaceProject;
   activeTurnId: string | null;
   bottomActivePanel?: DesktopPanelTab | null;
   bottomPanelSlot: DesktopPanelSlotState;
@@ -195,10 +197,10 @@ export function AppChatSurface({
 
   return (
     <>
-      <MarkdownNavigationProvider workspaceRoot={activeProject?.path} onOpenWorkspaceFile={onOpenProjectFile}>
+      <MarkdownNavigationProvider workspaceRoot={activeWorkspace?.path} onOpenWorkspaceFile={onOpenProjectFile}>
         <ChatWorkspace
           activeTurnId={activeTurnId}
-          activeProject={activeProject}
+          activeProject={activeWorkspace}
           canClearContext={canClearContext}
           contextCompacting={contextCompacting}
           config={config}
@@ -237,7 +239,8 @@ export function AppChatSurface({
       </MarkdownNavigationProvider>
       {sidePanelSlot.panels.filter((panel) => panel.type === 'chat').map((panel) => (
         <SideChatPanel
-          activeProject={activeProject}
+          activeProjectId={activeProject?.id ?? null}
+          activeWorkspace={activeWorkspace}
           client={sideChatClient}
           config={config}
           hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
@@ -274,7 +277,7 @@ export function AppChatSurface({
       {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'browser' && sideActivePanel.type !== 'chat' ? (
         <WorkspacePanel
           activePanel={sideActivePanel}
-          activeProject={activeProject}
+          activeProject={activeWorkspace}
           filePreview={filePreview}
           reviewError={reviewError}
           reviewFocusRequest={reviewFocusRequest}
@@ -312,7 +315,7 @@ export function AppChatSurface({
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           selectedWorkspaceApp={selectedWorkspaceApp}
-          activeProject={activeProject}
+          activeProject={activeWorkspace}
           terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
           onActivatePanel={onActivateBottomPanel}
           onClosePanel={onCloseBottomPanel}

@@ -13,7 +13,8 @@ import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { useSideChat } from '../../hooks/useSideChat.js';
 
 export function SideChatPanel({
-  activeProject,
+  activeProjectId,
+  activeWorkspace,
   client,
   config,
   hidden,
@@ -33,7 +34,8 @@ export function SideChatPanel({
   workspaceMinWidth,
   workspaceWidth,
 }: {
-  activeProject?: WorkspaceProject;
+  activeProjectId: string | null;
+  activeWorkspace?: WorkspaceProject;
   client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
   hidden: boolean;
@@ -54,7 +56,7 @@ export function SideChatPanel({
   workspaceWidth: number;
 }) {
   const sideChat = useSideChat({
-    activeProjectId: activeProject?.id ?? null,
+    activeProjectId,
     client,
     reloadThreads: onReloadThreads,
     setError: onError,
@@ -69,9 +71,9 @@ export function SideChatPanel({
         onResizeStart={onWorkspaceResizeStart}
         onResizeStep={onWorkspaceResizeStep}
       />
-      <MarkdownNavigationProvider workspaceRoot={activeProject?.path} onOpenWorkspaceFile={onOpenProjectFile}>
+      <MarkdownNavigationProvider workspaceRoot={activeWorkspace?.path} onOpenWorkspaceFile={onOpenProjectFile}>
         <ChatWorkspace
-          activeProject={activeProject}
+          activeProject={activeWorkspace}
           activeTurnId={sideChat.activeTurnId}
           canClearContext={Boolean(sideChat.currentThread?.messages.length)}
           config={config}

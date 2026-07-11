@@ -5,7 +5,6 @@ import type { MainView } from '../../types/app.js';
 
 export function AppTopbarActions({
   updater,
-  hasProject,
   activeView,
   bottomTerminalPanelOpen,
   sidePanelVisible,
@@ -13,7 +12,6 @@ export function AppTopbarActions({
   onToggleBottomTerminal,
 }: {
   updater: DesktopUpdaterStateView;
-  hasProject: boolean;
   activeView: MainView;
   bottomTerminalPanelOpen: boolean;
   sidePanelVisible: boolean;
@@ -42,7 +40,7 @@ export function AppTopbarActions({
           <Terminal size={16} />
         </IconButton>
       ) : null}
-      {activeView === 'chat' && hasProject && !sidePanelVisible ? (
+      {activeView === 'chat' && !sidePanelVisible ? (
         <IconButton label="打开右侧栏" onClick={onToggleSidePanel}>
           <PanelRight size={16} />
         </IconButton>
