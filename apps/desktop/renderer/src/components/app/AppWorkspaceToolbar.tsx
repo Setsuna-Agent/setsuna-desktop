@@ -29,6 +29,7 @@ export function AppWorkspaceToolbar({
   }
 
   const sideAvailablePanelTypes = [
+    'chat',
     activeProject && !sidePanels.some((panel) => panel.type === 'review') ? 'review' : null,
     activeProject?.path && !sidePanels.some((panel) => panel.type === 'files') ? 'files' : null,
     'terminal',
@@ -50,6 +51,10 @@ export function AppWorkspaceToolbar({
         workspacePanels.closeWorkspaceMenus();
         workspacePanels.openDesktopPanel('side', 'review');
         void workspacePanels.loadReviewState();
+      }}
+      onOpenSideChat={() => {
+        workspacePanels.closeWorkspaceMenus();
+        workspacePanels.openDesktopPanel('side', 'chat');
       }}
       onOpenTerminalPanel={() => {
         workspacePanels.closeWorkspaceMenus();

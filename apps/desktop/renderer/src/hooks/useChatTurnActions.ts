@@ -22,10 +22,10 @@ export function useChatTurnActions({
   client: DesktopRuntimeClient;
   currentThread: RuntimeThread | null;
   draft: string;
-  expandProject: (projectId: string) => void;
+  expandProject?: (projectId: string) => void;
   reloadThreads: () => Promise<unknown>;
   setActiveTurnId: Dispatch<SetStateAction<string | null>>;
-  setActiveView: Dispatch<SetStateAction<MainView>>;
+  setActiveView?: Dispatch<SetStateAction<MainView>>;
   setCurrentThread: Dispatch<SetStateAction<RuntimeThread | null>>;
   setDraft: Dispatch<SetStateAction<string>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -44,7 +44,7 @@ export function useChatTurnActions({
           // 首条消息事件会先投影出本地 fallback；runtime 随后用当前模型生成正式标题。
           thread = await client.createThread({ projectId: activeProjectId ?? undefined });
           if (activeProjectId) {
-            expandProject(activeProjectId);
+            expandProject?.(activeProjectId);
           }
           setCurrentThread(thread);
           await reloadThreads();
@@ -146,7 +146,7 @@ export function useChatTurnActions({
   const addFileToConversation = useCallback(
     (filePath: string) => {
       const mention = `@${filePath}`;
-      setActiveView('chat');
+      setActiveView?.('chat');
       setDraft((current) => {
         const trimmed = current.trimEnd();
         if (trimmed.includes(mention)) return current;

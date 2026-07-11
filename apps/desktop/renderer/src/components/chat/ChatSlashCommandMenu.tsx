@@ -1,5 +1,5 @@
 import { Progress } from 'antd';
-import { Boxes, CheckSquare, CircleGauge, Database, ListChecks, ShieldCheck, Target, Trash2, Users, Zap } from 'lucide-react';
+import { Boxes, CheckSquare, CircleGauge, Database, ListChecks, MessageSquare, ShieldCheck, Target, Trash2, Users, Zap } from 'lucide-react';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 
 export type SlashCommandMenuItem =
@@ -12,7 +12,7 @@ export type SlashCommandMenuItem =
       progressPercent?: number;
       scope?: string;
       title: string;
-      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'memory-mode' | 'plan' | 'review' | 'usage';
+      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'memory-mode' | 'plan' | 'review' | 'side-chat' | 'usage';
       checked?: boolean;
     }
   | {
@@ -92,6 +92,7 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.type === 'goal') return <Target className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'usage') return <CircleGauge className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'review') return <ShieldCheck className="chat-command-menu__item-icon" size={15} />;
+  if (item.type === 'side-chat') return <MessageSquare className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'memory-mode') return <Database className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'compact-context') {
     return (
@@ -127,6 +128,7 @@ function menuTitle(item?: SlashCommandMenuItem): string {
   if (item.type === 'goal') return '目标';
   if (item.type === 'usage') return '用量与诊断';
   if (item.type === 'review') return '审查';
+  if (item.type === 'side-chat') return '侧边任务';
   if (item.type === 'memory-mode') return '记忆';
   return '命令';
 }

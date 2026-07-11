@@ -10,6 +10,7 @@ describe('WorkspaceOverviewPanel', () => {
       latestReviewSummary: null,
       onOpenFilesPanel: () => undefined,
       onOpenReviewPanel,
+      onOpenSideChat: () => undefined,
       onOpenTerminalPanel: () => undefined,
     });
     const reviewButton = panel.props.children.props.children[0];
@@ -17,6 +18,23 @@ describe('WorkspaceOverviewPanel', () => {
     reviewButton.props.onClick({ type: 'click' });
 
     expect(onOpenReviewPanel).toHaveBeenCalledWith();
+  });
+
+  it('opens side chat from the workspace overview menu', () => {
+    const onOpenSideChat = vi.fn();
+    const panel = WorkspaceOverviewPanel({
+      activeProject: project,
+      latestReviewSummary: null,
+      onOpenFilesPanel: () => undefined,
+      onOpenReviewPanel: () => undefined,
+      onOpenSideChat,
+      onOpenTerminalPanel: () => undefined,
+    });
+    const sideChatButton = panel.props.children.props.children[3];
+
+    sideChatButton.props.onClick();
+
+    expect(onOpenSideChat).toHaveBeenCalledOnce();
   });
 });
 

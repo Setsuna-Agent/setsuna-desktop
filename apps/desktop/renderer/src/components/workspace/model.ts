@@ -1,7 +1,7 @@
 import type { RuntimeEvent, WorkspaceEntry } from '@setsuna-desktop/contracts';
 
 export type DesktopPanelSlot = 'side' | 'bottom';
-export type DesktopPanelType = 'overview' | 'files' | 'file' | 'review' | 'terminal';
+export type DesktopPanelType = 'overview' | 'chat' | 'files' | 'file' | 'review' | 'terminal';
 export type DesktopPanelTab = {
   id: string;
   type: DesktopPanelType;
@@ -17,6 +17,7 @@ export type DesktopPanelSlotState = {
 export const REVIEW_PANEL_ID = 'review';
 export const FILES_PANEL_ID = 'files';
 export const WORKSPACE_OVERVIEW_PANEL_ID = 'workspace-overview';
+export const SIDE_CHAT_PANEL_ID = 'side-chat';
 
 export const createEmptyPanelSlot = (): DesktopPanelSlotState => ({ active: null, panels: [] });
 export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
@@ -24,6 +25,7 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
   return { active: overviewPanel.id, panels: [overviewPanel] };
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
+export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边任务'): DesktopPanelTab => ({ id, type: 'chat', title });
 export const createReviewPanel = (): DesktopPanelTab => ({ id: REVIEW_PANEL_ID, type: 'review', title: '审查' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
 export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });

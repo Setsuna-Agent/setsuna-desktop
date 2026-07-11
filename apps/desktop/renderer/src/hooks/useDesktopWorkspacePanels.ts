@@ -11,6 +11,7 @@ import {
   createFilePanel,
   createFilesPanel,
   createReviewPanel,
+  createSideChatPanel as createSideChatPanelTab,
   createWorkspaceOverviewPanel,
   removePanelFromSlotState,
   reorderPanelInSlotState,
@@ -49,6 +50,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
   const [reviewError, setReviewError] = useState<string | null>(null);
   const pendingTerminalSessionKeysRef = useRef<Set<string>>(new Set());
   const terminalPanelSeqRef = useRef(0);
+  const sideChatPanelSeqRef = useRef(0);
 
   const selectedWorkspaceApp = workspaceApps.find((app) => app.id === selectedWorkspaceAppId) ?? workspaceApps[0] ?? null;
   const sideActivePanel = activePanelInSlot(sidePanelSlot);
@@ -187,6 +189,15 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
     };
   }, []);
 
+  const createSideChatPanel = useCallback((): DesktopPanelTab => {
+    sideChatPanelSeqRef.current += 1;
+    const sequence = sideChatPanelSeqRef.current;
+    return createSideChatPanelTab(
+      `side-chat-${Date.now()}-${sequence}`,
+      sequence === 1 ? '侧边任务' : `侧边任务 ${sequence}`,
+    );
+  }, []);
+
   const openTerminalSessionForPanel = useCallback(
     async (panelId: string) => {
       const sessionKey = terminalSessionKey(panelId, terminalProjectKey);
@@ -228,17 +239,20 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
 
   const openDesktopPanel = useCallback(
     (slot: DesktopPanelSlot, type: DesktopPanelType) => {
+      if (type === 'chat' && slot !== 'side') return;
       if (type === 'review' && !activeProject) return;
       if ((type === 'files' || type === 'file') && !activeProject?.path) return;
       if (type === 'file') return;
       const panel =
-        type === 'overview'
-          ? createWorkspaceOverviewPanel()
-          : type === 'review'
-            ? createReviewPanel()
-            : type === 'files'
-              ? createFilesPanel()
-              : createTerminalPanel();
+        type === 'chat'
+          ? createSideChatPanel()
+          : type === 'overview'
+            ? createWorkspaceOverviewPanel()
+            : type === 'review'
+              ? createReviewPanel()
+              : type === 'files'
+                ? createFilesPanel()
+                : createTerminalPanel();
       const updater = (current: DesktopPanelSlotState) => addPanelToSlotState(current, panel);
       if (slot === 'side') {
         setSidePanelSlot(updater);
@@ -246,7 +260,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       }
       setBottomPanelSlot(updater);
     },
-    [activeProject, createTerminalPanel],
+    [activeProject, createSideChatPanel, createTerminalPanel],
   );
 
   const openFilePanel = useCallback((filePath: string) => {

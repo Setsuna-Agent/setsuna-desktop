@@ -1,6 +1,7 @@
-import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
+import { useMemo, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import type {
   AnswerRuntimeApprovalInput,
+  DesktopRuntimeClient,
   RuntimeCollaborationMode,
   RuntimeThread,
   RuntimeConfigState,
@@ -15,6 +16,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { ChatWorkspace } from '../chat/ChatWorkspace.js';
+import { SideChatPanel } from '../chat/SideChatPanel.js';
 import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationProvider.js';
 import { BottomToolsPanel } from '../workspace/BottomToolsPanel.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
@@ -55,6 +57,8 @@ export function AppChatSurface({
   threadUsage,
   threads,
   sideActivePanel,
+  sidePanelSlot,
+  sideChatClient,
   sidePanelVisible,
   terminalSessionsByPanelId,
   onActivateBottomPanel,
@@ -81,11 +85,14 @@ export function AppChatSurface({
   onOpenFilesPanel,
   onOpenThread,
   onOpenFileReviewPanel,
+  onOpenSideChat,
   onOpenSideTerminalPanel,
   onOpenEntry,
   onOpenProjectFile,
   onReorderBottomPanels,
+  onReloadThreads,
   onReviewRefresh,
+  onSideChatError,
   onSetMultiAgentEnabled,
   onStartThreadReview,
   onSend,
@@ -123,6 +130,8 @@ export function AppChatSurface({
   threadUsage: RuntimeUsageResponse | null;
   threads: RuntimeThreadSummary[];
   sideActivePanel?: DesktopPanelTab | null;
+  sidePanelSlot: DesktopPanelSlotState;
+  sideChatClient: DesktopRuntimeClient;
   sidePanelVisible: boolean;
   terminalSessionsByPanelId: Record<string, DesktopTerminalSession>;
   onActivateBottomPanel: (panelId: string) => void;
@@ -149,11 +158,14 @@ export function AppChatSurface({
   onOpenFilesPanel: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReviewPanel?: (filePath?: string) => void;
+  onOpenSideChat: () => void;
   onOpenSideTerminalPanel: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
+  onReloadThreads: () => Promise<unknown>;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: () => void | Promise<unknown>;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
@@ -204,6 +216,7 @@ export function AppChatSurface({
           onDraftChange={onDraftChange}
           onEditUserMessage={onEditUserMessage}
           onOpenFilesPanel={onOpenFilesPanel}
+          onOpenSideChat={onOpenSideChat}
           onOpenThread={onOpenThread}
           onOpenFileReview={onOpenFileReviewPanel}
           onSelectModel={onSelectModel}
@@ -216,7 +229,31 @@ export function AppChatSurface({
           onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
         />
       </MarkdownNavigationProvider>
-      {sidePanelVisible && sideActivePanel ? (
+      {sidePanelSlot.panels.filter((panel) => panel.type === 'chat').map((panel) => (
+        <SideChatPanel
+          activeProject={activeProject}
+          client={sideChatClient}
+          config={config}
+          hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
+          key={panel.id}
+          skills={skills}
+          threads={threads}
+          onApprovalPolicyChange={onApprovalPolicyChange}
+          onError={onSideChatError}
+          onOpenProjectFile={onOpenProjectFile}
+          onOpenSideChat={onOpenSideChat}
+          onReloadThreads={onReloadThreads}
+          onSearchProjectEntries={onSearchProjectEntries}
+          onSelectModel={onSelectModel}
+          onSetMultiAgentEnabled={onSetMultiAgentEnabled}
+          onWorkspaceResizeStep={onWorkspaceResizeStep}
+          onWorkspaceResizeStart={onWorkspaceResizeStart}
+          workspaceMaxWidth={workspaceMaxWidth}
+          workspaceMinWidth={workspaceMinWidth}
+          workspaceWidth={workspaceWidth}
+        />
+      ))}
+      {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'chat' ? (
         <WorkspacePanel
           activePanel={sideActivePanel}
           activeProject={activeProject}
@@ -236,6 +273,7 @@ export function AppChatSurface({
           onGoRoot={onGoRoot}
           onOpenFilesPanel={onOpenFilesPanel}
           onOpenReviewPanel={onOpenFileReviewPanel}
+          onOpenSideChat={onOpenSideChat}
           onOpenTerminalPanel={onOpenSideTerminalPanel}
           onReviewRefresh={onReviewRefresh}
           onResizeStep={onWorkspaceResizeStep}

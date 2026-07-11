@@ -6,6 +6,7 @@ import {
   createFilePanel,
   createFilesPanel,
   createReviewPanel,
+  createSideChatPanel,
   createWorkspaceOverviewPanel,
   reorderPanelInSlotState,
 } from './model.js';
@@ -36,6 +37,25 @@ describe('desktop workspace panel model', () => {
 
     expect(slot.active).toBe('files');
     expect(slot.panels.map((panel) => panel.type)).toEqual(['files']);
+  });
+
+  it('allows multiple independent side chat tabs', () => {
+    const first = createSideChatPanel('side-chat-1', '侧边任务');
+    const second = createSideChatPanel('side-chat-2', '侧边任务 2');
+    const withChats = addPanelToSlotState(addPanelToSlotState(createDefaultSidePanelSlot(), first), second);
+
+    expect(withChats.active).toBe('side-chat-2');
+    expect(withChats.panels).toEqual([first, second]);
+  });
+
+  it('reorders multiple side chat tabs', () => {
+    const first = createSideChatPanel('side-chat-1', '侧边任务');
+    const second = createSideChatPanel('side-chat-2', '侧边任务 2');
+
+    const reordered = reorderPanelInSlotState({ active: second.id, panels: [first, second] }, second.id, first.id, 'before');
+
+    expect(reordered.active).toBe(second.id);
+    expect(reordered.panels).toEqual([second, first]);
   });
 
   it('reorders panels without changing the active tab', () => {

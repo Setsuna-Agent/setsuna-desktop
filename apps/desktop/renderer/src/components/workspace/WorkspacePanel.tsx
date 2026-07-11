@@ -8,6 +8,7 @@ import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import type { DesktopDiffSummary, DesktopPanelTab, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp, ProjectTreeNode } from './model.js';
 
 export function WorkspacePanel({
@@ -28,6 +29,7 @@ export function WorkspacePanel({
   onOpenProjectFile,
   onOpenFilesPanel,
   onOpenReviewPanel,
+  onOpenSideChat,
   onOpenTerminalPanel,
   onGoRoot,
   onReviewRefresh,
@@ -54,6 +56,7 @@ export function WorkspacePanel({
   onOpenProjectFile: (filePath: string) => void;
   onOpenFilesPanel: () => void;
   onOpenReviewPanel?: () => void;
+  onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
   onGoRoot: () => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
@@ -239,6 +242,7 @@ export function WorkspacePanel({
         latestReviewSummary={latestReviewSummary}
         onOpenFilesPanel={onOpenFilesPanel}
         onOpenReviewPanel={onOpenReviewPanel}
+        onOpenSideChat={onOpenSideChat}
         onOpenTerminalPanel={onOpenTerminalPanel}
       />
     ) : activePanel.type === 'review' ? (
@@ -294,26 +298,12 @@ export function WorkspacePanel({
   return (
     <>
       <aside className="desktop-workspace-panel">
-        <button
-          className="desktop-workspace-panel__resize-handle"
-          type="button"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整右侧面板宽度"
-          aria-valuemin={resizeMin}
-          aria-valuemax={resizeMax}
-          aria-valuenow={resizeValue}
-          title="拖拽调整右侧面板宽度"
-          onPointerDown={onResizeStart}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowLeft') {
-              event.preventDefault();
-              onResizeStep(16);
-            } else if (event.key === 'ArrowRight') {
-              event.preventDefault();
-              onResizeStep(-16);
-            }
-          }}
+        <WorkspaceResizeHandle
+          max={resizeMax}
+          min={resizeMin}
+          value={resizeValue}
+          onResizeStart={onResizeStart}
+          onResizeStep={onResizeStep}
         />
         <div
           className={`desktop-workspace-body ${showsFileExplorer ? '' : 'desktop-workspace-body--single'}`}
@@ -422,12 +412,14 @@ export function WorkspaceOverviewPanel({
   latestReviewSummary,
   onOpenFilesPanel,
   onOpenReviewPanel,
+  onOpenSideChat,
   onOpenTerminalPanel,
 }: {
   activeProject?: WorkspaceProject;
   latestReviewSummary: DesktopDiffSummary | null;
   onOpenFilesPanel: () => void;
   onOpenReviewPanel?: () => void;
+  onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
 }) {
   const reviewMeta = latestReviewSummary?.files.length
@@ -457,6 +449,14 @@ export function WorkspaceOverviewPanel({
       icon: <Terminal size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenTerminalPanel,
+    },
+    {
+      key: 'side-chat',
+      label: '侧边对话',
+      meta: '打开独立对话任务',
+      icon: <MessageSquare size={15} />,
+      disabled: false,
+      onClick: onOpenSideChat,
     },
   ];
 

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, FolderOpen, PanelRight, Plus, Terminal, X } from 'lucide-react';
+import { FileText, FolderOpen, MessageSquare, PanelRight, Plus, Terminal, X } from 'lucide-react';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
 
 export type DesktopPanelPlacement = 'side' | 'bottom';
 
 const panelLauncherItems: Array<{ key: DesktopPanelType; label: string; icon: JSX.Element }> = [
+  { key: 'chat', label: '侧边对话', icon: <MessageSquare size={14} /> },
   { key: 'review', label: '审查', icon: <FileText size={14} /> },
   { key: 'files', label: '文件', icon: <FolderOpen size={14} /> },
   { key: 'terminal', label: '终端', icon: <Terminal size={14} /> },

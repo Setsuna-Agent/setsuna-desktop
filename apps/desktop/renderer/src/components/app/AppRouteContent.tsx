@@ -167,6 +167,10 @@ export function AppRouteContent({
       threadUsage={runtime.threadUsage}
       threads={runtime.threads}
       sideActivePanel={workspacePanels.sideActivePanel}
+      sidePanelSlot={workspacePanels.sidePanelSlot}
+      sideChatClient={runtime.client}
+      onReloadThreads={runtime.reloadThreads}
+      onSideChatError={runtime.setError}
       sidePanelVisible={workspacePanels.sidePanelVisible}
       terminalSessionsByPanelId={workspacePanels.terminalSessionsByPanelId}
       onActivateBottomPanel={(panelId) => workspacePanels.activateDesktopPanel('bottom', panelId)}
@@ -201,6 +205,7 @@ export function AppRouteContent({
       }}
       onOpenThread={onSelectThread}
       onOpenFileReviewPanel={openFileReviewPanel}
+      onOpenSideChat={() => workspacePanels.openDesktopPanel('side', 'chat')}
       onOpenSideTerminalPanel={() => workspacePanels.openDesktopPanel('side', 'terminal')}
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={projectWorkspace.openProjectFile}

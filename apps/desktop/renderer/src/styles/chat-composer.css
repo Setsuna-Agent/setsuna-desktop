@@ -276,31 +276,6 @@
   text-overflow: ellipsis;
 }
 
-.chat-usage-panel__details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 12px;
-  color: var(--app-text-secondary);
-  font-size: 11px;
-}
-
-.chat-usage-panel details {
-  color: var(--app-text-muted);
-  font-size: 11px;
-}
-
-.chat-usage-panel details pre {
-  max-height: 160px;
-  margin: 8px 0 0;
-  padding: 8px;
-  overflow: auto;
-  border-radius: 7px;
-  background: var(--app-surface-muted);
-  color: var(--app-text-secondary);
-  font: 11px/1.5 var(--app-code-font-family);
-  white-space: pre-wrap;
-}
-
 .chat-command-menu__title {
   padding: 4px 7px 6px;
   color: var(--app-text-muted);

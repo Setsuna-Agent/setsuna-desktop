@@ -3,7 +3,7 @@ import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import { Button, Dropdown, Image } from 'antd';
 import { ArrowUp, Boxes, Check, CircleGauge, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
-import type { RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
@@ -32,8 +32,8 @@ export function ChatComposer({
   skillSelectionRequest,
   skills,
   threadUsage,
-  threads,
   starter = false,
+  placeholder = '输入消息（输入 / 唤起命令）',
   onCancelActiveTurn,
   onApprovalPolicyChange,
   onCompactContext,
@@ -42,6 +42,7 @@ export function ChatComposer({
   onDraftChange,
   onSelectModel,
   onSearchProjectEntries,
+  onOpenSideChat,
   onSetMultiAgentEnabled,
   onSend,
   onStartThreadReview,
@@ -60,8 +61,8 @@ export function ChatComposer({
   skillSelectionRequest?: ChatSkillSelectionRequest | null;
   skills: RuntimeSkillSummary[];
   threadUsage: RuntimeUsageResponse | null;
-  threads: RuntimeThreadSummary[];
   starter?: boolean;
+  placeholder?: string;
   threadMemoryMode?: RuntimeThreadMemoryMode;
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
@@ -71,6 +72,7 @@ export function ChatComposer({
   onDraftChange: (value: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
+  onOpenSideChat?: () => void;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
   onStartThreadReview: () => void | Promise<unknown>;
@@ -174,6 +176,15 @@ export function ChatComposer({
         scope: '当前线程',
       },
       {
+        key: 'side-chat',
+        kind: 'action',
+        type: 'side-chat',
+        title: '侧边任务',
+        description: '新建一个独立的侧边对话任务',
+        disabled: !onOpenSideChat,
+        scope: '右侧栏',
+      },
+      {
         key: 'review',
         kind: 'action',
         type: 'review',
@@ -230,7 +241,7 @@ export function ChatComposer({
       .slice(0, Math.max(0, 8 - visibleActions.length))
       .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
     return [...visibleActions, ...visibleSkills];
-  }, [activeGoal, activeProject, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, memoryGenerationEnabled, memoryMode, multiAgentEnabled, planModeEnabled, selectedSkillIds, skillQuery, skills]);
+  }, [activeGoal, activeProject, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills]);
 
   useEffect(() => {
     if (!commandOpen || !activeProject) {
@@ -476,6 +487,10 @@ export function ChatComposer({
       void onStartThreadReview();
       return;
     }
+    if (item.kind === 'action' && item.type === 'side-chat' && !item.disabled) {
+      onOpenSideChat?.();
+      return;
+    }
     if (item.type === 'clear-context' && !item.disabled) {
       onClearContext();
       return;
@@ -591,14 +606,14 @@ export function ChatComposer({
         />
       ) : null}
       {usagePanelOpen && currentThread ? (
-        <ChatUsagePanel currentThread={currentThread} threadUsage={threadUsage} threads={threads} onClose={() => setUsagePanelOpen(false)} />
+        <ChatUsagePanel threadUsage={threadUsage} onClose={() => setUsagePanelOpen(false)} />
       ) : null}
       <Sender
         ref={senderRef}
         value={draft}
         slotConfig={initialSlotConfigRef.current}
         loading={Boolean(activeTurnId)}
-        placeholder="输入消息（输入 / 唤起命令）"
+        placeholder={placeholder}
         autoSize={{ minRows: 2, maxRows: 6 }}
         suffix={false}
         onBlur={() => {
@@ -721,19 +736,13 @@ function ChatModeBadge({ label, onClose }: { label: string; onClose: () => void 
 }
 
 function ChatUsagePanel({
-  currentThread,
   threadUsage,
-  threads,
   onClose,
 }: {
-  currentThread: RuntimeThread;
   threadUsage: RuntimeUsageResponse | null;
-  threads: RuntimeThreadSummary[];
   onClose: () => void;
 }) {
   const summary = threadUsage?.summary;
-  const latestTurn = currentThread.turns?.at(-1);
-  const childCount = threads.filter((thread) => thread.parentThreadId === currentThread.id || thread.forkedFromId === currentThread.id).length;
   return (
     <section className="chat-usage-panel" aria-label="当前线程用量与诊断">
       <header>
@@ -746,14 +755,6 @@ function ChatUsagePanel({
         <span>输出<strong>{formatUsageTokens(summary?.outputTokens ?? 0)}</strong></span>
         <span>调用<strong>{summary?.recordCount ?? 0}</strong></span>
       </div>
-      <div className="chat-usage-panel__details">
-        <span>子 Agent：{childCount}</span>
-        <span>最近一轮：{turnStatusText(latestTurn?.status)}</span>
-        {latestTurn?.tokenCounts?.at(-1)?.tokensUntilCompaction !== undefined ? <span>距压缩：{formatUsageTokens(latestTurn.tokenCounts.at(-1)?.tokensUntilCompaction ?? 0)}</span> : null}
-        {latestTurn?.modelVerifications?.length ? <span>模型验证：{latestTurn.modelVerifications.length}</span> : null}
-        {latestTurn?.safetyBuffering ? <span>安全缓冲：已启用</span> : null}
-      </div>
-      {latestTurn?.diff ? <details><summary>查看最近 Turn Diff</summary><pre>{latestTurn.diff}</pre></details> : null}
     </section>
   );
 }
@@ -762,14 +763,6 @@ function formatUsageTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return String(value);
-}
-
-function turnStatusText(status: NonNullable<RuntimeThread['turns']>[number]['status'] | undefined): string {
-  if (status === 'in_progress') return '运行中';
-  if (status === 'completed') return '已完成';
-  if (status === 'failed') return '失败';
-  if (status === 'cancelled') return '已取消';
-  return '暂无';
 }
 
 function ChatImageAttachmentTray({

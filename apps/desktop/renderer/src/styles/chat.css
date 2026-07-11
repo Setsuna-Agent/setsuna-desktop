@@ -10,6 +10,21 @@
   overflow: hidden;
 }
 
+.desktop-side-chat-panel > .desktop-chat-panel--side {
+  flex: 1 1 auto;
+  width: 100%;
+  border-radius: 0;
+}
+
+.desktop-side-chat-panel[hidden] {
+  display: none;
+}
+
+.desktop-chat-panel--side {
+  --chat-content-inline-padding: 20px;
+  --chat-content-max-width: 680px;
+}
+
 .chat-main-workspace {
   position: relative;
   display: flex;

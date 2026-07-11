@@ -9,6 +9,7 @@ export function WorkspaceTopbar({
   onClosePanel,
   onOpenFilesPanel,
   onOpenReviewPanel,
+  onOpenSideChat,
   onOpenTerminalPanel,
   onSelectPanel,
   onReorderPanels,
@@ -22,6 +23,7 @@ export function WorkspaceTopbar({
   onClosePanel: (panelId: string) => void;
   onOpenFilesPanel: () => void;
   onOpenReviewPanel: () => void;
+  onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
   onSelectPanel: (panelId: string) => void;
   onReorderPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
@@ -30,6 +32,10 @@ export function WorkspaceTopbar({
 }) {
   const activePanel = panels.find((panel) => panel.id === activePanelId) ?? panels[0] ?? null;
   const handleOpenPanel = (panel: DesktopPanelType) => {
+    if (panel === 'chat') {
+      onOpenSideChat();
+      return;
+    }
     if (panel === 'review') {
       onOpenReviewPanel();
       return;

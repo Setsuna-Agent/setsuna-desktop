@@ -54,6 +54,7 @@ export function ChatWorkspace({
   onDraftChange,
   onEditUserMessage,
   onOpenFilesPanel,
+  onOpenSideChat,
   onOpenThread,
   onOpenFileReview,
   onSelectModel,
@@ -66,6 +67,7 @@ export function ChatWorkspace({
   onSkillSelectionRequestConsumed,
   reviewLoading = false,
   reviewState = null,
+  variant = 'main',
 }: {
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
@@ -90,6 +92,7 @@ export function ChatWorkspace({
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenFilesPanel: () => void;
+  onOpenSideChat?: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReview?: (filePath?: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
@@ -102,6 +105,7 @@ export function ChatWorkspace({
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   reviewLoading?: boolean;
   reviewState?: DesktopReviewState | null;
+  variant?: 'main' | 'side';
 }) {
   const messages = currentThread?.messages ?? [];
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
@@ -110,7 +114,10 @@ export function ChatWorkspace({
   const requestedReviewProjectRef = useRef<string | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread), [currentThread]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const conversationOverview = useMemo(() => (currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages]);
+  const conversationOverview = useMemo(
+    () => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null),
+    [currentThread, messages, variant],
+  );
   const overviewLayout = useConversationOverviewAutoExpand(conversationRef, contentRef);
   const overviewCanExpand = overviewLayout.canExpand;
   const [overviewManuallyCollapsed, setOverviewManuallyCollapsed] = useState(false);
@@ -129,7 +136,7 @@ export function ChatWorkspace({
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status),
     [contextUsage, currentThread?.contextCompaction?.status],
   );
-  const showEmptyStarter = displayItems.length === 0 && !activeTurnId;
+  const showEmptyStarter = variant === 'main' && displayItems.length === 0 && !activeTurnId;
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
   const [editingSubmitting, setEditingSubmitting] = useState(false);
@@ -354,9 +361,9 @@ export function ChatWorkspace({
       skillSelectionRequest={skillSelectionRequest}
       skills={skills}
       threadUsage={threadUsage}
-      threads={threads}
       starter={starter}
       threadMemoryMode={currentThread?.memoryMode}
+      placeholder={variant === 'side' ? '给侧边任务发送消息' : undefined}
       onCancelActiveTurn={onCancelActiveTurn}
       onApprovalPolicyChange={onApprovalPolicyChange}
       onCompactContext={onCompactContext}
@@ -365,6 +372,7 @@ export function ChatWorkspace({
       onDraftChange={onDraftChange}
       onSelectModel={onSelectModel}
       onSearchProjectEntries={onSearchProjectEntries}
+      onOpenSideChat={onOpenSideChat}
       onSetMultiAgentEnabled={onSetMultiAgentEnabled}
       onSend={onSend}
       onStartThreadReview={onStartThreadReview}
@@ -404,7 +412,7 @@ export function ChatWorkspace({
   );
 
   return (
-    <main className="chat-main-panel desktop-chat-panel">
+    <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
       <div className="chat-main-workspace">
         <div className={conversationClassName} ref={conversationRef}>
           <div
