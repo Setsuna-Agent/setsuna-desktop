@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   WORKSPACE_OVERVIEW_PANEL_ID,
   addPanelToSlotState,
+  createBrowserPanel,
   createDefaultSidePanelSlot,
   createFilePanel,
   createFilesPanel,
@@ -46,6 +47,16 @@ describe('desktop workspace panel model', () => {
 
     expect(withChats.active).toBe('side-chat-2');
     expect(withChats.panels).toEqual([first, second]);
+  });
+
+  it('keeps a single browser panel and activates it again', () => {
+    const browser = createBrowserPanel();
+    const withBrowser = addPanelToSlotState(createDefaultSidePanelSlot(), browser);
+    const reopened = addPanelToSlotState({ active: 'files', panels: [browser, createFilesPanel()] }, createBrowserPanel());
+
+    expect(withBrowser.panels).toEqual([browser]);
+    expect(reopened.active).toBe(browser.id);
+    expect(reopened.panels.filter((panel) => panel.type === 'browser')).toHaveLength(1);
   });
 
   it('reorders multiple side chat tabs', () => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, FolderOpen, MessageSquare, PanelRight, Plus, Terminal, X } from 'lucide-react';
+import { FileText, FolderOpen, Globe2, MessageSquare, PanelRight, Plus, Terminal, X } from 'lucide-react';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
 
@@ -8,6 +8,7 @@ export type DesktopPanelPlacement = 'side' | 'bottom';
 
 const panelLauncherItems: Array<{ key: DesktopPanelType; label: string; icon: JSX.Element }> = [
   { key: 'chat', label: '侧边对话', icon: <MessageSquare size={14} /> },
+  { key: 'browser', label: '浏览器', icon: <Globe2 size={14} /> },
   { key: 'review', label: '审查', icon: <FileText size={14} /> },
   { key: 'files', label: '文件', icon: <FolderOpen size={14} /> },
   { key: 'terminal', label: '终端', icon: <Terminal size={14} /> },
@@ -79,8 +80,12 @@ export function DesktopPanelHeader({
   const availableTypeSet = new Set(availablePanelTypes || panelLauncherItems.map((item) => item.key));
   const hasReviewPanel = tabPanels.some((panel) => panel.type === 'review');
   const hasFilesPanel = tabPanels.some((panel) => panel.type === 'files');
+  const hasBrowserPanel = tabPanels.some((panel) => panel.type === 'browser');
   const launcherItems = panelLauncherItems.filter(
-    (item) => availableTypeSet.has(item.key) && (item.key !== 'review' || !hasReviewPanel) && (item.key !== 'files' || !hasFilesPanel),
+    (item) => availableTypeSet.has(item.key)
+      && (item.key !== 'review' || !hasReviewPanel)
+      && (item.key !== 'files' || !hasFilesPanel)
+      && (item.key !== 'browser' || !hasBrowserPanel),
   );
   const sortable = Boolean(onReorderPanels && tabPanels.length > 1);
   const draggedPanelId = dragOverlay?.panel.id ?? null;

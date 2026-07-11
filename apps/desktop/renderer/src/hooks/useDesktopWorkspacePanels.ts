@@ -7,6 +7,7 @@ import {
   addPanelToSlotState,
   activatePanelInSlotState,
   createDefaultSidePanelSlot,
+  createBrowserPanel,
   createEmptyPanelSlot,
   createFilePanel,
   createFilesPanel,
@@ -239,12 +240,14 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
 
   const openDesktopPanel = useCallback(
     (slot: DesktopPanelSlot, type: DesktopPanelType) => {
-      if (type === 'chat' && slot !== 'side') return;
+      if ((type === 'browser' || type === 'chat') && slot !== 'side') return;
       if (type === 'review' && !activeProject) return;
       if ((type === 'files' || type === 'file') && !activeProject?.path) return;
       if (type === 'file') return;
       const panel =
-        type === 'chat'
+        type === 'browser'
+          ? createBrowserPanel()
+          : type === 'chat'
           ? createSideChatPanel()
           : type === 'overview'
             ? createWorkspaceOverviewPanel()
@@ -453,7 +456,7 @@ function terminalSessionKey(panelId: string, projectKey: string): string {
 }
 
 function clearProjectBoundPanelsFromSlot(slot: DesktopPanelSlotState): DesktopPanelSlotState {
-  const panels = slot.panels.filter((panel) => panel.type === 'terminal');
+  const panels = slot.panels.filter((panel) => panel.type === 'browser' || panel.type === 'terminal');
   const active = panels.some((panel) => panel.id === slot.active) ? slot.active : panels[0]?.id ?? null;
   if (panels.length === slot.panels.length && active === slot.active) return slot;
   return { active, panels };

@@ -9,6 +9,7 @@ describe('WorkspaceOverviewPanel', () => {
       activeProject: project,
       latestReviewSummary: null,
       onOpenFilesPanel: () => undefined,
+      onOpenBrowser: () => undefined,
       onOpenReviewPanel,
       onOpenSideChat: () => undefined,
       onOpenTerminalPanel: () => undefined,
@@ -26,6 +27,7 @@ describe('WorkspaceOverviewPanel', () => {
       activeProject: project,
       latestReviewSummary: null,
       onOpenFilesPanel: () => undefined,
+      onOpenBrowser: () => undefined,
       onOpenReviewPanel: () => undefined,
       onOpenSideChat,
       onOpenTerminalPanel: () => undefined,
@@ -35,6 +37,24 @@ describe('WorkspaceOverviewPanel', () => {
     sideChatButton.props.onClick();
 
     expect(onOpenSideChat).toHaveBeenCalledOnce();
+  });
+
+  it('opens the browser from the workspace overview menu', () => {
+    const onOpenBrowser = vi.fn();
+    const panel = WorkspaceOverviewPanel({
+      activeProject: project,
+      latestReviewSummary: null,
+      onOpenBrowser,
+      onOpenFilesPanel: () => undefined,
+      onOpenReviewPanel: () => undefined,
+      onOpenSideChat: () => undefined,
+      onOpenTerminalPanel: () => undefined,
+    });
+    const browserButton = panel.props.children.props.children[4];
+
+    browserButton.props.onClick();
+
+    expect(onOpenBrowser).toHaveBeenCalledOnce();
   });
 });
 

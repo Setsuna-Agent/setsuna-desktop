@@ -107,6 +107,9 @@ type DesktopReviewGeneratedCommitMessage = {
 declare global {
   interface Window {
     setsunaDesktop?: {
+      browser: {
+        onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void;
+      };
       desktop: {
         platform: string;
         selectDirectory(options?: { title?: string }): Promise<string | null>;

@@ -1,7 +1,7 @@
 import type { RuntimeEvent, WorkspaceEntry } from '@setsuna-desktop/contracts';
 
 export type DesktopPanelSlot = 'side' | 'bottom';
-export type DesktopPanelType = 'overview' | 'chat' | 'files' | 'file' | 'review' | 'terminal';
+export type DesktopPanelType = 'overview' | 'browser' | 'chat' | 'files' | 'file' | 'review' | 'terminal';
 export type DesktopPanelTab = {
   id: string;
   type: DesktopPanelType;
@@ -18,6 +18,7 @@ export const REVIEW_PANEL_ID = 'review';
 export const FILES_PANEL_ID = 'files';
 export const WORKSPACE_OVERVIEW_PANEL_ID = 'workspace-overview';
 export const SIDE_CHAT_PANEL_ID = 'side-chat';
+export const BROWSER_PANEL_ID = 'browser';
 
 export const createEmptyPanelSlot = (): DesktopPanelSlotState => ({ active: null, panels: [] });
 export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
@@ -26,6 +27,7 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
 export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边任务'): DesktopPanelTab => ({ id, type: 'chat', title });
+export const createBrowserPanel = (): DesktopPanelTab => ({ id: BROWSER_PANEL_ID, type: 'browser', title: '浏览器' });
 export const createReviewPanel = (): DesktopPanelTab => ({ id: REVIEW_PANEL_ID, type: 'review', title: '审查' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
 export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });
@@ -37,6 +39,10 @@ export const addPanelToSlotState = (slot: DesktopPanelSlotState, panel: DesktopP
     if (existing) return { ...slot, active: existing.id };
   }
   const panelsWithoutOverview = panel.type === 'overview' ? slot.panels : slot.panels.filter((item) => item.type !== 'overview');
+  if (panel.type === 'browser') {
+    const existing = panelsWithoutOverview.find((item) => item.type === 'browser');
+    if (existing) return { active: existing.id, panels: panelsWithoutOverview };
+  }
   if (panel.type === 'review') {
     const existing = panelsWithoutOverview.find((item) => item.type === 'review');
     if (existing) return { active: existing.id, panels: panelsWithoutOverview };

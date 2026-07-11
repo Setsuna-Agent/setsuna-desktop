@@ -90,6 +90,14 @@ const links = {
   openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke('desktop:open-external', url),
 };
 
+const browser = {
+  onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, request: { openerWebContentsId: number; url: string }) => callback(request);
+    ipcRenderer.on('browser:open-new-tab', listener);
+    return () => ipcRenderer.off('browser:open-new-tab', listener);
+  },
+};
+
 const updater = {
   getState: (): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:get-state'),
   checkForUpdates: (): Promise<DesktopUpdateState> => ipcRenderer.invoke('desktop-updater:check'),
@@ -150,4 +158,4 @@ const terminal = {
   },
 };
 
-contextBridge.exposeInMainWorld('setsunaDesktop', { desktop, desktopReview, links, runtime, terminal, updater, windowControls, workspaceApps });
+contextBridge.exposeInMainWorld('setsunaDesktop', { browser, desktop, desktopReview, links, runtime, terminal, updater, windowControls, workspaceApps });

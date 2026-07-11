@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Code2, FileText, Folder, FolderOpen, MessageSquare, Search, Terminal } from 'lucide-react';
+import { ChevronDown, Code2, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
 import type { WorkspaceEntry, WorkspaceEntrySearchItem, WorkspaceFileRead, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState } from '../primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
@@ -28,6 +28,7 @@ export function WorkspacePanel({
   onOpenEntry,
   onOpenProjectFile,
   onOpenFilesPanel,
+  onOpenBrowser,
   onOpenReviewPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
@@ -55,6 +56,7 @@ export function WorkspacePanel({
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onOpenFilesPanel: () => void;
+  onOpenBrowser: () => void;
   onOpenReviewPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
@@ -241,6 +243,7 @@ export function WorkspacePanel({
         activeProject={activeProject}
         latestReviewSummary={latestReviewSummary}
         onOpenFilesPanel={onOpenFilesPanel}
+        onOpenBrowser={onOpenBrowser}
         onOpenReviewPanel={onOpenReviewPanel}
         onOpenSideChat={onOpenSideChat}
         onOpenTerminalPanel={onOpenTerminalPanel}
@@ -411,6 +414,7 @@ export function WorkspaceOverviewPanel({
   activeProject,
   latestReviewSummary,
   onOpenFilesPanel,
+  onOpenBrowser,
   onOpenReviewPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
@@ -418,6 +422,7 @@ export function WorkspaceOverviewPanel({
   activeProject?: WorkspaceProject;
   latestReviewSummary: DesktopDiffSummary | null;
   onOpenFilesPanel: () => void;
+  onOpenBrowser: () => void;
   onOpenReviewPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
@@ -457,6 +462,14 @@ export function WorkspaceOverviewPanel({
       icon: <MessageSquare size={15} />,
       disabled: false,
       onClick: onOpenSideChat,
+    },
+    {
+      key: 'browser',
+      label: '浏览器',
+      meta: '在右侧打开网页',
+      icon: <Globe2 size={15} />,
+      disabled: false,
+      onClick: onOpenBrowser,
     },
   ];
 

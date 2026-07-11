@@ -199,6 +199,7 @@ export function AppRouteContent({
         void workspacePanels.loadReviewState();
       }}
       onOpenBottomTerminalPanel={() => workspacePanels.openDesktopPanel('bottom', 'terminal')}
+      onOpenBrowser={() => workspacePanels.openDesktopPanel('side', 'browser')}
       onOpenFilesPanel={() => {
         projectWorkspace.setFilePreview(null);
         workspacePanels.openDesktopPanel('side', 'files');

@@ -19,6 +19,7 @@ import { ChatWorkspace } from '../chat/ChatWorkspace.js';
 import { SideChatPanel } from '../chat/SideChatPanel.js';
 import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationProvider.js';
 import { BottomToolsPanel } from '../workspace/BottomToolsPanel.js';
+import { BrowserPanel } from '../workspace/BrowserPanel.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import type {
@@ -82,6 +83,7 @@ export function AppChatSurface({
   onSearchProjectEntries,
   onOpenBottomReviewPanel,
   onOpenBottomTerminalPanel,
+  onOpenBrowser,
   onOpenFilesPanel,
   onOpenThread,
   onOpenFileReviewPanel,
@@ -155,6 +157,7 @@ export function AppChatSurface({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
+  onOpenBrowser: () => void;
   onOpenFilesPanel: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReviewPanel?: (filePath?: string) => void;
@@ -253,7 +256,18 @@ export function AppChatSurface({
           workspaceWidth={workspaceWidth}
         />
       ))}
-      {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'chat' ? (
+      {sidePanelSlot.panels.filter((panel) => panel.type === 'browser').map((panel) => (
+        <BrowserPanel
+          hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
+          key={panel.id}
+          onResizeStep={onWorkspaceResizeStep}
+          onResizeStart={onWorkspaceResizeStart}
+          resizeMax={workspaceMaxWidth}
+          resizeMin={workspaceMinWidth}
+          resizeValue={workspaceWidth}
+        />
+      ))}
+      {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'browser' && sideActivePanel.type !== 'chat' ? (
         <WorkspacePanel
           activePanel={sideActivePanel}
           activeProject={activeProject}
@@ -272,6 +286,7 @@ export function AppChatSurface({
           onOpenProjectFile={onOpenProjectFile}
           onGoRoot={onGoRoot}
           onOpenFilesPanel={onOpenFilesPanel}
+          onOpenBrowser={onOpenBrowser}
           onOpenReviewPanel={onOpenFileReviewPanel}
           onOpenSideChat={onOpenSideChat}
           onOpenTerminalPanel={onOpenSideTerminalPanel}

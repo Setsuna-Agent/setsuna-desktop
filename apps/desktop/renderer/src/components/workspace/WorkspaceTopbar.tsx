@@ -7,6 +7,7 @@ export function WorkspaceTopbar({
   panels,
   terminalOpen,
   onClosePanel,
+  onOpenBrowser,
   onOpenFilesPanel,
   onOpenReviewPanel,
   onOpenSideChat,
@@ -21,6 +22,7 @@ export function WorkspaceTopbar({
   panels: DesktopPanelTab[];
   terminalOpen: boolean;
   onClosePanel: (panelId: string) => void;
+  onOpenBrowser: () => void;
   onOpenFilesPanel: () => void;
   onOpenReviewPanel: () => void;
   onOpenSideChat: () => void;
@@ -32,6 +34,10 @@ export function WorkspaceTopbar({
 }) {
   const activePanel = panels.find((panel) => panel.id === activePanelId) ?? panels[0] ?? null;
   const handleOpenPanel = (panel: DesktopPanelType) => {
+    if (panel === 'browser') {
+      onOpenBrowser();
+      return;
+    }
     if (panel === 'chat') {
       onOpenSideChat();
       return;

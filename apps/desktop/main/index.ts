@@ -66,6 +66,7 @@ async function createWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webviewTag: true,
     },
   });
   if (usesCustomFrame) mainWindow.setMenu(null);
@@ -94,6 +95,37 @@ async function createWindow(): Promise<void> {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    // Browser guests never inherit local preload or Node capabilities from the desktop renderer.
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    if (!isAllowedEmbeddedBrowserUrl(params.src)) event.preventDefault();
+  });
+  mainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
+    guestContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+    guestContents.setWindowOpenHandler(({ url }) => {
+      const hostWebContents = guestContents.hostWebContents;
+      if (isAllowedEmbeddedBrowserUrl(url) && hostWebContents) {
+        console.info('[browser] intercepted new-window request', { openerWebContentsId: guestContents.id, url });
+        hostWebContents.send('browser:open-new-tab', {
+          openerWebContentsId: guestContents.id,
+          url,
+        });
+      } else {
+        console.warn('[browser] blocked new-window request', {
+          hasHostWebContents: Boolean(hostWebContents),
+          openerWebContentsId: guestContents.id,
+          url,
+        });
+      }
+      return { action: 'deny' };
+    });
+    guestContents.on('will-navigate', (event, url) => {
+      if (!isAllowedEmbeddedBrowserUrl(url)) event.preventDefault();
+    });
+  });
   const publishWindowMaximizedState = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('window-control:maximized-change', isWindowMaximized(mainWindow));
@@ -117,6 +149,15 @@ function loadDesktopIcon(): NativeImage | undefined {
   if (!iconPath) return undefined;
   const image = nativeImage.createFromPath(iconPath);
   return image.isEmpty() ? undefined : image;
+}
+
+export function isAllowedEmbeddedBrowserUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === 'http:' || url.protocol === 'https:' || (url.protocol === 'about:' && url.href === 'about:blank');
+  } catch {
+    return false;
+  }
 }
 
 function resolveDesktopIconPath(): string | undefined {
