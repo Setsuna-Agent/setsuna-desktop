@@ -94,6 +94,12 @@ export const codeHighlightThemeOptions = [
   { label: 'GitHub', value: 'github' },
   { label: 'One Dark', value: 'oneDark' },
   { label: 'Monokai', value: 'monokai' },
+  { label: 'Dracula', value: 'dracula' },
+  { label: 'Nord', value: 'nord' },
+  { label: 'Tokyo Night', value: 'tokyoNight' },
+  { label: 'Catppuccin Mocha', value: 'catppuccinMocha' },
+  { label: 'Solarized Light', value: 'solarizedLight' },
+  { label: 'Solarized Dark', value: 'solarizedDark' },
 ] as const;
 
 export type CodeFontFamilyMode = typeof codeFontFamilyOptions[number]['value'];

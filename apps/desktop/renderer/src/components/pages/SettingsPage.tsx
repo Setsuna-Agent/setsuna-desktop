@@ -283,15 +283,12 @@ function GeneralSettings() {
   const availableCodeFontFamilyOptions = getCodeFontFamilyOptionsForPlatform();
   const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
   const selectedCodeFont = availableCodeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? codeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? availableCodeFontFamilyOptions[0] ?? codeFontFamilyOptions[0];
+  const selectedCodeHighlightTheme = codeHighlightThemeOptions.find((item) => item.value === codeHighlightTheme) ?? codeHighlightThemeOptions[0];
   const fontFamilySelectOptions = availableFontFamilyOptions.some((item) => item.value === selectedFont.value) ? availableFontFamilyOptions : [selectedFont, ...availableFontFamilyOptions];
   const codeFontFamilySelectOptions = availableCodeFontFamilyOptions.some((item) => item.value === selectedCodeFont.value) ? availableCodeFontFamilyOptions : [selectedCodeFont, ...availableCodeFontFamilyOptions];
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
   const scaleMarkMaxIndex = Math.max(fontSizeOptions.length - 1, 1);
   const fontSizeProgress = `${(fontSizeIndex / scaleMarkMaxIndex) * 100}%`;
-  const getScaleMarkLeft = (index: number) => {
-    const ratio = index / scaleMarkMaxIndex;
-    return `calc(${ratio * 100}% + ${7 - 14 * ratio}px)`;
-  };
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__section--general">
@@ -369,6 +366,11 @@ function GeneralSettings() {
               ))}
             </SelectField>
           </label>
+          <CodeAppearancePreview
+            fontFamily={selectedCodeFont.css}
+            fontLabel={selectedCodeFont.label}
+            themeLabel={selectedCodeHighlightTheme.label}
+          />
         </div>
       </div>
 
@@ -381,14 +383,21 @@ function GeneralSettings() {
               <span>页面缩放</span>
             </span>
             <div className="chat-user-settings__slider" style={{ '--settings-scale-progress': fontSizeProgress } as CSSProperties}>
-              <input aria-label="页面缩放" type="range" min={0} max={fontSizeOptions.length - 1} step={1} value={fontSizeIndex} onChange={(event) => setFontSize(fontSizeOptions[Number(event.currentTarget.value)] ?? '100')} />
-              <div className="settings-scale-control__marks" aria-hidden="true">
-                {fontSizeOptions.map((option, index) => (
-                  <span key={option} className={index <= fontSizeIndex ? 'is-active' : undefined} style={{ '--settings-scale-mark-left': getScaleMarkLeft(index) } as CSSProperties}>
-                    {Number(option) % 10 === 0 ? `${option}%` : ''}
-                  </span>
-                ))}
+              <div className="settings-scale-control__range">
+                <input id="settings-page-scale" aria-label="页面缩放" type="range" min={0} max={fontSizeOptions.length - 1} step={1} value={fontSizeIndex} onChange={(event) => setFontSize(fontSizeOptions[Number(event.currentTarget.value)] ?? '100')} />
+                <div className="settings-scale-control__marks" aria-hidden="true">
+                  {fontSizeOptions.map((option, index) => Number(option) % 10 === 0 ? (
+                    <span
+                      key={option}
+                      className={`${index === 0 ? 'is-first' : ''} ${index === fontSizeOptions.length - 1 ? 'is-last' : ''} ${option === fontSize ? 'is-current' : ''}`}
+                      style={{ '--settings-scale-mark-left': `${(index / scaleMarkMaxIndex) * 100}%` } as CSSProperties}
+                    >
+                      {option}%
+                    </span>
+                  ) : null)}
+                </div>
               </div>
+              <output htmlFor="settings-page-scale">{fontSize}%</output>
             </div>
           </div>
           <div className="chat-user-settings__row">
@@ -401,6 +410,66 @@ function GeneralSettings() {
         </div>
       </div>
     </div>
+  );
+}
+
+function CodeAppearancePreview({ fontFamily, fontLabel, themeLabel }: { fontFamily: string; fontLabel: string; themeLabel: string }) {
+  return (
+    <div className="chat-user-settings__code-preview" aria-label="代码样式预览">
+      <div className="chat-user-settings__code-preview-header">
+        <span><Code2 size={12} /> TypeScript</span>
+        <span>{`${fontLabel} · ${themeLabel}`}</span>
+      </div>
+      <code className="chat-user-settings__code-preview-body" style={{ fontFamily }}>
+        <CodePreviewLine number={1}>
+          <span className="is-keyword">import</span>
+          <span className="is-meta"> {'{'} </span>
+          <span className="is-title">useMemo</span>
+          <span className="is-meta"> {'}'} </span>
+          <span className="is-keyword">from</span>
+          <span> </span>
+          <span className="is-string">'react'</span>
+          <span className="is-meta">;</span>
+        </CodePreviewLine>
+        <CodePreviewLine number={2}>
+          <span className="is-comment">// 实时预览代码字体与高亮主题</span>
+        </CodePreviewLine>
+        <CodePreviewLine number={3}>
+          <span className="is-keyword">const</span>
+          <span> total </span>
+          <span className="is-meta">=</span>
+          <span> items.</span>
+          <span className="is-title">reduce</span>
+          <span className="is-meta">((</span>
+          <span>sum, item</span>
+          <span className="is-meta">) =&gt;</span>
+          <span> sum </span>
+          <span className="is-meta">+</span>
+          <span> item.</span>
+          <span className="is-attribute">price</span>
+          <span className="is-meta">, </span>
+          <span className="is-number">0</span>
+          <span className="is-meta">);</span>
+        </CodePreviewLine>
+        <CodePreviewLine number={4}>
+          <span className="is-keyword">return</span>
+          <span> </span>
+          <span className="is-title">formatCurrency</span>
+          <span className="is-meta">(</span>
+          <span>total</span>
+          <span className="is-meta">);</span>
+        </CodePreviewLine>
+      </code>
+    </div>
+  );
+}
+
+function CodePreviewLine({ children, number }: { children: ReactNode; number: number }) {
+  return (
+    <span className="chat-user-settings__code-preview-line">
+      <span aria-hidden="true">{number}</span>
+      <span>{children}</span>
+    </span>
   );
 }
 

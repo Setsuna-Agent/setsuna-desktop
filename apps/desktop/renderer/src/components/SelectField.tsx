@@ -171,6 +171,7 @@ export function SelectField({
         id={id}
         type="button"
         className={`sd-field sd-select-field ${open ? 'is-open' : ''} ${className}`}
+        aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
         aria-controls={open ? listboxId : undefined}
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -205,6 +206,7 @@ export function SelectField({
               return (
                 <button
                   key={`${option.value}:${index}`}
+                  id={`${listboxId}-option-${index}`}
                   type="button"
                   role="option"
                   className={`sd-select-menu__option ${index === activeIndex ? 'is-active' : ''}`}

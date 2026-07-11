@@ -62,6 +62,102 @@
   --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
+:root[data-code-highlight-theme='dracula'] {
+  --code-highlight-background: #282a36;
+  --code-highlight-text: #f8f8f2;
+  --code-highlight-comment: #6272a4;
+  --code-highlight-keyword: #ff79c6;
+  --code-highlight-string: #f1fa8c;
+  --code-highlight-number: #bd93f9;
+  --code-highlight-title: #50fa7b;
+  --code-highlight-type: #8be9fd;
+  --code-highlight-attribute: #50fa7b;
+  --code-highlight-meta: #ffb86c;
+  --code-highlight-addition: #50fa7b;
+  --code-highlight-deletion: #ff5555;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='nord'] {
+  --code-highlight-background: #2e3440;
+  --code-highlight-text: #d8dee9;
+  --code-highlight-comment: #616e88;
+  --code-highlight-keyword: #b48ead;
+  --code-highlight-string: #a3be8c;
+  --code-highlight-number: #b48ead;
+  --code-highlight-title: #88c0d0;
+  --code-highlight-type: #8fbcbb;
+  --code-highlight-attribute: #d08770;
+  --code-highlight-meta: #81a1c1;
+  --code-highlight-addition: #a3be8c;
+  --code-highlight-deletion: #bf616a;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='tokyoNight'] {
+  --code-highlight-background: #1a1b26;
+  --code-highlight-text: #a9b1d6;
+  --code-highlight-comment: #565f89;
+  --code-highlight-keyword: #bb9af7;
+  --code-highlight-string: #9ece6a;
+  --code-highlight-number: #ff9e64;
+  --code-highlight-title: #7aa2f7;
+  --code-highlight-type: #2ac3de;
+  --code-highlight-attribute: #73daca;
+  --code-highlight-meta: #89ddff;
+  --code-highlight-addition: #9ece6a;
+  --code-highlight-deletion: #f7768e;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='catppuccinMocha'] {
+  --code-highlight-background: #1e1e2e;
+  --code-highlight-text: #cdd6f4;
+  --code-highlight-comment: #6c7086;
+  --code-highlight-keyword: #cba6f7;
+  --code-highlight-string: #a6e3a1;
+  --code-highlight-number: #fab387;
+  --code-highlight-title: #89b4fa;
+  --code-highlight-type: #94e2d5;
+  --code-highlight-attribute: #f9e2af;
+  --code-highlight-meta: #89dceb;
+  --code-highlight-addition: #a6e3a1;
+  --code-highlight-deletion: #f38ba8;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='solarizedLight'] {
+  --code-highlight-background: #fdf6e3;
+  --code-highlight-text: #657b83;
+  --code-highlight-comment: #93a1a1;
+  --code-highlight-keyword: #859900;
+  --code-highlight-string: #2aa198;
+  --code-highlight-number: #d33682;
+  --code-highlight-title: #268bd2;
+  --code-highlight-type: #b58900;
+  --code-highlight-attribute: #cb4b16;
+  --code-highlight-meta: #6c71c4;
+  --code-highlight-addition: #859900;
+  --code-highlight-deletion: #dc322f;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='solarizedDark'] {
+  --code-highlight-background: #002b36;
+  --code-highlight-text: #839496;
+  --code-highlight-comment: #586e75;
+  --code-highlight-keyword: #859900;
+  --code-highlight-string: #2aa198;
+  --code-highlight-number: #d33682;
+  --code-highlight-title: #268bd2;
+  --code-highlight-type: #b58900;
+  --code-highlight-attribute: #cb4b16;
+  --code-highlight-meta: #6c71c4;
+  --code-highlight-addition: #859900;
+  --code-highlight-deletion: #dc322f;
+  --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
 .desktop-code-editor,
 .desktop-review-diff {
   background: var(--code-highlight-background);

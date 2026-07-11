@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCodeFontFamilyOptionsForPlatform, initializeCodeAppearancePreference } from './useCodeAppearancePreferences.js';
+import { codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, initializeCodeAppearancePreference } from './useCodeAppearancePreferences.js';
 
 describe('code appearance preferences', () => {
   it('defaults to the GitHub theme and system monospace font', () => {
@@ -51,6 +51,15 @@ describe('code appearance preferences', () => {
     expect(macOptions).not.toContain('consolas');
     expect(windowsOptions).toContain('consolas');
     expect(windowsOptions).not.toContain('sfMono');
+  });
+
+  it('offers a balanced set of light and dark code themes', () => {
+    const themes = codeHighlightThemeOptions.map((option) => option.value);
+
+    expect(themes).toHaveLength(9);
+    expect(themes).toContain('solarizedLight');
+    expect(themes).toContain('tokyoNight');
+    expect(themes).toContain('catppuccinMocha');
   });
 });
 
