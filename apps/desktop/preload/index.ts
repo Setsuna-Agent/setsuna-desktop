@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+  DesktopOpenPathResult,
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSourceInput,
   DesktopUpdateState,
@@ -32,8 +33,6 @@ type DesktopUserProfile = {
   shell: string | null;
   hostName: string | null;
 };
-
-type DesktopOpenPathResult = { ok: true } | { ok: false; error: string };
 
 type DesktopReviewCommitInput = {
   includeUnstaged?: boolean;
@@ -71,6 +70,8 @@ const desktop = {
   selectDirectory: (options?: { title?: string }): Promise<string | null> => ipcRenderer.invoke('desktop:select-directory', options ?? {}),
   getUserProfile: (): Promise<DesktopUserProfile> => ipcRenderer.invoke('desktop:get-user-profile'),
   openPath: (targetPath: string): Promise<DesktopOpenPathResult> => ipcRenderer.invoke('desktop:open-path', targetPath),
+  openWorkspaceFile: (workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult> =>
+    ipcRenderer.invoke('desktop:open-workspace-file', { workspaceRoot, filePath }),
 };
 
 const windowControls = {

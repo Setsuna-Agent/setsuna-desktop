@@ -4,10 +4,23 @@ export type MarkdownLinkTarget =
   | { kind: 'workspace'; line?: number; path: string }
   | { kind: 'invalid' };
 
+export type MarkdownWorkspaceLinkTarget = Extract<MarkdownLinkTarget, { kind: 'workspace' }>;
+
 const externalProtocolPattern = /^(?:https?:|mailto:)/i;
 const unsafeProtocolPattern = /^(?:data:|javascript:|vbscript:)/i;
 const windowsAbsolutePathPattern = /^[a-z]:\//i;
 const markdownLocationSuffixPattern = /(?::(\d+)(?::\d+)?(?:[-–]\d+(?::\d+)?)?|#L(\d+)(?:C\d+)?(?:-L\d+(?:C\d+)?)?)$/i;
+const commonWorkspaceFileExtensions = new Set([
+  'bash', 'c', 'cc', 'conf', 'cpp', 'cs', 'css', 'csv', 'cxx', 'doc', 'docx', 'env', 'fish',
+  'fs', 'fsx', 'gif', 'gitignore', 'go', 'gql', 'gradle', 'graphql', 'h', 'hpp', 'htm', 'html',
+  'ini', 'java', 'jpeg', 'jpg', 'js', 'json', 'jsonc', 'jsx', 'kt', 'kts', 'less', 'lock', 'md',
+  'mdx', 'pdf', 'php', 'png', 'properties', 'proto', 'ps1', 'py', 'pyi', 'rb', 'rs', 'sass',
+  'scss', 'sh', 'sql', 'svelte', 'svg', 'swift', 'toml', 'ts', 'tsv', 'tsx', 'txt', 'vue',
+  'webp', 'xls', 'xlsx', 'xml', 'yaml', 'yml', 'zsh',
+]);
+const extensionlessWorkspaceFileNames = new Set([
+  'dockerfile', 'gemfile', 'justfile', 'license', 'makefile', 'procfile', 'rakefile', 'readme',
+]);
 
 export function markdownUrlTransform(url: string): string {
   const value = url.trim();
@@ -40,6 +53,31 @@ export function resolveMarkdownLinkTarget(href: string | undefined, workspaceRoo
 
   const relativePath = normalizeRelativePath(normalizedPath);
   return relativePath ? { kind: 'workspace', line, path: relativePath } : { kind: 'invalid' };
+}
+
+export function resolveMarkdownFileReference(
+  value: string,
+  workspaceRoot?: string,
+): MarkdownWorkspaceLinkTarget | null {
+  const reference = value.trim();
+  if (!reference || reference.includes('\n')) return null;
+  const target = resolveMarkdownLinkTarget(reference, workspaceRoot);
+  if (target.kind !== 'workspace' || !looksLikeWorkspaceFile(target.path)) return null;
+  return target;
+}
+
+function looksLikeWorkspaceFile(filePath: string): boolean {
+  const fileName = filePath.split('/').at(-1)?.toLowerCase() ?? '';
+  if (!fileName) return false;
+  if (extensionlessWorkspaceFileNames.has(fileName)) return true;
+
+  const extensionStart = fileName.lastIndexOf('.');
+  if (extensionStart < 0 || extensionStart === fileName.length - 1) return false;
+  const extension = fileName.slice(extensionStart + 1);
+  if (commonWorkspaceFileExtensions.has(extension)) return true;
+
+  // A path segment makes a custom extension far less likely to be a domain or version literal.
+  return filePath.includes('/') && /^[a-z\d][a-z\d+_-]{0,15}$/i.test(extension);
 }
 
 function fileUrlPath(value: string): string | null {

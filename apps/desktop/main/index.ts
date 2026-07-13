@@ -33,6 +33,7 @@ import {
 import { RuntimeHost } from './runtime-host.js';
 import { DesktopTerminalStore } from './terminal-sessions.js';
 import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
+import { openWorkspaceFileWithDefaultApp } from './workspace-file-opening.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
@@ -286,6 +287,7 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('desktop:get-user-profile');
   ipcMain.removeHandler('desktop:open-external');
   ipcMain.removeHandler('desktop:open-path');
+  ipcMain.removeHandler('desktop:open-workspace-file');
   ipcMain.removeHandler('desktop-updater:get-state');
   ipcMain.removeHandler('desktop-updater:check');
   ipcMain.removeHandler('desktop-updater:download');
@@ -340,6 +342,11 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
       return { ok: false, error: error instanceof Error ? error.message : 'Failed to open path.' };
     }
   });
+  ipcMain.handle('desktop:open-workspace-file', async (_event, input) => openWorkspaceFileWithDefaultApp(
+    input?.workspaceRoot,
+    input?.filePath,
+    (targetPath) => shell.openPath(targetPath),
+  ));
   ipcMain.handle('desktop-updater:get-state', async () => updater.getState());
   ipcMain.handle('desktop-updater:check', async () => updater.checkAndDownload());
   ipcMain.handle('desktop-updater:download', async () => updater.checkAndDownload());

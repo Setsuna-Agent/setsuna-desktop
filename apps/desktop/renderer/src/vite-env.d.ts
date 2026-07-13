@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type {
+  DesktopOpenPathResult,
   DesktopRuntimeClient,
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSourceInput,
@@ -33,8 +34,6 @@ type DesktopUserProfile = {
   shell: string | null;
   hostName: string | null;
 };
-
-type DesktopOpenPathResult = { ok: true } | { ok: false; error: string };
 
 type DesktopDiffLine = {
   type: 'context' | 'added' | 'removed' | 'gap';
@@ -118,6 +117,7 @@ declare global {
         selectDirectory(options?: { title?: string }): Promise<string | null>;
         getUserProfile(): Promise<DesktopUserProfile>;
         openPath(targetPath: string): Promise<DesktopOpenPathResult>;
+        openWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
       };
       desktopReview: {
         getState(workspaceRoot: string, options?: { baseRef?: string | null }): Promise<DesktopReviewState>;

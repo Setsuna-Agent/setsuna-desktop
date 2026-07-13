@@ -148,6 +148,42 @@
   text-decoration-color: currentColor;
 }
 
+.chat-markdown a.chat-markdown__file-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--app-primary);
+  background: transparent;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-decoration: none;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.chat-markdown a.chat-markdown__file-link:hover,
+.chat-markdown a.chat-markdown__file-link:focus-visible {
+  color: var(--app-primary-hover);
+  background: transparent;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.chat-markdown__file-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.18em;
+  font-size: 1em;
+  line-height: 1;
+  vertical-align: -0.125em;
+}
+
 .chat-markdown__unavailable-link,
 .chat-markdown__image-alt {
   color: var(--app-text-muted);

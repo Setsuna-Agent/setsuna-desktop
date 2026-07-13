@@ -1,6 +1,7 @@
 export * from './approvals.js';
 export * from './browser-control.js';
 export * from './config.js';
+export * from './desktop.js';
 export * from './swe-events.js';
 export * from './events.js';
 export * from './http.js';

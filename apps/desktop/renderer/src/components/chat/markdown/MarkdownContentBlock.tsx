@@ -5,7 +5,8 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
-import { markdownUrlTransform, resolveMarkdownLinkTarget } from './markdownLinks.js';
+import { markdownUrlTransform, resolveMarkdownFileReference, resolveMarkdownLinkTarget } from './markdownLinks.js';
+import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 
 type MarkdownContentBlockProps = {
   content: string;
@@ -44,18 +45,25 @@ function MarkdownLink({ children, href, node: _node, onClick, ...props }: Markdo
   const target = resolveMarkdownLinkTarget(href, workspaceRoot);
 
   if (target.kind === 'workspace') {
-    if (!onOpenWorkspaceFile) {
+    if (!workspaceRoot && !onOpenWorkspaceFile) {
       return <span className="chat-markdown__unavailable-link">{children}</span>;
     }
     const handleWorkspaceClick = (event: MouseEvent<HTMLAnchorElement>) => {
       onClick?.(event);
       if (event.defaultPrevented) return;
       event.preventDefault();
-      onOpenWorkspaceFile(target.path, target.line);
+      openWorkspaceMarkdownFile(workspaceRoot, target.path, target.line, onOpenWorkspaceFile);
     };
     return (
-      <a {...props} data-markdown-link="workspace" href={href} onClick={handleWorkspaceClick}>
-        {children}
+      <a
+        {...props}
+        className="chat-markdown__file-link"
+        data-markdown-link="workspace"
+        href={href}
+        title={target.path}
+        onClick={handleWorkspaceClick}
+      >
+        <MarkdownWorkspaceFileLabel filePath={target.path}>{children}</MarkdownWorkspaceFileLabel>
       </a>
     );
   }
@@ -115,7 +123,41 @@ function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElement
 }
 
 function MarkdownInlineCode({ children, node: _node, ...props }: MarkdownElementProps<'code'>) {
+  const { onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
+  const childParts = Children.toArray(children);
+  const referenceText = childParts.every((child) => typeof child === 'string' || typeof child === 'number')
+    ? childParts.join('')
+    : '';
+  const target = resolveMarkdownFileReference(referenceText, workspaceRoot);
+
+  if (target && (workspaceRoot || onOpenWorkspaceFile)) {
+    const handleWorkspaceClick = (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      openWorkspaceMarkdownFile(workspaceRoot, target.path, target.line, onOpenWorkspaceFile);
+    };
+    return (
+      <a
+        className="chat-markdown__file-link"
+        data-markdown-link="workspace-inline"
+        href={referenceText}
+        title={target.path}
+        onClick={handleWorkspaceClick}
+      >
+        <MarkdownWorkspaceFileLabel filePath={target.path}>{children}</MarkdownWorkspaceFileLabel>
+      </a>
+    );
+  }
+
   return <code {...props}>{children}</code>;
+}
+
+function MarkdownWorkspaceFileLabel({ children, filePath }: { children: ReactNode; filePath: string }) {
+  return (
+    <>
+      <WorkspaceFileIcon className="chat-markdown__file-icon" path={filePath} type="file" />
+      <span>{children}</span>
+    </>
+  );
 }
 
 function MarkdownPre({ children, node: _node, ...props }: MarkdownElementProps<'pre'>) {
@@ -145,4 +187,26 @@ function openExternalMarkdownLink(href: string): void {
     return;
   }
   window.open(href, '_blank', 'noopener,noreferrer');
+}
+
+function openWorkspaceMarkdownFile(
+  workspaceRoot: string | undefined,
+  filePath: string,
+  line: number | undefined,
+  fallback: ((filePath: string, line?: number) => void) | undefined,
+): void {
+  const openWorkspaceFile = typeof window === 'undefined'
+    ? undefined
+    : window.setsunaDesktop?.desktop?.openWorkspaceFile;
+  if (workspaceRoot && openWorkspaceFile) {
+    void openWorkspaceFile(workspaceRoot, filePath)
+      .then((result) => {
+        if (!result.ok) console.error('[MarkdownContentBlock] failed to open workspace file', result.error);
+      })
+      .catch((error: unknown) => {
+        console.error('[MarkdownContentBlock] failed to open workspace file', error);
+      });
+    return;
+  }
+  fallback?.(filePath, line);
 }

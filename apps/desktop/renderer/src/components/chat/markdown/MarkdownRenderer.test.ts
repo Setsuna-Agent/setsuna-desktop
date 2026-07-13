@@ -58,8 +58,18 @@ describe('MarkdownRenderer', () => {
     const html = renderMarkdown('[source](./src/main.ts:12)\n\n<script>alert(1)</script>');
 
     expect(html).toContain('data-markdown-link="workspace"');
+    expect(html).toContain('class="chat-markdown__file-link"');
+    expect(html).toContain('class="chat-markdown__file-icon"');
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('alert(1)');
+  });
+
+  it('promotes inline code file references without changing identifiers', () => {
+    const html = renderMarkdown('Update `help.ts` and keep `invoice_status` unchanged.');
+
+    expect(html).toContain('data-markdown-link="workspace-inline"');
+    expect(html).toContain('>help.ts</span>');
+    expect(html).toContain('<code>invoice_status</code>');
   });
 
   it('keeps fenced code on the existing code highlighter path', () => {

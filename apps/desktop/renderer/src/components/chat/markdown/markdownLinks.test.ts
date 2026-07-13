@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markdownUrlTransform, resolveMarkdownLinkTarget } from './markdownLinks.js';
+import { markdownUrlTransform, resolveMarkdownFileReference, resolveMarkdownLinkTarget } from './markdownLinks.js';
 
 describe('markdownLinks', () => {
   it('recognizes safe external and anchor links', () => {
@@ -40,5 +40,20 @@ describe('markdownLinks', () => {
     expect(resolveMarkdownLinkTarget('/Users/dev/other/secret.txt', '/Users/dev/project')).toEqual({ kind: 'invalid' });
     expect(resolveMarkdownLinkTarget('javascript:alert(1)', '/Users/dev/project')).toEqual({ kind: 'invalid' });
     expect(markdownUrlTransform('data:text/html,unsafe')).toBe('');
+  });
+
+  it('recognizes inline code file references without treating identifiers as files', () => {
+    expect(resolveMarkdownFileReference('help.ts', '/Users/dev/project')).toEqual({
+      kind: 'workspace',
+      path: 'help.ts',
+    });
+    expect(resolveMarkdownFileReference('src/generated/schema.custom:12', '/Users/dev/project')).toEqual({
+      kind: 'workspace',
+      line: 12,
+      path: 'src/generated/schema.custom',
+    });
+    expect(resolveMarkdownFileReference('invoice_status', '/Users/dev/project')).toBeNull();
+    expect(resolveMarkdownFileReference('getInvoiceWalletItemsData', '/Users/dev/project')).toBeNull();
+    expect(resolveMarkdownFileReference('example.com', '/Users/dev/project')).toBeNull();
   });
 });
