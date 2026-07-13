@@ -906,7 +906,7 @@
   padding: 9px 0;
   border: 1px solid color-mix(in srgb, var(--code-highlight-text) 12%, var(--code-highlight-background));
   border-radius: 0 0 8px 8px;
-  color: var(--code-highlight-text);
+  color: var(--code-syntax-plain);
   background: var(--code-highlight-background);
   font-size: 12px;
   line-height: 20px;
@@ -929,32 +929,36 @@
 }
 
 .desktop-settings-panel .chat-user-settings__code-preview .is-comment {
-  color: var(--code-highlight-comment);
+  color: var(--code-syntax-comment);
   font-style: italic;
 }
 
 .desktop-settings-panel .chat-user-settings__code-preview .is-keyword {
-  color: var(--code-highlight-keyword);
+  color: var(--code-syntax-keyword);
 }
 
 .desktop-settings-panel .chat-user-settings__code-preview .is-string {
-  color: var(--code-highlight-string);
+  color: var(--code-syntax-string);
 }
 
 .desktop-settings-panel .chat-user-settings__code-preview .is-number {
-  color: var(--code-highlight-number);
+  color: var(--code-syntax-number);
 }
 
-.desktop-settings-panel .chat-user-settings__code-preview .is-title {
-  color: var(--code-highlight-title);
+.desktop-settings-panel .chat-user-settings__code-preview .is-function {
+  color: var(--code-syntax-function);
+}
+
+.desktop-settings-panel .chat-user-settings__code-preview .is-variable {
+  color: var(--code-syntax-plain);
 }
 
 .desktop-settings-panel .chat-user-settings__code-preview .is-attribute {
-  color: var(--code-highlight-attribute);
+  color: var(--code-syntax-property);
 }
 
 .desktop-settings-panel .chat-user-settings__code-preview .is-meta {
-  color: var(--code-highlight-meta);
+  color: var(--code-syntax-meta);
 }
 
 .desktop-settings-panel .chat-user-settings__personalization-section {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, initializeCodeAppearancePreference } from './useCodeAppearancePreferences.js';
+import { codeColorSchemeOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, initializeCodeAppearancePreference } from './useCodeAppearancePreferences.js';
 
 describe('code appearance preferences', () => {
   it('defaults to the One Light theme and system monospace font', () => {
@@ -8,6 +8,7 @@ describe('code appearance preferences', () => {
 
       expect(dataset.codeHighlightTheme).toBe('oneLight');
       expect(dataset.codeFontFamily).toBe('system');
+      expect(dataset.codeColorScheme).toBe('theme');
       expect(styles.get('--app-code-font-family')).toContain('SFMono-Regular');
     });
   });
@@ -17,12 +18,14 @@ describe('code appearance preferences', () => {
       {
         'setsuna-code-font-family': 'geistMono',
         'setsuna-code-highlight-theme': 'oneDark',
+        'setsuna-code-color-scheme': 'vscode',
       },
       ({ dataset, styles }) => {
         initializeCodeAppearancePreference();
 
         expect(dataset.codeHighlightTheme).toBe('oneDark');
         expect(dataset.codeFontFamily).toBe('geistMono');
+        expect(dataset.codeColorScheme).toBe('vscode');
         expect(styles.get('--app-code-font-family')).toContain('Geist Mono');
       },
     );
@@ -33,12 +36,14 @@ describe('code appearance preferences', () => {
       {
         'setsuna-code-font-family': 'missing-font',
         'setsuna-code-highlight-theme': 'missing-theme',
+        'setsuna-code-color-scheme': 'missing-scheme',
       },
       ({ dataset }) => {
         initializeCodeAppearancePreference();
 
         expect(dataset.codeHighlightTheme).toBe('oneLight');
         expect(dataset.codeFontFamily).toBe('system');
+        expect(dataset.codeColorScheme).toBe('theme');
       },
     );
   });
@@ -61,6 +66,24 @@ describe('code appearance preferences', () => {
     expect(themes).toContain('solarizedLight');
     expect(themes).toContain('tokyoNight');
     expect(themes).toContain('catppuccinMocha');
+  });
+
+  it('offers independent semantic token color schemes', () => {
+    const schemes = codeColorSchemeOptions.map((option) => option.value);
+
+    expect(schemes).toEqual([
+      'theme',
+      'one',
+      'vscode',
+      'github',
+      'material',
+      'monokai',
+      'dracula',
+      'nord',
+      'tokyoNight',
+      'catppuccin',
+      'solarized',
+    ]);
   });
 });
 

@@ -103,26 +103,44 @@ export const codeHighlightThemeOptions = [
   { label: 'Solarized Dark', value: 'solarizedDark' },
 ] as const;
 
+export const codeColorSchemeOptions = [
+  { label: '跟随高亮主题（默认）', value: 'theme' },
+  { label: 'One', value: 'one' },
+  { label: 'VS Code', value: 'vscode' },
+  { label: 'GitHub', value: 'github' },
+  { label: 'Material', value: 'material' },
+  { label: 'Monokai', value: 'monokai' },
+  { label: 'Dracula', value: 'dracula' },
+  { label: 'Nord', value: 'nord' },
+  { label: 'Tokyo Night', value: 'tokyoNight' },
+  { label: 'Catppuccin', value: 'catppuccin' },
+  { label: 'Solarized', value: 'solarized' },
+] as const;
+
 export type CodeFontFamilyMode = typeof codeFontFamilyOptions[number]['value'];
 export type CodeFontFamilyOption = typeof codeFontFamilyOptions[number];
 export type CodeHighlightTheme = typeof codeHighlightThemeOptions[number]['value'];
+export type CodeColorScheme = typeof codeColorSchemeOptions[number]['value'];
 
 const codeFontFamilyStorageKey = 'setsuna-code-font-family';
 const codeHighlightThemeStorageKey = 'setsuna-code-highlight-theme';
+const codeColorSchemeStorageKey = 'setsuna-code-color-scheme';
 export const CODE_APPEARANCE_CHANGE_EVENT_NAME = 'setsuna-code-appearance-change';
 
 export function useCodeAppearancePreferences() {
   const [codeFontFamily, setCodeFontFamilyState] = useState<CodeFontFamilyMode>(() => getInitialCodeFontFamily());
   const [codeHighlightTheme, setCodeHighlightThemeState] = useState<CodeHighlightTheme>(() => getInitialCodeHighlightTheme());
+  const [codeColorScheme, setCodeColorSchemeState] = useState<CodeColorScheme>(() => getInitialCodeColorScheme());
 
   useEffect(() => {
-    applyCodeAppearance(codeFontFamily, codeHighlightTheme);
-  }, [codeFontFamily, codeHighlightTheme]);
+    applyCodeAppearance(codeFontFamily, codeHighlightTheme, codeColorScheme);
+  }, [codeColorScheme, codeFontFamily, codeHighlightTheme]);
 
   useEffect(() => {
     const handleCodeAppearanceChange = () => {
       setCodeFontFamilyState(getInitialCodeFontFamily());
       setCodeHighlightThemeState(getInitialCodeHighlightTheme());
+      setCodeColorSchemeState(getInitialCodeColorScheme());
     };
     window.addEventListener(CODE_APPEARANCE_CHANGE_EVENT_NAME, handleCodeAppearanceChange);
     window.addEventListener('storage', handleCodeAppearanceChange);
@@ -135,22 +153,29 @@ export function useCodeAppearancePreferences() {
   const setCodeFontFamily = useCallback((nextCodeFontFamily: CodeFontFamilyMode) => {
     window.localStorage.setItem(codeFontFamilyStorageKey, nextCodeFontFamily);
     setCodeFontFamilyState(nextCodeFontFamily);
-    applyCodeAppearance(nextCodeFontFamily, getInitialCodeHighlightTheme());
+    applyCodeAppearance(nextCodeFontFamily, getInitialCodeHighlightTheme(), getInitialCodeColorScheme());
     window.dispatchEvent(new CustomEvent(CODE_APPEARANCE_CHANGE_EVENT_NAME));
   }, []);
 
   const setCodeHighlightTheme = useCallback((nextCodeHighlightTheme: CodeHighlightTheme) => {
     window.localStorage.setItem(codeHighlightThemeStorageKey, nextCodeHighlightTheme);
     setCodeHighlightThemeState(nextCodeHighlightTheme);
-    applyCodeAppearance(getInitialCodeFontFamily(), nextCodeHighlightTheme);
+    applyCodeAppearance(getInitialCodeFontFamily(), nextCodeHighlightTheme, getInitialCodeColorScheme());
     window.dispatchEvent(new CustomEvent(CODE_APPEARANCE_CHANGE_EVENT_NAME));
   }, []);
 
-  return { codeFontFamily, codeHighlightTheme, setCodeFontFamily, setCodeHighlightTheme };
+  const setCodeColorScheme = useCallback((nextCodeColorScheme: CodeColorScheme) => {
+    window.localStorage.setItem(codeColorSchemeStorageKey, nextCodeColorScheme);
+    setCodeColorSchemeState(nextCodeColorScheme);
+    applyCodeAppearance(getInitialCodeFontFamily(), getInitialCodeHighlightTheme(), nextCodeColorScheme);
+    window.dispatchEvent(new CustomEvent(CODE_APPEARANCE_CHANGE_EVENT_NAME));
+  }, []);
+
+  return { codeColorScheme, codeFontFamily, codeHighlightTheme, setCodeColorScheme, setCodeFontFamily, setCodeHighlightTheme };
 }
 
 export function initializeCodeAppearancePreference(): void {
-  applyCodeAppearance(getInitialCodeFontFamily(), getInitialCodeHighlightTheme());
+  applyCodeAppearance(getInitialCodeFontFamily(), getInitialCodeHighlightTheme(), getInitialCodeColorScheme());
 }
 
 function getInitialCodeFontFamily(): CodeFontFamilyMode {
@@ -163,10 +188,16 @@ function getInitialCodeHighlightTheme(): CodeHighlightTheme {
   return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'oneLight';
 }
 
-function applyCodeAppearance(codeFontFamily: CodeFontFamilyMode, codeHighlightTheme: CodeHighlightTheme): void {
+function getInitialCodeColorScheme(): CodeColorScheme {
+  const saved = window.localStorage.getItem(codeColorSchemeStorageKey);
+  return codeColorSchemeOptions.some((item) => item.value === saved) ? (saved as CodeColorScheme) : 'theme';
+}
+
+function applyCodeAppearance(codeFontFamily: CodeFontFamilyMode, codeHighlightTheme: CodeHighlightTheme, codeColorScheme: CodeColorScheme): void {
   const font = codeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? codeFontFamilyOptions[0];
   document.documentElement.dataset.codeFontFamily = codeFontFamily;
   document.documentElement.dataset.codeHighlightTheme = codeHighlightTheme;
+  document.documentElement.dataset.codeColorScheme = codeColorScheme;
   document.documentElement.style.setProperty('--app-code-font-family', font.css);
 }
 

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Archive, ArchiveRestore, BadgeCheck, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BadgeCheck, Bold, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
 import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
 import { fontFamilyOptions, fontSizeOptions, fontWeightOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode, type FontWeightMode } from '../../hooks/useAppearancePreferences.js';
-import { codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, useCodeAppearancePreferences, type CodeFontFamilyMode, type CodeHighlightTheme } from '../../hooks/useCodeAppearancePreferences.js';
+import { codeColorSchemeOptions, codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, useCodeAppearancePreferences, type CodeColorScheme, type CodeFontFamilyMode, type CodeHighlightTheme } from '../../hooks/useCodeAppearancePreferences.js';
 import { useSidebarOpacityPreference } from '../../hooks/useSidebarOpacityPreference.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
@@ -293,7 +293,7 @@ function MemorySettingToggle({ checked, description, label, onChange }: MemorySe
 
 function GeneralSettings() {
   const { fontFamily, fontSize, fontWeight, setFontFamily, setFontSize, setFontWeight } = useAppearancePreferences();
-  const { codeFontFamily, codeHighlightTheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
+  const { codeColorScheme, codeFontFamily, codeHighlightTheme, setCodeColorScheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
   const { sidebarTransparencyEnabled, setSidebarTransparencyEnabled } = useSidebarOpacityPreference();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const { accentColor, setAccentColor } = useAccentColorPreference();
@@ -302,6 +302,7 @@ function GeneralSettings() {
   const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
   const selectedCodeFont = availableCodeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? codeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? availableCodeFontFamilyOptions[0] ?? codeFontFamilyOptions[0];
   const selectedCodeHighlightTheme = codeHighlightThemeOptions.find((item) => item.value === codeHighlightTheme) ?? codeHighlightThemeOptions[0];
+  const selectedCodeColorScheme = codeColorSchemeOptions.find((item) => item.value === codeColorScheme) ?? codeColorSchemeOptions[0];
   const fontFamilySelectOptions = availableFontFamilyOptions.some((item) => item.value === selectedFont.value) ? availableFontFamilyOptions : [selectedFont, ...availableFontFamilyOptions];
   const codeFontFamilySelectOptions = availableCodeFontFamilyOptions.some((item) => item.value === selectedCodeFont.value) ? availableCodeFontFamilyOptions : [selectedCodeFont, ...availableCodeFontFamilyOptions];
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
@@ -328,7 +329,7 @@ function GeneralSettings() {
           </label>
           <label className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
-              <Type size={14} />
+              <Bold size={14} />
               <span>界面字重</span>
             </span>
             <SelectField aria-label="界面字重" className="settings-local-control" value={fontWeight} onValueChange={(nextValue) => setFontWeight(nextValue as FontWeightMode)}>
@@ -386,7 +387,7 @@ function GeneralSettings() {
           </label>
           <label className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
-              <Palette size={14} />
+              <Paintbrush size={14} />
               <span>高亮主题</span>
             </span>
             <SelectField aria-label="代码高亮主题" className="settings-local-control" value={codeHighlightTheme} onValueChange={(nextValue) => setCodeHighlightTheme(nextValue as CodeHighlightTheme)}>
@@ -397,7 +398,21 @@ function GeneralSettings() {
               ))}
             </SelectField>
           </label>
+          <label className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <Palette size={14} />
+              <span>配色方案</span>
+            </span>
+            <SelectField aria-label="代码配色方案" className="settings-local-control" value={codeColorScheme} onValueChange={(nextValue) => setCodeColorScheme(nextValue as CodeColorScheme)}>
+              {codeColorSchemeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectField>
+          </label>
           <CodeAppearancePreview
+            colorSchemeLabel={selectedCodeColorScheme.label}
             fontFamily={selectedCodeFont.css}
             fontLabel={selectedCodeFont.label}
             themeLabel={selectedCodeHighlightTheme.label}
@@ -465,18 +480,18 @@ function GeneralSettings() {
   );
 }
 
-function CodeAppearancePreview({ fontFamily, fontLabel, themeLabel }: { fontFamily: string; fontLabel: string; themeLabel: string }) {
+function CodeAppearancePreview({ colorSchemeLabel, fontFamily, fontLabel, themeLabel }: { colorSchemeLabel: string; fontFamily: string; fontLabel: string; themeLabel: string }) {
   return (
     <div className="chat-user-settings__code-preview" aria-label="代码样式预览">
       <div className="chat-user-settings__code-preview-header">
         <span><Code2 size={12} /> TypeScript</span>
-        <span>{`${fontLabel} · ${themeLabel}`}</span>
+        <span>{`${fontLabel} · ${themeLabel} · ${colorSchemeLabel}`}</span>
       </div>
       <code className="chat-user-settings__code-preview-body" style={{ fontFamily }}>
         <CodePreviewLine number={1}>
           <span className="is-keyword">import</span>
           <span className="is-meta"> {'{'} </span>
-          <span className="is-title">useMemo</span>
+          <span className="is-function">useMemo</span>
           <span className="is-meta"> {'}'} </span>
           <span className="is-keyword">from</span>
           <span> </span>
@@ -484,20 +499,20 @@ function CodeAppearancePreview({ fontFamily, fontLabel, themeLabel }: { fontFami
           <span className="is-meta">;</span>
         </CodePreviewLine>
         <CodePreviewLine number={2}>
-          <span className="is-comment">// 实时预览代码字体与高亮主题</span>
+          <span className="is-comment">// 实时预览代码字体、高亮主题与配色方案</span>
         </CodePreviewLine>
         <CodePreviewLine number={3}>
           <span className="is-keyword">const</span>
-          <span> total </span>
+          <span className="is-variable"> total </span>
           <span className="is-meta">=</span>
-          <span> items.</span>
-          <span className="is-title">reduce</span>
+          <span className="is-variable"> items.</span>
+          <span className="is-function">reduce</span>
           <span className="is-meta">((</span>
-          <span>sum, item</span>
+          <span className="is-variable">sum, item</span>
           <span className="is-meta">) =&gt;</span>
-          <span> sum </span>
+          <span className="is-variable"> sum </span>
           <span className="is-meta">+</span>
-          <span> item.</span>
+          <span className="is-variable"> item.</span>
           <span className="is-attribute">price</span>
           <span className="is-meta">, </span>
           <span className="is-number">0</span>
@@ -506,9 +521,9 @@ function CodeAppearancePreview({ fontFamily, fontLabel, themeLabel }: { fontFami
         <CodePreviewLine number={4}>
           <span className="is-keyword">return</span>
           <span> </span>
-          <span className="is-title">formatCurrency</span>
+          <span className="is-function">formatCurrency</span>
           <span className="is-meta">(</span>
-          <span>total</span>
+          <span className="is-variable">total</span>
           <span className="is-meta">);</span>
         </CodePreviewLine>
       </code>
