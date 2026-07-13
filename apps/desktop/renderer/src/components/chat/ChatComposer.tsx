@@ -8,6 +8,7 @@ import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
+import { createComposerDraftSyncPlan } from './chatComposerDraftSync.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import { entryLabel, parseMentionCommand, parseSlashCommand, skillDisplayText } from './chatCommandUtils.js';
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
@@ -102,6 +103,7 @@ export function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const removingImageTimersRef = useRef<Map<string, number>>(new Map());
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
+  const lastEditorDraftRef = useRef(draft);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const commandCursorOffset = cursorOffset ?? draft.length;
@@ -370,8 +372,27 @@ export function ChatComposer({
     if (slashMenuForcedOpen) setSlashMenuForcedOpen(false);
     setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
     syncSelectedSkillsFromSlots(slotConfig);
+    lastEditorDraftRef.current = value;
     onDraftChange(value);
   };
+
+  useEffect(() => {
+    const editor = senderRef.current;
+    if (!editor) return;
+    const syncPlan = createComposerDraftSyncPlan(draft, lastEditorDraftRef.current, editor.getValue().value);
+    if (syncPlan.type === 'none') return;
+    if (syncPlan.type === 'adopt') {
+      lastEditorDraftRef.current = draft;
+      return;
+    }
+
+    if (syncPlan.type === 'replace') editor.clear();
+    if (syncPlan.value) {
+      // Focus first so Ant Design X can create a valid selection for slot insertion.
+      editor.focus({ cursor: 'end', preventScroll: true });
+      editor.insert([createTextSlot(syncPlan.value)], 'end', undefined, true);
+    }
+  }, [draft]);
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (skillCommandOpen) return handleSkillKeyDown(event);
