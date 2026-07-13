@@ -722,8 +722,8 @@
 }
 
 .chat-message-footer button.is-copied {
-  color: var(--app-success);
-  background: color-mix(in srgb, var(--app-success) 10%, transparent);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
 }
 
 .chat-scroll-bottom-anchor {
@@ -1929,7 +1929,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
   color: currentColor;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
 }
 
 .chat-work-history__body {
@@ -2449,7 +2449,7 @@
 .chat-tool-run__title {
   color: currentColor;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
 }
 
 .chat-tool-run__target {

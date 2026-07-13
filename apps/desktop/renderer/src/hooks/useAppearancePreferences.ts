@@ -296,6 +296,10 @@ export function useAppearancePreferences() {
   return { fontFamily, fontSize, setFontFamily, setFontSize };
 }
 
+export function initializeAppearancePreference(): void {
+  applyAppearance(getInitialFontSize(), getInitialFontFamily());
+}
+
 function getInitialFontSize(): FontSizeMode {
   const saved = window.localStorage.getItem(fontSizeStorageKey);
   if (fontSizeOptions.includes(saved as FontSizeMode)) return saved as FontSizeMode;

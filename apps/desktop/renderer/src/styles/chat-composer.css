@@ -320,7 +320,6 @@
 
 .chat-command-menu__item.is-active {
   background: var(--app-accent-soft);
-  box-shadow: inset 2px 0 0 var(--app-primary);
 }
 
 .chat-command-menu__item:disabled {
@@ -339,11 +338,11 @@
 }
 
 .chat-command-progress-icon .ant-progress-circle-path {
-  stroke: var(--app-primary);
+  stroke: var(--app-primary) !important;
 }
 
 .chat-command-progress-icon .ant-progress-circle-trail {
-  stroke: color-mix(in srgb, var(--app-text-muted) 20%, transparent);
+  stroke: color-mix(in srgb, var(--app-text-muted) 20%, transparent) !important;
 }
 
 .chat-command-menu__item-main {
@@ -520,6 +519,13 @@
 .chat-sender textarea {
   color: var(--app-text);
   background: transparent;
+}
+
+.chat-sender .ant-sender-input-slot:empty::before,
+.chat-sender .ant-sender-skill-empty::after,
+.chat-sender textarea::placeholder {
+  color: var(--app-text-muted);
+  opacity: 1;
 }
 
 .chat-sender .ant-sender-input,
@@ -851,6 +857,11 @@
   line-height: 18px;
 }
 
+.chat-model-command-menu__search.ant-input-affix-wrapper input::placeholder {
+  color: var(--app-text-muted);
+  opacity: 1;
+}
+
 .chat-model-command-menu .chat-model-command-menu__item {
   grid-template-columns: minmax(0, 1fr) auto auto 16px;
   min-height: 28px;
@@ -892,6 +903,23 @@
   padding-inline: 8px;
   gap: 5px;
   color: var(--app-text-secondary);
+}
+
+.chat-model-selector.ant-btn:disabled,
+.chat-model-selector.ant-btn.ant-btn-disabled {
+  color: var(--app-text-secondary) !important;
+  opacity: 1;
+}
+
+.chat-model-selector.ant-btn:not(:disabled):not(.ant-btn-disabled):hover,
+.chat-model-selector.ant-btn:not(:disabled):not(.ant-btn-disabled):focus-visible {
+  color: var(--app-text) !important;
+  background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+}
+
+.chat-model-selector.ant-btn:not(:disabled):not(.ant-btn-disabled):active {
+  color: var(--app-text) !important;
+  background: color-mix(in srgb, var(--app-text) 9%, transparent) !important;
 }
 
 .chat-model-selector__name {
@@ -1010,7 +1038,7 @@
   min-height: 30px;
   padding: 5px 8px !important;
   border-radius: 6px;
-  color: var(--app-text-secondary);
+  color: var(--app-text-secondary) !important;
   background: transparent;
   font-family: inherit;
   font-size: 13px;
@@ -1019,7 +1047,13 @@
 
 .chat-thinking-menu-root .ant-dropdown-menu-title-content,
 .chat-authorization-menu-root .ant-dropdown-menu-title-content {
+  color: inherit !important;
   line-height: 18px;
+}
+
+.chat-thinking-menu-root .chat-thinking-menu__item,
+.chat-authorization-menu-root .chat-authorization-menu__item {
+  color: inherit !important;
 }
 
 .chat-thinking-menu-root .ant-dropdown-menu-item:hover,

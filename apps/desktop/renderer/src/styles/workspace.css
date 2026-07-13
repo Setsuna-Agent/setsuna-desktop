@@ -936,7 +936,7 @@
   background: var(--app-surface);
   box-shadow: 0 8px 22px color-mix(in srgb, #000 8%, transparent);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 18px;
   opacity: 0;
   pointer-events: none;
@@ -1680,7 +1680,7 @@
 .desktop-review-empty--panel span {
   color: var(--app-text-muted);
   font-size: 13px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 20px;
 }
 

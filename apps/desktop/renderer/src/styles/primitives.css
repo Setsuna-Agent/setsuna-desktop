@@ -112,7 +112,7 @@
   color: var(--app-text-muted);
   background: transparent;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 18px;
   transition: background 140ms ease, color 140ms ease;
 }
@@ -210,7 +210,7 @@
   min-height: var(--app-control-height);
   padding: 0 10px;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 18px;
 }
 

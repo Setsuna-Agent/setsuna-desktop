@@ -520,7 +520,7 @@
 .desktop-agent-session__title {
   flex: 1 1 auto;
   color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
 }
 
 .desktop-agent-session.is-active .desktop-agent-session__title {

@@ -46,6 +46,7 @@ body {
   overflow: hidden;
   font-family: var(--app-font-family);
   font-size: var(--app-font-size, 14px);
+  font-weight: var(--app-font-weight);
   color: var(--app-text);
   background: transparent;
   zoom: var(--app-page-scale);

@@ -466,7 +466,7 @@
   max-width: 560px;
   color: var(--app-text-muted);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 18px;
 }
 
@@ -730,7 +730,7 @@
 .desktop-settings-panel .chat-user-settings__runtime-policy-copy small {
   color: var(--app-text-muted);
   font-size: 11px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 16px;
 }
 
@@ -1443,7 +1443,7 @@
   overflow: hidden;
   color: var(--app-text-muted);
   font-size: 11px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1482,7 +1482,7 @@
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item.is-active {
-  box-shadow: inset 2px 0 0 var(--app-primary), 0 0 0 1px color-mix(in srgb, var(--app-primary) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-primary) 14%, transparent);
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item-icon {
@@ -1905,7 +1905,7 @@
 .settings-model-label {
   color: var(--app-text-muted);
   font-size: 11px;
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 14px;
 }
 

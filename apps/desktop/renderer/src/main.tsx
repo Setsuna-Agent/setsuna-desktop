@@ -8,6 +8,7 @@ import 'antd/dist/reset.css';
 import 'katex/dist/katex.min.css';
 import { App } from './App.js';
 import { initializeAccentColorPreference } from './hooks/useAccentColorPreference.js';
+import { initializeAppearancePreference } from './hooks/useAppearancePreferences.js';
 import { initializeCodeAppearancePreference } from './hooks/useCodeAppearancePreferences.js';
 import { initializeSidebarOpacityPreference } from './hooks/useSidebarOpacityPreference.js';
 import { initializeThemePreference } from './hooks/useThemeTransition.js';
@@ -32,6 +33,7 @@ import './styles/code-theme.css';
 applyDesktopPlatformAttribute();
 initializeThemePreference();
 initializeAccentColorPreference();
+initializeAppearancePreference();
 initializeCodeAppearancePreference();
 initializeSidebarOpacityPreference();
 

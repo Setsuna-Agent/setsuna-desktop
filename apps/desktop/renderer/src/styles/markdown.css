@@ -9,7 +9,7 @@
   font-kerning: normal;
   font-optical-sizing: auto;
   font-size: var(--app-font-size, 14px);
-  font-weight: 400;
+  font-weight: var(--app-font-weight);
   line-height: 1.72;
   overflow-wrap: break-word;
   text-rendering: optimizeLegibility;
@@ -361,7 +361,7 @@
 }
 
 .chat-code-highlighter__copy.is-copied {
-  color: var(--app-success);
+  color: var(--app-primary);
 }
 
 .chat-code-highlighter .ant-codeHighlighter-code {
