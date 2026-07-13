@@ -914,12 +914,12 @@
   scrollbar-width: thin;
 }
 
-:root[data-code-highlight-theme='chatgptLight'] .desktop-settings-panel .chat-user-settings__code-preview-header {
+:root[data-code-highlight-theme='chatgpt'] .desktop-settings-panel .chat-user-settings__code-preview-header {
   border: 0;
   background: var(--code-highlight-background);
 }
 
-:root[data-code-highlight-theme='chatgptLight'] .desktop-settings-panel .chat-user-settings__code-preview-body {
+:root[data-code-highlight-theme='chatgpt'] .desktop-settings-panel .chat-user-settings__code-preview-body {
   border: 0;
 }
 

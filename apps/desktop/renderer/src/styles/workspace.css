@@ -618,7 +618,7 @@
 }
 
 .desktop-editor__crumb-path span + span::before {
-  content: ">";
+  content: "/";
   margin-right: 6px;
   color: var(--app-text-subtle);
 }
@@ -652,7 +652,7 @@
   min-height: 0;
   padding: 10px 0 16px;
   overflow: auto;
-  background: var(--app-bg);
+  background: var(--code-highlight-background);
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 20px;
@@ -1266,8 +1266,8 @@
   --desktop-review-diff-line-height: 20px;
   --desktop-review-diff-gap-height: 30px;
   --desktop-review-diff-number-width: 5ch;
-  /* Review chrome follows the app surface; syntax colors remain independently configurable. */
-  --desktop-review-diff-background: var(--app-bg);
+  /* Review chrome follows the resolved code theme; syntax colors remain independently configurable. */
+  --desktop-review-diff-background: var(--code-highlight-background);
   display: grid;
   align-content: start;
   min-width: 0;

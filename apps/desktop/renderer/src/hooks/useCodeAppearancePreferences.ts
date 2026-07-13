@@ -91,17 +91,15 @@ export const codeFontFamilyOptions = [
 ] as const satisfies readonly CodeFontFamilyOptionConfig[];
 
 export const codeHighlightThemeOptions = [
-  { label: 'ChatGPT Light（推荐）', value: 'chatgptLight' },
-  { label: 'One Light', value: 'oneLight' },
+  { label: 'ChatGPT（推荐）', value: 'chatgpt' },
+  { label: 'One', value: 'one' },
   { label: 'GitHub', value: 'github' },
-  { label: 'One Dark', value: 'oneDark' },
   { label: 'Monokai', value: 'monokai' },
   { label: 'Dracula', value: 'dracula' },
   { label: 'Nord', value: 'nord' },
   { label: 'Tokyo Night', value: 'tokyoNight' },
-  { label: 'Catppuccin Mocha', value: 'catppuccinMocha' },
-  { label: 'Solarized Light', value: 'solarizedLight' },
-  { label: 'Solarized Dark', value: 'solarizedDark' },
+  { label: 'Catppuccin', value: 'catppuccin' },
+  { label: 'Solarized', value: 'solarized' },
 ] as const;
 
 export const codeColorSchemeOptions = [
@@ -126,6 +124,14 @@ export type CodeColorScheme = typeof codeColorSchemeOptions[number]['value'];
 const codeFontFamilyStorageKey = 'setsuna-code-font-family';
 const codeHighlightThemeStorageKey = 'setsuna-code-highlight-theme';
 const codeColorSchemeStorageKey = 'setsuna-code-color-scheme';
+const legacyCodeHighlightThemes: Readonly<Record<string, CodeHighlightTheme>> = {
+  chatgptLight: 'chatgpt',
+  oneLight: 'one',
+  oneDark: 'one',
+  catppuccinMocha: 'catppuccin',
+  solarizedLight: 'solarized',
+  solarizedDark: 'solarized',
+};
 export const CODE_APPEARANCE_CHANGE_EVENT_NAME = 'setsuna-code-appearance-change';
 
 export function useCodeAppearancePreferences() {
@@ -186,7 +192,8 @@ function getInitialCodeFontFamily(): CodeFontFamilyMode {
 
 function getInitialCodeHighlightTheme(): CodeHighlightTheme {
   const saved = window.localStorage.getItem(codeHighlightThemeStorageKey);
-  return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'chatgptLight';
+  if (saved && legacyCodeHighlightThemes[saved]) return legacyCodeHighlightThemes[saved];
+  return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'chatgpt';
 }
 
 function getInitialCodeColorScheme(): CodeColorScheme {

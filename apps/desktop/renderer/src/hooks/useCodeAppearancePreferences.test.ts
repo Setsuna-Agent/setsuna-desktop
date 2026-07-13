@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { codeColorSchemeOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, initializeCodeAppearancePreference } from './useCodeAppearancePreferences.js';
 
 describe('code appearance preferences', () => {
-  it('defaults to the recommended ChatGPT Light theme and system monospace font', () => {
+  it('defaults to the recommended adaptive ChatGPT theme and system monospace font', () => {
     withCodeAppearanceEnvironment({}, ({ dataset, styles }) => {
       initializeCodeAppearancePreference();
 
-      expect(dataset.codeHighlightTheme).toBe('chatgptLight');
+      expect(dataset.codeHighlightTheme).toBe('chatgpt');
       expect(dataset.codeFontFamily).toBe('system');
       expect(dataset.codeColorScheme).toBe('theme');
       expect(styles.get('--app-code-font-family')).toContain('SFMono-Regular');
@@ -23,7 +23,7 @@ describe('code appearance preferences', () => {
       ({ dataset, styles }) => {
         initializeCodeAppearancePreference();
 
-        expect(dataset.codeHighlightTheme).toBe('oneDark');
+        expect(dataset.codeHighlightTheme).toBe('one');
         expect(dataset.codeFontFamily).toBe('geistMono');
         expect(dataset.codeColorScheme).toBe('vscode');
         expect(styles.get('--app-code-font-family')).toContain('Geist Mono');
@@ -41,7 +41,7 @@ describe('code appearance preferences', () => {
       ({ dataset }) => {
         initializeCodeAppearancePreference();
 
-        expect(dataset.codeHighlightTheme).toBe('chatgptLight');
+        expect(dataset.codeHighlightTheme).toBe('chatgpt');
         expect(dataset.codeFontFamily).toBe('system');
         expect(dataset.codeColorScheme).toBe('theme');
       },
@@ -58,16 +58,21 @@ describe('code appearance preferences', () => {
     expect(windowsOptions).not.toContain('sfMono');
   });
 
-  it('offers a balanced set of light and dark code themes', () => {
+  it('offers theme suites that adapt to light and dark appearance', () => {
     const themes = codeHighlightThemeOptions.map((option) => option.value);
 
-    expect(themes).toHaveLength(11);
-    expect(codeHighlightThemeOptions[0]).toEqual({ label: 'ChatGPT Light（推荐）', value: 'chatgptLight' });
-    expect(themes).toContain('oneLight');
-    expect(themes).toContain('chatgptLight');
-    expect(themes).toContain('solarizedLight');
-    expect(themes).toContain('tokyoNight');
-    expect(themes).toContain('catppuccinMocha');
+    expect(themes).toEqual([
+      'chatgpt',
+      'one',
+      'github',
+      'monokai',
+      'dracula',
+      'nord',
+      'tokyoNight',
+      'catppuccin',
+      'solarized',
+    ]);
+    expect(codeHighlightThemeOptions[0]).toEqual({ label: 'ChatGPT（推荐）', value: 'chatgpt' });
   });
 
   it('offers independent semantic token color schemes', () => {

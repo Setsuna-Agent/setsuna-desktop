@@ -79,7 +79,6 @@
   --desktop-agent-button-hover-bg: var(--desktop-agent-control-hover-bg);
   --chat-message-user-bg: var(--app-accent-subtle);
   --chat-code-bg: #fafafa;
-  --chat-code-highlighter-bg: #f7f8fa;
   --chat-content-max-width: 750px;
   --chat-content-inline-padding: 28px;
   --chat-message-footer-gap: 3px;
@@ -180,7 +179,6 @@
   --desktop-agent-button-hover-bg: var(--desktop-agent-control-hover-bg);
   --chat-message-user-bg: var(--app-accent-subtle);
   --chat-code-bg: #202020;
-  --chat-code-highlighter-bg: #202020;
   --chat-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 34%, transparent);
   --chat-send-bg: #f4f4f5;
   --chat-send-bg-hover: #ffffff;

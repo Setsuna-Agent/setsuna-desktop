@@ -43,32 +43,7 @@
   --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
-:root[data-code-highlight-theme='oneLight'] {
-  --code-highlight-background: #fafafa;
-  --code-highlight-text: #383a42;
-  --code-highlight-comment: #a0a1a7;
-  --code-highlight-keyword: #a626a4;
-  --code-highlight-string: #50a14f;
-  --code-highlight-number: #c18401;
-  --code-highlight-title: #4078f2;
-  --code-highlight-type: #c18401;
-  --code-highlight-attribute: #c18401;
-  --code-highlight-meta: #0184bc;
-  --code-highlight-addition: #50a14f;
-  --code-highlight-deletion: #e45649;
-  --code-highlight-function: #4078f2;
-  --code-highlight-class: #c18401;
-  --code-highlight-property: #e45649;
-  --code-highlight-tag: #e45649;
-  --code-highlight-selector: #50a14f;
-  --code-highlight-attribute-name: #c18401;
-  --code-highlight-attribute-value: #50a14f;
-  --code-highlight-variable: #4078f2;
-  --code-highlight-operator: #4078f2;
-  --code-highlight-punctuation: #383a42;
-}
-
-:root[data-code-highlight-theme='chatgptLight'] {
+:root[data-code-highlight-theme='chatgpt'] {
   --code-highlight-background: #f4f4f4;
   --code-highlight-text: #171717;
   --code-highlight-comment: #6b7280;
@@ -93,6 +68,66 @@
   --code-highlight-punctuation: var(--code-highlight-text);
 }
 
+:root[data-theme='dark'][data-code-highlight-theme='chatgpt'] {
+  --code-highlight-background: #202020;
+  --code-highlight-text: #ededed;
+  --code-highlight-comment: #8b949e;
+  --code-highlight-keyword: #c4b5fd;
+  --code-highlight-string: #86efac;
+  --code-highlight-number: #fdba74;
+  --code-highlight-title: #93c5fd;
+  --code-highlight-type: #5eead4;
+  --code-highlight-attribute: #fdba74;
+  --code-highlight-meta: #94a3b8;
+  --code-highlight-addition: #7ee787;
+  --code-highlight-deletion: #ffa198;
+}
+
+:root[data-code-highlight-theme='one'] {
+  --code-highlight-background: #fafafa;
+  --code-highlight-text: #383a42;
+  --code-highlight-comment: #a0a1a7;
+  --code-highlight-keyword: #a626a4;
+  --code-highlight-string: #50a14f;
+  --code-highlight-number: #c18401;
+  --code-highlight-title: #4078f2;
+  --code-highlight-type: #c18401;
+  --code-highlight-attribute: #e45649;
+  --code-highlight-meta: #0184bc;
+  --code-highlight-addition: #50a14f;
+  --code-highlight-deletion: #e45649;
+}
+
+:root[data-theme='dark'][data-code-highlight-theme='one'] {
+  --code-highlight-background: #282c34;
+  --code-highlight-text: #abb2bf;
+  --code-highlight-comment: #5c6370;
+  --code-highlight-keyword: #c678dd;
+  --code-highlight-string: #98c379;
+  --code-highlight-number: #d19a66;
+  --code-highlight-title: #61aeee;
+  --code-highlight-type: #e6c07b;
+  --code-highlight-attribute: #56b6c2;
+  --code-highlight-meta: #61aeee;
+  --code-highlight-addition: #98c379;
+  --code-highlight-deletion: #e06c75;
+}
+
+:root[data-code-highlight-theme='github'] {
+  --code-highlight-background: #f7f8fa;
+  --code-highlight-text: #24292f;
+  --code-highlight-comment: #6e7781;
+  --code-highlight-keyword: #cf222e;
+  --code-highlight-string: #0a3069;
+  --code-highlight-number: #0550ae;
+  --code-highlight-title: #8250df;
+  --code-highlight-type: #953800;
+  --code-highlight-attribute: #116329;
+  --code-highlight-meta: #57606a;
+  --code-highlight-addition: #1a7f37;
+  --code-highlight-deletion: #cf222e;
+}
+
 :root[data-theme='dark'][data-code-highlight-theme='github'] {
   --code-highlight-background: #161b22;
   --code-highlight-text: #c9d1d9;
@@ -106,26 +141,24 @@
   --code-highlight-meta: #8b949e;
   --code-highlight-addition: #7ee787;
   --code-highlight-deletion: #ffa198;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
-}
-
-:root[data-code-highlight-theme='oneDark'] {
-  --code-highlight-background: #282c34;
-  --code-highlight-text: #abb2bf;
-  --code-highlight-comment: #5c6370;
-  --code-highlight-keyword: #c678dd;
-  --code-highlight-string: #98c379;
-  --code-highlight-number: #d19a66;
-  --code-highlight-title: #61aeee;
-  --code-highlight-type: #e6c07b;
-  --code-highlight-attribute: #56b6c2;
-  --code-highlight-meta: #61aeee;
-  --code-highlight-addition: #98c379;
-  --code-highlight-deletion: #e06c75;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
 :root[data-code-highlight-theme='monokai'] {
+  --code-highlight-background: #fafafa;
+  --code-highlight-text: #37474f;
+  --code-highlight-comment: #757575;
+  --code-highlight-keyword: #d81b60;
+  --code-highlight-string: #6d7400;
+  --code-highlight-number: #7e57c2;
+  --code-highlight-title: #558b2f;
+  --code-highlight-type: #00838f;
+  --code-highlight-attribute: #7b1fa2;
+  --code-highlight-meta: #795548;
+  --code-highlight-addition: #558b2f;
+  --code-highlight-deletion: #d81b60;
+}
+
+:root[data-theme='dark'][data-code-highlight-theme='monokai'] {
   --code-highlight-background: #272822;
   --code-highlight-text: #f8f8f2;
   --code-highlight-comment: #75715e;
@@ -138,10 +171,24 @@
   --code-highlight-meta: #fd971f;
   --code-highlight-addition: #a6e22e;
   --code-highlight-deletion: #f92672;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
 :root[data-code-highlight-theme='dracula'] {
+  --code-highlight-background: #fafafa;
+  --code-highlight-text: #37474f;
+  --code-highlight-comment: #6d7791;
+  --code-highlight-keyword: #c2185b;
+  --code-highlight-string: #6d7400;
+  --code-highlight-number: #7e57c2;
+  --code-highlight-title: #00897b;
+  --code-highlight-type: #007c91;
+  --code-highlight-attribute: #388e3c;
+  --code-highlight-meta: #795548;
+  --code-highlight-addition: #388e3c;
+  --code-highlight-deletion: #c2185b;
+}
+
+:root[data-theme='dark'][data-code-highlight-theme='dracula'] {
   --code-highlight-background: #282a36;
   --code-highlight-text: #f8f8f2;
   --code-highlight-comment: #6272a4;
@@ -154,10 +201,24 @@
   --code-highlight-meta: #ffb86c;
   --code-highlight-addition: #50fa7b;
   --code-highlight-deletion: #ff5555;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
 :root[data-code-highlight-theme='nord'] {
+  --code-highlight-background: #eceff4;
+  --code-highlight-text: #3b4252;
+  --code-highlight-comment: #6b7486;
+  --code-highlight-keyword: #8f5e83;
+  --code-highlight-string: #4f6f3e;
+  --code-highlight-number: #9f4f5b;
+  --code-highlight-title: #397b89;
+  --code-highlight-type: #477a78;
+  --code-highlight-attribute: #9a5d43;
+  --code-highlight-meta: #5e81ac;
+  --code-highlight-addition: #4f6f3e;
+  --code-highlight-deletion: #9f4f5b;
+}
+
+:root[data-theme='dark'][data-code-highlight-theme='nord'] {
   --code-highlight-background: #2e3440;
   --code-highlight-text: #d8dee9;
   --code-highlight-comment: #616e88;
@@ -170,10 +231,24 @@
   --code-highlight-meta: #81a1c1;
   --code-highlight-addition: #a3be8c;
   --code-highlight-deletion: #bf616a;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
 :root[data-code-highlight-theme='tokyoNight'] {
+  --code-highlight-background: #e1e2e7;
+  --code-highlight-text: #3760bf;
+  --code-highlight-comment: #848cb5;
+  --code-highlight-keyword: #9854f1;
+  --code-highlight-string: #587539;
+  --code-highlight-number: #b15c00;
+  --code-highlight-title: #34548a;
+  --code-highlight-type: #0f4b6e;
+  --code-highlight-attribute: #166775;
+  --code-highlight-meta: #007197;
+  --code-highlight-addition: #587539;
+  --code-highlight-deletion: #c64343;
+}
+
+:root[data-theme='dark'][data-code-highlight-theme='tokyoNight'] {
   --code-highlight-background: #1a1b26;
   --code-highlight-text: #a9b1d6;
   --code-highlight-comment: #565f89;
@@ -186,10 +261,24 @@
   --code-highlight-meta: #89ddff;
   --code-highlight-addition: #9ece6a;
   --code-highlight-deletion: #f7768e;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
-:root[data-code-highlight-theme='catppuccinMocha'] {
+:root[data-code-highlight-theme='catppuccin'] {
+  --code-highlight-background: #eff1f5;
+  --code-highlight-text: #4c4f69;
+  --code-highlight-comment: #9ca0b0;
+  --code-highlight-keyword: #8839ef;
+  --code-highlight-string: #40a02b;
+  --code-highlight-number: #fe640b;
+  --code-highlight-title: #1e66f5;
+  --code-highlight-type: #179299;
+  --code-highlight-attribute: #df8e1d;
+  --code-highlight-meta: #04a5e5;
+  --code-highlight-addition: #40a02b;
+  --code-highlight-deletion: #d20f39;
+}
+
+:root[data-theme='dark'][data-code-highlight-theme='catppuccin'] {
   --code-highlight-background: #1e1e2e;
   --code-highlight-text: #cdd6f4;
   --code-highlight-comment: #6c7086;
@@ -202,10 +291,9 @@
   --code-highlight-meta: #89dceb;
   --code-highlight-addition: #a6e3a1;
   --code-highlight-deletion: #f38ba8;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
-:root[data-code-highlight-theme='solarizedLight'] {
+:root[data-code-highlight-theme='solarized'] {
   --code-highlight-background: #fdf6e3;
   --code-highlight-text: #657b83;
   --code-highlight-comment: #93a1a1;
@@ -218,10 +306,9 @@
   --code-highlight-meta: #6c71c4;
   --code-highlight-addition: #859900;
   --code-highlight-deletion: #dc322f;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
-:root[data-code-highlight-theme='solarizedDark'] {
+:root[data-theme='dark'][data-code-highlight-theme='solarized'] {
   --code-highlight-background: #002b36;
   --code-highlight-text: #839496;
   --code-highlight-comment: #586e75;
@@ -234,7 +321,6 @@
   --code-highlight-meta: #6c71c4;
   --code-highlight-addition: #859900;
   --code-highlight-deletion: #dc322f;
-  --chat-code-highlighter-bg: var(--code-highlight-background);
 }
 
 /* Syntax palettes override semantic token colors without changing the selected surface theme. */
@@ -250,16 +336,7 @@
   --code-scheme-meta: var(--code-palette-light-type);
 }
 
-:root[data-code-color-scheme]:not([data-code-color-scheme='theme']):is(
-  [data-code-highlight-theme='oneDark'],
-  [data-code-highlight-theme='monokai'],
-  [data-code-highlight-theme='dracula'],
-  [data-code-highlight-theme='nord'],
-  [data-code-highlight-theme='tokyoNight'],
-  [data-code-highlight-theme='catppuccinMocha'],
-  [data-code-highlight-theme='solarizedDark']
-),
-:root[data-theme='dark'][data-code-highlight-theme='github'][data-code-color-scheme]:not([data-code-color-scheme='theme']) {
+:root[data-theme='dark'][data-code-color-scheme]:not([data-code-color-scheme='theme']) {
   --code-scheme-comment: var(--code-palette-dark-comment);
   --code-scheme-keyword: var(--code-palette-dark-keyword);
   --code-scheme-string: var(--code-palette-dark-string);
@@ -462,59 +539,11 @@
 }
 
 .desktop-code-editor {
-  background: var(--app-bg);
+  background: var(--code-highlight-background);
 }
 
 .desktop-review-diff {
   background: var(--desktop-review-diff-background, var(--app-bg));
-}
-
-/* Workspace code surfaces follow the app theme, so explicit syntax palettes
-   use their dark variants regardless of the selected highlighter surface. */
-:root[data-theme='dark'][data-code-color-scheme]:not([data-code-color-scheme='theme']) :is(.desktop-code-editor, .desktop-review-diff) {
-  --code-syntax-comment: var(--code-palette-dark-comment);
-  --code-syntax-keyword: var(--code-palette-dark-keyword);
-  --code-syntax-string: var(--code-palette-dark-string);
-  --code-syntax-number: var(--code-palette-dark-number);
-  --code-syntax-function: var(--code-palette-dark-function);
-  --code-syntax-class: var(--code-palette-dark-type);
-  --code-syntax-type: var(--code-palette-dark-type);
-  --code-syntax-property: var(--code-palette-dark-property);
-  --code-syntax-tag: var(--code-palette-dark-keyword);
-  --code-syntax-selector: var(--code-palette-dark-function);
-  --code-syntax-attribute-name: var(--code-palette-dark-property);
-  --code-syntax-attribute-value: var(--code-palette-dark-string);
-  --code-syntax-variable: var(--code-palette-dark-variable);
-  --code-syntax-plain: var(--code-palette-dark-variable);
-  --code-syntax-operator: var(--code-palette-dark-type);
-  --code-syntax-punctuation: var(--code-palette-dark-variable);
-  --code-syntax-meta: var(--code-palette-dark-type);
-}
-
-/* Light highlighter themes do not provide dark syntax tokens. Keep their hue
-   families while raising contrast inside dark workspace code surfaces. */
-:root[data-theme='dark'][data-code-color-scheme='theme']:is(
-  [data-code-highlight-theme='chatgptLight'],
-  [data-code-highlight-theme='oneLight'],
-  [data-code-highlight-theme='solarizedLight']
-) :is(.desktop-code-editor, .desktop-review-diff) {
-  --code-syntax-comment: #8b949e;
-  --code-syntax-keyword: #c4b5fd;
-  --code-syntax-string: #86efac;
-  --code-syntax-number: #fdba74;
-  --code-syntax-function: #93c5fd;
-  --code-syntax-class: #5eead4;
-  --code-syntax-type: #5eead4;
-  --code-syntax-property: #fdba74;
-  --code-syntax-tag: #c4b5fd;
-  --code-syntax-selector: #93c5fd;
-  --code-syntax-attribute-name: #fdba74;
-  --code-syntax-attribute-value: #86efac;
-  --code-syntax-variable: #ededed;
-  --code-syntax-plain: #ededed;
-  --code-syntax-operator: #94a3b8;
-  --code-syntax-punctuation: #d4d4d4;
-  --code-syntax-meta: #94a3b8;
 }
 
 .desktop-code-line code,
