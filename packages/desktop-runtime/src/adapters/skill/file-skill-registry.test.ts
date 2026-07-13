@@ -36,18 +36,18 @@ describe('file skill registry', () => {
     const list = await registry.listSkills();
     expect(list.skills).toHaveLength(1);
     expect(list.skills[0]).toMatchObject({
-      id: 'presentation-mcp',
-      name: 'presentation-mcp',
+      id: 'builtin-demo',
+      name: 'builtin-demo',
       enabled: true,
       selected: false,
     });
 
-    const updated = await registry.updateSkill('presentation-mcp', { selected: true });
+    const updated = await registry.updateSkill('builtin-demo', { selected: true });
     expect(updated.selected).toBe(true);
     expect(await registry.selectedSkillInjections()).toMatchObject([
       {
-        id: 'presentation-mcp',
-        name: 'presentation-mcp',
+        id: 'builtin-demo',
+        name: 'builtin-demo',
       },
     ]);
   });
@@ -152,14 +152,14 @@ describe('file skill registry', () => {
       await expect(changes.next()).resolves.toBe(true);
 
       await writeFile(
-        path.join(builtinDir, 'presentation-mcp', 'SKILL.md'),
+        path.join(builtinDir, 'builtin-demo', 'SKILL.md'),
         [
           '---',
-          'name: presentation-mcp',
+          'name: builtin-demo',
           'description: Updated externally',
           '---',
           '',
-          '# Presentation MCP',
+          '# Built-in Demo',
           '',
           'Changed outside the registry API.',
         ].join('\n'),
@@ -175,14 +175,14 @@ describe('file skill registry', () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
 
-    await expect(registry.updateSkill('presentation-mcp', { content: 'changed' })).rejects.toThrow('Built-in skill is read-only');
-    await expect(registry.deleteSkill('presentation-mcp')).rejects.toThrow('Built-in skill is read-only');
+    await expect(registry.updateSkill('builtin-demo', { content: 'changed' })).rejects.toThrow('Built-in skill is read-only');
+    await expect(registry.deleteSkill('builtin-demo')).rejects.toThrow('Built-in skill is read-only');
   });
 
   it('injects selected skills into agent loop model messages', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
-    await registry.updateSkill('presentation-mcp', { selected: true });
+    await registry.updateSkill('builtin-demo', { selected: true });
     const threadStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
     const thread = await threadStore.createThread({ title: 'Skill injection' });
     const modelClient = new CapturingModelClient();
@@ -195,10 +195,10 @@ describe('file skill registry', () => {
       skillRegistry: registry,
     });
 
-    await loop.sendTurn(thread.id, { input: 'make a deck' });
+    await loop.sendTurn(thread.id, { input: 'run the built-in workflow' });
 
-    expect(modelClient.messages[0]?.content).toContain('<skill name="presentation-mcp" id="presentation-mcp">');
-    expect(modelClient.messages[0]?.content).toContain('Use the local presentation tool.');
+    expect(modelClient.messages[0]?.content).toContain('<skill name="builtin-demo" id="builtin-demo">');
+    expect(modelClient.messages[0]?.content).toContain('Use the built-in demo workflow.');
   });
 
   it('injects per-turn skills without persisting selected state', async () => {
@@ -216,10 +216,10 @@ describe('file skill registry', () => {
       skillRegistry: registry,
     });
 
-    await loop.sendTurn(thread.id, { input: 'make a deck', skillIds: ['presentation-mcp'] });
+    await loop.sendTurn(thread.id, { input: 'run the built-in workflow', skillIds: ['builtin-demo'] });
 
-    expect(modelClient.messages[0]?.content).toContain('<skill name="presentation-mcp" id="presentation-mcp">');
-    expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'presentation-mcp', selected: false });
+    expect(modelClient.messages[0]?.content).toContain('<skill name="builtin-demo" id="builtin-demo">');
+    expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'builtin-demo', selected: false });
   });
 });
 
@@ -270,19 +270,19 @@ async function createSkillFixture(): Promise<{ builtinDir: string; dataDir: stri
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-skill-test-'));
   const builtinDir = path.join(root, 'skills');
   const dataDir = path.join(root, 'data');
-  const skillDir = path.join(builtinDir, 'presentation-mcp');
+  const skillDir = path.join(builtinDir, 'builtin-demo');
   await mkdir(skillDir, { recursive: true });
   await writeFile(
     path.join(skillDir, 'SKILL.md'),
     [
       '---',
-      'name: presentation-mcp',
-      'description: Generate decks locally',
+      'name: builtin-demo',
+      'description: Exercise built-in skill behavior',
       '---',
       '',
-      '# Presentation MCP',
+      '# Built-in Demo',
       '',
-      'Use the local presentation tool.',
+      'Use the built-in demo workflow.',
     ].join('\n'),
   );
   return { builtinDir, dataDir };

@@ -1,4 +1,6 @@
 .capabilities-page {
+  --desktop-capabilities-page-padding-top: 12px;
+
   grid-column: 2 / -1;
   grid-row: 1 / -1;
   min-width: 0;
@@ -22,13 +24,13 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 20px 28px 28px;
+  padding: var(--desktop-capabilities-page-padding-top) 28px 28px;
   overflow: hidden;
 }
 
 .desktop-capabilities-panel__inner--detail {
   grid-template-rows: minmax(0, 1fr);
-  padding-top: 20px;
+  padding-top: var(--desktop-capabilities-page-padding-top);
   overflow: auto;
 }
 
@@ -231,32 +233,26 @@
   display: grid;
   grid-row: 3;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 8px;
   min-width: 0;
+  min-height: 36px;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, #10b981 24%, var(--app-border));
+  border: 1px solid var(--app-accent-border);
   border-radius: var(--app-radius-md);
-  color: color-mix(in srgb, #047857 84%, var(--app-text));
-  background: color-mix(in srgb, #10b981 8%, transparent);
+  color: var(--app-text-muted);
+  background: var(--app-accent-subtle);
   font-size: 12px;
   line-height: 18px;
 }
 
 .desktop-capabilities-usage-note svg {
-  margin-top: 2px;
-  color: currentcolor;
+  color: var(--app-primary);
 }
 
 .desktop-capabilities-usage-note span {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.desktop-capabilities-usage-note--mcp {
-  border-color: color-mix(in srgb, var(--app-primary) 14%, var(--app-border));
-  color: color-mix(in srgb, var(--app-text-muted) 86%, var(--app-text));
-  background: color-mix(in srgb, var(--app-text) 3%, transparent);
 }
 
 .desktop-capabilities-grid {
@@ -410,10 +406,58 @@
 }
 
 .desktop-capability-card--mcp p {
-  min-height: 20px;
+  display: block;
+  min-height: 18px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
-  -webkit-line-clamp: 1;
+}
+
+.desktop-capability-card--mcp {
+  min-height: 176px;
+  gap: 10px;
+}
+
+.desktop-capability-card__head--mcp {
+  align-items: flex-start;
+}
+
+.desktop-capability-card__mcp-identity {
+  flex: 1 1 auto;
+  align-items: flex-start;
+}
+
+.desktop-capability-card__mcp-identity .desktop-capability-card__icon {
+  width: 42px;
+  height: 42px;
+}
+
+.desktop-capability-card__mcp-heading {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-capability-card__mcp-heading h2 {
+  min-width: 0;
+}
+
+.desktop-capability-card__mcp-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-capability-card__mcp-summary .desktop-capability-card__meta {
+  flex: 1 1 auto;
+}
+
+.desktop-capability-card__mcp-summary .desktop-capability-card__tool-policy {
+  flex: 0 0 auto;
 }
 
 .desktop-capability-card--hook {
@@ -465,6 +509,7 @@
   line-height: 18px;
 }
 
+.desktop-capability-card__mcp-summary .desktop-capability-card__meta span,
 .desktop-capability-card__tool-policy span {
   display: inline-flex;
   align-items: center;
@@ -490,8 +535,37 @@
 
 .desktop-capability-card__actions--mcp {
   display: grid;
-  grid-template-columns: auto auto minmax(96px, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+  width: 100%;
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+}
+
+.desktop-capability-card__mcp-setting {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.desktop-capability-card__mcp-setting-label {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capability-card__mcp-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+}
+
+.desktop-capability-card__mcp-approval {
   width: 100%;
 }
 
@@ -501,7 +575,7 @@
   font-size: 12px;
 }
 
-.desktop-capability-card__actions--mcp .sd-field {
+.desktop-capability-card__mcp-approval .sd-field {
   width: 100%;
 }
 
@@ -905,92 +979,5 @@
 @media (max-width: 1040px) {
   .mcp-form {
     grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-.desktop-capabilities-mcp-diagnostics__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.desktop-capabilities-mcp-diagnostics__grid > section,
-.desktop-capabilities-mcp-diagnostics__result {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
-  background: var(--app-surface);
-}
-
-.desktop-capabilities-mcp-diagnostics__grid > section > header,
-.desktop-capabilities-mcp-diagnostics__result > header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--app-text);
-  font-size: 12px;
-}
-
-.desktop-capabilities-mcp-diagnostics__grid > section > header span {
-  margin-left: auto;
-  color: var(--app-text-muted);
-}
-
-.desktop-capabilities-mcp-diagnostics__list,
-.desktop-capabilities-mcp-diagnostics__templates {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.desktop-capabilities-mcp-diagnostics__list button {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-  padding: 9px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-muted);
-  color: var(--app-text);
-  cursor: pointer;
-  text-align: left;
-}
-
-.desktop-capabilities-mcp-diagnostics__list button:hover {
-  border-color: var(--app-primary);
-}
-
-.desktop-capabilities-mcp-diagnostics__list small,
-.desktop-capabilities-mcp-diagnostics__templates code {
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-capabilities-mcp-diagnostics__result {
-  margin-top: 14px;
-}
-
-.desktop-capabilities-mcp-diagnostics__result pre {
-  max-height: 360px;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-muted);
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: 11px/1.5 var(--app-code-font-family);
-}
-
-@media (max-width: 820px) {
-  .desktop-capabilities-mcp-diagnostics__grid {
-    grid-template-columns: 1fr;
   }
 }

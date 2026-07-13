@@ -73,13 +73,13 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       onToggleSidebar={handleToggleSidebar}
       showSidebarToggle={activeView !== 'settings'}
       toolbarTitle={toolbarTitle}
-      workspaceToolbar={activeView !== 'settings' ? <AppWorkspaceToolbar activeProject={activeWorkspace} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
+      workspaceToolbar={activeView === 'chat' ? <AppWorkspaceToolbar activeProject={activeWorkspace} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
       menuActions={windowMenuActions}
       className={shellClassName}
       actions={
-        activeView !== 'settings' ? (
+        activeView === 'chat' ? (
           <>
-            {activeView === 'chat' && activeWorkspace?.path ? (
+            {activeWorkspace?.path ? (
               <WorkspaceAppLauncher
                 selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
                 workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}

@@ -130,7 +130,6 @@ export function AppRouteContent({
   if (activeView === 'capabilities') {
     return (
       <CapabilitiesPage
-        currentThreadId={runtime.currentThread?.id}
         skills={runtime.skills}
         selectedSkillCount={selectedSkillCount}
         mcpState={runtime.mcpState}
@@ -151,12 +150,6 @@ export function AppRouteContent({
         onDeleteHook={runtime.deleteHook}
         onUpdateMcpServer={runtime.updateMcpServer}
         onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
-        onListMcpServerStatuses={() => runtime.client.listMcpServerStatuses()}
-        onReadMcpResource={(server, uri) => runtime.client.readMcpServerResource(runtime.currentThread?.id ?? '', server, uri)}
-        onCallMcpTool={(server, tool, args) => {
-          if (!runtime.currentThread) return Promise.reject(new Error('请先打开一个对话。'));
-          return runtime.client.callMcpServerTool(runtime.currentThread.id, server, tool, args);
-        }}
       />
     );
   }

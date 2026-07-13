@@ -2857,17 +2857,6 @@ node-pty postinstall 修复脚本。
 - 说明内置 Skill 只读。
 - 规定生成 Skill 正文的质量要求。
 
-### `skills/presentation-mcp/SKILL.md`
-
-Presentation MCP 内置技能。
-
-职责：
-
-- 触发 PowerPoint/PPTX deck 生成、草拟、导出、检查或改进任务。
-- 要求使用本地 presentation MCP。
-- 要求先生成 slide plan，再生成真实 deck，再检查文件。
-- 规定输出路径优先级。
-
 ## 生成产物和缓存目录
 
 这些目录/文件可能出现在工作区，但不是源码主线，通常不应手写修改。

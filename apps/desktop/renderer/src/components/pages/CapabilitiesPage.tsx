@@ -1,6 +1,6 @@
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { BookOpen, Boxes, Database, FilePlus2, Info, Loader2, MessageSquare, Pencil, Play, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
-import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpResourceReadResult, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerStatusList, RuntimeMcpToolCallResult, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { BookOpen, Boxes, FilePlus2, Info, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
@@ -115,10 +115,6 @@ export function CapabilitiesPage({
   onDeleteHook,
   onUpdateMcpServer,
   onDeleteMcpServer,
-  currentThreadId,
-  onCallMcpTool,
-  onListMcpServerStatuses,
-  onReadMcpResource,
 }: {
   skills: RuntimeSkillSummary[];
   selectedSkillCount: number;
@@ -140,10 +136,6 @@ export function CapabilitiesPage({
   onDeleteHook: (hook: RuntimeHookMetadata) => Promise<void>;
   onUpdateMcpServer: (server: RuntimeMcpServer, patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>) => Promise<void>;
   onDeleteMcpServer: (server: RuntimeMcpServer) => void;
-  currentThreadId?: string;
-  onCallMcpTool: (server: string, tool: string, args?: unknown) => Promise<RuntimeMcpToolCallResult>;
-  onListMcpServerStatuses: () => Promise<RuntimeMcpServerStatusList>;
-  onReadMcpResource: (server: string, uri: string) => Promise<RuntimeMcpResourceReadResult>;
 }) {
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
@@ -156,7 +148,6 @@ export function CapabilitiesPage({
   const [hookEditorOpen, setHookEditorOpen] = useState(false);
   const [editingHook, setEditingHook] = useState<RuntimeHookMetadata | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<RuntimeMcpServer | null>(null);
-  const [inspectingMcpServer, setInspectingMcpServer] = useState<RuntimeMcpServer | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [skillPageMode, setSkillPageMode] = useState<'view' | 'edit' | 'create' | null>(null);
   const [skillDetailSummary, setSkillDetailSummary] = useState<RuntimeSkillSummary | null>(null);
@@ -391,23 +382,6 @@ export function CapabilitiesPage({
     );
   }
 
-  if (inspectingMcpServer) {
-    return (
-      <main className="capabilities-page desktop-capabilities-panel">
-        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
-          <CapabilitiesMcpDiagnostics
-            currentThreadId={currentThreadId}
-            server={inspectingMcpServer}
-            onBack={() => setInspectingMcpServer(null)}
-            onCallTool={onCallMcpTool}
-            onListStatuses={onListMcpServerStatuses}
-            onReadResource={onReadMcpResource}
-          />
-        </section>
-      </main>
-    );
-  }
-
   if (hookEditorOpen) {
     const selectedEvent = hookEventOptions.find((item) => item.value === hookDraft.eventName) ?? hookEventOptions[0];
     return (
@@ -632,7 +606,7 @@ export function CapabilitiesPage({
           <span>{servers.length} MCP · {enabledSkillCount}/{skills.length} 技能启用 · {selectedSkillCount} 默认 · {executableHookCount}/{hooks.length} Hooks 可执行</span>
         </div>
 
-        <div className={`desktop-capabilities-usage-note desktop-capabilities-usage-note--${capabilityFilter}`}>
+        <div className="desktop-capabilities-usage-note">
           <Info size={14} />
           <span>
             {capabilityFilter === 'mcp'
@@ -677,11 +651,14 @@ export function CapabilitiesPage({
                 const toolStats = mcpToolStats(server.tools, server.allowedTools, server.disabledTools);
                 return (
                   <article className="desktop-capability-card desktop-capability-card--mcp" key={`mcp:${server.key}`}>
-                    <div className="desktop-capability-card__head">
-                      <span className="desktop-capability-card__head-main">
-                        <span className="desktop-capability-card__icon"><Plug size={14} /></span>
-                        <span className={`desktop-capability-card__status ${server.enabled ? 'is-on' : ''}`}>{server.enabled ? '已启用' : '已停用'}</span>
-                      </span>
+                    <div className="desktop-capability-card__head desktop-capability-card__head--mcp">
+                      <div className="desktop-capability-card__head-main desktop-capability-card__mcp-identity">
+                        <span className="desktop-capability-card__icon"><Plug size={20} /></span>
+                        <div className="desktop-capability-card__mcp-heading">
+                          <h2>{server.label}</h2>
+                          <p title={endpoint || undefined}>{endpoint || server.description || '未配置入口'}</p>
+                        </div>
+                      </div>
                       <span className="desktop-capability-card__head-actions">
                         <IconButton label="Edit MCP server" variant="ghost" onClick={() => editMcpServer(server)}>
                           <Pencil size={14} />
@@ -691,37 +668,42 @@ export function CapabilitiesPage({
                         </IconButton>
                       </span>
                     </div>
-                    <h2>{server.label}</h2>
-                    <p title={endpoint || undefined}>{endpoint || server.description || '未配置入口'}</p>
-                    <div className="desktop-capability-card__meta">
-                      <span>{server.key}</span>
-                      <span>{server.transport}</span>
-                      <span>{approvalLabel(server.requireApproval)}</span>
-                    </div>
-                    <div className="desktop-capability-card__tool-policy">
-                      <span>{toolStats.total ? `${toolStats.enabled}/${toolStats.total} 工具启用` : '未获取工具'}</span>
+                    <div className="desktop-capability-card__mcp-summary">
+                      <div className="desktop-capability-card__meta">
+                        <span>{server.key}</span>
+                        <span>{server.transport}</span>
+                      </div>
+                      <div className="desktop-capability-card__tool-policy">
+                        <span>{toolStats.total ? `${toolStats.enabled}/${toolStats.total} 工具启用` : '未获取工具'}</span>
+                      </div>
                     </div>
                     <div className="desktop-capability-card__actions desktop-capability-card__actions--mcp">
-                      <Button type="button" variant="ghost" icon={<Database size={13} />} onClick={() => setInspectingMcpServer(server)}>
-                        资源与测试
-                      </Button>
-                      <label className="sd-check" title="启用后运行时会加载这个 MCP 服务">
-                        <input type="checkbox" checked={server.enabled} disabled={server.readOnly} onChange={(event) => void onUpdateMcpServer(server, { enabled: event.currentTarget.checked })} />
-                        <span>启用</span>
-                      </label>
-                      <label className="sd-check" title="必需是关键依赖标记，一般服务不建议开启">
-                        <input type="checkbox" checked={server.required} disabled={server.readOnly} onChange={(event) => void onUpdateMcpServer(server, { required: event.currentTarget.checked })} />
-                        <span>必需</span>
-                      </label>
-                      <SelectField
-                        value={server.requireApproval}
-                        disabled={server.readOnly}
-                        onValueChange={(nextValue) => void onUpdateMcpServer(server, { requireApproval: nextValue as RuntimeMcpRequireApproval })}
-                      >
-                        <option value="auto">自动判断</option>
-                        <option value="prompt">每次确认</option>
-                        <option value="approve">无需确认</option>
-                      </SelectField>
+                      <div className="desktop-capability-card__mcp-setting">
+                        <span className="desktop-capability-card__mcp-setting-label">服务状态</span>
+                        <div className="desktop-capability-card__mcp-switches">
+                          <label className="sd-check" title="启用后运行时会加载这个 MCP 服务">
+                            <input type="checkbox" checked={server.enabled} disabled={server.readOnly} onChange={(event) => void onUpdateMcpServer(server, { enabled: event.currentTarget.checked })} />
+                            <span>启用</span>
+                          </label>
+                          <label className="sd-check" title="必需是关键依赖标记，一般服务不建议开启">
+                            <input type="checkbox" checked={server.required} disabled={server.readOnly} onChange={(event) => void onUpdateMcpServer(server, { required: event.currentTarget.checked })} />
+                            <span>必需</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div className="desktop-capability-card__mcp-setting desktop-capability-card__mcp-approval">
+                        <span className="desktop-capability-card__mcp-setting-label">调用确认</span>
+                        <SelectField
+                          aria-label="调用确认"
+                          value={server.requireApproval}
+                          disabled={server.readOnly}
+                          onValueChange={(nextValue) => void onUpdateMcpServer(server, { requireApproval: nextValue as RuntimeMcpRequireApproval })}
+                        >
+                          <option value="auto">自动判断</option>
+                          <option value="prompt">每次确认</option>
+                          <option value="approve">无需确认</option>
+                        </SelectField>
+                      </div>
                     </div>
                   </article>
                 );
@@ -862,138 +844,6 @@ function trustStatusLabel(status: RuntimeHookMetadata['trustStatus']): string {
     default:
       return '待信任';
   }
-}
-
-function CapabilitiesMcpDiagnostics({
-  currentThreadId,
-  server,
-  onBack,
-  onCallTool,
-  onListStatuses,
-  onReadResource,
-}: {
-  currentThreadId?: string;
-  server: RuntimeMcpServer;
-  onBack: () => void;
-  onCallTool: (server: string, tool: string, args?: unknown) => Promise<RuntimeMcpToolCallResult>;
-  onListStatuses: () => Promise<RuntimeMcpServerStatusList>;
-  onReadResource: (server: string, uri: string) => Promise<RuntimeMcpResourceReadResult>;
-}) {
-  const [status, setStatus] = useState<RuntimeMcpServerStatusList['data'][number] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [resultTitle, setResultTitle] = useState('');
-  const [result, setResult] = useState<unknown>(null);
-  const [toolName, setToolName] = useState(server.tools[0]?.name ?? '');
-  const [toolArguments, setToolArguments] = useState('{}');
-  const [calling, setCalling] = useState(false);
-
-  const loadStatus = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const list = await onListStatuses();
-      setStatus(list.data.find((item) => item.name === server.key) ?? null);
-    } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadStatus();
-  }, [server.key]);
-
-  const readResource = async (uri: string) => {
-    setCalling(true);
-    setError('');
-    try {
-      setResultTitle(uri);
-      setResult(await onReadResource(server.key, uri));
-    } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      setCalling(false);
-    }
-  };
-
-  const callTool = async () => {
-    if (!toolName || !currentThreadId) return;
-    if (!window.confirm(`确认直接调用 MCP 工具「${server.key}.${toolName}」？该调用可能修改外部数据。`)) return;
-    setCalling(true);
-    setError('');
-    try {
-      const args = toolArguments.trim() ? JSON.parse(toolArguments) : {};
-      setResultTitle(`${server.key}.${toolName}`);
-      setResult(await onCallTool(server.key, toolName, args));
-    } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      setCalling(false);
-    }
-  };
-
-  const resources = status?.resources ?? [];
-  const templates = status?.resourceTemplates ?? [];
-  const tools = status ? Object.values(status.tools) : server.tools;
-
-  return (
-    <section className="desktop-capabilities-detail desktop-capabilities-mcp-diagnostics">
-      <PageHeader
-        title={`${server.label} · 资源与测试`}
-        subtitle={`认证状态：${mcpAuthStatusLabel(status?.authStatus)}`}
-        onBack={onBack}
-        actions={<Button icon={loading ? <Loader2 className="is-spinning" size={14} /> : <RefreshCw size={14} />} disabled={loading} onClick={() => void loadStatus()}>刷新</Button>}
-      />
-      {error ? <div className="desktop-capabilities-errors"><span>{error}</span></div> : null}
-      <div className="desktop-capabilities-mcp-diagnostics__grid">
-        <section>
-          <header><Database size={14} /><strong>Resources</strong><span>{resources.length}</span></header>
-          {loading ? <div className="desktop-capabilities-mcp-tools__empty">正在读取资源…</div> : resources.length ? (
-            <div className="desktop-capabilities-mcp-diagnostics__list">
-              {resources.map((resource) => (
-                <button key={resource.uri} type="button" disabled={calling} onClick={() => void readResource(resource.uri)}>
-                  <strong>{resource.name || resource.uri}</strong>
-                  <small>{resource.description || resource.uri}</small>
-                </button>
-              ))}
-            </div>
-          ) : <div className="desktop-capabilities-mcp-tools__empty">该服务没有公开静态资源。</div>}
-          {templates.length ? (
-            <div className="desktop-capabilities-mcp-diagnostics__templates">
-              <strong>Resource templates</strong>
-              {templates.map((template) => <code key={template.uriTemplate}>{template.uriTemplate}</code>)}
-            </div>
-          ) : null}
-        </section>
-        <section>
-          <header><Play size={14} /><strong>测试工具调用</strong><span>{tools.length}</span></header>
-          <SelectField value={toolName} onValueChange={setToolName}>
-            <option value="">选择工具</option>
-            {tools.map((tool) => <option key={tool.name} value={tool.name}>{tool.name}</option>)}
-          </SelectField>
-          <TextArea rows={8} value={toolArguments} onChange={(event) => setToolArguments(event.currentTarget.value)} placeholder={'{\n  "query": "example"\n}'} />
-          <Button variant="primary" icon={calling ? <Loader2 className="is-spinning" size={14} /> : <Play size={14} />} disabled={calling || !toolName || !currentThreadId} onClick={() => void callTool()}>
-            {currentThreadId ? '调用工具' : '请先打开一个对话'}
-          </Button>
-        </section>
-      </div>
-      {result !== null ? (
-        <section className="desktop-capabilities-mcp-diagnostics__result">
-          <header><strong>{resultTitle}</strong></header>
-          <pre>{JSON.stringify(result, null, 2)}</pre>
-        </section>
-      ) : null}
-    </section>
-  );
-}
-
-function mcpAuthStatusLabel(status: RuntimeMcpServerStatusList['data'][number]['authStatus'] | undefined): string {
-  if (status === 'bearerToken') return 'Bearer Token';
-  if (status === 'oAuth') return 'OAuth';
-  if (status === 'notLoggedIn') return '未登录';
-  return '不需要或不支持认证';
 }
 
 function CapabilitiesMcpEditor({
@@ -1349,12 +1199,6 @@ function optionalNumber(value: string): number | undefined {
   if (!trimmed) return undefined;
   const numeric = Number(trimmed);
   return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : undefined;
-}
-
-function approvalLabel(value: RuntimeMcpRequireApproval): string {
-  if (value === 'approve' || value === 'never') return '无需确认';
-  if (value === 'prompt' || value === 'always') return '每次确认';
-  return '自动判断';
 }
 
 function mcpToolStats(tools: RuntimeMcpToolInfo[], allowedTools: string[], disabledTools: string[]): { enabled: number; total: number } {

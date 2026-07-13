@@ -324,15 +324,15 @@ describe('runtime server', () => {
 
   it('lists and updates local skills', async () => {
     const list = await runtimeFetch('/v1/skills');
-    expect(list.skills.some((skill: { id: string }) => skill.id === 'presentation-mcp')).toBe(true);
+    expect(list.skills.some((skill: { id: string }) => skill.id === 'create-skill-in-chat')).toBe(true);
 
-    const updated = await runtimeFetch('/v1/skills/presentation-mcp', {
+    const updated = await runtimeFetch('/v1/skills/create-skill-in-chat', {
       method: 'PATCH',
       body: JSON.stringify({ selected: true }),
     });
 
     expect(updated).toMatchObject({
-      id: 'presentation-mcp',
+      id: 'create-skill-in-chat',
       selected: true,
       enabled: true,
     });
@@ -367,10 +367,10 @@ describe('runtime server', () => {
           errors: [],
           skills: expect.arrayContaining([
             expect.objectContaining({
-              name: 'presentation-mcp',
+              name: '对话创建Skill',
               scope: 'system',
               enabled: true,
-              path: expect.stringContaining(path.join('presentation-mcp', 'SKILL.md')),
+              path: expect.stringContaining(path.join('create-skill-in-chat', 'SKILL.md')),
             }),
           ]),
         }],
