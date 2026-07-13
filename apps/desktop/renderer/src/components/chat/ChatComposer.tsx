@@ -3,11 +3,12 @@ import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import { Button, Dropdown, Image } from 'antd';
 import { ArrowUp, Boxes, Check, CircleGauge, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
-import type { RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeMessageAttachment, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
+import { createChatComposerSendOptions, type ChatComposerSendOptions } from './chatComposerSendOptions.js';
 import { createComposerDraftSyncPlan } from './chatComposerDraftSync.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import { entryLabel, parseMentionCommand, parseSlashCommand, skillDisplayText } from './chatCommandUtils.js';
@@ -75,7 +76,7 @@ export function ChatComposer({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
   onOpenSideChat?: () => void;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onSend: (value?: string, options?: ChatComposerSendOptions) => void;
   onStartThreadReview: () => void | Promise<unknown>;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
@@ -111,7 +112,7 @@ export function ChatComposer({
   const slashCommand = useMemo(() => parseSlashCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
   const mentionQuery = mentionCommand?.query ?? '';
   const commandOpen = Boolean(focused && mentionCommand && dismissedCommandValue !== draft);
-  const skillCommandOpen = Boolean(!activeTurnId && focused && !commandOpen && (slashCommand ? dismissedSlashValue !== draft : slashMenuForcedOpen));
+  const skillCommandOpen = Boolean(focused && !commandOpen && (slashCommand ? dismissedSlashValue !== draft : slashMenuForcedOpen));
   const selectedSkillIds = useMemo(() => new Set(selectedSkills.map((skill) => skill.id)), [selectedSkills]);
   const sendableImageAttachments = useMemo(
     () => imageAttachments.filter((attachment) => !removingImageAttachmentIds.has(attachment.id)),
@@ -142,9 +143,15 @@ export function ChatComposer({
         kind: 'action',
         type: 'plan',
         title: '计划模式',
-        description: planModeEnabled ? '已开启：模型先给出计划，待确认后执行' : '模型先给出计划，待确认后再执行',
+        description: activeTurnId
+          ? planModeEnabled
+            ? '已开启：下一轮先给出计划，待确认后执行'
+            : '为当前回复结束后的下一轮开启计划模式'
+          : planModeEnabled
+            ? '已开启：模型先给出计划，待确认后执行'
+            : '模型先给出计划，待确认后再执行',
         checked: planModeEnabled,
-        scope: planModeEnabled ? '已开启' : '本地',
+        scope: activeTurnId ? '下一轮' : planModeEnabled ? '已开启' : '本地',
       },
       {
         key: 'collaboration',
@@ -162,11 +169,15 @@ export function ChatComposer({
         title: '目标模式',
         description: activeGoal
           ? `已开启：${activeGoal.objective}`
+          : activeTurnId
+            ? goalModeEnabled
+              ? '已开启：下一轮将设为线程目标'
+              : '把当前回复结束后的下一轮设为持续目标'
           : goalModeEnabled
             ? '已开启：下一条消息将设为线程目标'
             : '把下一条消息设为持续目标并开始执行',
         checked: goalEnabled,
-        scope: goalEnabled ? '已开启' : '当前线程',
+        scope: activeGoal || (!activeTurnId && goalEnabled) ? '已开启' : activeTurnId ? '下一轮' : '当前线程',
       },
       {
         key: 'usage',
@@ -191,8 +202,8 @@ export function ChatComposer({
         kind: 'action',
         type: 'review',
         title: '审查当前改动',
-        description: activeProject ? '让 Agent 审查当前项目的未提交改动' : '请先选择项目',
-        disabled: !activeProject || !currentThread,
+        description: activeTurnId ? '请等待当前回复结束后再开始审查' : activeProject ? '让 Agent 审查当前项目的未提交改动' : '请先选择项目',
+        disabled: Boolean(activeTurnId) || !activeProject || !currentThread,
         scope: '当前项目',
       },
       {
@@ -210,12 +221,14 @@ export function ChatComposer({
         kind: 'action',
         type: 'compact-context',
         title: '压缩上下文',
-        description: contextCompacting
-          ? '正在压缩上下文'
-          : canClearContext
-            ? `压缩此会话的上下文${contextCompactPercent > 0 ? `（已使用 ${contextCompactPercent}%）` : ''}`
-            : '当前对话暂无可压缩内容',
-        disabled: !canClearContext || contextCompacting,
+        description: activeTurnId
+          ? '请等待当前回复结束后再压缩上下文'
+          : contextCompacting
+            ? '正在压缩上下文'
+            : canClearContext
+              ? `压缩此会话的上下文${contextCompactPercent > 0 ? `（已使用 ${contextCompactPercent}%）` : ''}`
+              : '当前对话暂无可压缩内容',
+        disabled: Boolean(activeTurnId) || !canClearContext || contextCompacting,
         loading: contextCompacting,
         progressPercent: contextCompactPercent,
         scope: '本地',
@@ -225,8 +238,8 @@ export function ChatComposer({
         kind: 'action',
         type: 'clear-context',
         title: '清空上下文',
-        description: canClearContext ? '清除当前对话上下文' : '当前对话暂无上下文',
-        disabled: !canClearContext,
+        description: activeTurnId ? '请等待当前回复结束后再清空上下文' : canClearContext ? '清除当前对话上下文' : '当前对话暂无上下文',
+        disabled: Boolean(activeTurnId) || !canClearContext,
         scope: '本地',
       },
     ];
@@ -243,7 +256,7 @@ export function ChatComposer({
       .slice(0, Math.max(0, 8 - visibleActions.length))
       .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
     return [...visibleActions, ...visibleSkills];
-  }, [activeGoal, activeProject, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills]);
+  }, [activeGoal, activeProject, activeTurnId, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills]);
 
   useEffect(() => {
     if (!commandOpen || !activeProject) {
@@ -296,11 +309,6 @@ export function ChatComposer({
   }, [currentThread?.id]);
 
   useEffect(() => {
-    if (activeTurnId && slashMenuForcedOpen) setSlashMenuForcedOpen(false);
-  }, [activeTurnId, slashMenuForcedOpen]);
-
-  useEffect(() => {
-    if (activeTurnId) return;
     if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
     const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
     if (!skill || !skill.enabled) return;
@@ -312,7 +320,7 @@ export function ChatComposer({
     }
     setFocused(true);
     onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
-  }, [activeTurnId, onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
+  }, [onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
 
   useEffect(() => {
     if (!supportsImageInput && imageAttachments.length) {
@@ -523,21 +531,25 @@ export function ChatComposer({
 
   const submitDraft = (value?: string) => {
     const steering = Boolean(activeTurnId);
-    const thinking = !steering && thinkingConfig.supported && thinkingEnabled;
-    onSend(value, {
-      attachments: supportsImageInput ? sendableImageAttachments : [],
-      ...(!steering ? { skillIds: selectedSkills.map((skill) => skill.id) } : {}),
-      ...(!steering ? { thinking } : {}),
-      ...(!steering && thinking && thinkingEffort ? { thinkingEffort } : {}),
-      ...(!steering && planModeEnabled ? { collaborationMode: 'plan' as const } : {}),
-      ...(!steering && goalModeEnabled ? { goalMode: true } : {}),
-    });
+    onSend(value, createChatComposerSendOptions({
+      attachments: sendableImageAttachments,
+      goalModeEnabled,
+      planModeEnabled,
+      selectedSkillIds: selectedSkills.map((skill) => skill.id),
+      steering,
+      supportsImageInput,
+      thinkingEffort,
+      thinkingEnabled,
+      thinkingSupported: thinkingConfig.supported,
+    }));
     setSelectedSkills([]);
     clearRemovingImageTimers(removingImageTimersRef.current);
     setRemovingImageAttachmentIds(new Set());
     setImageAttachments([]);
-    setPlanModeEnabled(false);
-    setGoalModeEnabled(false);
+    if (!steering) {
+      setPlanModeEnabled(false);
+      setGoalModeEnabled(false);
+    }
     senderRef.current?.clear?.();
   };
 
@@ -585,7 +597,6 @@ export function ChatComposer({
   };
 
   const openSlashMenu = () => {
-    if (activeTurnId) return;
     setActiveSkillIndex(0);
     setDismissedSlashValue('');
     setSlashMenuForcedOpen((open) => !open);
@@ -668,14 +679,12 @@ export function ChatComposer({
                 type="button"
                 aria-label="打开命令菜单"
                 title="打开命令菜单"
-                disabled={Boolean(activeTurnId)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={openSlashMenu}
               >
                 <Plus size={14} />
               </button>
               <ChatThinkingMenu
-                disabled={Boolean(activeTurnId)}
                 enabled={thinkingEnabled}
                 menuOpen={thinkingMenuOpen}
                 thinkingConfig={thinkingConfig}
@@ -685,15 +694,14 @@ export function ChatComposer({
                 onValueChange={setThinkingEffort}
               />
               <ChatApprovalPolicyMenu
-                disabled={Boolean(activeTurnId)}
                 policy={config?.approvalPolicy ?? 'on-request'}
                 onChange={onApprovalPolicyChange}
               />
               {planModeEnabled ? (
-                <ChatModeBadge label="计划" onClose={() => setPlanModeEnabled(false)} />
+                <ChatModeBadge label={activeTurnId ? '计划（下一轮）' : '计划'} onClose={() => setPlanModeEnabled(false)} />
               ) : null}
               {multiAgentEnabled ? <ChatModeBadge label="协作" onClose={() => void onSetMultiAgentEnabled(false)} /> : null}
-              {goalEnabled ? <ChatModeBadge label={activeGoal && activeTurnId ? '目标进行中' : '目标已开启'} onClose={() => {
+              {goalEnabled ? <ChatModeBadge label={activeGoal && activeTurnId ? '目标进行中' : activeTurnId ? '目标（下一轮）' : '目标已开启'} onClose={() => {
                 if (activeGoal) void onClearThreadGoal();
                 setGoalModeEnabled(false);
               }} /> : null}
@@ -706,7 +714,7 @@ export function ChatComposer({
                     type="button"
                     aria-label="上传图片"
                     title="上传图片"
-                    disabled={Boolean(activeTurnId) || sendableImageAttachments.length >= maxImageAttachments}
+                    disabled={sendableImageAttachments.length >= maxImageAttachments}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Paperclip size={13} />
@@ -718,7 +726,6 @@ export function ChatComposer({
                 config={config}
                 contextCompacting={contextCompacting}
                 contextUsage={contextUsage}
-                disabled={Boolean(activeTurnId)}
                 openSignal={modelOpenSignal}
                 onSelect={onSelectModel}
               />

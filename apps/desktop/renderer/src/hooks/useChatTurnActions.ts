@@ -80,6 +80,9 @@ export function useChatTurnActions({
               attachments,
               client,
               input,
+              skillIds: options.skillIds,
+              thinking: options.thinking,
+              thinkingEffort: options.thinkingEffort,
               threadId,
             })
           : await startTurn();
@@ -186,12 +189,18 @@ async function steerActiveTurn({
   attachments,
   client,
   input,
+  skillIds,
+  thinking,
+  thinkingEffort,
   threadId,
 }: {
   activeTurnId: string;
   attachments: RuntimeMessageAttachment[];
   client: DesktopRuntimeClient;
   input: string;
+  skillIds?: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
   threadId: string;
 }) {
   try {
@@ -199,6 +208,9 @@ async function steerActiveTurn({
       attachments,
       expectedTurnId: activeTurnId,
       input,
+      skillIds,
+      thinking,
+      thinkingEffort,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -208,6 +220,9 @@ async function steerActiveTurn({
         attachments,
         expectedTurnId: retryTurnId,
         input,
+        skillIds,
+        thinking,
+        thinkingEffort,
       });
     }
     if (isExpiredSteerError(message)) {

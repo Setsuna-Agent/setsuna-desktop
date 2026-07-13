@@ -4743,6 +4743,7 @@ describe('agent loop tools', () => {
       eventBus: new InMemoryEventBus(),
       clock: systemClock,
       ids,
+      skillRegistry: stepSnapshotSkillRegistry(),
     });
 
     const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
@@ -4752,6 +4753,9 @@ describe('agent loop tools', () => {
       clientId: 'client-steer-1',
       expectedTurnId: started.turnId,
       input: 'Prefer the shorter path.',
+      skillIds: ['skill_step'],
+      thinking: true,
+      thinkingEffort: 'high',
     })).resolves.toEqual({ accepted: true, turnId: started.turnId });
     const steeredBeforeRelease = await threadStore.getThread(thread.id);
     expect(steeredBeforeRelease?.messages.find((message) => message.clientId === 'client-steer-1')).toMatchObject({
@@ -4773,6 +4777,8 @@ describe('agent loop tools', () => {
     ]);
     expect(modelSteerMessage).toMatchObject({ role: 'user' });
     expect(modelSteerMessage?.content).toBe('Prefer the shorter path.');
+    expect(modelClient.requests[1]).toMatchObject({ thinking: true, reasoningEffort: 'high' });
+    expect(modelClient.requests[1].stepSnapshot?.messageIds).toContain('skill_skill_step');
     expect(modelClient.requests[1].stepSnapshot?.inputMessageIds).toEqual(
       secondTurnMessages.filter((message) => message.role === 'user').map((message) => message.id),
     );

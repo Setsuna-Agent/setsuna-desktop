@@ -21,6 +21,7 @@ import { HookStoppedTurnError, type RuntimeContextCompactor } from './runtime-co
 import { isAbortError, throwIfAborted } from './runtime-turn-errors.js';
 import type { RuntimeTurnInputCoordinator } from './runtime-turn-input-coordinator.js';
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';
+import type { RuntimeQueuedSteer } from './turn-input-queue.js';
 import type { RuntimeTurnTaskRegistry } from './turn-task-registry.js';
 import type { RuntimeTurnTerminationCoordinator } from './runtime-turn-termination-coordinator.js';
 import type { RuntimeCollaborationCoordinator } from './collaboration-coordinator.js';
@@ -94,6 +95,8 @@ export class RuntimeAgentTurnRunner {
     const modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
     const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
     let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
+    let activeSkillIds = [...skillIds];
+    let activeThinkingOptions = thinkingOptions;
 
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
@@ -182,11 +185,22 @@ export class RuntimeAgentTurnRunner {
         fileMutationCallCount: 0,
       };
       let explicitMemoryUserContent = userMessage.content;
-      const appendSteerMessagesToConversation = (messages: RuntimeMessage[]) => {
-        if (!messages.length) return false;
+      const appendSteersToConversation = (steers: RuntimeQueuedSteer[]) => {
+        if (!steers.length) return false;
+        const messages = steers.map((steer) => steer.message);
         // 与 Codex turn/steer 对齐：steer 是同一 turn 的原始用户输入，
         // 不在 runtime 侧改写成额外提示词，只在下一个 sampling step 并入上下文。
         conversationMessages.push(...messages);
+        activeSkillIds = [...new Set([...activeSkillIds, ...steers.flatMap((steer) => steer.skillIds)])];
+        const thinkingSteer = [...steers].reverse().find((steer) => typeof steer.thinking === 'boolean');
+        if (thinkingSteer) {
+          activeThinkingOptions = {
+            thinking: thinkingSteer.thinking === true,
+            ...(thinkingSteer.thinking === true && thinkingSteer.thinkingEffort
+              ? { reasoningEffort: thinkingSteer.thinkingEffort }
+              : {}),
+          };
+        }
         const steerText = messages
           .map((message) => message.content.trim())
           .filter(Boolean)
@@ -206,13 +220,13 @@ export class RuntimeAgentTurnRunner {
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       for (let round = 0; round < maxToolRounds; round += 1) {
         appendMailboxMessagesToConversation(await this.options.turnInputs.drainMailboxMessages(threadId, turnId));
-        appendSteerMessagesToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
+        appendSteersToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
         const stepContext = await this.options.samplingContexts.build({
           conversationMessages,
           hookContextMessages: additionalContextMessages,
           runtimeConfig,
           signal,
-          skillIds,
+          skillIds: activeSkillIds,
           thread,
           threadId,
           turnId,
@@ -230,7 +244,7 @@ export class RuntimeAgentTurnRunner {
           planOnly,
           signal,
           step: stepContext,
-          thinkingOptions,
+          thinkingOptions: activeThinkingOptions,
           threadId,
           turnId,
         });
@@ -278,7 +292,7 @@ export class RuntimeAgentTurnRunner {
             status: 'complete',
           });
           appendMailboxMessagesToConversation(pendingMailboxMessages);
-          appendSteerMessagesToConversation(pendingSteers);
+          appendSteersToConversation(pendingSteers);
           usage = undefined;
           continue;
         }
@@ -353,13 +367,13 @@ export class RuntimeAgentTurnRunner {
       if (!turnCompleted) {
         // 达到工具轮次上限后禁用 toolChoice 再要一次最终回答，避免无限工具循环。
         appendMailboxMessagesToConversation(await this.options.turnInputs.drainMailboxMessages(threadId, turnId));
-        appendSteerMessagesToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
+        appendSteersToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
         const finalStepContext = await this.options.samplingContexts.build({
           conversationMessages,
           hookContextMessages: additionalContextMessages,
           runtimeConfig,
           signal,
-          skillIds,
+          skillIds: activeSkillIds,
           thread,
           threadId,
           turnId,
@@ -377,7 +391,7 @@ export class RuntimeAgentTurnRunner {
           planOnly,
           signal,
           step: finalStepContext,
-          thinkingOptions,
+          thinkingOptions: activeThinkingOptions,
           threadId,
           turnId,
         });

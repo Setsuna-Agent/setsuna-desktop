@@ -296,6 +296,9 @@ export type SteerTurnInput = {
   expectedTurnId: string;
   clientId?: string;
   attachments?: RuntimeMessageAttachment[];
+  skillIds?: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
 };
 
 export type SendTurnResponse = {

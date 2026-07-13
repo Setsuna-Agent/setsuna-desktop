@@ -417,8 +417,9 @@ export async function handleRuntimeRestRequest(
   if (steerTurnMatch && request.method === 'POST') {
     const threadId = decodeRuntimeId(steerTurnMatch[1], 'Thread id');
     const turnId = decodeRuntimeId(steerTurnMatch[2], 'Turn id');
-    const input = await readBody<{ attachments?: unknown; clientId?: unknown; expectedTurnId?: unknown; input?: unknown }>(request);
+    const input = await readBody<{ attachments?: unknown; clientId?: unknown; expectedTurnId?: unknown; input?: unknown; skillIds?: unknown; thinking?: unknown; thinkingEffort?: unknown; thinking_effort?: unknown }>(request);
     const expectedTurnId = stringInput(input.expectedTurnId) ?? turnId;
+    const skillIds = Array.isArray(input.skillIds) ? input.skillIds.filter((item): item is string => typeof item === 'string') : [];
     const attachments: SteerTurnInput['attachments'] = Array.isArray(input.attachments)
       ? input.attachments.filter(isRuntimeMessageAttachment)
       : [];
@@ -427,6 +428,9 @@ export async function handleRuntimeRestRequest(
       clientId: stringInput(input.clientId),
       expectedTurnId,
       input: typeof input.input === 'string' ? input.input : '',
+      skillIds,
+      thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
+      thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
     }));
     return true;
   }

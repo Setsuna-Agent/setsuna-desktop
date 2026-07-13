@@ -1,7 +1,14 @@
 import type { RuntimeMailboxDelivery, RuntimeMessage } from '@setsuna-desktop/contracts';
 
+export type RuntimeQueuedSteer = {
+  message: RuntimeMessage;
+  skillIds: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
+};
+
 export type RuntimeQueuedTurnInput =
-  | { type: 'steer'; message: RuntimeMessage }
+  | { type: 'steer'; input: RuntimeQueuedSteer }
   | { type: 'mailbox'; input: RuntimeMailboxDelivery };
 
 /**
@@ -32,19 +39,19 @@ export class RuntimeTurnInputQueue {
     }
   }
 
-  enqueueSteer(message: RuntimeMessage): void {
-    this.pending.push({ type: 'steer', message });
+  enqueueSteer(input: RuntimeQueuedSteer): void {
+    this.pending.push({ type: 'steer', input });
   }
 
   enqueueMailbox(input: RuntimeMailboxDelivery): void {
     this.pending.push({ type: 'mailbox', input });
   }
 
-  takeSteers(): RuntimeMessage[] {
-    const steers: RuntimeMessage[] = [];
+  takeSteers(): RuntimeQueuedSteer[] {
+    const steers: RuntimeQueuedSteer[] = [];
     this.takeMatching((item) => {
       if (item.type !== 'steer') return false;
-      steers.push(item.message);
+      steers.push(item.input);
       return true;
     });
     return steers;

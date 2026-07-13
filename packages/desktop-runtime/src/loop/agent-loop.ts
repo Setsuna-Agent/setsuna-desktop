@@ -306,6 +306,9 @@ export class AgentLoop {
         clientId: input.clientId,
         expectedTurnId: active.turnId,
         input: input.input,
+        skillIds: input.skillIds,
+        thinking: input.thinking,
+        thinkingEffort: input.thinkingEffort,
       });
     }
     const run = await this.turnRuns.createRegular(threadId, input);

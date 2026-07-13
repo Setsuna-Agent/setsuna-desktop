@@ -11,6 +11,7 @@ import type { ThreadStore } from '../ports/thread-store.js';
 import { escapeSkillAttribute, neutralizeMailboxTags } from './prompt-utils.js';
 import type { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
 import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
+import type { RuntimeQueuedSteer } from './turn-input-queue.js';
 
 export type DeliverMailboxInput = {
   content: string;
@@ -80,7 +81,12 @@ export class RuntimeTurnInputCoordinator {
         status: 'complete',
       };
       await this.options.publishMessage(threadId, active.turnId, message);
-      active.inputQueue.enqueueSteer(message);
+      active.inputQueue.enqueueSteer({
+        message,
+        skillIds: [...new Set((input.skillIds ?? []).map((skillId) => skillId.trim()).filter(Boolean))],
+        ...(typeof input.thinking === 'boolean' ? { thinking: input.thinking } : {}),
+        ...(input.thinking === true && input.thinkingEffort?.trim() ? { thinkingEffort: input.thinkingEffort.trim() } : {}),
+      });
       return { accepted: true, turnId: active.turnId };
     } finally {
       active.inputQueue.settleWrite();
@@ -156,7 +162,7 @@ export class RuntimeTurnInputCoordinator {
     return { accepted: true, queued: true, turnId: null };
   }
 
-  async drainSteers(threadId: string, turnId: string): Promise<RuntimeMessage[]> {
+  async drainSteers(threadId: string, turnId: string): Promise<RuntimeQueuedSteer[]> {
     await this.waitForPendingWrites(threadId, turnId);
     const active = this.activeTask(threadId, turnId);
     return active?.inputQueue.takeSteers() ?? [];

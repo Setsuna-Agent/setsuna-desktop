@@ -6,7 +6,7 @@ describe('runtime turn input queue', () => {
   it('waits for in-flight writes before consumers drain steer messages', async () => {
     const queue = new RuntimeTurnInputQueue();
     const message = runtimeUserMessage('msg_1', 'interrupting update');
-    let drained: RuntimeMessage[] | null = null;
+    let drained: ReturnType<RuntimeTurnInputQueue['takeSteers']> | null = null;
 
     queue.beginWrite();
     const drain = queue.waitForWrites().then(() => {
@@ -15,11 +15,11 @@ describe('runtime turn input queue', () => {
     await Promise.resolve();
     expect(drained).toBeNull();
 
-    queue.enqueueSteer(message);
+    queue.enqueueSteer({ message, skillIds: ['skill_1'], thinking: true, thinkingEffort: 'high' });
     queue.settleWrite();
     await drain;
 
-    expect(drained).toEqual([message]);
+    expect(drained).toEqual([{ message, skillIds: ['skill_1'], thinking: true, thinkingEffort: 'high' }]);
     expect(queue.takeSteers()).toEqual([]);
   });
 
@@ -28,10 +28,10 @@ describe('runtime turn input queue', () => {
     const steer = runtimeUserMessage('msg_steer', 'new user input');
 
     queue.enqueueMailbox({ id: 'mail_1', fromAgentId: 'agent_1', content: 'agent update' });
-    queue.enqueueSteer(steer);
+    queue.enqueueSteer({ message: steer, skillIds: [] });
 
     expect(queue.hasPending()).toBe(true);
-    expect(queue.takeSteers()).toEqual([steer]);
+    expect(queue.takeSteers()).toEqual([{ message: steer, skillIds: [] }]);
     expect(queue.takeMailbox()).toEqual([{ id: 'mail_1', fromAgentId: 'agent_1', content: 'agent update' }]);
     expect(queue.hasPending()).toBe(false);
   });
