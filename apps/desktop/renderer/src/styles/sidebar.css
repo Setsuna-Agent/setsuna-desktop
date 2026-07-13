@@ -92,13 +92,11 @@
 
 .app-sidebar__list {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 2px;
-  min-height: 0;
   padding: 0 8px 4px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .desktop-agent-sidebar__section-head {
