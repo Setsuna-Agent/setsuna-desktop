@@ -38,6 +38,7 @@
     "validate:release-version": "node scripts/validate-release-version.mjs"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.2.5",
     "@ant-design/x": "^2.5.0",
     "@fontsource/geist-mono": "^5.2.8",
     "@fontsource/geist-sans": "^5.2.5",

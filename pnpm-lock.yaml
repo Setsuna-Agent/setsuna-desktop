@@ -4,6 +4,7 @@ importers:
 
   .:
     specifiers:
+      '@ant-design/icons': ^6.2.5
       '@ant-design/x': ^2.5.0
       '@fontsource/geist-mono': ^5.2.8
       '@fontsource/geist-sans': ^5.2.5
@@ -44,6 +45,7 @@ importers:
       vscode-icons-js: ^11.6.1
       wait-on: ^8.0.1
     dependencies:
+      '@ant-design/icons': 6.2.5_nnrd3gsncyragczmpvfhocinkq
       '@ant-design/x': 2.5.0_wpkvtqnfjyo5goo4nceepuewmu
       '@fontsource/geist-mono': 5.2.8
       '@fontsource/geist-sans': 5.2.5

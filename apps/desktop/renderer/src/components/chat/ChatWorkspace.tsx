@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { CopyOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { Bubble } from '@ant-design/x';
-import { ArrowDown, BookOpen, Bug, Copy, Hammer, Pencil, SearchCode, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react';
+import { ArrowDown, BookOpen, Bug, Hammer, SearchCode, ShieldCheck, type LucideIcon } from 'lucide-react';
 import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatTimelineDivider } from './ChatTimelineDivider.js';
@@ -2030,7 +2031,7 @@ function MessageFooter({
           void copyMessage();
         }}
       >
-        <Copy size={13} />
+        <CopyOutlined aria-hidden="true" />
       </button>
       {onDelete ? (
         <button
@@ -2044,7 +2045,7 @@ function MessageFooter({
             onDelete();
           }}
         >
-          <Trash2 size={13} />
+          <DeleteOutlined aria-hidden="true" />
         </button>
       ) : null}
       {onEdit ? (
@@ -2059,7 +2060,7 @@ function MessageFooter({
             onEdit();
           }}
         >
-          <Pencil size={13} />
+          <EditOutlined aria-hidden="true" />
         </button>
       ) : null}
     </>

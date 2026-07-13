@@ -711,6 +711,11 @@
   flex: 0 0 auto;
 }
 
+.chat-message-footer button .anticon {
+  font-size: 13px;
+  line-height: 1;
+}
+
 .chat-message-footer button:hover {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
