@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Archive, ArchiveRestore, BadgeCheck, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BadgeCheck, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
 import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
 import { fontFamilyOptions, fontSizeOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode } from '../../hooks/useAppearancePreferences.js';
 import { codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, useCodeAppearancePreferences, type CodeFontFamilyMode, type CodeHighlightTheme } from '../../hooks/useCodeAppearancePreferences.js';
+import { useSidebarOpacityPreference } from '../../hooks/useSidebarOpacityPreference.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 
@@ -293,6 +294,7 @@ function MemorySettingToggle({ checked, description, label, onChange }: MemorySe
 function GeneralSettings() {
   const { fontFamily, fontSize, setFontFamily, setFontSize } = useAppearancePreferences();
   const { codeFontFamily, codeHighlightTheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
+  const { sidebarTransparencyEnabled, setSidebarTransparencyEnabled } = useSidebarOpacityPreference();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const { accentColor, setAccentColor } = useAccentColorPreference();
   const availableFontFamilyOptions = getFontFamilyOptionsForPlatform();
@@ -415,6 +417,20 @@ function GeneralSettings() {
               </div>
               <output htmlFor="settings-page-scale">{fontSize}%</output>
             </div>
+          </div>
+          <div className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <PanelLeft size={14} />
+              <span>侧栏半透明</span>
+            </span>
+            <label className="sd-check" title="开启后侧栏背景固定为 50% 不透明度">
+              <input
+                aria-label="侧栏半透明"
+                type="checkbox"
+                checked={sidebarTransparencyEnabled}
+                onChange={(event) => setSidebarTransparencyEnabled(event.currentTarget.checked)}
+              />
+            </label>
           </div>
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">

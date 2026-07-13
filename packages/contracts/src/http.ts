@@ -89,6 +89,7 @@ export type DesktopRuntimeClient = {
   deleteSkill(skillId: string): Promise<void>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
+  archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
   getWorkspaceStatus(projectId?: string): Promise<WorkspaceStatus>;
   listProjectEntries(projectId: string, path?: string): Promise<WorkspaceEntryList>;

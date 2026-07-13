@@ -62,6 +62,8 @@ export function ChatApprovalPolicyMenu({
       rootClassName="chat-authorization-menu-root"
       trigger={['click']}
       placement="topLeft"
+      // Windows reduced-motion mode can suppress transitionend and leave rc-motion's popup hidden.
+      transitionName=""
       disabled={disabled}
       menu={{
         items,

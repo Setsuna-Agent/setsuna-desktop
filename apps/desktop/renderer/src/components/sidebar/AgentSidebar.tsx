@@ -1,4 +1,4 @@
-import { ChevronDown, Boxes, Folder, FolderOpen, FolderPlus, Plus, RefreshCw, Search, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, Boxes, Folder, FolderOpen, FolderPlus, Plus, RefreshCw, Search, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
@@ -30,6 +30,7 @@ export function AgentSidebar({
   maxWidth,
   minWidth,
   onArchiveThread,
+  onArchiveProject,
   onCreateCurrentThread,
   onCreateGlobalThread,
   onCreateProjectThread,
@@ -70,6 +71,7 @@ export function AgentSidebar({
   maxWidth: number;
   minWidth: number;
   onArchiveThread: (thread: RuntimeThreadSummary) => void;
+  onArchiveProject: (project: WorkspaceProject) => void;
   onCreateCurrentThread: () => void;
   onCreateGlobalThread: () => void;
   onCreateProjectThread: (projectId: string) => void;
@@ -119,6 +121,7 @@ export function AgentSidebar({
           threadActionMenuId={threadActionMenuId}
           threadsByProjectId={threadsByProjectId}
           onArchiveThread={onArchiveThread}
+          onArchiveProject={onArchiveProject}
           onCreateProjectThread={onCreateProjectThread}
           onRemoveProject={onRemoveProject}
           onRenameThread={onRenameThread}
@@ -184,6 +187,7 @@ function ProjectSection({
   threadActionMenuId,
   threadsByProjectId,
   onArchiveThread,
+  onArchiveProject,
   onCreateProjectThread,
   onRemoveProject,
   onRenameThread,
@@ -206,6 +210,7 @@ function ProjectSection({
   threadActionMenuId: string | null;
   threadsByProjectId: Map<string, RuntimeThreadSummary[]>;
   onArchiveThread: (thread: RuntimeThreadSummary) => void;
+  onArchiveProject: (project: WorkspaceProject) => void;
   onCreateProjectThread: (projectId: string) => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
@@ -258,8 +263,19 @@ function ProjectSection({
                         if (isProjectActionTarget(event.target)) return;
                         onSelectProject(project);
                       }}
+                      onContextMenu={(event) => {
+                        if (isProjectActionTarget(event.target)) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
+                      }}
                       onKeyDown={(event) => {
                         if (isProjectActionTarget(event.target)) return;
+                        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                          event.preventDefault();
+                          if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
+                          return;
+                        }
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
                           onSelectProject(project);
@@ -273,6 +289,7 @@ function ProjectSection({
                       <ProjectActionMenu
                         open={projectActionMenuId === project.id}
                         project={project}
+                        onArchiveProject={onArchiveProject}
                         onCreateProjectThread={onCreateProjectThread}
                         onRemoveProject={onRemoveProject}
                         onToggleProjectActions={onToggleProjectActions}
@@ -318,12 +335,14 @@ function ProjectSection({
 function ProjectActionMenu({
   open,
   project,
+  onArchiveProject,
   onCreateProjectThread,
   onRemoveProject,
   onToggleProjectActions,
 }: {
   open: boolean;
   project: WorkspaceProject;
+  onArchiveProject: (project: WorkspaceProject) => void;
   onCreateProjectThread: (projectId: string) => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onToggleProjectActions: (projectId: string) => void;
@@ -346,6 +365,10 @@ function ProjectActionMenu({
   ) => {
     event.stopPropagation();
   };
+  const stopProjectActionContextMenu = (event: ReactMouseEvent<HTMLSpanElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   return (
     <span
@@ -353,6 +376,7 @@ function ProjectActionMenu({
       onClick={stopProjectActionEvent}
       onMouseDown={stopProjectActionEvent}
       onPointerDown={stopProjectActionEvent}
+      onContextMenu={stopProjectActionContextMenu}
       onKeyDown={stopProjectActionEvent}
     >
       <span
@@ -367,10 +391,17 @@ function ProjectActionMenu({
       >
         <MoreHorizontal size={14} />
       </span>
-      <SidebarFloatingMenu open={open} triggerRef={triggerRef} onClose={toggleMenu}>
-        <button type="button" role="menuitem" onClick={() => onCreateProjectThread(project.id)}>
-          <Plus size={13} />
-          新对话
+      <SidebarFloatingMenu open={open} placement="bottom-right" triggerRef={triggerRef} onClose={toggleMenu}>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            const confirmed = window.confirm(`确认归档项目「${project.name}」？项目下的全部对话也会归档，本地文件不会被删除。`);
+            if (confirmed) onArchiveProject(project);
+          }}
+        >
+          <Archive size={13} />
+          归档项目
         </button>
         <button
           type="button"
@@ -385,6 +416,15 @@ function ProjectActionMenu({
           移除
         </button>
       </SidebarFloatingMenu>
+      <button
+        className="desktop-agent-project__action desktop-agent-project__new-thread"
+        type="button"
+        aria-label={`在 ${project.name} 中新建会话`}
+        title="新建会话"
+        onClick={() => onCreateProjectThread(project.id)}
+      >
+        <Plus size={14} />
+      </button>
     </span>
   );
 }

@@ -68,6 +68,10 @@ export function AppSidebarSurface({
       maxWidth={maxWidth}
       minWidth={minWidth}
       onArchiveThread={(thread) => void navigation.archiveThread(thread)}
+      onArchiveProject={(project) => {
+        navigation.setProjectActionMenuId(null);
+        void navigation.archiveProject(project);
+      }}
       onCreateCurrentThread={() => {
         onResetDraft();
         navigation.startCurrentThread();

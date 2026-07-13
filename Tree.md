@@ -369,24 +369,16 @@ Vite renderer HTML 入口。
 
 应用和文档使用的静态资产。
 
-### `assets/branding`
-
-品牌图标资产。
-
-职责：
-
-- 存放 README 顶部展示和品牌相关的 PNG 图标。
-
 ### `assets/build`
 
-Electron 打包图标资源。
+应用统一使用的图标和 Electron 打包资源。
 
 职责：
 
 - `icon.icns`：macOS app icon。
 - `icon.ico`：Windows app icon。
-- `icon.png`：Linux 和 runtime 图标候选。
-- 被 `package.json` 的 Electron Builder `buildResources` 和 main 侧图标加载逻辑使用。
+- `icon.png`：README、renderer、Linux 和 runtime 共用的应用图标源。
+- 被 `package.json` 的 Electron Builder `buildResources`、main 侧图标加载逻辑和 renderer 使用。
 
 ### `assets/readme`
 

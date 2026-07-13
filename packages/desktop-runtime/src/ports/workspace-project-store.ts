@@ -13,6 +13,7 @@ import type {
 export type WorkspaceProjectStore = {
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
+  archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
   getStatus(projectId?: string): Promise<WorkspaceStatus>;
   listEntries(projectId: string, relativePath?: string): Promise<WorkspaceEntryList>;

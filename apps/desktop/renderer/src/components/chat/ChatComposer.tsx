@@ -882,6 +882,8 @@ function ChatThinkingMenu({
       rootClassName="chat-thinking-menu-root"
       trigger={['click']}
       placement="topLeft"
+      // Keep this usable when Windows "best performance" disables UI transition events.
+      transitionName=""
       disabled={disabled}
       open={menuOpen}
       menu={{

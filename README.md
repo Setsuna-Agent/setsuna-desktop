@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/setsuna-desktop-theme-icon.png" width="96" alt="Setsuna Desktop logo">
+  <img src="assets/build/icon.png" width="96" alt="Setsuna Desktop logo">
 </p>
 
 <h1 align="center">Setsuna Desktop</h1>

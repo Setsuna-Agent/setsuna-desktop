@@ -198,7 +198,7 @@ export function useDesktopAppController() {
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
   ].filter(Boolean).join(' ');
 
-  const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? '新对话' : activeView === 'capabilities' ? '能力' : '设置';
+  const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? '新对话' : activeView === 'capabilities' ? '能力' : undefined;
 
   return {
     activeProject: effectiveProject,

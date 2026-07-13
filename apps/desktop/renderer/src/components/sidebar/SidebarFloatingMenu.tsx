@@ -4,13 +4,17 @@ import { createPortal } from 'react-dom';
 const MENU_WIDTH = 138;
 
 export function SidebarFloatingMenu({
+  anchorPoint,
   children,
   open,
+  placement = 'bottom-left',
   triggerRef,
   onClose,
 }: {
+  anchorPoint?: { x: number; y: number };
   children: ReactNode;
   open: boolean;
+  placement?: 'bottom-left' | 'bottom-right';
   triggerRef: RefObject<HTMLElement>;
   onClose: () => void;
 }) {
@@ -21,9 +25,17 @@ export function SidebarFloatingMenu({
     if (!open) return undefined;
     const updatePosition = () => {
       const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const left = Math.max(8, rect.right - MENU_WIDTH);
-      setPosition({ left, top: rect.bottom + 6 });
+      if (!rect && !anchorPoint) return;
+
+      const menuHeight = menuRef.current?.offsetHeight ?? 0;
+      const desiredLeft = anchorPoint?.x ?? (placement === 'bottom-right' ? (rect?.left ?? 0) : (rect?.right ?? 0) - MENU_WIDTH);
+      const desiredTop = anchorPoint?.y ?? (rect?.bottom ?? 0) + 6;
+      const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH - 8);
+      const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
+      setPosition({
+        left: Math.min(Math.max(8, desiredLeft), maxLeft),
+        top: Math.min(Math.max(8, desiredTop), maxTop),
+      });
     };
     updatePosition();
 
@@ -41,7 +53,7 @@ export function SidebarFloatingMenu({
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [onClose, open, triggerRef]);
+  }, [anchorPoint, onClose, open, placement, triggerRef]);
 
   if (!open) return null;
 

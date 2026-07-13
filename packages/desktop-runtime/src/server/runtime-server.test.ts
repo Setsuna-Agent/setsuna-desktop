@@ -90,6 +90,40 @@ describe('runtime server', () => {
     expect(archivedList.threads).toMatchObject([{ id: created.id, title: 'Renamed title', archived: true }]);
   });
 
+  it('archives a project together with all of its conversations', async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-archived-project-test-'));
+    const project = await runtimeFetch('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ path: projectDir }),
+    });
+    const firstThread = await runtimeFetch('/v1/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'First project thread', projectId: project.id }),
+    });
+    const secondThread = await runtimeFetch('/v1/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Second project thread', projectId: project.id }),
+    });
+
+    await runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/archive`, { method: 'POST' });
+
+    const projects = await runtimeFetch('/v1/projects');
+    const activeThreads = await runtimeFetch(`/v1/threads?projectId=${encodeURIComponent(project.id)}`);
+    const allThreads = await runtimeFetch(`/v1/threads?projectId=${encodeURIComponent(project.id)}&includeArchived=true`);
+    expect(projects.projects).toEqual([]);
+    expect(activeThreads.threads).toEqual([]);
+    expect(allThreads.threads).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: secondThread.id, archived: true }),
+      expect.objectContaining({ id: firstThread.id, archived: true }),
+    ]));
+
+    const restored = await runtimeFetch('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ path: projectDir }),
+    });
+    expect(restored.id).toBe(project.id);
+  });
+
   it('rejects encoded path separators in thread ids', async () => {
     const response = await fetch(`${baseUrl}/v1/threads/..%2Fescaped`, {
       method: 'PATCH',

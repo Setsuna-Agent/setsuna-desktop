@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { Bubble } from '@ant-design/x';
-import { ArrowDown, BookOpen, Copy, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, BookOpen, Bug, Copy, Hammer, Pencil, SearchCode, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react';
 import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatTimelineDivider } from './ChatTimelineDivider.js';
@@ -22,6 +22,7 @@ import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from '.
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
+import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
 
 const scrollBottomThresholdPx = 96;
 const stickyBottomThresholdPx = 4;
@@ -29,6 +30,39 @@ const pinnedScrollSettleFrameCount = 3;
 const keyboardScrollIntentKeys = new Set(['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' ']);
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 type WorkHistoryExpandedChangeHandler = (itemId: string, expanded: boolean) => void;
+type StarterSuggestion = {
+  accent: 'blue' | 'green' | 'orange' | 'purple';
+  icon: LucideIcon;
+  label: string;
+  prompt: string;
+};
+
+const starterSuggestions: StarterSuggestion[] = [
+  {
+    accent: 'blue',
+    icon: SearchCode,
+    label: '探索并理解代码',
+    prompt: '请帮我探索并理解当前项目的代码结构、核心模块和主要运行流程。',
+  },
+  {
+    accent: 'purple',
+    icon: Hammer,
+    label: '构建新功能、应用或工具',
+    prompt: '请帮我在当前项目中构建一个新功能：',
+  },
+  {
+    accent: 'green',
+    icon: ShieldCheck,
+    label: '审查代码并提出修改建议',
+    prompt: '请审查当前项目的代码，并提出具体、可执行的修改建议。',
+  },
+  {
+    accent: 'orange',
+    icon: Bug,
+    label: '修复问题和失败',
+    prompt: '请帮我定位并修复当前项目中的这个问题：',
+  },
+];
 
 export function ChatWorkspace({
   activeTurnId,
@@ -430,10 +464,11 @@ export function ChatWorkspace({
             <MarkdownViewportProvider scrollRef={scrollRef}>
               <div className="chat-content-frame" ref={contentRef}>
                 {showEmptyStarter ? (
-                  <div className="chat-starter">
-                    <h1>{starterTitle}</h1>
-                    {composer(true)}
-                  </div>
+                  <ChatStarter
+                    composer={composer(true)}
+                    title={starterTitle}
+                    onSelectSuggestion={onDraftChange}
+                  />
                 ) : (
                   <div className="chat-bubble-list" ref={listRef}>
                     {renderWindow.hiddenItemCount ? (
@@ -532,6 +567,44 @@ export function ChatWorkspace({
         </div>
       </div>
     </main>
+  );
+}
+
+function ChatStarter({
+  composer,
+  title,
+  onSelectSuggestion,
+}: {
+  composer: ReactNode;
+  title: string;
+  onSelectSuggestion: (prompt: string) => void;
+}) {
+  return (
+    <div className="chat-starter">
+      <div className="chat-starter__intro">
+        <div className="chat-starter__heading">
+          <img className="chat-starter__system-icon" src={setsunaAppIconUrl} alt="" aria-hidden="true" />
+          <h1>{title}</h1>
+        </div>
+        <div className="chat-starter__suggestions" role="group" aria-label="快捷建议">
+          {starterSuggestions.map((suggestion) => {
+            const Icon = suggestion.icon;
+            return (
+              <button
+                key={suggestion.label}
+                className={`chat-starter-suggestion chat-starter-suggestion--${suggestion.accent}`}
+                type="button"
+                onClick={() => onSelectSuggestion(suggestion.prompt)}
+              >
+                <Icon size={16} strokeWidth={1.8} aria-hidden="true" />
+                <span>{suggestion.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {composer}
+    </div>
   );
 }
 

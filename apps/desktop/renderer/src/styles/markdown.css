@@ -180,8 +180,13 @@
   margin: 1em 0 1.15em;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
+  scrollbar-color: transparent transparent;
   scrollbar-width: thin !important;
+}
+
+.chat-markdown__table-scroll:hover,
+.chat-markdown__table-scroll:focus-visible {
+  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
 .chat-markdown__table-scroll:focus-visible {
@@ -198,6 +203,12 @@
 .chat-markdown__table-scroll::-webkit-scrollbar-thumb {
   border: 2px solid transparent !important;
   border-radius: 999px;
+  background: transparent !important;
+  background-clip: content-box !important;
+}
+
+.chat-markdown__table-scroll:hover::-webkit-scrollbar-thumb,
+.chat-markdown__table-scroll:focus-visible::-webkit-scrollbar-thumb {
   background: var(--chat-scrollbar-thumb) !important;
   background-clip: content-box !important;
 }

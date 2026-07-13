@@ -5,6 +5,7 @@ export type WorkspaceProject = {
   name: string;
   path: string;
   gitRoot?: string;
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

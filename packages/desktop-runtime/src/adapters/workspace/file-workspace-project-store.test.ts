@@ -38,6 +38,20 @@ describe('file workspace project store', () => {
     expect(written).toMatchObject({ path: 'src/generated.txt', created: true });
   });
 
+  it('archives a project without losing its identity when the same path is added again', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+
+    await store.archiveProject(project.id);
+    expect((await store.listProjects()).projects).toEqual([]);
+
+    const restored = await store.addProject({ path: fixture.projectDir });
+    expect(restored.id).toBe(project.id);
+    expect(restored.archivedAt).toBeUndefined();
+    expect((await store.listProjects()).projects).toMatchObject([{ id: project.id }]);
+  });
+
   it('provides a hidden temporary workspace when no project is selected', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
     const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);

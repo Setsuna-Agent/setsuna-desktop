@@ -58,7 +58,10 @@ async function createWindow(): Promise<void> {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
     trafficLightPosition: process.platform === 'darwin' ? getMacTrafficLightPosition(1) : undefined,
     autoHideMenuBar: usesCustomFrame,
-    backgroundColor: '#ffffff',
+    transparent: process.platform !== 'darwin',
+    backgroundColor: '#00000000',
+    vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
+    visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
     icon: desktopIcon,
     show: false,
     webPreferences: {
@@ -69,6 +72,14 @@ async function createWindow(): Promise<void> {
       webviewTag: true,
     },
   });
+  if (process.platform === 'win32') {
+    try {
+      mainWindow.setBackgroundMaterial('acrylic');
+    } catch (error) {
+      // Acrylic is available only on supported Windows versions; transparency remains the fallback.
+      console.warn('[window] acrylic background is unavailable', error);
+    }
+  }
   if (usesCustomFrame) mainWindow.setMenu(null);
   desktopUpdater = new DesktopUpdater({
     currentVersion: app.getVersion(),

@@ -252,9 +252,9 @@ export function useDesktopNavigation({
     }
   }, [addProjectByPath, selectingProjectDirectory, setError]);
 
-  const removeProject = useCallback(
-    async (project: WorkspaceProject) => {
-      await client.removeProject(project.id);
+  const hideProjectFromNavigation = useCallback(
+    async (project: WorkspaceProject, persist: () => Promise<void>) => {
+      await persist();
       const list = await client.listProjects();
       const nextThreads = await reloadThreads();
       setProjects(list.projects);
@@ -291,8 +291,23 @@ export function useDesktopNavigation({
     [client, currentThread?.projectId, expandProject, reloadThreads, resetWorkspacePanels, setActiveProjectId, setCurrentThread, setProjects],
   );
 
+  const archiveProject = useCallback(
+    async (project: WorkspaceProject) => {
+      await hideProjectFromNavigation(project, () => client.archiveProject(project.id));
+    },
+    [client, hideProjectFromNavigation],
+  );
+
+  const removeProject = useCallback(
+    async (project: WorkspaceProject) => {
+      await hideProjectFromNavigation(project, () => client.removeProject(project.id));
+    },
+    [client, hideProjectFromNavigation],
+  );
+
   return {
     addProjectByPath,
+    archiveProject,
     archiveThread,
     closeNavigationMenus,
     closeRenameThread,

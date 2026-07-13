@@ -9,6 +9,7 @@ import 'katex/dist/katex.min.css';
 import { App } from './App.js';
 import { initializeAccentColorPreference } from './hooks/useAccentColorPreference.js';
 import { initializeCodeAppearancePreference } from './hooks/useCodeAppearancePreferences.js';
+import { initializeSidebarOpacityPreference } from './hooks/useSidebarOpacityPreference.js';
 import { initializeThemePreference } from './hooks/useThemeTransition.js';
 import { applyDesktopPlatformAttribute } from './utils/desktopPlatform.js';
 import './styles/tokens.css';
@@ -32,6 +33,7 @@ applyDesktopPlatformAttribute();
 initializeThemePreference();
 initializeAccentColorPreference();
 initializeCodeAppearancePreference();
+initializeSidebarOpacityPreference();
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

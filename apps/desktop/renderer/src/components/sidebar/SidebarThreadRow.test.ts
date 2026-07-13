@@ -20,6 +20,14 @@ describe('SidebarThreadRow', () => {
     expect(html).toContain('is-running');
     expect(html).toContain('aria-label="对话进行中"');
   });
+
+  it('shows a direct archive action without relative time or an overflow trigger', () => {
+    const html = renderRow(thread);
+
+    expect(html).toContain('aria-label="归档对话"');
+    expect(html).not.toContain('aria-label="对话操作"');
+    expect(html).not.toContain('2026-07-11');
+  });
 });
 
 function renderRow(value: RuntimeThreadSummary, running = false): string {

@@ -214,6 +214,9 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     addProject(input: AddWorkspaceProjectInput) {
       return request<WorkspaceProject>({ path: '/v1/projects', method: 'POST', body: input });
     },
+    archiveProject(projectId: string) {
+      return request<void>({ path: `/v1/projects/${encodeURIComponent(projectId)}/archive`, method: 'POST' });
+    },
     removeProject(projectId: string) {
       return request<void>({ path: `/v1/projects/${encodeURIComponent(projectId)}`, method: 'DELETE' });
     },

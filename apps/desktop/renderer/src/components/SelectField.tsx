@@ -35,10 +35,16 @@ type SelectFieldProps = {
   value: string;
 };
 
-type MenuPosition = {
+export type SelectMenuPosition = {
   left: number;
   maxHeight: number;
   top: number;
+  width: number;
+};
+
+type SelectMenuViewport = {
+  height: number;
+  scaleInverse?: number;
   width: number;
 };
 
@@ -65,31 +71,16 @@ export function SelectField({
   const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
-  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [menuPosition, setMenuPosition] = useState<SelectMenuPosition | null>(null);
 
   const updateMenuPosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const desiredHeight = Math.min(MENU_MAX_HEIGHT, options.length * 36 + 12);
-    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_GUTTER;
-    const spaceAbove = rect.top - VIEWPORT_GUTTER;
-    const opensAbove = spaceBelow < Math.min(desiredHeight, 160) && spaceAbove > spaceBelow;
-    const availableHeight = Math.max(88, (opensAbove ? spaceAbove : spaceBelow) - MENU_GAP);
-    const maxHeight = Math.min(MENU_MAX_HEIGHT, availableHeight);
-    const width = Math.min(Math.max(rect.width, 160), window.innerWidth - VIEWPORT_GUTTER * 2);
-    const left = Math.min(
-      Math.max(VIEWPORT_GUTTER, rect.left),
-      window.innerWidth - width - VIEWPORT_GUTTER,
-    );
-    const menuHeight = Math.min(desiredHeight, maxHeight);
-
-    setMenuPosition({
-      left,
-      maxHeight,
-      top: opensAbove ? Math.max(VIEWPORT_GUTTER, rect.top - MENU_GAP - menuHeight) : rect.bottom + MENU_GAP,
-      width,
-    });
+    setMenuPosition(selectMenuPosition(trigger.getBoundingClientRect(), options.length, {
+      height: window.innerHeight,
+      scaleInverse: pageScaleInverse(),
+      width: window.innerWidth,
+    }));
   }, [options.length]);
 
   const openMenu = useCallback((preferredIndex = selectedIndex) => {
@@ -227,6 +218,45 @@ export function SelectField({
         : null}
     </>
   );
+}
+
+export function selectMenuPosition(
+  rect: Pick<DOMRect, 'bottom' | 'left' | 'top' | 'width'>,
+  optionCount: number,
+  viewport: SelectMenuViewport,
+): SelectMenuPosition {
+  const scaleInverse = viewport.scaleInverse && viewport.scaleInverse > 0 ? viewport.scaleInverse : 1;
+  // getBoundingClientRect returns visual pixels, while a fixed portal inside a zoomed body uses pre-zoom CSS pixels.
+  const viewportWidth = viewport.width * scaleInverse;
+  const viewportHeight = viewport.height * scaleInverse;
+  const rectLeft = rect.left * scaleInverse;
+  const rectTop = rect.top * scaleInverse;
+  const rectBottom = rect.bottom * scaleInverse;
+  const rectWidth = rect.width * scaleInverse;
+  const desiredHeight = Math.min(MENU_MAX_HEIGHT, optionCount * 36 + 12);
+  const spaceBelow = viewportHeight - rectBottom - VIEWPORT_GUTTER;
+  const spaceAbove = rectTop - VIEWPORT_GUTTER;
+  const opensAbove = spaceBelow < Math.min(desiredHeight, 160) && spaceAbove > spaceBelow;
+  const availableHeight = Math.max(88, (opensAbove ? spaceAbove : spaceBelow) - MENU_GAP);
+  const maxHeight = Math.min(MENU_MAX_HEIGHT, availableHeight);
+  const width = Math.min(Math.max(rectWidth, 160), viewportWidth - VIEWPORT_GUTTER * 2);
+  const left = Math.min(
+    Math.max(VIEWPORT_GUTTER, rectLeft),
+    viewportWidth - width - VIEWPORT_GUTTER,
+  );
+  const menuHeight = Math.min(desiredHeight, maxHeight);
+
+  return {
+    left,
+    maxHeight,
+    top: opensAbove ? Math.max(VIEWPORT_GUTTER, rectTop - MENU_GAP - menuHeight) : rectBottom + MENU_GAP,
+    width,
+  };
+}
+
+function pageScaleInverse(): number {
+  const value = Number.parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--app-page-scale-inverse'));
+  return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
 function optionElements(children: ReactNode): SelectOption[] {

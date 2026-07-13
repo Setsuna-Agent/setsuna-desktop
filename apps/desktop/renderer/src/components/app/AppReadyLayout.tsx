@@ -73,33 +73,35 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       onToggleSidebar={handleToggleSidebar}
       showSidebarToggle={activeView !== 'settings'}
       toolbarTitle={toolbarTitle}
-      workspaceToolbar={<AppWorkspaceToolbar activeProject={activeWorkspace} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} />}
+      workspaceToolbar={activeView !== 'settings' ? <AppWorkspaceToolbar activeProject={activeWorkspace} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
       menuActions={windowMenuActions}
       className={shellClassName}
       actions={
-        <>
-          {activeView === 'chat' && activeWorkspace?.path ? (
-            <WorkspaceAppLauncher
-              selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
-              workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
-              workspaceApps={workspacePanels.workspaceApps}
-              onOpenCurrentWorkspaceApp={() => {
-                workspacePanels.closeWorkspaceMenus();
-                void workspacePanels.openSelectedWorkspaceApp();
-              }}
-              onSelectWorkspaceApp={workspacePanels.selectWorkspaceApp}
-              onToggleWorkspaceAppMenu={workspacePanels.toggleWorkspaceAppMenu}
+        activeView !== 'settings' ? (
+          <>
+            {activeView === 'chat' && activeWorkspace?.path ? (
+              <WorkspaceAppLauncher
+                selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
+                workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
+                workspaceApps={workspacePanels.workspaceApps}
+                onOpenCurrentWorkspaceApp={() => {
+                  workspacePanels.closeWorkspaceMenus();
+                  void workspacePanels.openSelectedWorkspaceApp();
+                }}
+                onSelectWorkspaceApp={workspacePanels.selectWorkspaceApp}
+                onToggleWorkspaceAppMenu={workspacePanels.toggleWorkspaceAppMenu}
+              />
+            ) : null}
+            <AppTopbarActions
+              activeView={activeView}
+              updater={controller.updater}
+              bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
+              sidePanelVisible={workspacePanels.sidePanelVisible}
+              onToggleSidePanel={workspacePanels.toggleSidePanel}
+              onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
             />
-          ) : null}
-          <AppTopbarActions
-            activeView={activeView}
-            updater={controller.updater}
-            bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
-            sidePanelVisible={workspacePanels.sidePanelVisible}
-            onToggleSidePanel={workspacePanels.toggleSidePanel}
-            onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
-          />
-        </>
+          </>
+        ) : undefined
       }
     >
       <AppSidebarSurface

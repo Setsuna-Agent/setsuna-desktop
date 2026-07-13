@@ -52,7 +52,11 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
 
   async listProjects(): Promise<WorkspaceProjectList> {
     const index = await this.readIndex();
-    return { projects: index.projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
+    return {
+      projects: index.projects
+        .filter((project) => !project.archivedAt)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    };
   }
 
   async addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject> {
@@ -76,6 +80,19 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         projects: [project, ...index.projects.filter((item) => item.id !== project.id && item.path !== project.path)],
       });
       return project;
+    });
+  }
+
+  async archiveProject(projectId: string): Promise<void> {
+    await withFileStateUpdate(this.indexPath, async () => {
+      const index = await this.readIndex();
+      const now = this.clock.now().toISOString();
+      await this.writeIndex({
+        version: 1,
+        projects: index.projects.map((project) => project.id === projectId
+          ? { ...project, archivedAt: now, updatedAt: now }
+          : project),
+      });
     });
   }
 

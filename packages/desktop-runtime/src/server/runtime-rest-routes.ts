@@ -219,6 +219,19 @@ export async function handleRuntimeRestRequest(
     return true;
   }
 
+  const projectArchiveMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/archive$/);
+  if (projectArchiveMatch && request.method === 'POST') {
+    const projectId = decodeURIComponent(projectArchiveMatch[1]);
+    const projectThreads = await runtime.threadStore.listThreads({ includeArchived: true, projectId });
+    // Archive every conversation before hiding the project so a partial failure never creates active orphan threads.
+    for (const thread of projectThreads) {
+      if (!thread.archived) await runtime.threadStore.updateThread(thread.id, { archived: true });
+    }
+    await runtime.workspaceProjects.archiveProject(projectId);
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+
   const projectMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)$/);
   if (projectMatch && request.method === 'DELETE') {
     await runtime.workspaceProjects.removeProject(decodeURIComponent(projectMatch[1]));
