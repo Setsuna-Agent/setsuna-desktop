@@ -339,6 +339,32 @@
   min-width: 0;
 }
 
+.desktop-agent-thread-list__show-more {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 6px 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
+  border: 0;
+  border-radius: var(--app-radius-md);
+  color: color-mix(in srgb, var(--app-sidebar-text-secondary) 52%, transparent);
+  background: transparent;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+}
+
+.desktop-agent-thread-list__show-more:hover {
+  color: var(--app-text-subtle);
+  background: var(--desktop-agent-sidebar-hover-bg);
+}
+
+.desktop-agent-thread-list__show-more:focus-visible {
+  outline: 0;
+  color: var(--app-text-subtle);
+  box-shadow: var(--app-focus-ring);
+}
+
 .desktop-agent-session {
   position: relative;
   display: flex;
@@ -454,7 +480,7 @@
   padding: 0 7px 0 9px;
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
-  color: color-mix(in srgb, var(--app-sidebar-text-secondary) 92%, transparent);
+  color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -485,7 +511,6 @@
 .desktop-agent-session__title {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
   font-size: 13px;
   line-height: 18px;
   text-overflow: ellipsis;
@@ -494,6 +519,7 @@
 
 .desktop-agent-session__title {
   flex: 1 1 auto;
+  color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
   font-weight: 400;
 }
 
@@ -570,5 +596,4 @@
 .desktop-agent-project__icon {
   flex: 0 0 var(--desktop-agent-icon-size);
   width: var(--desktop-agent-icon-size);
-  color: color-mix(in srgb, currentColor 78%, transparent);
 }

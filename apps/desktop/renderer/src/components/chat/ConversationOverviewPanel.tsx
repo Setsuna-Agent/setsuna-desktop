@@ -1,8 +1,9 @@
-import { CheckCircle2, ChevronsRightLeft, Circle, CircleGauge, FileText, FolderOpen, ListChecks } from 'lucide-react';
+import { ChevronsRightLeft, CircleGauge, FileText, FolderOpen } from 'lucide-react';
 import type { RuntimeThread, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
-import type { ConversationOverviewState, ConversationPlanItem, ConversationPlanStatus } from './chatConversationOverview.js';
+import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationGitControls } from './ConversationGitControls.js';
+import { ConversationPlanSummary } from './ConversationPlanSummary.js';
 
 export function ConversationOverviewPanel({
   activeProject,
@@ -134,17 +135,7 @@ export function ConversationOverviewPanel({
       {overview.planItems.length ? (
         <>
           <div className="chat-conversation-overview-panel__divider" />
-          <div className="chat-conversation-overview-panel__plan">
-            <div className="chat-conversation-overview-panel__plan-title">
-              <ListChecks size={14} />
-              <span>计划</span>
-            </div>
-            <ol className="chat-conversation-overview-panel__plan-list">
-              {overview.planItems.map((item, index) => (
-                <PlanRow item={item} key={`${item.status}:${index}:${item.step}`} />
-              ))}
-            </ol>
-          </div>
+          <ConversationPlanSummary items={overview.planItems} />
         </>
       ) : null}
     </section>
@@ -187,30 +178,4 @@ function ContextProgressIcon({ percent }: { percent: number }) {
       <circle cx="7" cy="7" r={radius} strokeDasharray={circumference} strokeDashoffset={dashOffset} />
     </svg>
   );
-}
-
-function PlanRow({ item }: { item: ConversationPlanItem }) {
-  return (
-    <li className={`chat-conversation-overview-panel__plan-item is-${item.status}`}>
-      <span className="chat-conversation-overview-panel__plan-dot" aria-hidden="true">
-        {planStatusIcon(item.status)}
-      </span>
-      <span className="chat-conversation-overview-panel__plan-step" title={item.step}>
-        {item.step}
-      </span>
-      <span className="chat-conversation-overview-panel__plan-status">{planStatusLabel(item.status)}</span>
-    </li>
-  );
-}
-
-function planStatusIcon(status: ConversationPlanStatus) {
-  if (status === 'completed') return <CheckCircle2 size={11} />;
-  if (status === 'in_progress') return <Circle size={9} fill="currentColor" />;
-  return <Circle size={9} />;
-}
-
-function planStatusLabel(status: ConversationPlanStatus): string {
-  if (status === 'completed') return '完成';
-  if (status === 'in_progress') return '进行中';
-  return '待办';
 }

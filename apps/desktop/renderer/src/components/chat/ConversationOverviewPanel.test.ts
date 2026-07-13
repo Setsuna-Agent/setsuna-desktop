@@ -93,6 +93,31 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('协作任务');
     expect(html).not.toContain('Forked conversation');
   });
+
+  it('summarizes plan progress in one row and keeps the full plan in a hover popover', () => {
+    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+      ...baseProps,
+      compact: false,
+      overview: {
+        ...overview,
+        planItems: [
+          { step: '读取现有实现', status: 'completed' },
+          { step: '整理交互结构', status: 'completed' },
+          { step: '实现计划摘要', status: 'in_progress' },
+          { step: '补充浮层样式', status: 'pending' },
+          { step: '添加测试', status: 'pending' },
+          { step: '运行验证', status: 'pending' },
+        ],
+      },
+    }));
+
+    expect(html).toContain('aria-label="计划推进中，已完成 2/6"');
+    expect(html).toContain('chat-conversation-overview-panel__plan-loading');
+    expect(html).toContain('chat-conversation-overview-panel__plan-popover');
+    expect(html).toContain('计划详情');
+    expect(html).toContain('实现计划摘要');
+    expect(html.match(/>2\/6</g)).toHaveLength(2);
+  });
 });
 
 const project: WorkspaceProject = {

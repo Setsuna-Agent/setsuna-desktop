@@ -2,7 +2,7 @@ import { Archive, ChevronDown, Boxes, Folder, FolderOpen, FolderPlus, Plus, Refr
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
-import { SidebarThreadRow } from './SidebarThreadRow.js';
+import { SidebarThreadList } from './SidebarThreadList.js';
 import { SidebarUserMenu } from './SidebarUserMenu.js';
 
 const isProjectActionTarget = (target: EventTarget | null) =>
@@ -297,22 +297,17 @@ function ProjectSection({
                     </div>
                     {shouldShowChildren ? (
                       projectThreads.length ? (
-                        <div className="desktop-agent-session-list">
-                          {projectThreads.map((thread) => (
-                            <SidebarThreadRow
-                              key={`${project.id}:${thread.id}`}
-                              menuOpen={threadActionMenuId === thread.id}
-                              running={runningThreadId === thread.id}
-                              selected={isActiveProject && activeThreadId === thread.id}
-                              thread={thread}
-                              variant="project"
-                              onArchive={onArchiveThread}
-                              onRename={onRenameThread}
-                              onSelect={onSelectThread}
-                              onToggleMenu={onToggleThreadActions}
-                            />
-                          ))}
-                        </div>
+                        <SidebarThreadList
+                          menuThreadId={threadActionMenuId}
+                          runningThreadId={runningThreadId}
+                          selectedThreadId={isActiveProject ? activeThreadId : null}
+                          threads={projectThreads}
+                          variant="project"
+                          onArchive={onArchiveThread}
+                          onRename={onRenameThread}
+                          onSelect={onSelectThread}
+                          onToggleMenu={onToggleThreadActions}
+                        />
                       ) : (
                         <div className="desktop-agent-sidebar__empty-session">暂无对话</div>
                       )
@@ -476,26 +471,23 @@ function GlobalThreadSection({
         </div>
       </div>
       {!sessionsCollapsed ? (
-        <div className="app-sidebar__list">
-          {globalThreads.length ? (
-            globalThreads.map((thread) => (
-              <SidebarThreadRow
-                key={thread.id}
-                menuOpen={threadActionMenuId === thread.id}
-                running={runningThreadId === thread.id}
-                selected={!activeProjectId && activeThreadId === thread.id}
-                thread={thread}
-                variant="global"
-                onArchive={onArchiveThread}
-                onRename={onRenameThread}
-                onSelect={onSelectThread}
-                onToggleMenu={onToggleThreadActions}
-              />
-            ))
-          ) : (
+        globalThreads.length ? (
+          <SidebarThreadList
+            menuThreadId={threadActionMenuId}
+            runningThreadId={runningThreadId}
+            selectedThreadId={!activeProjectId ? activeThreadId : null}
+            threads={globalThreads}
+            variant="global"
+            onArchive={onArchiveThread}
+            onRename={onRenameThread}
+            onSelect={onSelectThread}
+            onToggleMenu={onToggleThreadActions}
+          />
+        ) : (
+          <div className="app-sidebar__list">
             <div className="desktop-agent-sidebar__empty-session">暂无聊天</div>
-          )}
-        </div>
+          </div>
+        )
       ) : null}
     </section>
   );

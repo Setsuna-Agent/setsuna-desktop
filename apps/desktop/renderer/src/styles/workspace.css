@@ -955,7 +955,7 @@
 .desktop-review-panel__file-expansion-toggle.is-collapsed,
 .desktop-review-panel__wrap-toggle.is-active {
   color: var(--app-text);
-  background: var(--app-accent-soft);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .desktop-review-panel__refresh {
