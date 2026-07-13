@@ -32,6 +32,7 @@
   --app-focus-ring: 0 0 0 3px var(--app-focus);
   --app-shadow-popover: 0 14px 42px color-mix(in srgb, #000000 12%, transparent), 0 2px 8px color-mix(in srgb, #000000 6%, transparent);
   --app-shadow-modal: 0 24px 64px color-mix(in srgb, #000000 18%, transparent), 0 4px 16px color-mix(in srgb, #000000 8%, transparent);
+  --app-tooltip-bg: #ffffff;
   --app-primary: #15171a;
   --app-primary-hover: #24272c;
   --app-primary-text: #ffffff;
@@ -153,6 +154,7 @@
   --app-text-subtle: #737373;
   --app-muted: #737373;
   --app-focus: rgba(255, 255, 255, 0.14);
+  --app-tooltip-bg: #2b2b2b;
   --app-primary: #f4f4f5;
   --app-primary-hover: #ffffff;
   --app-primary-text: #181818;

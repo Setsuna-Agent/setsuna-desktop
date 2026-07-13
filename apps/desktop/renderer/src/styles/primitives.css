@@ -238,10 +238,15 @@
   display: inline-flex;
 }
 
+.sd-action-tooltip:hover,
+.sd-action-tooltip:focus-within {
+  z-index: 1000;
+}
+
 .sd-action-tooltip::after {
   content: attr(data-tooltip);
   position: absolute;
-  z-index: 12;
+  z-index: 1;
   top: calc(100% + 6px);
   right: 0;
   width: max-content;
@@ -250,22 +255,38 @@
   border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
   border-radius: 7px;
   color: var(--app-text);
-  background: var(--app-surface);
-  box-shadow: 0 8px 22px color-mix(in srgb, #000 8%, transparent);
+  background: var(--app-tooltip-bg);
+  box-shadow: var(--app-shadow-popover);
   font-size: 12px;
   font-weight: var(--app-font-weight);
   line-height: 18px;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transform: translateY(-2px);
-  transition: opacity 120ms ease, transform 120ms ease;
+  transition: transform 120ms ease, visibility 0s linear 120ms;
   white-space: nowrap;
 }
 
 .sd-action-tooltip:hover::after,
 .sd-action-tooltip:focus-within::after {
   opacity: 1;
+  visibility: visible;
   transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.sd-action-tooltip--top::after {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translate(-50%, 2px);
+}
+
+.sd-action-tooltip--top:hover::after,
+.sd-action-tooltip--top:focus-within::after {
+  transform: translate(-50%, 0);
 }
 
 .sd-button:not(.sd-button--primary):not(.sd-button--danger):hover,

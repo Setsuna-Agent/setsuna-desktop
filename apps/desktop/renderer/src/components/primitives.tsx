@@ -30,9 +30,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   );
 });
 
-export function ActionTooltip({ children, title }: { children: ReactNode; title: string }) {
+export function ActionTooltip({ children, placement = 'bottom-end', title }: { children: ReactNode; placement?: 'bottom-end' | 'top'; title: string }) {
   return (
-    <span className="sd-action-tooltip" data-tooltip={title}>
+    <span className={`sd-action-tooltip sd-action-tooltip--${placement}`} data-tooltip={title}>
       {children}
     </span>
   );

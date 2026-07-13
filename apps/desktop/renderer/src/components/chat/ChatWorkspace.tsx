@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { CopyOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { Bubble } from '@ant-design/x';
-import { ArrowDown, BookOpen, Bug, Hammer, SearchCode, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { ArrowDown, BookOpen, Bug, Copy, Hammer, Pencil, SearchCode, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react';
 import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatTimelineDivider } from './ChatTimelineDivider.js';
@@ -22,6 +21,7 @@ import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
+import { ActionTooltip } from '../primitives.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
 
@@ -2016,49 +2016,31 @@ function MessageFooter({
   );
   const actionNodes = (
     <>
-      <button
-        className={copied ? 'is-copied' : ''}
-        type="button"
-        aria-label={copied ? '已复制' : '复制'}
-        title={copied ? '已复制' : '复制'}
+      <MessageFooterAction
+        active={copied}
         disabled={!message.content}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void copyMessage();
-        }}
+        label={copied ? '已复制' : '复制'}
+        onClick={() => void copyMessage()}
       >
-        <CopyOutlined aria-hidden="true" />
-      </button>
+        <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
+      </MessageFooterAction>
       {onDelete ? (
-        <button
-          type="button"
-          aria-label="删除"
-          title="删除"
+        <MessageFooterAction
           disabled={actionsDisabled}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onDelete();
-          }}
+          label="删除"
+          onClick={onDelete}
         >
-          <DeleteOutlined aria-hidden="true" />
-        </button>
+          <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
+        </MessageFooterAction>
       ) : null}
       {onEdit ? (
-        <button
-          type="button"
-          aria-label="编辑"
-          title="编辑"
+        <MessageFooterAction
           disabled={actionsDisabled}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onEdit();
-          }}
+          label="编辑"
+          onClick={onEdit}
         >
-          <EditOutlined aria-hidden="true" />
-        </button>
+          <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
+        </MessageFooterAction>
       ) : null}
     </>
   );
@@ -2068,6 +2050,38 @@ function MessageFooter({
       {actionNodes}
       {timePosition === 'after-actions' ? timeNode : null}
     </div>
+  );
+}
+
+function MessageFooterAction({
+  active = false,
+  children,
+  disabled = false,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  children: ReactNode;
+  disabled?: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <ActionTooltip placement="top" title={label}>
+      <button
+        className={active ? 'is-copied' : ''}
+        type="button"
+        aria-label={label}
+        disabled={disabled}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onClick();
+        }}
+      >
+        {children}
+      </button>
+    </ActionTooltip>
   );
 }
 
