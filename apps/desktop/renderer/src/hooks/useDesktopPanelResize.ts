@@ -13,6 +13,7 @@ export const WORKBENCH_MAIN_MIN_WIDTH = 420;
 export const WORKBENCH_EXPANDED_SIDEBAR_MAIN_MIN_WIDTH = 520;
 const WORKBENCH_MAIN_MIN_HEIGHT = 260;
 const WORKSPACE_MIN_WIDTH = 460;
+const WORKSPACE_DEFAULT_WIDTH = 640;
 const TERMINAL_MIN_HEIGHT = 180;
 const TERMINAL_MAX_HEIGHT = 520;
 
@@ -21,7 +22,7 @@ export function useDesktopPanelResize(
   { bottomPanelVisible = true, workspaceVisible = true }: DesktopPanelResizeOptions = {},
 ) {
   const [sidebarWidth, setSidebarWidth] = useState(240);
-  const [workspaceWidth, setWorkspaceWidth] = useState(560);
+  const [workspaceWidth, setWorkspaceWidth] = useState(WORKSPACE_DEFAULT_WIDTH);
   const [workspacePreviewWidth, setWorkspacePreviewWidth] = useState<number | null>(null);
   const [terminalHeight, setTerminalHeight] = useState(260);
   const workspacePreviewCanFitSidebarRef = useRef<boolean | null>(null);
