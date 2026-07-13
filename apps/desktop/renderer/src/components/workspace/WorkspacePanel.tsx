@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Code2, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
 import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState } from '../primitives.js';
+import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
@@ -292,10 +293,15 @@ export function WorkspacePanel({
     );
 
   const contextMenuStyle = contextMenu
-    ? {
-        left: Math.min(contextMenu.x, Math.max(8, window.innerWidth - 208)),
-        top: Math.min(contextMenu.y, Math.max(8, window.innerHeight - 96)),
-      }
+    ? zoomedPortalPosition({
+        anchorX: contextMenu.x,
+        anchorY: contextMenu.y,
+        menuHeight: 96,
+        menuWidth: 208,
+        scaleInverse: pageScaleInverse(),
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      })
     : undefined;
 
   return (

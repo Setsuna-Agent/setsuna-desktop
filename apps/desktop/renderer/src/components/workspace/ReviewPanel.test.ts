@@ -178,6 +178,8 @@ describe('DesktopReviewPanel', () => {
       expect(html).toContain('aria-pressed="true"');
       expect(html).toContain('data-tooltip="当前：左右对比，点击切换为单列对比"');
       expect(html).not.toContain('title="当前：左右对比，点击切换为单列对比"');
+      expect(html).not.toContain('desktop-review-panel__layout-toggle is-active');
+      expect(html).toContain('lucide-align-justify');
       expect(html).toContain('desktop-review-diff desktop-review-diff--split');
       expect(html).not.toContain('desktop-review-diff--wrap');
       expect(html).toContain('desktop-review-diff-split-pane desktop-review-diff-split-pane--old');
@@ -229,7 +231,9 @@ describe('DesktopReviewPanel', () => {
         onRefresh: () => undefined,
       }));
 
-      expect(html).toContain('desktop-review-panel__wrap-toggle is-active');
+      expect(html).toContain('desktop-review-panel__wrap-toggle');
+      expect(html).not.toContain('desktop-review-panel__wrap-toggle is-active');
+      expect(html).toContain('lucide-wrap-text');
       expect(html).toContain('data-tooltip="当前：自动换行已开启，点击关闭"');
       expect(html).not.toContain('title="当前：自动换行已开启，点击关闭"');
       expect(html).toContain('desktop-review-diff desktop-review-diff--split desktop-review-diff--wrap');

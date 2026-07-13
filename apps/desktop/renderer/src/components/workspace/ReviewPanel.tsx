@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject, type UIEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dropdown, type MenuProps } from 'antd';
-import { Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
+import { AlignJustify, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
+import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopWorkspaceApp } from './model.js';
@@ -318,7 +319,7 @@ export function DesktopReviewPanel({
             <ReviewActionTip title={reviewFileExpansionTip}>
               <IconButton
                 aria-pressed={!fileExpansionRequest.expanded}
-                className={`desktop-review-panel__file-expansion-toggle ${fileExpansionRequest.expanded ? '' : 'is-collapsed'}`}
+                className="desktop-review-panel__file-expansion-toggle"
                 disabled={!hasReviewFiles}
                 label={reviewFileExpansionTip}
                 title=""
@@ -331,7 +332,7 @@ export function DesktopReviewPanel({
             <ReviewActionTip title={reviewLayoutToggleTip}>
               <IconButton
                 aria-pressed={reviewDiffLayout === 'split'}
-                className={`desktop-review-panel__layout-toggle ${reviewDiffLayout === 'split' ? 'is-active' : ''}`}
+                className="desktop-review-panel__layout-toggle"
                 label={reviewLayoutToggleTip}
                 title=""
                 variant="ghost"
@@ -343,13 +344,13 @@ export function DesktopReviewPanel({
             <ReviewActionTip title={reviewLineWrapToggleTip}>
               <IconButton
                 aria-pressed={reviewLineWrap}
-                className={`desktop-review-panel__wrap-toggle ${reviewLineWrap ? 'is-active' : ''}`}
+                className="desktop-review-panel__wrap-toggle"
                 label={reviewLineWrapToggleTip}
                 title=""
                 variant="ghost"
                 onClick={handleReviewLineWrapToggle}
               >
-                <WrapText size={14} />
+                {reviewLineWrap ? <WrapText size={14} /> : <AlignJustify size={14} />}
               </IconButton>
             </ReviewActionTip>
           </div>
@@ -893,10 +894,16 @@ function ReviewFileCard({
   );
   const visibleLines = file.lines;
   const language = fileLanguage(file.path);
-  const wholeFileChange = useMemo(() => reviewWholeFileChangeType(visibleLines), [visibleLines]);
+  const wholeFileChange = useMemo(
+    () => (expanded ? reviewWholeFileChangeType(visibleLines) : null),
+    [expanded, visibleLines],
+  );
   const splitWholeFileChange = diffLayout === 'split' ? wholeFileChange : null;
   const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
     () => {
+      // Collapsed files should stay cheap: highlighting every hidden file is a
+      // noticeable up-front cost on large reviews.
+      if (!expanded) return [];
       const highlightedLines = highlightedReviewDiffLines(visibleLines, language);
       return visibleLines.map((line, index) => ({
         highlighted: highlightedLines[index],
@@ -904,9 +911,14 @@ function ReviewFileCard({
         line,
       }));
     },
-    [file.path, language, visibleLines],
+    [expanded, file.path, language, visibleLines],
   );
-  const splitRows = useMemo(() => splitReviewDiffRows(highlightedVisibleLines), [highlightedVisibleLines]);
+  const splitRows = useMemo(
+    () => (expanded && diffLayout === 'split'
+      ? splitReviewDiffRows(highlightedVisibleLines)
+      : []),
+    [diffLayout, expanded, highlightedVisibleLines],
+  );
   const diffRowEstimate = useCallback((index: number) => diffLayout === 'split' && !splitWholeFileChange
     ? estimatedSplitDiffRowHeight(splitRows[index])
     : estimatedUnifiedDiffLineHeight(highlightedVisibleLines[index]), [diffLayout, highlightedVisibleLines, splitRows, splitWholeFileChange]);
@@ -1077,6 +1089,16 @@ function ReviewDiffContent({
   const isTwoSidedSplit = diffLayout === 'split' && !wholeFileChange;
   const itemCount = isTwoSidedSplit ? splitRows.length : highlightedLines.length;
   const shouldVirtualize = canVirtualizeReviewDiff(itemCount);
+  const intrinsicSizeStyle = useMemo<CSSProperties | undefined>(() => {
+    if (shouldVirtualize) return undefined;
+    let estimatedHeight = 0;
+    for (let index = 0; index < itemCount; index += 1) {
+      estimatedHeight += rowEstimate(index);
+    }
+    return {
+      '--desktop-review-diff-intrinsic-block-size': `${Math.max(REVIEW_DIFF_LINE_HEIGHT_PX, estimatedHeight)}px`,
+    } as CSSProperties;
+  }, [itemCount, rowEstimate, shouldVirtualize]);
 
   if (isTwoSidedSplit) {
     if (shouldVirtualize && !lineWrap) {
@@ -1117,7 +1139,7 @@ function ReviewDiffContent({
       );
     }
     return (
-      <div className={className}>
+      <div className={className} style={intrinsicSizeStyle}>
         <ReviewSplitDiff
           canOpenLine={canOpenLine}
           language={language}
@@ -1133,7 +1155,7 @@ function ReviewDiffContent({
 
   if (!shouldVirtualize) {
     return (
-      <div className={className}>
+      <div className={className} style={intrinsicSizeStyle}>
         <ReviewUnifiedDiff
           canOpenLine={canOpenLine}
           language={language}
@@ -1914,10 +1936,15 @@ function ReviewDiffLineContextMenu({
   onOpen: () => void;
 }) {
   if (!contextMenu || typeof document === 'undefined') return null;
-  const style: CSSProperties = {
-    left: Math.min(contextMenu.x, Math.max(8, window.innerWidth - 224)),
-    top: Math.min(contextMenu.y, Math.max(8, window.innerHeight - 72)),
-  };
+  const style: CSSProperties = zoomedPortalPosition({
+    anchorX: contextMenu.x,
+    anchorY: contextMenu.y,
+    menuHeight: 72,
+    menuWidth: 224,
+    scaleInverse: pageScaleInverse(),
+    viewportHeight: window.innerHeight,
+    viewportWidth: window.innerWidth,
+  });
   return createPortal(
     <div className="desktop-file-context-menu desktop-review-line-context-menu" ref={menuRef} role="menu" style={style}>
       <button type="button" role="menuitem" disabled={!workspaceApp} onClick={onOpen}>

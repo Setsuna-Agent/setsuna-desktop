@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 
 const MENU_WIDTH = 138;
 
@@ -28,14 +29,17 @@ export function SidebarFloatingMenu({
       if (!rect && !anchorPoint) return;
 
       const menuHeight = menuRef.current?.offsetHeight ?? 0;
-      const desiredLeft = anchorPoint?.x ?? (placement === 'bottom-right' ? (rect?.left ?? 0) : (rect?.right ?? 0) - MENU_WIDTH);
-      const desiredTop = anchorPoint?.y ?? (rect?.bottom ?? 0) + 6;
-      const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH - 8);
-      const maxTop = Math.max(8, window.innerHeight - menuHeight - 8);
-      setPosition({
-        left: Math.min(Math.max(8, desiredLeft), maxLeft),
-        top: Math.min(Math.max(8, desiredTop), maxTop),
-      });
+      setPosition(zoomedPortalPosition({
+        anchorX: anchorPoint?.x ?? (placement === 'bottom-right' ? (rect?.left ?? 0) : (rect?.right ?? 0)),
+        anchorY: anchorPoint?.y ?? (rect?.bottom ?? 0),
+        horizontalAlign: !anchorPoint && placement === 'bottom-left' ? 'end' : 'start',
+        menuHeight,
+        menuWidth: MENU_WIDTH,
+        offsetY: anchorPoint ? 0 : 6,
+        scaleInverse: pageScaleInverse(),
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      }));
     };
     updatePosition();
 

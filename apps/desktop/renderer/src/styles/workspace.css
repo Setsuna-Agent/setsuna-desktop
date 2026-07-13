@@ -868,6 +868,20 @@
   width: 30px;
   height: 30px;
   border-radius: 7px;
+  border-color: transparent;
+  background: transparent;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.desktop-review-panel__actions .sd-icon-button:disabled {
+  border-color: transparent;
+  background: transparent;
+}
+
+.desktop-review-panel__actions .sd-icon-button:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-review-action-tip {
@@ -900,16 +914,9 @@
 }
 
 .desktop-review-action-tip:hover::after,
-.desktop-review-action-tip:focus-within::after {
+.desktop-review-action-tip:has(.sd-icon-button:focus-visible)::after {
   opacity: 1;
   transform: translateY(0);
-}
-
-.desktop-review-panel__layout-toggle.is-active,
-.desktop-review-panel__file-expansion-toggle.is-collapsed,
-.desktop-review-panel__wrap-toggle.is-active {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-active-bg);
 }
 
 .desktop-review-panel__refresh {
@@ -1151,7 +1158,7 @@
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  padding: 0 var(--desktop-review-file-action-edge) 0 12px;
+  padding: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
   background: var(--app-surface);
 }
@@ -1181,6 +1188,29 @@
   transition: opacity 120ms ease;
 }
 
+.desktop-review-file-card__meta .sd-icon-button,
+.desktop-review-file-card__meta .sd-icon-button:hover:not(:disabled),
+.desktop-review-file-card__meta .sd-icon-button:focus-visible,
+.desktop-review-file-card__meta .sd-icon-button:disabled {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.desktop-review-file-card__meta .sd-icon-button {
+  color: var(--app-text-muted);
+  transition: color 120ms ease;
+}
+
+.desktop-review-file-card__meta .sd-icon-button:hover:not(:disabled),
+.desktop-review-file-card__meta .sd-icon-button:focus-visible {
+  color: var(--app-primary);
+}
+
+.desktop-review-file-card__meta .sd-icon-button:disabled {
+  color: var(--app-text-subtle);
+}
+
 .desktop-review-file-card__summary:hover .desktop-review-file-card__meta,
 .desktop-review-file-card__summary:focus-within .desktop-review-file-card__meta {
   opacity: 1;
@@ -1194,10 +1224,11 @@
 }
 
 .desktop-review-file-card__path-main {
-  width: fit-content;
-  max-width: var(--desktop-review-file-content-max-width);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
   height: 34px;
-  padding: 0;
+  padding: 0 calc((100% - var(--desktop-review-file-content-max-width)) + var(--desktop-review-file-action-edge)) 0 12px;
   border: 0;
   border-radius: 0;
   color: var(--app-text-muted);
@@ -1205,11 +1236,12 @@
   font-family: var(--app-code-font-family);
   font-size: 12px;
   text-align: left;
+  cursor: pointer;
 }
 
 .desktop-review-file-card__path {
   display: inline-flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   align-items: baseline;
   min-width: 0;
   overflow: hidden;
@@ -1254,6 +1286,13 @@
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: var(--desktop-review-diff-line-height);
+}
+
+.desktop-review-diff:not(.desktop-review-diff--virtual) {
+  /* Large reviews keep their full scroll flow while Chromium skips layout and
+     paint work for diff bodies that are far outside the viewport. */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto var(--desktop-review-diff-intrinsic-block-size, 480px);
 }
 
 .desktop-review-diff--virtual {
