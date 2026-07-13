@@ -38,6 +38,22 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 - 打包后用 `ELECTRON_RUN_AS_NODE=1` 运行 runtime CLI。
 - `resolveRuntimeSpawnCwd()` 要兼容 `app.asar`。
 
+### `browser-control.ts` / `browser-control-server.ts` / `browser-cdp-automation.ts` / `browser-cdp-snapshot.ts`
+
+职责：
+
+- 维护 renderer tab ID 到 guest `WebContents` 的可信映射和 active tab。
+- 通过带随机 bearer token 的 loopback HTTP server 接收 runtime 浏览器命令。
+- 通过 CDP auto-attach 聚合主 frame、同进程 iframe、OOPIF 与 Shadow DOM 的 DOM/Accessibility/布局快照，并为语义控件和可见文本节点生成短 ref。
+- 通过 CDP `Input` 执行真实 click、type/select、wheel scroll 和 key，执行 navigate、wait，并处理超时、取消、导航失效和标签销毁。
+- main 只封装固定的 CDP 方法，不向 runtime、renderer 或远端网页暴露 Node、Electron、IPC、任意 JavaScript 或原始 CDP 入口。
+
+约束：
+
+- 注册 guest 时必须校验调用方是主 renderer、`hostWebContents` 匹配且 session 是内置浏览器 partition。
+- CDP 返回的页面值是不可信输入，必须归一化、截断并限制元素数量。
+- 元素 ref 只能用于生成它的标签和 target session，页面重新快照或导航后旧 ref 必须失效。
+
 ### `review-state.ts`
 
 职责：
@@ -112,6 +128,7 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 - `workspaceApps`：列出和打开外部工作区应用。
 - `terminal`：终端 session 操作和事件。
 - `windowControls`：自定义窗口按钮。
+- `browser`：注册/注销 browser guest、同步 active tab、接收 main 的新标签请求。
 
 约束：
 

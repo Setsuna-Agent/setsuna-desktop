@@ -56,6 +56,28 @@ renderer subscribeEvents(threadId, sinceSeq)
 
 `sinceSeq` 是恢复和去重边界。renderer 会按当前线程 `lastSeq` 续订，避免重放已处理事件。
 
+## 内置浏览器控制
+
+内置浏览器使用独立的持久化 `<webview>` session。renderer 只负责维护标签页 UI，并通过 preload 将 React tab ID 与对应的 guest `webContents` ID 注册给 main；注册时 main 会同时校验 host renderer 和 browser session。
+
+Agent 页面操作链路：
+
+```text
+BrowserToolHost
+  -> HttpBrowserControlClient
+  -> authenticated 127.0.0.1 BrowserControlServer
+  -> DesktopBrowserController
+  -> ElectronBrowserCdpAutomation
+  -> guest WebContents debugger / Chrome DevTools Protocol
+```
+
+- 浏览器控制端口和每次启动随机生成的 token 只通过 `RuntimeHost` 子进程环境传入 runtime，renderer 和网页均不可见。
+- `browser_snapshot` 合并 `DOMSnapshot`、Accessibility Tree、布局坐标和可见文本。普通文本 `div/span` 也会获得短 ref，覆盖依赖事件代理的 SPA 列表项；ref 带 target identity，并在新 snapshot 或 navigation 后失效。
+- click、scroll、type 和 key 通过 CDP `Input` 域发送真实浏览器输入；scroll 会比较操作前后的可见布局指纹，不再把无位移调用报告为成功。
+- CDP 只由 main 持有，runtime 仍只能调用固定的 tabs/snapshot/click/type/scroll/key/navigate/wait 命令，不开放任意协议命令、JavaScript 或 Electron API。
+- 页面结果按外部不可信上下文写回模型；click/type 以及可能提交或删除内容的 key 使用现有 ToolHost 审批链路。
+- `open_browser` 由 main 通知 renderer 创建标签页，并等待 guest 注册完成后再结束工具调用，避免后续 snapshot 与 UI 挂载竞争。
+
 ## 线程事件模型
 
 线程不是直接改数组，而是 append-only event：
@@ -99,6 +121,7 @@ runtime 数据根是 Electron `userData/runtime`：
 - renderer 不知道 runtime 端口和 token，所有 runtime 访问走 main 代理。
 - `RuntimeHost.normalizeRuntimePath()` 只允许 `/health` 和 `/v1/*`。
 - preload 只暴露明确方法，不暴露任意 IPC。
+- 浏览器控制 server 只监听 `127.0.0.1`，使用独立的一次性 bearer token；不能复用 runtime token。
 - 本地路径要用 `realpath`/`path.relative` 限制在 workspace 内。
 - MCP 默认审批，只有 server 显式 `requireApproval: "never"` 才跳过。
 - shell 和文件变更要尊重 `approvalPolicy` 与 `permissionProfile`。

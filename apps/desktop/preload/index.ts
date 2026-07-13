@@ -91,6 +91,12 @@ const links = {
 };
 
 const browser = {
+  registerTab: (tabId: string, webContentsId: number): Promise<boolean> =>
+    ipcRenderer.invoke('browser:register-tab', { tabId, webContentsId }),
+  unregisterTab: (tabId: string, webContentsId: number): Promise<boolean> =>
+    ipcRenderer.invoke('browser:unregister-tab', { tabId, webContentsId }),
+  setActiveTab: (tabId: string | null): Promise<boolean> =>
+    ipcRenderer.invoke('browser:set-active-tab', { tabId }),
   onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void {
     const listener = (_event: Electron.IpcRendererEvent, request: { openerWebContentsId: number; url: string }) => callback(request);
     ipcRenderer.on('browser:open-new-tab', listener);

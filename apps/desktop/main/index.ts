@@ -1,9 +1,23 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type NativeImage, type OpenDialogOptions } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeImage,
+  session,
+  shell,
+  webContents as electronWebContents,
+  type NativeImage,
+  type OpenDialogOptions,
+} from 'electron';
+import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
 import { existsSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hydrateDesktopProcessEnvironment } from './desktop-environment.js';
+import { DesktopBrowserController } from './browser-control.js';
+import { BrowserControlServer } from './browser-control-server.js';
 import { DesktopUpdater } from './desktop-updater.js';
 import {
   checkoutReviewBranch,
@@ -28,6 +42,8 @@ const macTrafficLightSize = 14;
 const appTopbarHeight = 42;
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
+let browserController: DesktopBrowserController | null = null;
+let browserControlServer: BrowserControlServer | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
 const usesCustomFrame = process.platform !== 'darwin';
@@ -40,13 +56,32 @@ async function createWindow(): Promise<void> {
     app.dock?.setIcon(desktopIcon);
   }
 
-  runtimeHost = new RuntimeHost({
+  const currentBrowserController = new DesktopBrowserController({
+    openTab: async (url) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return false;
+      mainWindow.webContents.send('browser:open-new-tab', { openerWebContentsId: 0, url });
+      return true;
+    },
+  });
+  const currentBrowserControlServer = new BrowserControlServer(currentBrowserController);
+  browserController = currentBrowserController;
+  browserControlServer = currentBrowserControlServer;
+  const browserControl = await currentBrowserControlServer.start();
+
+  const currentRuntimeHost = new RuntimeHost({
     appRoot: app.getAppPath(),
+    browserControl,
     dataDir: app.getPath('userData'),
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,
   });
-  await runtimeHost.start();
-  registerRuntimeIpc(runtimeHost);
+  runtimeHost = currentRuntimeHost;
+  try {
+    await currentRuntimeHost.start();
+  } catch (error) {
+    await currentBrowserControlServer.stop();
+    throw error;
+  }
+  registerRuntimeIpc(currentRuntimeHost);
 
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -93,9 +128,16 @@ async function createWindow(): Promise<void> {
     mainWindow?.webContents.send('terminal:event', payload);
   });
   registerDesktopIpc(terminalStore, desktopUpdater);
+  registerBrowserIpc(currentBrowserController);
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => {
+    currentBrowserController.clear();
+    void currentBrowserControlServer.stop();
+    currentRuntimeHost.stop();
+    if (browserController === currentBrowserController) browserController = null;
+    if (browserControlServer === currentBrowserControlServer) browserControlServer = null;
+    if (runtimeHost === currentRuntimeHost) runtimeHost = null;
     desktopUpdater?.stop();
     desktopUpdater = null;
     terminalStore?.closeAll();
@@ -202,6 +244,41 @@ function registerRuntimeIpc(host: RuntimeHost): void {
   ipcMain.handle('runtime:unsubscribe', async (_event, subscriptionId) => {
     host.unsubscribe(String(subscriptionId));
   });
+}
+
+function registerBrowserIpc(controller: DesktopBrowserController): void {
+  ipcMain.removeHandler('browser:register-tab');
+  ipcMain.removeHandler('browser:unregister-tab');
+  ipcMain.removeHandler('browser:set-active-tab');
+  ipcMain.handle('browser:register-tab', (event, input) => {
+    const webContentsId = Number(input?.webContentsId);
+    const tabId = String(input?.tabId ?? '');
+    if (!Number.isSafeInteger(webContentsId) || !isDesktopRendererSender(event.sender)) return false;
+    const guest = electronWebContents.fromId(webContentsId);
+    const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
+    if (!guest || guest.hostWebContents?.id !== event.sender.id || guest.session !== browserSession) return false;
+    controller.registerTab(tabId, guest);
+    return true;
+  });
+  ipcMain.handle('browser:unregister-tab', (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return false;
+    const webContentsId = Number(input?.webContentsId);
+    controller.unregisterTab(
+      String(input?.tabId ?? ''),
+      Number.isSafeInteger(webContentsId) ? webContentsId : undefined,
+    );
+    return true;
+  });
+  ipcMain.handle('browser:set-active-tab', (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return false;
+    const tabId = typeof input?.tabId === 'string' ? input.tabId : null;
+    controller.setActiveTab(tabId);
+    return true;
+  });
+}
+
+function isDesktopRendererSender(sender: Electron.WebContents): boolean {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && sender.id === mainWindow.webContents.id);
 }
 
 function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpdater): void {
@@ -400,4 +477,6 @@ app.on('before-quit', () => {
   desktopUpdater?.stop();
   terminalStore?.closeAll();
   runtimeHost?.stop();
+  browserController?.clear();
+  void browserControlServer?.stop();
 });

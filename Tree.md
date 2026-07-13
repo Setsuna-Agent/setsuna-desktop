@@ -70,6 +70,10 @@ Runtime service
 ├── apps/
 │   └── desktop/
 │       ├── main/
+│       │   ├── browser-cdp-automation.ts
+│       │   ├── browser-cdp-snapshot.ts
+│       │   ├── browser-control-server.ts
+│       │   ├── browser-control.ts
 │       │   ├── desktop-updater.ts
 │       │   ├── index.ts
 │       │   ├── review-state.ts
@@ -451,6 +455,18 @@ Electron main 与本地 runtime service 的桥接层。
 - 停止时 abort 所有订阅并 kill 子进程。
 
 边界原则：renderer 不知道 runtime 端口和 token；RuntimeHost 是唯一拥有这些信息的 main 侧对象。
+
+### `browser-control.ts` / `browser-control-server.ts` / `browser-cdp-automation.ts` / `browser-cdp-snapshot.ts`
+
+内置浏览器的 main 侧控制层。
+
+职责：
+
+- 注册并清理 `<webview>` guest tabs，跟踪 active tab。
+- 启动带独立随机 token 的 loopback browser control server，并把固定命令路由到 main 所持有的 CDP session。
+- 合并 DOMSnapshot、Accessibility、布局坐标、Shadow DOM 和跨 target frame 的可见页面节点，生成短 ref。
+- 通过真实浏览器输入执行 click、type/select、wheel scroll、key，并执行 navigate、wait，限制 URL、输入和结果大小。
+- CDP adapter 只暴露窄命令，不向 runtime 或网页暴露 Electron/Node、任意脚本或原始协议入口。
 
 ### `desktop-updater.ts`
 
@@ -2052,6 +2068,10 @@ loop 测试。
 
 ports 是 runtime 的抽象接口层。它们定义核心业务依赖，不关心具体文件存储、HTTP 实现、模型协议或工具来源。
 
+### `browser-control.ts`
+
+定义 runtime 浏览器工具依赖的窄命令执行 port，使 Electron loopback adapter 可以独立替换或测试。
+
 ### `approval-gate.ts`
 
 审批 gate 接口。
@@ -2516,6 +2536,17 @@ MCP 工具发现和调用底层客户端。
 - 将多个 ToolHost 合并成一个。
 - listTools 时合并工具定义。
 - execute/preview/approval 时按工具名找到对应 host。
+
+### `adapters/browser/http-browser-control-client.ts` / `adapters/tool/browser-tool-host.ts`
+
+runtime 到 Electron 内置浏览器的 port/adapter 与模型工具层。
+
+职责：
+
+- 从 main 注入的环境变量读取 loopback URL 和一次性 token。
+- 暴露 `open_browser`、tabs、snapshot、click、type、scroll、key、navigate、wait。
+- 将页面结果标记为外部上下文，并为 click/type 和具有副作用的 key 生成审批要求。
+- 不允许 runtime 或 renderer 直接持有 guest `WebContents`。
 
 ### `adapters/tool/mcp-management-tool-host.ts`
 

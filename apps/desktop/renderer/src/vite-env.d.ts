@@ -108,6 +108,9 @@ declare global {
   interface Window {
     setsunaDesktop?: {
       browser: {
+        registerTab(tabId: string, webContentsId: number): Promise<boolean>;
+        unregisterTab(tabId: string, webContentsId: number): Promise<boolean>;
+        setActiveTab(tabId: string | null): Promise<boolean>;
         onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void;
       };
       desktop: {

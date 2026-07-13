@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowLeft, ArrowRight, ExternalLink, Globe2, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
 import type { DidFailLoadEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
+import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
 const browserHomeUrl = 'https://www.bing.com/';
-const browserPartition = 'persist:setsuna-desktop-browser';
 // Electron parses webview boolean attributes by presence, while React only emits
 // custom-element attributes reliably when their runtime value is a string.
 const enabledWebviewBooleanAttribute = 'true' as unknown as boolean;
@@ -57,7 +57,9 @@ export function BrowserPanel({
     setActiveTabId(tab.id);
   }, []);
 
-  useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url }) => openTab(url)), [openTab]);
+  useEffect(() => {
+    void window.setsunaDesktop?.browser.setActiveTab(activeTab?.id ?? null);
+  }, [activeTab?.id]);
 
   useEffect(() => {
     if (!openRequest || handledOpenRequestIdRef.current === openRequest.id) return;
@@ -247,6 +249,30 @@ function BrowserWebview({
     };
   }, [onUpdate, tab.id, tab.initialUrl]);
 
+  useEffect(() => {
+    const node = nodeRef.current;
+    if (!node) return undefined;
+    let registeredWebContentsId: number | null = null;
+    const register = () => {
+      try {
+        const webContentsId = node.getWebContentsId();
+        if (!Number.isSafeInteger(webContentsId) || webContentsId <= 0) return;
+        registeredWebContentsId = webContentsId;
+        void window.setsunaDesktop?.browser.registerTab(tab.id, webContentsId);
+      } catch {
+        // The webview may not have attached yet; dom-ready retries registration.
+      }
+    };
+    node.addEventListener('dom-ready', register);
+    register();
+    return () => {
+      node.removeEventListener('dom-ready', register);
+      if (registeredWebContentsId !== null) {
+        void window.setsunaDesktop?.browser.unregisterTab(tab.id, registeredWebContentsId);
+      }
+    };
+  }, [tab.id]);
+
   return (
     <webview
       allowpopups={enabledWebviewBooleanAttribute}
@@ -256,7 +282,7 @@ function BrowserWebview({
         onRef(webview);
       }}
       className={`desktop-browser-webview ${active ? 'is-active' : ''}`}
-      partition={browserPartition}
+      partition={DESKTOP_BROWSER_PARTITION}
       src={tab.initialUrl}
     />
   );

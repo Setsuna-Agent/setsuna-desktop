@@ -9,6 +9,7 @@ import { FilePersistentToolApprovalStore } from '../adapters/store/file-persiste
 import { FilePolicyAmendmentStore } from '../adapters/store/file-policy-amendment-store.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import { FileUsageStore } from '../adapters/store/file-usage-store.js';
+import { HttpBrowserControlClient } from '../adapters/browser/http-browser-control-client.js';
 import { ConfiguredModelClient } from '../adapters/model/configured-model-client.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
@@ -59,9 +60,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
   const skillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
+  const browserControl = HttpBrowserControlClient.fromEnvironment();
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
-    new BrowserToolHost(),
+    new BrowserToolHost(browserControl),
     new McpManagementToolHost(mcpStore),
     new McpRuntimeToolHost(mcpStore),
     new PcLocalToolHost(workspaceProjects, policyAmendmentStore),

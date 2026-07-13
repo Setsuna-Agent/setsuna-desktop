@@ -23,9 +23,12 @@ runtime CLI 读取端口、数据目录、token、内置 skills 目录，创建 
 - `InMemoryEventBus`：SSE 广播。
 - `ConfiguredModelClient`：按配置选择 provider。
 - `CompositeToolHost`：组合 MCP 管理、MCP runtime、本地 PC 工具、Skill 管理、memory 工具。
+- `BrowserToolHost`：通过 main 所拥有的 browser control adapter 暴露 tabs/snapshot/click/type/scroll/key/navigate/wait。
 - `AgentLoop`：执行对话和工具循环。
 
 ToolHost 顺序会影响模型看到的能力面。新增能力时先判断是管理工具、运行工具还是本地工具，再放入合适位置。
+
+浏览器工具不直接访问 Electron 或 CDP。`HttpBrowserControlClient` 实现 `BrowserControlPort`，只连接 main 通过环境变量注入的 `127.0.0.1` 地址并携带独立 token。页面快照结果设置 `containsExternalContext`；click/type 和具有提交或删除语义的 key 返回 ToolHost approval requirement。
 
 ## Server
 

@@ -67,12 +67,19 @@ export function AppRouteContent({
   const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
   const [reviewFocusRequest, setReviewFocusRequest] = useState<{ path: string; version: number } | null>(null);
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
+  const browserOpenSequenceRef = useRef(0);
   const handledBrowserOpenRequestIdRef = useRef<string | null>(null);
   const pendingBrowserOpenRequest = useMemo(
     () => latestBrowserOpenRequest(runtime.activityEvents),
     [runtime.activityEvents],
   );
   const { openDesktopPanel } = workspacePanels;
+
+  useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url }) => {
+    browserOpenSequenceRef.current += 1;
+    setBrowserOpenRequest({ id: `desktop-browser-${Date.now()}-${browserOpenSequenceRef.current}`, url });
+    openDesktopPanel('side', 'browser');
+  }), [openDesktopPanel]);
 
   useEffect(() => {
     if (!pendingBrowserOpenRequest || handledBrowserOpenRequestIdRef.current === pendingBrowserOpenRequest.id) return;

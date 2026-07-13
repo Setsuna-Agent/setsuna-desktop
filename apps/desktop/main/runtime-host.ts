@@ -10,6 +10,10 @@ import { desktopProcessEnvironment } from './desktop-environment.js';
 
 type RuntimeHostOptions = {
   appRoot: string;
+  browserControl?: {
+    token: string;
+    url: string;
+  };
   dataDir: string;
   runtimeEntry?: string;
 };
@@ -45,6 +49,10 @@ export class RuntimeHost {
       env: {
         ...desktopProcessEnvironment(process.env),
         ELECTRON_RUN_AS_NODE: '1',
+        ...(this.options.browserControl ? {
+          SETSUNA_DESKTOP_BROWSER_CONTROL_TOKEN: this.options.browserControl.token,
+          SETSUNA_DESKTOP_BROWSER_CONTROL_URL: this.options.browserControl.url,
+        } : {}),
         SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR: builtinSkillsDir,
         SETSUNA_DESKTOP_DATA_DIR: this.options.dataDir,
         SETSUNA_DESKTOP_RUNTIME_TOKEN: this.token,
