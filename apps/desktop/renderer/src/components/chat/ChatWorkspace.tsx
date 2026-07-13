@@ -88,7 +88,6 @@ export function ChatWorkspace({
   onDiscardFileChanges,
   onDraftChange,
   onEditUserMessage,
-  onOpenFilesPanel,
   onOpenSideChat,
   onOpenThread,
   onOpenFileReview,
@@ -126,7 +125,6 @@ export function ChatWorkspace({
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
-  onOpenFilesPanel: () => void;
   onOpenSideChat?: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReview?: (filePath?: string) => void;
@@ -537,7 +535,6 @@ export function ChatWorkspace({
                   setOverviewManuallyCollapsed(false);
                   setOverviewManuallyExpanded(!overviewCanExpand);
                 }}
-                onOpenFiles={activeProject ? onOpenFilesPanel : undefined}
                 onOpenThread={onOpenThread}
                 onOpenReview={onOpenFileReview}
                 onReviewRefresh={onReviewRefresh}

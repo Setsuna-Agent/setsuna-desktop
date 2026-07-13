@@ -34,14 +34,14 @@ export function AppTopbarActions({
       {activeView === 'chat' && !sidePanelVisible ? (
         <IconButton
           label={bottomTerminalPanelOpen ? '关闭终端' : '打开终端'}
-          className={bottomTerminalPanelOpen ? 'is-active' : ''}
+          className={`app-shell-icon-control ${bottomTerminalPanelOpen ? 'is-active' : ''}`}
           onClick={onToggleBottomTerminal}
         >
           <Terminal size={16} />
         </IconButton>
       ) : null}
       {activeView === 'chat' && !sidePanelVisible ? (
-        <IconButton label="打开右侧栏" onClick={onToggleSidePanel}>
+        <IconButton label="打开右侧栏" className="app-shell-icon-control" onClick={onToggleSidePanel}>
           <PanelRight size={16} />
         </IconButton>
       ) : null}

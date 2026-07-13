@@ -773,7 +773,7 @@
 
 .desktop-settings-panel .chat-user-settings__option-button.is-active {
   color: var(--app-text);
-  background: var(--app-accent-soft);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .desktop-settings-panel .chat-user-settings__option-icon {
@@ -798,7 +798,7 @@
 
 .desktop-settings-panel .chat-user-settings__accent-row .chat-user-settings__option-button.is-active {
   color: var(--app-text);
-  background: var(--app-accent-soft);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .desktop-settings-panel .chat-user-settings__font-preview {
@@ -1491,11 +1491,11 @@
 .desktop-settings-panel .chat-user-settings__local-provider-item:hover,
 .desktop-settings-panel .chat-user-settings__local-provider-item:focus-visible,
 .desktop-settings-panel .chat-user-settings__local-provider-item.is-active {
-  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface) 93%);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item.is-active {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-primary) 14%, transparent);
+  box-shadow: 0 0 0 1px var(--desktop-agent-button-hover-border);
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item-icon {
@@ -1511,8 +1511,8 @@
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item.is-active .chat-user-settings__local-provider-item-icon {
-  color: var(--app-primary);
-  border-color: color-mix(in srgb, var(--app-primary) 42%, var(--chat-settings-divider));
+  color: var(--app-text);
+  border-color: var(--desktop-agent-button-hover-border);
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item-body {
@@ -1960,10 +1960,17 @@
   cursor: inherit;
 }
 
+.settings-model-modal .settings-model-check:hover {
+  border-color: var(--desktop-agent-button-hover-border);
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
 .settings-model-modal .settings-model-check.is-active {
-  border-color: var(--app-primary);
-  color: var(--app-primary-text);
-  background: var(--app-primary);
+  border-color: var(--desktop-agent-button-hover-border);
+  color: var(--app-text);
+  background: var(--desktop-agent-control-active-bg);
+  font-weight: 600;
 }
 
 .settings-model-modal .settings-model-check svg {
@@ -2013,14 +2020,16 @@
 }
 
 .settings-model-modal .settings-thinking-preset:hover:not(:disabled) {
+  border-color: var(--desktop-agent-button-hover-border);
   color: var(--app-text);
-  background: var(--app-surface-muted);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .settings-model-modal .settings-thinking-preset.is-active {
-  border-color: var(--app-primary);
-  background: var(--app-primary);
-  color: var(--app-primary-text);
+  border-color: var(--desktop-agent-button-hover-border);
+  background: var(--desktop-agent-control-active-bg);
+  color: var(--app-text);
+  font-weight: 600;
 }
 
 .settings-model-modal .settings-thinking-preset:disabled {

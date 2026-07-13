@@ -319,7 +319,7 @@
 }
 
 .chat-command-menu__item.is-active {
-  background: var(--app-accent-soft);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .chat-command-menu__item:disabled {
@@ -709,28 +709,28 @@
 
 .chat-sender-icon-button:hover {
   color: var(--app-text);
-  background: var(--desktop-agent-button-hover-bg);
+  background: var(--desktop-agent-control-hover-bg);
   border-color: var(--desktop-agent-button-hover-border);
 }
 
 .chat-sender-icon-button.is-active {
   color: var(--app-text);
-  border-color: var(--app-accent-border);
-  background: var(--app-accent-soft);
+  border-color: var(--desktop-agent-button-hover-border);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .chat-sender-command-button:hover,
 .chat-sender-command-button:focus-visible {
   border-color: transparent;
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  background: var(--desktop-agent-control-hover-bg);
   box-shadow: none;
 }
 
 .chat-sender-command-button.is-active {
-  border-color: var(--app-accent-border);
+  border-color: transparent;
   color: var(--app-text);
-  background: var(--app-accent-soft);
+  background: var(--desktop-agent-control-active-bg);
   box-shadow: none;
 }
 
@@ -914,12 +914,12 @@
 .chat-model-selector.ant-btn:not(:disabled):not(.ant-btn-disabled):hover,
 .chat-model-selector.ant-btn:not(:disabled):not(.ant-btn-disabled):focus-visible {
   color: var(--app-text) !important;
-  background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+  background: var(--desktop-agent-control-hover-bg) !important;
 }
 
 .chat-model-selector.ant-btn:not(:disabled):not(.ant-btn-disabled):active {
   color: var(--app-text) !important;
-  background: color-mix(in srgb, var(--app-text) 9%, transparent) !important;
+  background: var(--desktop-agent-control-active-bg) !important;
 }
 
 .chat-model-selector__name {
@@ -978,7 +978,7 @@
 .chat-authorization-switch.ant-btn-variant-solid {
   border-color: transparent !important;
   color: var(--app-text) !important;
-  background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+  background: var(--desktop-agent-control-hover-bg) !important;
   box-shadow: none !important;
 }
 
@@ -1012,6 +1012,14 @@
   color: var(--app-text-muted);
   line-height: 14px;
   transform: translateY(0.5px);
+}
+
+.chat-approval-menu__trigger--full-access :where(
+  .chat-authorization-switch__icon,
+  .chat-authorization-switch__label,
+  .chat-authorization-switch__arrow
+) {
+  color: color-mix(in srgb, var(--app-primary) 88%, var(--app-text)) !important;
 }
 
 .chat-thinking-menu-root .ant-dropdown-menu,
@@ -1059,13 +1067,13 @@
 .chat-thinking-menu-root .ant-dropdown-menu-item:hover,
 .chat-authorization-menu-root .ant-dropdown-menu-item:hover {
   color: var(--app-text) !important;
-  background: color-mix(in srgb, var(--app-text) 6%, transparent) !important;
+  background: var(--desktop-agent-control-hover-bg) !important;
 }
 
 .chat-thinking-menu-root .ant-dropdown-menu-item-selected,
 .chat-authorization-menu-root .ant-dropdown-menu-item-selected {
   color: var(--app-text) !important;
-  background: var(--app-accent-soft) !important;
+  background: var(--desktop-agent-control-active-bg) !important;
 }
 
 .chat-thinking-menu-root .ant-dropdown-menu-item-selected :where(.ant-dropdown-menu-title-content, .chat-thinking-menu__item),

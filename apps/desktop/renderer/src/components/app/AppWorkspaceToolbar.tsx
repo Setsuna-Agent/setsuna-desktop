@@ -100,6 +100,7 @@ function WorkspaceOverviewToolbar({
           <span className="chat-file-review-panel__heading-actions">
             <button
               className={[
+                'app-shell-icon-control',
                 'chat-file-review-panel__close',
                 'chat-file-review-panel__terminal-action',
                 terminalOpen ? 'chat-file-review-panel__close--active' : '',
@@ -114,7 +115,7 @@ function WorkspaceOverviewToolbar({
               <Terminal size={14} />
             </button>
             <button
-              className="chat-file-review-panel__close chat-file-review-panel__panel-close chat-file-review-panel__close--active"
+              className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close chat-file-review-panel__close--active"
               type="button"
               aria-label="收起右侧栏"
               title="收起右侧栏"

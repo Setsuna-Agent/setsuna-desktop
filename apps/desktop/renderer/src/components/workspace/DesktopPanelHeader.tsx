@@ -337,6 +337,7 @@ export function DesktopPanelHeader({
           {placement === 'side' && onToggleBottomTerminal ? (
             <button
               className={[
+                'app-shell-icon-control',
                 'chat-file-review-panel__close',
                 'chat-file-review-panel__terminal-action',
                 bottomBarActive ? 'chat-file-review-panel__close--active' : '',
@@ -352,6 +353,7 @@ export function DesktopPanelHeader({
           ) : null}
           <button
             className={[
+              placement === 'side' ? 'app-shell-icon-control' : '',
               'chat-file-review-panel__close',
               'chat-file-review-panel__panel-close',
               placement === 'side' ? 'chat-file-review-panel__close--active' : '',

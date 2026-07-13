@@ -74,7 +74,7 @@ export function ChatApprovalPolicyMenu({
       <Button
         type="text"
         size="small"
-        className="chat-authorization-switch chat-approval-menu__trigger"
+        className={`chat-authorization-switch chat-approval-menu__trigger ${policy === 'full' ? 'chat-approval-menu__trigger--full-access' : ''}`}
         disabled={disabled}
       >
         <ActiveIcon className="chat-authorization-switch__icon" size={13} />

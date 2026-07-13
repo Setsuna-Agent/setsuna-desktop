@@ -1,4 +1,4 @@
-import { ChevronsRightLeft, CircleGauge, FileText, FolderOpen } from 'lucide-react';
+import { ChevronsRightLeft, CircleGauge, FileText } from 'lucide-react';
 import type { RuntimeThread, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
@@ -18,7 +18,6 @@ export function ConversationOverviewPanel({
   threads,
   onCollapse,
   onExpand,
-  onOpenFiles,
   onOpenReview,
   onOpenThread,
   onReviewRefresh,
@@ -35,7 +34,6 @@ export function ConversationOverviewPanel({
   threads: RuntimeThreadSummary[];
   onCollapse: () => void;
   onExpand: () => void;
-  onOpenFiles?: () => void;
   onOpenReview?: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
@@ -108,12 +106,6 @@ export function ConversationOverviewPanel({
           <span className="chat-conversation-overview-panel__label">用量与诊断</span>
           <span className="chat-conversation-overview-panel__meta" title={usageDiagnosticLabel}>{usageDiagnosticLabel}</span>
         </div>
-        <button type="button" className="chat-conversation-overview-panel__row" disabled={!onOpenFiles} onClick={() => onOpenFiles?.()}>
-          <span className="chat-conversation-overview-panel__icon">
-            <FolderOpen size={14} />
-          </span>
-          <span className="chat-conversation-overview-panel__label">打开文件</span>
-        </button>
       </div>
       {childThreads.length ? (
         <>

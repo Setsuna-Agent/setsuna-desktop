@@ -215,8 +215,8 @@
 
 .desktop-capabilities-tabs button.is-active {
   color: var(--app-text);
-  border-color: var(--app-accent-border);
-  background: var(--app-accent-soft);
+  border-color: var(--desktop-agent-panel-border);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .desktop-capabilities-tabs span {

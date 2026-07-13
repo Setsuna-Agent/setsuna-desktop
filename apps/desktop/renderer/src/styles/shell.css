@@ -75,6 +75,32 @@
   flex: 0 0 auto;
 }
 
+.app-shell-icon-control svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+/* Shell icon controls keep the same geometry and interaction in open and collapsed layouts. */
+.app-topbar .sd-icon-button.app-shell-icon-control {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.app-topbar .sd-icon-button.app-shell-icon-control:hover:not(:disabled),
+.app-topbar .sd-icon-button.app-shell-icon-control:active:not(:disabled),
+.app-topbar .sd-icon-button.app-shell-icon-control.is-active {
+  border-color: transparent;
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
 .app-topbar__drag {
   align-self: stretch;
   min-height: 0;
@@ -197,8 +223,8 @@
 }
 
 .app-topbar__right .sd-icon-button.is-active {
-  color: var(--app-primary);
-  background: var(--app-accent-soft);
+  color: var(--app-text);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .app-topbar-update-alert {
@@ -325,13 +351,13 @@
 :root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:hover:not(:disabled),
 :root[data-desktop-platform='linux'] .app-topbar .sd-icon-button:hover:not(:disabled) {
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 :root[data-desktop-platform='win32'] .app-topbar .sd-icon-button.is-active,
 :root[data-desktop-platform='linux'] .app-topbar .sd-icon-button.is-active {
-  color: var(--app-primary);
-  background: var(--app-accent-soft);
+  color: var(--app-text);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 :root[data-desktop-platform='win32'] .app-topbar .sd-icon-button:disabled,
@@ -408,8 +434,8 @@
 
 :root[data-desktop-platform='win32'] .app-workbench__main-actions .sd-icon-button.is-active,
 :root[data-desktop-platform='linux'] .app-workbench__main-actions .sd-icon-button.is-active {
-  color: var(--app-primary);
-  background: var(--app-accent-soft);
+  color: var(--app-text);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 :root[data-desktop-platform='win32'] .app-workbench__main-title,
@@ -548,7 +574,7 @@ body.desktop-terminal-resizing .app-workbench {
 .desktop-workspace-panel__resize-handle:hover::after,
 body.desktop-agent-sidebar-resizing .desktop-agent-sidebar__resize-handle::after,
 body.desktop-agent-workspace-resizing .desktop-workspace-panel__resize-handle::after {
-  background: var(--app-primary);
+  background: var(--app-text-muted);
 }
 
 body.desktop-agent-sidebar-resizing,

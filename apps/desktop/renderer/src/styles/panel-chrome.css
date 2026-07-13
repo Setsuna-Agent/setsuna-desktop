@@ -46,7 +46,7 @@
 
 .desktop-panel-chrome .chat-file-review-panel__title:hover {
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-panel-chrome .chat-file-review-panel__title--active {

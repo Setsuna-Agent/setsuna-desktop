@@ -25,6 +25,7 @@ describe('ConversationOverviewPanel', () => {
     expect(expandedHtml).toContain('+71');
     expect(expandedHtml).toContain('-247');
     expect(expandedHtml).not.toContain('无变更');
+    expect(expandedHtml).not.toContain('打开文件');
   });
 
   it('does not forward the React click event to the review callback', () => {
@@ -187,7 +188,6 @@ const baseProps = {
   reviewState,
   onCollapse: () => undefined,
   onExpand: () => undefined,
-  onOpenFiles: () => undefined,
   onOpenReview: () => undefined,
   onOpenThread: () => undefined,
   onReviewRefresh: () => undefined,

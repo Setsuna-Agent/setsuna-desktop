@@ -154,14 +154,14 @@ function TitlebarNavigation({
       {showSidebarToggle && onToggleSidebar ? (
         <IconButton
           label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-          className={!sidebarCollapsed ? 'is-active' : ''}
+          className={`app-shell-icon-control ${!sidebarCollapsed ? 'is-active' : ''}`}
           onClick={onToggleSidebar}
         >
           <PanelLeft size={16} />
         </IconButton>
       ) : null}
       {onNewChat ? (
-        <IconButton label="新对话" className="app-topbar__new-chat" onClick={onNewChat}>
+        <IconButton label="新对话" className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
           <Plus size={15} />
         </IconButton>
       ) : null}

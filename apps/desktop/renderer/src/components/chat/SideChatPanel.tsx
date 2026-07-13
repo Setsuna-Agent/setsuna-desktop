@@ -100,7 +100,6 @@ export function SideChatPanel({
           onDeleteMessages={sideChat.actions.deleteMessages}
           onDraftChange={sideChat.setDraft}
           onEditUserMessage={sideChat.actions.editUserMessage}
-          onOpenFilesPanel={() => undefined}
           onOpenSideChat={onOpenSideChat}
           onOpenThread={() => undefined}
           onPlanDecision={(decision) => void sideChat.actions.sendInput('', { planDecision: decision })}

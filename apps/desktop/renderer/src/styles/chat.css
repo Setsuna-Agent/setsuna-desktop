@@ -324,8 +324,8 @@
 }
 
 .chat-bubble-item--selecting.is-selected-for-delete {
-  border-color: color-mix(in srgb, var(--app-primary) 30%, var(--app-border));
-  background: color-mix(in srgb, var(--app-primary) 5%, var(--app-surface));
+  border-color: var(--desktop-agent-button-hover-border);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .chat-bubble-item--selecting.chat-bubble-item--user {

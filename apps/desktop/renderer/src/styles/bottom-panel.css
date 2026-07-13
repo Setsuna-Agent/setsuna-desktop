@@ -30,7 +30,7 @@
 
 .bottom-panel__resize-handle:hover::after,
 body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
-  background: var(--app-primary);
+  background: var(--app-text-muted);
 }
 
 .bottom-panel .desktop-panel-chrome {

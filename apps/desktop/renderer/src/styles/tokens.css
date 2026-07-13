@@ -65,7 +65,8 @@
   --desktop-agent-subtle-divider: #f0f0f0;
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 72%, transparent);
   --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 9%, transparent);
-  --desktop-agent-control-active-bg: color-mix(in srgb, var(--app-text) 10%, transparent);
+  /* Neutral controls keep hover and selected states visually consistent across accent themes. */
+  --desktop-agent-control-active-bg: var(--desktop-agent-control-hover-bg);
   --desktop-agent-input-shadow: 0 14px 32px rgba(0, 0, 0, 0.045);
   --desktop-agent-sidebar-hover-bg: #f2f2f2;
   --desktop-agent-sidebar-active-bg: #ffffff;
@@ -75,7 +76,7 @@
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
-  --desktop-agent-button-hover-bg: color-mix(in srgb, var(--app-text) 4%, transparent);
+  --desktop-agent-button-hover-bg: var(--desktop-agent-control-hover-bg);
   --chat-message-user-bg: var(--app-accent-subtle);
   --chat-code-bg: #fafafa;
   --chat-code-highlighter-bg: #f7f8fa;
@@ -176,7 +177,7 @@
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
-  --desktop-agent-button-hover-bg: color-mix(in srgb, var(--app-text) 8%, transparent);
+  --desktop-agent-button-hover-bg: var(--desktop-agent-control-hover-bg);
   --chat-message-user-bg: var(--app-accent-subtle);
   --chat-code-bg: #202020;
   --chat-code-highlighter-bg: #202020;
@@ -186,7 +187,7 @@
   --chat-send-bg-active: #e4e4e7;
 }
 
-/* Accent presets override interactive emphasis while semantic status colors stay stable. */
+/* Accent presets are reserved for primary actions, links, focus rings, and explicit emphasis. */
 :root[data-accent-color='blue'] {
   --app-primary: #2563eb;
   --app-primary-hover: #1d4ed8;

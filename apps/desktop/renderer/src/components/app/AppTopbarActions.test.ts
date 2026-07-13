@@ -9,6 +9,7 @@ describe('AppTopbarActions', () => {
     const html = renderActions({ activeView: 'chat', sidePanelVisible: false });
 
     expect(html).toContain('aria-label="打开右侧栏"');
+    expect(html.match(/app-shell-icon-control/g)).toHaveLength(2);
   });
 
   it('右侧栏已打开时隐藏重复入口', () => {

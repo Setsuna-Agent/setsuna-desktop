@@ -126,12 +126,11 @@
 }
 
 .desktop-agent-search-result:hover {
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .desktop-agent-search-result.is-active {
-  background: var(--app-accent-soft);
-  box-shadow: inset 2px 0 0 var(--app-primary);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .desktop-agent-search-result:focus-visible {

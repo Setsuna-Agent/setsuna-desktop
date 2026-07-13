@@ -229,7 +229,6 @@ export function AppChatSurface({
           onDiscardFileChanges={onDiscardFileChanges}
           onDraftChange={onDraftChange}
           onEditUserMessage={onEditUserMessage}
-          onOpenFilesPanel={onOpenFilesPanel}
           onOpenSideChat={onOpenSideChat}
           onOpenThread={onOpenThread}
           onOpenFileReview={onOpenFileReviewPanel}

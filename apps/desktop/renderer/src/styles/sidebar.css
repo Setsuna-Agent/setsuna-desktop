@@ -3,6 +3,13 @@
   --desktop-agent-content-start: 16px;
   --desktop-agent-text-start: 40px;
   --desktop-agent-icon-size: 16px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.desktop-agent-sidebar :where(input, textarea, [contenteditable='true']) {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .desktop-agent-sidebar__top-actions {

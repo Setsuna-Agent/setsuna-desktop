@@ -233,8 +233,12 @@
   padding: 0;
 }
 
-.sd-button:hover,
-.sd-icon-button:hover {
+.sd-button:not(.sd-button--primary):not(.sd-button--danger):hover,
+.sd-button:not(.sd-button--primary):not(.sd-button--danger):active,
+.sd-button:not(.sd-button--primary):not(.sd-button--danger).is-active,
+.sd-icon-button:not(.sd-icon-button--danger):hover,
+.sd-icon-button:not(.sd-icon-button--danger):active,
+.sd-icon-button:not(.sd-icon-button--danger).is-active {
   border-color: var(--desktop-agent-button-hover-border);
   background: var(--desktop-agent-button-hover-bg);
 }
@@ -398,15 +402,15 @@
 }
 
 .sd-select-menu__option:hover:not(:disabled) {
-  background: var(--app-surface-muted);
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .sd-select-menu__option.is-active {
-  background: var(--app-accent-soft);
+  background: var(--desktop-agent-control-active-bg);
 }
 
 .sd-select-menu__option[aria-selected="true"] {
-  background: var(--app-accent-soft);
+  background: var(--desktop-agent-control-active-bg);
   font-weight: 500;
 }
 
