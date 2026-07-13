@@ -8,7 +8,9 @@ describe('appearance preferences', () => {
 
       expect(dataset.fontFamily).toBe('system');
       expect(dataset.fontSize).toBe('100');
+      expect(dataset.fontWeight).toBe('500');
       expect(styles.get('--app-font-family')).toContain('PingFang SC');
+      expect(styles.get('--app-font-weight')).toBe('500');
     });
   });
 
@@ -17,15 +19,27 @@ describe('appearance preferences', () => {
       {
         'setusna-font-family': 'geist',
         'setusna-font-size': '110',
+        'setusna-font-weight': '400',
       },
       ({ dataset, styles }) => {
         initializeAppearancePreference();
 
         expect(dataset.fontFamily).toBe('geist');
         expect(dataset.fontSize).toBe('110');
+        expect(dataset.fontWeight).toBe('400');
         expect(styles.get('--app-font-family')).toContain('Geist');
+        expect(styles.get('--app-font-weight')).toBe('400');
       },
     );
+  });
+
+  it('falls back to the current font weight when the saved value is invalid', () => {
+    withAppearanceEnvironment({ 'setusna-font-weight': '950' }, ({ dataset, styles }) => {
+      initializeAppearancePreference();
+
+      expect(dataset.fontWeight).toBe('500');
+      expect(styles.get('--app-font-weight')).toBe('500');
+    });
   });
 });
 

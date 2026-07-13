@@ -3,6 +3,13 @@ import { useCallback, useEffect, useState } from 'react';
 export const fontSizeOptions = ['80', '85', '90', '95', '100', '105', '110', '115', '120'] as const;
 export type FontSizeMode = typeof fontSizeOptions[number];
 
+export const fontWeightOptions = [
+  { label: '较细', value: '400' },
+  { label: '标准（默认）', value: '500' },
+  { label: '较粗', value: '600' },
+] as const;
+export type FontWeightMode = typeof fontWeightOptions[number]['value'];
+
 export type FontPlatform = 'mac' | 'windows' | 'linux';
 type FontPlatformScope = FontPlatform | 'all';
 type FontFamilyOptionConfig = {
@@ -236,6 +243,7 @@ export type FontFamilyOption = typeof fontFamilyOptions[number];
 
 const fontSizeStorageKey = 'setusna-font-size';
 const fontFamilyStorageKey = 'setusna-font-family';
+const fontWeightStorageKey = 'setusna-font-weight';
 const appearanceChangeEventName = 'setsuna-appearance-change';
 
 const legacyFontSizeMap: Record<string, FontSizeMode> = {
@@ -261,15 +269,17 @@ const legacyFontFamilyMap: Partial<Record<string, FontFamilyMode>> = {
 export function useAppearancePreferences() {
   const [fontSize, setFontSizeState] = useState<FontSizeMode>(() => getInitialFontSize());
   const [fontFamily, setFontFamilyState] = useState<FontFamilyMode>(() => getInitialFontFamily());
+  const [fontWeight, setFontWeightState] = useState<FontWeightMode>(() => getInitialFontWeight());
 
   useEffect(() => {
-    applyAppearance(fontSize, fontFamily);
-  }, [fontFamily, fontSize]);
+    applyAppearance(fontSize, fontFamily, fontWeight);
+  }, [fontFamily, fontSize, fontWeight]);
 
   useEffect(() => {
     const handleAppearanceChange = () => {
       setFontSizeState(getInitialFontSize());
       setFontFamilyState(getInitialFontFamily());
+      setFontWeightState(getInitialFontWeight());
     };
     window.addEventListener(appearanceChangeEventName, handleAppearanceChange);
     window.addEventListener('storage', handleAppearanceChange);
@@ -282,22 +292,29 @@ export function useAppearancePreferences() {
   const setFontSize = useCallback((nextFontSize: FontSizeMode) => {
     window.localStorage.setItem(fontSizeStorageKey, nextFontSize);
     setFontSizeState(nextFontSize);
-    applyAppearance(nextFontSize, getInitialFontFamily());
+    applyAppearance(nextFontSize, getInitialFontFamily(), getInitialFontWeight());
     window.dispatchEvent(new CustomEvent(appearanceChangeEventName));
   }, []);
 
   const setFontFamily = useCallback((nextFontFamily: FontFamilyMode) => {
     window.localStorage.setItem(fontFamilyStorageKey, nextFontFamily);
     setFontFamilyState(nextFontFamily);
-    applyAppearance(getInitialFontSize(), nextFontFamily);
+    applyAppearance(getInitialFontSize(), nextFontFamily, getInitialFontWeight());
     window.dispatchEvent(new CustomEvent(appearanceChangeEventName));
   }, []);
 
-  return { fontFamily, fontSize, setFontFamily, setFontSize };
+  const setFontWeight = useCallback((nextFontWeight: FontWeightMode) => {
+    window.localStorage.setItem(fontWeightStorageKey, nextFontWeight);
+    setFontWeightState(nextFontWeight);
+    applyAppearance(getInitialFontSize(), getInitialFontFamily(), nextFontWeight);
+    window.dispatchEvent(new CustomEvent(appearanceChangeEventName));
+  }, []);
+
+  return { fontFamily, fontSize, fontWeight, setFontFamily, setFontSize, setFontWeight };
 }
 
 export function initializeAppearancePreference(): void {
-  applyAppearance(getInitialFontSize(), getInitialFontFamily());
+  applyAppearance(getInitialFontSize(), getInitialFontFamily(), getInitialFontWeight());
 }
 
 function getInitialFontSize(): FontSizeMode {
@@ -312,12 +329,20 @@ function getInitialFontFamily(): FontFamilyMode {
   return saved ? legacyFontFamilyMap[saved] ?? 'system' : 'system';
 }
 
-function applyAppearance(fontSize: FontSizeMode, fontFamily: FontFamilyMode): void {
+function getInitialFontWeight(): FontWeightMode {
+  const saved = window.localStorage.getItem(fontWeightStorageKey);
+  if (fontWeightOptions.some((item) => item.value === saved)) return saved as FontWeightMode;
+  return '500';
+}
+
+function applyAppearance(fontSize: FontSizeMode, fontFamily: FontFamilyMode, fontWeight: FontWeightMode): void {
   const font = fontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions[0];
   document.documentElement.dataset.fontSize = fontSize;
   document.documentElement.dataset.fontFamily = fontFamily;
+  document.documentElement.dataset.fontWeight = fontWeight;
   document.documentElement.style.removeProperty('--app-font-size');
   document.documentElement.style.setProperty('--app-font-family', font.css);
+  document.documentElement.style.setProperty('--app-font-weight', fontWeight);
   syncNativeTitlebarScale(Number(fontSize) / 100);
 }
 

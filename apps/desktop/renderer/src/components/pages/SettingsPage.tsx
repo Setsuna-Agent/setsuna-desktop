@@ -6,7 +6,7 @@ import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, R
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
-import { fontFamilyOptions, fontSizeOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode } from '../../hooks/useAppearancePreferences.js';
+import { fontFamilyOptions, fontSizeOptions, fontWeightOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode, type FontWeightMode } from '../../hooks/useAppearancePreferences.js';
 import { codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, useCodeAppearancePreferences, type CodeFontFamilyMode, type CodeHighlightTheme } from '../../hooks/useCodeAppearancePreferences.js';
 import { useSidebarOpacityPreference } from '../../hooks/useSidebarOpacityPreference.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
@@ -292,7 +292,7 @@ function MemorySettingToggle({ checked, description, label, onChange }: MemorySe
 }
 
 function GeneralSettings() {
-  const { fontFamily, fontSize, setFontFamily, setFontSize } = useAppearancePreferences();
+  const { fontFamily, fontSize, fontWeight, setFontFamily, setFontSize, setFontWeight } = useAppearancePreferences();
   const { codeFontFamily, codeHighlightTheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
   const { sidebarTransparencyEnabled, setSidebarTransparencyEnabled } = useSidebarOpacityPreference();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
@@ -326,7 +326,20 @@ function GeneralSettings() {
               ))}
             </SelectField>
           </label>
-          <div className="chat-user-settings__font-preview" style={{ fontFamily: selectedFont.css }}>
+          <label className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <Type size={14} />
+              <span>界面字重</span>
+            </span>
+            <SelectField aria-label="界面字重" className="settings-local-control" value={fontWeight} onValueChange={(nextValue) => setFontWeight(nextValue as FontWeightMode)}>
+              {fontWeightOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectField>
+          </label>
+          <div className="chat-user-settings__font-preview" style={{ fontFamily: selectedFont.css, fontWeight }}>
             <div className="chat-user-settings__font-preview-pane">
               <span className="chat-user-settings__font-preview-label">Plain Text</span>
               <div className="chat-user-settings__font-preview-body">
