@@ -692,6 +692,8 @@
 
 .desktop-review-panel {
   --desktop-review-panel-x-padding: 8px;
+  --desktop-review-file-action-edge: 8px;
+  --desktop-review-file-content-max-width: 80%;
   --desktop-review-focus: #2563eb;
   --desktop-review-focus-ring: rgba(37, 99, 235, 0.14);
   --desktop-review-addition-marker: #0fa340;
@@ -1147,7 +1149,7 @@
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  padding: 0 8px 0 12px;
+  padding: 0 var(--desktop-review-file-action-edge) 0 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
   background: var(--app-surface);
 }
@@ -1167,7 +1169,7 @@
 .desktop-review-file-card__meta {
   position: absolute;
   top: 3px;
-  right: 8px;
+  right: var(--desktop-review-file-action-edge);
   justify-content: flex-end;
   height: 28px;
   padding-left: 16px;
@@ -1191,7 +1193,7 @@
 
 .desktop-review-file-card__path-main {
   width: fit-content;
-  max-width: 100%;
+  max-width: var(--desktop-review-file-content-max-width);
   height: 34px;
   padding: 0;
   border: 0;
