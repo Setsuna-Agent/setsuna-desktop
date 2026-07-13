@@ -30,6 +30,14 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   );
 });
 
+export function ActionTooltip({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <span className="sd-action-tooltip" data-tooltip={title}>
+      {children}
+    </span>
+  );
+}
+
 export function TextField({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`sd-field ${className}`} {...props} />;
 }

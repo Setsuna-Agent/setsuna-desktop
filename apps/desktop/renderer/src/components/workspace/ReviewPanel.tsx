@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import { AlignJustify, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { EmptyState, IconButton } from '../primitives.js';
+import { ActionTooltip, EmptyState, IconButton } from '../primitives.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
@@ -89,14 +89,6 @@ const REVIEW_DIFF_VIRTUAL_VIEWPORT_HEIGHT_PX = 320;
 const REVIEW_DIFF_MAX_WRAPPABLE_LINE_CHARS = 240;
 const DEFAULT_REVIEW_LINE_WRAP = true;
 const useReviewLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
-
-function ReviewActionTip({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <span className="desktop-review-action-tip" data-tooltip={title}>
-      {children}
-    </span>
-  );
-}
 
 export function DesktopReviewPanel({
   activeProject,
@@ -316,7 +308,7 @@ export function DesktopReviewPanel({
         </div>
         <div className="desktop-review-panel__actions">
           <div className="desktop-review-panel__action-group" role="group" aria-label="差异显示">
-            <ReviewActionTip title={reviewFileExpansionTip}>
+            <ActionTooltip title={reviewFileExpansionTip}>
               <IconButton
                 aria-pressed={!fileExpansionRequest.expanded}
                 className="desktop-review-panel__file-expansion-toggle"
@@ -328,8 +320,8 @@ export function DesktopReviewPanel({
               >
                 {fileExpansionRequest.expanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
               </IconButton>
-            </ReviewActionTip>
-            <ReviewActionTip title={reviewLayoutToggleTip}>
+            </ActionTooltip>
+            <ActionTooltip title={reviewLayoutToggleTip}>
               <IconButton
                 aria-pressed={reviewDiffLayout === 'split'}
                 className="desktop-review-panel__layout-toggle"
@@ -340,8 +332,8 @@ export function DesktopReviewPanel({
               >
                 {reviewDiffLayout === 'split' ? <Rows3 size={14} /> : <Columns2 size={14} />}
               </IconButton>
-            </ReviewActionTip>
-            <ReviewActionTip title={reviewLineWrapToggleTip}>
+            </ActionTooltip>
+            <ActionTooltip title={reviewLineWrapToggleTip}>
               <IconButton
                 aria-pressed={reviewLineWrap}
                 className="desktop-review-panel__wrap-toggle"
@@ -352,10 +344,10 @@ export function DesktopReviewPanel({
               >
                 {reviewLineWrap ? <WrapText size={14} /> : <AlignJustify size={14} />}
               </IconButton>
-            </ReviewActionTip>
+            </ActionTooltip>
           </div>
           <div className="desktop-review-panel__action-group" role="group" aria-label="审查操作">
-            <ReviewActionTip title={reviewRefreshTip}>
+            <ActionTooltip title={reviewRefreshTip}>
               <IconButton
                 aria-disabled={reviewRefreshing}
                 aria-busy={reviewRefreshing}
@@ -367,7 +359,7 @@ export function DesktopReviewPanel({
               >
                 <RefreshCw className="desktop-review-panel__refresh-icon" size={14} />
               </IconButton>
-            </ReviewActionTip>
+            </ActionTooltip>
           </div>
         </div>
       </header>

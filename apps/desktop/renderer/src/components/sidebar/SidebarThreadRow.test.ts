@@ -25,6 +25,7 @@ describe('SidebarThreadRow', () => {
     const html = renderRow(thread);
 
     expect(html).toContain('aria-label="归档对话"');
+    expect(html).toContain('data-tooltip="归档对话"');
     expect(html).not.toContain('aria-label="对话操作"');
     expect(html).not.toContain('2026-07-11');
   });

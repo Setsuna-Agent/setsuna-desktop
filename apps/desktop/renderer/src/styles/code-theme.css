@@ -461,9 +461,60 @@
   --code-palette-dark-variable: #839496;
 }
 
-.desktop-code-editor,
+.desktop-code-editor {
+  background: var(--app-bg);
+}
+
 .desktop-review-diff {
-  background: var(--code-highlight-background);
+  background: var(--desktop-review-diff-background, var(--app-bg));
+}
+
+/* Workspace code surfaces follow the app theme, so explicit syntax palettes
+   use their dark variants regardless of the selected highlighter surface. */
+:root[data-theme='dark'][data-code-color-scheme]:not([data-code-color-scheme='theme']) :is(.desktop-code-editor, .desktop-review-diff) {
+  --code-syntax-comment: var(--code-palette-dark-comment);
+  --code-syntax-keyword: var(--code-palette-dark-keyword);
+  --code-syntax-string: var(--code-palette-dark-string);
+  --code-syntax-number: var(--code-palette-dark-number);
+  --code-syntax-function: var(--code-palette-dark-function);
+  --code-syntax-class: var(--code-palette-dark-type);
+  --code-syntax-type: var(--code-palette-dark-type);
+  --code-syntax-property: var(--code-palette-dark-property);
+  --code-syntax-tag: var(--code-palette-dark-keyword);
+  --code-syntax-selector: var(--code-palette-dark-function);
+  --code-syntax-attribute-name: var(--code-palette-dark-property);
+  --code-syntax-attribute-value: var(--code-palette-dark-string);
+  --code-syntax-variable: var(--code-palette-dark-variable);
+  --code-syntax-plain: var(--code-palette-dark-variable);
+  --code-syntax-operator: var(--code-palette-dark-type);
+  --code-syntax-punctuation: var(--code-palette-dark-variable);
+  --code-syntax-meta: var(--code-palette-dark-type);
+}
+
+/* Light highlighter themes do not provide dark syntax tokens. Keep their hue
+   families while raising contrast inside dark workspace code surfaces. */
+:root[data-theme='dark'][data-code-color-scheme='theme']:is(
+  [data-code-highlight-theme='chatgptLight'],
+  [data-code-highlight-theme='oneLight'],
+  [data-code-highlight-theme='solarizedLight']
+) :is(.desktop-code-editor, .desktop-review-diff) {
+  --code-syntax-comment: #8b949e;
+  --code-syntax-keyword: #c4b5fd;
+  --code-syntax-string: #86efac;
+  --code-syntax-number: #fdba74;
+  --code-syntax-function: #93c5fd;
+  --code-syntax-class: #5eead4;
+  --code-syntax-type: #5eead4;
+  --code-syntax-property: #fdba74;
+  --code-syntax-tag: #c4b5fd;
+  --code-syntax-selector: #93c5fd;
+  --code-syntax-attribute-name: #fdba74;
+  --code-syntax-attribute-value: #86efac;
+  --code-syntax-variable: #ededed;
+  --code-syntax-plain: #ededed;
+  --code-syntax-operator: #94a3b8;
+  --code-syntax-punctuation: #d4d4d4;
+  --code-syntax-meta: #94a3b8;
 }
 
 .desktop-code-line code,

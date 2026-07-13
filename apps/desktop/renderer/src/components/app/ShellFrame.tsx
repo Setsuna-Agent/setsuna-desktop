@@ -154,7 +154,7 @@ function TitlebarNavigation({
       {showSidebarToggle && onToggleSidebar ? (
         <IconButton
           label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-          className={`app-shell-icon-control ${!sidebarCollapsed ? 'is-active' : ''}`}
+          className="app-shell-icon-control"
           onClick={onToggleSidebar}
         >
           <PanelLeft size={16} />

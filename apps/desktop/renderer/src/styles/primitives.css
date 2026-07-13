@@ -233,6 +233,41 @@
   padding: 0;
 }
 
+.sd-action-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.sd-action-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 6px);
+  right: 0;
+  width: max-content;
+  max-width: min(220px, calc(100vw - 24px));
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
+  border-radius: 7px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: 0 8px 22px color-mix(in srgb, #000 8%, transparent);
+  font-size: 12px;
+  font-weight: var(--app-font-weight);
+  line-height: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+
+.sd-action-tooltip:hover::after,
+.sd-action-tooltip:focus-within::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .sd-button:not(.sd-button--primary):not(.sd-button--danger):hover,
 .sd-button:not(.sd-button--primary):not(.sd-button--danger):active,
 .sd-button:not(.sd-button--primary):not(.sd-button--danger).is-active,

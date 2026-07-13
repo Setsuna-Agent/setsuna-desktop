@@ -3,6 +3,7 @@ import { addCollection, Icon } from '@iconify/react';
 import { icons as vscodeIcons } from '@iconify-json/vscode-icons';
 import { getIconForFile } from 'vscode-icons-js';
 import { fileName, type DesktopPanelTab, type DesktopPanelType, type DesktopWorkspaceApp } from './model.js';
+import { workspaceAppIconAssets } from './workspaceAppIcons.js';
 
 addCollection(vscodeIcons);
 
@@ -41,35 +42,15 @@ function iconifyNameFromVscodeIcon(iconFile?: string | null): string {
   return `vscode-icons:${iconName || 'default-file'}`;
 }
 
-const WORKSPACE_APP_ICON_URLS: Record<string, string> = {
-  vscode: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg',
-  'vscode-insiders': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg',
-  cursor: 'https://cdn.simpleicons.org/cursor/111111',
-  windsurf: 'https://cdn.simpleicons.org/windsurf',
-  zed: 'https://cdn.simpleicons.org/zedindustries',
-  'sublime-text': 'https://cdn.simpleicons.org/sublimetext',
-  xcode: 'https://cdn.simpleicons.org/xcode',
-  'visual-studio': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/visualstudio/visualstudio-plain.svg',
-  'android-studio': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/androidstudio/androidstudio-original.svg',
-  'intellij-idea': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/intellij/intellij-original.svg',
-  pycharm: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/pycharm/pycharm-original.svg',
-  webstorm: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/webstorm/webstorm-original.svg',
-  clion: 'https://cdn.simpleicons.org/clion',
-  goland: 'https://cdn.simpleicons.org/goland',
-  datagrip: 'https://cdn.simpleicons.org/datagrip',
-  rider: 'https://cdn.simpleicons.org/rider',
-  rubymine: 'https://cdn.simpleicons.org/rubymine',
-  phpstorm: 'https://cdn.simpleicons.org/phpstorm',
-  eclipse: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/eclipse/eclipse-original.svg',
-  netbeans: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/netbeans/netbeans-original.svg',
-};
-
 export function WorkspaceAppGlyph({ app }: { app: DesktopWorkspaceApp | null }) {
   const icon = app?.icon || app?.id || 'app';
-  const iconUrl = WORKSPACE_APP_ICON_URLS[icon];
+  const iconAsset = workspaceAppIconAssets[icon];
   return (
-    <span className={`desktop-workspace-launcher__glyph desktop-workspace-launcher__glyph--${icon}`} aria-hidden="true">
-      {iconUrl ? <img src={iconUrl} alt="" draggable={false} /> : workspaceAppSystemIcon(icon)}
+    <span
+      className={`desktop-workspace-launcher__glyph desktop-workspace-launcher__glyph--${icon} ${iconAsset?.monochrome ? 'desktop-workspace-launcher__glyph--monochrome' : ''}`}
+      aria-hidden="true"
+    >
+      {iconAsset ? <img src={iconAsset.src} alt="" draggable={false} /> : workspaceAppSystemIcon(icon)}
     </span>
   );
 }

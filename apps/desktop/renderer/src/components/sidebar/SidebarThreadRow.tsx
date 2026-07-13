@@ -1,6 +1,7 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Archive, LoaderCircle, Pencil } from 'lucide-react';
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { ActionTooltip } from '../primitives.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 
 export function SidebarThreadRow({
@@ -72,16 +73,17 @@ export function SidebarThreadRow({
           <LoaderCircle className="is-spinning" size={13} />
         </span>
       ) : null}
-      <button
-        className="desktop-agent-session__archive-button"
-        type="button"
-        aria-label="归档对话"
-        title="归档对话"
-        onClick={handleArchiveClick}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        <Archive size={13} />
-      </button>
+      <ActionTooltip title="归档对话">
+        <button
+          className="desktop-agent-session__archive-button"
+          type="button"
+          aria-label="归档对话"
+          onClick={handleArchiveClick}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <Archive size={14} />
+        </button>
+      </ActionTooltip>
     </span>
   );
 

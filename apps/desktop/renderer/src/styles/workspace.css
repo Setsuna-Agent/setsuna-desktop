@@ -400,6 +400,11 @@
   height: 14px;
 }
 
+/* Invert downloaded monochrome marks without altering colored application icons. */
+:root[data-theme='dark'] .desktop-workspace-launcher__glyph--monochrome img {
+  filter: invert(1);
+}
+
 .desktop-workspace-toolbar .chat-file-review-panel__header {
   flex: 1 1 auto;
   width: 100%;
@@ -740,17 +745,22 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: var(--app-text);
-  background: transparent;
+  border-color: transparent !important;
+  color: var(--app-text) !important;
+  background: transparent !important;
+  box-shadow: none !important;
   font-size: 13px;
   line-height: 18px;
   font-weight: 600;
 }
 
 .desktop-review-panel .chat-file-review-panel__source-button.ant-btn:hover,
-.desktop-review-panel .chat-file-review-panel__source-button.ant-btn:focus-visible {
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+.desktop-review-panel .chat-file-review-panel__source-button.ant-btn:focus-visible,
+.desktop-review-panel .chat-file-review-panel__source-button.ant-btn:active,
+.desktop-review-panel .chat-file-review-panel__source-button.ant-btn.ant-dropdown-open {
+  border-color: transparent !important;
+  color: var(--app-text) !important;
+  background: var(--desktop-agent-control-hover-bg) !important;
 }
 
 .desktop-review-panel .chat-file-review-panel__source-button.ant-btn > span {
@@ -790,7 +800,11 @@
   min-height: 30px;
   padding: 5px 8px !important;
   border-radius: 6px;
-  color: var(--app-text-secondary);
+  color: var(--app-text-secondary) !important;
+}
+
+.chat-file-review-panel__source-menu .ant-dropdown-menu-item :where(.ant-dropdown-menu-title-content, .chat-file-review-panel__source-menu-item) {
+  color: inherit !important;
 }
 
 .chat-file-review-panel__source-menu .ant-dropdown-menu-item:hover {
@@ -883,41 +897,6 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
-.desktop-review-action-tip {
-  position: relative;
-  display: inline-flex;
-}
-
-.desktop-review-action-tip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  z-index: 12;
-  top: calc(100% + 6px);
-  right: 0;
-  width: max-content;
-  max-width: min(220px, calc(100vw - 24px));
-  padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
-  border-radius: 7px;
-  color: var(--app-text);
-  background: var(--app-surface);
-  box-shadow: 0 8px 22px color-mix(in srgb, #000 8%, transparent);
-  font-size: 12px;
-  font-weight: var(--app-font-weight);
-  line-height: 18px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-2px);
-  transition: opacity 120ms ease, transform 120ms ease;
-  white-space: nowrap;
-}
-
-.desktop-review-action-tip:hover::after,
-.desktop-review-action-tip:has(.sd-icon-button:focus-visible)::after {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 .desktop-review-panel__refresh {
   flex: 0 0 auto;
 }
@@ -961,8 +940,10 @@
   min-width: 0;
   padding: 0 6px !important;
   border-radius: 7px;
-  color: var(--app-text);
-  background: transparent;
+  border-color: transparent !important;
+  color: var(--app-text) !important;
+  background: transparent !important;
+  box-shadow: none !important;
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 18px;
@@ -970,14 +951,18 @@
 }
 
 .desktop-review-branch-compare__button.ant-btn:hover,
-.desktop-review-branch-compare__button.ant-btn:focus-visible {
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+.desktop-review-branch-compare__button.ant-btn:focus-visible,
+.desktop-review-branch-compare__button.ant-btn:active,
+.desktop-review-branch-compare__button.ant-btn.ant-dropdown-open {
+  border-color: transparent !important;
+  color: var(--app-text) !important;
+  background: var(--desktop-agent-control-hover-bg) !important;
 }
 
 .desktop-review-branch-compare__button.ant-btn:disabled {
-  color: var(--app-text-muted);
-  background: transparent;
+  border-color: transparent !important;
+  color: var(--app-text-muted) !important;
+  background: transparent !important;
   opacity: 0.5;
 }
 
@@ -1018,7 +1003,11 @@
   min-height: 31px;
   padding: 5px 8px !important;
   border-radius: 6px;
-  color: var(--app-text-secondary);
+  color: var(--app-text-secondary) !important;
+}
+
+.desktop-review-branch-dropdown .ant-dropdown-menu-title-content {
+  color: inherit !important;
 }
 
 .desktop-review-branch-dropdown .ant-dropdown-menu-item:hover {
@@ -1277,11 +1266,13 @@
   --desktop-review-diff-line-height: 20px;
   --desktop-review-diff-gap-height: 30px;
   --desktop-review-diff-number-width: 5ch;
+  /* Review chrome follows the app surface; syntax colors remain independently configurable. */
+  --desktop-review-diff-background: var(--app-bg);
   display: grid;
   align-content: start;
   min-width: 0;
   overflow: visible;
-  background: var(--app-bg);
+  background: var(--desktop-review-diff-background);
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: var(--desktop-review-diff-line-height);
@@ -1675,7 +1666,7 @@
 
 .desktop-review-diff-line--added::before,
 .desktop-review-diff-split-cell--added::before {
-  background: color-mix(in srgb, var(--app-success) 12%, var(--code-highlight-background));
+  background: color-mix(in srgb, var(--app-success) 12%, var(--desktop-review-diff-background));
 }
 
 .desktop-review-diff-line--added::after,
@@ -1696,7 +1687,7 @@
 
 .desktop-review-diff-line--removed::before,
 .desktop-review-diff-split-cell--removed::before {
-  background: color-mix(in srgb, var(--app-danger) 12%, var(--code-highlight-background));
+  background: color-mix(in srgb, var(--app-danger) 12%, var(--desktop-review-diff-background));
 }
 
 .desktop-review-diff-line--removed::after,

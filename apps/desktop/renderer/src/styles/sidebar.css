@@ -3,6 +3,8 @@
   --desktop-agent-content-start: 16px;
   --desktop-agent-text-start: 40px;
   --desktop-agent-icon-size: 16px;
+  --desktop-agent-row-action-inset: 6px;
+  --desktop-agent-row-action-size: 22px;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -286,6 +288,7 @@
 .project-list {
   display: grid;
   gap: 2px;
+  width: 100%;
   min-width: 0;
 }
 
@@ -343,6 +346,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  width: 100%;
   min-width: 0;
 }
 
@@ -376,12 +380,12 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
   width: 100%;
   min-width: 0;
   height: 34px;
   margin-left: 0;
-  padding: 0 6px 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
+  padding: 0 var(--desktop-agent-row-action-inset) 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
   color: color-mix(in srgb, var(--app-sidebar-text-secondary) 88%, transparent);
@@ -417,37 +421,39 @@
 }
 
 .desktop-agent-session__meta {
-  position: relative;
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
+  position: absolute;
+  top: 50%;
+  right: var(--desktop-agent-row-action-inset);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--desktop-agent-row-action-size);
+  height: var(--desktop-agent-row-action-size);
   overflow: visible;
   color: var(--app-sidebar-text-secondary);
+  transform: translateY(-50%);
 }
 
 .desktop-agent-session__running {
   position: absolute;
-  top: 50%;
+  top: 0;
   right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  transform: translateY(-50%);
+  width: var(--desktop-agent-row-action-size);
+  height: var(--desktop-agent-row-action-size);
   color: color-mix(in srgb, var(--desktop-agent-accent) 72%, var(--app-sidebar-text-secondary));
   transition: opacity 160ms ease;
 }
 
 .desktop-agent-session__archive-button {
-  position: absolute;
-  top: 50%;
-  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: var(--desktop-agent-row-action-size);
+  height: var(--desktop-agent-row-action-size);
   padding: 0;
   border: 0;
   border-radius: var(--app-radius-sm);
@@ -456,8 +462,13 @@
   box-shadow: none;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%);
   transition: opacity 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.desktop-agent-session:hover .desktop-agent-session__title,
+.desktop-agent-session:focus-within .desktop-agent-session__title,
+.desktop-agent-session.is-running .desktop-agent-session__title {
+  padding-right: calc(var(--desktop-agent-row-action-size) + 8px);
 }
 
 .desktop-agent-session:hover .desktop-agent-session__running,
@@ -484,7 +495,7 @@
   width: 100%;
   min-width: 0;
   height: 34px;
-  padding: 0 7px 0 9px;
+  padding: 0 var(--desktop-agent-row-action-inset) 0 9px;
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
   color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
@@ -554,10 +565,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  flex: 0 0 48px;
+  flex: 0 0 calc(var(--desktop-agent-row-action-size) + var(--desktop-agent-row-action-size) + 2px);
   gap: 2px;
-  width: 48px;
-  height: 22px;
+  width: calc(var(--desktop-agent-row-action-size) + var(--desktop-agent-row-action-size) + 2px);
+  height: var(--desktop-agent-row-action-size);
   border-radius: var(--app-radius-sm);
   color: var(--app-sidebar-text-secondary);
   opacity: 0;
@@ -576,9 +587,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: var(--desktop-agent-row-action-size);
+  height: var(--desktop-agent-row-action-size);
+  min-width: var(--desktop-agent-row-action-size);
   padding: 0;
   border: 0;
   border-radius: var(--app-radius-sm);

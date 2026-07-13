@@ -356,7 +356,6 @@ export function DesktopPanelHeader({
               placement === 'side' ? 'app-shell-icon-control' : '',
               'chat-file-review-panel__close',
               'chat-file-review-panel__panel-close',
-              placement === 'side' ? 'chat-file-review-panel__close--active' : '',
             ]
               .filter(Boolean)
               .join(' ')}

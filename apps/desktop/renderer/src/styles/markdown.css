@@ -459,6 +459,28 @@
   padding: 6px 8px 14px !important;
 }
 
+/* Code-block chrome follows the app theme even when a light syntax palette is selected. */
+:root[data-theme='dark'] .chat-code-highlighter {
+  border: 1px solid color-mix(in srgb, var(--app-text) 12%, var(--chat-code-highlighter-bg));
+}
+
+:root[data-theme='dark'] .chat-code-highlighter__header {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-text) 10%, var(--chat-code-highlighter-bg));
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-text) 6%, var(--chat-code-highlighter-bg));
+}
+
+:root[data-theme='dark'] .chat-code-highlighter__language,
+:root[data-theme='dark'] .chat-code-highlighter__copy {
+  color: var(--app-text-muted);
+}
+
+:root[data-theme='dark'] .chat-code-highlighter__copy:hover {
+  border-color: var(--desktop-agent-button-hover-border);
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
 .chat-code-highlighter pre {
   margin: 0 !important;
   background: var(--chat-code-highlighter-bg) !important;
