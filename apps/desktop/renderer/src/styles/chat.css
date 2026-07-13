@@ -1656,7 +1656,11 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .chat-starter-suggestion > svg {
@@ -2112,7 +2116,7 @@
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  margin: 4px 0 2px;
+  margin: 4px 0;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-surface);
@@ -2133,7 +2137,7 @@
   flex-wrap: wrap;
   justify-content: space-between;
   min-height: 42px;
-  padding: 12px;
+  padding: 10px 12px;
 }
 
 .chat-file-changes__icon {
@@ -2225,7 +2229,7 @@
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding: 8px 12px 10px;
+  padding: 8px 12px;
   border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
 }
 
@@ -2241,8 +2245,8 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 0 8px;
   border: 0;
   border-radius: 6px;
   color: inherit;
