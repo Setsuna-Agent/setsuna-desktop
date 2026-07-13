@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 const defaultSidebarOpacity = 100;
-const translucentSidebarOpacity = 50;
+const translucentSidebarOpacity = 95;
 const sidebarOpacityStorageKey = 'setsuna-sidebar-opacity';
 const sidebarOpacityChangeEventName = 'setsuna-sidebar-opacity-change';
 

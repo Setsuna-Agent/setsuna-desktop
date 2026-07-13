@@ -7,14 +7,23 @@
   height: 100%;
   overflow: hidden;
   /* Keep dark translucent sidebars legible over macOS vibrancy without disabling transparency. */
-  background:
-    linear-gradient(var(--app-sidebar-surface), var(--app-sidebar-surface)),
-    var(--app-sidebar-backdrop);
+  background: linear-gradient(var(--app-sidebar-surface), var(--app-sidebar-surface)), var(--app-sidebar-backdrop);
   font-weight: var(--app-font-weight);
 }
 
 .app-shell--window-maximized {
   --app-topbar-divider-width: 0px;
+}
+
+:root[data-desktop-platform='win32'] .app-shell:not(.app-shell--window-maximized) {
+  --app-window-frame-inset: 14px;
+
+  width: calc(100% - var(--app-window-frame-inset) - var(--app-window-frame-inset));
+  height: calc(100% - var(--app-window-frame-inset) - var(--app-window-frame-inset));
+  margin: var(--app-window-frame-inset);
+  border: 1px solid color-mix(in srgb, var(--app-text) 28%, transparent);
+  border-radius: var(--app-radius-lg);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 14%);
 }
 
 .app-topbar {
@@ -290,7 +299,7 @@
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
   padding-right: 0;
   background: var(--app-titlebar-bg);
-  border-bottom: var(--app-topbar-divider-width) solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  border-bottom: 0;
 }
 
 :root[data-desktop-platform='win32'] .app-topbar::after,
@@ -492,7 +501,9 @@
   min-height: 0;
   height: 100%;
   background: transparent;
-  transition: grid-template-columns 180ms ease, grid-template-rows 180ms ease;
+  transition:
+    grid-template-columns 180ms ease,
+    grid-template-rows 180ms ease;
 }
 
 body.desktop-agent-sidebar-resizing .app-workbench,
@@ -519,7 +530,10 @@ body.desktop-terminal-resizing .app-workbench {
   color: var(--app-sidebar-text);
   opacity: 1;
   transform: translateX(0);
-  transition: transform 180ms ease, opacity 160ms ease, visibility 0s linear 0s;
+  transition:
+    transform 180ms ease,
+    opacity 160ms ease,
+    visibility 0s linear 0s;
   visibility: visible;
   will-change: transform, opacity;
 }
@@ -530,7 +544,10 @@ body.desktop-terminal-resizing .app-workbench {
   opacity: 0;
   pointer-events: none;
   transform: translateX(-100%);
-  transition: transform 180ms ease, opacity 160ms ease, visibility 0s linear 180ms;
+  transition:
+    transform 180ms ease,
+    opacity 160ms ease,
+    visibility 0s linear 180ms;
   visibility: hidden;
 }
 
@@ -559,7 +576,7 @@ body.desktop-terminal-resizing .app-workbench {
   bottom: 0;
   width: 1px;
   background: transparent;
-  content: "";
+  content: '';
 }
 
 .desktop-agent-sidebar__resize-handle::after {
@@ -594,10 +611,7 @@ body.desktop-terminal-resizing {
   }
 
   .app-topbar {
-    grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(
-        min(var(--desktop-agent-main-min-width), calc(100vw - var(--app-topbar-sidebar-width, var(--app-sidebar-width)))),
-        1fr
-      );
+    grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(min(var(--desktop-agent-main-min-width), calc(100vw - var(--app-topbar-sidebar-width, var(--app-sidebar-width)))), 1fr);
   }
 
   .app-topbar__workspace {
@@ -653,7 +667,6 @@ body.desktop-terminal-resizing {
   .app-sidebar {
     display: none;
   }
-
 }
 
 :root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-topbar,

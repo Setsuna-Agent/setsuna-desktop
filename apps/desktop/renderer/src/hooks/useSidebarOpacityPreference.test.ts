@@ -12,12 +12,12 @@ describe('initializeSidebarOpacityPreference', () => {
     expect(styles.get('--app-sidebar-opacity')).toBe('100%');
   });
 
-  it('migrates an existing partial opacity to the enabled 50% value', () => {
+  it('migrates an existing partial opacity to the enabled 95% value', () => {
     const styles = installPreferenceEnvironment({ 'setsuna-sidebar-opacity': '83' });
 
     initializeSidebarOpacityPreference();
 
-    expect(styles.get('--app-sidebar-opacity')).toBe('50%');
+    expect(styles.get('--app-sidebar-opacity')).toBe('95%');
   });
 });
 

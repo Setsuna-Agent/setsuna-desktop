@@ -466,11 +466,11 @@ function GeneralSettings({
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <PanelLeft size={14} />
-              <span>侧栏半透明</span>
+              <span>侧栏与标题栏半透明</span>
             </span>
-            <label className="sd-check" title="开启后侧栏背景固定为 50% 不透明度">
+            <label className="sd-check" title="开启后侧栏与标题栏背景固定为 95% 不透明度">
               <input
-                aria-label="侧栏半透明"
+                aria-label="侧栏与标题栏半透明"
                 type="checkbox"
                 checked={sidebarTransparencyEnabled}
                 onChange={(event) => setSidebarTransparencyEnabled(event.currentTarget.checked)}

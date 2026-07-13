@@ -32,6 +32,7 @@ import {
 } from './review-state.js';
 import { RuntimeHost } from './runtime-host.js';
 import { DesktopTerminalStore } from './terminal-sessions.js';
+import { registerWindowsTitlebarDoubleClick, toggleWindowMaximized } from './window-frame.js';
 import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
 import { openWorkspaceFileWithDefaultApp } from './workspace-file-opening.js';
 
@@ -94,6 +95,8 @@ async function createWindow(): Promise<void> {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
     trafficLightPosition: process.platform === 'darwin' ? getMacTrafficLightPosition(1) : undefined,
     autoHideMenuBar: usesCustomFrame,
+    // Keep the Windows HWND genuinely transparent: a DWM background material
+    // would also fill the CSS shadow gutter and turn it into a solid border.
     transparent: process.platform !== 'darwin',
     backgroundColor: '#00000000',
     vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
@@ -108,14 +111,7 @@ async function createWindow(): Promise<void> {
       webviewTag: true,
     },
   });
-  if (process.platform === 'win32') {
-    try {
-      mainWindow.setBackgroundMaterial('acrylic');
-    } catch (error) {
-      // Acrylic is available only on supported Windows versions; transparency remains the fallback.
-      console.warn('[window] acrylic background is unavailable', error);
-    }
-  }
+  registerWindowsTitlebarDoubleClick(mainWindow);
   if (usesCustomFrame) mainWindow.setMenu(null);
   desktopUpdater = new DesktopUpdater({
     currentVersion: app.getVersion(),
@@ -365,12 +361,7 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.handle('window-control:toggle-maximize', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return false;
-    if (window.isMaximized()) {
-      window.unmaximize();
-    } else {
-      window.maximize();
-    }
-    return window.isMaximized();
+    return toggleWindowMaximized(window);
   });
   ipcMain.handle('window-control:close', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
