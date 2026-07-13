@@ -1143,7 +1143,9 @@
 }
 
 .desktop-review-file-card__summary {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 6;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
