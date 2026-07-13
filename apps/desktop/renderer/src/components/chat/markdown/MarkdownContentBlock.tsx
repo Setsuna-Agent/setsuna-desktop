@@ -1,4 +1,5 @@
 import { Children, isValidElement, memo, type MouseEvent, type ReactNode } from 'react';
+import { Globe2 } from 'lucide-react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -41,7 +42,7 @@ const markdownComponents = {
 } satisfies Components;
 
 function MarkdownLink({ children, href, node: _node, onClick, ...props }: MarkdownElementProps<'a'>) {
-  const { onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
+  const { onOpenWebLink, onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(href, workspaceRoot);
 
   if (target.kind === 'workspace') {
@@ -69,15 +70,29 @@ function MarkdownLink({ children, href, node: _node, onClick, ...props }: Markdo
   }
 
   if (target.kind === 'external') {
+    const webLink = /^https?:/i.test(target.href);
     const handleExternalClick = (event: MouseEvent<HTMLAnchorElement>) => {
       onClick?.(event);
       if (event.defaultPrevented) return;
       event.preventDefault();
+      if (webLink && onOpenWebLink) {
+        onOpenWebLink(target.href);
+        return;
+      }
       openExternalMarkdownLink(target.href);
     };
     return (
-      <a {...props} href={target.href} onClick={handleExternalClick} rel="noreferrer" target="_blank">
+      <a
+        {...props}
+        className={[props.className, webLink ? 'chat-markdown__web-link' : ''].filter(Boolean).join(' ') || undefined}
+        data-markdown-link={webLink ? 'web' : 'external'}
+        href={target.href}
+        onClick={handleExternalClick}
+        rel="noreferrer"
+        target="_blank"
+      >
         {children}
+        {webLink ? <Globe2 className="chat-markdown__web-link-icon" size={12} aria-hidden="true" /> : null}
       </a>
     );
   }

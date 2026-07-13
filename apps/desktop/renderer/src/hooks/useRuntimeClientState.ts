@@ -365,7 +365,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   );
 
   const saveRuntimePreferences = useCallback(
-    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features'>) => {
+    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>) => {
       const next = await client.saveConfig(input);
       setConfig(next);
       if (Object.hasOwn(input, 'storagePath')) {

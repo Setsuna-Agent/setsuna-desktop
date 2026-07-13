@@ -148,6 +148,14 @@
   text-decoration-color: currentColor;
 }
 
+.chat-markdown__web-link-icon {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-left: 0.28em;
+  vertical-align: -0.12em;
+}
+
 .chat-markdown a.chat-markdown__file-link {
   display: inline;
   margin: 0;

@@ -22,6 +22,7 @@ export function SideChatPanel({
   threads,
   onApprovalPolicyChange,
   onError,
+  onOpenMarkdownWebLink,
   onOpenProjectFile,
   onOpenSideChat,
   onReloadThreads,
@@ -43,6 +44,7 @@ export function SideChatPanel({
   threads: RuntimeThreadSummary[];
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
   onError: Dispatch<SetStateAction<string | null>>;
+  onOpenMarkdownWebLink: (url: string) => void;
   onOpenProjectFile: (filePath: string) => void;
   onOpenSideChat: () => void;
   onReloadThreads: () => Promise<unknown>;
@@ -71,7 +73,11 @@ export function SideChatPanel({
         onResizeStart={onWorkspaceResizeStart}
         onResizeStep={onWorkspaceResizeStep}
       />
-      <MarkdownNavigationProvider workspaceRoot={activeWorkspace?.path} onOpenWorkspaceFile={onOpenProjectFile}>
+      <MarkdownNavigationProvider
+        onOpenWebLink={onOpenMarkdownWebLink}
+        workspaceRoot={activeWorkspace?.path}
+        onOpenWorkspaceFile={onOpenProjectFile}
+      >
         <ChatWorkspace
           activeProject={activeWorkspace}
           activeTurnId={sideChat.activeTurnId}

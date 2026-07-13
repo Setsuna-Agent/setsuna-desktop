@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Archive, ArchiveRestore, BadgeCheck, Bold, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BadgeCheck, Bold, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
 import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
@@ -11,9 +11,10 @@ import { codeColorSchemeOptions, codeFontFamilyOptions, codeHighlightThemeOption
 import { useSidebarOpacityPreference } from '../../hooks/useSidebarOpacityPreference.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
+import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
 
 type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'archives' | 'runtime' | 'about';
-type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features'>;
+type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>;
 
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
   { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
@@ -121,7 +122,7 @@ export function SettingsPage({
   const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
   const content =
     activeSection === 'general' ? (
-      <GeneralSettings />
+      <GeneralSettings config={config} onSave={onSaveRuntimePreferences} />
     ) : activeSection === 'localLlm' ? (
       config ? (
         <LocalModelSettings config={config} onFetchModels={onFetchProviderModels} onSave={onSaveProviders} onSaveStateChange={setLocalModelSaveState} />
@@ -291,7 +292,13 @@ function MemorySettingToggle({ checked, description, label, onChange }: MemorySe
   );
 }
 
-function GeneralSettings() {
+function GeneralSettings({
+  config,
+  onSave,
+}: {
+  config: RuntimeConfigState | null;
+  onSave: (input: RuntimePreferenceInput) => Promise<void>;
+}) {
   const { fontFamily, fontSize, fontWeight, setFontFamily, setFontSize, setFontWeight } = useAppearancePreferences();
   const { codeColorScheme, codeFontFamily, codeHighlightTheme, setCodeColorScheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
   const { sidebarTransparencyEnabled, setSidebarTransparencyEnabled } = useSidebarOpacityPreference();
@@ -308,6 +315,16 @@ function GeneralSettings() {
   const fontSizeIndex = Math.max(0, fontSizeOptions.indexOf(fontSize));
   const scaleMarkMaxIndex = Math.max(fontSizeOptions.length - 1, 1);
   const fontSizeProgress = `${(fontSizeIndex / scaleMarkMaxIndex) * 100}%`;
+  const markdownLinkOpenMode = markdownLinkOpenModeFromConfig(config);
+  const setMarkdownLinkOpenMode = (nextValue: string) => {
+    if (!config || (nextValue !== 'in-app' && nextValue !== 'external')) return;
+    void onSave({
+      desktopSettings: {
+        ...(config.desktopSettings ?? {}),
+        markdownLinkOpenMode: nextValue,
+      },
+    });
+  };
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__section--general">
@@ -474,6 +491,28 @@ function GeneralSettings() {
             </span>
             <SettingsChoiceGroup ariaLabel="强调色" options={accentColorChoiceOptions} value={accentColor} onChange={setAccentColor} />
           </div>
+        </div>
+      </div>
+
+      <div className="chat-user-settings__section-block">
+        <div className="chat-user-settings__group-title">链接</div>
+        <div className="chat-user-settings__group chat-user-settings__general-section">
+          <label className="chat-user-settings__row">
+            <span className="chat-user-settings__row-label">
+              <Globe2 size={14} />
+              <span>Markdown Web 链接</span>
+            </span>
+            <SelectField
+              aria-label="Markdown Web 链接打开方式"
+              className="settings-local-control"
+              disabled={!config}
+              value={markdownLinkOpenMode}
+              onValueChange={setMarkdownLinkOpenMode}
+            >
+              <option value="in-app">内置浏览器</option>
+              <option value="external">系统浏览器</option>
+            </SelectField>
+          </label>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { CapabilitiesPage } from '../pages/CapabilitiesPage.js';
 import { SettingsPage } from '../pages/SettingsPage.js';
@@ -10,6 +10,7 @@ import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../hooks/useRuntimeClientState.js';
 import type { ChatSkillSelectionRequest, MainView } from '../../types/app.js';
 import { latestBrowserOpenRequest, type BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
+import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
 
 export function AppRouteContent({
   activeProject,
@@ -74,12 +75,28 @@ export function AppRouteContent({
     [runtime.activityEvents],
   );
   const { openDesktopPanel } = workspacePanels;
-
-  useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url }) => {
+  const openBrowserUrl = useCallback((url: string) => {
     browserOpenSequenceRef.current += 1;
     setBrowserOpenRequest({ id: `desktop-browser-${Date.now()}-${browserOpenSequenceRef.current}`, url });
     openDesktopPanel('side', 'browser');
-  }), [openDesktopPanel]);
+  }, [openDesktopPanel]);
+  const markdownLinkOpenMode = markdownLinkOpenModeFromConfig(runtime.config);
+  const openMarkdownWebLink = useCallback((url: string) => {
+    if (markdownLinkOpenMode === 'in-app') {
+      openBrowserUrl(url);
+      return;
+    }
+    const openExternal = window.setsunaDesktop?.links.openExternal;
+    if (!openExternal) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    void openExternal(url).catch((unknownError: unknown) => {
+      runtime.setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    });
+  }, [markdownLinkOpenMode, openBrowserUrl, runtime.setError]);
+
+  useEffect(() => window.setsunaDesktop?.browser.onOpenNewTab(({ url }) => openBrowserUrl(url)), [openBrowserUrl]);
 
   useEffect(() => {
     if (!pendingBrowserOpenRequest || handledBrowserOpenRequestIdRef.current === pendingBrowserOpenRequest.id) return;
@@ -219,6 +236,7 @@ export function AppRouteContent({
       }}
       onOpenBottomTerminalPanel={() => workspacePanels.openDesktopPanel('bottom', 'terminal')}
       onOpenBrowser={() => workspacePanels.openDesktopPanel('side', 'browser')}
+      onOpenMarkdownWebLink={openMarkdownWebLink}
       onOpenFilesPanel={() => {
         projectWorkspace.setFilePreview(null);
         workspacePanels.openDesktopPanel('side', 'files');

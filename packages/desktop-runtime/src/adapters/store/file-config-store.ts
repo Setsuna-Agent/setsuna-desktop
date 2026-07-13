@@ -5,6 +5,7 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeDesktopSettings,
   RuntimeHookEventName,
   RuntimeHookHandlerConfig,
   RuntimeHookMatcherGroup,
@@ -469,9 +470,9 @@ function normalizeHookState(value: unknown): NonNullable<RuntimeHooksConfig['sta
   return state;
 }
 
-function normalizeDesktopSettings(value: unknown): Record<string, unknown> {
+function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.fromEntries(
+  const settings = Object.fromEntries(
     Object.entries(value).filter(([key, setting]) => (
       typeof key === 'string' &&
       setting !== undefined &&
@@ -479,6 +480,10 @@ function normalizeDesktopSettings(value: unknown): Record<string, unknown> {
       typeof setting !== 'symbol'
     )),
   );
+  if (settings.markdownLinkOpenMode !== 'in-app' && settings.markdownLinkOpenMode !== 'external') {
+    delete settings.markdownLinkOpenMode;
+  }
+  return settings;
 }
 
 function maskApiKey(apiKey: string): string {

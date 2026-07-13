@@ -264,6 +264,11 @@ export function ChatWorkspace({
     showEmptyStarter,
     threadId: currentThread?.id ?? null,
   });
+  const handleSend = useCallback<NonNullable<typeof onSend>>((value, options) => {
+    // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
+    scrollToBottom();
+    onSend(value, options);
+  }, [onSend, scrollToBottom]);
 
   useLayoutEffect(() => {
     setEditingMessageId(null);
@@ -411,7 +416,7 @@ export function ChatWorkspace({
       onSearchProjectEntries={onSearchProjectEntries}
       onOpenSideChat={onOpenSideChat}
       onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-      onSend={onSend}
+      onSend={handleSend}
       onStartThreadReview={onStartThreadReview}
       onThreadMemoryModeChange={onThreadMemoryModeChange}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
@@ -1411,6 +1416,11 @@ function AssistantRunContent({
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
+  const awaitingApproval = toolRuns.some(
+    (run) => run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected',
+  );
+  // 活动回合已有内容时，等待反馈始终跟在最新内容之后；等待用户审批时则不显示假进度。
+  const showTrailingLoading = active && status !== 'error' && hasRenderableContent && !awaitingApproval;
   const guidanceMessageIds = useMemo(() => new Set(item.handledSteerMessageIds), [item.handledSteerMessageIds]);
   const assistantGuidanceMessages = item.steerMessages;
   const timelinePlan = useMemo(
@@ -1452,7 +1462,11 @@ function AssistantRunContent({
   }
   return (
     <div className="chat-assistant-run">
-      {showActiveWorkPlaceholder ? <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder> : null}
+      {showActiveWorkPlaceholder ? (
+        <ActiveWorkPlaceholder segments={displaySegments} showLoading={!showTrailingLoading}>
+          {activePlaceholderGuidance}
+        </ActiveWorkPlaceholder>
+      ) : null}
       {renderAssistantTimelinePlan({
         active,
         handledGuidanceMessageIds: guidanceMessageIds,
@@ -1462,6 +1476,7 @@ function AssistantRunContent({
         plan: timelinePlan,
         workHistoryExpanded: workHistoryState.expanded,
       })}
+      {showTrailingLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
           <FileChangesSummaryCard
@@ -1737,15 +1752,25 @@ function assistantWorkItemNodes(
     : [];
 }
 
-function ActiveWorkPlaceholder({ children, segments }: { children?: ReactNode; segments: RuntimeMessage[] }) {
+function ActiveWorkPlaceholder({
+  children,
+  segments,
+  showLoading = true,
+}: {
+  children?: ReactNode;
+  segments: RuntimeMessage[];
+  showLoading?: boolean;
+}) {
   return (
     <WorkHistoryPanel
       active
       completedAtMs={null}
-      hasDetails={Boolean(children)}
+      hasDetails={Boolean(children) || showLoading}
       startedAtMs={inferActiveTurnStartedAtMs(segments)}
     >
       {children}
+      {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
+      {showLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
     </WorkHistoryPanel>
   );
 }
@@ -1947,15 +1972,15 @@ function WorkHistoryPanel({
   );
 }
 
-function AssistantLoadingIndicator({ label }: { label: string }) {
+function AssistantLoadingIndicator({ label, showLabel = true }: { label: string; showLabel?: boolean }) {
   return (
-    <div className="chat-assistant-loading" aria-live="polite">
+    <div className="chat-assistant-loading" aria-label={label} aria-live="polite">
       <span className="chat-assistant-loading__dots" aria-hidden="true">
         <span />
         <span />
         <span />
       </span>
-      <span>{label}</span>
+      {showLabel ? <span>{label}</span> : null}
     </div>
   );
 }

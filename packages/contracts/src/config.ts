@@ -26,6 +26,13 @@ export type ProviderModelConfig = {
 
 export type RuntimeSetsunaStyle = 'developer' | 'daily';
 
+export type RuntimeMarkdownLinkOpenMode = 'in-app' | 'external';
+
+export type RuntimeDesktopSettings = {
+  [key: string]: unknown;
+  markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
+};
+
 export type RuntimeMemorySettings = {
   useMemories: boolean;
   generateMemories: boolean;
@@ -157,7 +164,7 @@ export type RuntimeConfigState = {
   hooks?: RuntimeHooksConfig;
   bypassHookTrust?: boolean;
   features?: Record<string, boolean>;
-  desktopSettings?: Record<string, unknown>;
+  desktopSettings?: RuntimeDesktopSettings;
 };
 
 export type RuntimePermissionProfile = 'read-only' | 'workspace-write' | 'danger-full-access';
@@ -219,6 +226,6 @@ export type RuntimeConfigInput = {
   hooks?: RuntimeHooksConfig;
   bypassHookTrust?: boolean;
   features?: Record<string, boolean>;
-  desktopSettings?: Record<string, unknown>;
+  desktopSettings?: RuntimeDesktopSettings;
   providers?: ProviderConfigInput[];
 };
