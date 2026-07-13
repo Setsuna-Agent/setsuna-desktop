@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject, type UIEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dropdown, type MenuProps } from 'antd';
-import { Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, Maximize2, Minimize2, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
+import { Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
@@ -24,6 +24,7 @@ type ReviewLineContextMenuState = {
 };
 
 type HighlightedReviewDiffLine = {
+  highlighted?: string;
   key: string;
   line: DesktopDiffFile['lines'][number];
 };
@@ -33,6 +34,8 @@ type SplitReviewDiffRow = {
   oldLine: HighlightedReviewDiffLine | null;
   newLine: HighlightedReviewDiffLine | null;
 };
+
+type WholeFileReviewChange = 'added' | 'removed';
 
 type ReviewFileExpansionRequest = {
   expanded: boolean;
@@ -79,8 +82,10 @@ const reviewSourceOptions: Array<{ key: DesktopReviewSource; label: string }> = 
 const REVIEW_REFRESH_FEEDBACK_MS = 650;
 const REVIEW_DIFF_VIRTUALIZE_THRESHOLD = 80;
 const REVIEW_DIFF_ROW_OVERSCAN = 12;
-const REVIEW_DIFF_LINE_HEIGHT_PX = 18;
-const REVIEW_DIFF_GAP_HEIGHT_PX = 22;
+const REVIEW_DIFF_LINE_HEIGHT_PX = 20;
+const REVIEW_DIFF_GAP_HEIGHT_PX = 30;
+const REVIEW_DIFF_VIRTUAL_VIEWPORT_HEIGHT_PX = 320;
+const REVIEW_DIFF_MAX_WRAPPABLE_LINE_CHARS = 240;
 const DEFAULT_REVIEW_LINE_WRAP = true;
 const useReviewLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -437,6 +442,26 @@ function ReviewChangeCounts({ additions, deletions }: { additions: number; delet
     <span className="desktop-review-change-counts">
       <span className="desktop-review-change-counts__addition">+{additions}</span>
       <span className="desktop-review-change-counts__deletion">-{deletions}</span>
+    </span>
+  );
+}
+
+export function reviewFilePathParts(path: string): { directory: string; filename: string } {
+  const normalizedPath = path.replace(/\\/gu, '/');
+  const separatorIndex = normalizedPath.lastIndexOf('/');
+  if (separatorIndex < 0) return { directory: '', filename: normalizedPath };
+  return {
+    directory: normalizedPath.slice(0, separatorIndex + 1),
+    filename: normalizedPath.slice(separatorIndex + 1),
+  };
+}
+
+function ReviewFilePath({ path }: { path: string }) {
+  const { directory, filename } = reviewFilePathParts(path);
+  return (
+    <span className="desktop-review-file-card__path" title={path}>
+      {directory ? <span className="desktop-review-file-card__path-directory">{directory}</span> : null}
+      <span className="desktop-review-file-card__path-filename">{filename}</span>
     </span>
   );
 }
@@ -857,7 +882,6 @@ function ReviewFileCard({
 }) {
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
   const [focusHighlightVersion, setFocusHighlightVersion] = useState<number | null>(null);
-  const [diffHeightExpanded, setDiffHeightExpanded] = useState(false);
   const [lineContextMenu, setLineContextMenu] = useState<ReviewLineContextMenuState | null>(null);
   const fileCardRef = useRef<HTMLElement | null>(null);
   const lineContextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -869,17 +893,23 @@ function ReviewFileCard({
   );
   const visibleLines = file.lines;
   const language = fileLanguage(file.path);
+  const wholeFileChange = useMemo(() => reviewWholeFileChangeType(visibleLines), [visibleLines]);
+  const splitWholeFileChange = diffLayout === 'split' ? wholeFileChange : null;
   const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
-    () => visibleLines.map((line, index) => ({
-      key: `${file.path}:${line.lineNumber}:${index}`,
-      line,
-    })),
-    [file.path, visibleLines],
+    () => {
+      const highlightedLines = highlightedReviewDiffLines(visibleLines, language);
+      return visibleLines.map((line, index) => ({
+        highlighted: highlightedLines[index],
+        key: `${file.path}:${line.lineNumber}:${index}`,
+        line,
+      }));
+    },
+    [file.path, language, visibleLines],
   );
   const splitRows = useMemo(() => splitReviewDiffRows(highlightedVisibleLines), [highlightedVisibleLines]);
-  const diffRowEstimate = useCallback((index: number) => diffLayout === 'split'
+  const diffRowEstimate = useCallback((index: number) => diffLayout === 'split' && !splitWholeFileChange
     ? estimatedSplitDiffRowHeight(splitRows[index])
-    : estimatedUnifiedDiffLineHeight(highlightedVisibleLines[index]), [diffLayout, highlightedVisibleLines, splitRows]);
+    : estimatedUnifiedDiffLineHeight(highlightedVisibleLines[index]), [diffLayout, highlightedVisibleLines, splitRows, splitWholeFileChange]);
 
   useEffect(() => {
     setExpanded(fileExpansionRequest.expanded);
@@ -948,27 +978,14 @@ function ReviewFileCard({
             className="desktop-review-file-card__path-main"
             type="button"
             aria-expanded={expanded}
+            aria-label={`${expanded ? '折叠' : '展开'} ${file.path}，${file.action}`}
             onClick={() => setExpanded((value) => !value)}
           >
-            <ChevronDown className="desktop-review-file-card__chevron" size={13} />
             <WorkspaceFileIcon path={file.path} type="file" />
-            <span className="desktop-review-file-card__path" title={file.path}>
-              {file.path}
-            </span>
+            <ReviewFilePath path={file.path} />
+            <ReviewChangeCounts additions={file.additions} deletions={file.deletions} />
           </button>
           <div className="desktop-review-file-card__meta">
-            <span>{file.action}</span>
-            <ReviewChangeCounts additions={file.additions} deletions={file.deletions} />
-            <IconButton
-              aria-pressed={diffHeightExpanded}
-              className={`desktop-review-file-card__height-toggle ${diffHeightExpanded ? 'is-active' : ''}`}
-              disabled={!visibleLines.length}
-              label={diffHeightExpanded ? '收起 diff 高度' : '展开 diff 高度'}
-              variant="ghost"
-              onClick={() => setDiffHeightExpanded((value) => !value)}
-            >
-              {diffHeightExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-            </IconButton>
             <IconButton
               disabled={!canOpenFile}
               label={canOpenFile ? 'Open file in panel' : '文件不在当前项目目录内'}
@@ -998,7 +1015,8 @@ function ReviewFileCard({
               'desktop-review-diff',
               `desktop-review-diff--${diffLayout}`,
               lineWrap ? 'desktop-review-diff--wrap' : '',
-              diffHeightExpanded ? 'desktop-review-diff--expanded' : '',
+              splitWholeFileChange ? 'desktop-review-diff--single-sided' : '',
+              splitWholeFileChange ? `desktop-review-diff--single-sided-${splitWholeFileChange}` : '',
             ].filter(Boolean).join(' ')}
             diffLayout={diffLayout}
             highlightedLines={highlightedVisibleLines}
@@ -1006,6 +1024,7 @@ function ReviewFileCard({
             lineWrap={lineWrap}
             rowEstimate={diffRowEstimate}
             splitRows={splitRows}
+            wholeFileChange={splitWholeFileChange}
             onLineContextMenu={openDiffLineContextMenu}
             onOpenLine={openDiffLine}
           >
@@ -1038,6 +1057,7 @@ function ReviewDiffContent({
   lineWrap,
   rowEstimate,
   splitRows,
+  wholeFileChange,
   onLineContextMenu,
   onOpenLine,
 }: {
@@ -1050,13 +1070,15 @@ function ReviewDiffContent({
   lineWrap: boolean;
   rowEstimate: (index: number) => number;
   splitRows: SplitReviewDiffRow[];
+  wholeFileChange: WholeFileReviewChange | null;
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
   onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
-  const itemCount = diffLayout === 'split' ? splitRows.length : highlightedLines.length;
+  const isTwoSidedSplit = diffLayout === 'split' && !wholeFileChange;
+  const itemCount = isTwoSidedSplit ? splitRows.length : highlightedLines.length;
   const shouldVirtualize = canVirtualizeReviewDiff(itemCount);
 
-  if (diffLayout === 'split') {
+  if (isTwoSidedSplit) {
     if (shouldVirtualize && !lineWrap) {
       return (
         <ReviewSplitVirtualDiffViewport
@@ -1140,7 +1162,7 @@ function ReviewDiffContent({
         />
       )}
       rowEstimate={rowEstimate}
-      virtualizationKey={`unified:${lineWrap ? 'wrap' : 'nowrap'}`}
+      virtualizationKey={`${diffLayout}:${wholeFileChange ?? 'unified'}:${lineWrap ? 'wrap' : 'nowrap'}`}
     >
       {children}
     </VirtualReviewDiffViewport>
@@ -1217,7 +1239,10 @@ function ReviewSplitVirtualDiffViewport({
   }, [rows]);
 
   return (
-    <div className={`${className} desktop-review-diff--virtual desktop-review-diff--split-independent`}>
+    <div
+      className={`${className} desktop-review-diff--virtual desktop-review-diff--split-independent`}
+      style={{ height: REVIEW_DIFF_VIRTUAL_VIEWPORT_HEIGHT_PX }}
+    >
       <div
         className="desktop-review-diff-split-virtual-pane desktop-review-diff-split-virtual-pane--old"
         ref={oldPaneRef}
@@ -1310,6 +1335,7 @@ function VirtualReviewDiffViewport({
     <div
       className={`${className} desktop-review-diff--virtual`}
       ref={containerRef}
+      style={{ height: REVIEW_DIFF_VIRTUAL_VIEWPORT_HEIGHT_PX }}
       onScroll={onScroll}
     >
       <div className="desktop-review-diff-virtual-spacer" style={{ height: totalHeight }}>
@@ -1358,10 +1384,13 @@ function ReviewVirtualStackRow({
   useReviewLayoutEffect(() => {
     const row = rowRef.current;
     if (!row) return undefined;
-    const measure = () => onMeasure(index, row.getBoundingClientRect().height);
+    // Measure intrinsic content instead of the wrapper's reserved min-height. Measuring
+    // the wrapper would feed a transient oversized value back into itself indefinitely.
+    const content = row.firstElementChild ?? row;
+    const measure = () => onMeasure(index, content.getBoundingClientRect().height);
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(row);
+    observer.observe(content);
     return () => observer.disconnect();
   }, [index, onMeasure]);
 
@@ -1423,13 +1452,10 @@ function ReviewUnifiedDiffLine({
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
   onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
-  const highlighted = useHighlightedDiffLine(item.line.type === 'gap' ? '' : item.line.content, language);
   if (item.line.type === 'gap') {
     return (
       <div className={`desktop-review-diff-line desktop-review-diff-line--gap ${lineWrap ? 'desktop-review-diff-line--wrap' : ''}`}>
-        <span className="desktop-review-diff-line__prefix" />
-        <span className="desktop-review-diff-line__number" />
-        <ReviewDiffCode content={item.line.content} language={language} lineWrap={lineWrap} />
+        <ReviewDiffGapContent content={item.line.content} />
       </div>
     );
   }
@@ -1442,9 +1468,8 @@ function ReviewUnifiedDiffLine({
       onClick={() => onOpenLine(item.line, targetLine)}
       onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
     >
-      <span className="desktop-review-diff-line__prefix">{diffLinePrefix(item.line)}</span>
       <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
-      <ReviewDiffCode content={item.line.content} highlighted={highlighted} language={language} lineWrap={lineWrap} />
+      <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} lineWrap={lineWrap} />
     </button>
   );
 }
@@ -1575,16 +1600,13 @@ function ReviewSplitDiffCell({
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
   onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
-  const highlighted = useHighlightedDiffLine(item?.line.type === 'gap' ? '' : item?.line.content ?? '', language);
   if (!item) {
     return <span aria-hidden="true" className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--empty ${lineWrap ? 'desktop-review-diff-split-cell--wrap' : ''}`} />;
   }
   if (item.line.type === 'gap') {
     return (
       <span className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--gap ${lineWrap ? 'desktop-review-diff-split-cell--wrap' : ''}`}>
-        <span className="desktop-review-diff-line__prefix" />
-        <span className="desktop-review-diff-line__number" />
-        <ReviewDiffCode content={item.line.content} language={language} lineWrap={lineWrap} />
+        <ReviewDiffGapContent content={item.line.content} />
       </span>
     );
   }
@@ -1597,23 +1619,90 @@ function ReviewSplitDiffCell({
       onClick={() => onOpenLine(item.line, targetLine)}
       onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
     >
-      <span className="desktop-review-diff-line__prefix">{diffLinePrefix(item.line)}</span>
       <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
-      <ReviewDiffCode content={item.line.content} highlighted={highlighted} language={language} lineWrap={lineWrap} />
+      <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} lineWrap={lineWrap} />
     </button>
   );
 }
 
-function useHighlightedDiffLine(content: string, language: string): string | undefined {
-  return useMemo(() => highlightedCodeLinesHtml(content, language)[0], [content, language]);
+function ReviewDiffGapContent({ content }: { content: string }) {
+  return (
+    <span className="desktop-review-diff-gap-content">
+      <span aria-hidden="true" className="desktop-review-diff-line__number desktop-review-diff-gap-content__gutter">
+        <ChevronsUpDown size={11} />
+      </span>
+      <span className="desktop-review-diff-gap-content__label">{content}</span>
+    </span>
+  );
+}
+
+export function highlightedReviewDiffLines(lines: DesktopDiffFile['lines'], language: string): Array<string | undefined> {
+  const highlightedLines = Array<string | undefined>(lines.length).fill(undefined);
+  let segmentStart = 0;
+
+  for (let index = 0; index <= lines.length; index += 1) {
+    if (index < lines.length && lines[index]?.type !== 'gap') continue;
+    highlightReviewDiffSegment(lines, segmentStart, index, language, highlightedLines);
+    segmentStart = index + 1;
+  }
+
+  return highlightedLines;
+}
+
+export function reviewWholeFileChangeType(lines: DesktopDiffFile['lines']): WholeFileReviewChange | null {
+  const contentLines = lines.filter((line) => line.type !== 'gap');
+  if (!contentLines.length) return null;
+  if (contentLines.every((line) => line.type === 'added')) return 'added';
+  if (contentLines.every((line) => line.type === 'removed')) return 'removed';
+  return null;
+}
+
+function highlightReviewDiffSegment(
+  lines: DesktopDiffFile['lines'],
+  start: number,
+  end: number,
+  language: string,
+  output: Array<string | undefined>,
+): void {
+  if (start >= end) return;
+  const oldSourceLines: Array<{ content: string; index: number }> = [];
+  const newSourceLines: Array<{ content: string; index: number }> = [];
+
+  // Parse the old and new sides as continuous source independently. This preserves
+  // multiline syntax context without mixing both versions of a changed block.
+  for (let index = start; index < end; index += 1) {
+    const line = lines[index];
+    if (!line || line.type === 'gap') continue;
+    if (line.type !== 'added') oldSourceLines.push({ content: line.content, index });
+    if (line.type !== 'removed') newSourceLines.push({ content: line.content, index });
+  }
+
+  const oldHighlightedLines = highlightedCodeLinesHtml(oldSourceLines.map((line) => line.content).join('\n'), language);
+  oldSourceLines.forEach((line, index) => {
+    if (lines[line.index]?.type === 'removed') output[line.index] = oldHighlightedLines[index];
+  });
+
+  const newHighlightedLines = highlightedCodeLinesHtml(newSourceLines.map((line) => line.content).join('\n'), language);
+  newSourceLines.forEach((line, index) => {
+    output[line.index] = newHighlightedLines[index];
+  });
 }
 
 function ReviewDiffCode({ content, highlighted, language, lineWrap }: { content: string; highlighted?: string; language: string; lineWrap: boolean }) {
-  const className = `desktop-review-diff-code ${lineWrap ? 'desktop-review-diff-code--wrap' : ''}`;
+  const shouldWrap = shouldWrapReviewDiffLine(content, lineWrap);
+  const className = [
+    'desktop-review-diff-code',
+    shouldWrap ? 'desktop-review-diff-code--wrap' : '',
+    lineWrap && !shouldWrap ? 'desktop-review-diff-code--long-line' : '',
+  ].filter(Boolean).join(' ');
   if (highlighted !== undefined) {
     return <code className={`${className} language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />;
   }
   return <code className={className}>{content || ' '}</code>;
+}
+
+export function shouldWrapReviewDiffLine(content: string, lineWrap: boolean): boolean {
+  return lineWrap && content.length <= REVIEW_DIFF_MAX_WRAPPABLE_LINE_CHARS;
 }
 
 function splitReviewDiffRows(lines: HighlightedReviewDiffLine[]): SplitReviewDiffRow[] {
@@ -1842,9 +1931,4 @@ function ReviewDiffLineContextMenu({
 
 function reviewLineContextMenuLabel(appLabel: string, line?: number): string {
   return line ? `用 ${appLabel} 打开第 ${line} 行` : `用 ${appLabel} 打开`;
-}
-
-function diffLinePrefix(line: DesktopDiffFile['lines'][number]): string {
-  if (line.type === 'added' || line.type === 'removed') return '';
-  return ' ';
 }

@@ -91,6 +91,7 @@ export const codeFontFamilyOptions = [
 ] as const satisfies readonly CodeFontFamilyOptionConfig[];
 
 export const codeHighlightThemeOptions = [
+  { label: 'One Light', value: 'oneLight' },
   { label: 'GitHub', value: 'github' },
   { label: 'One Dark', value: 'oneDark' },
   { label: 'Monokai', value: 'monokai' },
@@ -159,7 +160,7 @@ function getInitialCodeFontFamily(): CodeFontFamilyMode {
 
 function getInitialCodeHighlightTheme(): CodeHighlightTheme {
   const saved = window.localStorage.getItem(codeHighlightThemeStorageKey);
-  return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'github';
+  return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'oneLight';
 }
 
 function applyCodeAppearance(codeFontFamily: CodeFontFamilyMode, codeHighlightTheme: CodeHighlightTheme): void {

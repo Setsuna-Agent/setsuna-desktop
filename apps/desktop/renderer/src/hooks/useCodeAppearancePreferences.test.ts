@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, initializeCodeAppearancePreference } from './useCodeAppearancePreferences.js';
 
 describe('code appearance preferences', () => {
-  it('defaults to the GitHub theme and system monospace font', () => {
+  it('defaults to the One Light theme and system monospace font', () => {
     withCodeAppearanceEnvironment({}, ({ dataset, styles }) => {
       initializeCodeAppearancePreference();
 
-      expect(dataset.codeHighlightTheme).toBe('github');
+      expect(dataset.codeHighlightTheme).toBe('oneLight');
       expect(dataset.codeFontFamily).toBe('system');
       expect(styles.get('--app-code-font-family')).toContain('SFMono-Regular');
     });
@@ -37,7 +37,7 @@ describe('code appearance preferences', () => {
       ({ dataset }) => {
         initializeCodeAppearancePreference();
 
-        expect(dataset.codeHighlightTheme).toBe('github');
+        expect(dataset.codeHighlightTheme).toBe('oneLight');
         expect(dataset.codeFontFamily).toBe('system');
       },
     );
@@ -56,7 +56,8 @@ describe('code appearance preferences', () => {
   it('offers a balanced set of light and dark code themes', () => {
     const themes = codeHighlightThemeOptions.map((option) => option.value);
 
-    expect(themes).toHaveLength(9);
+    expect(themes).toHaveLength(10);
+    expect(themes).toContain('oneLight');
     expect(themes).toContain('solarizedLight');
     expect(themes).toContain('tokyoNight');
     expect(themes).toContain('catppuccinMocha');

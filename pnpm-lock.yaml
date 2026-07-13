@@ -24,7 +24,6 @@ importers:
       electron-builder: ^25.1.8
       esbuild: ^0.24.2
       eslint: ^9.17.0
-      highlight.js: 10.7.3
       katex: ^0.16.22
       lucide-react: ^0.468.0
       marked: ^17.0.1
@@ -32,6 +31,7 @@ importers:
       react: ^18.3.1
       react-dom: ^18.3.1
       react-markdown: ^10.1.0
+      refractor: 5.0.0
       rehype-katex: ^7.0.1
       remark-gfm: ^4.0.1
       remark-math: ^6.0.0
@@ -53,7 +53,6 @@ importers:
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
       antd: 6.3.6_nnrd3gsncyragczmpvfhocinkq
-      highlight.js: 10.7.3
       katex: 0.16.47
       lucide-react: 0.468.0_react@18.3.1
       marked: 17.0.6
@@ -61,6 +60,7 @@ importers:
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
       react-markdown: 10.1.0_ldrqq4ddkzwykih5vpyejmhynu
+      refractor: 5.0.0
       rehype-katex: 7.0.1
       remark-gfm: 4.0.1
       remark-math: 6.0.0

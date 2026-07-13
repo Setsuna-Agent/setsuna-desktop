@@ -2,11 +2,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, reviewVirtualRange, reviewWorkspaceFilePath, shouldRestoreBranchBaseRefPreference } from './ReviewPanel.js';
+import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, highlightedReviewDiffLines, reviewFilePathParts, reviewVirtualRange, reviewWholeFileChangeType, reviewWorkspaceFilePath, shouldRestoreBranchBaseRefPreference, shouldWrapReviewDiffLine } from './ReviewPanel.js';
 import type { DesktopDiffSummary, DesktopReviewState } from './model.js';
 
 describe('DesktopReviewPanel', () => {
-  it('renders collapsible file diffs with status bars, gaps, and syntax highlighting', () => {
+  it('renders compact file diffs with inline counts, gap bars, and syntax highlighting', () => {
     const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
       activeProject: project,
       error: null,
@@ -20,24 +20,26 @@ describe('DesktopReviewPanel', () => {
 
     expect(html).toContain('<article class="desktop-review-file-card is-open"');
     expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain('desktop-review-file-card__chevron');
+    expect(html).not.toContain('desktop-review-file-card__chevron');
     expect(html).toContain('desktop-review-file-card__path-main');
+    expect(html).toContain('desktop-review-file-card__path-directory">src/domain/agent/drawer/</span>');
+    expect(html).toContain('desktop-review-file-card__path-filename">ChatLogDrawer.vue</span>');
     expect(html).not.toContain('desktop-review-file-card__path-button');
     expect(html).toContain('aria-label="Open file in panel"');
     expect(html).toContain('desktop-review-change-counts__addition">+1</span>');
     expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
     expect(html).toContain('aria-label="折叠所有文件改动"');
     expect(html).toContain('desktop-review-panel__file-expansion-toggle');
-    expect(html).toContain('aria-label="展开 diff 高度"');
-    expect(html).toContain('desktop-review-file-card__height-toggle');
+    expect(html).not.toContain('desktop-review-file-card__height-toggle');
     expect(html).toContain('desktop-review-diff-line--removed');
     expect(html).toContain('desktop-review-diff-line--added');
-    expect(html).toContain('desktop-review-diff-line__prefix"></span>');
-    expect(html).not.toContain('desktop-review-diff-line__prefix">-</span>');
-    expect(html).not.toContain('desktop-review-diff-line__prefix">+</span>');
+    expect(html).not.toContain('desktop-review-diff-line__prefix');
     expect(html).toContain('desktop-review-diff-line--gap');
+    expect(html).toContain('desktop-review-diff-gap-content');
+    expect(html).toContain('desktop-review-diff-line__number desktop-review-diff-gap-content__gutter');
+    expect(html).toContain('desktop-review-diff-gap-content__label">6 unmodified lines</span>');
     expect(html).toContain('6 unmodified lines');
-    expect(html).toContain('hljs-keyword');
+    expect(html).toContain('token keyword');
   });
 
   it('renders every diff line returned by the review state', () => {
@@ -182,7 +184,33 @@ describe('DesktopReviewPanel', () => {
       expect(html).toContain('desktop-review-diff-split-pane desktop-review-diff-split-pane--new');
       expect(html).toContain('desktop-review-diff-split-cell--old desktop-review-diff-split-cell--removed');
       expect(html).toContain('desktop-review-diff-split-cell--new desktop-review-diff-split-cell--added');
+      expect(html).toContain('desktop-review-diff-gap-content__label">6 unmodified lines</span>');
       expect(html).toContain('desktop-review-diff-split-cell--empty');
+    });
+  });
+
+  it('fills the split diff width for files that only contain additions or removals', () => {
+    withWindowLocalStorage({
+      'setsuna-desktop:review-diff-layout:project_1': 'split',
+      'setsuna-desktop:review-line-wrap:project_1': 'nowrap',
+    }, () => {
+      for (const type of ['added', 'removed'] as const) {
+        const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+          activeProject: project,
+          error: null,
+          latestSummary: wholeFileReviewSummary(type),
+          loading: false,
+          reviewState: null,
+          onExternalOpenFile: () => undefined,
+          onOpenProjectFile: () => undefined,
+          onRefresh: () => undefined,
+        }));
+
+        expect(html).toContain(`desktop-review-diff--single-sided desktop-review-diff--single-sided-${type}`);
+        expect(html).toContain(`desktop-review-diff-line desktop-review-diff-line--${type}`);
+        expect(html).not.toContain('desktop-review-diff-split-pane');
+        expect(html).not.toContain('desktop-review-diff-split-cell--empty');
+      }
     });
   });
 
@@ -319,7 +347,45 @@ describe('DesktopReviewPanel', () => {
     });
   });
 
-  it('virtualizes large wrapped unified diffs with dynamic row measurement', () => {
+  it('keeps pathological single lines compact even when wrapping is enabled', () => {
+    expect(shouldWrapReviewDiffLine('x'.repeat(240), true)).toBe(true);
+    expect(shouldWrapReviewDiffLine('x'.repeat(241), true)).toBe(false);
+    expect(shouldWrapReviewDiffLine('short line', false)).toBe(false);
+
+    const singleLongLineSummary: DesktopDiffSummary = {
+      additions: 1,
+      deletions: 0,
+      files: [{
+        path: 'generated-output.ts',
+        action: 'Modified',
+        additions: 1,
+        deletions: 0,
+        truncated: false,
+        lines: [{
+          type: 'added',
+          lineNumber: 1,
+          newLine: 1,
+          content: `const generated = '${'x'.repeat(600)}';`,
+        }],
+      }],
+    };
+
+    const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+      activeProject: project,
+      error: null,
+      latestSummary: singleLongLineSummary,
+      loading: false,
+      reviewState: null,
+      onExternalOpenFile: () => undefined,
+      onOpenProjectFile: () => undefined,
+      onRefresh: () => undefined,
+    }));
+
+    expect(html).toContain('desktop-review-diff-code desktop-review-diff-code--long-line language-typescript');
+    expect(html).not.toContain('desktop-review-diff-code desktop-review-diff-code--wrap language-typescript');
+  });
+
+  it('virtualizes large wrapped unified diffs in a stable compact viewport', () => {
     const largeWrappedSummary = largeWrappedReviewSummary('large-unified.ts', 90);
 
     withReviewBrowserEnvironment({ 'setsuna-desktop:review-line-wrap:project_1': 'wrap' }, () => {
@@ -335,6 +401,7 @@ describe('DesktopReviewPanel', () => {
       }));
 
       expect(html).toContain('desktop-review-diff desktop-review-diff--unified desktop-review-diff--wrap desktop-review-diff--virtual');
+      expect(html).toContain('style="height:320px"');
       expect(html).toContain('desktop-review-diff-virtual-spacer');
       expect(html).toContain('desktop-review-diff-code desktop-review-diff-code--wrap language-typescript');
       expect(html).toContain('desktop-review-diff-line__number">1</span>');
@@ -343,7 +410,7 @@ describe('DesktopReviewPanel', () => {
   });
 
   it('virtualizes large wrapped split diffs as row pairs instead of independent panes', () => {
-    const largeWrappedSummary = largeWrappedReviewSummary('large-split.ts', 90);
+    const largeWrappedSummary = largeWrappedReviewSummary('large-split.ts', 90, true);
 
     withReviewBrowserEnvironment({
       'setsuna-desktop:review-diff-layout:project_1': 'split',
@@ -361,10 +428,36 @@ describe('DesktopReviewPanel', () => {
       }));
 
       expect(html).toContain('desktop-review-diff desktop-review-diff--split desktop-review-diff--wrap desktop-review-diff--virtual');
+      expect(html).toContain('style="height:320px"');
       expect(html).toContain('desktop-review-diff-split-row');
       expect(html).not.toContain('desktop-review-diff-split-virtual-pane');
       expect(html).toContain('desktop-review-diff-line__number">1</span>');
       expect(html).not.toContain('desktop-review-diff-line__number">90</span>');
+    });
+  });
+
+  it('virtualizes large whole-file additions as one full-width stream in split mode', () => {
+    const largeCreatedSummary = largeWrappedReviewSummary('large-created.ts', 90);
+
+    withReviewBrowserEnvironment({
+      'setsuna-desktop:review-diff-layout:project_1': 'split',
+      'setsuna-desktop:review-line-wrap:project_1': 'wrap',
+    }, () => {
+      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+        activeProject: project,
+        error: null,
+        latestSummary: largeCreatedSummary,
+        loading: false,
+        reviewState: null,
+        onExternalOpenFile: () => undefined,
+        onOpenProjectFile: () => undefined,
+        onRefresh: () => undefined,
+      }));
+
+      expect(html).toContain('desktop-review-diff--single-sided desktop-review-diff--single-sided-added desktop-review-diff--virtual');
+      expect(html).toContain('desktop-review-diff-line desktop-review-diff-line--added');
+      expect(html).not.toContain('desktop-review-diff-split-row');
+      expect(html).not.toContain('desktop-review-diff-split-virtual-pane');
     });
   });
 
@@ -405,6 +498,50 @@ describe('DesktopReviewPanel', () => {
       workspaceRoot: '/Users/zy/work/yuri/front-end/agent',
       gitRoot: '/Users/zy/work/yuri',
     })).toBe('src/domain/agent/App.vue');
+  });
+
+  it('splits review paths so the filename can stay visible when the directory is truncated', () => {
+    expect(reviewFilePathParts('front-end/agent/src/App.tsx')).toEqual({
+      directory: 'front-end/agent/src/',
+      filename: 'App.tsx',
+    });
+    expect(reviewFilePathParts('front-end\\agent\\src\\App.tsx')).toEqual({
+      directory: 'front-end/agent/src/',
+      filename: 'App.tsx',
+    });
+    expect(reviewFilePathParts('App.tsx')).toEqual({ directory: '', filename: 'App.tsx' });
+  });
+
+  it('highlights each diff side as a continuous Prism source segment', () => {
+    const highlighted = highlightedReviewDiffLines([
+      { type: 'removed', lineNumber: 1, oldLine: 1, content: "export type Previous = 'old';" },
+      { type: 'added', lineNumber: 1, newLine: 1, content: "export type Current = 'new';" },
+      { type: 'context', lineNumber: 2, oldLine: 2, newLine: 2, content: 'const value = Current;' },
+      { type: 'gap', lineNumber: 3, content: '8 unmodified lines' },
+    ], 'typescript');
+
+    expect(highlighted[0]).toContain('token keyword');
+    expect(highlighted[0]).toContain('token class-name');
+    expect(highlighted[1]).toContain('token operator');
+    expect(highlighted[2]).toContain('token keyword');
+    expect(highlighted[3]).toBeUndefined();
+  });
+
+  it('detects whole-file changes from diff line semantics', () => {
+    expect(reviewWholeFileChangeType([
+      { type: 'added', lineNumber: 1, newLine: 1, content: 'first' },
+      { type: 'gap', lineNumber: 2, content: '2 unmodified lines' },
+      { type: 'added', lineNumber: 3, newLine: 4, content: 'last' },
+    ])).toBe('added');
+    expect(reviewWholeFileChangeType([
+      { type: 'removed', lineNumber: 1, oldLine: 1, content: 'first' },
+      { type: 'removed', lineNumber: 2, oldLine: 2, content: 'last' },
+    ])).toBe('removed');
+    expect(reviewWholeFileChangeType([
+      { type: 'removed', lineNumber: 1, oldLine: 1, content: 'before' },
+      { type: 'added', lineNumber: 2, newLine: 1, content: 'after' },
+    ])).toBeNull();
+    expect(reviewWholeFileChangeType([{ type: 'gap', lineNumber: 1, content: '2 unmodified lines' }])).toBeNull();
   });
 });
 
@@ -456,23 +593,51 @@ const reviewState: DesktopReviewState = {
   unstagedSummary: latestSummary,
 };
 
-function largeWrappedReviewSummary(path: string, lineCount: number): DesktopDiffSummary {
+function wholeFileReviewSummary(type: 'added' | 'removed'): DesktopDiffSummary {
+  const added = type === 'added';
+  return {
+    additions: added ? 2 : 0,
+    deletions: added ? 0 : 2,
+    files: [{
+      path: added ? 'created.ts' : 'deleted.ts',
+      action: added ? 'Created' : 'Deleted',
+      additions: added ? 2 : 0,
+      deletions: added ? 0 : 2,
+      truncated: false,
+      lines: added ? [
+        { type: 'added', lineNumber: 1, newLine: 1, content: 'const first = true;' },
+        { type: 'added', lineNumber: 2, newLine: 2, content: 'export { first };' },
+      ] : [
+        { type: 'removed', lineNumber: 1, oldLine: 1, content: 'const first = true;' },
+        { type: 'removed', lineNumber: 2, oldLine: 2, content: 'export { first };' },
+      ],
+    }],
+  };
+}
+
+function largeWrappedReviewSummary(path: string, lineCount: number, paired = false): DesktopDiffSummary {
+  const lines = Array.from({ length: lineCount }, (_, index) => ({
+    type: 'added' as const,
+    lineNumber: paired ? index * 2 + 2 : index + 1,
+    newLine: index + 1,
+    content: `const wrapped line ${index + 1} = '${'veryLongIdentifier'.repeat(8)}';`,
+  }));
   return {
     additions: lineCount,
-    deletions: 0,
+    deletions: paired ? lineCount : 0,
     files: [
       {
         path,
         action: 'Modified',
         additions: lineCount,
-        deletions: 0,
+        deletions: paired ? lineCount : 0,
         truncated: false,
-        lines: Array.from({ length: lineCount }, (_, index) => ({
-          type: 'added' as const,
-          lineNumber: index + 1,
-          newLine: index + 1,
-          content: `const wrapped line ${index + 1} = '${'veryLongIdentifier'.repeat(8)}';`,
-        })),
+        lines: paired ? lines.flatMap((line, index) => [{
+          type: 'removed' as const,
+          lineNumber: index * 2 + 1,
+          oldLine: index + 1,
+          content: `const previous line ${index + 1} = false;`,
+        }, line]) : lines,
       },
     ],
   };

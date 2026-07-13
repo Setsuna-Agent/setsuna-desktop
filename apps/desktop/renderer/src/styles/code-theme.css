@@ -11,7 +11,42 @@
   --code-highlight-meta: #57606a;
   --code-highlight-addition: #1a7f37;
   --code-highlight-deletion: #cf222e;
+  --code-highlight-function: var(--code-highlight-title);
+  --code-highlight-class: var(--code-highlight-type);
+  --code-highlight-property: var(--code-highlight-attribute);
+  --code-highlight-tag: var(--code-highlight-type);
+  --code-highlight-selector: var(--code-highlight-attribute);
+  --code-highlight-attribute-name: var(--code-highlight-attribute);
+  --code-highlight-attribute-value: var(--code-highlight-string);
+  --code-highlight-variable: var(--code-highlight-attribute);
+  --code-highlight-operator: var(--code-highlight-meta);
+  --code-highlight-punctuation: var(--code-highlight-text);
   --chat-code-highlighter-bg: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='oneLight'] {
+  --code-highlight-background: #fafafa;
+  --code-highlight-text: #383a42;
+  --code-highlight-comment: #a0a1a7;
+  --code-highlight-keyword: #a626a4;
+  --code-highlight-string: #50a14f;
+  --code-highlight-number: #c18401;
+  --code-highlight-title: #4078f2;
+  --code-highlight-type: #c18401;
+  --code-highlight-attribute: #c18401;
+  --code-highlight-meta: #0184bc;
+  --code-highlight-addition: #50a14f;
+  --code-highlight-deletion: #e45649;
+  --code-highlight-function: #4078f2;
+  --code-highlight-class: #c18401;
+  --code-highlight-property: #e45649;
+  --code-highlight-tag: #e45649;
+  --code-highlight-selector: #50a14f;
+  --code-highlight-attribute-name: #c18401;
+  --code-highlight-attribute-value: #50a14f;
+  --code-highlight-variable: #4078f2;
+  --code-highlight-operator: #4078f2;
+  --code-highlight-punctuation: #383a42;
 }
 
 :root[data-theme='dark'][data-code-highlight-theme='github'] {
@@ -170,89 +205,87 @@
   color: var(--code-highlight-text);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-comment, .hljs-quote) {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.comment, .token.prolog, .token.doctype, .token.cdata) {
   color: var(--code-highlight-comment);
   font-style: italic;
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-doctag, .hljs-keyword, .hljs-formula, .hljs-selector-tag, .hljs-literal) {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.atrule, .token.keyword, .token.rule, .token.important) {
   color: var(--code-highlight-keyword);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-string, .hljs-regexp, .hljs-attribute, .hljs-meta-string) {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.string, .token.char, .token.regex, .token.url, .token.inserted) {
   color: var(--code-highlight-string);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-link) {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.boolean, .token.number, .token.constant, .token.symbol) {
   color: var(--code-highlight-number);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-title, .hljs-section, .hljs-selector-id),
-:is(.desktop-code-line, .desktop-review-diff-code) .hljs-class .hljs-title {
-  color: var(--code-highlight-title);
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.function {
+  color: var(--code-highlight-function);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-type, .hljs-built_in, .hljs-builtin-name, .hljs-name, .hljs-tag) {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.class-name {
+  color: var(--code-highlight-class);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.builtin, .token.namespace) {
   color: var(--code-highlight-type);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-attr, .hljs-variable, .hljs-template-variable, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo) {
-  color: var(--code-highlight-attribute);
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.property {
+  color: var(--code-highlight-property);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) :is(.hljs-meta, .hljs-template-tag) {
-  color: var(--code-highlight-meta);
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.tag {
+  color: var(--code-highlight-tag);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) .hljs-addition {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.selector {
+  color: var(--code-highlight-selector);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.attr-name {
+  color: var(--code-highlight-attribute-name);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.attr-value {
+  color: var(--code-highlight-attribute-value);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.variable {
+  color: var(--code-highlight-variable);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.operator, .token.entity) {
+  color: var(--code-highlight-operator);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.punctuation {
+  color: var(--code-highlight-punctuation);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.attr-value > .token.punctuation {
+  color: var(--code-highlight-attribute-value);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.attr-value > .token.attr-equals {
+  color: var(--code-highlight-punctuation);
+}
+
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.inserted {
   color: var(--code-highlight-addition);
 }
 
-:is(.desktop-code-line, .desktop-review-diff-code) .hljs-deletion {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) .token.deleted {
   color: var(--code-highlight-deletion);
 }
 
-.chat-markdown .chat-code-highlighter :is(.token.comment, .token.prolog, .token.doctype, .token.cdata) {
-  color: var(--code-highlight-comment);
-  font-style: italic;
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.atrule, .token.keyword, .token.rule, .token.important) {
-  color: var(--code-highlight-keyword);
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.string, .token.char, .token.regex, .token.url, .token.inserted) {
-  color: var(--code-highlight-string);
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.boolean, .token.number, .token.constant, .token.symbol) {
-  color: var(--code-highlight-number);
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.function, .token.class-name) {
-  color: var(--code-highlight-title);
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.builtin, .token.namespace) {
-  color: var(--code-highlight-type);
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.property, .token.tag, .token.selector, .token.attr-name, .token.attr-value, .token.variable) {
-  color: var(--code-highlight-attribute);
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.operator, .token.entity, .token.punctuation) {
-  color: var(--code-highlight-meta);
-}
-
-.chat-markdown .chat-code-highlighter .token.deleted {
-  color: var(--code-highlight-deletion);
-}
-
-.chat-markdown .chat-code-highlighter :is(.token.bold, .token.important) {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.bold, .token.important) {
   font-weight: 600;
 }
 
-.chat-markdown .chat-code-highlighter :is(.token.italic, .token.entity) {
+:is(.desktop-code-line, .desktop-review-diff-code, .chat-markdown .chat-code-highlighter) :is(.token.italic, .token.entity) {
   font-style: italic;
 }
