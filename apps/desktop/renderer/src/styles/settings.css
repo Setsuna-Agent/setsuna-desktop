@@ -914,6 +914,15 @@
   scrollbar-width: thin;
 }
 
+:root[data-code-highlight-theme='chatgptLight'] .desktop-settings-panel .chat-user-settings__code-preview-header {
+  border: 0;
+  background: var(--code-highlight-background);
+}
+
+:root[data-code-highlight-theme='chatgptLight'] .desktop-settings-panel .chat-user-settings__code-preview-body {
+  border: 0;
+}
+
 .desktop-settings-panel .chat-user-settings__code-preview-line {
   display: grid;
   grid-template-columns: 34px minmax(max-content, 1fr);

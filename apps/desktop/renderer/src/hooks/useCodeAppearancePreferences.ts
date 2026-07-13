@@ -91,6 +91,7 @@ export const codeFontFamilyOptions = [
 ] as const satisfies readonly CodeFontFamilyOptionConfig[];
 
 export const codeHighlightThemeOptions = [
+  { label: 'ChatGPT Light（推荐）', value: 'chatgptLight' },
   { label: 'One Light', value: 'oneLight' },
   { label: 'GitHub', value: 'github' },
   { label: 'One Dark', value: 'oneDark' },
@@ -185,7 +186,7 @@ function getInitialCodeFontFamily(): CodeFontFamilyMode {
 
 function getInitialCodeHighlightTheme(): CodeHighlightTheme {
   const saved = window.localStorage.getItem(codeHighlightThemeStorageKey);
-  return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'oneLight';
+  return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'chatgptLight';
 }
 
 function getInitialCodeColorScheme(): CodeColorScheme {

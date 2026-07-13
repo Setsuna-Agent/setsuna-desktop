@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CodeHighlighter } from '@ant-design/x';
+import { Check, Copy } from 'lucide-react';
 import { copyTextToClipboard } from '../../../utils/clipboard.js';
 
 type MarkdownCodeBlockProps = {
@@ -119,7 +120,10 @@ function CodeCopyButton({ code }: { code: string }) {
       aria-label={copied ? '代码已复制' : '复制代码'}
       onClick={() => void copyCode()}
     >
-      {copied ? '已复制' : '复制'}
+      {copied
+        ? <Check aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />
+        : <Copy aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />}
+      <span className="chat-code-highlighter__copy-label">{copied ? '已复制' : '复制'}</span>
     </button>
   );
 }

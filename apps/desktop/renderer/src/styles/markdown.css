@@ -385,6 +385,10 @@
   transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
 }
 
+.chat-code-highlighter__copy-icon {
+  display: none;
+}
+
 .chat-code-highlighter__copy:hover {
   border-color: color-mix(in srgb, var(--code-highlight-text) 10%, transparent);
   color: var(--code-highlight-text);
@@ -410,6 +414,41 @@
 .chat-code-highlighter--plain pre {
   padding: 18px 16px;
   white-space: pre;
+}
+
+:root[data-code-highlight-theme='chatgptLight'] .chat-code-highlighter {
+  border: 0;
+  box-shadow: none;
+}
+
+:root[data-code-highlight-theme='chatgptLight'] .chat-code-highlighter__header {
+  min-height: 34px;
+  padding: 6px 8px;
+  border-bottom: 0;
+  background: var(--chat-code-highlighter-bg);
+}
+
+:root[data-code-highlight-theme='chatgptLight'] .chat-code-highlighter__copy {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+:root[data-code-highlight-theme='chatgptLight'] .chat-code-highlighter__copy-icon {
+  display: block;
+}
+
+:root[data-code-highlight-theme='chatgptLight'] .chat-code-highlighter__copy-label {
+  display: none;
+}
+
+:root[data-code-highlight-theme='chatgptLight'] .chat-code-highlighter pre {
+  padding: 6px 8px 14px !important;
 }
 
 .chat-code-highlighter pre {

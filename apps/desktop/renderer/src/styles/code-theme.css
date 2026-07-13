@@ -68,6 +68,31 @@
   --code-highlight-punctuation: #383a42;
 }
 
+:root[data-code-highlight-theme='chatgptLight'] {
+  --code-highlight-background: #f4f4f4;
+  --code-highlight-text: #171717;
+  --code-highlight-comment: #6b7280;
+  --code-highlight-keyword: #7c3aed;
+  --code-highlight-string: #166534;
+  --code-highlight-number: #b45309;
+  --code-highlight-title: #1d4ed8;
+  --code-highlight-type: #0f766e;
+  --code-highlight-attribute: #9a3412;
+  --code-highlight-meta: #64748b;
+  --code-highlight-addition: #15803d;
+  --code-highlight-deletion: #dc2626;
+  --code-highlight-function: var(--code-highlight-title);
+  --code-highlight-class: var(--code-highlight-type);
+  --code-highlight-property: var(--code-highlight-attribute);
+  --code-highlight-tag: var(--code-highlight-type);
+  --code-highlight-selector: var(--code-highlight-attribute);
+  --code-highlight-attribute-name: var(--code-highlight-attribute);
+  --code-highlight-attribute-value: var(--code-highlight-string);
+  --code-highlight-variable: var(--code-highlight-text);
+  --code-highlight-operator: var(--code-highlight-meta);
+  --code-highlight-punctuation: var(--code-highlight-text);
+}
+
 :root[data-theme='dark'][data-code-highlight-theme='github'] {
   --code-highlight-background: #161b22;
   --code-highlight-text: #c9d1d9;
