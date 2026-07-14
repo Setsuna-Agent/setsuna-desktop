@@ -213,7 +213,7 @@ export class RuntimeTurnInputCoordinator {
     return {
       id: `mailbox_${input.id}`,
       turnId,
-      role: 'system',
+      role: 'user',
       content: `<mailbox_message id="${escapeSkillAttribute(input.id)}"${fromAttribute}${fromThreadAttribute}${toAttribute}${modeAttribute}${triggerAttribute}>\n${neutralizeMailboxTags(input.content)}\n</mailbox_message>`,
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',

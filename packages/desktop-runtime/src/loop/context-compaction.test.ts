@@ -3,7 +3,7 @@ import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction } from './context-compaction.js';
 
 describe('runtime context compaction', () => {
-  it('creates a system summary and keeps recent messages when forced', () => {
+  it('creates a user-context summary and keeps recent messages when forced', () => {
     const messages = Array.from({ length: 12 }, (_, index): RuntimeMessage => ({
       id: `msg_${index}`,
       role: index % 2 ? 'assistant' : 'user',
@@ -24,13 +24,13 @@ describe('runtime context compaction', () => {
 
     expect(result?.messages[4]).toMatchObject({
       id: 'compact_1',
-      role: 'system',
+      role: 'user',
       contextCompaction: {
         compactedMessageCount: 4,
         maxContextTokens: 256000,
         keptRecentMessageCount: 8,
         maxContextTokensK: 256,
-        summaryRole: 'system',
+        summaryRole: 'user',
         triggerScopes: ['manual'],
       },
     });
@@ -103,6 +103,49 @@ describe('runtime context compaction', () => {
     ];
 
     expect(createRuntimeContextCompactionCandidate({ messages })).toBeNull();
+  });
+
+  it('pins persisted system and developer messages instead of summarizing or archiving them', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'injected_policy',
+        role: 'developer',
+        content: 'Persisted developer policy',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+        visibility: 'model',
+      },
+      {
+        id: 'old_user',
+        role: 'user',
+        content: 'Old user context',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'recent_assistant',
+        role: 'assistant',
+        content: 'Recent answer',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+
+    const candidate = createRuntimeContextCompactionCandidate({ force: true, keepRecentMessages: 1, messages });
+    const result = candidate && materializeRuntimeContextCompaction({
+      candidate,
+      createdAt: '2026-06-25T00:01:00.000Z',
+      id: 'compact_1',
+      summary: 'Old user context summary',
+    });
+
+    expect(candidate?.pinnedMessages.map((message) => message.id)).toEqual(['injected_policy']);
+    expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['old_user']);
+    expect(result?.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'injected_policy', role: 'developer', visibility: 'model' }),
+      expect.objectContaining({ id: 'compact_1', role: 'user' }),
+    ]));
+    expect(result?.messages.find((message) => message.id === 'injected_policy')?.visibility).not.toBe('transcript');
   });
 
   it('uses the active model budget when deciding automatic compaction', () => {
@@ -226,7 +269,7 @@ describe('runtime context compaction', () => {
     expect(result?.messages.slice(0, 3).every((message) => message.visibility === 'transcript')).toBe(true);
     expect(result?.messages[3]).toMatchObject({
       id: 'compact_1',
-      role: 'system',
+      role: 'user',
       contextCompaction: {
         triggerScopes: ['total', 'latest_input'],
       },

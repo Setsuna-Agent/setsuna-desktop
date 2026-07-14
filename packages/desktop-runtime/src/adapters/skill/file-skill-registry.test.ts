@@ -2,7 +2,7 @@ import { mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ModelRequest } from '@setsuna-desktop/contracts';
+import type { ModelRequest, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { InMemoryEventBus } from '../event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../id/random-id-generator.js';
 import { JsonThreadStore } from '../store/json-thread-store.js';
@@ -197,8 +197,9 @@ describe('file skill registry', () => {
 
     await loop.sendTurn(thread.id, { input: 'run the built-in workflow' });
 
-    expect(modelClient.messages[0]?.content).toContain('<skill name="builtin-demo" id="builtin-demo">');
-    expect(modelClient.messages[0]?.content).toContain('Use the built-in demo workflow.');
+    const skillMessage = modelClient.messages.find((message) => message.id === 'skill_builtin-demo');
+    expect(skillMessage?.content).toContain('<skill name="builtin-demo" id="builtin-demo" path="');
+    expect(skillMessage?.content).toContain('Use the built-in demo workflow.');
   });
 
   it('injects per-turn skills without persisting selected state', async () => {
@@ -218,7 +219,8 @@ describe('file skill registry', () => {
 
     await loop.sendTurn(thread.id, { input: 'run the built-in workflow', skillIds: ['builtin-demo'] });
 
-    expect(modelClient.messages[0]?.content).toContain('<skill name="builtin-demo" id="builtin-demo">');
+    expect(modelClient.messages.find((message) => message.id === 'skill_builtin-demo')?.content)
+      .toContain('<skill name="builtin-demo" id="builtin-demo" path="');
     expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'builtin-demo', selected: false });
   });
 });
@@ -257,7 +259,7 @@ function skillChangeQueue(registry: FileSkillRegistry): { next(): Promise<boolea
 }
 
 class CapturingModelClient implements ModelClient {
-  messages: Array<{ content: string }> = [];
+  messages: RuntimeMessage[] = [];
 
   async *stream(request: ModelRequest) {
     this.messages = request.messages;

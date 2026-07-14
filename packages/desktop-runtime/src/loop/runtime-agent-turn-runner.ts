@@ -9,7 +9,6 @@ import type { ConfigStore } from '../ports/config-store.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../ports/tool-host.js';
-import { normalizedMaxToolRounds } from './agent-loop-tool-utils.js';
 import type { RuntimeHookCoordinator } from './runtime-hook-coordinator.js';
 import { isSuccessfulRememberMemoryMessage } from './runtime-memory-coordinator.js';
 import type { RuntimeModelSampler } from './runtime-model-sampler.js';
@@ -17,7 +16,7 @@ import type { RuntimeSamplingContextBuilder } from './runtime-sampling-context-b
 import type { RuntimeThreadTitleCoordinator } from './runtime-thread-title-coordinator.js';
 import type { RuntimeToolCallExecutor } from './runtime-tool-call-executor.js';
 import type { RuntimeTurnFinalizer } from './runtime-turn-finalizer.js';
-import { HookStoppedTurnError, type RuntimeContextCompactor } from './runtime-context-compactor.js';
+import { HookStoppedTurnError } from './runtime-context-compactor.js';
 import { isAbortError, throwIfAborted } from './runtime-turn-errors.js';
 import type { RuntimeTurnInputCoordinator } from './runtime-turn-input-coordinator.js';
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';
@@ -30,10 +29,8 @@ type RuntimeAgentTurnRunnerOptions = {
   clock: Clock;
   collaborationCoordinator: Pick<RuntimeCollaborationCoordinator, 'collectPendingChildren' | 'pendingChildren'>;
   configStore?: ConfigStore;
-  contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
   hooks: Pick<RuntimeHookCoordinator, 'planModeContextMessages' | 'runStopHooks' | 'runTurnStartHooks' | 'stopContinuationMessages'>;
   ids: IdGenerator;
-  maxToolRounds?: number;
   modelSampler: Pick<RuntimeModelSampler, 'sample'>;
   samplingContexts: Pick<RuntimeSamplingContextBuilder, 'build'>;
   threadTitles: Pick<RuntimeThreadTitleCoordinator, 'start'>;
@@ -162,20 +159,12 @@ export class RuntimeAgentTurnRunner {
     });
 
     let usage: RuntimeUsage | undefined;
-    let turnCompleted = false;
     let cleanupStatus: ToolTurnCleanupOutcome['status'] = 'completed';
     try {
       throwIfAborted(signal);
-      const initialConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
-        force: false,
-        messages: [...thread.messages, ...(includeUserMessageInConversation ? [modelUserMessage] : [])],
-        runtimeConfig,
-        signal,
-        thread,
-        threadId,
-        turnId,
-      });
-      let conversationMessages = initialConversationMessages;
+      // SamplingContextBuilder owns the single request boundary so compaction can
+      // account for transient prompt fragments, tool schemas, and output reserve.
+      let conversationMessages = [...thread.messages, ...(includeUserMessageInConversation ? [modelUserMessage] : [])];
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
       let explicitMemoryUserContent = userMessage.content;
@@ -208,11 +197,11 @@ export class RuntimeAgentTurnRunner {
         return true;
       };
       let memorySavedByTool = false;
-      const maxToolRounds = normalizedMaxToolRounds(this.options.maxToolRounds);
       let stopHookActive = false;
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
-      for (let round = 0; round < maxToolRounds; round += 1) {
+      while (true) {
+        throwIfAborted(signal);
         appendMailboxMessagesToConversation(await this.options.turnInputs.drainMailboxMessages(threadId, turnId));
         appendSteersToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
         const stepContext = await this.options.samplingContexts.build({
@@ -224,13 +213,13 @@ export class RuntimeAgentTurnRunner {
           thread,
           threadId,
           turnId,
+          toolAccess: planOnly ? 'none' : taskKind === 'review' ? 'read-only' : 'all',
         });
         conversationMessages = stepContext.conversationMessages;
         runtimeConfig = stepContext.runtimeConfig;
 
         const sampled = await this.options.modelSampler.sample({
           captureProtocolUsage: true,
-          forceNoTools: false,
           onAssistantStarted: (messageId) => {
             activeAssistantMessageId = messageId;
           },
@@ -349,80 +338,7 @@ export class RuntimeAgentTurnRunner {
           },
         });
         activeAssistantMessageId = null;
-        turnCompleted = true;
         break;
-      }
-
-      if (!turnCompleted) {
-        // 达到工具轮次上限后禁用 toolChoice 再要一次最终回答，避免无限工具循环。
-        appendMailboxMessagesToConversation(await this.options.turnInputs.drainMailboxMessages(threadId, turnId));
-        appendSteersToConversation(await this.options.turnInputs.drainSteers(threadId, turnId));
-        const finalStepContext = await this.options.samplingContexts.build({
-          conversationMessages,
-          hookContextMessages: additionalContextMessages,
-          runtimeConfig,
-          signal,
-          skillIds: activeSkillIds,
-          thread,
-          threadId,
-          turnId,
-        });
-        conversationMessages = finalStepContext.conversationMessages;
-        runtimeConfig = finalStepContext.runtimeConfig;
-        this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
-        const sampled = await this.options.modelSampler.sample({
-          captureProtocolUsage: false,
-          forceNoTools: true,
-          onAssistantStarted: (messageId) => {
-            activeAssistantMessageId = messageId;
-          },
-          planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
-          planOnly,
-          signal,
-          step: finalStepContext,
-          thinkingOptions: activeThinkingOptions,
-          threadId,
-          turnId,
-        });
-        const assistantMessageId = sampled.assistantMessageId;
-        const finalMemoryCitation = sampled.memoryCitation;
-        if (sampled.usage) usage = sampled.usage;
-        let finalText = sampled.text;
-
-        if (!finalText.trim()) {
-          const fallbackText = `已经连续执行了 ${maxToolRounds} 轮工具调用，我先停止继续调用工具并保留当前结果。可以继续让我接着处理剩余部分。`;
-          await this.options.appendEvent(threadId, {
-            id: this.options.ids.id('event'),
-            threadId,
-            turnId,
-            type: 'message.delta',
-            createdAt: this.options.clock.now().toISOString(),
-            payload: { messageId: assistantMessageId, text: fallbackText },
-          });
-          finalText = fallbackText;
-        }
-
-        await this.options.turnFinalizer.finish({
-          threadId,
-          turnId,
-          messageId: assistantMessageId,
-          usage,
-          finalization: {
-            explicitMemory: taskKind === 'goal' ? undefined : {
-              alreadySaved: memorySavedByTool,
-              config: runtimeConfig,
-              projectId: thread.projectId,
-              userContent: explicitMemoryUserContent,
-            },
-            memoryCitation: finalMemoryCitation,
-            content: finalText,
-            planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
-            review: options.review ? finalText : undefined,
-            taskKind,
-            threadTitle: threadTitleGeneration,
-          },
-        });
-        activeAssistantMessageId = null;
       }
     } catch (error) {
       if (error instanceof HookStoppedTurnError) {

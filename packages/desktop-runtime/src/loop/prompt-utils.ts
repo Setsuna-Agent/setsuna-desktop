@@ -1,21 +1,38 @@
 export function escapeSkillAttribute(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('\r', '&#13;')
+    .replaceAll('\n', '&#10;')
+    .replaceAll('\t', '&#9;');
 }
 
 export function neutralizeSkillTags(value: string): string {
-  return value.replaceAll('</skill', '<\\/skill');
+  return neutralizePromptClosingTags(value, ['skill']);
 }
 
 export function neutralizeMemoryTags(value: string): string {
-  return value.replaceAll('</memory', '<\\/memory');
+  return neutralizePromptClosingTags(value, ['memory']);
 }
 
 export function neutralizePersonalizationTags(value: string): string {
-  return value.replaceAll('</memory', '<\\/memory').replaceAll('</skill', '<\\/skill');
+  return neutralizePromptClosingTags(value, ['memory', 'skill']);
 }
 
 export function neutralizeMailboxTags(value: string): string {
-  return value.replaceAll('</mailbox_message', '<\\/mailbox_message');
+  return neutralizePromptClosingTags(value, ['mailbox_message']);
+}
+
+export function neutralizeInstructionTags(value: string): string {
+  return neutralizePromptClosingTags(value, ['instructions']);
+}
+
+export function neutralizePromptClosingTags(value: string, tagNames: readonly string[]): string {
+  if (!value || !tagNames.length) return value;
+  const alternatives = tagNames.map(escapeRegExp).join('|');
+  return value.replace(new RegExp(`</(?:${alternatives})`, 'giu'), (match) => `<\\/${match.slice(2)}`);
 }
 
 export function parseJsonObjectFromText(value: string): Record<string, unknown> | null {
@@ -82,4 +99,8 @@ function tryParseJsonArray(value: string): unknown[] | null {
   } catch {
     return null;
   }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

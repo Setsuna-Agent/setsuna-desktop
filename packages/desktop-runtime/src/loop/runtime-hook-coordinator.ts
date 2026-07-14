@@ -9,6 +9,7 @@ import {
   type RuntimeStopHookOutcome,
 } from '../hooks/runtime-hooks.js';
 import type { RuntimeToolCallExecutor } from './runtime-tool-call-executor.js';
+import { neutralizePromptClosingTags } from './prompt-utils.js';
 
 export type RuntimeTurnStartHookResult =
   | { stopped: true; reason: string }
@@ -99,7 +100,8 @@ export class RuntimeHookCoordinator {
     return [{
       id: 'desktop_plan_mode',
       turnId,
-      role: 'system',
+      role: 'developer',
+      promptSource: 'plan',
       content: [
         '<plan_mode>',
         'Plan mode is active. Produce a concise implementation plan or review plan only.',
@@ -119,8 +121,13 @@ export class RuntimeHookCoordinator {
     return [{
       id: this.options.ids.id('msg'),
       turnId,
-      role: 'system',
-      content: ['<hook_stop_continuation>', text, '</hook_stop_continuation>'].join('\n'),
+      role: 'developer',
+      promptSource: 'hook',
+      content: [
+        '<hook_stop_continuation>',
+        neutralizePromptClosingTags(text, ['hook_stop_continuation']),
+        '</hook_stop_continuation>',
+      ].join('\n'),
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
       visibility: 'model',
@@ -216,8 +223,13 @@ export class RuntimeHookCoordinator {
     return [{
       id: this.options.ids.id('msg'),
       turnId,
-      role: 'system',
-      content: ['<hook_additional_context>', text, '</hook_additional_context>'].join('\n'),
+      role: 'developer',
+      promptSource: 'hook',
+      content: [
+        '<hook_additional_context>',
+        neutralizePromptClosingTags(text, ['hook_additional_context']),
+        '</hook_additional_context>',
+      ].join('\n'),
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
       visibility: 'model',

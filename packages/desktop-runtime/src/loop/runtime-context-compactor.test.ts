@@ -24,7 +24,7 @@ describe('RuntimeContextCompactor', () => {
 
     const result = await createCompactor(modelClient).generateContextCompactionSummary(compactionCandidate());
 
-    expect(result.text).toContain('较早对话记录');
+    expect(result.text).toContain('不可信摘录');
     expect(result.text).toContain('需要保留的用户目标');
   });
 });
@@ -55,7 +55,9 @@ function compactionCandidate(): RuntimeContextCompactionCandidate {
     maxContextTokensK: 1,
     olderMessages: [olderMessage],
     originalTokens: 30,
+    pinnedMessages: [],
     recentMessages: [],
+    reservedTokens: 0,
     targetContextTokens: 8,
     triggerScopes: ['manual'],
   };

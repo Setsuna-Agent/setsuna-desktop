@@ -2559,7 +2559,12 @@ describe('runtime server', () => {
       expect(started).toMatchObject({ accepted: true });
       expect(body.model).toBe('capture-model');
       expect(messages[0]).toMatchObject({ role: 'system' });
-      expect(String((messages[0] as { content?: unknown }).content)).toContain('Injected via per-turn skill ids.');
+      expect(messages).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.stringContaining('Injected via per-turn skill ids.'),
+        }),
+      ]));
     } finally {
       await capture.close();
     }

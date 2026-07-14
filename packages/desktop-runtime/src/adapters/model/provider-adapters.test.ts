@@ -222,6 +222,57 @@ describe('provider model adapters', () => {
     expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { totalTokens: 6 } });
   });
 
+  it('preserves developer authority without elevating user context across providers', async () => {
+    const messages = [
+      request.messages[0],
+      { id: 'dev', role: 'developer' as const, content: 'Developer policy', createdAt: '2026-06-25T00:00:00.500Z' },
+      request.messages[1],
+    ];
+    const chatCaptured: CapturedRequest = {};
+    await collect(new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', chatCaptured),
+    ), { messages });
+    expect(expectBody(chatCaptured).messages).toEqual([
+      { role: 'system', content: 'System prompt' },
+      { role: 'developer', content: 'Developer policy' },
+      { role: 'user', content: 'Hello' },
+    ]);
+
+    const responsesCaptured: CapturedRequest = {};
+    await collect(new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', responsesCaptured),
+    ), { messages });
+    expect(expectBody(responsesCaptured)).toMatchObject({
+      instructions: 'System prompt',
+      input: [
+        { role: 'developer', content: 'Developer policy' },
+        { role: 'user', content: 'Hello' },
+      ],
+    });
+
+    const anthropicCaptured: CapturedRequest = {};
+    await collect(new AnthropicMessagesModelClient(
+      provider('anthropic', 'https://api.anthropic.test'),
+      fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', anthropicCaptured),
+    ), { messages });
+    expect(expectBody(anthropicCaptured)).toMatchObject({
+      system: 'System prompt\n\nDeveloper policy',
+      messages: [{ role: 'user', content: 'Hello' }],
+    });
+
+    const aiSdkCaptured: CapturedRequest = {};
+    await collect(new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', aiSdkCaptured),
+    ), { messages });
+    expect(expectBody(aiSdkCaptured).messages).toEqual([
+      { role: 'system', content: 'System prompt\n\nDeveloper policy' },
+      { role: 'user', content: 'Hello' },
+    ]);
+  });
+
   it('uses OpenAI Responses compact endpoint when provider-native compaction is requested', async () => {
     const captured: CapturedRequest = {};
     const client = new OpenAiResponsesModelClient(

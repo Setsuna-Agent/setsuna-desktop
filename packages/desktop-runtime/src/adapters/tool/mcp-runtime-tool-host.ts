@@ -34,6 +34,10 @@ export class McpRuntimeToolHost implements ToolHost {
     }));
   }
 
+  toolRuntimeProfile() {
+    return { exposure: 'deferred' as const };
+  }
+
   /**
    * 返回给模型的 MCP 工具使用规则。
    */

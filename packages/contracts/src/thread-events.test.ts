@@ -809,7 +809,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
 
     const compactedMessage = {
       id: 'msg_compact',
-      role: 'system' as const,
+      role: 'user' as const,
       content: '<context_compaction_summary>hello</context_compaction_summary>',
       createdAt: '2026-06-26T00:00:02.000Z',
       status: 'complete' as const,
@@ -897,7 +897,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
     const compactedMessage = {
       id: 'msg_compact',
       turnId: 'turn_compact',
-      role: 'system' as const,
+      role: 'user' as const,
       content: '<context_compaction_summary>hello</context_compaction_summary>',
       createdAt: '2026-06-26T00:00:03.000Z',
       status: 'complete' as const,

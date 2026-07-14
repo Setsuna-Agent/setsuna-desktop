@@ -64,7 +64,9 @@ describe('agent loop tools', () => {
     await loop.setThreadGoal(thread.id, { objective: 'Inspect the project and finish the requested change', status: 'active' });
     const completedGoal = await waitForTestState(
       async () => (await threadStore.getThread(thread.id))?.goal,
-      (goal) => goal?.status === 'complete',
+      // update_goal publishes the terminal status before the final assistant
+      // segment settles; wait for that segment's usage to be accounted too.
+      (goal) => goal?.status === 'complete' && goal.tokensUsed === 15,
       (goal) => `Timed out waiting for goal completion; goal=${JSON.stringify(goal ?? null)}`,
     );
     await waitForModelRequestCount(modelClient, 4);
@@ -81,12 +83,12 @@ describe('agent loop tools', () => {
     expect(modelClient.requests).toHaveLength(4);
     expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['get_goal', 'create_goal', 'update_goal']));
     expect(modelClient.requests[0].messages).toContainEqual(expect.objectContaining({
-      role: 'system',
+      role: 'user',
       content: expect.stringContaining('Inspect the project and finish the requested change'),
     }));
     expect(modelClient.requests[0].messages).toContainEqual(expect.objectContaining({
       role: 'user',
-      content: 'Continue goal: Inspect the project and finish the requested change',
+      content: 'Continue the active goal.',
     }));
     expect(saved?.messages.some((message) => message.role === 'user')).toBe(false);
     expect(saved?.messages.filter((message) => message.role === 'assistant').map((message) => message.content)).toEqual(expect.arrayContaining([
@@ -304,12 +306,20 @@ describe('agent loop tools', () => {
         autoCompactTokenLimit: expect.any(Number),
         compactionSummaryMessageIds: [],
         estimatedTokens: expect.any(Number),
+        messageTokens: expect.any(Number),
+        toolDefinitionTokens: expect.any(Number),
+        reservedOutputTokens: expect.any(Number),
         maxContextTokens: expect.any(Number),
         maxContextTokensK: expect.any(Number),
         messageCount: expect.any(Number),
         tokensUntilCompaction: expect.any(Number),
       },
       featureKeys: ['request_permissions_tool', 'step_snapshot'],
+      promptManifest: expect.arrayContaining([
+        expect.objectContaining({ id: 'desktop_runtime_base', role: 'system', source: 'product', trust: 'runtime' }),
+        expect.objectContaining({ id: 'desktop_runtime_permissions', role: 'developer', source: 'permissions', trust: 'runtime' }),
+        expect.objectContaining({ id: 'skill_skill_step', role: 'user', source: 'skill', trust: 'user' }),
+      ]),
       worldState: {
         activeProviderId: 'test',
         configPath: '/tmp/config.json',
@@ -349,6 +359,43 @@ describe('agent loop tools', () => {
     expect(toolHost.runContexts[0].environment).toEqual(firstSnapshotEnvironment);
   });
 
+  it('injects project instructions as user context with source provenance', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Project instructions', projectId: 'project_1' });
+    const modelClient = new MemoryCapturingModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      projectInstructions: {
+        load: async () => [{
+          content: 'Use pnpm and keep runtime boundaries intact.',
+          directory: '/workspace',
+          path: '/workspace/AGENTS.md',
+          truncated: false,
+        }],
+      },
+    });
+
+    await loop.sendTurn(thread.id, { input: 'inspect the project rules' });
+
+    const request = modelClient.requests[0];
+    expect(request.messages.find((message) => message.id === 'project_instruction_0')).toMatchObject({
+      role: 'user',
+      content: expect.stringContaining('Use pnpm and keep runtime boundaries intact.'),
+    });
+    expect(request.stepSnapshot?.promptManifest).toContainEqual(expect.objectContaining({
+      id: 'project_instruction_0',
+      role: 'user',
+      source: 'project_instruction',
+      sourcePath: '/workspace/AGENTS.md',
+    }));
+    expect((await threadStore.getThread(thread.id))?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+  });
+
   it('keeps plan collaboration mode from executing tools', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -373,11 +420,53 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual([]);
     expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual([]);
     expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual([]);
+    expect(modelClient.requests[0].messages.some((message) => message.id === 'desktop_local_tool_rules')).toBe(false);
+    expect(modelClient.requests[0].stepSnapshot?.contextWindow?.toolDefinitionTokens).toBe(0);
     expect(modelClient.requests[0].messages.some((message) => message.id === 'desktop_plan_mode' && message.content.includes('<plan_mode>'))).toBe(true);
     expect(toolHost.calls).toEqual([]);
     expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     expect(saved?.messages.at(-1)?.content).toContain('Plan mode is active');
     expect(saved?.messages.at(-1)?.planMode).toEqual({ mode: 'plan', status: 'awaiting_confirmation' });
+  });
+
+  it('uses the dedicated review policy and exposes only read-only review tools', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Review profile', projectId: 'project_1' });
+    const modelClient = new MemoryCapturingModelClient();
+    const toolHost = new CapturingToolHost([
+      WORKSPACE_READ_FILE_TOOL,
+      { name: 'write_file', description: 'Write a file', inputSchema: {} },
+    ]);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    const started = await loop.startReview(thread.id, {
+      displayText: 'current changes',
+      prompt: 'Review the current uncommitted changes.',
+    });
+    await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file']);
+    expect(modelClient.requests[0].messages.find((message) => message.id === 'desktop_review_policy')).toMatchObject({
+      role: 'developer',
+      content: expect.stringContaining('do not modify files'),
+    });
+    expect(modelClient.requests[0].stepSnapshot?.promptManifest).toContainEqual(expect.objectContaining({
+      id: 'desktop_review_policy',
+      source: 'review',
+      role: 'developer',
+    }));
+    expect(modelClient.requests[0].messages).toContainEqual(expect.objectContaining({
+      role: 'user',
+      content: 'Review the current uncommitted changes.',
+    }));
   });
 
   it('persists PlanDelta-only model output as the plan-mode assistant message', async () => {
@@ -2150,12 +2239,13 @@ describe('agent loop tools', () => {
     expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
   });
 
-  it('automatically compacts oversized mid-turn tool results before follow-up sampling', async () => {
+  it('automatically compacts oversized tool results during a long tool chain', async () => {
+    const toolCallBatches = 5;
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Mid-turn context compaction', projectId: 'project_1' });
-    const modelClient = new MidTurnToolCompactionModelClient();
-    const toolHost = new LargeToolResultHost();
+    const modelClient = new LongToolChainCompactionModelClient(toolCallBatches);
+    const toolHost = new LateLargeToolResultHost(toolCallBatches);
     const loop = new AgentLoop({
       threadStore,
       modelClient,
@@ -2168,9 +2258,15 @@ describe('agent loop tools', () => {
     await loop.sendTurn(thread.id, { input: 'read the huge generated report' });
     const saved = await threadStore.getThread(thread.id);
     const events = await threadStore.listEvents(thread.id, 0);
-    const followUpRequest = modelClient.requests[2];
+    const mainRequests = modelClient.requests.filter((request) => request.model === 'local-runtime-smoke');
+    const followUpRequest = mainRequests.at(-1)!;
 
-    expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'context-compaction', 'local-runtime-smoke']);
+    expect(modelClient.requests.map((request) => request.model)).toEqual([
+      ...Array.from({ length: toolCallBatches }, () => 'local-runtime-smoke'),
+      'context-compaction',
+      'local-runtime-smoke',
+    ]);
+    expect(toolHost.calls).toHaveLength(toolCallBatches);
     expect(events.some((event) => event.type === 'thread.context_compacted' && event.turnId)).toBe(true);
     expect(saved?.messages.find((message) => message.role === 'tool')?.visibility).toBe('transcript');
     expect(saved?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
@@ -2244,12 +2340,12 @@ describe('agent loop tools', () => {
     }));
   });
 
-  it('forces a final no-tool response when the tool loop reaches its round limit', async () => {
-    const maxToolRounds = 3;
+  it('keeps tools available until the model ends a long tool chain', async () => {
+    const toolCallBatches = 5;
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Tool loop limit', projectId: 'project_1' });
-    const modelClient = new ToolLoopLimitModelClient();
+    const thread = await threadStore.createThread({ title: 'Long tool chain', projectId: 'project_1' });
+    const modelClient = new LongToolChainModelClient(toolCallBatches);
     const toolHost = new CapturingToolHost();
     const loop = new AgentLoop({
       threadStore,
@@ -2258,7 +2354,6 @@ describe('agent loop tools', () => {
       clock: systemClock,
       ids,
       toolHost,
-      maxToolRounds,
     });
 
     await loop.sendTurn(thread.id, { input: 'keep inspecting files' });
@@ -2267,9 +2362,11 @@ describe('agent loop tools', () => {
 
     expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
     expect(events.some((event) => event.type === 'turn.completed')).toBe(true);
-    expect(modelClient.requests.at(-1)?.toolChoice).toBe('none');
-    expect(modelClient.requests).toHaveLength(maxToolRounds + 1);
-    expect(toolHost.calls).toHaveLength(maxToolRounds);
+    expect(modelClient.requests).toHaveLength(toolCallBatches + 1);
+    expect(modelClient.requests.every((request) => request.toolChoice !== 'none')).toBe(true);
+    expect(modelClient.requests.every((request) => request.tools?.some((tool) => tool.name === 'workspace_read_file'))).toBe(true);
+    expect(modelClient.requests.every((request) => (request.stepSnapshot?.contextWindow?.toolDefinitionTokens ?? 0) > 0)).toBe(true);
+    expect(toolHost.calls).toHaveLength(toolCallBatches);
     expect(events.some((event) =>
       event.type === 'tool.completed'
       && event.payload.status === 'error'
@@ -2298,13 +2395,14 @@ describe('agent loop tools', () => {
 
     await loop.sendTurn(thread.id, { input: 'what should you remember?' });
 
-    expect(modelClient.requests[0].messages[0]).toMatchObject({ role: 'system' });
-    expect(modelClient.requests[0].messages[0].content).toContain('<memory_context>');
-    expect(modelClient.requests[0].messages[0].content).toContain('local-only runtime answers');
-    expect(modelClient.requests[0].messages[0].content).toContain('source="MEMORY.md:');
-    expect(modelClient.requests[0].messages[0].content).toContain('<oai-mem-citation>');
-    expect(modelClient.requests[0].messages[0].content).not.toContain('========= MEMORY_SUMMARY BEGINS =========');
-    expect(modelClient.requests[0].messages[0].content).toContain('<rollout_ids>');
+    const memoryContext = modelClient.requests[0].messages.find((message) => message.id === 'memory_context');
+    expect(memoryContext).toMatchObject({ role: 'user' });
+    expect(memoryContext?.content).toContain('<memory_context>');
+    expect(memoryContext?.content).toContain('local-only runtime answers');
+    expect(memoryContext?.content).toContain('source="MEMORY.md:');
+    expect(memoryContext?.content).toContain('<oai-mem-citation>');
+    expect(memoryContext?.content).not.toContain('========= MEMORY_SUMMARY BEGINS =========');
+    expect(memoryContext?.content).toContain('<rollout_ids>');
   });
 
   it('keeps project memory context isolated from other projects and shared summaries', async () => {
@@ -2328,7 +2426,7 @@ describe('agent loop tools', () => {
 
     await loop.sendTurn(thread.id, { input: 'which package manager does this project use?' });
 
-    const memoryContext = modelClient.requests[0].messages[0].content;
+    const memoryContext = modelClient.requests[0].messages.find((message) => message.id === 'memory_context')?.content ?? '';
     expect(memoryContext).toContain('Global preference is safe everywhere.');
     expect(memoryContext).toContain('Project alpha uses pnpm.');
     expect(memoryContext).toContain('project_id="project_alpha"');
@@ -5012,7 +5110,7 @@ describe('agent loop tools', () => {
     }));
     expect(modelClient.requests).toHaveLength(2);
     expect(modelClient.requests[1].messages.find((message) => message.id === 'mailbox_mail_1')).toMatchObject({
-      role: 'system',
+      role: 'user',
       visibility: 'model',
       turnId: started.turnId,
     });
@@ -5991,12 +6089,14 @@ class ShellMentionApplyPatchModelClient implements ModelClient {
   }
 }
 
-class ToolLoopLimitModelClient implements ModelClient {
+class LongToolChainModelClient implements ModelClient {
   requests: ModelRequest[] = [];
+
+  constructor(private readonly toolCallBatches: number) {}
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.toolChoice === 'none' || !request.tools?.length) {
+    if (this.requests.length > this.toolCallBatches) {
       yield { type: 'text_delta', text: 'Final answer after the available tool results.' };
       yield { type: 'done', finishReason: 'stop' };
       return;
@@ -6109,8 +6209,10 @@ class RemoteCompactionModelClient implements ModelClient {
   }
 }
 
-class MidTurnToolCompactionModelClient implements ModelClient {
+class LongToolChainCompactionModelClient implements ModelClient {
   requests: ModelRequest[] = [];
+
+  constructor(private readonly toolCallBatches: number) {}
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
@@ -6128,10 +6230,15 @@ class MidTurnToolCompactionModelClient implements ModelClient {
       yield { type: 'done', finishReason: 'stop' };
       return;
     }
-    if (this.requests.filter((item) => item.model === 'local-runtime-smoke').length === 1) {
+    const mainRequestCount = this.requests.filter((item) => item.model === 'local-runtime-smoke').length;
+    if (mainRequestCount <= this.toolCallBatches) {
       yield {
         type: 'tool_calls',
-        toolCalls: [{ id: 'call_huge_tool', name: 'workspace_read_file', arguments: '{"path":"huge-report.txt"}' }],
+        toolCalls: [{
+          id: `call_tool_${mainRequestCount}`,
+          name: 'workspace_read_file',
+          arguments: JSON.stringify({ path: `report-part-${mainRequestCount}.txt` }),
+        }],
       };
       yield { type: 'done', finishReason: 'tool_calls' };
       return;
@@ -6234,12 +6341,20 @@ class RefreshingToolHost implements ToolHost {
   }
 }
 
-class LargeToolResultHost extends CapturingToolHost {
+class LateLargeToolResultHost extends CapturingToolHost {
   readonly largeContent = 'BEGIN_HUGE_TOOL_OUTPUT ' + 'huge generated report '.repeat(90_000);
+
+  constructor(private readonly largeResultCall: number) {
+    super();
+  }
 
   override async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     this.calls.push({ name, input, projectId: context.projectId });
-    return { content: this.largeContent };
+    return {
+      content: this.calls.length === this.largeResultCall
+        ? this.largeContent
+        : `small report part ${this.calls.length}`,
+    };
   }
 }
 

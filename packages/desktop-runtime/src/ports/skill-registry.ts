@@ -4,6 +4,7 @@ export type SkillInjection = {
   id: string;
   name: string;
   content: string;
+  path?: string;
 };
 
 export type SkillRegistry = {

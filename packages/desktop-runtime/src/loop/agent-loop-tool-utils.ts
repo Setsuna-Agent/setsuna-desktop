@@ -14,7 +14,6 @@ import { GOAL_TOOL_DEFINITIONS, goalToolsEnabled, isGoalToolName } from './runti
 import { parseJsonObjectFromText } from './prompt-utils.js';
 import type { RuntimeToolRouter } from './tool-router.js';
 
-const MAX_TOOL_ROUNDS = 200;
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
 
 export function parseToolArguments(value: string): unknown {
@@ -153,11 +152,6 @@ export function mergeToolArgumentDelta(current: string, delta: string): string {
   if (delta.startsWith(current)) return delta;
   if (current.endsWith(delta)) return current;
   return `${current}${delta}`;
-}
-
-export function normalizedMaxToolRounds(value: number | undefined): number {
-  if (value === undefined || !Number.isFinite(value)) return MAX_TOOL_ROUNDS;
-  return Math.max(1, Math.floor(value));
 }
 
 export function toolCallFromModelStreamItem(event: ModelStreamEvent): RuntimeToolCall | null {

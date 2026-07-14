@@ -507,6 +507,7 @@ function cloneStepSnapshot(
     inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
     mcpServerKeys: [...snapshot.mcpServerKeys],
     messageIds: [...snapshot.messageIds],
+    promptManifest: snapshot.promptManifest ? snapshot.promptManifest.map((entry) => ({ ...entry })) : undefined,
     sandboxWorkspaceWrite: snapshot.sandboxWorkspaceWrite
       ? {
           ...snapshot.sandboxWorkspaceWrite,
@@ -973,7 +974,7 @@ function appendTurnDiff(current: string | undefined, diff: string): string | und
 
 function updatePreviewFromMessage(thread: RuntimeThread, message: RuntimeMessage): void {
   // 线程列表预览只取用户/助手可见内容，tool/system 不直接覆盖会话摘要。
-  if (!isTranscriptVisibleMessage(message) || message.role === 'tool' || message.role === 'system') return;
+  if (!isTranscriptVisibleMessage(message) || message.contextCompaction || message.role === 'tool' || message.role === 'system' || message.role === 'developer') return;
   const text = preview(message.content || attachmentPreview(message));
   if (text) thread.lastMessagePreview = text;
 }
@@ -981,7 +982,7 @@ function updatePreviewFromMessage(thread: RuntimeThread, message: RuntimeMessage
 function refreshThreadSummary(thread: RuntimeThread): void {
   const visibleMessages = thread.messages.filter(isTranscriptVisibleMessage);
   thread.messageCount = visibleMessages.length;
-  const lastVisibleMessage = [...visibleMessages].reverse().find((message) => message.role !== 'tool' && message.role !== 'system' && (message.content.trim() || message.attachments?.length));
+  const lastVisibleMessage = [...visibleMessages].reverse().find((message) => !message.contextCompaction && message.role !== 'tool' && message.role !== 'system' && message.role !== 'developer' && (message.content.trim() || message.attachments?.length));
   thread.lastMessagePreview = lastVisibleMessage ? preview(lastVisibleMessage.content || attachmentPreview(lastVisibleMessage)) : '';
 }
 

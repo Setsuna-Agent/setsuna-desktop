@@ -3,6 +3,7 @@ import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/c
 import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost, type ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
 import * as pcTools from './pc-local-tools.js';
 
 type PcToolState = ReturnType<typeof pcTools.createLocalToolState>;
@@ -13,6 +14,7 @@ type ProjectToolState = {
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
+const DEFERRED_COMPAT_TOOL_NAMES = new Set(['request_permissions', 'exec_command', 'write_stdin']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_PATH_ARGUMENT_TOOLS = new Set(['read_file', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
@@ -194,11 +196,15 @@ export class PcLocalToolHost implements ToolHost {
     };
   }
 
+  toolRuntimeProfile(name: string) {
+    return DEFERRED_COMPAT_TOOL_NAMES.has(name) ? { exposure: 'deferred' as const } : null;
+  }
+
   /**
    * 返回 PC local tools 的系统提示规则。
    */
-  systemPrompt(): string {
-    return pcTools.LOCAL_TOOL_SYSTEM_PROMPT;
+  systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
+    return pcLocalToolPrompt(request?.tools);
   }
 
   /**

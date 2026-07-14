@@ -1,0 +1,85 @@
+import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+
+const READ_TOOL_NAMES = ['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff'] as const;
+const FILE_MUTATION_TOOL_NAMES = ['apply_patch', 'edit', 'write_file', 'append_file', 'delete_file'] as const;
+const SHELL_PROCESS_TOOL_NAMES = ['read_shell_process', 'list_shell_processes', 'write_shell_process', 'terminate_shell_process'] as const;
+const COMPAT_TOOL_NAMES = ['request_permissions', 'exec_command', 'write_stdin'] as const;
+const ALL_TOOL_NAMES = [
+  ...READ_TOOL_NAMES,
+  ...FILE_MUTATION_TOOL_NAMES,
+  'update_plan',
+  'run_shell_command',
+  ...SHELL_PROCESS_TOOL_NAMES,
+  ...COMPAT_TOOL_NAMES,
+] as const;
+
+/** Builds policy text only for PC-local tools advertised in the current sampling step. */
+export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | null {
+  const advertised = new Set(tools ? tools.map((tool) => tool.name) : ALL_TOOL_NAMES);
+  const localToolNames = ALL_TOOL_NAMES.filter((name) => advertised.has(name));
+  if (!localToolNames.length) return null;
+
+  const lines = [
+    'Local tools operate directly in the selected desktop workspace. Use them only when the user request depends on current workspace files, Git state, or a local command result.',
+    '- For conceptual or how-to questions, answer directly without local tools.',
+  ];
+
+  if (hasAny(advertised, READ_TOOL_NAMES)) {
+    lines.push(
+      '- For questions about current workspace contents, inspect with read-only tools first.',
+      '- Inspect only the files and snippets needed for the task; do not read every file or entire large files by default.',
+    );
+  }
+
+  if (hasAny(advertised, FILE_MUTATION_TOOL_NAMES)) {
+    if (advertised.has('apply_patch')) {
+      lines.push(
+        '- Prefer apply_patch for targeted code changes so the runtime can preview and approve a cohesive multi-file patch.',
+        '- apply_patch may create, update, or delete multiple files. Keep patches scoped and easy to review.',
+      );
+    }
+    const singleFileTools = ['edit', 'write_file', 'append_file', 'delete_file'].filter((name) => advertised.has(name));
+    if (singleFileTools.length) {
+      lines.push(`- ${singleFileTools.join('/')} each modify one file; choose the narrowest operation that matches the requested change.`);
+    }
+    if (advertised.has('append_file')) lines.push('- Use append_file for a pure append instead of simulating one with an exact replacement.');
+    if (advertised.has('delete_file')) lines.push('- Verify a requested file deletion and relevant references, then use delete_file rather than a shell deletion command.');
+    lines.push('- Reuse conversation context when it already contains enough of the target file; avoid ritual re-reads.');
+  }
+
+  if (advertised.has('run_shell_command')) {
+    lines.push(
+      '- Use run_shell_command for builds, tests, package-manager commands, and work that depends on command output.',
+      '- Mark installs, destructive or high-impact commands, permission changes, sudo, remote scripts, publish/deploy, and shell redirection as high risk. If uncertain, use high risk.',
+      '- Low-risk shell commands normally run directly; high-risk commands go through runtime approval.',
+      '- For an explicitly requested directory removal, inspect it first. Use rmdir only for an empty directory and rm -r only when removal of its contents was explicit; classify either destructive case as high risk.',
+    );
+    if (hasAny(advertised, FILE_MUTATION_TOOL_NAMES)) {
+      lines.push('- Use the file mutation tools for file edits; do not substitute Python, sed, awk, Perl, heredocs, redirection, rm, or unlink.');
+    }
+  }
+
+  if (hasAny(advertised, SHELL_PROCESS_TOOL_NAMES)) {
+    lines.push('- A long-running shell command may return a process id. Use the advertised shell-process tools to poll, write interactive input, or terminate it as needed.');
+  }
+  if (advertised.has('update_plan')) {
+    lines.push('- For multi-step tasks, keep a concise plan with exactly one step in progress and update it as work completes.');
+  }
+  if (advertised.has('exec_command')) {
+    lines.push('- exec_command is the Codex-compatible shell surface. Request only the narrowest per-command sandbox override when broader access is necessary.');
+  }
+  if (advertised.has('write_stdin')) {
+    lines.push('- Use write_stdin only with an existing compatible shell session id; empty input polls the session.');
+  }
+
+  lines.push(
+    '- Keep paths inside the effective readable and writable roots unless the runtime grants additional access.',
+    '- Before related tool calls, send one short user-visible update. Group related actions instead of repeating a preamble for every small read.',
+    '- In normal user-facing updates, describe actions naturally. Mention raw tool names or call mechanics only when the user asks or when debugging the runtime.',
+  );
+  return lines.join('\n');
+}
+
+function hasAny(names: ReadonlySet<string>, candidates: readonly string[]): boolean {
+  return candidates.some((name) => names.has(name));
+}

@@ -12,7 +12,7 @@ import {
   parseSse,
   requireFetch,
   stringValue,
-  systemText,
+  systemAndDeveloperText,
   toAnthropicMessages,
   toAnthropicTools,
   withEndpoint,
@@ -31,7 +31,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
-    const system = systemText(request.messages);
+    const system = systemAndDeveloperText(request.messages);
     const thinking = anthropicThinkingBody(this.provider, request);
     const response = await fetcher(withEndpoint(this.provider.baseUrl, '/v1/messages'), {
       method: 'POST',

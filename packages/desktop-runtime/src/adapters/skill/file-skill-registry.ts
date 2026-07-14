@@ -129,6 +129,7 @@ export class FileSkillRegistry implements SkillRegistry {
         id: skill.id,
         name: skill.name,
         content: skill.content,
+        path: skill.path,
       }));
   }
 

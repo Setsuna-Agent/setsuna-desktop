@@ -10,6 +10,7 @@ import type { McpStore } from '../ports/mcp-store.js';
 import type { ModelClient } from '../ports/model-client.js';
 import type { PolicyAmendmentStore } from '../ports/policy-amendment-store.js';
 import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
+import type { ProjectInstructionLoader } from '../ports/project-instruction-loader.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolHost } from '../ports/tool-host.js';
@@ -52,8 +53,8 @@ export type AgentLoopOptions = {
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
+  projectInstructions?: ProjectInstructionLoader;
   eventWriter?: RuntimeEventWriter;
-  maxToolRounds?: number;
 };
 
 export type { DeliverMailboxInput, DeliverMailboxResponse } from './runtime-turn-input-coordinator.js';
@@ -144,6 +145,7 @@ export class AgentLoop {
       contextCompactor: this.contextCompactor,
       mcpStore: options.mcpStore,
       memory: this.memory,
+      projectInstructions: options.projectInstructions,
       skillRegistry: options.skillRegistry,
       threadStore: options.threadStore,
       toolExecutor: this.toolExecutor,
@@ -210,10 +212,8 @@ export class AgentLoop {
       clock: options.clock,
       collaborationCoordinator: this.collaborationCoordinator,
       configStore: options.configStore,
-      contextCompactor: this.contextCompactor,
       hooks: this.hooks,
       ids: options.ids,
-      maxToolRounds: options.maxToolRounds,
       modelSampler: this.modelSampler,
       samplingContexts: this.samplingContexts,
       threadTitles: this.threadTitles,

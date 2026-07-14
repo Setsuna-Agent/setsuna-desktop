@@ -14,6 +14,7 @@ import type { Clock } from '../ports/clock.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { RuntimeToolExecutionContext } from '../ports/tool-host.js';
+import { neutralizePromptClosingTags } from './prompt-utils.js';
 
 type ActiveGoalTask = {
   taskKind: RuntimeTaskKind;
@@ -266,19 +267,31 @@ function goalContinuationMessages(goal: RuntimeThreadGoal, ids: IdGenerator, clo
     ? 'No token budget is configured.'
     : `${Math.max(0, goal.tokenBudget - goal.tokensUsed)} of ${goal.tokenBudget} goal tokens remain.`;
   return [{
-    id: ids.id('msg_goal_context'),
+    id: ids.id('msg_goal_policy'),
     turnId: `goal:${goal.threadId}`,
-    role: 'system',
+    role: 'developer',
+    promptSource: 'goal',
     createdAt: clock.now().toISOString(),
     status: 'complete',
     content: [
       'You are executing a persistent multi-turn goal managed by the runtime.',
-      `Objective: ${goal.objective}`,
-      budget,
       'Continue making concrete progress. A normal assistant answer ends only the current turn, not the goal.',
       'Use get_goal when you need current counters. Before completion, audit the full objective and remaining work.',
       'Call update_goal with status complete only when the entire objective is achieved and verified.',
       'Call update_goal with status blocked only for a genuine impasse that requires user input or an external state change.',
+    ].join('\n'),
+  }, {
+    id: ids.id('msg_goal_context'),
+    turnId: `goal:${goal.threadId}`,
+    role: 'user',
+    promptSource: 'goal',
+    createdAt: clock.now().toISOString(),
+    status: 'complete',
+    content: [
+      '<goal_context>',
+      `Objective:\n${neutralizePromptClosingTags(goal.objective, ['goal_context'])}`,
+      `Budget: ${budget}`,
+      '</goal_context>',
     ].join('\n'),
   }];
 }

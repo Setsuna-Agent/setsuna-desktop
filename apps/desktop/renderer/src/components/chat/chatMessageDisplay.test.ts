@@ -7,7 +7,7 @@ describe('createChatDisplayItems', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'compact_1',
-        role: 'system',
+        role: 'user',
         content: '<context_compaction_summary>older context</context_compaction_summary>',
         createdAt: '2026-06-26T00:00:00.000Z',
         status: 'complete',
@@ -468,7 +468,7 @@ describe('createChatDisplayItems', () => {
       },
       {
         id: 'compact_1',
-        role: 'system',
+        role: 'user',
         content: '<context_compaction_summary>older context</context_compaction_summary>',
         createdAt: '2026-06-26T00:00:01.000Z',
         status: 'complete',

@@ -66,11 +66,16 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       if (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId)) assistantRunMessageIds.push(message.id);
       continue;
     }
-    if (message.role === 'system') {
-      if (message.contextCompaction || message.reviewMode) {
-        // 只有具备 UI 语义的 system 消息才显示：上下文压缩或 review 模式标记。
+    if (message.contextCompaction) {
+      flushAssistantRun();
+      items.push({ type: 'context', id: message.id, message });
+      continue;
+    }
+    if (message.role === 'system' || message.role === 'developer') {
+      if (message.reviewMode) {
+        // 普通 system/developer 消息不进 transcript；review 标记是显式 UI 事件。
         flushAssistantRun();
-        items.push({ type: message.contextCompaction ? 'context' : 'review', id: message.id, message });
+        items.push({ type: 'review', id: message.id, message });
       }
       continue;
     }

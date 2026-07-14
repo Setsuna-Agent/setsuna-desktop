@@ -10,13 +10,15 @@ import type {
   RuntimePermissionApprovalContext,
 } from './approvals.js';
 
-export type RuntimeMessageRole = 'system' | 'user' | 'assistant' | 'tool';
+export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool';
+export type RuntimeMessagePromptSource = 'hook' | 'plan' | 'review' | 'goal' | 'runtime_context';
 
 export type RuntimeMessage = {
   id: string;
   clientId?: string;
   turnId?: string;
   role: RuntimeMessageRole;
+  promptSource?: RuntimeMessagePromptSource;
   content: string;
   createdAt: string;
   completedAt?: string;

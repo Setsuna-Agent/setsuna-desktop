@@ -90,7 +90,7 @@ export type ToolApprovalRequirement = {
 export type ToolHost = {
   listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]>;
   environmentForToolContext?(context: ToolExecutionContext): Promise<ToolExecutionEnvironment | null> | ToolExecutionEnvironment | null;
-  systemPrompt?(context: ToolExecutionContext): Promise<string | null> | string | null;
+  systemPrompt?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> | string | null;
   toolChoice?(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> | RuntimeToolChoice | null;
   toolRuntimeProfile?(name: string, context: ToolExecutionContext): Promise<ToolRuntimeProfile | null> | ToolRuntimeProfile | null;
   approvalForTool?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolApprovalRequirement | null>;

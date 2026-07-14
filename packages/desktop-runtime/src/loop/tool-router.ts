@@ -11,6 +11,7 @@ export type RuntimeToolRouterOptions = {
   context: RuntimeToolExecutionContext;
   approvalPolicy: RuntimeConfigState['approvalPolicy'];
   additionalDeferredTools?: RuntimeToolDefinition[];
+  allowTool?(tool: RuntimeToolDefinition): boolean;
   revealedDeferredToolNames?: ReadonlySet<string>;
   revealDeferredTools?(names: string[]): void;
   strictApprovalRequiresSerial?: boolean;
@@ -64,6 +65,7 @@ export class RuntimeToolRouter {
     const deferredTools: RuntimeToolDefinition[] = [];
     const revealedDeferredToolNames = options.revealedDeferredToolNames ?? new Set<string>();
     for (const tool of allTools) {
+      if (options.allowTool && !options.allowTool(tool)) continue;
       const profile = await runtimeProfileForTool(options.toolHost, context, tool.name);
       profiles.set(tool.name, profile);
       // Router-owned tool names are reserved so external tools cannot shadow
@@ -78,6 +80,7 @@ export class RuntimeToolRouter {
     }
     const routerToolNames = new Set<string>();
     for (const tool of options.additionalDeferredTools ?? []) {
+      if (options.allowTool && !options.allowTool(tool)) continue;
       if (RESERVED_ROUTER_TOOL_NAMES.has(tool.name)) continue;
       if (revealedDeferredToolNames.has(tool.name)) continue;
       if (visibleTools.some((visibleTool) => visibleTool.name === tool.name)) continue;
@@ -134,7 +137,7 @@ export class RuntimeToolRouter {
   }
 
   async systemPrompt(): Promise<string | null> {
-    return this.options.toolHost.systemPrompt?.(this.options.context) ?? null;
+    return this.options.toolHost.systemPrompt?.(this.options.context, { tools: this.tools }) ?? null;
   }
 
   async toolChoice(messages: RuntimeMessage[]): Promise<ModelRequest['toolChoice']> {

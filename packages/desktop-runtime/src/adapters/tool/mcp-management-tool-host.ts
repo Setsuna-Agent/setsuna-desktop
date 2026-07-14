@@ -183,6 +183,10 @@ export class McpManagementToolHost implements ToolHost {
     return [configureMcpTool];
   }
 
+  toolRuntimeProfile() {
+    return { exposure: 'deferred' as const };
+  }
+
   systemPrompt(): string {
     return [
       'When the user asks to create, update, enable, disable, or configure a Setsuna Desktop MCP server from chat, use configure_mcp_server.',

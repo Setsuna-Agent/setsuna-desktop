@@ -179,7 +179,7 @@ function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {
   const output: ModelMessage[] = [];
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
-    if (message.role === 'system') {
+    if (message.role === 'system' || message.role === 'developer') {
       continue;
     } else if (message.role === 'user') {
       output.push({ role: 'user', content: toAiSdkUserContent(message) });
@@ -204,7 +204,7 @@ function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {
 
 function toAiSdkInstructions(messages: RuntimeMessage[]): string | undefined {
   const instructions = messages
-    .filter((message) => message.visibility !== 'transcript' && message.role === 'system' && message.content.trim())
+    .filter((message) => message.visibility !== 'transcript' && (message.role === 'system' || message.role === 'developer') && message.content.trim())
     .map((message) => message.content.trim())
     .join('\n\n');
   return instructions || undefined;

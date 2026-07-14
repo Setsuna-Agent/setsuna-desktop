@@ -97,7 +97,7 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
   const output: Array<Record<string, unknown>> = [];
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
-    if (message.role === 'system' || message.role === 'user' || message.role === 'assistant') {
+    if (message.role === 'system' || message.role === 'developer' || message.role === 'user' || message.role === 'assistant') {
       output.push({
         role: message.role,
         content: message.role === 'user' && message.attachments?.length
@@ -129,8 +129,16 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
 }
 
 export function systemText(messages: RuntimeMessage[]): string {
+  return instructionText(messages, new Set(['system']));
+}
+
+export function systemAndDeveloperText(messages: RuntimeMessage[]): string {
+  return instructionText(messages, new Set(['system', 'developer']));
+}
+
+function instructionText(messages: RuntimeMessage[], roles: ReadonlySet<RuntimeMessage['role']>): string {
   return messages
-    .filter((message) => message.visibility !== 'transcript' && message.role === 'system' && message.content.trim())
+    .filter((message) => message.visibility !== 'transcript' && roles.has(message.role) && message.content.trim())
     .map((message) => message.content.trim())
     .join('\n\n');
 }
@@ -151,7 +159,9 @@ export function toOpenAiResponsesInput(messages: RuntimeMessage[]): unknown[] {
   const toolOutputsByCallId = openAiResponsesToolOutputsByCallId(messages);
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
-    if (message.role === 'user') {
+    if (message.role === 'developer') {
+      output.push({ role: 'developer', content: message.content });
+    } else if (message.role === 'user') {
       output.push({ role: 'user', content: openAiResponsesContentParts(message) });
     } else if (message.role === 'assistant') {
       if (message.content) output.push({ role: 'assistant', content: message.content });

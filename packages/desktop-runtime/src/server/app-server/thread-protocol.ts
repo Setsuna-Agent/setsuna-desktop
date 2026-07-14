@@ -364,11 +364,7 @@ export function sweReviewRequestFromTarget(value: unknown): { displayText: strin
 }
 
 function sweReviewPrompt(scope: string): string {
-  return [
-    scope,
-    'Find bugs, regressions, security issues, and missing tests. Report findings first, ordered by severity, with file and line references when possible.',
-    'If there are no actionable findings, say so briefly and mention any residual risk.',
-  ].join('\n');
+  return `${scope}\nInspect the relevant diff and return the review findings.`;
 }
 
 export function sweReviewUserMessageItem(id: string, text: string): AppServerThreadItem {
@@ -515,8 +511,7 @@ function sweInjectedFunctionCallOutputToRuntimeMessage(item: Record<string, unkn
 }
 
 function sweInjectedMessageRole(role: string, index: number): RuntimeMessage['role'] {
-  if (role === 'user' || role === 'assistant' || role === 'system') return role;
-  if (role === 'developer') return 'system';
+  if (role === 'user' || role === 'assistant' || role === 'system' || role === 'developer') return role;
   throw new AppServerRpcError(-32602, `items[${index}].role is not supported: ${role}`);
 }
 

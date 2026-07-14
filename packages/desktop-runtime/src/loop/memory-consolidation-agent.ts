@@ -15,10 +15,15 @@ export type RunMemoryConsolidationAgentInput = {
   now(): Date;
   signal?: AbortSignal;
   heartbeat?(): Promise<boolean>;
+  /** Cumulative provider-reported tokens allowed for one Phase 2 rollout. */
+  rolloutTokenBudget?: number;
+  /** Wall-clock deadline for the complete rollout, including tool execution. */
+  deadlineMs?: number;
 };
 
 const MEMORY_CONSOLIDATION_MODEL = 'memory-consolidation';
-const MAX_CONSOLIDATION_ROUNDS = 12;
+const DEFAULT_CONSOLIDATION_ROLLOUT_TOKEN_BUDGET = 64_000;
+const DEFAULT_CONSOLIDATION_DEADLINE_MS = 5 * 60_000;
 const MAX_CONSOLIDATION_OUTPUT_TOKENS = 2200;
 const MAX_READ_FILE_CHARS = 120_000;
 const MAX_SEARCH_MATCHES = 80;
@@ -27,31 +32,52 @@ const REQUIRED_SUMMARY_HEADER = 'v1';
 const WRITABLE_TOP_LEVEL_FILES = new Set(['MEMORY.md', 'memory_summary.md']);
 
 export async function runMemoryConsolidationAgent(input: RunMemoryConsolidationAgentInput): Promise<MemoryConsolidationAgentResult> {
+  const deadline = createConsolidationDeadlineSignal(input.signal, normalizedPositiveInteger(
+    input.deadlineMs,
+    DEFAULT_CONSOLIDATION_DEADLINE_MS,
+  ));
+  try {
+    return await runMemoryConsolidationRollout(input, deadline.signal);
+  } finally {
+    deadline.dispose();
+  }
+}
+
+async function runMemoryConsolidationRollout(
+  input: RunMemoryConsolidationAgentInput,
+  signal: AbortSignal,
+): Promise<MemoryConsolidationAgentResult> {
   const host = new MemoryConsolidationToolHost(input.root);
   const context: ToolExecutionContext = {
     threadId: 'internal:memory_consolidation',
     permissionProfile: 'workspace-write',
-    signal: input.signal,
+    signal,
   };
   const tools = await host.listTools(context);
   const messages: RuntimeMessage[] = [
     modelMessage('memory_consolidation_system', 'system', consolidationSystemPrompt(), input.now()),
     modelMessage('memory_consolidation_user', 'user', buildConsolidationPrompt(input.root), input.now()),
   ];
-  let usage: RuntimeUsage | undefined;
+  const budget = new MemoryConsolidationRolloutBudget(normalizedPositiveInteger(
+    input.rolloutTokenBudget,
+    DEFAULT_CONSOLIDATION_ROLLOUT_TOKEN_BUDGET,
+  ));
+  let rounds = 0;
 
-  for (let round = 0; round < MAX_CONSOLIDATION_ROUNDS; round += 1) {
+  while (true) {
     await assertHeartbeat(input.heartbeat);
-    throwIfAborted(input.signal);
+    throwIfAborted(signal);
 
-    const assistantId = `memory_consolidation_assistant_${round}`;
+    const assistantId = `memory_consolidation_assistant_${rounds}`;
     const { text, toolCalls, usage: roundUsage } = await runConsolidationModelRound({
       modelClient: input.modelClient,
       messages,
-      signal: input.signal,
+      signal,
       tools,
     });
-    usage = roundUsage ?? usage;
+    rounds += 1;
+    budget.record(roundUsage);
+    budget.assertNotExhausted();
     messages.push({
       ...modelMessage(assistantId, 'assistant', text, input.now()),
       toolCalls,
@@ -59,12 +85,12 @@ export async function runMemoryConsolidationAgent(input: RunMemoryConsolidationA
 
     if (!toolCalls.length) {
       await assertConsolidationOutputs(input.root);
-      return { rounds: round + 1, usage };
+      return { rounds, usage: budget.usage() };
     }
 
     for (const toolCall of toolCalls) {
       await assertHeartbeat(input.heartbeat);
-      throwIfAborted(input.signal);
+      throwIfAborted(signal);
       const result = await host.runTool(toolCall.name, parseToolArguments(toolCall.arguments), {
         ...context,
         toolCallId: toolCall.id,
@@ -80,8 +106,28 @@ export async function runMemoryConsolidationAgent(input: RunMemoryConsolidationA
       });
     }
   }
+}
 
-  throw new Error(`memory consolidation exceeded ${MAX_CONSOLIDATION_ROUNDS} tool rounds`);
+class MemoryConsolidationRolloutBudget {
+  private cumulativeUsage: RuntimeUsage | undefined;
+  private usedTokens = 0;
+
+  constructor(private readonly limitTokens: number) {}
+
+  record(usage: RuntimeUsage | undefined): void {
+    if (!usage) return;
+    this.cumulativeUsage = addRuntimeUsage(this.cumulativeUsage, usage);
+    this.usedTokens += runtimeUsageTokenCount(usage);
+  }
+
+  assertNotExhausted(): void {
+    if (this.usedTokens < this.limitTokens) return;
+    throw new Error(`memory consolidation exhausted rollout token budget (${this.usedTokens}/${this.limitTokens} tokens)`);
+  }
+
+  usage(): RuntimeUsage | undefined {
+    return this.cumulativeUsage ? { ...this.cumulativeUsage } : undefined;
+  }
 }
 
 class MemoryConsolidationToolHost implements ToolHost {
@@ -215,9 +261,77 @@ async function runConsolidationModelRound(input: {
     throwIfAborted(input.signal);
     if (event.type === 'text_delta') text += event.text;
     if (event.type === 'tool_calls') toolCalls = event.toolCalls;
-    if (event.type === 'usage') usage = event.usage;
+    if (event.type === 'usage' || event.type === 'token_count') usage = event.usage;
   }
   return { text, toolCalls, usage };
+}
+
+function addRuntimeUsage(previous: RuntimeUsage | undefined, next: RuntimeUsage): RuntimeUsage {
+  const inputTokens = sumTokenCounts(previous?.inputTokens, next.inputTokens);
+  const outputTokens = sumTokenCounts(previous?.outputTokens, next.outputTokens);
+  const totalTokens = sumTokenCounts(
+    previous ? reportedRuntimeUsageTokenCount(previous) : undefined,
+    reportedRuntimeUsageTokenCount(next),
+  );
+  return {
+    ...previous,
+    ...next,
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+  };
+}
+
+function runtimeUsageTokenCount(usage: RuntimeUsage): number {
+  return reportedRuntimeUsageTokenCount(usage) ?? 0;
+}
+
+function reportedRuntimeUsageTokenCount(usage: RuntimeUsage): number | undefined {
+  // RuntimeUsage does not expose cached-input tokens, so total usage is the
+  // conservative local equivalent of Codex's weighted prefill/output budget.
+  if (Number.isFinite(usage.totalTokens)) return normalizedTokenCount(usage.totalTokens);
+  return sumTokenCounts(usage.inputTokens, usage.outputTokens);
+}
+
+function sumTokenCounts(...values: Array<number | undefined>): number | undefined {
+  const counts = values.filter((value): value is number => Number.isFinite(value));
+  if (!counts.length) return undefined;
+  return counts.reduce((total, value) => total + normalizedTokenCount(value), 0);
+}
+
+function normalizedTokenCount(value: number | undefined): number {
+  return Math.max(0, Math.floor(value ?? 0));
+}
+
+function normalizedPositiveInteger(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  return Math.max(1, Math.floor(value));
+}
+
+function createConsolidationDeadlineSignal(
+  parentSignal: AbortSignal | undefined,
+  deadlineMs: number,
+): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController();
+  const forwardParentAbort = () => {
+    controller.abort(parentSignal?.reason ?? new Error('memory consolidation aborted'));
+  };
+  if (parentSignal?.aborted) {
+    forwardParentAbort();
+  } else {
+    parentSignal?.addEventListener('abort', forwardParentAbort, { once: true });
+  }
+  const timeout = setTimeout(() => {
+    controller.abort(new Error(`memory consolidation exceeded ${deadlineMs}ms deadline`));
+  }, deadlineMs);
+  timeout.unref();
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener('abort', forwardParentAbort);
+    },
+  };
 }
 
 async function assertConsolidationOutputs(root: string): Promise<void> {

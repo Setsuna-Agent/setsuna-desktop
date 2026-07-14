@@ -49,7 +49,6 @@ export class RuntimeModelSampler {
 
   async sample({
     captureProtocolUsage,
-    forceNoTools,
     onAssistantStarted,
     planMode,
     planOnly,
@@ -60,7 +59,6 @@ export class RuntimeModelSampler {
     turnId,
   }: {
     captureProtocolUsage: boolean;
-    forceNoTools: boolean;
     onAssistantStarted?(messageId: string): void;
     planMode?: RuntimeMessage['planMode'];
     planOnly: boolean;
@@ -92,9 +90,9 @@ export class RuntimeModelSampler {
     );
     const streamBridge = createAssistantItemStreamBridge(output, { renderPlanDeltas: planOnly });
     const mirror = createLegacyModelStreamMirrorState();
-    const requestToolChoice = forceNoTools || planOnly ? 'none' : step.toolChoice;
-    const requestTools = forceNoTools || planOnly ? undefined : toolsForModelRequest(step.tools, requestToolChoice);
-    const requestSnapshot = forceNoTools || planOnly ? noToolStepSnapshot(step.snapshot) : step.snapshot;
+    const requestToolChoice = planOnly ? 'none' : step.toolChoice;
+    const requestTools = planOnly ? undefined : toolsForModelRequest(step.tools, requestToolChoice);
+    const requestSnapshot = planOnly ? noToolStepSnapshot(step.snapshot) : step.snapshot;
     await this.options.streamEvents.publishSamplingStepSnapshot(threadId, turnId, requestSnapshot);
 
     for await (const item of this.options.modelClient.stream({
@@ -110,10 +108,8 @@ export class RuntimeModelSampler {
       if (await this.options.streamEvents.publishModelStreamProtocolEvent(threadId, turnId, item)) {
         if (captureProtocolUsage && item.type === 'token_count') usage = item.usage;
         await streamBridge.consume(item);
-        if (!forceNoTools) {
-          const protocolToolCall = toolCallFromModelStreamItem(item);
-          if (protocolToolCall) toolCalls = upsertRuntimeToolCall(toolCalls, protocolToolCall);
-        }
+        const protocolToolCall = toolCallFromModelStreamItem(item);
+        if (protocolToolCall) toolCalls = upsertRuntimeToolCall(toolCalls, protocolToolCall);
         continue;
       }
       if (item.type === 'reasoning_delta') {
@@ -124,7 +120,7 @@ export class RuntimeModelSampler {
         await this.options.streamEvents.mirrorLegacyAgentDelta(mirror, threadId, turnId, assistantMessageId, item.text);
         await streamBridge.appendAgent(item.text);
       }
-      if (!forceNoTools && item.type === 'tool_call_delta') {
+      if (item.type === 'tool_call_delta') {
         await this.options.streamEvents.mirrorLegacyToolCallDelta(mirror, threadId, turnId, item.call);
         await this.options.toolExecutor.publishToolCallDeltaPreview({
           announcedToolPreviews,
@@ -135,7 +131,7 @@ export class RuntimeModelSampler {
           turnId,
         });
       }
-      if (!forceNoTools && item.type === 'tool_calls') {
+      if (item.type === 'tool_calls') {
         toolCalls = item.toolCalls;
         await this.options.streamEvents.mirrorLegacyToolCallsCompleted(mirror, threadId, turnId, toolCalls);
       }

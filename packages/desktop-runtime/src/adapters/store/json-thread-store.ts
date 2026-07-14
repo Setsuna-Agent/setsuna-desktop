@@ -202,7 +202,7 @@ export class JsonThreadStore implements ThreadStore {
     const thread = await this.requireThread(threadId);
     const message = thread.messages.find((item) => item.id === messageId);
     if (!message) throw new Error(`Message not found: ${messageId}`);
-    if (message.role !== 'user') throw new Error('Only user messages can be edited.');
+    if (message.role !== 'user' || message.contextCompaction) throw new Error('Only user messages can be edited.');
     const content = patch.content.trim();
     if (!content) throw new Error('Message content is required.');
     await this.appendEvent(threadId, {

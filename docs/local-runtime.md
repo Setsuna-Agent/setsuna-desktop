@@ -132,7 +132,7 @@ REST 路由覆盖：
 - 事件必须先落盘再广播。
 - 被动 memory 失败不能影响主回答完成。
 - usage 只在模型返回 usage 时记录，不伪造。
-- 达到工具轮次上限后禁用 toolChoice 再生成最终回答。
+- 工具调用由模型驱动持续 sampling，不按调用次数截断；长链路在每次 sampling 前按上下文边界自动压缩，直到模型正常结束或取消、hook、provider/资源错误终止。
 - 只读检查工具可以批处理，文件写入必须通过 mutation 工具的预览、审批和权限预检。
 
 ## Context Compaction

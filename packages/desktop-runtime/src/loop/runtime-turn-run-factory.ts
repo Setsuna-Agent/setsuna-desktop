@@ -13,6 +13,7 @@ import type { ThreadStore } from '../ports/thread-store.js';
 import type { RuntimeEventWriter } from './runtime-event-writer.js';
 import type { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
 import { RuntimeTurnTaskRegistry } from './turn-task-registry.js';
+import { runtimeReviewPolicyMessage } from './runtime-review-profile.js';
 
 export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
@@ -150,6 +151,7 @@ export class RuntimeTurnRunFactory {
       options: {
         modelInput: prompt,
         review: { displayText },
+        runtimeContextMessages: [runtimeReviewPolicyMessage(turnId, this.options.clock.now().toISOString())],
         taskKind: 'review',
         userMessage: {
           id: turnId,
@@ -166,7 +168,7 @@ export class RuntimeTurnRunFactory {
 
   async createGoalContinuation(
     threadId: string,
-    goal: RuntimeThreadGoal,
+    _goal: RuntimeThreadGoal,
     runtimeContextMessages: RuntimeMessage[],
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const thread = await this.requireThread(threadId);
@@ -180,13 +182,13 @@ export class RuntimeTurnRunFactory {
       attachments: [],
       signal: task.controller.signal,
       skillIds: [],
-      text: `Continue goal: ${goal.objective}`,
+      text: 'Continue the active goal.',
       thread,
       threadId,
       turnId,
       options: {
         // Keep the synthetic continuation out of the transcript, but include it as the
-        // user message required by OpenAI-compatible providers alongside system instructions.
+        // user message required by OpenAI-compatible providers alongside runtime context.
         includeUserMessageInModel: true,
         publishUserMessage: false,
         runtimeContextMessages,
@@ -206,7 +208,7 @@ export class RuntimeTurnRunFactory {
     const originalThread = await this.requireThread(threadId);
     const originalMessage = originalThread.messages.find((message) => message.id === messageId);
     if (!originalMessage) throw new Error(`Message not found: ${messageId}`);
-    if (originalMessage.role !== 'user') throw new Error('Only user messages can be regenerated.');
+    if (originalMessage.role !== 'user' || originalMessage.contextCompaction) throw new Error('Only user messages can be regenerated.');
 
     const text = typeof input.content === 'string' ? input.content.trim() : originalMessage.content.trim();
     if (!text) throw new Error('Message content is required.');

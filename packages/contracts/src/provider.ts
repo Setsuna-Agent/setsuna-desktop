@@ -1,4 +1,4 @@
-import type { RuntimeMessage } from './threads.js';
+import type { RuntimeMessage, RuntimeMessagePromptSource } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './config.js';
 
@@ -47,6 +47,18 @@ export type RuntimeModelRequestToolEnvironment = {
 export type RuntimeModelRequestStepSkill = {
   id: string;
   name: string;
+  path?: string;
+};
+
+export type RuntimePromptManifestEntry = {
+  id: string;
+  role: Extract<RuntimeMessage['role'], 'system' | 'developer' | 'user' | 'assistant'>;
+  source: 'product' | 'tool_policy' | 'permissions' | 'personalization' | 'project_instruction' | 'memory' | 'skill' | RuntimeMessagePromptSource;
+  trust: 'runtime' | 'trusted_local' | 'user' | 'external';
+  lifecycle: 'runtime' | 'workspace' | 'turn';
+  estimatedTokens: number;
+  contentHash: string;
+  sourcePath?: string;
 };
 
 export type RuntimeModelRequestWorldState = {
@@ -64,6 +76,9 @@ export type RuntimeModelRequestContextWindow = {
   compactionHash?: string;
   compactionSummaryMessageIds: string[];
   estimatedTokens: number;
+  messageTokens?: number;
+  toolDefinitionTokens?: number;
+  reservedOutputTokens?: number;
   maxContextTokens: number;
   maxContextTokensK: number;
   messageCount: number;
@@ -103,6 +118,7 @@ export type RuntimeModelRequestStepSnapshot = {
   permissionProfile: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
   contextWindow?: RuntimeModelRequestContextWindow;
+  promptManifest?: RuntimePromptManifestEntry[];
   featureKeys: string[];
   worldState: RuntimeModelRequestWorldState;
 };

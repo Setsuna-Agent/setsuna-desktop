@@ -764,7 +764,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     const message = event.payload.message;
     if (message.visibility === 'model') return [];
     if (!turnId || message.role === 'tool') return [];
-    if (message.role === 'system') {
+    if (message.role === 'system' || message.role === 'developer') {
       if (!message.reviewMode) return [];
       const item = reviewModeItem(turnId, message.reviewMode);
       const timestampMs = toEpochMs(event.createdAt);
@@ -1272,6 +1272,7 @@ function cloneRuntimeModelRequestStepSnapshot(snapshot: RuntimeModelRequestStepS
     inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
     mcpServerKeys: [...snapshot.mcpServerKeys],
     messageIds: [...snapshot.messageIds],
+    promptManifest: snapshot.promptManifest ? snapshot.promptManifest.map((entry) => ({ ...entry })) : undefined,
     routerToolNames: snapshot.routerToolNames ? [...snapshot.routerToolNames] : undefined,
     sandboxWorkspaceWrite: snapshot.sandboxWorkspaceWrite
       ? {
@@ -1431,17 +1432,18 @@ function compareRuntimeSweTurnEntries(left: RuntimeSweTurnEntry, right: RuntimeS
 function runtimeMessageToSweItems(message: RuntimeMessage, options: { skipTranscriptContent?: boolean } = {}): SweThreadItem[] {
   if (message.visibility === 'model') return [];
   if (message.role === 'tool') return [];
-  if (message.role === 'system') {
-    const items: SweThreadItem[] = [];
+  const items: SweThreadItem[] = [];
+  if (!options.skipTranscriptContent && message.contextCompaction && message.turnId) {
+    items.push(contextCompactionItem(contextCompactionItemId(message.turnId)));
+  }
+  if (message.role === 'system' || message.role === 'developer') {
     if (!options.skipTranscriptContent && message.reviewMode && message.turnId) items.push(reviewModeItem(message.turnId, message.reviewMode));
-    if (!options.skipTranscriptContent && message.contextCompaction && message.turnId) items.push(contextCompactionItem(contextCompactionItemId(message.turnId)));
     return items;
   }
-  const items: SweThreadItem[] = [];
-  if (!options.skipTranscriptContent && message.role === 'user') {
+  if (!options.skipTranscriptContent && message.role === 'user' && !message.contextCompaction) {
     items.push({ type: 'userMessage', id: message.id, clientId: message.clientId ?? null, content: [{ type: 'text', text: message.content }] });
   }
-  if (!options.skipTranscriptContent && message.role === 'assistant' && message.content.trim()) {
+  if (!options.skipTranscriptContent && message.role === 'assistant' && !message.contextCompaction && message.content.trim()) {
     if (message.planMode) {
       items.push(planItem(message.id, message.content, message.planMode.status));
     } else {

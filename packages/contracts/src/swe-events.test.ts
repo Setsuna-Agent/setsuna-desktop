@@ -2585,7 +2585,7 @@ describe('runtime AppServer SWE event mapping', () => {
         {
           id: 'msg_compaction',
           turnId: 'turn_2',
-          role: 'system',
+          role: 'user',
           content: '<context_compaction_summary>Earlier work.</context_compaction_summary>',
           createdAt: '2026-06-27T00:00:03.000Z',
           status: 'complete',
