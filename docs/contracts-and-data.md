@@ -5,6 +5,7 @@
 ## 模块
 
 - `config.ts`：provider、model、runtime preferences、permission profile、feature flags。
+- `environment.ts`：每次 runtime 操作共享的 cwd、workspace roots、shell 与 Git 仓库路径关系；不承载权限。
 - `provider.ts`：模型请求、工具定义、工具调用、流式模型事件。
 - `threads.ts`：线程、消息、附件、toolRun、context compaction、goal、git info。
 - `events.ts`：runtime event union 和 SSE envelope。

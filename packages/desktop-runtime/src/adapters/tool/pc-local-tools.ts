@@ -174,7 +174,7 @@ export const LOCAL_TOOL_DEFINITIONS = [
     {
       query: {
         type: 'string',
-        description: 'Text or regular expression to search for.',
+        description: 'Regular expression to search for. Set regex to false when the query must be matched literally.',
       },
       path: {
         type: 'string',
@@ -182,7 +182,7 @@ export const LOCAL_TOOL_DEFINITIONS = [
       },
       regex: {
         type: 'boolean',
-        description: 'Treat query as a JavaScript regular expression. Defaults to false.',
+        description: 'Treat query as a regular expression. Defaults to true; set false for an exact literal search.',
       },
       case_sensitive: {
         type: 'boolean',
@@ -279,6 +279,47 @@ export const LOCAL_TOOL_DEFINITIONS = [
     'git_status',
     'Show read-only Git branch and status information for the workspace.',
     {},
+  ),
+  localTool(
+    'git_log',
+    'List commits that affect the selected workspace. Runs from the workspace and safely scopes history to it.',
+    {
+      revision: {
+        type: 'string',
+        description: 'Optional Git revision or range to start from. Defaults to HEAD.',
+      },
+      path: {
+        type: 'string',
+        description: 'Optional file or directory path, absolute or relative to the workspace root.',
+      },
+      max_count: {
+        type: 'integer',
+        description: 'Maximum number of commits. Defaults to 20 and is capped at 100.',
+        minimum: 1,
+        maximum: 100,
+      },
+    },
+  ),
+  localTool(
+    'git_show',
+    'Show one committed Git revision, including its patch, scoped to the selected workspace with workspace-relative paths.',
+    {
+      revision: {
+        type: 'string',
+        description: 'Git revision to show, such as HEAD, HEAD~1, or a commit hash.',
+      },
+      path: {
+        type: 'string',
+        description: 'Optional file or directory path, absolute or relative to the workspace root.',
+      },
+      context_lines: {
+        type: 'integer',
+        description: 'Optional number of unified diff context lines. Defaults to 3 and is capped at 20.',
+        minimum: 0,
+        maximum: 20,
+      },
+    },
+    ['revision'],
   ),
   localTool(
     'read_diff',
@@ -953,6 +994,8 @@ export function summarizeToolCall(name, args, state = createLocalToolState()) {
   if (name === 'search_text') return `搜索文本 ${shortSingleLine(args?.query || '')}`;
   if (name === 'find_files') return `查找文件 ${shortSingleLine(args?.query || '')}`;
   if (name === 'git_status') return '查看 Git 状态';
+  if (name === 'git_log') return `查看 Git 历史 ${shortSingleLine(args?.revision || 'HEAD')}`;
+  if (name === 'git_show') return `查看 Git 提交 ${shortSingleLine(args?.revision || '')}`;
   if (name === 'read_diff') return args?.staged ? '查看暂存区 diff' : '查看工作区 diff';
   if (name === 'read_file') return `查看 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
   if (name === 'list_directory') return `查看 ${relativeLabel(resolvePathForDisplay(args?.path, state.root))}`;
@@ -1092,6 +1135,8 @@ export async function executeLocalTool(name, args, state = createLocalToolState(
     if (name === 'search_text') return await searchText(args, state);
     if (name === 'read_file') return await readLocalFile(args, state);
     if (name === 'git_status') return await gitStatus(state, options.signal);
+    if (name === 'git_log') return await gitLog(args, state, options.signal);
+    if (name === 'git_show') return await gitShow(args, state, options.signal);
     if (name === 'read_diff') return await readDiff(args, state, options.signal);
     if (name === 'update_plan') return updatePlan(args);
     if (name === 'remember_memory') return await rememberMemory(args, state);
@@ -1591,8 +1636,9 @@ async function searchText(args, state) {
 
   const maxResults = boundedInteger(args?.max_results, DEFAULT_SEARCH_RESULTS, 1, MAX_SEARCH_RESULTS);
   const contextLines = boundedInteger(args?.context_lines, 0, 0, MAX_SEARCH_CONTEXT_LINES);
+  const regex = args?.regex !== false;
   const matcher = createTextMatcher(query, {
-    regex: Boolean(args?.regex),
+    regex,
     caseSensitive: Boolean(args?.case_sensitive),
   });
   if (!matcher.ok) return errorResult(matcher.error);
@@ -1615,7 +1661,7 @@ async function searchText(args, state) {
 
   const externalResult = await searchTextWithExternalTool({
     query,
-    regex: Boolean(args?.regex),
+    regex,
     caseSensitive: Boolean(args?.case_sensitive),
     contextLines,
     maxResults,
@@ -2802,41 +2848,116 @@ async function terminateShellProcess(args, state) {
 async function gitStatus(state, signal) {
   const result = await collectProcess(
     'git',
-    ['--no-pager', 'status', '--short', '--branch'],
+    ['-c', 'status.relativePaths=true', '-c', 'core.quotepath=false', '--literal-pathspecs', '--no-pager', 'status', '--short', '--branch', '--', '.'],
     state.root,
     DEFAULT_READONLY_TIMEOUT_MS,
     signal,
   );
   return gitProcessResult(result, {
-    title: 'Git status',
+    title: 'Git status (workspace-relative paths)',
     empty: '(no status output)',
     successDisplay: 'read Git status',
     failureDisplay: 'Git status failed',
   });
 }
 
+async function gitLog(args, state, signal) {
+  const revision = normalizedGitRevision(args?.revision, 'HEAD');
+  const maxCount = boundedInteger(args?.max_count, 20, 1, 100);
+  const { pathspec, targetLabel } = gitWorkspacePathspec(args, state);
+  const result = await collectProcess(
+    'git',
+    [
+      '--literal-pathspecs',
+      '--no-pager',
+      'log',
+      `--max-count=${maxCount}`,
+      '--date=iso-strict',
+      '--format=%H%x09%aI%x09%an <%ae>%x09%s',
+      revision,
+      '--',
+      pathspec,
+    ],
+    state.root,
+    DEFAULT_READONLY_TIMEOUT_MS,
+    signal,
+  );
+  return gitProcessResult(result, {
+    title: `Git history for ${targetLabel || '.'} from ${revision} (workspace-scoped)`,
+    empty: '(no commits affect this workspace path)',
+    successDisplay: 'read Git history',
+    failureDisplay: 'Git history failed',
+  });
+}
+
+async function gitShow(args, state, signal) {
+  const revision = normalizedGitRevision(args?.revision);
+  const contextLines = boundedInteger(args?.context_lines, 3, 0, 20);
+  const { pathspec, targetLabel } = gitWorkspacePathspec(args, state);
+  const result = await collectProcess(
+    'git',
+    [
+      '--literal-pathspecs',
+      '--no-pager',
+      'show',
+      '--no-color',
+      '--no-ext-diff',
+      '--no-textconv',
+      '--no-renames',
+      '--relative',
+      `--unified=${contextLines}`,
+      '--format=fuller',
+      revision,
+      '--',
+      pathspec,
+    ],
+    state.root,
+    DEFAULT_READONLY_TIMEOUT_MS,
+    signal,
+  );
+  return gitProcessResult(result, {
+    title: `Git revision ${revision}${targetLabel ? ` for ${targetLabel}` : ''} (workspace-relative paths)`,
+    empty: '(revision has no changes in the selected workspace path)',
+    successDisplay: `read Git revision ${revision}`,
+    failureDisplay: `Git revision ${revision} failed`,
+  });
+}
+
 async function readDiff(args, state, signal) {
   const contextLines = boundedInteger(args?.context_lines, 3, 0, 20);
   const staged = Boolean(args?.staged);
-  const gitArgs = ['--no-pager', 'diff', '--no-color', `--unified=${contextLines}`];
+  const gitArgs = ['--literal-pathspecs', '--no-pager', 'diff', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--relative', `--unified=${contextLines}`];
   if (staged) gitArgs.push('--cached');
 
-  let targetLabel = '';
-  const requestedPath = args?.path ?? args?.file_path;
-  if (requestedPath) {
-    const targetPath = resolveWorkspacePath(requestedPath, state.root);
-    targetLabel = formatPath(targetPath, state.root);
-    const relative = workspaceRelativePath(targetPath, state.root);
-    if (relative !== '.') gitArgs.push('--', relative);
-  }
+  const { pathspec, targetLabel } = gitWorkspacePathspec(args, state);
+  gitArgs.push('--', pathspec);
 
   const result = await collectProcess('git', gitArgs, state.root, DEFAULT_READONLY_TIMEOUT_MS, signal);
   return gitProcessResult(result, {
-    title: `${staged ? 'Staged' : 'Unstaged'} Git diff${targetLabel ? ` for ${targetLabel}` : ''}`,
+    title: `${staged ? 'Staged' : 'Unstaged'} Git diff (workspace-relative paths)${targetLabel ? ` for ${targetLabel}` : ''}`,
     empty: staged ? '(no staged diff)' : '(no unstaged diff)',
     successDisplay: staged ? 'read staged diff' : 'read unstaged diff',
     failureDisplay: 'Git diff failed',
   });
+}
+
+function gitWorkspacePathspec(args, state) {
+  const requestedPath = args?.path ?? args?.file_path;
+  if (!requestedPath) return { pathspec: '.', targetLabel: '' };
+  const targetPath = resolveWorkspacePath(requestedPath, state.root);
+  return {
+    pathspec: workspaceRelativePath(targetPath, state.root),
+    targetLabel: formatPath(targetPath, state.root),
+  };
+}
+
+function normalizedGitRevision(value, fallback = '') {
+  const revision = String(value ?? fallback).trim();
+  if (!revision) throw new Error('Git revision is required.');
+  if (revision.startsWith('-') || /[\0\r\n]/.test(revision)) {
+    throw new Error('Git revision must be a revision name or hash, not an option.');
+  }
+  return revision;
 }
 
 function startShellSession({ command, cwd, state, timeout, signal, onProgress }) {

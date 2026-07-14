@@ -97,6 +97,7 @@ BrowserToolHost
 - 创建 turn、发布 `turn.started` 和用户消息。
 - 在模型请求前注入个性化配置、memory、tool system prompt、Skill 和对话历史。
 - 需要时先做 context compaction，并把压缩生命周期写入线程事件。
+- 每个 sampling step 解析一次 `RuntimeEnvironment`，同一快照同时驱动 prompt、工具执行、sandbox、project instructions 和 step snapshot。
 - 流式消费模型输出，发布 assistant delta、reasoning 标记、tool call preview。
 - 执行工具调用，处理审批、并行只读工具批次、工具预算、文件变更预览、shell 输出 delta。
 - 记录 usage，保存显式/被动 memory，发布 `turn.completed`。

@@ -11,6 +11,7 @@ import type { RuntimeToolExecutionContext, ToolExecutionEnvironment, ToolHost } 
 import { escapeSkillAttribute, neutralizeInstructionTags, neutralizePersonalizationTags, neutralizeSkillTags } from './prompt-utils.js';
 import type { RuntimePromptFragment } from './prompt-compiler.js';
 import { RUNTIME_BASE_INSTRUCTIONS } from './runtime-base-instructions.js';
+import { runtimeEnvironmentPrompt } from './runtime-environment-prompt.js';
 import type { RuntimeMemoryCoordinator } from './runtime-memory-coordinator.js';
 import { runtimePermissionsPrompt } from './runtime-permissions-prompt.js';
 import type { RuntimeToolRouter } from './tool-router.js';
@@ -35,7 +36,6 @@ export class RuntimePromptContextAssembler {
 
   async build({
     config,
-    environment,
     hookContextMessages,
     skillIds,
     thread,
@@ -44,7 +44,6 @@ export class RuntimePromptContextAssembler {
     tools,
   }: {
     config: RuntimeConfigState | null | undefined;
-    environment: ToolExecutionEnvironment;
     hookContextMessages: RuntimeMessage[];
     skillIds: string[];
     thread: RuntimeThread;
@@ -52,12 +51,12 @@ export class RuntimePromptContextAssembler {
     toolRouter: RuntimeToolRouter | null;
     tools: RuntimeToolDefinition[];
   }): Promise<RuntimePromptContext> {
+    const environment = toolContext.environment;
     const [skillContext, memoryMessages, projectInstructions, toolPrompt] = await Promise.all([
       this.skillContext(skillIds, config),
       this.options.memory.contextMessages(thread.projectId, config),
       this.options.projectInstructions?.load({
-        projectId: thread.projectId,
-        cwd: environment.cwd,
+        environment,
         maxBytes: positiveSetting(config?.desktopSettings?.projectInstructionMaxBytes),
         fallbackFilenames: stringArraySetting(config?.desktopSettings?.projectInstructionFallbackFilenames),
       }).catch(() => []) ?? [],
@@ -68,7 +67,8 @@ export class RuntimePromptContextAssembler {
       fragments: [
         baseInstructionFragment(),
         ...(toolPrompt ? [toolPolicyFragment(toolPrompt)] : []),
-        permissionsFragment(config, toolContext, environment, tools),
+        environmentFragment(environment),
+        permissionsFragment(config, toolContext, tools),
         ...personalizationFragments(config),
         ...projectInstructions.map(projectInstructionFragment),
         ...memoryMessages.map(memoryFragment),
@@ -151,10 +151,20 @@ function toolPolicyFragment(content: string): RuntimePromptFragment {
   };
 }
 
+function environmentFragment(environment: ToolExecutionEnvironment): RuntimePromptFragment {
+  return {
+    id: 'desktop_runtime_environment',
+    role: 'developer',
+    source: 'environment',
+    trust: 'runtime',
+    lifecycle: 'turn',
+    content: runtimeEnvironmentPrompt(environment),
+  };
+}
+
 function permissionsFragment(
   config: RuntimeConfigState | null | undefined,
   context: RuntimeToolExecutionContext,
-  environment: ToolExecutionEnvironment,
   tools: RuntimeToolDefinition[],
 ): RuntimePromptFragment {
   return {
@@ -166,7 +176,6 @@ function permissionsFragment(
     content: runtimePermissionsPrompt({
       approvalPolicy: config?.approvalPolicy ?? 'on-request',
       context,
-      environment,
       tools,
     }),
   };

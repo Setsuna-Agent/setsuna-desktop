@@ -1,9 +1,9 @@
 import type { ModelRequest, RuntimeConfigState, RuntimeMessage, RuntimeModelRequestToolRuntime, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import type { RuntimeToolExecutionContext, ToolExecutionEnvironment, ToolExecutionPreview, ToolHost, ToolRuntimeProfile } from '../ports/tool-host.js';
+import type { RuntimeToolExecutionContext, ToolExecutionPreview, ToolHost, ToolRuntimeProfile } from '../ports/tool-host.js';
 import type { ToolOrchestrator, ToolOrchestratorRunOptions, ToolOrchestratorRunResult } from './tool-orchestrator.js';
 
 // 默认只让确定性的本地只读工具进入并行批处理；其它 runtime 可通过 profile 显式覆盖。
-export const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
+export const LOCAL_PARALLEL_READ_ONLY_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'git_log', 'git_show', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 
 export type RuntimeToolRouterOptions = {
   toolHost: ToolHost;
@@ -49,16 +49,13 @@ export class RuntimeToolRouter {
   private constructor(
     private readonly options: RuntimeToolRouterOptions,
     readonly tools: RuntimeToolDefinition[],
-    readonly environment: ToolExecutionEnvironment,
     private readonly profiles: Map<string, ToolRuntimeProfile>,
     private readonly deferredTools: RuntimeToolDefinition[],
     private readonly routerToolNames: Set<string>,
   ) {}
 
   static async create(options: RuntimeToolRouterOptions): Promise<RuntimeToolRouter> {
-    const environment = await toolEnvironmentForContext(options.toolHost, options.context);
-    const context = { ...options.context, environment };
-    const normalizedOptions = { ...options, context };
+    const context = options.context;
     const allTools = await options.toolHost.listTools(context);
     const profiles = new Map<string, ToolRuntimeProfile>();
     const visibleTools: RuntimeToolDefinition[] = [];
@@ -95,7 +92,7 @@ export class RuntimeToolRouter {
         visibleTools.push(TOOL_SUGGEST_DEFINITION);
       }
     }
-    return new RuntimeToolRouter(normalizedOptions, visibleTools, environment, profiles, deferredTools, routerToolNames);
+    return new RuntimeToolRouter(options, visibleTools, profiles, deferredTools, routerToolNames);
   }
 
   hasTool(name: string): boolean {
@@ -166,9 +163,7 @@ export class RuntimeToolRouter {
     if (!this.options.orchestrator) return false;
     const profile = await this.profileFor(toolCall.name);
     if (profile.supportsParallel !== true) return false;
-    return this.options.orchestrator.canRunWithoutApproval(toolCall, parsedArguments, this.options.context, this.options.approvalPolicy, {
-      environment: this.environment,
-    });
+    return this.options.orchestrator.canRunWithoutApproval(toolCall, parsedArguments, this.options.context, this.options.approvalPolicy);
   }
 
   async runToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, options: ToolOrchestratorRunOptions = {}): Promise<ToolOrchestratorRunResult> {
@@ -180,7 +175,6 @@ export class RuntimeToolRouter {
     const profile = await this.profileFor(toolCall.name);
     return this.options.orchestrator.runToolCall(toolCall, parsedArguments, this.options.context, this.options.approvalPolicy, {
       ...options,
-      environment: this.environment,
       waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation !== false,
     });
   }
@@ -238,17 +232,6 @@ function routerPartialPreview(name: string, rawArguments: string): ToolExecution
   return {
     argumentsPreview,
     resultPreview: query ? `Reveal deferred tools matching "${query}".` : 'Reveal matching deferred tools.',
-  };
-}
-
-async function toolEnvironmentForContext(toolHost: ToolHost, context: RuntimeToolExecutionContext): Promise<ToolExecutionEnvironment> {
-  if (context.environment) return context.environment;
-  const environment = toolHost.environmentForToolContext
-    ? await Promise.resolve(toolHost.environmentForToolContext(context)).catch(() => null)
-    : null;
-  return environment ?? {
-    id: context.projectId ?? context.threadId,
-    cwd: process.cwd(),
   };
 }
 

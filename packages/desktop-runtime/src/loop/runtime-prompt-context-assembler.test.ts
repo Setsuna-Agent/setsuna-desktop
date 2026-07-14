@@ -4,8 +4,15 @@ import { RuntimePromptContextAssembler } from './runtime-prompt-context-assemble
 
 describe('RuntimePromptContextAssembler', () => {
   it('prioritizes explicitly selected skills when the full-content budget is exhausted', async () => {
+    let instructionEnvironment: unknown;
     const assembler = new RuntimePromptContextAssembler({
       memory: { contextMessages: async () => [] },
+      projectInstructions: {
+        load: async (input) => {
+          instructionEnvironment = input.environment;
+          return [];
+        },
+      },
       skillRegistry: {
         selectedSkillInjections: async () => [
           { id: 'default', name: 'Default Skill', content: '12345', path: '/skills/default/SKILL.md' },
@@ -13,14 +20,20 @@ describe('RuntimePromptContextAssembler', () => {
         ],
       },
     });
+    const environment = {
+      id: 'project_1',
+      cwd: '/workspace',
+      workspaceRoot: '/workspace',
+      workspaceRoots: ['/workspace'],
+    };
 
     const result = await assembler.build({
       config: runtimeConfig(),
-      environment: { id: 'project_1', cwd: '/workspace' },
       hookContextMessages: [],
       skillIds: ['explicit'],
       thread: { id: 'thread_1', projectId: 'project_1' } as RuntimeThread,
       toolContext: {
+        environment,
         threadId: 'thread_1',
         projectId: 'project_1',
         turnId: 'turn_1',
@@ -37,6 +50,12 @@ describe('RuntimePromptContextAssembler', () => {
     expect(explicit?.content).toContain('abcde');
     expect(defaultSkill?.content).toContain('budget was exhausted');
     expect(result.selectedSkills.map((skill) => skill.id)).toEqual(['explicit', 'default']);
+    expect(instructionEnvironment).toBe(environment);
+    expect(result.fragments.find((fragment) => fragment.id === 'desktop_runtime_environment')).toMatchObject({
+      role: 'developer',
+      source: 'environment',
+      trust: 'runtime',
+    });
   });
 });
 

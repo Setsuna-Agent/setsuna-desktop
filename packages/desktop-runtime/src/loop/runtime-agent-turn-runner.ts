@@ -1,4 +1,5 @@
 import type {
+  RuntimeEnvironment,
   RuntimeMemoryCitation,
   RuntimeMessage,
   RuntimeToolCall,
@@ -160,6 +161,7 @@ export class RuntimeAgentTurnRunner {
 
     let usage: RuntimeUsage | undefined;
     let cleanupStatus: ToolTurnCleanupOutcome['status'] = 'completed';
+    let cleanupEnvironment: RuntimeEnvironment | undefined;
     try {
       throwIfAborted(signal);
       // SamplingContextBuilder owns the single request boundary so compaction can
@@ -215,6 +217,7 @@ export class RuntimeAgentTurnRunner {
           turnId,
           toolAccess: planOnly ? 'none' : taskKind === 'review' ? 'read-only' : 'all',
         });
+        cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;
         runtimeConfig = stepContext.runtimeConfig;
 
@@ -393,6 +396,7 @@ export class RuntimeAgentTurnRunner {
       throw error;
     } finally {
       await this.cleanupToolHostTurn({
+        ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
         threadId,
         projectId: thread.projectId,
         turnId,

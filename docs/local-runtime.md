@@ -19,6 +19,7 @@ runtime CLI 读取端口、数据目录、token、内置 skills 目录，创建 
 - `FileMemoryStore`：本地 memory。
 - `FileSkillRegistry`：内置和用户 Skill。
 - `FileWorkspaceProjectStore`：workspace 项目、文件、搜索。
+- `WorkspaceRuntimeEnvironmentResolver`：从选中的 workspace 生成一次规范化环境快照，并补充 Git root / workspace prefix。
 - `InMemoryApprovalGate`：审批状态。
 - `InMemoryEventBus`：SSE 广播。
 - `ConfiguredModelClient`：按配置选择 provider。
@@ -91,7 +92,7 @@ REST 路由覆盖：
 - `RuntimeCompactionTurnCoordinator`：管理显式 compact turn 的任务登记、hooks、事件与取消生命周期。
 - `RuntimeModelInputGuard`：统一校验当前模型的附件能力。
 - `RuntimeHookCoordinator`：维护 SessionStart source，并统一运行 SessionStart、UserPromptSubmit、Stop、Pre/PostCompact hooks。
-- `RuntimeSamplingContextBuilder`：使用 Builder 模式，在每个 sampling step 重新捕获 provider config、压缩后的对话、memory、Skill、工具路由和 world-state snapshot。
+- `RuntimeSamplingContextBuilder`：使用 Builder 模式，在每个 sampling step 只解析一次环境，并重新捕获 provider config、压缩后的对话、memory、Skill、工具路由和 world-state snapshot。
 - `RuntimeThreadTitleCoordinator`：管理首轮自动标题策略、模型生成、fallback 资格、usage 和手动改名竞争保护。
 - `RuntimeTurnRunFactory`：使用 Factory 模式统一创建普通、review、mailbox-triggered 和 regenerate turn，把输入准备与任务登记移出主循环。
 - `RuntimeTurnFinalizer`：按固定模板依次结算 usage、完成消息、提交标题、退出 review、保存 memory、发布 `turn.completed`。
@@ -134,6 +135,16 @@ REST 路由覆盖：
 - usage 只在模型返回 usage 时记录，不伪造。
 - 工具调用由模型驱动持续 sampling，不按调用次数截断；长链路在每次 sampling 前按上下文边界自动压缩，直到模型正常结束或取消、hook、provider/资源错误终止。
 - 只读检查工具可以批处理，文件写入必须通过 mutation 工具的预览、审批和权限预检。
+
+## Runtime Environment
+
+`RuntimeEnvironment` 是 prompt、工具、sandbox、project instructions 和 step snapshot 共享的位置 contract：
+
+- `cwd` 是 shell 默认目录，`workspaceRoot` 是文件工具相对路径的基准；两者语义独立，即使当前通常相同也不要互相推断。
+- `workspaceRoots` 描述工作区层级；`repository.root` 和 `repository.workspacePrefix` 只描述 Git worktree 与所选 workspace 的路径关系，不扩大访问权限。
+- `environment_context` 只告诉模型“在哪里”；`runtimePermissionsPrompt` 单独描述“能访问哪里”。
+- 内置 `git_status` / `read_diff` 检查工作树，`git_log` / `git_show` 检查已提交历史；四者都用 pathspec 限定在 workspace，路径统一为 workspace-relative。通过 shell 运行的其他 Git 命令仍可能输出 repository-relative path：从 cwd 复用时要去掉一次 `workspacePrefix`，或显式使用 Git 的 `:(top)` pathspec，不能把带前缀路径直接当作 cwd-relative path。
+- project instructions 仍在每个 sampling step 按同一环境从 workspace root 加载到 cwd，避免线程创建时的旧 cwd 污染当前 turn。
 
 ## Context Compaction
 
@@ -206,6 +217,7 @@ REST 路由覆盖：
 
 - `projects.json` 保存项目列表和 gitRoot。
 - 文件浏览、搜索和读取都限制在项目根下。
+- `search_text` 默认把 query 作为正则表达式；需要搜索 `|`、`[]` 等字面字符时显式传 `regex: false`，避免 schema 与执行语义漂移。
 - 忽略 `.git`、`node_modules`、`dist`、`build`、`coverage`、`target`、`release-artifacts`。
 - 读取、搜索和列表都有大小/数量上限。
 

@@ -1,6 +1,8 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import type { RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment } from '@setsuna-desktop/contracts';
 import { systemClock } from '../../ports/clock.js';
@@ -9,6 +11,8 @@ import { ToolExecutionError } from '../../ports/tool-host.js';
 import { FileWorkspaceProjectStore } from '../workspace/file-workspace-project-store.js';
 import { PcLocalToolHost } from './pc-local-tool-host.js';
 import { shellSandboxProfile, shellSandboxUnavailableReason } from './pc-local-tools.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('pc local tool host', () => {
   it('exposes the pc SWE tool contract and writes files directly', async () => {
@@ -25,6 +29,8 @@ describe('pc local tool host', () => {
       'read_file',
       'read_diff',
       'git_status',
+      'git_log',
+      'git_show',
       'run_shell_command',
       'request_permissions',
       'exec_command',
@@ -53,6 +59,52 @@ describe('pc local tool host', () => {
       },
     });
     await expect(readFile(path.join(projectDir, 'src', 'generated.txt'), 'utf8')).resolves.toBe('generated\n');
+  });
+
+  it('keeps built-in Git output scoped and relative to a selected repository subdirectory', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-git-paths-'));
+    const repositoryRoot = path.join(root, 'repo');
+    const projectDir = path.join(repositoryRoot, 'packages', 'app');
+    await mkdir(projectDir, { recursive: true });
+    await execFileAsync('git', ['init'], { cwd: repositoryRoot });
+    await writeFile(path.join(repositoryRoot, 'outside.txt'), 'outside before\n');
+    await writeFile(path.join(projectDir, 'inside.txt'), 'inside before\n');
+    await execFileAsync('git', ['add', '.'], { cwd: repositoryRoot });
+    await execFileAsync('git', ['-c', 'user.name=Setsuna Test', '-c', 'user.email=setsuna@example.com', 'commit', '-m', 'initial workspace commit'], { cwd: repositoryRoot });
+    const initialRevision = (await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repositoryRoot })).stdout.trim();
+    await writeFile(path.join(repositoryRoot, 'outside.txt'), 'outside committed\n');
+    await execFileAsync('git', ['add', 'outside.txt'], { cwd: repositoryRoot });
+    await execFileAsync('git', ['-c', 'user.name=Setsuna Test', '-c', 'user.email=setsuna@example.com', 'commit', '-m', 'outside-only commit'], { cwd: repositoryRoot });
+    await writeFile(path.join(repositoryRoot, 'outside.txt'), 'outside after\n');
+    await writeFile(path.join(projectDir, 'inside.txt'), 'inside after\n');
+
+    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
+    const project = await store.addProject({ path: projectDir });
+    const host = new PcLocalToolHost(store);
+    const environment = await host.environmentForToolContext({ threadId: 'thread_1', projectId: project.id });
+    const context = { environment, threadId: 'thread_1', turnId: 'turn_1', projectId: project.id };
+
+    const status = await host.runTool('git_status', {}, context);
+    const diff = await host.runTool('read_diff', {}, context);
+    const log = await host.runTool('git_log', { max_count: 5 }, context);
+    const show = await host.runTool('git_show', { revision: initialRevision }, context);
+    const canonicalRepositoryRoot = await realpath(repositoryRoot);
+
+    expect(environment.repository).toMatchObject({
+      root: canonicalRepositoryRoot,
+      workspacePrefix: 'packages/app',
+    });
+    expect(status.content).toContain('inside.txt');
+    expect(status.content).not.toContain('outside.txt');
+    expect(status.content).not.toContain('packages/app/inside.txt');
+    expect(diff.content).toContain('diff --git a/inside.txt b/inside.txt');
+    expect(diff.content).not.toContain('outside.txt');
+    expect(diff.content).not.toContain('a/packages/app/inside.txt');
+    expect(log.content).toContain('initial workspace commit');
+    expect(log.content).not.toContain('outside-only commit');
+    expect(show.content).toContain('diff --git a/inside.txt b/inside.txt');
+    expect(show.content).not.toContain('outside.txt');
+    expect(show.content).not.toContain('a/packages/app/inside.txt');
   });
 
   it('hides request_permissions when the feature is disabled', async () => {
@@ -428,6 +480,32 @@ describe('pc local tool host', () => {
     const search = await host.runTool('search_text', { query: 'SECRET' }, context);
     expect(search.content).not.toContain('ROOT_SECRET');
     expect(search.content).not.toContain('APP_SECRET');
+  });
+
+  it('treats search_text queries as regex by default and preserves an explicit literal mode', async () => {
+    const { host, projectDir } = await createHost();
+    await writeFile(path.join(projectDir, 'symbols.ts'), [
+      'const historyTrip = true',
+      'const HistoryTrip = false',
+      "const literal = 'a|b'",
+      '',
+    ].join('\n'));
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    const regexSearch = await host.runTool('search_text', {
+      query: 'history_trip|HistoryTrip|historyTrip',
+      max_results: 30,
+    }, context);
+    const literalSearch = await host.runTool('search_text', {
+      query: 'a|b',
+      regex: false,
+    }, context);
+
+    expect(regexSearch.content).toContain('regex "history_trip|HistoryTrip|historyTrip"');
+    expect(regexSearch.content).toContain('symbols.ts:1:');
+    expect(regexSearch.content).toContain('symbols.ts:2:');
+    expect(literalSearch.content).not.toContain('regex "a|b"');
+    expect(literalSearch.content).toContain("const literal = 'a|b'");
   });
 
   it('denies shell writes under configured denied roots', async () => {

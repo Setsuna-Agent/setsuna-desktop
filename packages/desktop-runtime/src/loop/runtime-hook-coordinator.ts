@@ -1,7 +1,8 @@
 import type { RuntimeConfigState, RuntimeHookRun, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { Clock } from '../ports/clock.js';
 import type { IdGenerator } from '../ports/id-generator.js';
-import type { RuntimeToolExecutionContext, ToolExecutionContext, ToolExecutionEnvironment, ToolHost } from '../ports/tool-host.js';
+import type { RuntimeEnvironmentResolver } from '../ports/runtime-environment-resolver.js';
+import type { RuntimeToolExecutionContext, ToolExecutionContext } from '../ports/tool-host.js';
 import {
   createRuntimeToolHookRunner,
   type RuntimeCompactHookTrigger,
@@ -17,9 +18,9 @@ export type RuntimeTurnStartHookResult =
 
 type RuntimeHookCoordinatorOptions = {
   clock: Clock;
+  environmentResolver: RuntimeEnvironmentResolver;
   ids: IdGenerator;
   toolExecutor: Pick<RuntimeToolCallExecutor, 'publishHookStarted' | 'publishHookCompleted'>;
-  toolHost?: ToolHost;
 };
 
 /**
@@ -52,7 +53,16 @@ export class RuntimeHookCoordinator {
     turnId: string;
   }): Promise<RuntimeTurnStartHookResult> {
     const runner = createRuntimeToolHookRunner(runtimeConfig);
+    if (!runner) {
+      this.takeSessionStartSource(thread);
+      return { stopped: false, contextMessages: [] };
+    }
+    const environment = await this.options.environmentResolver.resolve({
+      projectId: thread.projectId,
+      threadId: thread.id,
+    });
     const context: ToolExecutionContext & { turnId: string } = {
+      environment,
       threadId: thread.id,
       projectId: thread.projectId,
       turnId,
@@ -61,7 +71,6 @@ export class RuntimeHookCoordinator {
       features: runtimeConfig?.features ?? {},
       signal,
     };
-    const environment = await this.environmentForContext(context);
     const events = this.hookEvents(thread.id, turnId);
     const sessionStartSource = this.takeSessionStartSource(thread);
     const sessionStartOutcome = sessionStartSource
@@ -151,7 +160,12 @@ export class RuntimeHookCoordinator {
   }) {
     const runner = createRuntimeToolHookRunner(runtimeConfig);
     if (!runner) return { shouldStop: false };
+    const environment = await this.options.environmentResolver.resolve({
+      projectId: thread.projectId,
+      threadId: thread.id,
+    });
     const context: ToolExecutionContext & { turnId: string } = {
+      environment,
       threadId: thread.id,
       projectId: thread.projectId,
       turnId,
@@ -163,7 +177,7 @@ export class RuntimeHookCoordinator {
     const input = {
       approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
       context,
-      environment: await this.environmentForContext(context),
+      environment,
       events: this.hookEvents(thread.id, turnId),
       trigger,
     };
@@ -186,7 +200,7 @@ export class RuntimeHookCoordinator {
     return runner.runStop({
       approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
       context,
-      environment: await this.environmentForContext(context),
+      environment: context.environment,
       events: this.hookEvents(context.threadId, context.turnId),
       lastAssistantMessage,
       stopHookActive,
@@ -205,16 +219,6 @@ export class RuntimeHookCoordinator {
     this.initializedThreadIds.add(thread.id);
     if (thread.forkedFromId) return 'startup';
     return thread.messages.length ? 'resume' : 'startup';
-  }
-
-  private async environmentForContext(context: ToolExecutionContext & { turnId: string }): Promise<ToolExecutionEnvironment> {
-    const environment = this.options.toolHost?.environmentForToolContext
-      ? await Promise.resolve(this.options.toolHost.environmentForToolContext(context)).catch(() => null)
-      : null;
-    return environment ?? {
-      id: context.projectId ?? context.threadId,
-      cwd: process.cwd(),
-    };
   }
 
   private additionalContextMessages(contexts: string[], turnId: string): RuntimeMessage[] {

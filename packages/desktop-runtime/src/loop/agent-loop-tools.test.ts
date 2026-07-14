@@ -10,6 +10,7 @@ import type {
   ModelStreamEvent,
   RuntimeConfigState,
   RuntimeExecPolicyAmendment,
+  RuntimeEnvironment,
   RuntimeEvent,
   RuntimeHookRun,
   RuntimeMessage,
@@ -266,6 +267,7 @@ describe('agent loop tools', () => {
     const snapshotEvents = events.filter((event): event is Extract<RuntimeEvent, { type: 'turn.step_snapshot' }> => event.type === 'turn.step_snapshot');
 
     expect(toolHost.listCalls).toBe(2);
+    expect(toolHost.environmentCalls).toBe(2);
     expect(snapshotEvents.map((event) => event.payload.snapshot.toolNames)).toEqual([
       ['step_tool_1'],
       ['step_tool_2'],
@@ -296,6 +298,8 @@ describe('agent loop tools', () => {
       toolEnvironment: {
         id: expect.stringMatching(/^step_env_\d+$/),
         cwd: expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/),
+        workspaceRoot: expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/),
+        workspaceRoots: [expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/)],
       },
       selectedSkills: [{ id: 'skill_step', name: 'Step Skill' }],
       mcpServerKeys: ['alpha', 'zeta'],
@@ -317,6 +321,7 @@ describe('agent loop tools', () => {
       featureKeys: ['request_permissions_tool', 'step_snapshot'],
       promptManifest: expect.arrayContaining([
         expect.objectContaining({ id: 'desktop_runtime_base', role: 'system', source: 'product', trust: 'runtime' }),
+        expect.objectContaining({ id: 'desktop_runtime_environment', role: 'developer', source: 'environment', trust: 'runtime' }),
         expect.objectContaining({ id: 'desktop_runtime_permissions', role: 'developer', source: 'permissions', trust: 'runtime' }),
         expect.objectContaining({ id: 'skill_skill_step', role: 'user', source: 'skill', trust: 'user' }),
       ]),
@@ -336,6 +341,7 @@ describe('agent loop tools', () => {
       toolEnvironment: {
         id: expect.stringMatching(/^step_env_\d+$/),
         cwd: expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/),
+        workspaceRoot: expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/),
       },
     });
     expect(modelClient.requests[1].stepSnapshot?.permissionProfile).toBe('workspace-write');
@@ -353,10 +359,11 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[0].stepSnapshot?.conversationMessageIds).toHaveLength(1);
     expect(modelClient.requests[1].stepSnapshot?.conversationMessageIds.length).toBeGreaterThan(1);
     expect(modelClient.requests[0].stepSnapshot?.messageIds).toContain('skill_skill_step');
+    expect(modelClient.requests[0].stepSnapshot?.messageIds).toContain('desktop_runtime_environment');
     expect(modelClient.requests[0].stepSnapshot?.threadLastSeq).toEqual(expect.any(Number));
     expect(modelClient.requests[0].stepSnapshot?.contextWindow?.estimatedTokens).toBeGreaterThan(0);
     expect(modelClient.requests[0].stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThan(0);
-    expect(toolHost.runContexts[0].environment).toEqual(firstSnapshotEnvironment);
+    expect(toolHost.runContexts[0].environment).toBe(firstSnapshotEnvironment);
   });
 
   it('injects project instructions as user context with source provenance', async () => {
@@ -436,6 +443,8 @@ describe('agent loop tools', () => {
     const modelClient = new MemoryCapturingModelClient();
     const toolHost = new CapturingToolHost([
       WORKSPACE_READ_FILE_TOOL,
+      { name: 'git_log', description: 'Read Git history', inputSchema: {} },
+      { name: 'git_show', description: 'Read a Git revision', inputSchema: {} },
       { name: 'write_file', description: 'Write a file', inputSchema: {} },
     ]);
     const loop = new AgentLoop({
@@ -453,7 +462,7 @@ describe('agent loop tools', () => {
     });
     await waitForTurnCompleted(threadStore, thread.id, started.turnId);
 
-    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file']);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file', 'git_log', 'git_show']);
     expect(modelClient.requests[0].messages.find((message) => message.id === 'desktop_review_policy')).toMatchObject({
       role: 'developer',
       content: expect.stringContaining('do not modify files'),
@@ -3500,7 +3509,7 @@ describe('agent loop tools', () => {
       deniedSpecialRoot,
       deniedGlobPattern,
     });
-    const toolHost = new RequestPermissionsExecToolHost(environmentCwd);
+    const toolHost = new RequestPermissionsExecToolHost(environmentCwd, 'environment_1');
     const approvalGate = new InMemoryApprovalGate(systemClock, ids);
     const loop = new AgentLoop({
       threadStore,
@@ -3520,7 +3529,7 @@ describe('agent loop tools', () => {
       status: 'pending',
       permissionApprovalContext: {
         cwd: environmentCwd,
-        environmentId: 'project_1',
+        environmentId: 'environment_1',
         availableScopes: ['turn', 'session'],
       },
     });
@@ -6317,10 +6326,7 @@ class RefreshingToolHost implements ToolHost {
 
   environmentForToolContext(_context: ToolExecutionContext) {
     this.environmentCalls += 1;
-    return {
-      id: `step_env_${this.environmentCalls}`,
-      cwd: `/tmp/setsuna-step-${this.environmentCalls}`,
-    };
+    return testRuntimeEnvironment(`step_env_${this.environmentCalls}`, `/tmp/setsuna-step-${this.environmentCalls}`);
   }
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
@@ -7936,10 +7942,7 @@ class AdditionalPermissionsExecToolHost implements ToolHost {
   }
 
   environmentForToolContext(context: ToolExecutionContext) {
-    return {
-      id: context.projectId ?? context.threadId,
-      cwd: this.cwd,
-    };
+    return testRuntimeEnvironment(context.projectId ?? context.threadId, this.cwd);
   }
 
   async runTool(_name: string, _input: unknown, context: ToolExecutionContext) {
@@ -7951,7 +7954,10 @@ class AdditionalPermissionsExecToolHost implements ToolHost {
 class RequestPermissionsExecToolHost implements ToolHost {
   contexts: ToolExecutionContext[] = [];
 
-  constructor(private readonly cwd = process.cwd()) {}
+  constructor(
+    private readonly cwd = process.cwd(),
+    private readonly environmentId?: string,
+  ) {}
 
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
@@ -7969,10 +7975,7 @@ class RequestPermissionsExecToolHost implements ToolHost {
   }
 
   environmentForToolContext(context: ToolExecutionContext) {
-    return {
-      id: context.projectId ?? context.threadId,
-      cwd: this.cwd,
-    };
+    return testRuntimeEnvironment(this.environmentId ?? context.projectId ?? context.threadId, this.cwd);
   }
 
   async runTool(name: string, _input: unknown, context: ToolExecutionContext) {
@@ -8853,7 +8856,16 @@ function hookContext(): ToolExecutionContext & { turnId: string } {
 }
 
 function hookEnvironment() {
-  return { id: 'local', cwd: tmpdir() };
+  return testRuntimeEnvironment('local', tmpdir());
+}
+
+function testRuntimeEnvironment(id: string, workspaceRoot: string): RuntimeEnvironment {
+  return {
+    id,
+    cwd: workspaceRoot,
+    workspaceRoot,
+    workspaceRoots: [workspaceRoot],
+  };
 }
 
 function stepSnapshotSkillRegistry(): SkillRegistry {

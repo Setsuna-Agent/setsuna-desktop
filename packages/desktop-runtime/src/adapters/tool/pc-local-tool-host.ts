@@ -1,8 +1,9 @@
 import path from 'node:path';
-import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost, type ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import { WorkspaceRuntimeEnvironmentResolver } from '../workspace/workspace-runtime-environment-resolver.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
 import * as pcTools from './pc-local-tools.js';
 
@@ -166,11 +167,14 @@ export class PcLocalToolHost implements ToolHost {
   private readonly projectStates = new Map<string, ProjectToolState>();
   // shell process store 跨项目状态复用，但执行目录和权限仍由每个 toolState 控制。
   private readonly shellProcessStore = pcTools.createShellProcessStore();
+  private readonly environmentResolver: WorkspaceRuntimeEnvironmentResolver;
 
   constructor(
-    private readonly projects: WorkspaceProjectStore,
+    projects: WorkspaceProjectStore,
     private readonly policyAmendmentStore?: PolicyAmendmentStore,
-  ) {}
+  ) {
+    this.environmentResolver = new WorkspaceRuntimeEnvironmentResolver(projects);
+  }
 
   /**
    * 暴露 PC local tools 中允许模型调用的工具定义。
@@ -189,11 +193,11 @@ export class PcLocalToolHost implements ToolHost {
   }
 
   async environmentForToolContext(context: ToolExecutionContext) {
-    const project = await this.projectFor(context.projectId);
-    return {
-      id: project.id,
-      cwd: path.resolve(project.path),
-    };
+    if (context.environment) return context.environment;
+    return this.environmentResolver.resolve({
+      projectId: context.projectId,
+      threadId: context.threadId,
+    });
   }
 
   toolRuntimeProfile(name: string) {
@@ -361,17 +365,17 @@ export class PcLocalToolHost implements ToolHost {
    * @param context 当前工具执行上下文，包含项目 ID 和权限配置。
    */
   private async projectStateFor(context: ToolExecutionContext): Promise<ProjectToolState> {
-    const project = await this.projectFor(context.projectId);
-    const root = path.resolve(project.path);
+    const environment = context.environment ?? await this.environmentForToolContext(context);
+    const root = path.resolve(environment.workspaceRoot);
     const existing = this.projectStates.get(root);
     if (existing) {
-      existing.toolState.environmentId = project.id;
+      existing.toolState.environmentId = environment.id;
       existing.toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
       existing.toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
       await this.refreshPolicyAmendments(existing);
       return existing;
     }
-    const toolState = pcTools.createLocalToolState(root, { environmentId: project.id, shellProcessStore: this.shellProcessStore });
+    const toolState = pcTools.createLocalToolState(root, { environmentId: environment.id, shellProcessStore: this.shellProcessStore });
     toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
     toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
     const created = {
@@ -384,10 +388,9 @@ export class PcLocalToolHost implements ToolHost {
   }
 
   private async projectStatesForCleanup(context: ToolExecutionContext): Promise<ProjectToolState[]> {
-    const projectId = typeof context.projectId === 'string' && context.projectId ? context.projectId : undefined;
-    const project = await this.projects.getStatus(projectId).then((status) => status.project).catch(() => undefined);
-    if (!project) return [];
-    const existing = this.projectStates.get(path.resolve(project.path));
+    const environment = context.environment ?? await this.environmentForToolContext(context).catch(() => null);
+    if (!environment) return [];
+    const existing = this.projectStates.get(path.resolve(environment.workspaceRoot));
     return existing ? [existing] : [];
   }
 
@@ -411,17 +414,6 @@ export class PcLocalToolHost implements ToolHost {
       })),
     ];
     toolState.networkPolicyAmendments = amendments.networkPolicyAmendments;
-  }
-
-  /**
-   * 根据 projectId 找到当前工具调用要操作的项目。
-   *
-   * @param projectId 工具上下文中的项目 ID；为空时回落到第一个项目。
-   */
-  private async projectFor(projectId: unknown): Promise<WorkspaceProject> {
-    const status = await this.projects.getStatus(typeof projectId === 'string' && projectId ? projectId : undefined);
-    if (!status.project) throw new Error('No workspace is available for local tools.');
-    return status.project;
   }
 
   /**

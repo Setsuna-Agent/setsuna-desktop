@@ -518,7 +518,13 @@ function cloneStepSnapshot(
         }
       : undefined,
     selectedSkills: snapshot.selectedSkills.map((skill) => ({ ...skill })),
-    toolEnvironment: snapshot.toolEnvironment ? { ...snapshot.toolEnvironment } : snapshot.toolEnvironment,
+    toolEnvironment: snapshot.toolEnvironment
+      ? {
+          ...snapshot.toolEnvironment,
+          repository: snapshot.toolEnvironment.repository ? { ...snapshot.toolEnvironment.repository } : undefined,
+          workspaceRoots: snapshot.toolEnvironment.workspaceRoots ? [...snapshot.toolEnvironment.workspaceRoots] : undefined,
+        }
+      : snapshot.toolEnvironment,
     toolNames: [...snapshot.toolNames],
     routerToolNames: snapshot.routerToolNames ? [...snapshot.routerToolNames] : undefined,
     toolRuntimes: snapshot.toolRuntimes ? snapshot.toolRuntimes.map((runtime) => ({ ...runtime })) : undefined,

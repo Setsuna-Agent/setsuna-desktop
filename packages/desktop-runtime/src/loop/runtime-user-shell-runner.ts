@@ -1,11 +1,13 @@
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import type { Clock } from '../ports/clock.js';
 import type { IdGenerator } from '../ports/id-generator.js';
+import type { RuntimeEnvironmentResolver } from '../ports/runtime-environment-resolver.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../ports/tool-host.js';
 
 type RuntimeUserShellRunnerOptions = {
   clock: Clock;
+  environmentResolver: RuntimeEnvironmentResolver;
   ids: IdGenerator;
   toolHost?: ToolHost;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
@@ -43,6 +45,10 @@ export class RuntimeUserShellRunner {
   }): Promise<void> {
     const toolHost = this.options.toolHost;
     if (!toolHost) throw new Error('Tool host is not configured.');
+    const environment = await this.options.environmentResolver.resolve({
+      projectId: thread.projectId,
+      threadId,
+    });
     const toolCallId = this.options.ids.id('call_shell');
     const startedAtDate = this.options.clock.now();
     const startedAtMs = startedAtDate.getTime();
@@ -105,6 +111,7 @@ export class RuntimeUserShellRunner {
         risk_level: 'low',
         yield_time_ms: 0,
       }, {
+        environment,
         threadId,
         projectId: thread.projectId,
         turnId,
@@ -147,7 +154,7 @@ export class RuntimeUserShellRunner {
             { marker: true },
           );
         }
-        await this.options.cleanupTurn({ threadId, projectId: thread.projectId, turnId, toolCallId }, { status: cleanupStatus });
+        await this.options.cleanupTurn({ environment, threadId, projectId: thread.projectId, turnId, toolCallId }, { status: cleanupStatus });
         return;
       }
       status = 'error';
@@ -206,7 +213,7 @@ export class RuntimeUserShellRunner {
         payload: { taskKind: 'user_shell' },
       });
     }
-    await this.options.cleanupTurn({ threadId, projectId: thread.projectId, turnId, toolCallId }, { status: cleanupStatus });
+    await this.options.cleanupTurn({ environment, threadId, projectId: thread.projectId, turnId, toolCallId }, { status: cleanupStatus });
   }
 }
 

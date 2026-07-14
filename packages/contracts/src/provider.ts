@@ -1,6 +1,7 @@
 import type { RuntimeMessage, RuntimeMessagePromptSource } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './config.js';
+import type { RuntimeEnvironment } from './environment.js';
 
 export type ModelProviderKind = 'openai-compatible' | 'openai-responses' | 'anthropic';
 
@@ -39,10 +40,13 @@ export type RuntimeToolCallDelta = {
   argumentsDelta: string;
 };
 
-export type RuntimeModelRequestToolEnvironment = {
-  id: string;
-  cwd: string;
-};
+/**
+ * Persisted snapshots created before RuntimeEnvironment may only contain id and
+ * cwd. Keep the optional fields here so old event logs remain readable while
+ * live runtime execution uses the complete RuntimeEnvironment contract.
+ */
+export type RuntimeModelRequestToolEnvironment = Pick<RuntimeEnvironment, 'id' | 'cwd'>
+  & Partial<Omit<RuntimeEnvironment, 'id' | 'cwd'>>;
 
 export type RuntimeModelRequestStepSkill = {
   id: string;
@@ -53,7 +57,7 @@ export type RuntimeModelRequestStepSkill = {
 export type RuntimePromptManifestEntry = {
   id: string;
   role: Extract<RuntimeMessage['role'], 'system' | 'developer' | 'user' | 'assistant'>;
-  source: 'product' | 'tool_policy' | 'permissions' | 'personalization' | 'project_instruction' | 'memory' | 'skill' | RuntimeMessagePromptSource;
+  source: 'product' | 'tool_policy' | 'environment' | 'permissions' | 'personalization' | 'project_instruction' | 'memory' | 'skill' | RuntimeMessagePromptSource;
   trust: 'runtime' | 'trusted_local' | 'user' | 'external';
   lifecycle: 'runtime' | 'workspace' | 'turn';
   estimatedTokens: number;

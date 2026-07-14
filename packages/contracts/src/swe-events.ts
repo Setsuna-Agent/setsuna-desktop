@@ -1284,7 +1284,13 @@ function cloneRuntimeModelRequestStepSnapshot(snapshot: RuntimeModelRequestStepS
         }
       : undefined,
     selectedSkills: snapshot.selectedSkills.map((skill) => ({ ...skill })),
-    toolEnvironment: snapshot.toolEnvironment ? { ...snapshot.toolEnvironment } : snapshot.toolEnvironment,
+    toolEnvironment: snapshot.toolEnvironment
+      ? {
+          ...snapshot.toolEnvironment,
+          repository: snapshot.toolEnvironment.repository ? { ...snapshot.toolEnvironment.repository } : undefined,
+          workspaceRoots: snapshot.toolEnvironment.workspaceRoots ? [...snapshot.toolEnvironment.workspaceRoots] : undefined,
+        }
+      : snapshot.toolEnvironment,
     toolNames: [...snapshot.toolNames],
     toolRuntimes: snapshot.toolRuntimes ? snapshot.toolRuntimes.map((runtime) => ({ ...runtime })) : undefined,
     worldState: { ...snapshot.worldState },

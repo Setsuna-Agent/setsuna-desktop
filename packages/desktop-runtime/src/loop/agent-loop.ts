@@ -11,6 +11,7 @@ import type { ModelClient } from '../ports/model-client.js';
 import type { PolicyAmendmentStore } from '../ports/policy-amendment-store.js';
 import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
 import type { ProjectInstructionLoader } from '../ports/project-instruction-loader.js';
+import type { RuntimeEnvironmentResolver } from '../ports/runtime-environment-resolver.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolHost } from '../ports/tool-host.js';
@@ -36,6 +37,7 @@ import { RuntimeUserShellRunner } from './runtime-user-shell-runner.js';
 import { RuntimeContextCompactor } from './runtime-context-compactor.js';
 import { RuntimeTurnTaskRegistry } from './turn-task-registry.js';
 import { RuntimeGoalCoordinator } from './runtime-goal-coordinator.js';
+import { runtimeEnvironmentResolver } from './runtime-environment-resolver.js';
 
 export type AgentLoopOptions = {
   threadStore: ThreadStore;
@@ -54,6 +56,7 @@ export type AgentLoopOptions = {
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   projectInstructions?: ProjectInstructionLoader;
+  environmentResolver?: RuntimeEnvironmentResolver;
   eventWriter?: RuntimeEventWriter;
 };
 
@@ -82,6 +85,7 @@ export class AgentLoop {
   private shuttingDown = false;
 
   constructor(private readonly options: AgentLoopOptions) {
+    const environmentResolver = runtimeEnvironmentResolver(options.environmentResolver, options.toolHost);
     this.eventWriter = options.eventWriter ?? new RuntimeEventWriter(options.threadStore, options.eventBus);
     this.memory = new RuntimeMemoryCoordinator({
       clock: options.clock,
@@ -125,9 +129,9 @@ export class AgentLoop {
     });
     this.hooks = new RuntimeHookCoordinator({
       clock: options.clock,
+      environmentResolver,
       ids: options.ids,
       toolExecutor: this.toolExecutor,
-      toolHost: options.toolHost,
     });
     this.contextCompactor = new RuntimeContextCompactor({
       clock: options.clock,
@@ -143,6 +147,7 @@ export class AgentLoop {
       clock: options.clock,
       configStore: options.configStore,
       contextCompactor: this.contextCompactor,
+      environmentResolver,
       mcpStore: options.mcpStore,
       memory: this.memory,
       projectInstructions: options.projectInstructions,
@@ -251,6 +256,7 @@ export class AgentLoop {
     });
     this.userShellRunner = new RuntimeUserShellRunner({
       clock: options.clock,
+      environmentResolver,
       ids: options.ids,
       toolHost: options.toolHost,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),

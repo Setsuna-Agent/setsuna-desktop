@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
 import { FileProjectInstructionLoader } from './file-project-instruction-loader.js';
 
 const temporaryDirectories: string[] = [];
@@ -19,9 +20,9 @@ describe('FileProjectInstructionLoader', () => {
     await writeFile(path.join(root, 'AGENTS.md'), 'root instructions');
     await writeFile(path.join(nested, 'AGENTS.md'), 'ignored sibling instructions');
     await writeFile(path.join(nested, 'AGENTS.override.md'), 'nested override');
-    const loader = loaderFor(root);
+    const loader = loaderFor();
 
-    await expect(loader.load({ projectId: 'project_1', cwd: nested })).resolves.toEqual([
+    await expect(loader.load({ environment: testEnvironment(root, nested) })).resolves.toEqual([
       expect.objectContaining({ content: 'root instructions', directory: root, path: path.join(root, 'AGENTS.md'), truncated: false }),
       expect.objectContaining({ content: 'nested override', directory: nested, path: path.join(nested, 'AGENTS.override.md'), truncated: false }),
     ]);
@@ -30,9 +31,9 @@ describe('FileProjectInstructionLoader', () => {
   it('honors the total byte budget and optional fallback filename', async () => {
     const root = await temporaryProject();
     await writeFile(path.join(root, 'PROJECT_RULES.md'), '1234567890');
-    const loader = loaderFor(root);
+    const loader = loaderFor();
 
-    const result = await loader.load({ cwd: root, fallbackFilenames: ['PROJECT_RULES.md'], maxBytes: 5 });
+    const result = await loader.load({ environment: testEnvironment(root), fallbackFilenames: ['PROJECT_RULES.md'], maxBytes: 5 });
 
     expect(result).toEqual([
       expect.objectContaining({ content: '12345', path: path.join(root, 'PROJECT_RULES.md'), truncated: true }),
@@ -46,7 +47,7 @@ describe('FileProjectInstructionLoader', () => {
     await writeFile(outsideInstructions, 'outside instructions');
     await symlink(outsideInstructions, path.join(root, 'AGENTS.md'));
 
-    await expect(loaderFor(root).load({ cwd: root })).resolves.toEqual([]);
+    await expect(loaderFor().load({ environment: testEnvironment(root) })).resolves.toEqual([]);
   });
 });
 
@@ -56,18 +57,15 @@ async function temporaryProject(): Promise<string> {
   return realpath(directory);
 }
 
-function loaderFor(root: string): FileProjectInstructionLoader {
-  return new FileProjectInstructionLoader({
-    getStatus: async () => ({
-      project: {
-        id: 'project_1',
-        name: 'Project',
-        path: root,
-        createdAt: '2026-07-14T00:00:00.000Z',
-        updatedAt: '2026-07-14T00:00:00.000Z',
-      },
-      exists: true,
-      readable: true,
-    }),
-  });
+function loaderFor(): FileProjectInstructionLoader {
+  return new FileProjectInstructionLoader();
+}
+
+function testEnvironment(root: string, cwd = root): RuntimeEnvironment {
+  return {
+    id: 'project_1',
+    cwd,
+    workspaceRoot: root,
+    workspaceRoots: [root],
+  };
 }

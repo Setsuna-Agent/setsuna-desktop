@@ -134,12 +134,7 @@ export type ToolOrchestratorOptions = {
 
 export type ToolOrchestratorRunOptions = {
   checkApproval?: boolean;
-  environment?: ToolExecutionEnvironment;
   waitsForRuntimeCancellation?: boolean;
-};
-
-export type ToolOrchestratorCheckOptions = {
-  environment?: ToolExecutionEnvironment;
 };
 
 export type ToolOrchestratorRunResult = {
@@ -157,12 +152,10 @@ export type ToolOrchestratorRunResult = {
 export class ToolOrchestrator {
   constructor(private readonly options: ToolOrchestratorOptions) {}
 
-  async canRunWithoutApproval(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], options: ToolOrchestratorCheckOptions = {}): Promise<boolean> {
+  async canRunWithoutApproval(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<boolean> {
     const effective = effectiveToolCallFor(toolCall, parsedArguments);
     if (effective.rejectionReason) return false;
-    const environment = options.environment ?? await this.toolEnvironmentForContext(context);
-    const stepContext: RuntimeToolExecutionContext = { ...context, environment };
-    const requirement = await this.approvalRequirement(effective.toolCall, effective.parsedArguments, stepContext, approvalPolicy, environment).catch((): ToolApprovalRequirement => ({
+    const requirement = await this.approvalRequirement(effective.toolCall, effective.parsedArguments, context, approvalPolicy, context.environment).catch((): ToolApprovalRequirement => ({
       action: 'ask',
       reason: 'Approval check failed.',
       argumentsPreview: previewArguments(effective.parsedArguments),
@@ -174,8 +167,8 @@ export class ToolOrchestrator {
     const effective = effectiveToolCallFor(toolCall, parsedArguments);
     let runToolCall = effective.toolCall;
     let runArguments = effective.parsedArguments;
-    const environment = runOptions.environment ?? await this.toolEnvironmentForContext(context);
-    const stepContext: RuntimeToolExecutionContext = { ...context, environment };
+    const environment = context.environment;
+    const stepContext = context;
     if (runToolCall.name === REQUEST_PERMISSIONS_TOOL_NAME) {
       return this.runRequestPermissionsTool(runToolCall, runArguments, stepContext, approvalPolicy, environment);
     }
@@ -463,17 +456,6 @@ export class ToolOrchestrator {
       ),
       extra,
     );
-  }
-
-  private async toolEnvironmentForContext(context: RuntimeToolExecutionContext): Promise<ToolExecutionEnvironment> {
-    if (context.environment) return context.environment;
-    const environment = this.options.toolHost.environmentForToolContext
-      ? await Promise.resolve(this.options.toolHost.environmentForToolContext(context)).catch(() => null)
-      : null;
-    return environment ?? {
-      id: environmentIdForContext(context),
-      cwd: process.cwd(),
-    };
   }
 
   private hookEvents() {
@@ -1547,7 +1529,7 @@ function requestPermissionsApprovalKeys(environmentId: string, grantedPermission
 }
 
 function environmentIdForContext(context: RuntimeToolExecutionContext): string {
-  return context.projectId ?? context.threadId;
+  return context.environment.id || context.projectId || context.threadId;
 }
 
 function shellCommandForApprovalKey(parsedArguments: unknown): string {

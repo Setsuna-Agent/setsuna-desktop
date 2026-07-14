@@ -977,7 +977,13 @@ describe('applyRuntimeEventToThread context compaction', () => {
         waitsForRuntimeCancellation: true,
       }],
       toolChoice: 'auto' as const,
-      toolEnvironment: { id: 'project_1', cwd: '/tmp/project' },
+      toolEnvironment: {
+        id: 'project_1',
+        cwd: '/tmp/project',
+        workspaceRoot: '/tmp/project',
+        workspaceRoots: ['/tmp/project'],
+        repository: { kind: 'git' as const, root: '/tmp', workspacePrefix: 'project' },
+      },
       selectedSkills: [{ id: 'skill_1', name: 'Skill One' }],
       mcpServerKeys: ['filesystem'],
       mcpServerCount: 1,
@@ -1038,6 +1044,8 @@ describe('applyRuntimeEventToThread context compaction', () => {
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.routerToolNames!.push('mutated');
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolRuntimes![0]!.name = 'mutated';
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.contextWindow!.compactionSummaryMessageIds.push('mutated');
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolEnvironment!.workspaceRoots!.push('/mutated');
+    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolEnvironment!.repository!.workspacePrefix = 'mutated';
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolNames).toEqual(['read_file']);
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.advertisedToolNames).toEqual(['read_file']);
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.deferredToolNames).toEqual(['hidden_lookup']);
@@ -1045,6 +1053,8 @@ describe('applyRuntimeEventToThread context compaction', () => {
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.routerToolNames).toEqual(['tool_search']);
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolRuntimes?.[0]?.name).toBe('read_file');
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.contextWindow?.compactionSummaryMessageIds).toEqual(['msg_compact']);
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolEnvironment?.workspaceRoots).toEqual(['/tmp/project']);
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolEnvironment?.repository?.workspacePrefix).toBe('project');
   });
 
   it('projects item-based model stream state into the owning turn', () => {

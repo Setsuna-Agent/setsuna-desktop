@@ -11,6 +11,7 @@ import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
 import type { McpStore } from '../ports/mcp-store.js';
 import type { ProjectInstructionLoader } from '../ports/project-instruction-loader.js';
+import type { RuntimeEnvironmentResolver } from '../ports/runtime-environment-resolver.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { RuntimeToolExecutionContext, ToolHost } from '../ports/tool-host.js';
@@ -47,6 +48,7 @@ type RuntimeSamplingContextBuilderOptions = {
   clock: Clock;
   configStore?: ConfigStore;
   contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
+  environmentResolver: RuntimeEnvironmentResolver;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
@@ -103,7 +105,12 @@ export class RuntimeSamplingContextBuilder {
   }): Promise<RuntimeSamplingStepContext> {
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
+    const environment = await this.options.environmentResolver.resolve({
+      projectId: thread.projectId,
+      threadId,
+    });
     const toolContext: RuntimeToolExecutionContext = {
+      environment,
       threadId,
       projectId: thread.projectId,
       turnId,
@@ -136,11 +143,8 @@ export class RuntimeSamplingContextBuilder {
       : availableTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
     const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, threadHasGoal);
-    const environment = toolRouter?.environment
-      ?? await samplingEnvironment(this.options.toolHost, toolContext, thread.projectId ?? threadId);
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
-      environment,
       hookContextMessages,
       skillIds,
       thread,
@@ -236,17 +240,6 @@ export class RuntimeSamplingContextBuilder {
 
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
   return messages.filter((message) => message.visibility !== 'transcript');
-}
-
-async function samplingEnvironment(
-  toolHost: ToolHost | undefined,
-  context: RuntimeToolExecutionContext,
-  fallbackId: string,
-) {
-  const environment = toolHost?.environmentForToolContext
-    ? await Promise.resolve(toolHost.environmentForToolContext(context)).catch(() => null)
-    : null;
-  return environment ?? { id: fallbackId, cwd: process.cwd() };
 }
 
 function reservedOutputTokensForConfig(config: RuntimeConfigState | null | undefined): number {

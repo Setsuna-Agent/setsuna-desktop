@@ -93,6 +93,12 @@ function createCoordinator(overrides: Partial<ConstructorParameters<typeof Runti
 
 function toolContext(signal = new AbortController().signal): RuntimeToolExecutionContext {
   return {
+    environment: {
+      id: 'project_1',
+      cwd: '/workspace',
+      workspaceRoot: '/workspace',
+      workspaceRoots: ['/workspace'],
+    },
     threadId: 'thread_parent',
     turnId: 'turn_parent',
     permissionProfile: 'workspace-write',

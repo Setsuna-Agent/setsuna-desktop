@@ -1,9 +1,6 @@
-import type { RuntimeMessage, RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeEnvironment, RuntimeMessage, RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
-export type ToolExecutionEnvironment = {
-  id: string;
-  cwd: string;
-};
+export type ToolExecutionEnvironment = RuntimeEnvironment;
 
 export type ToolExecutionContext = {
   threadId: string;
@@ -25,6 +22,7 @@ export type ToolExecutionContext = {
  * agent-loop 与 tool-orchestrator 共享该类型，避免重复定义导致字段漂移。
  */
 export type RuntimeToolExecutionContext = ToolExecutionContext & {
+  environment: ToolExecutionEnvironment;
   turnId: string;
   permissionProfile: RuntimePermissionProfile;
   sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite | undefined;

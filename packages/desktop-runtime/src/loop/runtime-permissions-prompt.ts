@@ -1,29 +1,27 @@
 import type { RuntimeConfigState, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import type { RuntimeToolExecutionContext, ToolExecutionEnvironment } from '../ports/tool-host.js';
+import type { RuntimeToolExecutionContext } from '../ports/tool-host.js';
 
 export function runtimePermissionsPrompt({
   approvalPolicy,
   context,
-  environment,
   tools,
 }: {
   approvalPolicy: RuntimeConfigState['approvalPolicy'];
   context: RuntimeToolExecutionContext;
-  environment: ToolExecutionEnvironment;
   tools: RuntimeToolDefinition[];
 }): string {
+  const environment = context.environment;
   const sandbox = context.sandboxWorkspaceWrite ?? {};
   const unrestrictedFileSystem = context.permissionProfile === 'danger-full-access';
-  const readableRoots = sandbox.readableRoots?.length ? sandbox.readableRoots : [environment.cwd];
+  const readableRoots = sandbox.readableRoots?.length ? sandbox.readableRoots : [environment.workspaceRoot];
   const writableRoots = context.permissionProfile === 'read-only'
     ? []
-    : sandbox.writableRoots?.length ? sandbox.writableRoots : [environment.cwd];
+    : sandbox.writableRoots?.length ? sandbox.writableRoots : [environment.workspaceRoot];
   const networkAccess = unrestrictedFileSystem || sandbox.networkAccess === true;
   const canRequestPermissions = tools.some((tool) => tool.name === 'request_permissions');
 
   return [
     'Runtime permissions for this sampling step:',
-    `- Working directory: ${quotedPath(environment.cwd)}`,
     `- Permission profile: ${context.permissionProfile}`,
     `- Approval policy: ${approvalPolicy}`,
     `- Network access: ${networkAccess ? 'enabled' : 'restricted'}`,

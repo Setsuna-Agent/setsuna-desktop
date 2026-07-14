@@ -1,21 +1,14 @@
 import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { ProjectInstructionLoader, ProjectInstructionSource } from '../../ports/project-instruction-loader.js';
-import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 
 const DEFAULT_MAX_BYTES = 32 * 1024;
 const PRIMARY_FILENAMES = ['AGENTS.override.md', 'AGENTS.md'];
 
 export class FileProjectInstructionLoader implements ProjectInstructionLoader {
-  constructor(private readonly projects: Pick<WorkspaceProjectStore, 'getStatus'>) {}
-
-  async load({ projectId, cwd, maxBytes = DEFAULT_MAX_BYTES, fallbackFilenames = [] }: Parameters<ProjectInstructionLoader['load']>[0]): Promise<ProjectInstructionSource[]> {
-    const status = await this.projects.getStatus(projectId).catch(() => null);
-    if (!status?.readable || !status.project) return [];
-
-    const projectPath = status.project.path;
-    const root = await realpath(projectPath).catch(() => path.resolve(projectPath));
-    const requestedCwd = await realpath(cwd).catch(() => path.resolve(cwd));
+  async load({ environment, maxBytes = DEFAULT_MAX_BYTES, fallbackFilenames = [] }: Parameters<ProjectInstructionLoader['load']>[0]): Promise<ProjectInstructionSource[]> {
+    const root = await realpath(environment.workspaceRoot).catch(() => path.resolve(environment.workspaceRoot));
+    const requestedCwd = await realpath(environment.cwd).catch(() => path.resolve(environment.cwd));
     const scopedCwd = pathIsWithin(root, requestedCwd) ? requestedCwd : root;
     const filenames = [...PRIMARY_FILENAMES, ...validFallbackFilenames(fallbackFilenames)];
     let remainingBytes = Math.max(0, Math.floor(maxBytes));

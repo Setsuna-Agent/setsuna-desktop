@@ -1,3 +1,5 @@
+import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
+
 export type ProjectInstructionSource = {
   content: string;
   directory: string;
@@ -6,8 +8,7 @@ export type ProjectInstructionSource = {
 };
 
 export type ProjectInstructionLoadInput = {
-  projectId?: string;
-  cwd: string;
+  environment: RuntimeEnvironment;
   maxBytes?: number;
   fallbackFilenames?: string[];
 };

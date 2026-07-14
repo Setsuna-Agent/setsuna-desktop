@@ -2017,7 +2017,13 @@ describe('runtime AppServer SWE event mapping', () => {
         waitsForRuntimeCancellation: true,
       }],
       toolChoice: 'auto' as const,
-      toolEnvironment: { id: 'project_1', cwd: '/tmp/project' },
+      toolEnvironment: {
+        id: 'project_1',
+        cwd: '/tmp/project',
+        workspaceRoot: '/tmp/project',
+        workspaceRoots: ['/tmp/project'],
+        repository: { kind: 'git' as const, root: '/tmp', workspacePrefix: 'project' },
+      },
       selectedSkills: [],
       mcpServerKeys: ['filesystem'],
       mcpServerCount: 1,
@@ -2108,7 +2114,11 @@ describe('runtime AppServer SWE event mapping', () => {
     const mappedStepSnapshot = mappedSnapshot[0];
     if (mappedStepSnapshot?.method !== 'turn/stepSnapshot/updated') throw new Error('expected a step snapshot notification');
     mappedStepSnapshot.params.stepSnapshot.snapshot.toolRuntimes![0]!.name = 'mutated';
+    mappedStepSnapshot.params.stepSnapshot.snapshot.toolEnvironment!.workspaceRoots!.push('/mutated');
+    mappedStepSnapshot.params.stepSnapshot.snapshot.toolEnvironment!.repository!.workspacePrefix = 'mutated';
     expect(stepSnapshot.toolRuntimes[0]!.name).toBe('read_file');
+    expect(stepSnapshot.toolEnvironment.workspaceRoots).toEqual(['/tmp/project']);
+    expect(stepSnapshot.toolEnvironment.repository.workspacePrefix).toBe('project');
     expect(mapEvent(safety)).toEqual([{
       method: 'model/safetyBuffering/updated',
       params: {

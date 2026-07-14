@@ -1,6 +1,9 @@
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
-const READ_TOOL_NAMES = ['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff'] as const;
+const WORKTREE_GIT_TOOL_NAMES = ['git_status', 'read_diff'] as const;
+const HISTORY_GIT_TOOL_NAMES = ['git_log', 'git_show'] as const;
+const GIT_TOOL_NAMES = [...WORKTREE_GIT_TOOL_NAMES, ...HISTORY_GIT_TOOL_NAMES] as const;
+const READ_TOOL_NAMES = ['list_directory', 'find_files', 'search_text', 'read_file', ...GIT_TOOL_NAMES] as const;
 const FILE_MUTATION_TOOL_NAMES = ['apply_patch', 'edit', 'write_file', 'append_file', 'delete_file'] as const;
 const SHELL_PROCESS_TOOL_NAMES = ['read_shell_process', 'list_shell_processes', 'write_shell_process', 'terminate_shell_process'] as const;
 const COMPAT_TOOL_NAMES = ['request_permissions', 'exec_command', 'write_stdin'] as const;
@@ -29,6 +32,22 @@ export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | nul
       '- For questions about current workspace contents, inspect with read-only tools first.',
       '- Inspect only the files and snippets needed for the task; do not read every file or entire large files by default.',
     );
+  }
+
+  if (advertised.has('search_text')) {
+    lines.push('- search_text treats query as a regular expression by default. Set regex to false only for an exact literal search.');
+  }
+
+  if (hasAny(advertised, GIT_TOOL_NAMES)) {
+    const worktreeTools = advertisedNames(advertised, WORKTREE_GIT_TOOL_NAMES);
+    const historyTools = advertisedNames(advertised, HISTORY_GIT_TOOL_NAMES);
+    if (worktreeTools.length) lines.push(`- ${worktreeTools.join('/')} inspect working-tree changes.`);
+    if (historyTools.length) {
+      lines.push(
+        `- ${historyTools.join('/')} inspect committed history. Prefer ${historyTools.join('/')} over reconstructing repository-relative pathspecs with shell commands.`,
+        '- The Git history tools stay scoped to the selected workspace and return workspace-relative paths.',
+      );
+    }
   }
 
   if (hasAny(advertised, FILE_MUTATION_TOOL_NAMES)) {
@@ -82,4 +101,8 @@ export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | nul
 
 function hasAny(names: ReadonlySet<string>, candidates: readonly string[]): boolean {
   return candidates.some((name) => names.has(name));
+}
+
+function advertisedNames(names: ReadonlySet<string>, candidates: readonly string[]): string[] {
+  return candidates.filter((name) => names.has(name));
 }
