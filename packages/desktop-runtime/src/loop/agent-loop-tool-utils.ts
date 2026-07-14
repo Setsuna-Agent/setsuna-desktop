@@ -11,30 +11,11 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { COLLABORATION_TOOL_DEFINITIONS, collaborationToolsEnabled, isCollaborationToolName } from './collaboration-coordinator.js';
 import { GOAL_TOOL_DEFINITIONS, goalToolsEnabled, isGoalToolName } from './runtime-goal-coordinator.js';
-import { FILE_MUTATION_TOOL_NAMES } from './tool-orchestrator.js';
 import { parseJsonObjectFromText } from './prompt-utils.js';
 import type { RuntimeToolRouter } from './tool-router.js';
 
-export type ToolBudget = {
-  readFileCallCount: number;
-  inspectionCallCount: number;
-  fileMutationCallCount: number;
-};
-
-export type ToolBudgetBlock = {
-  content: string;
-  display: string;
-};
-
-type ToolBudgetLimit = number | null;
-
 const MAX_TOOL_ROUNDS = 200;
-// null 表示“统计但不限制”；计数器仍保留，后续打开限额或测试 defer 文案时不用重写流程。
-const MAX_READ_FILE_CALLS_PER_RUN: ToolBudgetLimit = null;
-const MAX_INSPECTION_CALLS_PER_RUN: ToolBudgetLimit = null;
-const MAX_FILE_MUTATION_CALLS_PER_RUN: ToolBudgetLimit = null;
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
-const INSPECTION_TOOL_NAMES = new Set(['list_directory', 'find_files', 'search_text', 'read_file', 'git_status', 'read_diff', 'workspace_list_directory', 'workspace_search_text', 'workspace_read_file']);
 
 export function parseToolArguments(value: string): unknown {
   if (!value.trim()) return {};
@@ -174,75 +155,6 @@ export function mergeToolArgumentDelta(current: string, delta: string): string {
   return `${current}${delta}`;
 }
 
-/**
- * 判断是否需要在连续查看类工具前先给用户一个进度提示。
- *
- * @param roundText 本轮 assistant 已输出的文本。
- * @param toolCalls 本轮模型请求的工具调用列表。
- */
-export function shouldPublishInspectionProgressNote(roundText: string, toolCalls: RuntimeToolCall[]): boolean {
-  if (stripThinkingMarkup(roundText).trim()) return false;
-  return toolCalls.filter(isInspectionToolCall).length > 1;
-}
-
-export function isInspectionToolCall(toolCall: RuntimeToolCall): boolean {
-  return INSPECTION_TOOL_NAMES.has(toolCall.name);
-}
-
-export function deferredToolCallDisplay(executedInspectionCount: number): string {
-  return `本轮已先执行 ${executedInspectionCount} 个本地查看，后续操作已暂缓。`;
-}
-
-/**
- * 生成回填给模型的工具暂缓内容，明确告知该工具没有执行。
- *
- * @param toolCall 被暂缓的工具调用。
- * @param executedInspectionCount 当前模型轮次已执行的查看类工具数量。
- */
-export function deferredToolCallContent(toolCall: RuntimeToolCall, executedInspectionCount: number): string {
-  return [`Deferred by desktop runtime: ${toolCall.name} was not executed.`, `The current model response already executed ${executedInspectionCount} local inspection calls.`, 'Summarize the completed inspection batch before requesting more workspace inspection.', 'Do not assume this deferred tool call happened.'].join('\n');
-}
-
-function stripThinkingMarkup(value: string): string {
-  return value.replace(/<think>[\s\S]*?<\/think>/g, '');
-}
-
-/**
- * 判断某个工具调用是否被当前预算挡住，并生成对应模型/展示文案。
- *
- * @param toolCall 待执行的工具调用。
- * @param budget 当前 turn 已累计的工具预算。
- */
-export function toolBudgetBlockForCall(toolCall: RuntimeToolCall, budget: ToolBudget): ToolBudgetBlock | null {
-  const name = toolCall.name;
-  const readFileLimit = MAX_READ_FILE_CALLS_PER_RUN;
-  if (READ_FILE_TOOL_NAMES.has(name) && isToolBudgetExhausted(budget.readFileCallCount, readFileLimit)) {
-    return {
-      display: `本次请求已读取 ${readFileLimit} 个文件，剩余本地操作已暂缓。`,
-      content: ['Skipped by desktop runtime: The read_file budget for this user request is exhausted.', `Already executed this turn: ${budget.readFileCallCount}/${readFileLimit}.`, `Skipped call: ${name}.`].join('\n'),
-    };
-  }
-  const inspectionLimit = MAX_INSPECTION_CALLS_PER_RUN;
-  if (INSPECTION_TOOL_NAMES.has(name) && isToolBudgetExhausted(budget.inspectionCallCount, inspectionLimit)) {
-    return {
-      display: `本次请求已查看 ${inspectionLimit} 个文件/目录，剩余本地操作已暂缓。`,
-      content: ['Skipped by desktop runtime: The inspection budget for this user request is exhausted.', `Already executed this turn: ${budget.inspectionCallCount}/${inspectionLimit}.`, `Skipped call: ${name}.`].join('\n'),
-    };
-  }
-  const fileMutationLimit = MAX_FILE_MUTATION_CALLS_PER_RUN;
-  if (FILE_MUTATION_TOOL_NAMES.has(name) && isToolBudgetExhausted(budget.fileMutationCallCount, fileMutationLimit)) {
-    return {
-      display: `本次请求已执行 ${fileMutationLimit} 个文件变更，剩余本地操作已暂缓。`,
-      content: ['Skipped by desktop runtime: The file mutation budget for this user request is exhausted.', `Already executed this turn: ${budget.fileMutationCallCount}/${fileMutationLimit}.`, `Skipped call: ${name}.`].join('\n'),
-    };
-  }
-  return null;
-}
-
-function isToolBudgetExhausted(count: number, limit: ToolBudgetLimit): limit is number {
-  return limit !== null && count >= limit;
-}
-
 export function normalizedMaxToolRounds(value: number | undefined): number {
   if (value === undefined || !Number.isFinite(value)) return MAX_TOOL_ROUNDS;
   return Math.max(1, Math.floor(value));
@@ -267,17 +179,6 @@ export function upsertRuntimeToolCall(toolCalls: RuntimeToolCall[], next: Runtim
     arguments: next.arguments || copy[index]?.arguments || '',
   };
   return copy;
-}
-
-export function markToolBudgetProcessed(budget: ToolBudget, toolCall: RuntimeToolCall): void {
-  reserveToolBudgetForCall(budget, toolCall);
-}
-
-export function reserveToolBudgetForCall(budget: ToolBudget, toolCall: RuntimeToolCall): void {
-  const name = toolCall.name;
-  if (READ_FILE_TOOL_NAMES.has(name)) budget.readFileCallCount += 1;
-  if (INSPECTION_TOOL_NAMES.has(name)) budget.inspectionCallCount += 1;
-  if (FILE_MUTATION_TOOL_NAMES.has(name)) budget.fileMutationCallCount += 1;
 }
 
 /**

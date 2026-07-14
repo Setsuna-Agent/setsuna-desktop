@@ -1598,11 +1598,11 @@ describe('agent loop tools', () => {
       && message.content.includes('"search_graph"'))).toBe(true);
   });
 
-  it('pauses overlarge local inspection batches after a visible progress note', async () => {
+  it('executes all inspection calls without injecting progress copy', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Inspection batch', projectId: 'project_1' });
-    const modelClient = new OverlargeInspectionModelClient();
+    const modelClient = new ManyInspectionModelClient();
     const toolHost = new CountingReadToolHost();
     const loop = new AgentLoop({
       threadStore,
@@ -1619,7 +1619,7 @@ describe('agent loop tools', () => {
     const assistantWithTools = saved?.messages.find((message) => message.role === 'assistant' && message.toolCalls?.length);
     const secondRequestToolMessages = modelClient.requests[1].messages.filter((message) => message.role === 'tool');
 
-    expect(toolHost.calls).toHaveLength(8);
+    expect(toolHost.calls).toHaveLength(10);
     expect(toolHost.calls.map((input) => input.file_path)).toEqual([
       'src/file-1.ts',
       'src/file-2.ts',
@@ -1629,17 +1629,18 @@ describe('agent loop tools', () => {
       'src/file-6.ts',
       'src/file-7.ts',
       'src/file-8.ts',
+      'src/file-9.ts',
+      'src/file-10.ts',
     ]);
     expect(modelClient.requests).toHaveLength(2);
-    expect(assistantWithTools?.content).toContain('第一批关键文件');
+    expect(assistantWithTools?.content).toBe('');
     expect(assistantWithTools?.toolCalls).toHaveLength(10);
-    expect(assistantWithTools?.toolRuns).toHaveLength(8);
+    expect(assistantWithTools?.toolRuns).toHaveLength(10);
     expect(secondRequestToolMessages).toHaveLength(10);
-    expect(secondRequestToolMessages.slice(8).map((message) => message.toolCallId)).toEqual(['call_9', 'call_10']);
-    expect(secondRequestToolMessages.slice(8).every((message) => message.content.includes('was not executed'))).toBe(true);
-    expect(events.filter((event) => event.type === 'tool.started')).toHaveLength(8);
-    expect(events.filter((event) => event.type === 'tool.completed')).toHaveLength(8);
-    expect(saved?.messages.at(-1)?.content).toContain('summarized after first batch');
+    expect(secondRequestToolMessages.every((message) => message.content.startsWith('contents for src/file-'))).toBe(true);
+    expect(events.filter((event) => event.type === 'tool.started')).toHaveLength(10);
+    expect(events.filter((event) => event.type === 'tool.completed')).toHaveLength(10);
+    expect(saved?.messages.at(-1)?.content).toContain('inspection complete');
   });
 
   it('honors a tool host forced tool choice for the next model request', async () => {
@@ -5835,7 +5836,7 @@ class ExactDeferredToolSearchModelClient implements ModelClient {
   }
 }
 
-class OverlargeInspectionModelClient implements ModelClient {
+class ManyInspectionModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
@@ -5852,7 +5853,7 @@ class OverlargeInspectionModelClient implements ModelClient {
       yield { type: 'done', finishReason: 'tool_calls' };
       return;
     }
-    yield { type: 'text_delta', text: 'summarized after first batch' };
+    yield { type: 'text_delta', text: 'inspection complete' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

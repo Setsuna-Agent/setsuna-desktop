@@ -30,7 +30,6 @@ export type RuntimeSampledAssistant = {
   assistantMessage: RuntimeMessage;
   assistantMessageId: string;
   memoryCitation?: RuntimeMemoryCitation;
-  previewedToolCallIds: ReadonlySet<string>;
   text: string;
   toolCalls: RuntimeToolCall[];
   usage?: RuntimeUsage;
@@ -163,7 +162,6 @@ export class RuntimeModelSampler {
       assistantMessage,
       assistantMessageId,
       memoryCitation,
-      previewedToolCallIds: new Set(announcedToolPreviews.keys()),
       text,
       toolCalls,
       usage,

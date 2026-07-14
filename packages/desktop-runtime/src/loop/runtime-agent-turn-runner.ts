@@ -9,7 +9,7 @@ import type { ConfigStore } from '../ports/config-store.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../ports/tool-host.js';
-import { normalizedMaxToolRounds, shouldPublishInspectionProgressNote, type ToolBudget } from './agent-loop-tool-utils.js';
+import { normalizedMaxToolRounds } from './agent-loop-tool-utils.js';
 import type { RuntimeHookCoordinator } from './runtime-hook-coordinator.js';
 import { isSuccessfulRememberMemoryMessage } from './runtime-memory-coordinator.js';
 import type { RuntimeModelSampler } from './runtime-model-sampler.js';
@@ -60,7 +60,6 @@ type RuntimeAgentTurnRunnerOptions = {
   publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
 };
 
-const INSPECTION_PROGRESS_NOTE = '我先查看项目结构和第一批关键文件，读完后再继续收敛。\n\n';
 const COLLABORATION_WAIT_NOTE = '\n\n子线程仍在执行；主任务会继续等待，收到调研结果后再统一收口。';
 
 export class RuntimeAgentTurnRunner {
@@ -179,11 +178,6 @@ export class RuntimeAgentTurnRunner {
       let conversationMessages = initialConversationMessages;
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
-      const toolBudget: ToolBudget = {
-        readFileCallCount: 0,
-        inspectionCallCount: 0,
-        fileMutationCallCount: 0,
-      };
       let explicitMemoryUserContent = userMessage.content;
       const appendSteersToConversation = (steers: RuntimeQueuedSteer[]) => {
         if (!steers.length) return false;
@@ -252,7 +246,6 @@ export class RuntimeAgentTurnRunner {
           assistantMessage,
           assistantMessageId,
           memoryCitation: roundMemoryCitation,
-          previewedToolCallIds,
           toolCalls,
         } = sampled;
         if (sampled.usage) usage = sampled.usage;
@@ -260,10 +253,6 @@ export class RuntimeAgentTurnRunner {
 
         if (toolCalls.length) {
           throwIfAborted(signal);
-          if (shouldPublishInspectionProgressNote(roundText, toolCalls)) {
-            roundText += INSPECTION_PROGRESS_NOTE;
-            await this.options.publishAssistantDelta(threadId, turnId, assistantMessageId, INSPECTION_PROGRESS_NOTE);
-          }
           // 先把 toolCalls 挂到 assistant 消息上，再执行工具，UI 才能把后续 toolRuns 归到正确气泡。
           await this.options.completeMessage(threadId, turnId, assistantMessageId, { toolCalls, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
@@ -274,7 +263,7 @@ export class RuntimeAgentTurnRunner {
             toolCalls,
             status: 'complete',
           });
-          const toolMessages = await this.options.toolExecutor.runToolCalls(toolCalls, stepContext.toolContext, stepContext.toolRouter, toolBudget, stepContext.runtimeConfig, previewedToolCallIds);
+          const toolMessages = await this.options.toolExecutor.runToolCalls(toolCalls, stepContext.toolContext, stepContext.toolRouter, stepContext.runtimeConfig);
           if (toolMessages.some(isSuccessfulRememberMemoryMessage)) memorySavedByTool = true;
           conversationMessages.push(...toolMessages);
           continue;

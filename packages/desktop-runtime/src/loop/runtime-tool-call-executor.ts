@@ -30,32 +30,18 @@ import {
   appServerDynamicToolErrorMessage,
   appServerDynamicToolResult,
   appServerRpcId,
-  deferredToolCallContent,
-  deferredToolCallDisplay,
-  isInspectionToolCall,
-  markToolBudgetProcessed,
   mergeToolArgumentDelta,
   parallelReadFileKey,
   parseToolArguments,
   previewArguments,
   previewPartialArguments,
   previewToolContent,
-  reserveToolBudgetForCall,
-  toolBudgetBlockForCall,
   unifiedDiffFromToolPreview,
-  type ToolBudget,
 } from './agent-loop-tool-utils.js';
 
-const MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE = 8;
-const MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND = MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE;
 const APP_SERVER_DYNAMIC_TOOL_TIMEOUT_MS = 120_000;
 
 type RuntimeToolCallDeltaLike = Pick<RuntimeToolCallDelta, 'id' | 'name' | 'argumentsDelta'>;
-
-type ToolCallExecution = {
-  message: RuntimeMessage;
-  processed: boolean;
-};
 
 type AppServerDynamicToolRegistration = {
   connectionId: string;
@@ -141,42 +127,22 @@ export class RuntimeToolCallExecutor {
     return this.appServerDynamicToolsByThread.get(threadId)?.tools;
   }
 
-  async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, toolBudget: ToolBudget, runtimeConfig: RuntimeConfigState | null | undefined, previewedToolCallIds: ReadonlySet<string> = new Set()): Promise<RuntimeMessage[]> {
+  async runToolCalls(toolCalls: RuntimeToolCall[], context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined): Promise<RuntimeMessage[]> {
     const messages: RuntimeMessage[] = [];
-    let inspectionCallsExecutedThisRound = 0;
     for (let index = 0; index < toolCalls.length; ) {
-      // 超过单轮查看上限的 tool call 会回写“未执行”工具消息，让模型显式总结已完成查看。
-      if (inspectionCallsExecutedThisRound >= MAX_INSPECTION_TOOL_CALLS_PER_MODEL_ROUND) {
-        for (; index < toolCalls.length; index += 1) {
-          messages.push(await this.publishDeferredToolMessage(context.threadId, context.turnId, toolCalls[index], inspectionCallsExecutedThisRound, previewedToolCallIds));
-        }
-        break;
-      }
-
       const parallelBatch = toolRouter
-        ? await this.collectParallelToolBatch(toolCalls, index, toolRouter, toolBudget)
+        ? await this.collectParallelToolBatch(toolCalls, index, toolRouter)
         : [];
       if (parallelBatch.length > 1) {
-        // 批量执行只读工具时统一跳过审批和预算二次检查，预算已在 collect 阶段模拟预留。
-        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolRouter, toolBudget, runtimeConfig, { checkBudget: false, skipApproval: true })));
-        for (let batchIndex = 0; batchIndex < parallelBatch.length; batchIndex += 1) {
-          if (executions[batchIndex].processed) {
-            markToolBudgetProcessed(toolBudget, parallelBatch[batchIndex]);
-            if (isInspectionToolCall(parallelBatch[batchIndex])) inspectionCallsExecutedThisRound += 1;
-          }
-          messages.push(executions[batchIndex].message);
-        }
+        // collect 阶段已确认这一连续批次都支持并行，可直接跳过逐项审批检查。
+        const executions = await Promise.all(parallelBatch.map((toolCall) => this.runSingleToolCall(toolCall, context, toolRouter, runtimeConfig, { skipApproval: true })));
+        messages.push(...executions);
         index += parallelBatch.length;
         continue;
       }
 
       const toolCall = toolCalls[index];
-      const execution = await this.runSingleToolCall(toolCall, context, toolRouter, toolBudget, runtimeConfig);
-      if (execution.processed) {
-        markToolBudgetProcessed(toolBudget, toolCall);
-        if (isInspectionToolCall(toolCall)) inspectionCallsExecutedThisRound += 1;
-      }
-      messages.push(execution.message);
+      messages.push(await this.runSingleToolCall(toolCall, context, toolRouter, runtimeConfig));
       index += 1;
     }
     return messages;
@@ -188,23 +154,18 @@ export class RuntimeToolCallExecutor {
    * @param toolCalls 完整工具调用列表。
    * @param startIndex 本次尝试收集的起始下标。
    * @param toolRouter 当前 sampling step 捕获的工具路由器。
-   * @param toolBudget 当前已消耗的工具预算。
    */
-  private async collectParallelToolBatch(toolCalls: RuntimeToolCall[], startIndex: number, toolRouter: RuntimeToolRouter, toolBudget: ToolBudget): Promise<RuntimeToolCall[]> {
-    const simulatedBudget = { ...toolBudget };
+  private async collectParallelToolBatch(toolCalls: RuntimeToolCall[], startIndex: number, toolRouter: RuntimeToolRouter): Promise<RuntimeToolCall[]> {
     const readFileKeys = new Set<string>();
     const batch: RuntimeToolCall[] = [];
     // 只收集连续批次；保留模型输出顺序，避免后面的工具依赖前一个工具结果时被提前执行。
     for (let index = startIndex; index < toolCalls.length; index += 1) {
-      if (batch.length >= MAX_PARALLEL_READ_ONLY_TOOL_BATCH_SIZE) break;
       const toolCall = toolCalls[index];
       const parsedArguments = parseToolArguments(toolCall.arguments);
       if (!(await toolRouter.canRunInParallel(toolCall, parsedArguments))) break;
       const readFileKey = parallelReadFileKey(toolCall, parsedArguments);
       // 同一个文件片段重复读取不并行，避免浪费上下文并让模型误以为拿到了不同信息。
       if (readFileKey && readFileKeys.has(readFileKey)) break;
-      if (toolBudgetBlockForCall(toolCall, simulatedBudget)) break;
-      reserveToolBudgetForCall(simulatedBudget, toolCall);
       if (readFileKey) readFileKeys.add(readFileKey);
       batch.push(toolCall);
     }
@@ -212,17 +173,15 @@ export class RuntimeToolCallExecutor {
   }
 
   /**
-   * 执行单个工具调用，负责预算、预览、审批、运行、结果事件和 tool 消息。
+   * 执行单个工具调用，负责预览、审批、运行、结果事件和 tool 消息。
    *
    * @param toolCall 要执行的工具调用。
    * @param context 当前工具执行上下文。
    * @param toolRouter 当前 sampling step 捕获的工具路由器。
-   * @param toolBudget 本轮工具预算计数器。
-   * @param options 批处理场景下可跳过预算或审批的内部选项。
+   * @param options 批处理场景下可跳过审批的内部选项。
    */
-  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, toolBudget: ToolBudget, runtimeConfig: RuntimeConfigState | null | undefined, options: { checkBudget?: boolean; skipApproval?: boolean } = {}): Promise<ToolCallExecution> {
+  private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined, options: { skipApproval?: boolean } = {}): Promise<RuntimeMessage> {
     let content = '';
-    let processed = false;
     let parsedArguments: unknown;
     try {
       throwIfAborted(context.signal);
@@ -231,65 +190,35 @@ export class RuntimeToolCallExecutor {
         if (!collaborationToolsEnabled(runtimeConfig)) {
           content = `Tool ${toolCall.name} failed: multi_agent feature is disabled.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-          return {
-            message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
-            processed,
-          };
+          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
         }
         const execution = await this.runCollaborationToolCall(toolCall, parsedArguments, context);
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content),
-          processed: true,
-        };
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
       }
       if (isGoalToolName(toolCall.name)) {
         const execution = await this.runGoalToolCall(toolCall, parsedArguments, context);
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content),
-          processed: true,
-        };
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
       }
       const dynamicTool = this.appServerDynamicToolForCall(context.threadId, context.turnId, toolCall.name, toolRouter);
       if (dynamicTool?.status === 'not_advertised') {
         content = `Tool ${toolCall.name} failed: it was not advertised in this sampling step.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
-          processed,
-        };
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
       }
       if (dynamicTool?.status === 'available') {
         const execution = await this.runAppServerDynamicToolCall(toolCall, parsedArguments, context, dynamicTool.registration, dynamicTool.tool);
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content),
-          processed: true,
-        };
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
       }
       const memoryBlock = await this.options.memory.toolBlockForCall(toolCall, context.threadId, runtimeConfig);
       if (memoryBlock) {
         content = memoryBlock;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
-          processed,
-        };
-      }
-      const budgetBlock = options.checkBudget === false ? null : toolBudgetBlockForCall(toolCall, toolBudget);
-      if (budgetBlock) {
-        content = budgetBlock.content;
-        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', budgetBlock.display);
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
-          processed,
-        };
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
       }
       if (!toolRouter) {
         content = `Tool ${toolCall.name} failed: no tool host is available.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
-          processed,
-        };
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
       }
       if (toolRouter.isRouterTool(toolCall.name)) {
         const startedAtMs = this.options.clock.now().getTime();
@@ -298,35 +227,26 @@ export class RuntimeToolCallExecutor {
           checkApproval: options.skipApproval !== true,
         });
         content = execution.content;
-        processed = execution.processed;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, execution.status, execution.content, {
           data: execution.result?.data,
           resultPreview: execution.result?.preview,
           startedAtMs,
         });
-        return {
-          message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
-          processed,
-        };
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
       }
       const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
         checkApproval: options.skipApproval !== true,
       });
       content = execution.content;
-      processed = execution.processed;
       if (execution.status === 'success' && execution.result) {
         await this.options.memory.markPollutedByExternalContext(context.threadId, context.turnId, toolCall, execution.result, runtimeConfig);
       }
     } catch (error) {
       if (isAbortError(error)) throw error;
-      processed = true;
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
       await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
     }
-    return {
-      message: await this.publishToolMessage(context.threadId, context.turnId, toolCall, content),
-      processed,
-    };
+    return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
   }
 
   private appServerDynamicToolForCall(threadId: string, turnId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
@@ -497,23 +417,6 @@ export class RuntimeToolCallExecutor {
     };
     await this.options.publishMessage(threadId, turnId, message);
     return message;
-  }
-
-  /**
-   * 发布被 runtime 暂缓执行的工具消息，让模型知道该工具没有真的运行。
-   *
-   * @param threadId 目标线程 ID。
-   * @param turnId 当前 turn ID。
-   * @param toolCall 被暂缓的工具调用。
-   * @param executedInspectionCount 本轮已经执行的查看类工具数量。
-   * @param previewedToolCallIds 已经在 UI 中预览过的工具调用 ID。
-   */
-  private async publishDeferredToolMessage(threadId: string, turnId: string, toolCall: RuntimeToolCall, executedInspectionCount: number, previewedToolCallIds: ReadonlySet<string>): Promise<RuntimeMessage> {
-    const content = deferredToolCallContent(toolCall, executedInspectionCount);
-    if (previewedToolCallIds.has(toolCall.id)) {
-      await this.publishToolCompleted(threadId, turnId, toolCall, parseToolArguments(toolCall.arguments), 'error', deferredToolCallDisplay(executedInspectionCount));
-    }
-    return this.publishToolMessage(threadId, turnId, toolCall, content);
   }
 
   /**
