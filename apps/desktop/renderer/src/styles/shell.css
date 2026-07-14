@@ -529,13 +529,13 @@ body.desktop-terminal-resizing .app-workbench {
   background: transparent;
   color: var(--app-sidebar-text);
   opacity: 1;
-  transform: translateX(0);
+  /* A persistent transform layer makes Chromium re-rasterize text over macOS vibrancy. */
+  transform: none;
   transition:
     transform 180ms ease,
     opacity 160ms ease,
     visibility 0s linear 0s;
   visibility: visible;
-  will-change: transform, opacity;
 }
 
 .desktop-agent-page--sidebar-collapsed .app-sidebar {
