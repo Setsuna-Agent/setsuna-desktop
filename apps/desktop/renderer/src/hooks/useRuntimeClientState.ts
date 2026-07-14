@@ -3,6 +3,7 @@ import type {
   AnswerRuntimeApprovalInput,
   ProviderConfigState,
   RuntimeAvailableModelsResponse,
+  RuntimeApprovalStatus,
   RuntimeApprovalRequest,
   RuntimeConfigInput,
   RuntimeConfigState,
@@ -242,7 +243,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
             item.id === event.payload.approvalId
               ? {
                   ...item,
-                  status: event.payload.decision === 'reject' || event.payload.decision === 'cancel' ? 'rejected' : 'approved',
+                  status: approvalStatusForDecision(event.payload.decision),
                   decision: event.payload.decision,
                   message: event.payload.message,
                 }
@@ -685,7 +686,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
           item.id === approvalId
             ? {
                 ...item,
-                status: input.decision === 'reject' || input.decision === 'cancel' ? 'rejected' : 'approved',
+                status: approvalStatusForDecision(input.decision),
                 decision: input.decision,
                 message: input.message,
                 resolvedAt,
@@ -791,14 +792,17 @@ function updateThreadApprovalRun(
       ...message,
       toolRuns: message.toolRuns.map((run) => {
         if (run.approvalId !== approvalId) return run;
-        const rejected = input.decision === 'reject' || input.decision === 'cancel';
+        const approvalStatus = approvalStatusForDecision(input.decision);
+        const terminal = approvalStatus === 'rejected' || approvalStatus === 'cancelled';
         const nextRun: RuntimeToolRun = {
           ...run,
-          approvalStatus: rejected ? 'rejected' : 'approved',
+          approvalStatus,
           approvalMessage: input.message,
-          status: rejected ? 'rejected' : 'running',
-          completedAt: rejected ? resolvedAt : run.completedAt,
-          resultPreview: rejected ? input.message || 'Tool call rejected.' : run.resultPreview,
+          status: terminal ? approvalStatus : 'running',
+          completedAt: terminal ? resolvedAt : run.completedAt,
+          resultPreview: terminal
+            ? input.message || (approvalStatus === 'cancelled' ? 'Tool call cancelled.' : 'Tool call rejected.')
+            : run.resultPreview,
         };
         return nextRun;
       }),
@@ -880,5 +884,16 @@ export function activeTurnIdFromThreadSnapshot(thread: RuntimeThread | null, ter
 }
 
 function isActiveToolRun(run: NonNullable<RuntimeThread['messages'][number]['toolRuns']>[number]): boolean {
-  return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected');
+  return run.status === 'running' || (
+    run.status === 'pending_approval'
+    && run.approvalStatus !== 'approved'
+    && run.approvalStatus !== 'rejected'
+    && run.approvalStatus !== 'cancelled'
+  );
+}
+
+function approvalStatusForDecision(decision: AnswerRuntimeApprovalInput['decision']): Exclude<RuntimeApprovalStatus, 'pending'> {
+  if (decision === 'cancel') return 'cancelled';
+  if (decision === 'reject') return 'rejected';
+  return 'approved';
 }

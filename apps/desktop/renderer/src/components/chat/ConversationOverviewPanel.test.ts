@@ -7,25 +7,60 @@ import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
 
 describe('ConversationOverviewPanel', () => {
-  it('uses the same git change summary in compact and expanded modes', () => {
+  it('uses the same local git change summary in compact and expanded modes', () => {
+    const localReviewState: DesktopReviewState = {
+      ...reviewState,
+      stagedSummary: {
+        additions: 3,
+        deletions: 5,
+        files: [{ ...gitSummary.files[0], path: 'README.md', additions: 3, deletions: 5 }],
+      },
+    };
     const compactHtml = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
       ...baseProps,
       compact: true,
+      reviewState: localReviewState,
     }));
     const expandedHtml = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
       ...baseProps,
       compact: false,
+      reviewState: localReviewState,
     }));
 
     expect(compactHtml).toContain('变更');
     expect(compactHtml).toContain('aria-label="展开对话环境信息"');
-    expect(compactHtml).toContain('+71');
-    expect(compactHtml).toContain('-247');
+    expect(compactHtml).toContain('+74');
+    expect(compactHtml).toContain('-252');
+    expect(compactHtml).not.toContain('2 个文件');
     expect(expandedHtml).toContain('变更');
-    expect(expandedHtml).toContain('+71');
-    expect(expandedHtml).toContain('-247');
+    expect(expandedHtml).toContain('+74');
+    expect(expandedHtml).toContain('-252');
+    expect(expandedHtml).not.toContain('2 个文件');
     expect(expandedHtml).not.toContain('无变更');
     expect(expandedHtml).not.toContain('打开文件');
+  });
+
+  it('shows untracked worktree changes before a repository has its first commit', () => {
+    const unbornReviewState: DesktopReviewState = {
+      ...reviewState,
+      baseRef: null,
+      baseRefs: [],
+      branchSummary: null,
+      currentRemoteRef: null,
+      currentRemoteSummary: null,
+      stagedSummary: { additions: 0, deletions: 0, files: [] },
+      unstagedSummary: gitSummary,
+    };
+    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+      ...baseProps,
+      compact: false,
+      reviewState: unbornReviewState,
+    }));
+
+    expect(html).toContain('+71');
+    expect(html).toContain('-247');
+    expect(html).not.toContain('1 个文件');
+    expect(html).not.toContain('无变更');
   });
 
   it('does not forward the React click event to the review callback', () => {
@@ -165,7 +200,7 @@ const reviewState: DesktopReviewState = {
   currentRemoteSummary: gitSummary,
   branchSummary: null,
   stagedSummary: null,
-  unstagedSummary: null,
+  unstagedSummary: gitSummary,
 };
 
 const baseProps = {

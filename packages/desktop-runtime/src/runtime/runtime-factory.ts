@@ -22,6 +22,7 @@ import { PcLocalToolHost } from '../adapters/tool/pc-local-tool-host.js';
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
+import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
 import { AgentLoop } from '../loop/agent-loop.js';
 import { RuntimeEventWriter } from '../loop/runtime-event-writer.js';
@@ -64,6 +65,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
+  const projectWorkflow = new FileProjectWorkflowResolver();
   const browserControl = HttpBrowserControlClient.fromEnvironment();
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
@@ -93,6 +95,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     policyAmendmentStore,
     persistentToolApprovalStore,
     projectInstructions,
+    projectWorkflow,
     eventWriter,
   });
   // Codex 会在 root session 启动时触发 memories startup；桌面端这里做一次轻量历史抽取。
@@ -112,6 +115,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     mcpStore,
     persistentToolApprovalStore,
     policyAmendmentStore,
+    projectWorkflow,
     skillRegistry,
     toolHost,
     threadStore,

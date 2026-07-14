@@ -156,7 +156,7 @@
   vertical-align: -0.12em;
 }
 
-.chat-markdown a.chat-markdown__file-link {
+a.chat-markdown__file-link {
   display: inline;
   margin: 0;
   padding: 0;
@@ -172,8 +172,8 @@
   white-space: nowrap;
 }
 
-.chat-markdown a.chat-markdown__file-link:hover,
-.chat-markdown a.chat-markdown__file-link:focus-visible {
+a.chat-markdown__file-link:hover,
+a.chat-markdown__file-link:focus-visible {
   color: var(--app-primary-hover);
   background: transparent;
   text-decoration: underline;

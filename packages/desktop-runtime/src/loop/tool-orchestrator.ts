@@ -406,10 +406,10 @@ export class ToolOrchestrator {
       } catch (error) {
         if (isAbortError(error)) {
           const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-            decision: 'reject',
+            decision: 'cancel',
             message: 'Turn cancelled.',
           });
-          await this.options.events.publishApprovalResolved(approval.id, 'reject', 'Turn cancelled.', resolved.resolvedAt);
+          await this.options.events.publishApprovalResolved(approval.id, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
         }
         throw error;
       }
@@ -659,10 +659,10 @@ export class ToolOrchestrator {
     } catch (error) {
       if (isAbortError(error)) {
         const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-          decision: 'reject',
+          decision: 'cancel',
           message: 'Turn cancelled.',
         });
-        await this.options.events.publishApprovalResolved(approval.id, 'reject', 'Turn cancelled.', resolved.resolvedAt);
+        await this.options.events.publishApprovalResolved(approval.id, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
       }
       throw error;
     }
@@ -703,10 +703,10 @@ export class ToolOrchestrator {
     } catch (error) {
       if (isAbortError(error)) {
         const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-          decision: 'reject',
+          decision: 'cancel',
           message: 'Turn cancelled.',
         });
-        await this.options.events.publishApprovalResolved(approval.id, 'reject', 'Turn cancelled.', resolved.resolvedAt);
+        await this.options.events.publishApprovalResolved(approval.id, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
       }
       throw error;
     }
@@ -763,10 +763,10 @@ export class ToolOrchestrator {
     } catch (error) {
       if (isAbortError(error)) {
         const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-          decision: 'reject',
+          decision: 'cancel',
           message: 'Turn cancelled.',
         });
-        await this.options.events.publishApprovalResolved(approval.id, 'reject', 'Turn cancelled.', resolved.resolvedAt);
+        await this.options.events.publishApprovalResolved(approval.id, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
       }
       throw error;
     }

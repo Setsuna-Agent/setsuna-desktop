@@ -138,13 +138,22 @@ REST 路由覆盖：
 
 ## Runtime Environment
 
-`RuntimeEnvironment` 是 prompt、工具、sandbox、project instructions 和 step snapshot 共享的位置 contract：
+`RuntimeEnvironment` 是 prompt、工具、sandbox、project workflow、project instructions 和 step snapshot 共享的位置 contract：
 
 - `cwd` 是 shell 默认目录，`workspaceRoot` 是文件工具相对路径的基准；两者语义独立，即使当前通常相同也不要互相推断。
 - `workspaceRoots` 描述工作区层级；`repository.root` 和 `repository.workspacePrefix` 只描述 Git worktree 与所选 workspace 的路径关系，不扩大访问权限。
 - `environment_context` 只告诉模型“在哪里”；`runtimePermissionsPrompt` 单独描述“能访问哪里”。
 - 内置 `git_status` / `read_diff` 检查工作树，`git_log` / `git_show` 检查已提交历史；四者都用 pathspec 限定在 workspace，路径统一为 workspace-relative。通过 shell 运行的其他 Git 命令仍可能输出 repository-relative path：从 cwd 复用时要去掉一次 `workspacePrefix`，或显式使用 Git 的 `:(top)` pathspec，不能把带前缀路径直接当作 cwd-relative path。
 - project instructions 仍在每个 sampling step 按同一环境从 workspace root 加载到 cwd，避免线程创建时的旧 cwd 污染当前 turn。
+
+## Project Workflow
+
+`FileProjectWorkflowResolver` 在每个 sampling step 根据同一 `RuntimeEnvironment` 解析 workspace root 到 cwd 之间的 Node.js 工作流：
+
+- 优先使用最近作用域的 `package.json#packageManager`，再看 lockfile、workspace 配置和 `engines`；同层证据冲突时保持 unresolved，不替模型猜测。
+- 提取 build/test/lint/typecheck/check/verify/format 及其定向子脚本，生成带 cwd、source path 和原始 script definition 的标准调用。
+- package manager、script 数量、单条 definition、ancestry、warning 和 cache 都有固定边界；manifest stat 变化时自动失效缓存。
+- 解析结果以 `user` / `external` 的 `project_workflow` fragment 注入，并在更窄的 project instructions 之前出现。仓库脚本始终作为外部数据处理，不能提升为 runtime policy。
 
 ## Context Compaction
 

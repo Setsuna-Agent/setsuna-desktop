@@ -1,6 +1,8 @@
 import { ChevronsRightLeft, CircleGauge, FileText } from 'lucide-react';
 import type { RuntimeThread, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
+import { localReviewChangeStats } from '../workspace/reviewChanges.js';
+import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationGitControls } from './ConversationGitControls.js';
 import { ConversationPlanSummary } from './ConversationPlanSummary.js';
@@ -38,12 +40,14 @@ export function ConversationOverviewPanel({
   onOpenThread: (threadId: string) => void | Promise<void>;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
 }) {
-  const summary = reviewState?.isGitRepository
-    ? reviewState.currentRemoteSummary ?? reviewState.branchSummary
-    : overview.fileChangeSummary;
-  const additions = summary?.additions ?? 0;
-  const deletions = summary?.deletions ?? 0;
-  const hasFileChanges = Boolean(summary?.files.length);
+  const changeStats = reviewState?.isGitRepository
+    ? localReviewChangeStats(reviewState)
+    : {
+        additions: overview.fileChangeSummary?.additions ?? 0,
+        deletions: overview.fileChangeSummary?.deletions ?? 0,
+        fileCount: overview.fileChangeSummary?.files.length ?? 0,
+      };
+  const hasFileChanges = changeStats.fileCount > 0;
   const usageSummary = threadUsage?.summary;
   const latestTurn = currentThread.turns?.at(-1);
   // Forks are independent conversations; only spawned child agents belong in collaboration tasks.
@@ -57,7 +61,7 @@ export function ConversationOverviewPanel({
         <FileText size={13} />
         <span>{hasFileChanges ? '变更' : '环境'}</span>
         {hasFileChanges ? (
-          <ChangeCountText additions={additions} deletions={deletions} />
+          <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
         ) : (
           <span className="chat-conversation-overview-chip__meta">{contextLabel}</span>
         )}
@@ -85,7 +89,9 @@ export function ConversationOverviewPanel({
           </span>
           <span className="chat-conversation-overview-panel__label">变更</span>
           <span className="chat-conversation-overview-panel__meta">
-            {hasFileChanges ? <ChangeCountText additions={additions} deletions={deletions} /> : '无变更'}
+            {hasFileChanges ? (
+              <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
+            ) : '无变更'}
           </span>
         </button>
         <ConversationGitControls
@@ -148,15 +154,6 @@ function turnDiagnosticLabel(turn: NonNullable<RuntimeThread['turns']>[number] |
     turn.safetyBuffering ? '安全缓冲' : null,
   ].filter(Boolean);
   return signals.length ? `${status} · ${signals.join(' · ')}` : status;
-}
-
-function ChangeCountText({ additions, deletions }: { additions: number; deletions: number }) {
-  return (
-    <span className="chat-conversation-overview-change-counts" aria-label={`新增 ${additions} 行，删除 ${deletions} 行`}>
-      <span className="chat-conversation-overview-change-counts__add">+{additions}</span>
-      <span className="chat-conversation-overview-change-counts__del">-{deletions}</span>
-    </span>
-  );
 }
 
 function ContextProgressIcon({ percent }: { percent: number }) {

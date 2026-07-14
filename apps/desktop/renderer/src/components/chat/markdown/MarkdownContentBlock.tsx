@@ -6,8 +6,9 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
+import { WorkspaceFileLink } from './WorkspaceFileLink.js';
 import { markdownUrlTransform, resolveMarkdownFileReference, resolveMarkdownLinkTarget } from './markdownLinks.js';
-import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
+import { remarkAutolinkBoundaries } from './remarkAutolinkBoundaries.js';
 
 type MarkdownContentBlockProps = {
   content: string;
@@ -17,7 +18,7 @@ type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> = JSX.Intrins
 type MarkdownCodeChildProps = { children?: ReactNode; className?: string };
 
 const rehypePlugins = [rehypeKatex];
-const remarkPlugins = [remarkGfm, remarkMath];
+const remarkPlugins = [remarkGfm, remarkAutolinkBoundaries, remarkMath];
 
 export const MarkdownContentBlock = memo(function MarkdownContentBlock({ content }: MarkdownContentBlockProps) {
   return (
@@ -42,30 +43,21 @@ const markdownComponents = {
 } satisfies Components;
 
 function MarkdownLink({ children, href, node: _node, onClick, ...props }: MarkdownElementProps<'a'>) {
-  const { onOpenWebLink, onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
+  const { onOpenWebLink, workspaceRoot } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(href, workspaceRoot);
 
   if (target.kind === 'workspace') {
-    if (!workspaceRoot && !onOpenWorkspaceFile) {
-      return <span className="chat-markdown__unavailable-link">{children}</span>;
-    }
-    const handleWorkspaceClick = (event: MouseEvent<HTMLAnchorElement>) => {
-      onClick?.(event);
-      if (event.defaultPrevented) return;
-      event.preventDefault();
-      openWorkspaceMarkdownFile(workspaceRoot, target.path, target.line, onOpenWorkspaceFile);
-    };
     return (
-      <a
+      <WorkspaceFileLink
         {...props}
-        className="chat-markdown__file-link"
-        data-markdown-link="workspace"
+        filePath={target.path}
         href={href}
-        title={target.path}
-        onClick={handleWorkspaceClick}
+        line={target.line}
+        linkKind="workspace"
+        onClick={onClick}
       >
-        <MarkdownWorkspaceFileLabel filePath={target.path}>{children}</MarkdownWorkspaceFileLabel>
-      </a>
+        {children}
+      </WorkspaceFileLink>
     );
   }
 
@@ -146,33 +138,19 @@ function MarkdownInlineCode({ children, node: _node, ...props }: MarkdownElement
   const target = resolveMarkdownFileReference(referenceText, workspaceRoot);
 
   if (target && (workspaceRoot || onOpenWorkspaceFile)) {
-    const handleWorkspaceClick = (event: MouseEvent<HTMLAnchorElement>) => {
-      event.preventDefault();
-      openWorkspaceMarkdownFile(workspaceRoot, target.path, target.line, onOpenWorkspaceFile);
-    };
     return (
-      <a
-        className="chat-markdown__file-link"
-        data-markdown-link="workspace-inline"
+      <WorkspaceFileLink
+        filePath={target.path}
         href={referenceText}
-        title={target.path}
-        onClick={handleWorkspaceClick}
+        line={target.line}
+        linkKind="workspace-inline"
       >
-        <MarkdownWorkspaceFileLabel filePath={target.path}>{children}</MarkdownWorkspaceFileLabel>
-      </a>
+        {children}
+      </WorkspaceFileLink>
     );
   }
 
   return <code {...props}>{children}</code>;
-}
-
-function MarkdownWorkspaceFileLabel({ children, filePath }: { children: ReactNode; filePath: string }) {
-  return (
-    <>
-      <WorkspaceFileIcon className="chat-markdown__file-icon" path={filePath} type="file" />
-      <span>{children}</span>
-    </>
-  );
 }
 
 function MarkdownPre({ children, node: _node, ...props }: MarkdownElementProps<'pre'>) {
@@ -202,26 +180,4 @@ function openExternalMarkdownLink(href: string): void {
     return;
   }
   window.open(href, '_blank', 'noopener,noreferrer');
-}
-
-function openWorkspaceMarkdownFile(
-  workspaceRoot: string | undefined,
-  filePath: string,
-  line: number | undefined,
-  fallback: ((filePath: string, line?: number) => void) | undefined,
-): void {
-  const openWorkspaceFile = typeof window === 'undefined'
-    ? undefined
-    : window.setsunaDesktop?.desktop?.openWorkspaceFile;
-  if (workspaceRoot && openWorkspaceFile) {
-    void openWorkspaceFile(workspaceRoot, filePath)
-      .then((result) => {
-        if (!result.ok) console.error('[MarkdownContentBlock] failed to open workspace file', result.error);
-      })
-      .catch((error: unknown) => {
-        console.error('[MarkdownContentBlock] failed to open workspace file', error);
-      });
-    return;
-  }
-  fallback?.(filePath, line);
 }

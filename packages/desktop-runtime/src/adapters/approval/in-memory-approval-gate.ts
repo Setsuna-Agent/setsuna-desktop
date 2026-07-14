@@ -54,8 +54,11 @@ export class InMemoryApprovalGate implements ApprovalGate {
     if (approval.status === 'approved') {
       return this.resolvedAnswers.get(approvalId) ?? { decision: approval.decision ?? 'approve', message: approval.message };
     }
-    if (approval.status === 'rejected') {
-      return this.resolvedAnswers.get(approvalId) ?? { decision: approval.decision ?? 'reject', message: approval.message };
+    if (approval.status === 'rejected' || approval.status === 'cancelled') {
+      return this.resolvedAnswers.get(approvalId) ?? {
+        decision: approval.decision ?? (approval.status === 'cancelled' ? 'cancel' : 'reject'),
+        message: approval.message,
+      };
     }
     return new Promise((resolve, reject) => {
       this.pending.set(approvalId, { resolve, reject });
@@ -69,7 +72,7 @@ export class InMemoryApprovalGate implements ApprovalGate {
 
     const next: RuntimeApprovalRequest = {
       ...approval,
-      status: input.decision === 'reject' || input.decision === 'cancel' ? 'rejected' : 'approved',
+      status: input.decision === 'cancel' ? 'cancelled' : input.decision === 'reject' ? 'rejected' : 'approved',
       resolvedAt: this.clock.now().toISOString(),
       decision: input.decision,
       message: input.message,

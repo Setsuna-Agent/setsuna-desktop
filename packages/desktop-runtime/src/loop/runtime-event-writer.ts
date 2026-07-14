@@ -71,7 +71,7 @@ export class RuntimeEventWriter {
       this.batches.set(threadId, batch);
     }
     const existingIndex = batch.mergeIndexes.get(mergeKey);
-    if (existingIndex !== undefined && mergeDeltaEvent(batch.events[existingIndex], event)) return;
+    if (existingIndex !== undefined && mergeBufferedEvent(batch.events[existingIndex], event)) return;
     batch.mergeIndexes.set(mergeKey, batch.events.length);
     batch.events.push(clonePendingEvent(event));
   }
@@ -125,11 +125,17 @@ function mergeKeyForEvent(event: PendingRuntimeEvent): string {
   if (event.type === 'tool.output_delta') {
     return [event.type, payload.toolCallId, payload.stream, payload.processId].map((value) => String(value ?? '')).join(':');
   }
+  if (event.type === 'tool.preview') return `${event.type}:${String(payload.toolCallId ?? '')}`;
   return '';
 }
 
-function mergeDeltaEvent(target: PendingRuntimeEvent, next: PendingRuntimeEvent): boolean {
+function mergeBufferedEvent(target: PendingRuntimeEvent, next: PendingRuntimeEvent): boolean {
   if (target.type !== next.type) return false;
+  if (target.type === 'tool.preview') {
+    // 工具参数预览只需要最新状态；中间 token 预览没有独立的审计价值。
+    Object.assign(target, clonePendingEvent(next));
+    return true;
+  }
   const targetPayload = target.payload as Record<string, unknown>;
   const nextPayload = next.payload as Record<string, unknown>;
   const field = target.type === 'message.delta' ? 'text' : 'delta';

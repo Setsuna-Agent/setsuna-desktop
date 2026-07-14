@@ -6,12 +6,14 @@ import type {
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { ProjectInstructionLoader } from '../ports/project-instruction-loader.js';
+import type { ProjectWorkflow, ProjectWorkflowResolver } from '../ports/project-workflow-resolver.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { RuntimeToolExecutionContext, ToolExecutionEnvironment, ToolHost } from '../ports/tool-host.js';
 import { escapeSkillAttribute, neutralizeInstructionTags, neutralizePersonalizationTags, neutralizeSkillTags } from './prompt-utils.js';
 import type { RuntimePromptFragment } from './prompt-compiler.js';
 import { RUNTIME_BASE_INSTRUCTIONS } from './runtime-base-instructions.js';
 import { runtimeEnvironmentPrompt } from './runtime-environment-prompt.js';
+import { runtimeProjectWorkflowPrompt } from './runtime-project-workflow-prompt.js';
 import type { RuntimeMemoryCoordinator } from './runtime-memory-coordinator.js';
 import { runtimePermissionsPrompt } from './runtime-permissions-prompt.js';
 import type { RuntimeToolRouter } from './tool-router.js';
@@ -21,6 +23,7 @@ const DEFAULT_SKILL_PROMPT_MAX_BYTES = 48 * 1024;
 type RuntimePromptContextAssemblerOptions = {
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
+  projectWorkflow?: ProjectWorkflowResolver;
   skillRegistry?: Pick<SkillRegistry, 'selectedSkillInjections'>;
   toolHost?: ToolHost;
 };
@@ -52,7 +55,7 @@ export class RuntimePromptContextAssembler {
     tools: RuntimeToolDefinition[];
   }): Promise<RuntimePromptContext> {
     const environment = toolContext.environment;
-    const [skillContext, memoryMessages, projectInstructions, toolPrompt] = await Promise.all([
+    const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt] = await Promise.all([
       this.skillContext(skillIds, config),
       this.options.memory.contextMessages(thread.projectId, config),
       this.options.projectInstructions?.load({
@@ -60,6 +63,7 @@ export class RuntimePromptContextAssembler {
         maxBytes: positiveSetting(config?.desktopSettings?.projectInstructionMaxBytes),
         fallbackFilenames: stringArraySetting(config?.desktopSettings?.projectInstructionFallbackFilenames),
       }).catch(() => []) ?? [],
+      this.options.projectWorkflow?.resolve({ environment }).catch(() => null) ?? null,
       this.toolSystemPrompt(toolContext, toolRouter, tools),
     ]);
 
@@ -70,6 +74,7 @@ export class RuntimePromptContextAssembler {
         environmentFragment(environment),
         permissionsFragment(config, toolContext, tools),
         ...personalizationFragments(config),
+        ...(projectWorkflow ? [projectWorkflowFragment(projectWorkflow)] : []),
         ...projectInstructions.map(projectInstructionFragment),
         ...memoryMessages.map(memoryFragment),
         ...skillContext.fragments,
@@ -127,6 +132,17 @@ export class RuntimePromptContextAssembler {
       : await this.options.toolHost?.systemPrompt?.(context, { tools });
     return typeof prompt === 'string' ? prompt.trim() : '';
   }
+}
+
+function projectWorkflowFragment(workflow: ProjectWorkflow): RuntimePromptFragment {
+  return {
+    id: 'desktop_project_workflow',
+    role: 'user',
+    source: 'project_workflow',
+    trust: 'external',
+    lifecycle: 'workspace',
+    content: runtimeProjectWorkflowPrompt(workflow),
+  };
 }
 
 function baseInstructionFragment(): RuntimePromptFragment {

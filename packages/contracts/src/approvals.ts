@@ -1,4 +1,4 @@
-export type RuntimeApprovalStatus = 'pending' | 'approved' | 'rejected';
+export type RuntimeApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
 export type RuntimeApprovalDecision =
   | 'approve'

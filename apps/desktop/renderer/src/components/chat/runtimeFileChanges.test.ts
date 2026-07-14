@@ -184,6 +184,32 @@ describe('runtime file changes', () => {
     ]);
   });
 
+  it('recovers file changes from tool data when a legacy result preview contains truncated JSON', () => {
+    const summary = fileChangeSummaryFromRuns([{
+      id: 'call_legacy',
+      name: 'write_file',
+      status: 'success',
+      resultPreview: '{"diff":{"path":"src/index.css"\n[truncated 7096 chars]',
+      data: {
+        ok: true,
+        diff: {
+          path: 'src/index.css',
+          action: 'Edited',
+          additions: 703,
+          deletions: 51,
+          truncated: false,
+          lines: [{ type: 'add', lineNumber: 1, newLine: 1, content: ':root {}' }],
+        },
+      },
+    }]);
+
+    expect(summary).toMatchObject({
+      additions: 703,
+      deletions: 51,
+      files: [{ path: 'src/index.css', action: 'Edited', additions: 703, deletions: 51 }],
+    });
+  });
+
   it('does not merge adjacent assistant file change groups from different turns', () => {
     const messages: RuntimeMessage[] = [
       {

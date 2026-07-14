@@ -498,6 +498,7 @@ function eventCanUseDelayedCheckpoint(event: RuntimeEvent): boolean {
     || event.type === 'reasoning.summary_delta'
     || event.type === 'reasoning.raw_delta'
     || event.type === 'plan.delta'
+    || event.type === 'tool.preview'
     || event.type === 'tool.output_delta';
 }
 
@@ -521,13 +522,45 @@ function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
 }
 
 function normalizeThreadSnapshot(thread: RuntimeThread): RuntimeThread {
-  return {
+  const normalized = {
     ...thread,
     parentThreadId: typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
       ? (thread as { parentThreadId: string }).parentThreadId
       : undefined,
     memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
   };
+  return normalizeLegacyCancelledToolRuns(normalized);
+}
+
+/** 将旧快照里由 turn 取消错误折叠成 rejected 的工具记录迁移为 cancelled。 */
+function normalizeLegacyCancelledToolRuns(thread: RuntimeThread): RuntimeThread {
+  const cancelledAtByTurn = new Map(
+    (thread.turns ?? [])
+      .filter((turn) => turn.status === 'cancelled' && turn.completedAt)
+      .map((turn) => [turn.id, { completedAt: turn.completedAt, reason: turn.error }]),
+  );
+  if (!cancelledAtByTurn.size) return thread;
+  let changed = false;
+  const messages = thread.messages.map((message) => {
+    const cancellation = message.turnId ? cancelledAtByTurn.get(message.turnId) : undefined;
+    if (!cancellation || !message.toolRuns?.length) return message;
+    let messageChanged = false;
+    const toolRuns = message.toolRuns.map((run) => {
+      if (run.status !== 'rejected' || run.completedAt !== cancellation.completedAt) return run;
+      messageChanged = true;
+      changed = true;
+      const approvalWasCancelled = run.approvalStatus === 'rejected'
+        && Boolean(cancellation.reason)
+        && run.approvalMessage === cancellation.reason;
+      return {
+        ...run,
+        status: 'cancelled' as const,
+        approvalStatus: approvalWasCancelled ? 'cancelled' as const : run.approvalStatus,
+      };
+    });
+    return messageChanged ? { ...message, toolRuns } : message;
+  });
+  return changed ? { ...thread, messages } : thread;
 }
 
 function normalizeThreadSummary(thread: RuntimeThreadSummary): RuntimeThreadSummary {

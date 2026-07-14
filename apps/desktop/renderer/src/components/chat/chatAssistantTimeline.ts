@@ -247,7 +247,12 @@ function isEmptyStreamingAssistantSegment(segment: RuntimeMessage): boolean {
 }
 
 function isActiveWorkToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
-  return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected');
+  return run.status === 'running' || (
+    run.status === 'pending_approval'
+    && run.approvalStatus !== 'approved'
+    && run.approvalStatus !== 'rejected'
+    && run.approvalStatus !== 'cancelled'
+  );
 }
 
 function isFileChangeWorkflowRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {

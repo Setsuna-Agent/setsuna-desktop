@@ -4,6 +4,12 @@ import { isActivityEvent } from './runtimeEvents.js';
 
 describe('runtime event activity filtering', () => {
   it('keeps streaming tool output out of the high-level activity list', () => {
+    const preview = toolEvent('tool.preview', {
+      toolCallId: 'call_1',
+      toolName: 'run_shell_command',
+      argumentsPreview: '{"command":"pnpm',
+      argumentsLength: 16,
+    });
     const started = toolEvent('tool.started', {
       toolCallId: 'call_1',
       toolName: 'run_shell_command',
@@ -22,6 +28,7 @@ describe('runtime event activity filtering', () => {
       content: '$ pnpm test\nexit: 0',
     });
 
+    expect(isActivityEvent(preview)).toBe(false);
     expect(isActivityEvent(started)).toBe(true);
     expect(isActivityEvent(outputDelta)).toBe(false);
     expect(isActivityEvent(completed)).toBe(true);

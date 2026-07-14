@@ -6,6 +6,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ActionTooltip, EmptyState, IconButton } from '../primitives.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
+import { canCompareReviewBranch } from './reviewChanges.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopWorkspaceApp } from './model.js';
 
@@ -120,7 +121,9 @@ export function DesktopReviewPanel({
   const [fileExpansionRequest, setFileExpansionRequest] = useState<ReviewFileExpansionRequest>({ expanded: true, version: 0 });
   const [refreshFeedbackVisible, setRefreshFeedbackVisible] = useState(false);
   const refreshFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handledFocusRequestKeyRef = useRef<string | null>(null);
   const hasGit = Boolean(reviewState?.isGitRepository);
+  const branchComparisonAvailable = canCompareReviewBranch(reviewState);
   const reviewSourceStorageKey = activeProject ? reviewSourcePreferenceKey(activeProject) : null;
   const branchBaseRefStorageKey = activeProject ? branchBaseRefPreferenceKey(activeProject) : null;
   const reviewDiffLayoutStorageKey = activeProject ? reviewDiffLayoutPreferenceKey(activeProject) : null;
@@ -138,7 +141,9 @@ export function DesktopReviewPanel({
   const reviewLineWrap = reviewLineWrapStorageKey
     ? reviewLineWrapByKey[reviewLineWrapStorageKey] ?? storedReviewLineWrap ?? DEFAULT_REVIEW_LINE_WRAP
     : DEFAULT_REVIEW_LINE_WRAP;
-  const activeSource = hasGit ? reviewSource : 'latest';
+  const activeSource = hasGit
+    ? reviewSource === 'branch' && !branchComparisonAvailable ? 'unstaged' : reviewSource
+    : 'latest';
   const availableBaseRefs = reviewState?.baseRefs ?? [];
   const pendingBranchBaseRef = branchBaseRefStorageKey ? branchBaseRefByKey[branchBaseRefStorageKey] : undefined;
   const activeBranchBaseRef = branchBaseRefStorageKey
@@ -161,6 +166,9 @@ export function DesktopReviewPanel({
     }) : null,
     [activeSource, focusRequest?.path, latestSummary, reviewState],
   );
+  const focusRequestKey = focusRequest?.path
+    ? JSON.stringify([reviewSourceStorageKey, focusRequest.version, normalizeReviewFocusPath(focusRequest.path)])
+    : null;
 
   useEffect(() => {
     if (activeSource !== 'branch') return;
@@ -184,7 +192,13 @@ export function DesktopReviewPanel({
   }, []);
 
   useEffect(() => {
-    if (!focusRequest?.path || !focusTargetSource) return;
+    const consumption = consumeReviewFocusRequest(
+      handledFocusRequestKeyRef.current,
+      focusRequestKey,
+      focusTargetSource,
+    );
+    handledFocusRequestKeyRef.current = consumption.nextHandledRequestKey;
+    if (!consumption.shouldApply || !focusTargetSource) return;
     if (focusTargetSource !== activeSource && reviewSourceStorageKey) {
       setReviewSourceByKey((current) => (
         current[reviewSourceStorageKey] === focusTargetSource ? current : { ...current, [reviewSourceStorageKey]: focusTargetSource }
@@ -192,7 +206,7 @@ export function DesktopReviewPanel({
       writeReviewSourcePreference(reviewSourceStorageKey, focusTargetSource);
     }
     setFileExpansionRequest((current) => ({ expanded: true, version: current.version + 1 }));
-  }, [activeSource, focusRequest?.path, focusRequest?.version, focusTargetSource, reviewSourceStorageKey]);
+  }, [activeSource, focusRequestKey, focusTargetSource, reviewSourceStorageKey]);
 
   if (!activeProject) {
     return (
@@ -224,6 +238,7 @@ export function DesktopReviewPanel({
     gitRoot: reviewState?.gitRoot ?? null,
   };
   const sourceMenuItems: MenuProps['items'] = reviewSourceOptions.map((item) => ({
+    disabled: item.key === 'branch' && !branchComparisonAvailable,
     key: item.key,
     label: (
       <span className="chat-file-review-panel__source-menu-item">
@@ -234,6 +249,7 @@ export function DesktopReviewPanel({
   }));
   const handleSourceMenuClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
     if (!isDesktopReviewSource(key)) return;
+    if (key === 'branch' && !branchComparisonAvailable) return;
     if (reviewSourceStorageKey) {
       setReviewSourceByKey((current) => (
         current[reviewSourceStorageKey] === key ? current : { ...current, [reviewSourceStorageKey]: key }
@@ -419,6 +435,18 @@ function reviewSourceForFocusPath(
 
 function uniqueReviewSources(sources: DesktopReviewSource[]): DesktopReviewSource[] {
   return sources.filter((source, index) => sources.indexOf(source) === index);
+}
+
+export function consumeReviewFocusRequest(
+  handledRequestKey: string | null,
+  requestKey: string | null,
+  targetSource: DesktopReviewSource | null,
+): { nextHandledRequestKey: string | null; shouldApply: boolean } {
+  if (!requestKey) return { nextHandledRequestKey: null, shouldApply: false };
+  if (!targetSource || handledRequestKey === requestKey) {
+    return { nextHandledRequestKey: handledRequestKey, shouldApply: false };
+  }
+  return { nextHandledRequestKey: requestKey, shouldApply: true };
 }
 
 function reviewSummaryHasPath(summary: DesktopDiffSummary | null, filePath: string): boolean {

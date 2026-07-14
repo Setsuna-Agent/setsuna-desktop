@@ -104,10 +104,12 @@ export function fileMutationDisplayKey(run: RuntimeToolRun): string {
 }
 
 export function fileChangesFromToolRun(run: RuntimeToolRun): RuntimeFileChange[] {
-  if (!run.resultPreview || run.status === 'error' || run.status === 'rejected') return [];
-  const parsed = parseJson(run.resultPreview);
-  if (!parsed) return [];
-  return extractFileChanges(parsed);
+  if (run.status === 'error' || run.status === 'rejected' || run.status === 'cancelled') return [];
+  const previewChanges = extractFileChanges(parseJson(run.resultPreview));
+  if (previewChanges.length) return previewChanges;
+  // Older snapshots may contain a text-truncated resultPreview. The tool data still owns the
+  // complete structured diff, so use it to repair file rows, Review, and the final change card.
+  return extractFileChanges(run.data);
 }
 
 export function fileChangeFromToolRun(run: RuntimeToolRun): RuntimeFileChange | null {

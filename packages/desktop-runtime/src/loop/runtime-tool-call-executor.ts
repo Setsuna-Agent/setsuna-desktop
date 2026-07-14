@@ -40,8 +40,14 @@ import {
 } from './agent-loop-tool-utils.js';
 
 const APP_SERVER_DYNAMIC_TOOL_TIMEOUT_MS = 120_000;
+const TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD = 1_024;
 
 type RuntimeToolCallDeltaLike = Pick<RuntimeToolCallDelta, 'id' | 'name' | 'argumentsDelta'>;
+
+export type ToolPreviewAnnouncement = {
+  argumentsLength: number;
+  signature: string;
+};
 
 type AppServerDynamicToolRegistration = {
   connectionId: string;
@@ -445,7 +451,7 @@ export class RuntimeToolCallExecutor {
   }
 
   /**
-   * 根据模型流式输出的 tool_call_delta 发布渐进式工具预览。
+   * 根据模型流式输出的 tool_call_delta 发布限频后的渐进式工具预览。
    *
    * @param announcedToolPreviews 已发布预览的签名缓存。
    * @param call 本次模型输出的工具调用增量。
@@ -454,7 +460,7 @@ export class RuntimeToolCallExecutor {
    * @param toolRouter 当前 sampling step 的工具路由器。
    * @param turnId 当前 turn ID。
    */
-  async publishToolCallDeltaPreview({ announcedToolPreviews, call, partialToolCalls, threadId, toolRouter, turnId }: { announcedToolPreviews: Map<string, string>; call: RuntimeToolCallDeltaLike; partialToolCalls: Map<string, RuntimeToolCall>; threadId: string; toolRouter: RuntimeToolRouter | null; turnId: string }): Promise<void> {
+  async publishToolCallDeltaPreview({ announcedToolPreviews, call, partialToolCalls, threadId, toolRouter, turnId }: { announcedToolPreviews: Map<string, ToolPreviewAnnouncement>; call: RuntimeToolCallDeltaLike; partialToolCalls: Map<string, RuntimeToolCall>; threadId: string; toolRouter: RuntimeToolRouter | null; turnId: string }): Promise<void> {
     if (!toolRouter) return;
     const id = call.id || `tool_call_${partialToolCalls.size}`;
     const current = partialToolCalls.get(id) ?? { id, name: '', arguments: '' };
@@ -468,23 +474,34 @@ export class RuntimeToolCallExecutor {
     if (!next.name) return;
     if (!toolRouter.isRouterTool(next.name) && !toolRouter.hasTool(next.name)) return;
 
+    const previous = announcedToolPreviews.get(id);
+    const argumentsLength = next.arguments.length;
+    // 文件内容可能逐 token 输出。先按参数增长量限频，避免每个 token 都计算 diff、落盘和触发 renderer 更新。
+    if (previous && argumentsLength >= previous.argumentsLength
+      && argumentsLength - previous.argumentsLength < TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD) return;
+
     const preview = await toolRouter.previewPartialToolCall(next.name, next.arguments);
+    // A lone opening brace has no useful target or progress information. Waiting for the first
+    // host preview lets a path such as file_path appear immediately instead of being hidden by
+    // the subsequent 1 KiB throttle window.
+    if (!previous && !preview && argumentsLength < TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD) return;
     const argumentsPreview = preview?.argumentsPreview ?? previewPartialArguments(next.arguments);
     const resultPreview = preview?.resultPreview;
     const signature = JSON.stringify({ name: next.name, argumentsPreview, resultPreview });
-    // 预览内容没变化时不重复发 tool.started，避免 UI 闪烁和 toolRun 重复合并。
-    if (announcedToolPreviews.get(id) === signature) return;
-    announcedToolPreviews.set(id, signature);
+    // 预览内容和参数进度都没变化时不重复发布，避免 UI 闪烁和 toolRun 重复合并。
+    if (previous?.signature === signature && previous.argumentsLength === argumentsLength) return;
+    announcedToolPreviews.set(id, { argumentsLength, signature });
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
-      type: 'tool.started',
+      type: 'tool.preview',
       createdAt: this.options.clock.now().toISOString(),
       payload: {
         toolCallId: id,
         toolName: next.name,
         argumentsPreview,
+        argumentsLength,
         resultPreview,
       },
     });
@@ -572,7 +589,9 @@ export class RuntimeToolCallExecutor {
         status,
         content: previewToolContent(content),
         argumentsPreview: previewArguments(parsedArguments),
-        resultPreview: metadata.resultPreview ? previewToolContent(metadata.resultPreview) : undefined,
+        // Structured previews must stay parseable. Text truncation can split JSON mid-token and
+        // silently remove the file path/change counts needed by chat and Review projections.
+        resultPreview: metadata.resultPreview,
         data: metadata.data,
         durationMs: metadata.startedAtMs === undefined ? undefined : Math.max(0, completedAt.getTime() - metadata.startedAtMs),
       },

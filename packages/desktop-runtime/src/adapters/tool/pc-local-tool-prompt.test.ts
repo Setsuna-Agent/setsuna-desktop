@@ -15,11 +15,24 @@ describe('pcLocalToolPrompt', () => {
   });
 
   it('includes focused mutation and shell policy when those tools are advertised', () => {
-    const prompt = pcLocalToolPrompt([tool('apply_patch'), tool('run_shell_command'), tool('update_plan')]);
+    const prompt = pcLocalToolPrompt([tool('apply_patch'), tool('write_file'), tool('run_shell_command'), tool('update_plan')]);
 
     expect(prompt).toContain('Prefer apply_patch');
     expect(prompt).toContain('Use run_shell_command');
     expect(prompt).toContain('exactly one step in progress');
+    expect(prompt).toContain('use the injected project workflow');
+    expect(prompt).toContain('Never use npm, npx');
+    expect(prompt).toContain('preserve its package manager');
+    expect(prompt).toContain('Reserve write_file for new files or genuine full-file rewrites');
+    expect(prompt).toContain('delay visible progress');
+  });
+
+  it('applies repository command selection rules to the compatibility shell surface', () => {
+    const prompt = pcLocalToolPrompt([tool('read_file'), tool('exec_command')]);
+
+    expect(prompt).toContain('nearest relevant manifest');
+    expect(prompt).toContain('Prefer declared scripts');
+    expect(prompt).not.toContain('Use run_shell_command');
   });
 
   it('directs committed-history reads through workspace-scoped Git tools', () => {

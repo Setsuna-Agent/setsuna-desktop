@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, Search, UploadCloud } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
+import { localReviewChangeStats } from '../workspace/reviewChanges.js';
+import { ChangeCountText } from './ChangeCountText.js';
 
 type GitBusyAction = 'checkout' | 'commit' | 'create' | 'generate' | 'push' | null;
 
@@ -33,7 +35,7 @@ export function ConversationGitControls({
   const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
   const hasGit = Boolean(reviewState?.isGitRepository);
   const currentBranch = reviewState?.currentBranch || 'HEAD';
-  const changeStats = useMemo(() => localChangeStats(reviewState), [reviewState]);
+  const changeStats = useMemo(() => localReviewChangeStats(reviewState), [reviewState]);
   const unstagedFileCount = fileCount(reviewState?.unstagedSummary);
   const createBranchDisabledReason = unstagedFileCount > 0 ? '请先暂存或丢弃当前工作区的未暂存更改。' : null;
   const commitableFileCount = includeUnstaged ? changeStats.fileCount : fileCount(reviewState?.stagedSummary);
@@ -526,29 +528,6 @@ function GitActionButton({
       {shortcut ? <kbd>{shortcut}</kbd> : null}
     </button>
   );
-}
-
-function ChangeCountText({ additions, deletions }: { additions: number; deletions: number }) {
-  return (
-    <span className="chat-git-change-counts" aria-label={`新增 ${additions} 行，删除 ${deletions} 行`}>
-      <span className="chat-git-change-counts__add">+{additions}</span>
-      <span className="chat-git-change-counts__del">-{deletions}</span>
-    </span>
-  );
-}
-
-function localChangeStats(reviewState: DesktopReviewState | null): { additions: number; deletions: number; fileCount: number } {
-  const summaries = [reviewState?.stagedSummary, reviewState?.unstagedSummary];
-  const files = new Set<string>();
-  let additions = 0;
-  let deletions = 0;
-  for (const summary of summaries) {
-    if (!summary) continue;
-    additions += summary.additions;
-    deletions += summary.deletions;
-    summary.files.forEach((file) => files.add(file.path));
-  }
-  return { additions, deletions, fileCount: files.size };
 }
 
 function fileCount(summary: DesktopDiffSummary | null | undefined): number {

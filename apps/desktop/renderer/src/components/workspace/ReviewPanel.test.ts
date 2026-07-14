@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, highlightedReviewDiffLines, reviewFilePathParts, reviewVirtualRange, reviewWholeFileChangeType, reviewWorkspaceFilePath, shouldRestoreBranchBaseRefPreference, shouldWrapReviewDiffLine } from './ReviewPanel.js';
+import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, consumeReviewFocusRequest, highlightedReviewDiffLines, reviewFilePathParts, reviewVirtualRange, reviewWholeFileChangeType, reviewWorkspaceFilePath, shouldRestoreBranchBaseRefPreference, shouldWrapReviewDiffLine } from './ReviewPanel.js';
 import type { DesktopDiffSummary, DesktopReviewState } from './model.js';
 
 describe('DesktopReviewPanel', () => {
@@ -97,8 +97,73 @@ describe('DesktopReviewPanel', () => {
       }));
 
       expect(html).toContain('已暂存');
-      expect(html).toContain('+3');
-      expect(html).toContain('-1');
+      expect(html).toContain('desktop-review-change-counts__addition">+3</span>');
+      expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
+    });
+  });
+
+  it('shows the selected source diff totals beside every source label', () => {
+    const summaries = {
+      unstaged: { additions: 11, deletions: 12, files: [] },
+      staged: { additions: 21, deletions: 22, files: [] },
+      branch: { additions: 31, deletions: 32, files: [] },
+      latest: { additions: 41, deletions: 42, files: [] },
+    } satisfies Record<'unstaged' | 'staged' | 'branch' | 'latest', DesktopDiffSummary>;
+    const labels = {
+      unstaged: '未暂存',
+      staged: '已暂存',
+      branch: '分支',
+      latest: '上轮对话',
+    } as const;
+
+    for (const source of ['unstaged', 'staged', 'branch', 'latest'] as const) {
+      withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': source }, () => {
+        const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+          activeProject: project,
+          error: null,
+          latestSummary: summaries.latest,
+          loading: false,
+          reviewState: {
+            ...reviewState,
+            branchSummary: summaries.branch,
+            stagedSummary: summaries.staged,
+            unstagedSummary: summaries.unstaged,
+          },
+          onExternalOpenFile: () => undefined,
+          onOpenProjectFile: () => undefined,
+          onRefresh: () => undefined,
+        }));
+
+        expect(html).toContain(labels[source]);
+        expect(html).toContain(`desktop-review-change-counts__addition">+${summaries[source].additions}</span>`);
+        expect(html).toContain(`desktop-review-change-counts__deletion">-${summaries[source].deletions}</span>`);
+      });
+    }
+  });
+
+  it('consumes automatic file focus once so manual source selection is not reverted', () => {
+    const firstFocus = consumeReviewFocusRequest(null, 'project_1:Tile.tsx:1', 'unstaged');
+    expect(firstFocus).toEqual({
+      nextHandledRequestKey: 'project_1:Tile.tsx:1',
+      shouldApply: true,
+    });
+
+    expect(consumeReviewFocusRequest(
+      firstFocus.nextHandledRequestKey,
+      'project_1:Tile.tsx:1',
+      'unstaged',
+    )).toEqual({
+      nextHandledRequestKey: 'project_1:Tile.tsx:1',
+      shouldApply: false,
+    });
+
+    expect(consumeReviewFocusRequest(
+      firstFocus.nextHandledRequestKey,
+      'project_1:Tile.tsx:2',
+      'staged',
+    )).toEqual({
+      nextHandledRequestKey: 'project_1:Tile.tsx:2',
+      shouldApply: true,
     });
   });
 
@@ -118,6 +183,32 @@ describe('DesktopReviewPanel', () => {
       expect(html).toContain('desktop-review-branch-compare');
       expect(html).toContain('main');
       expect(html).toContain('title="origin/main"');
+    });
+  });
+
+  it('falls back to unstaged changes when an unborn repository has no branch comparison base', () => {
+    withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': 'branch' }, () => {
+      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+        activeProject: project,
+        error: null,
+        latestSummary,
+        loading: false,
+        reviewState: {
+          ...reviewState,
+          baseRef: null,
+          baseRefs: [],
+          branchSummary: null,
+          currentRemoteRef: null,
+          currentRemoteSummary: null,
+        },
+        onExternalOpenFile: () => undefined,
+        onOpenProjectFile: () => undefined,
+        onRefresh: () => undefined,
+      }));
+
+      expect(html).toContain('未暂存');
+      expect(html).not.toContain('desktop-review-branch-compare');
+      expect(html).not.toContain('未设置');
     });
   });
 

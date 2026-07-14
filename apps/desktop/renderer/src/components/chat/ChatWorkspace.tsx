@@ -1415,7 +1415,10 @@ function AssistantRunContent({
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
   const awaitingApproval = toolRuns.some(
-    (run) => run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected',
+    (run) => run.status === 'pending_approval'
+      && run.approvalStatus !== 'approved'
+      && run.approvalStatus !== 'rejected'
+      && run.approvalStatus !== 'cancelled',
   );
   // 活动回合已有内容时，等待反馈始终跟在最新内容之后；等待用户审批时则不显示假进度。
   const showTrailingLoading = active && status !== 'error' && hasRenderableContent && !awaitingApproval;

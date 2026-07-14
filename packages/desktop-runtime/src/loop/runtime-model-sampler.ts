@@ -13,7 +13,7 @@ import type { ModelClient } from '../ports/model-client.js';
 import { createAssistantItemStreamBridge, createAssistantOutputAccumulator, createLegacyModelStreamMirrorState } from './model-stream-output.js';
 import { toolCallFromModelStreamItem, toolsForModelRequest, upsertRuntimeToolCall } from './agent-loop-tool-utils.js';
 import type { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
-import type { RuntimeToolCallExecutor } from './runtime-tool-call-executor.js';
+import type { RuntimeToolCallExecutor, ToolPreviewAnnouncement } from './runtime-tool-call-executor.js';
 import type { RuntimeToolRouter } from './tool-router.js';
 
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
@@ -84,7 +84,7 @@ export class RuntimeModelSampler {
     let toolCalls: RuntimeToolCall[] = [];
     let usage: RuntimeUsage | undefined;
     const partialToolCalls = new Map<string, RuntimeToolCall>();
-    const announcedToolPreviews = new Map<string, string>();
+    const announcedToolPreviews = new Map<string, ToolPreviewAnnouncement>();
     const output = createAssistantOutputAccumulator((delta) =>
       this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta)
     );

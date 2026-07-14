@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { AnswerRuntimeApprovalInput, RuntimeApprovalAvailableDecision, RuntimeHookRun, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
+import { WorkspaceFileLink, WorkspacePathLabel } from './markdown/WorkspaceFileLink.js';
 import {
   fileChangeFromToolRun,
   fileChangesFromToolRun,
@@ -108,15 +109,17 @@ function ToolRunPanel({
   const pendingApproval = isPendingApprovalRun(run);
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
   const summary = toolRunSummary(run);
+  const kind = toolRunGroupKind(run);
+  const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
   if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
   const open = toolRunPanelDefaultOpen(run);
   return (
-    <details className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(toolRunGroupKind(run))} chat-tool-run--${run.status}`} open={open}>
+    <details className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`} open={open}>
       <summary className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{summary.title}</span>
-          {summary.target ? <span className="chat-tool-run__target">{summary.target}</span> : null}
+          <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={kind} target={summary.target} />
         </span>
         <ToolRunStatus status={run.status} />
       </summary>
@@ -143,6 +146,8 @@ function ToolRunGroupPanel({
   const shellGroup = group.kind === 'shell';
   const fileOperationGroup = group.kind === 'fileMutation';
   const fileOperationSummary = fileOperationGroup ? fileOperationGroupSummary(group.runs) : null;
+  const summaryInspectionRun = group.kind === 'inspection' ? activeToolRunOrLast(group.runs) : undefined;
+  const summaryInspectionKind = summaryInspectionRun ? inspectionEntryFromRun(summaryInspectionRun)?.kind : undefined;
   const fileOperationSummaryChangeCounts = fileOperationSummary?.target && isConcreteFileOperationTarget(fileOperationSummary.target)
     ? fileOperationSummary.changeCounts
     : undefined;
@@ -152,7 +157,7 @@ function ToolRunGroupPanel({
         <span className="chat-tool-run__icon">{toolRunGroupIcon(group)}</span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{summary.title}</span>
-          {summary.target ? <span className="chat-tool-run__target">{summary.target}</span> : null}
+          <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={group.kind} target={summary.target} />
           {fileOperationSummaryChangeCounts ? (
             <ChangeCounts
               additions={fileOperationSummaryChangeCounts.additions}
@@ -229,7 +234,11 @@ function MixedToolRunGroupPanel({
         <span className="chat-tool-run__icon">{mixedToolRunGroupIcon(status)}</span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{compactSummary.title}</span>
-          {compactSummary.target ? <span className="chat-tool-run__target">{compactSummary.target}</span> : null}
+          <ToolRunSummaryTarget
+            inspectionKind={compactSummary.inspectionKind}
+            kind={compactSummary.targetKind}
+            target={compactSummary.target}
+          />
           {compactSummaryChangeCounts ? (
             <ChangeCounts
               additions={compactSummaryChangeCounts.additions}
@@ -280,13 +289,18 @@ function isToolRunGroup(group: ToolRunGroup | null): group is ToolRunGroup {
 
 function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
   const summary = toolRunSummary(run);
+  const kind = toolRunGroupKind(run);
   return (
-    <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName(toolRunGroupKind(run))} chat-tool-run--${run.status}`}>
+    <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}>
       <div className="chat-tool-run__summary">
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__title">{summary.title}</span>
-          {summary.target ? <span className="chat-tool-run__target">{summary.target}</span> : null}
+          <ToolRunSummaryTarget
+            inspectionKind={kind === 'inspection' ? inspectionEntryKind(run) : undefined}
+            kind={kind}
+            target={summary.target}
+          />
         </span>
         <ToolRunStatus status={run.status} />
       </div>
@@ -313,13 +327,13 @@ function FileMutationRunRow({
           <span className="chat-tool-run__file-status">
             <span>{fileOperationVerb(run)}</span>
             {target ? (
-              <code className="chat-tool-run__file-target" title={target}>
-                {pathBaseName(target)}
-              </code>
+              <>
+                <FileOperationTarget target={target} />
+                <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={run.status === 'running'} />
+              </>
             ) : null}
           </span>
         </span>
-        <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={run.status === 'running'} />
       </div>
       {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
       {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
@@ -375,11 +389,7 @@ export function FileChangesSummaryCard({
           <span className="chat-file-changes__title">
             {singleFile ? `${completedFileOperationActionLabel(normalizeFileOperationAction(singleFile.action))} ${pathBaseName(singleFile.path)}` : `已编辑 ${fileCount} 个文件`}
           </span>
-          <ChangeCounts
-            additions={singleFile ? singleFile.additions : summary.additions}
-            deletions={singleFile ? singleFile.deletions : summary.deletions}
-            showZero
-          />
+          {singleFile ? <ChangeCounts additions={singleFile.additions} deletions={singleFile.deletions} showZero /> : null}
         </span>
         {onOpenReview || onDiscardChanges ? (
           <span className="chat-file-changes__actions">
@@ -594,7 +604,7 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.kind}:${entry.target}`}>
           <span>{inspectionEntryLabel(entry.kind)}</span>
-          <code title={entry.target}>{entry.target}</code>
+          <InspectionTarget className="chat-tool-run__file-list-target" entry={entry} />
         </li>
       ))}
     </ul>
@@ -609,7 +619,9 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.action}:${entry.path}`}>
           <span>{fileOperationActionLabel(entry.action)}</span>
-          <code title={entry.path}>{entry.path}</code>
+          <WorkspaceFileLink className="chat-tool-run__file-list-target" filePath={entry.path} linkKind="workspace-tool">
+            {pathBaseName(entry.path)}
+          </WorkspaceFileLink>
           <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.hasChangeCounts} />
         </li>
       ))}
@@ -672,7 +684,7 @@ function ToolRunDetails({
       {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
       {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
       {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
-      {diagnostic ? <ToolPreview label={run.status === 'rejected' ? '已拒绝' : '错误'} value={diagnostic} /> : null}
+      {diagnostic ? <ToolPreview label={run.status === 'cancelled' ? '已取消' : run.status === 'rejected' ? '已拒绝' : '错误'} value={diagnostic} /> : null}
       {hookRuns}
       {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
     </>
@@ -686,11 +698,16 @@ function GroupedHookRunList({ runs }: { runs: RuntimeToolRun[] }) {
     <div className="chat-tool-run__hook-groups">
       {runsWithHooks.map((run) => {
         const summary = toolRunSummary(run);
+        const kind = toolRunGroupKind(run);
         return (
           <div className="chat-tool-run__hook-group" key={`${run.id}:hooks`}>
             <div className="chat-tool-run__hook-group-title">
               <span>{summary.title}</span>
-              {summary.target ? <code>{summary.target}</code> : null}
+              <ToolRunSummaryTarget
+                inspectionKind={kind === 'inspection' ? inspectionEntryKind(run) : undefined}
+                kind={kind}
+                target={summary.target}
+              />
             </div>
             <HookRunList runs={run.hookRuns} />
           </div>
@@ -979,6 +996,8 @@ function toolRunGroupRuns(group: ToolRunGroup): RuntimeToolRun[] {
 type CompactToolRunSummary = {
   title: string;
   target?: string;
+  targetKind?: ToolRunGroupKind;
+  inspectionKind?: InspectionEntryKind;
   changeCounts?: { additions: number; deletions: number; showZero: boolean };
 };
 
@@ -991,9 +1010,15 @@ function compactToolRunGroupSummary(group: ToolRunGroup | undefined): CompactToo
   if (!group) return { title: '' };
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
-  if (kind === 'fileMutation') return fileOperationGroupSummary(runs);
-  if (group.type === 'single') return toolRunSummary(group.run);
-  if (kind === 'shell' && runs.length === 1) return toolRunSummary(runs[0]);
+  if (kind === 'fileMutation') return { ...fileOperationGroupSummary(runs), targetKind: kind };
+  if (group.type === 'single') {
+    return {
+      ...toolRunSummary(group.run),
+      targetKind: kind,
+      inspectionKind: kind === 'inspection' ? inspectionEntryKind(group.run) : undefined,
+    };
+  }
+  if (kind === 'shell' && runs.length === 1) return { ...toolRunSummary(runs[0]), targetKind: kind };
   return { title: mixedToolRunGroupPart(group) };
 }
 
@@ -1034,6 +1059,7 @@ function mixedToolRunBucketSummary(kind: ToolRunGroupKind | 'webContent', runs: 
   if (kind === 'webContent') return webContentGroupSummary(runs)?.title ?? '';
   const name = toolDisplayName(runs[0]?.name ?? '工具');
   if (status === 'running' || status === 'pending_approval') return `正在使用 ${name}`;
+  if (status === 'cancelled') return `已取消 ${name}`;
   if (status === 'rejected') return `已拒绝 ${name}`;
   return `已使用 ${runs.length} 次 ${name}`;
 }
@@ -1050,18 +1076,21 @@ function mixedToolRunGroupPart(group: ToolRunGroup): string {
   if (webContentSummary) return webContentSummary.title;
   const name = toolDisplayName(runs[0]?.name ?? '工具');
   if (status === 'running' || status === 'pending_approval') return `正在使用 ${name}`;
+  if (status === 'cancelled') return `已取消 ${name}`;
   if (status === 'rejected') return `已拒绝 ${name}`;
   return `已使用 ${runs.length} 次 ${name}`;
 }
 
 function shellCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status']): string {
   if (status === 'running' || status === 'pending_approval') return `正在运行 ${runs.length} 条命令`;
+  if (status === 'cancelled') return `已取消 ${runs.length} 条命令`;
   if (status === 'rejected') return `已拒绝 ${runs.length} 条命令`;
   return `已运行 ${runs.length} 条命令`;
 }
 
 function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status']): string {
   if (status === 'running' || status === 'pending_approval') return `正在搜索 ${runs.length} 次代码`;
+  if (status === 'cancelled') return `已取消 ${runs.length} 次搜索`;
   if (status === 'rejected') return `已拒绝 ${runs.length} 次搜索`;
   return `已搜索 ${runs.length} 次代码`;
 }
@@ -1069,6 +1098,7 @@ function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['stat
 function mixedToolRunGroupIcon(status: RuntimeToolRun['status']) {
   if (status === 'pending_approval') return <ShieldAlert size={14} />;
   if (status === 'running') return <Clock3 size={14} />;
+  if (status === 'cancelled') return <XCircle size={14} />;
   if (status === 'rejected') return <AlertCircle size={14} />;
   return <CheckCircle2 size={14} />;
 }
@@ -1082,7 +1112,10 @@ function isFileOperationRun(run: RuntimeToolRun): boolean {
 }
 
 function isPendingApprovalRun(run: RuntimeToolRun): boolean {
-  return run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected';
+  return run.status === 'pending_approval'
+    && run.approvalStatus !== 'approved'
+    && run.approvalStatus !== 'rejected'
+    && run.approvalStatus !== 'cancelled';
 }
 
 function isFlatInspectionRun(run: RuntimeToolRun): boolean {
@@ -1116,6 +1149,7 @@ function toolRunGroupStatus(runs: RuntimeToolRun[]): RuntimeToolRun['status'] {
   if (runs.some((run) => run.status === 'error')) return 'error';
   if (runs.some((run) => run.status === 'pending_approval')) return 'pending_approval';
   if (runs.some((run) => run.status === 'running')) return 'running';
+  if (runs.some((run) => run.status === 'cancelled')) return 'cancelled';
   if (runs.some((run) => run.status === 'rejected')) return 'rejected';
   return 'success';
 }
@@ -1139,6 +1173,8 @@ function toolRunGroupSummary(group: Extract<ToolRunGroup, { type: 'group' }>): {
   const name = toolDisplayName(group.runs[0]?.name ?? '工具');
   if (status === 'running' || status === 'pending_approval') return { title: `正在使用 ${name}` };
   if (status === 'error') return { title: `${name} 调用失败` };
+  if (status === 'cancelled') return { title: `已取消 ${name}` };
+  if (status === 'rejected') return { title: `已拒绝 ${name}` };
   return { title: `已使用 ${group.runs.length} 次 ${name}` };
 }
 
@@ -1148,9 +1184,16 @@ function inspectionGroupSummary(runs: RuntimeToolRun[]): { title: string; target
   const activeEntry = active ? inspectionEntryFromRun(active) : null;
   const activeTarget = activeEntry?.target ?? '';
   if (status === 'running' || status === 'pending_approval') {
-    return { title: activeEntry ? inspectionRunningTitle(activeEntry.kind) : '正在查看文件/目录', target: activeTarget };
+    return {
+      title: active && isPreparingToolRun(active)
+        ? '正在准备查看文件/目录'
+        : activeEntry ? inspectionRunningTitle(activeEntry.kind) : '正在查看文件/目录',
+      target: activeTarget,
+    };
   }
   if (status === 'error') return { title: '查看文件/目录失败', target: activeTarget };
+  if (status === 'cancelled') return { title: '已取消查看文件/目录', target: activeTarget };
+  if (status === 'rejected') return { title: '已拒绝查看文件/目录', target: activeTarget };
   const parts = inspectionSummaryParts(inspectionEntries(runs));
   if (parts.length) return { title: parts.join('，') };
   return { title: activeEntry ? inspectionCompleteTitle(activeEntry.kind) : '已查看文件/目录', target: activeTarget };
@@ -1160,8 +1203,13 @@ function shellGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: st
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const command = active ? shellCommand(active) : '';
-  if (status === 'running' || status === 'pending_approval') return { title: command ? `正在运行 ${command}` : '正在运行命令' };
+  if (status === 'running' || status === 'pending_approval') {
+    if (active && isPreparingToolRun(active)) return { title: command ? `正在准备运行 ${command}` : '正在生成命令' };
+    return { title: command ? `正在运行 ${command}` : '正在运行命令' };
+  }
   if (status === 'error') return { title: command ? `命令运行失败 ${command}` : '命令运行失败' };
+  if (status === 'cancelled') return { title: command ? `已取消运行 ${command}` : '已取消运行命令' };
+  if (status === 'rejected') return { title: command ? `已拒绝运行 ${command}` : '已拒绝运行命令' };
   return { title: `已运行 ${runs.length} 条命令` };
 }
 
@@ -1169,8 +1217,10 @@ function searchGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: s
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const query = active ? toolRunTarget(active) : '';
-  if (status === 'running' || status === 'pending_approval') return { title: '正在搜索代码', target: query };
+  if (status === 'running' || status === 'pending_approval') return { title: active && isPreparingToolRun(active) ? '正在准备搜索代码' : '正在搜索代码', target: query };
   if (status === 'error') return { title: '搜索代码失败', target: query };
+  if (status === 'cancelled') return { title: '已取消搜索代码', target: query };
+  if (status === 'rejected') return { title: '已拒绝搜索代码', target: query };
   if (runs.length > 1) return { title: `已搜索 ${runs.length} 次代码` };
   return { title: '已搜索代码', target: query };
 }
@@ -1180,8 +1230,9 @@ function webContentGroupSummary(runs: RuntimeToolRun[]): { title: string; target
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const target = active ? toolRunTarget(active) : '';
-  if (status === 'running' || status === 'pending_approval') return { title: '正在获取网页', target };
+  if (status === 'running' || status === 'pending_approval') return { title: active && isPreparingToolRun(active) ? '正在准备获取网页' : '正在获取网页', target };
   if (status === 'error') return { title: '获取网页失败', target };
+  if (status === 'cancelled') return { title: '已取消获取网页', target };
   if (status === 'rejected') return { title: '已拒绝获取网页', target };
   if (runs.length > 1) return { title: `已获取 ${runs.length} 个网页` };
   return { title: '已获取网页', target };
@@ -1263,7 +1314,18 @@ function toolRunTarget(run: RuntimeToolRun): string {
 }
 
 function fileOperationTarget(run: RuntimeToolRun): string {
+  const args = recordFromJson(run.argumentsPreview);
+  if (hasIncompleteFileOperationPath(args)) return '';
   return fileMutationDisplayPath(run) || fileOperationTargetFromArguments(run) || toolRunTarget(run) || fileMutationPathFromReason(run.approvalReason);
+}
+
+function hasIncompleteFileOperationPath(args: Record<string, unknown>): boolean {
+  return [
+    ['path', 'path_closed'],
+    ['file_path', 'file_path_closed'],
+    ['target_path', 'target_path_closed'],
+    ['file', 'file_closed'],
+  ].some(([pathKey, closedKey]) => Boolean(stringField(args[pathKey])) && args[closedKey] === false);
 }
 
 function fileOperationTargetFromArguments(run: RuntimeToolRun): string {
@@ -1285,8 +1347,9 @@ function fileOperationVerb(run: RuntimeToolRun): string {
   const created = action === 'created';
   const deleted = action === 'deleted';
   if (run.status === 'pending_approval') return '等待授权：写入';
-  if (run.status === 'running') return '正在写入';
+  if (run.status === 'running') return isPreparingToolRun(run) ? '正在生成修改' : '正在写入';
   if (run.status === 'error') return created ? '生成失败' : deleted ? '删除失败' : '编辑失败';
+  if (run.status === 'cancelled') return '已取消文件操作';
   if (run.status === 'rejected') return '已拒绝写入';
   if (created) return '已生成';
   if (deleted) return '已删除';
@@ -1310,6 +1373,7 @@ function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSumm
     return { title: active ? fileOperationVerb(active) : '正在处理文件', target: fallbackTarget, changeCounts };
   }
   if (status === 'error') return { title: '文件操作失败', target: fallbackTarget, changeCounts };
+  if (status === 'cancelled') return { title: '已取消文件操作', target: fallbackTarget, changeCounts };
   if (status === 'rejected') return { title: '已拒绝文件操作', target: fallbackTarget, changeCounts };
 
   const appliedEntries = entries.filter((entry) => entry.applied);
@@ -1460,6 +1524,51 @@ function isConcreteFileOperationTarget(value: string): boolean {
   return Boolean(target && !/^\d+\s*个文件$/u.test(target));
 }
 
+function ToolRunSummaryTarget({
+  inspectionKind,
+  kind,
+  target,
+}: {
+  inspectionKind?: InspectionEntryKind;
+  kind?: ToolRunGroupKind;
+  target?: string;
+}) {
+  if (!target) return null;
+  if (kind === 'fileMutation' && isConcreteFileOperationTarget(target)) {
+    return <FileOperationTarget target={target} />;
+  }
+  if (kind === 'inspection' && (inspectionKind === 'file' || inspectionKind === 'directory')) {
+    return <InspectionTarget className="chat-tool-run__file-target" entry={{ kind: inspectionKind, target }} />;
+  }
+  return <span className="chat-tool-run__target">{target}</span>;
+}
+
+function FileOperationTarget({ target }: { target: string }) {
+  return (
+    <WorkspaceFileLink className="chat-tool-run__file-target" filePath={target} linkKind="workspace-tool">
+      {pathBaseName(target)}
+    </WorkspaceFileLink>
+  );
+}
+
+function InspectionTarget({ className, entry }: { className: string; entry: InspectionEntry }) {
+  if (entry.kind === 'file') {
+    return (
+      <WorkspaceFileLink className={className} filePath={entry.target} linkKind="workspace-tool">
+        {pathBaseName(entry.target)}
+      </WorkspaceFileLink>
+    );
+  }
+  if (entry.kind === 'directory') {
+    return (
+      <WorkspacePathLabel className={className} path={entry.target} type="directory">
+        {pathBaseName(entry.target)}
+      </WorkspacePathLabel>
+    );
+  }
+  return <code title={entry.target}>{entry.target}</code>;
+}
+
 function fileOperationActionLabel(action: FileOperationAction): string {
   if (action === 'created') return '创建';
   if (action === 'deleted') return '删除';
@@ -1519,6 +1628,7 @@ function shellCommand(run: RuntimeToolRun): string {
 function shellStatusLabel(run: RuntimeToolRun): string {
   if (run.status === 'running' || run.status === 'pending_approval') return '运行中';
   if (run.status === 'error') return '失败';
+  if (run.status === 'cancelled') return '已取消';
   if (run.status === 'rejected') return '已拒绝';
   const exit = shellContentLine(run.resultPreview ?? '', /^exit:\s*(.+)$/im);
   if (exit && exit !== '0') return '失败';
@@ -1531,6 +1641,7 @@ function shellTerminalStatus(run: RuntimeToolRun): string {
     return exit && exit !== '0' ? 'error' : 'completed';
   }
   if (run.status === 'pending_approval') return 'running';
+  if (run.status === 'cancelled') return 'cancelled';
   return run.status === 'error' || run.status === 'rejected' ? 'error' : run.status;
 }
 
@@ -1629,16 +1740,21 @@ function toolRunSummary(run: RuntimeToolRun): { title: string; target?: string }
 function shellRunSummary(run: RuntimeToolRun, command: string): { title: string; target?: string } {
   const displayCommand = command || shellCommand(run);
   if (run.status === 'pending_approval') return { title: displayCommand ? `等待授权：运行 ${displayCommand}` : '等待授权：运行命令' };
-  if (run.status === 'running') return { title: displayCommand ? `正在运行 ${displayCommand}` : '正在运行命令' };
+  if (run.status === 'running') {
+    if (isPreparingToolRun(run)) return { title: displayCommand ? `正在准备运行 ${displayCommand}` : '正在生成命令' };
+    return { title: displayCommand ? `正在运行 ${displayCommand}` : '正在运行命令' };
+  }
   if (run.status === 'error') return { title: displayCommand ? `命令运行失败 ${displayCommand}` : '命令运行失败' };
+  if (run.status === 'cancelled') return { title: displayCommand ? `已取消运行 ${displayCommand}` : '已取消运行命令' };
   if (run.status === 'rejected') return { title: displayCommand ? `已拒绝运行 ${displayCommand}` : '已拒绝运行命令' };
   return { title: displayCommand ? `已运行 ${displayCommand}` : '已运行命令' };
 }
 
 function runningAware(run: RuntimeToolRun, running: string, complete: string) {
   if (run.status === 'pending_approval') return `等待授权：${running}`;
-  if (run.status === 'running') return `正在${running.replace(/^已?/, '')}`;
+  if (run.status === 'running') return `${isPreparingToolRun(run) ? '正在准备' : '正在'}${running.replace(/^已?/, '')}`;
   if (run.status === 'error') return `${running.replace(/^已?/, '')}失败`;
+  if (run.status === 'cancelled') return `${running.replace(/^已?/, '')}已取消`;
   if (run.status === 'rejected') return `${running.replace(/^已?/, '')}已拒绝`;
   return complete;
 }
@@ -1650,6 +1766,7 @@ function ToolRunStatus({ status }: { status: RuntimeToolRun['status'] }) {
 
 function statusTextFromStatus(status: RuntimeToolRun['status']) {
   if (status === 'pending_approval') return '待确认';
+  if (status === 'cancelled') return '已取消';
   if (status === 'rejected') return '已拒绝';
   if (status === 'error') return '失败';
   return '';
@@ -1660,6 +1777,7 @@ function toolRunGroupIcon(group: Extract<ToolRunGroup, { type: 'group' }>) {
   if (status === 'pending_approval') return <ShieldAlert size={14} />;
   if (status === 'running') return <Clock3 size={14} />;
   if (status === 'error') return <XCircle size={14} />;
+  if (status === 'cancelled') return <XCircle size={14} />;
   if (status === 'rejected') return <AlertCircle size={14} />;
   if (group.kind === 'inspection') return <FileText size={14} />;
   if (group.kind === 'search') return <Search size={14} />;
@@ -1672,6 +1790,7 @@ function toolRunIcon(run: RuntimeToolRun) {
   if (run.status === 'pending_approval') return <ShieldAlert size={14} />;
   if (run.status === 'running') return <Clock3 size={14} />;
   if (run.status === 'error') return <XCircle size={14} />;
+  if (run.status === 'cancelled') return <XCircle size={14} />;
   if (run.status === 'rejected') return <AlertCircle size={14} />;
   if (run.name.includes('search')) return <Search size={14} />;
   if (run.name.includes('shell')) return <TerminalSquare size={14} />;
@@ -1744,8 +1863,12 @@ function compactUrlTarget(value: string): string {
 }
 
 function genericToolRunDiagnostic(run: RuntimeToolRun): string {
-  if (run.status !== 'error' && run.status !== 'rejected') return '';
+  if (run.status !== 'error' && run.status !== 'rejected' && run.status !== 'cancelled') return '';
   return concisePreview(run.approvalMessage || run.resultPreview || run.approvalReason || '');
+}
+
+function isPreparingToolRun(run: RuntimeToolRun): boolean {
+  return run.status === 'running' && run.phase === 'preparing';
 }
 
 function concisePreview(value: string): string {

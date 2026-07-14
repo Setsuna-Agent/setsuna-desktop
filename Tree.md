@@ -1878,6 +1878,8 @@ runtime 依赖组装层。
   - `FileMemoryStore`
   - `FileSkillRegistry`
   - `FileWorkspaceProjectStore`
+  - `FileProjectInstructionLoader`
+  - `FileProjectWorkflowResolver`
   - `CompositeToolHost`
   - `ConfiguredModelClient`
   - `AgentLoop`
@@ -1990,6 +1992,10 @@ Hook 生命周期协调器。维护 SessionStart 状态，运行 turn start、St
 ### `runtime-sampling-context-builder.ts`
 
 单次模型采样上下文 Builder。负责 provider config、compaction、memory、Skill、工具路由、MCP 与 step snapshot 的一致性组装。
+
+### `runtime-prompt-context-assembler.ts` / `runtime-project-workflow-prompt.ts`
+
+按 system/developer/user 权限边界组装瞬时 prompt fragments；把受限解析的 package manager、manifest 和 scripts 渲染为 `project_workflow` 外部数据，并让更窄的 project instructions 保持后置覆盖关系。
 
 ### `runtime-thread-title-coordinator.ts` / `runtime-thread-title-generator.ts`
 
@@ -2148,6 +2154,10 @@ memory 存储接口。
 
 - 将 `ModelRequest` 转成 async stream of `ModelStreamEvent`。
 - 屏蔽具体 OpenAI/Anthropic/AI SDK 协议。
+
+### `project-workflow-resolver.ts`
+
+定义 workspace 工作流画像 port，包括 package manager 证据、manifest、标准/定向 scripts、cwd、source path 和冲突 warning。
 
 ### `skill-registry.ts`
 
@@ -2395,6 +2405,10 @@ usage JSONL 存储。
 - 读取文件，限制最大读取字节。
 - 写文件，确保路径不逃逸项目根。
 - 项目内文本搜索。
+
+### `adapters/workspace/file-project-workflow-resolver.ts`
+
+从 workspace root 到 cwd 检查 Node.js manifest、lockfile 和 workspace 配置，按作用域解析 package manager 与仓库 scripts；对冲突保持 unresolved，并通过 stat 指纹缓存有界结果。
 
 ### `adapters/model/configured-model-client.ts`
 

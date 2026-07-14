@@ -345,7 +345,9 @@ function toolRunScrollSignal(run: NonNullable<RuntimeMessage['toolRuns']>[number
   return [
     run.id,
     run.status,
+    run.phase ?? '',
     run.approvalStatus ?? '',
+    run.argumentsLength ?? 0,
     run.resultPreview?.length ?? 0,
     run.approvalMessage?.length ?? 0,
     run.startedAt ?? '',
@@ -359,5 +361,6 @@ function toolRunStatusLabel(status: NonNullable<RuntimeMessage['toolRuns']>[numb
   if (status === 'running') return '正在使用';
   if (status === 'success') return '已使用';
   if (status === 'rejected') return '已拒绝';
+  if (status === 'cancelled') return '已取消';
   return '调用失败';
 }

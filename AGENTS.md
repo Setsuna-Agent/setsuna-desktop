@@ -12,6 +12,12 @@
 - 路径、runtime 启动、打包和终端能力要按 macOS、Windows、Linux 一起考虑，优先用 `path.join`、`path.resolve`、`path.relative` 和规范化比较。
 - renderer 不应直接访问本地 runtime 端口、token、模型供应商或文件系统；这些能力必须通过 preload 暴露的窄 API 或 runtime client。
 
+## 工作流速查
+
+- 本仓库统一使用 `pnpm@7.33.7`，从仓库根目录执行 `package.json` 声明的 scripts；不要用 `npm`、`npx` 或直接调用测试 runner 来试探命令。
+- 第一次执行 build/test/lint/typecheck 前先确认相关 script。需要缩小验证范围时，从已有 script 派生命令并保留其 package manager、config 和 runner 参数。
+- 验证顺序是先运行最相关的定向检查，再按改动影响面运行下方的 `pnpm typecheck`、`pnpm test`、`pnpm lint`、`pnpm build`。
+
 ## 项目定位
 
 `setsuna-desktop` 是 local-first Electron 桌面工作台：

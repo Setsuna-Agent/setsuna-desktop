@@ -282,6 +282,70 @@ describe('json thread store', () => {
     });
   });
 
+  it('normalizes legacy turn cancellations that were stored as rejected tool runs', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
+    const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Legacy cancelled tool' });
+    await store.appendEvent(thread.id, {
+      id: 'event_turn',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.started',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      payload: { input: 'write file' },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_message',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        message: {
+          id: 'msg_1',
+          turnId: 'turn_1',
+          role: 'assistant',
+          content: '',
+          createdAt: '2026-06-26T00:00:01.000Z',
+          status: 'streaming',
+        },
+      },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_preview',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'tool.preview',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'write_file',
+        argumentsPreview: '{"file_path":"src/generated.ts"',
+        argumentsLength: 34,
+      },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_cancel',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.cancelled',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: { reason: 'Turn cancelled.' },
+    });
+
+    const snapshotPath = path.join(dataDir, 'threads', `${thread.id}.json`);
+    const snapshot = JSON.parse(await readFile(snapshotPath, 'utf8'));
+    snapshot.messages[0].toolRuns[0].status = 'rejected';
+    await writeFile(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+
+    const recoveredStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await expect(recoveredStore.getThread(thread.id)).resolves.toMatchObject({
+      messages: [expect.objectContaining({
+        toolRuns: [expect.objectContaining({ id: 'call_1', status: 'cancelled' })],
+      })],
+    });
+  });
+
   it('persists streamed tool output in thread snapshots', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
     const thread = await store.createThread({ title: 'Tool output replay' });

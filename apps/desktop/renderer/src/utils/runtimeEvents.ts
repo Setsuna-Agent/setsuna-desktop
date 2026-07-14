@@ -21,5 +21,6 @@ export function isActivityEvent(event: RuntimeEvent): boolean {
 }
 
 function isToolEvent(event: RuntimeEvent): event is ToolRuntimeEvent {
+  // tool.preview 只更新当前工具投影，不进入高层活动列表，避免长文件参数流淹没 UI。
   return event.type === 'tool.started' || event.type === 'tool.completed' || event.type === 'hook.started' || event.type === 'hook.completed';
 }

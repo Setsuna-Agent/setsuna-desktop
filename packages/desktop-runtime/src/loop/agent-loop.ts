@@ -11,6 +11,7 @@ import type { ModelClient } from '../ports/model-client.js';
 import type { PolicyAmendmentStore } from '../ports/policy-amendment-store.js';
 import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
 import type { ProjectInstructionLoader } from '../ports/project-instruction-loader.js';
+import type { ProjectWorkflowResolver } from '../ports/project-workflow-resolver.js';
 import type { RuntimeEnvironmentResolver } from '../ports/runtime-environment-resolver.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
@@ -56,6 +57,7 @@ export type AgentLoopOptions = {
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   projectInstructions?: ProjectInstructionLoader;
+  projectWorkflow?: ProjectWorkflowResolver;
   environmentResolver?: RuntimeEnvironmentResolver;
   eventWriter?: RuntimeEventWriter;
 };
@@ -151,6 +153,7 @@ export class AgentLoop {
       mcpStore: options.mcpStore,
       memory: this.memory,
       projectInstructions: options.projectInstructions,
+      projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
       threadStore: options.threadStore,
       toolExecutor: this.toolExecutor,

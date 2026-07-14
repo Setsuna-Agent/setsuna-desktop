@@ -435,7 +435,7 @@ export function WorkspaceOverviewPanel({
 }) {
   const temporaryWorkspace = activeProject?.id === TEMPORARY_WORKSPACE_PROJECT_ID;
   const reviewMeta = latestReviewSummary?.files.length
-    ? `${latestReviewSummary.files.length} 个文件  +${latestReviewSummary.additions} -${latestReviewSummary.deletions}`
+    ? `${latestReviewSummary.files.length} 个文件`
     : '查看代码变更';
   const actions = [
     {

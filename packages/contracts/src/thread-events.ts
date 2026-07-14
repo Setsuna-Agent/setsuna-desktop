@@ -313,16 +313,35 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = assistantMessageForTurn(next.messages, event.turnId);
     const run = message?.toolRuns?.find((item) => item.approvalId === event.payload.approvalId);
     if (run) {
-      const rejected = event.payload.decision === 'reject' || event.payload.decision === 'cancel';
-      run.approvalStatus = rejected ? 'rejected' : 'approved';
+      const rejected = event.payload.decision === 'reject';
+      const cancelled = event.payload.decision === 'cancel';
+      run.approvalStatus = cancelled ? 'cancelled' : rejected ? 'rejected' : 'approved';
       run.approvalMessage = event.payload.message;
-      if (!rejected) {
+      if (!rejected && !cancelled) {
         run.status = 'running';
       } else {
-        run.status = 'rejected';
+        run.status = cancelled ? 'cancelled' : 'rejected';
         run.completedAt = event.createdAt;
-        run.resultPreview = event.payload.message || 'Tool call rejected.';
+        run.resultPreview = event.payload.message || (cancelled ? 'Tool call cancelled.' : 'Tool call rejected.');
       }
+    }
+    return next;
+  }
+
+  if (event.type === 'tool.preview') {
+    const message = assistantMessageForTurn(next.messages, event.turnId);
+    if (message) {
+      upsertToolRun(message, {
+        id: event.payload.toolCallId,
+        name: event.payload.toolName,
+        source: event.payload.source,
+        status: 'running',
+        phase: 'preparing',
+        argumentsPreview: event.payload.argumentsPreview,
+        argumentsLength: event.payload.argumentsLength,
+        resultPreview: event.payload.resultPreview,
+        preparedAt: event.createdAt,
+      });
     }
     return next;
   }
@@ -335,6 +354,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         name: event.payload.toolName,
         source: event.payload.source,
         status: 'running',
+        phase: 'executing',
         argumentsPreview: event.payload.argumentsPreview,
         resultPreview: event.payload.resultPreview,
         startedAt: event.createdAt,
@@ -366,8 +386,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         name: event.payload.toolName,
         source: event.payload.source,
         status: event.payload.status,
+        phase: 'executing',
         argumentsPreview: event.payload.argumentsPreview,
-        resultPreview: event.payload.content,
+        // resultPreview carries structured UI data (for example file diffs), while content is
+        // the model-facing tool result. Falling back keeps shell tools without a preview working.
+        resultPreview: event.payload.resultPreview ?? event.payload.content,
         data: event.payload.data,
         durationMs: event.payload.durationMs,
         completedAt: event.createdAt,
@@ -791,6 +814,7 @@ function appendToolRunOutputDelta(
     name: input.name,
     source: input.source,
     status: 'running',
+    phase: 'executing',
     argumentsPreview: current?.argumentsPreview,
     resultPreview: appendPreviewDelta(current?.resultPreview ?? '', input.delta),
     startedAt: current?.startedAt ?? input.createdAt,
@@ -822,15 +846,18 @@ function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, re
       return { ...run, hookRuns: nextHookRuns };
     }
     changed = true;
-    const rejectApproval = run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected';
+    const cancelApproval = run.status === 'pending_approval'
+      && run.approvalStatus !== 'approved'
+      && run.approvalStatus !== 'rejected'
+      && run.approvalStatus !== 'cancelled';
     return {
       ...run,
-      status: 'rejected' as RuntimeToolRunStatus,
+      status: 'cancelled' as RuntimeToolRunStatus,
       resultPreview: run.resultPreview || reason,
       completedAt,
       hookRuns: nextHookRuns,
-      approvalStatus: rejectApproval ? 'rejected' : run.approvalStatus,
-      approvalMessage: rejectApproval ? reason : run.approvalMessage,
+      approvalStatus: cancelApproval ? 'cancelled' : run.approvalStatus,
+      approvalMessage: cancelApproval ? reason : run.approvalMessage,
     };
   });
   if (changed) message.toolRuns = runs;
@@ -900,7 +927,12 @@ function hasActiveToolRun(message: RuntimeMessage): boolean {
 }
 
 function isActiveToolRun(run: RuntimeToolRun): boolean {
-  return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected');
+  return run.status === 'running' || (
+    run.status === 'pending_approval'
+    && run.approvalStatus !== 'approved'
+    && run.approvalStatus !== 'rejected'
+    && run.approvalStatus !== 'cancelled'
+  );
 }
 
 /**
@@ -910,15 +942,18 @@ function isActiveToolRun(run: RuntimeToolRun): boolean {
  * @param next 新事件带来的 toolRun 增量。
  */
 function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): RuntimeToolRun {
-  // tool.started / approval / output_delta / completed 会多次更新同一 run，这里按非空字段增量合并。
+  // tool.preview / started / approval / output_delta / completed 会多次更新同一 run，这里按非空字段增量合并。
   return {
     ...current,
     ...next,
     argumentsPreview: next.argumentsPreview ?? current.argumentsPreview,
+    argumentsLength: next.argumentsLength ?? current.argumentsLength,
     resultPreview: next.resultPreview ?? current.resultPreview,
     data: next.data ?? current.data,
     durationMs: next.durationMs ?? current.durationMs,
     source: next.source ?? current.source,
+    phase: next.phase ?? current.phase,
+    preparedAt: current.preparedAt ?? next.preparedAt,
     startedAt: next.startedAt ?? current.startedAt,
     completedAt: next.completedAt ?? current.completedAt,
     approvalId: next.approvalId ?? current.approvalId,

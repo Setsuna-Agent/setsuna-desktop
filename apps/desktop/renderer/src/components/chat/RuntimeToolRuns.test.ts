@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { FileChangesSummaryCard, RuntimeToolRuns, groupToolRuns, toolRunGroupDefaultOpen, toolRunGroupKindClassName, toolRunPanelDefaultOpen } from './RuntimeToolRuns.js';
+import { MarkdownNavigationProvider } from './markdown/MarkdownNavigationProvider.js';
 import { fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 
 describe('RuntimeToolRuns kind class names', () => {
@@ -71,8 +72,50 @@ describe('RuntimeToolRuns default expansion', () => {
       fileRun('edit_merge', 'edit_file', 'merge_sort.py', 'Modified'),
     ]);
 
-    expect(html).toContain('<span class="chat-tool-run__file-status"><span>已编辑</span><code class="chat-tool-run__file-target" title="merge_sort.py">merge_sort.py</code></span>');
-    expect(html).toContain('<span class="chat-change-counts"');
+    expect(html).toContain('data-markdown-link="workspace-tool"');
+    expect(html).toContain('class="chat-markdown__file-icon"');
+    expect(html).toMatch(/<a[^>]*chat-tool-run__file-target[^>]*>.*merge_sort\.py.*<\/a><span class="chat-change-counts"/u);
+  });
+
+  it('normalizes absolute tool paths through the shared workspace file renderer', () => {
+    const html = renderedHtml([
+      fileRun('edit_style', 'edit_file', '/Users/dev/project/src/index.css', 'Modified'),
+    ]);
+
+    expect(html).toContain('data-markdown-link="workspace-tool"');
+    expect(html).toContain('title="src/index.css"');
+    expect(html).toContain('<span>index.css</span>');
+    expect(html).not.toContain('title="/Users/dev/project/src/index.css"');
+  });
+
+  it('uses the shared file renderer in grouped, mixed, and hook-backed summaries', () => {
+    const absolutePath = '/Users/dev/project/src/index.css';
+    const groupedHtml = renderedHtml([
+      fileRun('edit_previous', 'edit_file', absolutePath, 'Modified'),
+      preparingFileRun('edit_grouped', absolutePath),
+    ]);
+    const mixedHtml = renderedHtml([
+      toolRun('read_package', 'workspace_read_file', { path: 'package.json' }),
+      preparingFileRun('edit_mixed', absolutePath),
+    ], 'latest');
+    const hookBackedHtml = renderedHtml([{
+      ...preparingFileRun('edit_with_hook', absolutePath),
+      hookRuns: [{
+        id: 'hook_1',
+        eventName: 'PreToolUse',
+        handlerType: 'command',
+        status: 'completed',
+      }],
+    }]);
+
+    for (const html of [groupedHtml, mixedHtml, hookBackedHtml]) {
+      const summaryHtml = firstToolRunSummaryHtml(html);
+      expect(summaryHtml).toContain('data-markdown-link="workspace-tool"');
+      expect(summaryHtml).toContain('class="chat-markdown__file-icon"');
+      expect(summaryHtml).toContain('title="src/index.css"');
+      expect(summaryHtml).toContain('<span>index.css</span>');
+      expect(renderedTextFromHtml(summaryHtml)).not.toContain(absolutePath);
+    }
   });
 
   it('shows running file operation target and change counts in compact rows', () => {
@@ -104,6 +147,53 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(grouped).toContain('generated.ts');
     expect(grouped).toContain('+2-0');
     expect(grouped).not.toContain('运行中');
+  });
+
+  it('distinguishes file preparation from execution and cancellation', () => {
+    const preparing = renderedText([{
+      ...toolRun('write_preparing', 'write_file', { file_path: 'src/generated.ts', content: 'partial' }, 'running'),
+      phase: 'preparing',
+    }]);
+    const cancelled = renderedText([
+      toolRun('write_cancelled', 'write_file', { file_path: 'src/generated.ts', content: 'partial' }, 'cancelled'),
+    ]);
+
+    expect(preparing).toContain('正在生成修改');
+    expect(preparing).not.toContain('正在写入');
+    expect(cancelled).toContain('已取消文件操作');
+    expect(cancelled).not.toContain('已拒绝');
+  });
+
+  it('does not render zero change counts before a file target is known', () => {
+    const html = renderedHtml([{
+      id: 'write_preparing',
+      name: 'write_file',
+      status: 'running',
+      phase: 'preparing',
+      argumentsPreview: '{',
+    }]);
+
+    expect(renderedTextFromHtml(html)).toContain('正在生成修改');
+    expect(html).not.toContain('chat-change-counts');
+  });
+
+  it('does not render a partial streamed workspace root as a file target', () => {
+    const html = renderedHtml([{
+      id: 'edit_preparing',
+      name: 'edit',
+      status: 'running',
+      phase: 'preparing',
+      argumentsPreview: JSON.stringify({
+        file_path: '/Users/dev/project',
+        file_path_closed: false,
+        old_string: '',
+        new_string: '',
+      }),
+    }]);
+
+    expect(renderedTextFromHtml(html)).toBe('正在生成修改');
+    expect(html).not.toContain('workspace-tool');
+    expect(html).not.toContain('chat-change-counts');
   });
 
   it('coalesces repeated mixed aggregate categories into one compact summary', () => {
@@ -166,6 +256,50 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(text).toContain('已查找文件quick_sort.py');
     expect(text).toContain('已读取文件quick_sort.py');
     expect(text).not.toContain('已查看目录quick_sort.py');
+  });
+
+  it('normalizes inspection files and directories through workspace path renderers', () => {
+    const workspaceRoot = '/Users/dev/project';
+    const groupedHtml = renderedHtml([
+      toolRun('list_src', 'list_directory', { path: `${workspaceRoot}/src` }),
+      toolRun('read_index', 'read_file', { file_path: `${workspaceRoot}/index.html` }),
+      toolRun('read_config', 'read_file', { file_path: `${workspaceRoot}/uno.config.ts` }),
+      toolRun('list_components', 'list_directory', { path: `${workspaceRoot}/src/components` }),
+      {
+        ...toolRun('read_grid', 'read_file', { file_path: `${workspaceRoot}/src/components/Grid.tsx` }),
+        hookRuns: [{
+          id: 'inspection_hook',
+          eventName: 'PostToolUse',
+          handlerType: 'command',
+          status: 'completed',
+        }],
+      },
+    ]);
+    const flatHtml = renderedHtml([
+      toolRun('read_flat', 'read_file', { file_path: `${workspaceRoot}/src/index.css` }),
+    ]);
+    const runningGroupHtml = renderedHtml([
+      toolRun('read_previous', 'read_file', { file_path: `${workspaceRoot}/index.html` }),
+      toolRun('read_running', 'read_file', { file_path: `${workspaceRoot}/src/App.tsx` }, 'running'),
+    ]);
+
+    expect(renderedTextFromHtml(groupedHtml)).not.toContain(workspaceRoot);
+    expect(groupedHtml).toContain('title="src"');
+    expect(groupedHtml).toContain('title="src/components"');
+    expect(groupedHtml).toContain('chat-workspace-path-label chat-tool-run__file-list-target');
+    expect(groupedHtml).toContain('title="index.html"');
+    expect(groupedHtml).toContain('title="src/components/Grid.tsx"');
+    expect(groupedHtml).toContain('<span>Grid.tsx</span>');
+
+    expect(renderedTextFromHtml(flatHtml)).toContain('已读取文件index.css');
+    expect(renderedTextFromHtml(flatHtml)).not.toContain(workspaceRoot);
+    expect(flatHtml).toContain('data-markdown-link="workspace-tool"');
+    expect(flatHtml).toContain('title="src/index.css"');
+
+    const runningSummaryHtml = firstToolRunSummaryHtml(runningGroupHtml);
+    expect(renderedTextFromHtml(runningSummaryHtml)).toContain('正在读取文件App.tsx');
+    expect(renderedTextFromHtml(runningSummaryHtml)).not.toContain(workspaceRoot);
+    expect(runningSummaryHtml).toContain('title="src/App.tsx"');
   });
 
   it('summarizes web-content MCP runs without exposing raw arguments or fetched page text', () => {
@@ -287,7 +421,7 @@ describe('RuntimeToolRuns default expansion', () => {
     const text = renderedTextFromHtml(html);
 
     expect(text).toContain('已编辑 5 个文件');
-    expect(text).toContain('+15-10');
+    expect(text).not.toContain('+15-10');
     expect(text).toContain('再显示 2 个文件');
     expect(html.match(/class="chat-file-changes__item"/gu)).toHaveLength(3);
     expect(html).toContain('src/file-3.ts');
@@ -434,6 +568,23 @@ function fileRun(id: string, name: string, path: string, action: string): Runtim
   };
 }
 
+function preparingFileRun(id: string, path: string): RuntimeToolRun {
+  return {
+    ...toolRun(id, 'edit_file', { file_path: path, old_string: 'before', new_string: 'after' }, 'running'),
+    phase: 'preparing',
+    resultPreview: JSON.stringify({
+      diff: {
+        path,
+        action: 'Modified',
+        additions: 47,
+        deletions: 19,
+        truncated: false,
+        lines: [],
+      },
+    }),
+  };
+}
+
 function groupLabel(group: ReturnType<typeof groupToolRuns>[number]): string {
   return group.type === 'group' ? `${group.kind}:${group.runs.length}` : `single:${group.run.name}`;
 }
@@ -449,7 +600,18 @@ function renderedTextFromHtml(html: string): string {
     .trim();
 }
 
+function firstToolRunSummaryHtml(html: string): string {
+  const start = html.indexOf('<summary');
+  const end = html.indexOf('</summary>', start);
+  return start >= 0 && end >= 0 ? html.slice(start, end + '</summary>'.length) : html;
+}
+
 function renderedHtml(runs: RuntimeToolRun[], summaryMode?: 'aggregate' | 'latest'): string {
-  const html = renderToStaticMarkup(createElement(RuntimeToolRuns, { runs, summaryMode, onAnswerApproval: () => undefined }));
+  const children = createElement(RuntimeToolRuns, { runs, summaryMode, onAnswerApproval: () => undefined });
+  const html = renderToStaticMarkup(createElement(MarkdownNavigationProvider, {
+    children,
+    onOpenWorkspaceFile: () => undefined,
+    workspaceRoot: '/Users/dev/project',
+  }));
   return html;
 }

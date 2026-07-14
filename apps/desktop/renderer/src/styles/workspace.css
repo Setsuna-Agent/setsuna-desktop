@@ -851,7 +851,9 @@
   align-items: center;
   gap: 6px;
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
+  font-family: var(--app-font-family);
+  font-feature-settings: 'tnum' 1, 'zero' 0;
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   line-height: 18px;
 }
@@ -882,12 +884,14 @@
   height: 30px;
   border-radius: 7px;
   border-color: transparent;
+  color: var(--app-text-muted);
   background: transparent;
   transition: background 140ms ease, color 140ms ease;
 }
 
 .desktop-review-panel__actions .sd-icon-button:disabled {
   border-color: transparent;
+  color: var(--app-text-subtle);
   background: transparent;
 }
 

@@ -11,6 +11,7 @@ import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
 import type { McpStore } from '../ports/mcp-store.js';
 import type { ProjectInstructionLoader } from '../ports/project-instruction-loader.js';
+import type { ProjectWorkflowResolver } from '../ports/project-workflow-resolver.js';
 import type { RuntimeEnvironmentResolver } from '../ports/runtime-environment-resolver.js';
 import type { SkillRegistry } from '../ports/skill-registry.js';
 import type { ThreadStore } from '../ports/thread-store.js';
@@ -52,6 +53,7 @@ type RuntimeSamplingContextBuilderOptions = {
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
+  projectWorkflow?: ProjectWorkflowResolver;
   skillRegistry?: SkillRegistry;
   threadStore: ThreadStore;
   toolExecutor: Pick<
@@ -77,6 +79,7 @@ export class RuntimeSamplingContextBuilder {
     this.promptContexts = new RuntimePromptContextAssembler({
       memory: options.memory,
       projectInstructions: options.projectInstructions,
+      projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
       toolHost: options.toolHost,
     });

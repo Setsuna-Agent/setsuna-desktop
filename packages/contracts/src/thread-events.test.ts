@@ -4,6 +4,72 @@ import type { RuntimeEvent } from './events.js';
 import type { RuntimeThread } from './threads.js';
 
 describe('applyRuntimeEventToThread context compaction', () => {
+  it('separates streamed tool preparation from actual execution', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [{
+        id: 'msg_1',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'streaming',
+      }],
+    };
+    const preview: RuntimeEvent = {
+      id: 'event_preview',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'tool.preview',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'write_file',
+        argumentsPreview: '{"file_path":"src/generated.ts"',
+        argumentsLength: 34,
+      },
+    };
+    const started: RuntimeEvent = {
+      id: 'event_started',
+      seq: 2,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'tool.started',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'write_file',
+        argumentsPreview: '{"file_path":"src/generated.ts","content":"export {};"}',
+      },
+    };
+
+    const preparing = applyRuntimeEventToThread(thread, preview);
+    const executing = applyRuntimeEventToThread(preparing, started);
+
+    expect(preparing.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      status: 'running',
+      phase: 'preparing',
+      argumentsLength: 34,
+      preparedAt: '2026-06-26T00:00:01.000Z',
+    });
+    expect(executing.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      status: 'running',
+      phase: 'executing',
+      preparedAt: '2026-06-26T00:00:01.000Z',
+      startedAt: '2026-06-26T00:00:02.000Z',
+    });
+  });
+
   it('appends tool output deltas to the matching assistant tool run', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',
@@ -138,6 +204,50 @@ describe('applyRuntimeEventToThread context compaction', () => {
       resultPreview: '$ pnpm test\nstdout: done\nexit: 0',
       durationMs: 42,
     });
+  });
+
+  it('preserves structured completion previews instead of replacing them with model-facing content', () => {
+    const structuredPreview = JSON.stringify({
+      diff: { path: 'src/theme.css', action: 'Edited', additions: 4, deletions: 2, lines: [] },
+    });
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [{
+        id: 'msg_1',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'streaming',
+        toolRuns: [{ id: 'call_1', name: 'write_file', status: 'running' }],
+      }],
+    };
+    const completed: RuntimeEvent = {
+      id: 'event_2',
+      seq: 2,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'tool.completed',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        toolCallId: 'call_1',
+        toolName: 'write_file',
+        status: 'success',
+        content: 'Updated src/theme.css.',
+        resultPreview: structuredPreview,
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, completed);
+
+    expect(updated.messages[0].toolRuns?.[0]?.resultPreview).toBe(structuredPreview);
   });
 
   it('marks approved tool runs as running while the tool continues', () => {
@@ -478,14 +588,14 @@ describe('applyRuntimeEventToThread context compaction', () => {
     expect(cancelled.messages[1].toolRuns).toEqual([
       expect.objectContaining({
         id: 'call_running',
-        status: 'rejected',
+        status: 'cancelled',
         resultPreview: 'partial output',
         completedAt: '2026-06-26T00:00:03.000Z',
       }),
       expect.objectContaining({
         id: 'call_approval',
-        status: 'rejected',
-        approvalStatus: 'rejected',
+        status: 'cancelled',
+        approvalStatus: 'cancelled',
         approvalMessage: 'Stopped after restart.',
         resultPreview: 'Stopped after restart.',
         completedAt: '2026-06-26T00:00:03.000Z',

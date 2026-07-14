@@ -659,7 +659,7 @@ describe('runtime server', () => {
       error: 'Turn cancelled because the desktop runtime restarted.',
     });
     expect(thread.messages[0].toolRuns?.[0]).toMatchObject({
-      status: 'rejected',
+      status: 'cancelled',
       resultPreview: 'Turn cancelled because the desktop runtime restarted.',
       completedAt: expect.any(String),
     });

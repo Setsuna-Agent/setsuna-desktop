@@ -366,7 +366,7 @@ describe('agent loop tools', () => {
     expect(toolHost.runContexts[0].environment).toBe(firstSnapshotEnvironment);
   });
 
-  it('injects project instructions as user context with source provenance', async () => {
+  it('injects project workflow and instructions before the first model sampling step', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Project instructions', projectId: 'project_1' });
@@ -377,6 +377,23 @@ describe('agent loop tools', () => {
       eventBus: new InMemoryEventBus(),
       clock: systemClock,
       ids,
+      projectWorkflow: {
+        resolve: async () => ({
+          root: '/workspace',
+          cwd: '/workspace',
+          manifests: [{ kind: 'node-package', path: '/workspace/package.json', directory: '/workspace' }],
+          packageManager: { name: 'pnpm', version: '7.33.7', evidence: ['package.json#packageManager'] },
+          scripts: [{
+            name: 'test',
+            definition: 'vitest run --config vitest.unit.config.ts',
+            invocation: 'pnpm test',
+            cwd: '/workspace',
+            sourcePath: '/workspace/package.json',
+            truncated: false,
+          }],
+          warnings: [],
+        }),
+      },
       projectInstructions: {
         load: async () => [{
           content: 'Use pnpm and keep runtime boundaries intact.',
@@ -390,10 +407,21 @@ describe('agent loop tools', () => {
     await loop.sendTurn(thread.id, { input: 'inspect the project rules' });
 
     const request = modelClient.requests[0];
+    expect(request.messages.find((message) => message.id === 'desktop_project_workflow')).toMatchObject({
+      role: 'user',
+      content: expect.stringContaining('<invocation>pnpm test</invocation>'),
+    });
     expect(request.messages.find((message) => message.id === 'project_instruction_0')).toMatchObject({
       role: 'user',
       content: expect.stringContaining('Use pnpm and keep runtime boundaries intact.'),
     });
+    expect(request.stepSnapshot?.promptManifest).toContainEqual(expect.objectContaining({
+      id: 'desktop_project_workflow',
+      role: 'user',
+      source: 'project_workflow',
+      trust: 'external',
+      lifecycle: 'workspace',
+    }));
     expect(request.stepSnapshot?.promptManifest).toContainEqual(expect.objectContaining({
       id: 'project_instruction_0',
       role: 'user',
@@ -1780,7 +1808,7 @@ describe('agent loop tools', () => {
     const events = await threadStore.listEvents(thread.id, 0);
     const saved = await threadStore.getThread(thread.id);
     const runningPreview = events.find((event) =>
-      event.type === 'tool.started'
+      event.type === 'tool.preview'
       && event.payload.toolName === 'write_file'
       && event.payload.resultPreview?.includes('src/generated.txt')
     );
@@ -1804,6 +1832,63 @@ describe('agent loop tools', () => {
     expect(saved?.turns?.[0]?.diff).toContain('+generated');
   });
 
+  it('keeps large structured tool result previews valid for thread projections', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Large structured preview', projectId: 'project_1' });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new ToolDeltaModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new LargePreviewingToolHost(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'write a large file' });
+    const saved = await threadStore.getThread(thread.id);
+    const resultPreview = saved?.messages
+      .flatMap((message) => message.toolRuns ?? [])
+      .find((run) => run.id === 'call_delta')?.resultPreview;
+
+    expect(resultPreview?.length).toBeGreaterThan(60_000);
+    expect(JSON.parse(resultPreview ?? '{}')).toMatchObject({
+      diff: { path: 'src/generated.txt', additions: 1, deletions: 0 },
+    });
+  });
+
+  it('bounds persisted previews for token-heavy tool arguments', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Noisy tool delta loop', projectId: 'project_1' });
+    const modelClient = new NoisyToolDeltaModelClient();
+    const toolHost = new PreviewingToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'write a large file' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const previews = events.filter((event) => event.type === 'tool.preview' && event.payload.toolCallId === 'call_noisy_delta');
+    const starts = events.filter((event) => event.type === 'tool.started' && event.payload.toolCallId === 'call_noisy_delta');
+
+    expect(toolHost.partialPreviewCalls.length).toBeGreaterThan(1);
+    expect(toolHost.partialPreviewCalls.length).toBeLessThanOrEqual(6);
+    expect(previews).toHaveLength(1);
+    expect(previews[0]).toMatchObject({ payload: { argumentsLength: expect.any(Number) } });
+    expect((previews[0] as Extract<RuntimeEvent, { type: 'tool.preview' }>).payload.argumentsLength).toBeGreaterThan(4_000);
+    expect(starts).toHaveLength(1);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'tool.completed',
+      payload: expect.objectContaining({ toolCallId: 'call_noisy_delta', status: 'success' }),
+    }));
+  });
+
   it('does not publish streaming previews for deferred tools before discovery', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -1823,7 +1908,7 @@ describe('agent loop tools', () => {
     const events = await threadStore.listEvents(thread.id, 0);
 
     expect(toolHost.partialPreviewCalls).toEqual([]);
-    expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'deferred_lookup')).toBe(false);
+    expect(events.some((event) => event.type === 'tool.preview' && event.payload.toolName === 'deferred_lookup')).toBe(false);
     expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
   });
 
@@ -3321,6 +3406,9 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'approval.resolved' && event.payload.approvalId === pendingApproval.id && event.payload.decision === 'cancel')).toBe(true);
     expect(events.some((event) => event.type === 'turn.cancelled' && event.payload.reason?.includes('approval decision'))).toBe(true);
     expect(events.some((event) => event.type === 'tool.completed' && event.payload.toolName === 'dangerous_tool')).toBe(false);
+    await expect(approvalGate.listApprovals()).resolves.toEqual({
+      approvals: [expect.objectContaining({ id: pendingApproval.id, decision: 'cancel', status: 'cancelled' })],
+    });
     expect(modelClient.requests).toHaveLength(1);
   });
 
@@ -5981,11 +6069,47 @@ class ToolDeltaModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     if (this.requests.length === 1) {
-      yield { type: 'tool_call_delta', call: { id: 'call_delta', name: 'write_file', argumentsDelta: '{"file_path":"src/generated.txt",' } };
+      yield { type: 'tool_call_delta', call: { id: 'call_delta', name: 'write_file', argumentsDelta: '{' } };
+      yield { type: 'tool_call_delta', call: { id: 'call_delta', name: 'write_file', argumentsDelta: '"file_path":"src/generated.txt",' } };
       yield { type: 'tool_call_delta', call: { id: 'call_delta', name: 'write_file', argumentsDelta: '"content":"generated\\n"}' } };
       yield {
         type: 'tool_calls',
         toolCalls: [{ id: 'call_delta', name: 'write_file', arguments: '{"file_path":"src/generated.txt","content":"generated\\n"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'done' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class NoisyToolDeltaModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      const content = Array.from({ length: 4_096 }, (_, index) => String(index % 10)).join('');
+      yield {
+        type: 'tool_call_delta',
+        call: {
+          id: 'call_noisy_delta',
+          name: 'write_file',
+          argumentsDelta: '{"file_path":"src/generated.txt","content":"',
+        },
+      };
+      for (const character of content) {
+        yield { type: 'tool_call_delta', call: { id: 'call_noisy_delta', name: 'write_file', argumentsDelta: character } };
+      }
+      yield { type: 'tool_call_delta', call: { id: 'call_noisy_delta', name: 'write_file', argumentsDelta: '"}' } };
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_noisy_delta',
+          name: 'write_file',
+          arguments: JSON.stringify({ file_path: 'src/generated.txt', content }),
+        }],
       };
       yield { type: 'done', finishReason: 'tool_calls' };
       return;
@@ -6843,6 +6967,13 @@ class PreviewingToolHost implements ToolHost {
   }
 }
 
+class LargePreviewingToolHost extends PreviewingToolHost {
+  override async runTool() {
+    this.calls += 1;
+    return { content: 'wrote file', preview: largeFilePreview() };
+  }
+}
+
 class DeferredPreviewingToolHost extends DeferredToolHost {
   partialPreviewCalls: Array<{ name: string; rawArguments: string }> = [];
 
@@ -6906,6 +7037,19 @@ function filePreview() {
       },
     }),
   };
+}
+
+function largeFilePreview(): string {
+  return JSON.stringify({
+    diff: {
+      path: 'src/generated.txt',
+      action: 'Edited',
+      additions: 1,
+      deletions: 0,
+      truncated: false,
+      lines: [{ type: 'added', content: 'x'.repeat(61_000), newLine: 1 }],
+    },
+  });
 }
 
 function shellPatchPreview(input: unknown) {

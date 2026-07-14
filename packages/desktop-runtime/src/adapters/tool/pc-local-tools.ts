@@ -513,7 +513,7 @@ export const LOCAL_TOOL_DEFINITIONS = [
   ),
   localTool(
     'write_file',
-    'Create or completely overwrite one UTF-8 text file in the local workspace. Use for new generated files or full-file rewrites; use edit or apply_patch for small targeted replacements.',
+    'Create or completely overwrite one UTF-8 text file in the local workspace. Use for new generated files or genuine full-file rewrites; for an existing file, prefer edit or apply_patch whenever they avoid regenerating unchanged content.',
     {
       file_path: {
         type: 'string',

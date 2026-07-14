@@ -7,6 +7,7 @@ const READ_TOOL_NAMES = ['list_directory', 'find_files', 'search_text', 'read_fi
 const FILE_MUTATION_TOOL_NAMES = ['apply_patch', 'edit', 'write_file', 'append_file', 'delete_file'] as const;
 const SHELL_PROCESS_TOOL_NAMES = ['read_shell_process', 'list_shell_processes', 'write_shell_process', 'terminate_shell_process'] as const;
 const COMPAT_TOOL_NAMES = ['request_permissions', 'exec_command', 'write_stdin'] as const;
+const COMMAND_TOOL_NAMES = ['run_shell_command', 'exec_command'] as const;
 const ALL_TOOL_NAMES = [
   ...READ_TOOL_NAMES,
   ...FILE_MUTATION_TOOL_NAMES,
@@ -61,6 +62,9 @@ export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | nul
     if (singleFileTools.length) {
       lines.push(`- ${singleFileTools.join('/')} each modify one file; choose the narrowest operation that matches the requested change.`);
     }
+    if (advertised.has('write_file') && (advertised.has('edit') || advertised.has('apply_patch'))) {
+      lines.push('- For an existing file, use edit or apply_patch when they can express the change without regenerating unchanged content. Reserve write_file for new files or genuine full-file rewrites; large full-file arguments delay visible progress.');
+    }
     if (advertised.has('append_file')) lines.push('- Use append_file for a pure append instead of simulating one with an exact replacement.');
     if (advertised.has('delete_file')) lines.push('- Verify a requested file deletion and relevant references, then use delete_file rather than a shell deletion command.');
     lines.push('- Reuse conversation context when it already contains enough of the target file; avoid ritual re-reads.');
@@ -76,6 +80,14 @@ export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | nul
     if (hasAny(advertised, FILE_MUTATION_TOOL_NAMES)) {
       lines.push('- Use the file mutation tools for file edits; do not substitute Python, sed, awk, Perl, heredocs, redirection, rm, or unlink.');
     }
+  }
+
+  if (hasAny(advertised, COMMAND_TOOL_NAMES)) {
+    lines.push(
+      '- Before the first build, test, lint, or typecheck command, use the injected project workflow. If it is unavailable or insufficient, inspect project instructions, the nearest relevant manifest, lockfile, and workspace configuration with read-only tools first.',
+      '- Never use npm, npx, or another package-manager command as a probe when repository evidence selects a different manager. Prefer declared scripts; invoke a runner directly only when no declared script covers the check.',
+      '- When deriving a narrower validation command from a declared script, preserve its package manager, working directory, runner flags, and configuration.',
+    );
   }
 
   if (hasAny(advertised, SHELL_PROCESS_TOOL_NAMES)) {

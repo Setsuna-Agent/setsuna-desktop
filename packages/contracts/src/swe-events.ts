@@ -997,7 +997,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
       : [];
   }
 
-  if (event.type === 'tool.started') {
+  if (event.type === 'tool.preview' || event.type === 'tool.started') {
     if (!turnId) return [];
     const item = toolStartedItem(event.payload.toolCallId, event.payload.toolName, event.payload.argumentsPreview, event.payload.resultPreview, event.payload.source);
     const notifications: SweNotification[] = [];
@@ -1488,7 +1488,7 @@ function runtimeToolRunToSweItem(run: RuntimeToolRun): SweThreadItem {
     run.name,
     recordFromJson(run.argumentsPreview),
     dynamicStatusFromToolRun(run.status),
-    dynamicData.success ?? (run.status === 'success' ? true : run.status === 'error' || run.status === 'rejected' ? false : null),
+    dynamicData.success ?? (run.status === 'success' ? true : run.status === 'error' || run.status === 'rejected' || run.status === 'cancelled' ? false : null),
     run.durationMs,
     dynamicData.contentItems,
   );
@@ -1777,21 +1777,21 @@ function reasoningItemId(messageId: string, segmentIndex: number): string {
 
 function patchStatusFromToolRun(status: RuntimeToolRun['status']): SwePatchApplyStatus {
   if (status === 'success') return 'completed';
-  if (status === 'rejected') return 'declined';
+  if (status === 'rejected' || status === 'cancelled') return 'declined';
   if (status === 'error') return 'failed';
   return 'inProgress';
 }
 
 function commandStatusFromToolRun(status: RuntimeToolRun['status']): SweCommandExecutionStatus {
   if (status === 'success') return 'completed';
-  if (status === 'rejected') return 'declined';
+  if (status === 'rejected' || status === 'cancelled') return 'declined';
   if (status === 'error') return 'failed';
   return 'inProgress';
 }
 
 function dynamicStatusFromToolRun(status: RuntimeToolRun['status']): SweDynamicToolCallStatus {
   if (status === 'success') return 'completed';
-  if (status === 'error' || status === 'rejected') return 'failed';
+  if (status === 'error' || status === 'rejected' || status === 'cancelled') return 'failed';
   return 'inProgress';
 }
 

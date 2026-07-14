@@ -164,7 +164,9 @@ export type RuntimeGitInfo = {
 
 export type RuntimeThreadMemoryMode = 'enabled' | 'disabled' | 'polluted';
 
-export type RuntimeToolRunStatus = 'pending_approval' | 'running' | 'success' | 'error' | 'rejected';
+export type RuntimeToolRunStatus = 'pending_approval' | 'running' | 'success' | 'error' | 'rejected' | 'cancelled';
+
+export type RuntimeToolRunPhase = 'preparing' | 'executing';
 
 export type RuntimeHookRunEventName = 'PreToolUse' | 'PermissionRequest' | 'PostToolUse' | 'PreCompact' | 'PostCompact' | 'SessionStart' | 'SubagentStart' | 'UserPromptSubmit' | 'SubagentStop' | 'Stop';
 
@@ -206,15 +208,18 @@ export type RuntimeToolRun = {
   name: string;
   source?: 'agent' | 'userShell';
   status: RuntimeToolRunStatus;
+  phase?: RuntimeToolRunPhase;
   argumentsPreview?: string;
+  argumentsLength?: number;
   resultPreview?: string;
   data?: unknown;
   durationMs?: number;
+  preparedAt?: string;
   startedAt?: string;
   completedAt?: string;
   approvalId?: string;
   approvalReason?: string;
-  approvalStatus?: 'pending' | 'approved' | 'rejected';
+  approvalStatus?: 'pending' | 'approved' | 'rejected' | 'cancelled';
   approvalMessage?: string;
   availableApprovalDecisions?: RuntimeApprovalAvailableDecision[];
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;

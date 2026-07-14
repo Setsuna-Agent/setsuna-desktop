@@ -47,6 +47,7 @@ export type RuntimeEventType =
   | 'turn.diff'
   | 'messages.deleted'
   | 'messages.truncated'
+  | 'tool.preview'
   | 'tool.started'
   | 'tool.output_delta'
   | 'tool.completed'
@@ -109,6 +110,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'turn.diff', { unifiedDiff: string }>
   | RuntimeEventBase<'messages.deleted', { messageIds: string[] }>
   | RuntimeEventBase<'messages.truncated', { messageId: string; includeSelf?: boolean; removedMessageIds: string[] }>
+  | RuntimeEventBase<'tool.preview', { toolCallId: string; toolName: string; argumentsPreview: string; argumentsLength: number; resultPreview?: string; source?: 'agent' | 'userShell' }>
   | RuntimeEventBase<'tool.started', { toolCallId: string; toolName: string; argumentsPreview: string; resultPreview?: string; source?: 'agent' | 'userShell' }>
   | RuntimeEventBase<'tool.output_delta', { toolCallId: string; toolName: string; delta: string; stream?: 'stdout' | 'stderr'; processId?: string; source?: 'agent' | 'userShell' }>
   | RuntimeEventBase<
