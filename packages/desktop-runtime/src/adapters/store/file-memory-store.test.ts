@@ -261,6 +261,20 @@ describe('file memory store', () => {
     await expect(readFile(path.join(memoryRoot, '.git', 'HEAD'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it.skipIf(process.platform === 'win32')('refuses a top-level phase-2 directory symlink outside the memory root', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-test-'));
+    const outsideDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-phase2-outside-test-'));
+    const memoryRoot = path.join(dataDir, 'memories');
+    const store = new FileMemoryStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.preparePhase2Workspace();
+    await writeFile(path.join(outsideDir, 'SKILL.md'), 'external phase-2 secret\n', 'utf8');
+    await symlink(outsideDir, path.join(memoryRoot, 'skills'));
+
+    await expect(store.syncPhase2Workspace()).rejects.toThrow('refuses symbolic links');
+    await expect(readFile(path.join(memoryRoot, 'phase2_workspace_diff.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(outsideDir, 'SKILL.md'), 'utf8')).resolves.toBe('external phase-2 secret\n');
+  });
+
   it('claims phase-2 jobs with lease, cooldown, and watermark guards', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-test-'));
     const clock = mutableClock('2026-01-01T00:00:00.000Z');

@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { RuntimeMemoryPhase2Workspace, RuntimeMemoryPhase2WorkspaceChange, RuntimeMemoryPhase2WorkspaceChangeStatus } from '@setsuna-desktop/contracts';
+import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const PHASE2_WORKSPACE_DIFF_FILE = 'phase2_workspace_diff.md';
@@ -79,9 +80,12 @@ async function snapshotMemoryFiles(root: string): Promise<Phase2Baseline> {
 }
 
 async function snapshotDirectory(root: string, relativeDir: string, files: Record<string, string>): Promise<void> {
-  const absoluteDir = path.join(root, relativeDir);
   let entries;
   try {
+    const absoluteDir = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativeDir), {
+      allowMissing: false,
+      label: 'Memory Phase 2 snapshot path',
+    });
     entries = await readdir(absoluteDir, { withFileTypes: true });
   } catch (error) {
     if (isNodeErrorCode(error, 'ENOENT')) return;
@@ -96,10 +100,13 @@ async function snapshotDirectory(root: string, relativeDir: string, files: Recor
 }
 
 async function snapshotRegularFile(root: string, relativePath: string, files: Record<string, string>): Promise<void> {
-  const absolutePath = path.join(root, relativePath);
   try {
+    const absolutePath = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativePath), {
+      allowMissing: false,
+      label: 'Memory Phase 2 snapshot path',
+    });
     const stats = await lstat(absolutePath);
-    if (!stats.isFile() || stats.isSymbolicLink()) return;
+    if (!stats.isFile()) return;
     files[relativePath] = await readFile(absolutePath, 'utf8');
   } catch (error) {
     if (!isNodeErrorCode(error, 'ENOENT')) throw error;
