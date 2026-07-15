@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { ArrowLeft, ArrowRight, ExternalLink, Globe2, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
-import type { DidFailLoadEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw, X } from 'lucide-react';
+import type { DidFailLoadEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
+import { BrowserTabStrip } from './BrowserTabStrip.js';
+import { useBrowserTabsHeaderPortal } from './BrowserTabsHeaderPortal.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
@@ -15,6 +18,7 @@ type BrowserTab = {
   canGoForward: boolean;
   draftUrl: string;
   error: string | null;
+  faviconUrl: string | null;
   id: string;
   initialUrl: string;
   loading: boolean;
@@ -42,6 +46,7 @@ export function BrowserPanel({
   const tabSequenceRef = useRef(1);
   const handledOpenRequestIdRef = useRef(openRequest?.id ?? null);
   const webviewsRef = useRef<Map<string, WebviewTag>>(new Map());
+  const { host: tabsHeaderHost } = useBrowserTabsHeaderPortal();
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createBrowserTab(1, openRequest?.url)]);
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id ?? '');
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
@@ -67,9 +72,7 @@ export function BrowserPanel({
     openTab(openRequest.url);
   }, [openRequest, openTab]);
 
-  const addTab = () => openTab();
-
-  const closeTab = (tabId: string) => {
+  const closeTab = useCallback((tabId: string) => {
     setTabs((current) => {
       const closingIndex = current.findIndex((tab) => tab.id === tabId);
       const remaining = current.filter((tab) => tab.id !== tabId);
@@ -84,7 +87,9 @@ export function BrowserPanel({
       }
       return remaining;
     });
-  };
+  }, [activeTabId]);
+
+  const selectTab = useCallback((tabId: string) => setActiveTabId(tabId), []);
 
   const navigate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -123,78 +128,66 @@ export function BrowserPanel({
   };
 
   return (
-    <aside className="desktop-workspace-panel desktop-browser-panel" aria-label="浏览器" hidden={hidden}>
-      <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
-      <div className="desktop-browser-tabs" role="tablist" aria-label="浏览器标签页">
-        {tabs.map((tab) => (
-          <div
-            aria-selected={tab.id === activeTabId}
-            className={`desktop-browser-tab ${tab.id === activeTabId ? 'is-active' : ''}`}
-            key={tab.id}
-            role="tab"
-            title={tab.title}
+    <>
+      {tabsHeaderHost
+        ? createPortal(
+            <BrowserTabStrip
+              activeTabId={activeTabId}
+              tabs={tabs}
+              onAddTab={openTab}
+              onCloseTab={closeTab}
+              onSelectTab={selectTab}
+            />,
+            tabsHeaderHost,
+          )
+        : null}
+      <aside className="desktop-workspace-panel desktop-browser-panel" aria-label="浏览器" hidden={hidden}>
+        <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
+        <div className="desktop-browser-navigation">
+          <button type="button" disabled={!activeTab?.canGoBack} aria-label="后退" onClick={() => navigateHistory('back')}>
+            <ArrowLeft size={14} />
+          </button>
+          <button type="button" disabled={!activeTab?.canGoForward} aria-label="前进" onClick={() => navigateHistory('forward')}>
+            <ArrowRight size={14} />
+          </button>
+          <button type="button" aria-label={activeTab?.loading ? '停止加载' : '刷新'} onClick={reload}>
+            {activeTab?.loading ? <X size={13} /> : <RefreshCw size={13} />}
+          </button>
+          <form onSubmit={navigate}>
+            <input
+              aria-label="网址或搜索内容"
+              value={activeTab?.draftUrl ?? ''}
+              spellCheck={false}
+              onChange={(event) => activeTab && updateTab(activeTab.id, { draftUrl: event.currentTarget.value })}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+          </form>
+          <button
+            type="button"
+            aria-label="在系统浏览器中打开"
+            disabled={!activeTab?.url}
+            onClick={() => activeTab?.url && void window.setsunaDesktop?.links.openExternal(activeTab.url)}
           >
-            <button className="desktop-browser-tab__select" type="button" onClick={() => setActiveTabId(tab.id)}>
-              {tab.loading ? <LoaderCircle className="is-spinning" size={13} /> : <Globe2 size={13} />}
-              <span>{tab.title}</span>
-            </button>
-            <button
-              className="desktop-browser-tab__close"
-              type="button"
-              aria-label={`关闭 ${tab.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                closeTab(tab.id);
+            <ExternalLink size={13} />
+          </button>
+        </div>
+        <div className="desktop-browser-content">
+          {tabs.map((tab) => (
+            <BrowserWebview
+              active={tab.id === activeTabId}
+              key={tab.id}
+              tab={tab}
+              onRef={(node) => {
+                if (node) webviewsRef.current.set(tab.id, node);
+                else webviewsRef.current.delete(tab.id);
               }}
-            >
-              <X size={11} />
-            </button>
-          </div>
-        ))}
-        <button className="desktop-browser-tabs__add" type="button" aria-label="新建浏览器标签页" title="新建标签页" onClick={addTab}>
-          <Plus size={14} />
-        </button>
-      </div>
-      <div className="desktop-browser-navigation">
-        <button type="button" disabled={!activeTab?.canGoBack} aria-label="后退" onClick={() => navigateHistory('back')}><ArrowLeft size={14} /></button>
-        <button type="button" disabled={!activeTab?.canGoForward} aria-label="前进" onClick={() => navigateHistory('forward')}><ArrowRight size={14} /></button>
-        <button type="button" aria-label={activeTab?.loading ? '停止加载' : '刷新'} onClick={reload}>
-          {activeTab?.loading ? <X size={13} /> : <RefreshCw size={13} />}
-        </button>
-        <form onSubmit={navigate}>
-          <input
-            aria-label="网址或搜索内容"
-            value={activeTab?.draftUrl ?? ''}
-            spellCheck={false}
-            onChange={(event) => activeTab && updateTab(activeTab.id, { draftUrl: event.currentTarget.value })}
-            onFocus={(event) => event.currentTarget.select()}
-          />
-        </form>
-        <button
-          type="button"
-          aria-label="在系统浏览器中打开"
-          disabled={!activeTab?.url}
-          onClick={() => activeTab?.url && void window.setsunaDesktop?.links.openExternal(activeTab.url)}
-        >
-          <ExternalLink size={13} />
-        </button>
-      </div>
-      <div className="desktop-browser-content">
-        {tabs.map((tab) => (
-          <BrowserWebview
-            active={tab.id === activeTabId}
-            key={tab.id}
-            tab={tab}
-            onRef={(node) => {
-              if (node) webviewsRef.current.set(tab.id, node);
-              else webviewsRef.current.delete(tab.id);
-            }}
-            onUpdate={updateTab}
-          />
-        ))}
-        {activeTab?.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{activeTab.error}</span></div> : null}
-      </div>
-    </aside>
+              onUpdate={updateTab}
+            />
+          ))}
+          {activeTab?.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{activeTab.error}</span></div> : null}
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -223,12 +216,13 @@ function BrowserWebview({
         url,
       });
     };
-    const handleStart = () => onUpdate(tab.id, { loading: true, error: null });
+    const handleStart = () => onUpdate(tab.id, { faviconUrl: null, loading: true, error: null });
     const handleStop = () => {
       syncNavigation();
       onUpdate(tab.id, { loading: false });
     };
     const handleTitle = (event: PageTitleUpdatedEvent) => onUpdate(tab.id, { title: event.title || browserHostLabel(node.getURL()) });
+    const handleFavicon = (event: PageFaviconUpdatedEvent) => onUpdate(tab.id, { faviconUrl: resolveBrowserFaviconUrl(event.favicons) });
     const handleFailure = (event: DidFailLoadEvent) => {
       if (event.errorCode === -3) return;
       onUpdate(tab.id, { error: event.errorDescription || '无法加载网页', loading: false });
@@ -238,6 +232,7 @@ function BrowserWebview({
     node.addEventListener('did-navigate', syncNavigation);
     node.addEventListener('did-navigate-in-page', syncNavigation);
     node.addEventListener('page-title-updated', handleTitle);
+    node.addEventListener('page-favicon-updated', handleFavicon);
     node.addEventListener('did-fail-load', handleFailure);
     return () => {
       node.removeEventListener('did-start-loading', handleStart);
@@ -245,6 +240,7 @@ function BrowserWebview({
       node.removeEventListener('did-navigate', syncNavigation);
       node.removeEventListener('did-navigate-in-page', syncNavigation);
       node.removeEventListener('page-title-updated', handleTitle);
+      node.removeEventListener('page-favicon-updated', handleFavicon);
       node.removeEventListener('did-fail-load', handleFailure);
     };
   }, [onUpdate, tab.id, tab.initialUrl]);
@@ -294,12 +290,29 @@ function createBrowserTab(sequence: number, url = browserHomeUrl): BrowserTab {
     canGoForward: false,
     draftUrl: url,
     error: null,
+    faviconUrl: null,
     id: `browser-tab-${Date.now()}-${sequence}`,
     initialUrl: url,
     loading: true,
     title: '新标签页',
     url,
   };
+}
+
+const maxBrowserFaviconUrlLength = 512_000;
+
+export function resolveBrowserFaviconUrl(favicons: readonly string[]): string | null {
+  for (const favicon of favicons) {
+    if (!favicon || favicon.length > maxBrowserFaviconUrlLength) continue;
+    if (/^data:image\//i.test(favicon)) return favicon;
+    try {
+      const url = new URL(favicon);
+      if (url.protocol === 'https:' || url.protocol === 'http:') return url.href;
+    } catch {
+      // Ignore malformed and unsupported favicon URLs from untrusted pages.
+    }
+  }
+  return null;
 }
 
 function isAbortedNavigationError(error: unknown): boolean {

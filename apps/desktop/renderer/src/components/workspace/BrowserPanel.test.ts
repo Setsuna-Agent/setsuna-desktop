@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { BrowserPanel, normalizeBrowserInput } from './BrowserPanel.js';
+import { BrowserPanel, normalizeBrowserInput, resolveBrowserFaviconUrl } from './BrowserPanel.js';
 
 describe('normalizeBrowserInput', () => {
   it('keeps absolute web URLs', () => {
@@ -21,6 +21,17 @@ describe('normalizeBrowserInput', () => {
   });
 });
 
+describe('resolveBrowserFaviconUrl', () => {
+  it('uses the first supported favicon URL', () => {
+    expect(resolveBrowserFaviconUrl(['javascript:alert(1)', 'https://example.com/favicon.ico'])).toBe('https://example.com/favicon.ico');
+    expect(resolveBrowserFaviconUrl(['data:image/png;base64,aWNvbg=='])).toBe('data:image/png;base64,aWNvbg==');
+  });
+
+  it('rejects unsupported favicon URLs', () => {
+    expect(resolveBrowserFaviconUrl(['javascript:alert(1)', 'file:///tmp/favicon.ico'])).toBeNull();
+  });
+});
+
 describe('BrowserPanel', () => {
   it('allows popup requests so main can route them into internal tabs', () => {
     const html = renderToStaticMarkup(createElement(BrowserPanel, {
@@ -33,6 +44,7 @@ describe('BrowserPanel', () => {
     }));
 
     expect(html).toContain('allowpopups="true"');
+    expect(html).not.toContain('desktop-browser-tabs');
   });
 
   it('uses an AI browser request as the initial tab URL', () => {

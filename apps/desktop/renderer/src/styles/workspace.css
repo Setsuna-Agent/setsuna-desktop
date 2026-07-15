@@ -39,83 +39,47 @@
   display: none;
 }
 
+.desktop-browser-tabs-host,
 .desktop-browser-tabs {
-  display: flex;
-  flex: 0 0 36px;
-  align-items: end;
-  gap: 3px;
-  min-width: 0;
-  padding: 5px 8px 0;
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-  background: var(--app-surface-subtle);
-  overflow: hidden;
-}
-
-.desktop-browser-tab {
-  display: flex;
-  flex: 0 1 180px;
+  display: inline-flex;
   align-items: center;
+  min-width: 0;
+  height: 28px;
+}
+
+.desktop-browser-tabs-host {
+  flex: 0 0 auto;
+}
+
+.desktop-browser-tabs {
   gap: 6px;
-  min-width: 74px;
-  max-width: 210px;
-  height: 30px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px 8px 0 0;
-  color: var(--app-text-muted);
-  background: transparent;
-  font-size: 11px;
-  text-align: left;
 }
 
-.desktop-browser-tab:hover {
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.desktop-browser-tab.is-active {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-active-bg);
+.desktop-panel-chrome .desktop-browser-tab {
+  flex: 0 1 150px;
 }
 
 .desktop-browser-tab__select {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
   text-align: left;
 }
 
-.desktop-browser-tab__select span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.desktop-browser-tab__favicon {
+  display: inline-flex;
+  flex: 0 0 14px;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
 }
 
-.desktop-browser-tab__close {
-  display: inline-grid;
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  color: inherit;
-  background: transparent;
+.desktop-browser-tab__favicon img {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  object-fit: contain;
 }
 
-.desktop-browser-tab__close:hover {
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.desktop-browser-tabs__add,
 .desktop-browser-navigation > button {
   display: inline-grid;
   flex: 0 0 28px;
@@ -129,11 +93,6 @@
   background: transparent;
 }
 
-.desktop-browser-tabs__add {
-  align-self: center;
-}
-
-.desktop-browser-tabs__add:hover,
 .desktop-browser-navigation > button:not(:disabled):hover {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);

@@ -1,5 +1,29 @@
-import { describe, expect, it } from 'vitest';
-import { panelDragPreviewPosition, panelLauncherMenuPosition } from './DesktopPanelHeader.js';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import { DesktopPanelHeader, panelDragPreviewPosition, panelLauncherMenuPosition } from './DesktopPanelHeader.js';
+
+describe('DesktopPanelHeader browser tab slot', () => {
+  it('replaces the active browser panel tab with the browser tabs host', () => {
+    const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
+      activePanel: 'browser',
+      activePanelId: 'browser',
+      onClose: vi.fn(),
+      onClosePanel: vi.fn(),
+      onSelectPanel: vi.fn(),
+      panels: [
+        { id: 'review', type: 'review' },
+        { id: 'browser', type: 'browser' },
+      ],
+      placement: 'side',
+    }));
+
+    expect(html).toContain('class="desktop-browser-tabs-host"');
+    expect(html).toContain('data-desktop-panel-tab-id="browser"');
+    expect(html).not.toContain('title="浏览器"');
+    expect(html).toContain('title="审查"');
+  });
+});
 
 describe('DesktopPanelHeader launcher menu positioning', () => {
   it('opens the menu to the right from the launcher', () => {

@@ -7,6 +7,7 @@ import '@fontsource/geist-mono/400.css';
 import 'antd/dist/reset.css';
 import 'katex/dist/katex.min.css';
 import { App } from './App.js';
+import { BrowserTabsHeaderPortalProvider } from './components/workspace/BrowserTabsHeaderPortal.js';
 import { initializeAccentColorPreference } from './hooks/useAccentColorPreference.js';
 import { initializeAppearancePreference } from './hooks/useAppearancePreferences.js';
 import { initializeCodeAppearancePreference } from './hooks/useCodeAppearancePreferences.js';
@@ -40,6 +41,8 @@ initializeSidebarOpacityPreference();
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <BrowserTabsHeaderPortalProvider>
+      <App />
+    </BrowserTabsHeaderPortalProvider>
   </React.StrictMode>
 );
