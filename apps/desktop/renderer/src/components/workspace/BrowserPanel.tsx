@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RefreshCw, X } from 'lucide-react';
 import type { DidFailLoadEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
+import { BrowserAddressBar } from './BrowserAddressBar.js';
 import { BrowserTabStrip } from './BrowserTabStrip.js';
-import { useBrowserTabsHeaderPortal } from './BrowserTabsHeaderPortal.js';
+import { useBrowserTabCommands, useBrowserTabsHeaderPortal } from './BrowserTabsHeaderPortal.js';
+import { BrowserWindowMenu } from './BrowserWindowMenu.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
@@ -24,6 +26,7 @@ type BrowserTab = {
   loading: boolean;
   title: string;
   url: string;
+  zoomFactor: number;
 };
 
 export function BrowserPanel({
@@ -47,6 +50,7 @@ export function BrowserPanel({
   const handledOpenRequestIdRef = useRef(openRequest?.id ?? null);
   const webviewsRef = useRef<Map<string, WebviewTag>>(new Map());
   const { host: tabsHeaderHost } = useBrowserTabsHeaderPortal();
+  const { registerNewTabHandler } = useBrowserTabCommands();
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createBrowserTab(1, openRequest?.url)]);
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id ?? '');
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
@@ -61,6 +65,8 @@ export function BrowserPanel({
     setTabs((current) => [...current, tab]);
     setActiveTabId(tab.id);
   }, []);
+
+  useEffect(() => registerNewTabHandler(openTab), [openTab, registerNewTabHandler]);
 
   useEffect(() => {
     void window.setsunaDesktop?.browser.setActiveTab(activeTab?.id ?? null);
@@ -91,8 +97,7 @@ export function BrowserPanel({
 
   const selectTab = useCallback((tabId: string) => setActiveTabId(tabId), []);
 
-  const navigate = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const navigate = () => {
     if (!activeTab) return;
     const url = normalizeBrowserInput(activeTab.draftUrl);
     const webview = webviewsRef.current.get(activeTab.id);
@@ -127,6 +132,44 @@ export function BrowserPanel({
     else webview.reload();
   };
 
+  const printActivePage = () => {
+    if (!activeTab) return;
+    const webview = webviewsRef.current.get(activeTab.id);
+    if (!webview) return;
+    try {
+      void webview.print().catch(() => undefined);
+    } catch {
+      // The guest may detach between opening the menu and choosing print.
+    }
+  };
+
+  const openActivePageDevTools = () => {
+    if (!activeTab) return;
+    try {
+      webviewsRef.current.get(activeTab.id)?.openDevTools();
+    } catch {
+      // Ignore a guest that detached while its menu was open.
+    }
+  };
+
+  const changeActivePageZoom = (direction: BrowserZoomDirection) => {
+    if (!activeTab) return;
+    const webview = webviewsRef.current.get(activeTab.id);
+    let currentZoomFactor = activeTab.zoomFactor;
+    try {
+      currentZoomFactor = webview?.getZoomFactor() ?? currentZoomFactor;
+    } catch {
+      // Retain the tab's last known zoom if the guest is no longer attached.
+    }
+    const nextZoomFactor = nextBrowserZoomFactor(currentZoomFactor, direction);
+    try {
+      webview?.setZoomFactor(nextZoomFactor);
+    } catch {
+      // State still tracks the requested value for the next attached guest.
+    }
+    updateTab(activeTab.id, { zoomFactor: nextZoomFactor });
+  };
+
   return (
     <>
       {tabsHeaderHost
@@ -134,7 +177,6 @@ export function BrowserPanel({
             <BrowserTabStrip
               activeTabId={activeTabId}
               tabs={tabs}
-              onAddTab={openTab}
               onCloseTab={closeTab}
               onSelectTab={selectTab}
             />,
@@ -144,32 +186,34 @@ export function BrowserPanel({
       <aside className="desktop-workspace-panel desktop-browser-panel" aria-label="浏览器" hidden={hidden}>
         <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
         <div className="desktop-browser-navigation">
-          <button type="button" disabled={!activeTab?.canGoBack} aria-label="后退" onClick={() => navigateHistory('back')}>
+          <button className="desktop-browser-navigation__button" type="button" disabled={!activeTab?.canGoBack} aria-label="后退" onClick={() => navigateHistory('back')}>
             <ArrowLeft size={14} />
           </button>
-          <button type="button" disabled={!activeTab?.canGoForward} aria-label="前进" onClick={() => navigateHistory('forward')}>
+          <button className="desktop-browser-navigation__button" type="button" disabled={!activeTab?.canGoForward} aria-label="前进" onClick={() => navigateHistory('forward')}>
             <ArrowRight size={14} />
           </button>
-          <button type="button" aria-label={activeTab?.loading ? '停止加载' : '刷新'} onClick={reload}>
+          <button className="desktop-browser-navigation__button" type="button" aria-label={activeTab?.loading ? '停止加载' : '刷新'} onClick={reload}>
             {activeTab?.loading ? <X size={13} /> : <RefreshCw size={13} />}
           </button>
-          <form onSubmit={navigate}>
-            <input
-              aria-label="网址或搜索内容"
-              value={activeTab?.draftUrl ?? ''}
-              spellCheck={false}
-              onChange={(event) => activeTab && updateTab(activeTab.id, { draftUrl: event.currentTarget.value })}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-          </form>
-          <button
-            type="button"
-            aria-label="在系统浏览器中打开"
-            disabled={!activeTab?.url}
-            onClick={() => activeTab?.url && void window.setsunaDesktop?.links.openExternal(activeTab.url)}
-          >
-            <ExternalLink size={13} />
-          </button>
+          <BrowserAddressBar
+            externalUrl={activeTab?.url ?? null}
+            value={activeTab?.draftUrl ?? ''}
+            onChange={(value) => activeTab && updateTab(activeTab.id, { draftUrl: value })}
+            onNavigate={navigate}
+            onOpenExternal={(url) => void window.setsunaDesktop?.links.openExternal(url)}
+          />
+          <BrowserWindowMenu
+            disabled={!activeTab}
+            key={activeTab?.id ?? 'browser-menu'}
+            loading={Boolean(activeTab?.loading)}
+            zoomFactor={activeTab?.zoomFactor ?? 1}
+            onOpenDevTools={openActivePageDevTools}
+            onPrint={printActivePage}
+            onReload={reload}
+            onZoomIn={() => changeActivePageZoom('in')}
+            onZoomOut={() => changeActivePageZoom('out')}
+            onZoomReset={() => changeActivePageZoom('reset')}
+          />
         </div>
         <div className="desktop-browser-content">
           {tabs.map((tab) => (
@@ -214,6 +258,7 @@ function BrowserWebview({
         canGoForward: node.canGoForward(),
         draftUrl: url,
         url,
+        zoomFactor: node.getZoomFactor(),
       });
     };
     const handleStart = () => onUpdate(tab.id, { faviconUrl: null, loading: true, error: null });
@@ -296,7 +341,22 @@ function createBrowserTab(sequence: number, url = browserHomeUrl): BrowserTab {
     loading: true,
     title: '新标签页',
     url,
+    zoomFactor: 1,
   };
+}
+
+const browserZoomFactors = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
+
+export type BrowserZoomDirection = 'in' | 'out' | 'reset';
+
+export function nextBrowserZoomFactor(current: number, direction: BrowserZoomDirection): number {
+  if (direction === 'reset') return 1;
+  if (direction === 'in') return browserZoomFactors.find((factor) => factor > current + 0.001) ?? browserZoomFactors.at(-1)!;
+  for (let index = browserZoomFactors.length - 1; index >= 0; index -= 1) {
+    const factor = browserZoomFactors[index];
+    if (factor < current - 0.001) return factor;
+  }
+  return browserZoomFactors[0];
 }
 
 const maxBrowserFaviconUrlLength = 512_000;

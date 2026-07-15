@@ -23,6 +23,22 @@ describe('DesktopPanelHeader browser tab slot', () => {
     expect(html).not.toContain('title="浏览器"');
     expect(html).toContain('title="审查"');
   });
+
+  it('keeps the shared panel launcher when a browser panel already exists', () => {
+    const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
+      activePanel: 'browser',
+      activePanelId: 'browser',
+      availablePanelTypes: ['browser'],
+      onClose: vi.fn(),
+      onClosePanel: vi.fn(),
+      onOpenPanel: vi.fn(),
+      onSelectPanel: vi.fn(),
+      panels: [{ id: 'browser', type: 'browser' }],
+      placement: 'side',
+    }));
+
+    expect(html).toContain('aria-label="添加面板"');
+  });
 });
 
 describe('DesktopPanelHeader launcher menu positioning', () => {

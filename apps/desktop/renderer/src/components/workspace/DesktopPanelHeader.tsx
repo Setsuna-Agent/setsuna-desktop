@@ -82,12 +82,10 @@ export function DesktopPanelHeader({
   const availableTypeSet = new Set(availablePanelTypes || panelLauncherItems.map((item) => item.key));
   const hasReviewPanel = tabPanels.some((panel) => panel.type === 'review');
   const hasFilesPanel = tabPanels.some((panel) => panel.type === 'files');
-  const hasBrowserPanel = tabPanels.some((panel) => panel.type === 'browser');
   const launcherItems = panelLauncherItems.filter(
     (item) => availableTypeSet.has(item.key)
       && (item.key !== 'review' || !hasReviewPanel)
-      && (item.key !== 'files' || !hasFilesPanel)
-      && (item.key !== 'browser' || !hasBrowserPanel),
+      && (item.key !== 'files' || !hasFilesPanel),
   );
   const sortable = Boolean(onReorderPanels && tabPanels.length > 1);
   const draggedPanelId = dragOverlay?.panel.id ?? null;

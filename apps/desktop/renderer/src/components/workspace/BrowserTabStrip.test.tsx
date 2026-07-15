@@ -11,7 +11,6 @@ describe('BrowserTabStrip', () => {
           { faviconUrl: 'https://example.com/favicon.ico', id: 'browser-tab-1', loading: false, title: 'Setsuna' },
           { faviconUrl: null, id: 'browser-tab-2', loading: true, title: '文档' },
         ]}
-        onAddTab={vi.fn()}
         onCloseTab={vi.fn()}
         onSelectTab={vi.fn()}
       />,
@@ -25,6 +24,6 @@ describe('BrowserTabStrip', () => {
     expect(html).toContain('aria-selected="true"');
     expect(html).toContain('tabindex="0"');
     expect(html).toContain('aria-label="关闭文档"');
-    expect(html).toContain('aria-label="新建浏览器标签页"');
+    expect(html).not.toContain('aria-label="新建浏览器标签页"');
   });
 });

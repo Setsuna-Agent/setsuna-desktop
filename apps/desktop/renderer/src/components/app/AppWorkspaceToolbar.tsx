@@ -1,5 +1,6 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { PanelRight, Terminal } from 'lucide-react';
+import { useBrowserTabCommands } from '../workspace/BrowserTabsHeaderPortal.js';
 import { WorkspaceTopbar } from '../workspace/WorkspaceTopbar.js';
 import type { DesktopWorkspacePanelsState } from '../../hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
@@ -14,6 +15,7 @@ export function AppWorkspaceToolbar({
   projectWorkspace: ProjectWorkspaceState;
   workspacePanels: DesktopWorkspacePanelsState;
 }) {
+  const { requestNewTab } = useBrowserTabCommands();
   if (!workspacePanels.sidePanelVisible) return null;
 
   const sidePanels = workspacePanels.sidePanelSlot.panels;
@@ -30,7 +32,7 @@ export function AppWorkspaceToolbar({
 
   const sideAvailablePanelTypes = [
     'chat',
-    !sidePanels.some((panel) => panel.type === 'browser') ? 'browser' : null,
+    'browser',
     activeProject && !sidePanels.some((panel) => panel.type === 'review') ? 'review' : null,
     activeProject?.path && !sidePanels.some((panel) => panel.type === 'files') ? 'files' : null,
     'terminal',
@@ -45,6 +47,7 @@ export function AppWorkspaceToolbar({
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
       onOpenBrowser={() => {
         workspacePanels.closeWorkspaceMenus();
+        if (sidePanels.some((panel) => panel.type === 'browser')) requestNewTab();
         workspacePanels.openDesktopPanel('side', 'browser');
       }}
       onOpenFilesPanel={() => {

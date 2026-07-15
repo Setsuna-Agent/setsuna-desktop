@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { BrowserPanel, normalizeBrowserInput, resolveBrowserFaviconUrl } from './BrowserPanel.js';
+import { BrowserPanel, nextBrowserZoomFactor, normalizeBrowserInput, resolveBrowserFaviconUrl } from './BrowserPanel.js';
 
 describe('normalizeBrowserInput', () => {
   it('keeps absolute web URLs', () => {
@@ -32,6 +32,16 @@ describe('resolveBrowserFaviconUrl', () => {
   });
 });
 
+describe('nextBrowserZoomFactor', () => {
+  it('moves between bounded browser zoom steps', () => {
+    expect(nextBrowserZoomFactor(1, 'in')).toBe(1.1);
+    expect(nextBrowserZoomFactor(1, 'out')).toBe(0.9);
+    expect(nextBrowserZoomFactor(3, 'in')).toBe(3);
+    expect(nextBrowserZoomFactor(0.5, 'out')).toBe(0.5);
+    expect(nextBrowserZoomFactor(1.75, 'reset')).toBe(1);
+  });
+});
+
 describe('BrowserPanel', () => {
   it('allows popup requests so main can route them into internal tabs', () => {
     const html = renderToStaticMarkup(createElement(BrowserPanel, {
@@ -45,6 +55,12 @@ describe('BrowserPanel', () => {
 
     expect(html).toContain('allowpopups="true"');
     expect(html).not.toContain('desktop-browser-tabs');
+    expect(html).toContain('desktop-browser-address-bar__external');
+    expect(html).toContain('aria-label="浏览器菜单"');
+    expect(html).toContain('aria-label="浏览器窗口设置"');
+    expect(html).toContain('打印页面');
+    expect(html).toContain('100%');
+    expect(html).toContain('打开开发者工具');
   });
 
   it('uses an AI browser request as the initial tab URL', () => {

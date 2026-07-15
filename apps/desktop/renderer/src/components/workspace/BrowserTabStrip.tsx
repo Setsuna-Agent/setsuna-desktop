@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import { Plus } from 'lucide-react';
 import { BrowserFavicon } from './BrowserFavicon.js';
 
 export type BrowserTabHeaderItem = {
@@ -11,13 +10,11 @@ export type BrowserTabHeaderItem = {
 
 export const BrowserTabStrip = memo(function BrowserTabStrip({
   activeTabId,
-  onAddTab,
   onCloseTab,
   onSelectTab,
   tabs,
 }: {
   activeTabId: string;
-  onAddTab: () => void;
   onCloseTab: (tabId: string) => void;
   onSelectTab: (tabId: string) => void;
   tabs: readonly BrowserTabHeaderItem[];
@@ -64,15 +61,6 @@ export const BrowserTabStrip = memo(function BrowserTabStrip({
           </span>
         );
       })}
-      <button
-        aria-label="新建浏览器标签页"
-        className="chat-file-review-panel__heading-action desktop-browser-tabs__add"
-        title="新建标签页"
-        type="button"
-        onClick={() => onAddTab()}
-      >
-        <Plus size={14} />
-      </button>
     </span>
   );
 });
