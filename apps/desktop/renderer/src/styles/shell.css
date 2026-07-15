@@ -90,24 +90,37 @@
   stroke-width: 2;
 }
 
-/* Shell icon controls keep the same geometry and interaction in open and collapsed layouts. */
-.app-topbar .sd-icon-button.app-shell-icon-control {
+/* Shell icon controls keep one geometry and interaction model across toolbars and panels. */
+.app-shell-icon-control,
+.sd-icon-button.app-shell-icon-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   width: 28px;
   min-width: 28px;
   height: 28px;
   padding: 0;
-  border-color: transparent;
+  border: 0;
   border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: transparent;
 }
 
-.app-topbar .sd-icon-button.app-shell-icon-control:hover:not(:disabled),
-.app-topbar .sd-icon-button.app-shell-icon-control:active:not(:disabled),
-.app-topbar .sd-icon-button.app-shell-icon-control.is-active {
-  border-color: transparent;
+.app-shell-icon-control:hover:not(:disabled),
+.app-shell-icon-control:active:not(:disabled),
+.app-shell-icon-control.is-active,
+.sd-icon-button.app-shell-icon-control:hover:not(:disabled),
+.sd-icon-button.app-shell-icon-control:active:not(:disabled),
+.sd-icon-button.app-shell-icon-control.is-active {
+  border: 0;
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.app-shell-icon-control:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
 }
 
 .app-topbar__drag {

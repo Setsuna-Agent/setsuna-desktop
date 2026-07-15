@@ -1,0 +1,57 @@
+[data-file-icon-theme='seti'] {
+  --workspace-file-icon-color: var(--file-icon-seti-white);
+
+  color: var(--workspace-file-icon-color);
+  line-height: 1;
+}
+
+[data-file-icon-theme='seti'] > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: var(--workspace-file-icon-color);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='blue'] {
+  --workspace-file-icon-color: var(--file-icon-seti-blue);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='grey'] {
+  --workspace-file-icon-color: var(--file-icon-seti-grey);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='grey-light'] {
+  --workspace-file-icon-color: var(--file-icon-seti-grey-light);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='green'] {
+  --workspace-file-icon-color: var(--file-icon-seti-green);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='orange'] {
+  --workspace-file-icon-color: var(--file-icon-seti-orange);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='pink'] {
+  --workspace-file-icon-color: var(--file-icon-seti-pink);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='purple'] {
+  --workspace-file-icon-color: var(--file-icon-seti-purple);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='red'] {
+  --workspace-file-icon-color: var(--file-icon-seti-red);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='white'] {
+  --workspace-file-icon-color: var(--file-icon-seti-white);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='yellow'] {
+  --workspace-file-icon-color: var(--file-icon-seti-yellow);
+}
+
+[data-file-icon-theme='seti'][data-file-icon-color='ignore'] {
+  --workspace-file-icon-color: var(--file-icon-seti-ignore);
+}

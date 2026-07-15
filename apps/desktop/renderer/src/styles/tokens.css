@@ -43,6 +43,17 @@
   --app-danger-bg: #fef2f2;
   --app-success: #16833a;
   --app-warning: #9a5b00;
+  --file-icon-seti-blue: #519aba;
+  --file-icon-seti-grey: #4d5a5e;
+  --file-icon-seti-grey-light: #6d8086;
+  --file-icon-seti-green: #8dc149;
+  --file-icon-seti-orange: #e37933;
+  --file-icon-seti-pink: #f55385;
+  --file-icon-seti-purple: #a074c4;
+  --file-icon-seti-red: #cc3e44;
+  --file-icon-seti-white: #6d8086;
+  --file-icon-seti-yellow: #a18f24;
+  --file-icon-seti-ignore: #899599;
   --app-radius-xs: 5px;
   --app-radius-sm: 6px;
   --app-radius-md: 8px;
@@ -163,6 +174,9 @@
   --app-danger-bg: rgba(248, 113, 113, 0.11);
   --app-success: #62c779;
   --app-warning: #facc15;
+  --file-icon-seti-white: #d4d7d6;
+  --file-icon-seti-yellow: #cbcb41;
+  --file-icon-seti-ignore: #41535b;
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-main-bg: var(--app-bg);

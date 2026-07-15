@@ -226,9 +226,6 @@ export function AppRouteContent({
       onEditUserMessage={(messageId, content) => chatActions.editUserMessage(messageId, content)}
       onExternalOpenFile={(filePath, line) => void workspacePanels.openFileInWorkspaceApp(filePath, line)}
       onSelectModel={(providerId, modelId) => void runtime.selectProviderModel(providerId, modelId)}
-      onGoRoot={() => {
-        projectWorkspace.setFilePreview(null);
-      }}
       onSearchProjectEntries={projectWorkspace.searchProjectEntries}
       onOpenBottomReviewPanel={() => {
         workspacePanels.openDesktopPanel('bottom', 'review');

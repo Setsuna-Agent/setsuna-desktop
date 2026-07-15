@@ -1,11 +1,7 @@
 import { Code2, FileText, FolderOpen, Globe2, MessageSquare, PanelRight, Terminal } from 'lucide-react';
-import { addCollection, Icon } from '@iconify/react';
-import { icons as vscodeIcons } from '@iconify-json/vscode-icons';
-import { getIconForFile } from 'vscode-icons-js';
 import { fileName, type DesktopPanelTab, type DesktopPanelType, type DesktopWorkspaceApp } from './model.js';
+import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import { workspaceAppIconAssets } from './workspaceAppIcons.js';
-
-addCollection(vscodeIcons);
 
 export function desktopPanelTitle(panel: DesktopPanelTab): string {
   if (panel.title) return panel.title;
@@ -20,26 +16,15 @@ export function desktopPanelTitle(panel: DesktopPanelTab): string {
 
 export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; type?: DesktopPanelType }) {
   const panelType = panel?.type ?? type;
-  if (panel?.type === 'file') return <FileTabIcon filePath={panel.filePath ?? panel.title} />;
+  if (panel?.type === 'file') {
+    return <WorkspaceFileIcon className="chat-file-review-panel__tab-file-icon" path={panel.filePath ?? panel.title ?? ''} type="file" />;
+  }
   if (panelType === 'overview') return <PanelRight size={14} />;
   if (panelType === 'chat') return <MessageSquare size={14} />;
   if (panelType === 'browser') return <Globe2 size={14} />;
   if (panelType === 'terminal') return <Terminal size={14} />;
   if (panelType === 'review' || panelType === 'file') return <FileText size={14} />;
   return <FolderOpen size={14} />;
-}
-
-function FileTabIcon({ filePath }: { filePath?: string | null }) {
-  return (
-    <span className="chat-file-review-panel__tab-file-icon" aria-hidden="true">
-      <Icon icon={iconifyNameFromVscodeIcon(getIconForFile(fileName(filePath ?? '')))} />
-    </span>
-  );
-}
-
-function iconifyNameFromVscodeIcon(iconFile?: string | null): string {
-  const iconName = String(iconFile || '').replace(/\.svg$/i, '').replace(/_/g, '-');
-  return `vscode-icons:${iconName || 'default-file'}`;
 }
 
 export function WorkspaceAppGlyph({ app }: { app: DesktopWorkspaceApp | null }) {

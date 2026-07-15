@@ -8,8 +8,6 @@ importers:
       '@ant-design/x': ^2.5.0
       '@fontsource/geist-mono': ^5.2.8
       '@fontsource/geist-sans': ^5.2.5
-      '@iconify-json/vscode-icons': ^1.2.61
-      '@iconify/react': ^6.0.2
       '@setsuna-desktop/contracts': workspace:*
       '@types/node': ^22.10.2
       '@types/react': ^18.3.17
@@ -38,19 +36,17 @@ importers:
       remark-math: ^6.0.0
       remend: ^1.3.0
       rimraf: ^6.0.1
+      seti-file-icons: ^0.0.8
       tsx: ^4.19.2
       typescript: ^5.7.2
       vite: ^6.0.5
       vitest: ^2.1.8
-      vscode-icons-js: ^11.6.1
       wait-on: ^8.0.1
     dependencies:
       '@ant-design/icons': 6.2.5_nnrd3gsncyragczmpvfhocinkq
       '@ant-design/x': 2.5.0_wpkvtqnfjyo5goo4nceepuewmu
       '@fontsource/geist-mono': 5.2.8
       '@fontsource/geist-sans': 5.2.5
-      '@iconify-json/vscode-icons': 1.2.61
-      '@iconify/react': 6.0.2_react@18.3.1
       '@setsuna-desktop/contracts': link:packages/contracts
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
@@ -67,7 +63,7 @@ importers:
       remark-gfm: 4.0.1
       remark-math: 6.0.0
       remend: 1.3.0
-      vscode-icons-js: 11.6.1
+      seti-file-icons: 0.0.8
     devDependencies:
       '@types/node': 22.20.0
       '@types/react': 18.3.31
@@ -1606,21 +1602,6 @@ packages:
     engines: {node: '>=18.18'}
     dev: true
 
-  /@iconify-json/vscode-icons/1.2.61:
-    resolution: {integrity: sha512-UIXY/NurvgMQxOA2EpgKVPW3z6vVHG0ww6aODtttxhXVU4vTLuwRR2WqHoNlmpYK6cAWUlXO9Ey7zgrG1OcIhg==}
-    dependencies:
-      '@iconify/types': 2.0.0
-    dev: false
-
-  /@iconify/react/6.0.2_react@18.3.1:
-    resolution: {integrity: sha512-SMmC2sactfpJD427WJEDN6PMyznTFMhByK9yLW0gOTtnjzzbsi/Ke/XqsumsavFPwNiXs8jSiYeZTmLCLwO+Fg==}
-    peerDependencies:
-      react: '>=16'
-    dependencies:
-      '@iconify/types': 2.0.0
-      react: 18.3.1
-    dev: false
-
   /@iconify/types/2.0.0:
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
     dev: false
@@ -2796,10 +2777,6 @@ packages:
   /@types/http-cache-semantics/4.2.0:
     resolution: {integrity: sha512-L3LgimLHXtGkWikKnsPg0/VFx9OGZaC+eN1u4r+OB1XRqH3meBIAVC2zr1WdMH+RHmnRkqliQAOHNJ/E0j/e0Q==}
     dev: true
-
-  /@types/jasmine/3.10.19:
-    resolution: {integrity: sha512-Bz6P2XoeIN13AhvVe0nS7+m2RfxVllETDjFQ/s6lyEwEfIVpPCc1Q8vPdFopFAOU5mzrU1zypXJ1xGDl5EVU9Q==}
-    dev: false
 
   /@types/json-schema/7.0.15:
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
@@ -7060,6 +7037,10 @@ packages:
     resolution: {integrity: sha512-KiKBS8AnWGEyLzofFfmvKwpdPzqiy16LvQfK3yv/fVH7Bj13/wl3JSR1J+rfgRE9q7xUJK4qvgS8raSOeLUehw==}
     dev: true
 
+  /seti-file-icons/0.0.8:
+    resolution: {integrity: sha512-HIK9HMkfhmwCZYeyQFuCAGYdwaK5/tmZBVnQmbGXx9orT2bD0xbKqvJR7q6NmsTbgtLNwBwa+PYnTzUvdExuDQ==}
+    dev: false
+
   /shebang-command/2.0.0:
     resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
     engines: {node: '>=8'}
@@ -7737,12 +7718,6 @@ packages:
       - supports-color
       - terser
     dev: true
-
-  /vscode-icons-js/11.6.1:
-    resolution: {integrity: sha512-rht18IFYv117UlqBn6o9j258SOtwhDBmtVrGwdoLPpSj6Z5LKQIzarQDd/tCRWneU68KEX25+nsh48tAoknKNw==}
-    dependencies:
-      '@types/jasmine': 3.10.19
-    dev: false
 
   /wait-on/8.0.5:
     resolution: {integrity: sha512-J3WlS0txVHkhLRb2FsmRg3dkMTCV1+M6Xra3Ho7HzZDHpE7DCOnoSoCJsZotrmW3uRMhvIJGSKUKrh/MeF4iag==}

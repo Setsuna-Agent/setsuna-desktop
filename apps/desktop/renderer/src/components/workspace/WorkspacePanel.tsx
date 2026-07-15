@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import { createPortal } from 'react-dom';
 import { ChevronDown, Code2, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
 import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceEntrySearchResponse, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
-import { EmptyState } from '../primitives.js';
+import { EmptyState, IconButton } from '../primitives.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { desktopPanelTitle } from './PanelChrome.js';
@@ -11,6 +11,8 @@ import { TerminalPane } from './TerminalPane.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import type { DesktopDiffSummary, DesktopPanelTab, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp, ProjectTreeNode } from './model.js';
+
+const FILE_TREE_INDENT_STEP_PX = 8;
 
 export function WorkspacePanel({
   activePanel,
@@ -33,7 +35,6 @@ export function WorkspacePanel({
   onOpenReviewPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
-  onGoRoot,
   onReviewRefresh,
   onResizeStep,
   onResizeStart,
@@ -61,7 +62,6 @@ export function WorkspacePanel({
   onOpenReviewPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
-  onGoRoot: () => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -222,7 +222,7 @@ export function WorkspacePanel({
     const selected = filePreview?.path === node.path;
     return (
       <div className="desktop-file-tree-node" key={node.path}>
-        <div className={`desktop-file-row-shell ${selected ? 'is-active' : ''}`} style={{ '--desktop-file-tree-indent': `${level * 14}px` } as CSSProperties}>
+        <div className={`desktop-file-row-shell ${selected ? 'is-active' : ''}`} style={{ '--desktop-file-tree-indent': `${level * FILE_TREE_INDENT_STEP_PX}px` } as CSSProperties}>
           <button
             className={`desktop-file-row desktop-file-row--${node.type}`}
             type="button"
@@ -235,7 +235,7 @@ export function WorkspacePanel({
             onClick={() => (directory ? toggleDirectory(node.path) : onOpenEntry(node.entry))}
           >
             {directory ? <ChevronDown className={expanded ? '' : 'is-collapsed'} size={12} /> : <span className="desktop-file-row__spacer" />}
-            <WorkspaceFileIcon expanded={expanded} path={node.path} type={node.type} />
+            <WorkspaceFileIcon path={node.path} type={node.type} />
             <span title={node.path}>{node.name}</span>
             {loading ? <span className="desktop-file-row__loading">...</span> : null}
           </button>
@@ -280,16 +280,14 @@ export function WorkspacePanel({
             <span>{activeProject?.name ?? 'No project'}</span>
             {filePreview ? <span>{filePreview.path}</span> : null}
           </span>
-          <button
-            className={`desktop-editor__tree-toggle ${treeVisible ? 'is-active' : ''}`}
-            type="button"
-            aria-label={treeVisible ? '收起文件目录' : '展开文件目录'}
+          <IconButton
+            className="app-shell-icon-control desktop-editor__tree-toggle"
+            label={treeVisible ? '收起文件目录' : '展开文件目录'}
             aria-pressed={treeVisible}
-            title={treeVisible ? '收起文件目录' : '展开文件目录'}
             onClick={() => setTreeVisible((current) => !current)}
           >
-            {treeVisible ? <FolderOpen size={14} /> : <Folder size={14} />}
-          </button>
+            {treeVisible ? <FolderOpen size={16} /> : <Folder size={16} />}
+          </IconButton>
         </div>
         {filePreview ? (
           <CodeEditorPreview file={filePreview} onOpenLine={selectedWorkspaceApp ? (line) => onExternalOpenFile(filePreview.path, line) : undefined} openApp={selectedWorkspaceApp} />
@@ -359,31 +357,22 @@ export function WorkspacePanel({
                   />
                 </div>
                 {activeProject ? (
-                  <>
-                    <div className="desktop-file-explorer__project">
-                      <button type="button" onClick={onGoRoot}>
-                        <ChevronDown size={13} />
-                        <WorkspaceFileIcon expanded path={activeProject.name} type="directory" />
-                        <span>{activeProject.name}</span>
-                      </button>
-                    </div>
-                    <div className="desktop-file-list">
-                      {treeSearching ? <div className="desktop-file-tree__empty">正在搜索...</div> : null}
-                      {treeError ? <div className="desktop-file-tree__empty">{treeError}</div> : null}
-                      {!treeSearching && !treeError && tree.length ? (
-                        tree.map((node) => renderTreeNode(node))
-                      ) : !treeSearching && !treeError && query ? (
-                        <div className="desktop-file-tree__empty">暂无匹配文件</div>
-                      ) : !treeSearching && !treeError ? (
-                        <EmptyState title="暂无文件" />
-                      ) : null}
-                      {!treeSearching && !treeError && treeTruncated ? (
-                        <div className="desktop-file-tree__empty">
-                          {query ? '匹配结果已达到上限，请缩小筛选范围。' : '目录内容过多，仅显示已扫描部分。'}
-                        </div>
-                      ) : null}
-                    </div>
-                  </>
+                  <div className="desktop-file-list">
+                    {treeSearching ? <div className="desktop-file-tree__empty">正在搜索...</div> : null}
+                    {treeError ? <div className="desktop-file-tree__empty">{treeError}</div> : null}
+                    {!treeSearching && !treeError && tree.length ? (
+                      tree.map((node) => renderTreeNode(node))
+                    ) : !treeSearching && !treeError && query ? (
+                      <div className="desktop-file-tree__empty">暂无匹配文件</div>
+                    ) : !treeSearching && !treeError ? (
+                      <EmptyState title="暂无文件" />
+                    ) : null}
+                    {!treeSearching && !treeError && treeTruncated ? (
+                      <div className="desktop-file-tree__empty">
+                        {query ? '匹配结果已达到上限，请缩小筛选范围。' : '目录内容过多，仅显示已扫描部分。'}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : (
                   <EmptyState title="未选择项目" body="先在左侧添加项目目录。" />
                 )}

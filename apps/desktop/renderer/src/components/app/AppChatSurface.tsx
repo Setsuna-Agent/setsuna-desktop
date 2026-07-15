@@ -82,7 +82,6 @@ export function AppChatSurface({
   onEditUserMessage,
   onExternalOpenFile,
   onSelectModel,
-  onGoRoot,
   onSearchProjectEntries,
   onOpenBottomReviewPanel,
   onOpenBottomTerminalPanel,
@@ -159,7 +158,6 @@ export function AppChatSurface({
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
-  onGoRoot: () => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
@@ -297,7 +295,6 @@ export function AppChatSurface({
           onSearchProjectEntries={onSearchProjectEntries}
           onOpenEntry={onOpenEntry}
           onOpenProjectFile={onOpenProjectFile}
-          onGoRoot={onGoRoot}
           onOpenFilesPanel={onOpenFilesPanel}
           onOpenBrowser={onOpenBrowser}
           onOpenReviewPanel={onOpenFileReviewPanel}

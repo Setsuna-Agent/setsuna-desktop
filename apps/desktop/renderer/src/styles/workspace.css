@@ -596,7 +596,7 @@
   justify-content: space-between;
   gap: 6px;
   min-width: 0;
-  padding: 0 14px;
+  padding: 0 10px 0 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
   color: var(--app-text-muted);
   font-size: 12px;
@@ -623,28 +623,9 @@
   color: var(--app-text-subtle);
 }
 
-.desktop-editor__tree-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: transparent;
-}
-
-.desktop-editor__tree-toggle:hover {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.desktop-editor__tree-toggle.is-active {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-active-bg);
+.desktop-editor__tree-toggle svg {
+  width: 16px;
+  height: 16px;
 }
 
 .desktop-code-editor {
@@ -1808,7 +1789,7 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   align-items: center;
   gap: 6px;
   height: 30px;
-  margin: 0 8px 4px;
+  margin: 4px 8px;
   padding: 0 9px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);
@@ -1824,45 +1805,6 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   color: var(--app-text);
   background: transparent;
   font-size: 12px;
-}
-
-.desktop-file-row:hover,
-.desktop-file-explorer__project button:hover {
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.desktop-file-explorer__project {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  min-width: 0;
-  padding: 0 8px;
-}
-
-.desktop-file-explorer__project button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 28px;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text);
-  background: transparent;
-  font-size: 12px;
-  text-align: left;
-}
-
-.desktop-file-explorer__project button:first-child {
-  padding: 0 6px;
-}
-
-.desktop-file-explorer__project span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-file-list {
@@ -1887,7 +1829,6 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   border-radius: var(--app-radius-sm);
 }
 
-.desktop-file-row-shell:hover,
 .desktop-file-row-shell:hover {
   background: var(--desktop-agent-control-hover-bg);
 }
@@ -1914,6 +1855,10 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
   background: transparent;
   font-size: 12px;
   text-align: left;
+}
+
+.desktop-file-row--directory {
+  grid-template-columns: 14px minmax(0, 1fr);
 }
 
 .desktop-file-row .is-collapsed {

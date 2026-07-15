@@ -1,35 +1,35 @@
-import { addCollection, Icon } from '@iconify/react';
-import { icons as vscodeIcons } from '@iconify-json/vscode-icons';
-import { getIconForFile, getIconForFolder, getIconForOpenFolder } from 'vscode-icons-js';
+import { memo } from 'react';
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
+import { getIcon } from 'seti-file-icons';
 
-addCollection(vscodeIcons);
-
-export function WorkspaceFileIcon({
-  className = 'desktop-file-row__icon',
-  expanded = false,
-  path,
-  type,
-}: {
+type WorkspaceFileIconProps = {
   className?: string;
-  expanded?: boolean;
   path: string;
   type: WorkspaceEntry['type'];
-}) {
-  const name = fileName(path);
-  const icon = type === 'directory' ? (expanded ? getIconForOpenFolder(name) : getIconForFolder(name)) : getIconForFile(name);
-  return (
-    <span className={className} aria-hidden="true">
-      <Icon icon={iconifyNameFromVscodeIcon(icon)} />
-    </span>
-  );
-}
+};
 
-function iconifyNameFromVscodeIcon(iconFile?: string): string {
-  const iconName = String(iconFile || '').replace(/\.svg$/i, '').replace(/_/g, '-');
-  return `vscode-icons:${iconName || 'default-file'}`;
-}
+export const WorkspaceFileIcon = memo(function WorkspaceFileIcon({
+  className = 'desktop-file-row__icon',
+  path,
+  type,
+}: WorkspaceFileIconProps) {
+  if (type === 'directory') return null;
+
+  const icon = getIcon(fileName(path));
+  const svgMarkup = { __html: icon.svg };
+
+  return (
+    <span
+      className={className}
+      data-file-icon-theme="seti"
+      data-file-icon-color={icon.color}
+      aria-hidden="true"
+      // The filename only selects a bundled Seti asset; user-controlled text is never inserted into the SVG.
+      dangerouslySetInnerHTML={svgMarkup}
+    />
+  );
+});
 
 function fileName(path: string): string {
-  return path.split('/').filter(Boolean).at(-1) ?? path;
+  return path.split(/[\\/]/u).filter(Boolean).at(-1) ?? path;
 }
