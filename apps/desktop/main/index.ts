@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   nativeImage,
@@ -244,10 +245,22 @@ function registerRuntimeIpc(host: RuntimeHost): void {
 }
 
 function registerBrowserIpc(controller: DesktopBrowserController): void {
+  ipcMain.removeHandler('browser:capture-screenshot');
   ipcMain.removeHandler('browser:register-tab');
   ipcMain.removeHandler('browser:unregister-tab');
   ipcMain.removeHandler('browser:set-active-tab');
   ipcMain.removeHandler('browser:set-device-emulation');
+  ipcMain.handle('browser:capture-screenshot', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return null;
+    const screenshot = await controller.captureScreenshot(String(input?.tabId ?? ''));
+    if (!screenshot) return null;
+    const image = nativeImage.createFromDataURL(screenshot.dataUrl);
+    if (image.isEmpty()) return null;
+    // Clipboard is written before the renderer receives the screenshot, so every
+    // successful capture remains available even when it cannot become an attachment.
+    clipboard.writeImage(image);
+    return screenshot;
+  });
   ipcMain.handle('browser:register-tab', (event, input) => {
     const webContentsId = Number(input?.webContentsId);
     const tabId = String(input?.tabId ?? '');

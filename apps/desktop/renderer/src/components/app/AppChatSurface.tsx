@@ -33,6 +33,7 @@ import type {
   DesktopWorkspaceApp,
 } from '../workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../workspace/runtimeReviewSummary.js';
+import { useChatImageAttachmentRequest } from '../../hooks/useChatImageAttachmentRequest.js';
 import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
@@ -190,6 +191,11 @@ export function AppChatSurface({
   workspaceMinWidth: number;
   workspaceWidth: number;
 }) {
+  const {
+    imageAttachmentRequest,
+    requestImageAttachment,
+    resolveImageAttachmentRequest,
+  } = useChatImageAttachmentRequest();
   const latestReviewSummary = useMemo(
     () => latestDesktopReviewSummaryFromMessages(currentThread?.messages ?? []),
     [currentThread?.messages],
@@ -210,6 +216,7 @@ export function AppChatSurface({
           config={config}
           currentThread={currentThread}
           draft={draft}
+          imageAttachmentRequest={imageAttachmentRequest}
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           skillSelectionRequest={skillSelectionRequest}
@@ -237,6 +244,7 @@ export function AppChatSurface({
           onReviewRefresh={onReviewRefresh}
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
           onStartThreadReview={onStartThreadReview}
+          onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
           onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
         />
       </MarkdownNavigationProvider>
@@ -271,6 +279,7 @@ export function AppChatSurface({
           hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
           key={panel.id}
           openRequest={browserOpenRequest}
+          onScreenshotAttachment={requestImageAttachment}
           onResizeStep={onWorkspaceResizeStep}
           onResizeStart={onWorkspaceResizeStart}
           resizeMax={workspaceMaxWidth}

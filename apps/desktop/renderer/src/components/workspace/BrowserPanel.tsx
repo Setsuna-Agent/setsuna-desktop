@@ -9,6 +9,7 @@ import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
 import { BrowserTabStrip } from './BrowserTabStrip.js';
 import { useBrowserTabCommands, useBrowserTabsHeaderPortal } from './BrowserTabsHeaderPortal.js';
 import { BrowserWindowMenu } from './BrowserWindowMenu.js';
+import { useBrowserScreenshot, type BrowserScreenshotAttachmentHandler } from './useBrowserScreenshot.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import {
   createDefaultBrowserDeviceEmulation,
@@ -42,6 +43,7 @@ export function BrowserPanel({
   openRequest,
   onResizeStep,
   onResizeStart,
+  onScreenshotAttachment,
   resizeMax,
   resizeMin,
   resizeValue,
@@ -50,6 +52,7 @@ export function BrowserPanel({
   openRequest?: BrowserOpenRequest | null;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onScreenshotAttachment?: BrowserScreenshotAttachmentHandler;
   resizeMax: number;
   resizeMin: number;
   resizeValue: number;
@@ -62,6 +65,14 @@ export function BrowserPanel({
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createBrowserTab(1, openRequest?.url)]);
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id ?? '');
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const {
+    captureScreenshot,
+    capturing: screenshotCapturing,
+    notice: screenshotNotice,
+  } = useBrowserScreenshot({
+    activeTabId: activeTab?.id ?? null,
+    onAttachment: onScreenshotAttachment,
+  });
 
   const updateTab = useCallback((tabId: string, patch: Partial<BrowserTab>) => {
     setTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)));
@@ -240,12 +251,14 @@ export function BrowserPanel({
             onOpenExternal={(url) => void window.setsunaDesktop?.links.openExternal(url)}
           />
           <BrowserWindowMenu
+            capturingScreenshot={screenshotCapturing}
             deviceToolbarVisible={Boolean(activeTab?.deviceEmulation.enabled)}
             disabled={!activeTab}
             key={activeTab?.id ?? 'browser-menu'}
             loading={Boolean(activeTab?.loading)}
             zoomFactor={activeTab?.zoomFactor ?? 1}
             onOpenDevTools={openActivePageDevTools}
+            onCaptureScreenshot={() => void captureScreenshot()}
             onPrint={printActivePage}
             onReload={reload}
             onToggleDeviceToolbar={toggleActiveDeviceToolbar}
@@ -272,6 +285,15 @@ export function BrowserPanel({
           ))}
           {activeTab?.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{activeTab.error}</span></div> : null}
         </div>
+        {screenshotNotice ? (
+          <div
+            className={`desktop-browser-capture-notice is-${screenshotNotice.kind}`}
+            role={screenshotNotice.kind === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {screenshotNotice.message}
+          </div>
+        ) : null}
       </aside>
     </>
   );

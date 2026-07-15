@@ -10,9 +10,15 @@ import { ChatModelPicker } from './ChatModelPicker.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 import { createChatComposerSendOptions, type ChatComposerSendOptions } from './chatComposerSendOptions.js';
 import { createComposerDraftSyncPlan } from './chatComposerDraftSync.js';
+import {
+  maxChatImageAttachments,
+  maxChatImageSize,
+  readChatImageAttachment,
+  rejectedChatImageAttachment,
+} from './chatImageAttachments.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import { entryLabel, parseMentionCommand, parseSlashCommand, skillDisplayText } from './chatCommandUtils.js';
-import type { ChatSkillSelectionRequest } from '../../types/app.js';
+import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest } from '../../types/app.js';
 
 type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
 type ActiveThinkingConfig = {
@@ -31,6 +37,7 @@ export function ChatComposer({
   contextUsage,
   currentThread,
   draft,
+  imageAttachmentRequest,
   skillSelectionRequest,
   skills,
   threadUsage,
@@ -49,6 +56,7 @@ export function ChatComposer({
   onSend,
   onStartThreadReview,
   onThreadMemoryModeChange,
+  onImageAttachmentRequestConsumed,
   onSkillSelectionRequestConsumed,
   threadMemoryMode,
 }: {
@@ -60,6 +68,7 @@ export function ChatComposer({
   contextUsage: ChatContextTokenUsage;
   currentThread: RuntimeThread | null;
   draft: string;
+  imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   skillSelectionRequest?: ChatSkillSelectionRequest | null;
   skills: RuntimeSkillSummary[];
   threadUsage: RuntimeUsageResponse | null;
@@ -79,6 +88,7 @@ export function ChatComposer({
   onSend: (value?: string, options?: ChatComposerSendOptions) => void;
   onStartThreadReview: () => void | Promise<unknown>;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
+  onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -105,6 +115,7 @@ export function ChatComposer({
   const removingImageTimersRef = useRef<Map<string, number>>(new Map());
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
   const lastEditorDraftRef = useRef(draft);
+  const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const commandCursorOffset = cursorOffset ?? draft.length;
@@ -322,6 +333,23 @@ export function ChatComposer({
     setFocused(true);
     onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
   }, [onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
+
+  useEffect(() => {
+    if (!imageAttachmentRequest || consumedImageAttachmentRequestIdRef.current === imageAttachmentRequest.requestId) return;
+    consumedImageAttachmentRequestIdRef.current = imageAttachmentRequest.requestId;
+    const rejection = rejectedChatImageAttachment(
+      imageAttachmentRequest.attachment,
+      sendableImageAttachments.length,
+      supportsImageInput,
+    );
+    if (!rejection) {
+      setImageAttachments((current) => current.some((attachment) => attachment.id === imageAttachmentRequest.attachment.id)
+        ? current
+        : [...current, imageAttachmentRequest.attachment]);
+      setFocused(true);
+    }
+    onImageAttachmentRequestConsumed?.(imageAttachmentRequest.requestId, rejection ?? 'added');
+  }, [imageAttachmentRequest, onImageAttachmentRequestConsumed, sendableImageAttachments.length, supportsImageInput]);
 
   useEffect(() => {
     if (!supportsImageInput && imageAttachments.length) {
@@ -575,9 +603,9 @@ export function ChatComposer({
     if (!supportsImageInput) return;
     const nextFiles = files.filter((file) => file.type.startsWith('image/'));
     if (!nextFiles.length) return;
-    const available = maxImageAttachments - sendableImageAttachments.length;
+    const available = maxChatImageAttachments - sendableImageAttachments.length;
     if (available <= 0) return;
-    const attachments = await Promise.all(nextFiles.slice(0, available).filter((file) => file.size <= maxImageSize).map(readImageAttachment));
+    const attachments = await Promise.all(nextFiles.slice(0, available).filter((file) => file.size <= maxChatImageSize).map(readChatImageAttachment));
     setImageAttachments((current) => [...current, ...attachments]);
     setFocused(true);
   };
@@ -715,7 +743,7 @@ export function ChatComposer({
                     type="button"
                     aria-label="上传图片"
                     title="上传图片"
-                    disabled={sendableImageAttachments.length >= maxImageAttachments}
+                    disabled={sendableImageAttachments.length >= maxChatImageAttachments}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Paperclip size={13} />
@@ -1061,33 +1089,9 @@ function normalizeThinkingEfforts(value: unknown): string[] {
   return efforts;
 }
 
-const maxImageAttachments = 8;
-const maxImageSize = 8 * 1024 * 1024;
 const imageAttachmentExitAnimationMs = 180;
 
 function clearRemovingImageTimers(timers: Map<string, number>): void {
   timers.forEach((timer) => window.clearTimeout(timer));
   timers.clear();
-}
-
-function readImageAttachment(file: File): Promise<RuntimeMessageAttachment> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error('图片读取失败'));
-    reader.onload = () => {
-      const url = typeof reader.result === 'string' ? reader.result : '';
-      if (!url) {
-        reject(new Error('图片读取失败'));
-        return;
-      }
-      resolve({
-        id: `image_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        name: file.name || 'image',
-        type: file.type || 'image/png',
-        size: file.size,
-        url,
-      });
-    };
-    reader.readAsDataURL(file);
-  });
 }

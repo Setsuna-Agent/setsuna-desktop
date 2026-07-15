@@ -177,8 +177,15 @@ function toProviderOptionJson(value: unknown): ProviderOptionJson | undefined {
 
 function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {
   const output: ModelMessage[] = [];
+  const pendingToolVisuals: RuntimeMessage[] = [];
+  const flushToolVisuals = () => {
+    for (const message of pendingToolVisuals.splice(0, pendingToolVisuals.length)) {
+      output.push({ role: 'user', content: toAiSdkUserContent(toolVisualMessage(message)) });
+    }
+  };
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
+    if (message.role !== 'tool') flushToolVisuals();
     if (message.role === 'system' || message.role === 'developer') {
       continue;
     } else if (message.role === 'user') {
@@ -197,8 +204,10 @@ function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {
           },
         ],
       });
+      if (message.attachments?.length) pendingToolVisuals.push(message);
     }
   }
+  flushToolVisuals();
   return output;
 }
 
@@ -224,6 +233,14 @@ function toAiSdkUserContent(message: RuntimeMessage): UserContent {
       };
     }),
   ];
+}
+
+function toolVisualMessage(message: RuntimeMessage): RuntimeMessage {
+  return {
+    ...message,
+    role: 'user',
+    content: `Image output from tool ${message.toolName || 'tool'}:`,
+  };
 }
 
 function toAiSdkAssistantContent(message: RuntimeMessage): AssistantContent {

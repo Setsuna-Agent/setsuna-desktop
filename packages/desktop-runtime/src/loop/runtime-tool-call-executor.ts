@@ -188,6 +188,7 @@ export class RuntimeToolCallExecutor {
    */
   private async runSingleToolCall(toolCall: RuntimeToolCall, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter | null, runtimeConfig: RuntimeConfigState | null | undefined, options: { skipApproval?: boolean } = {}): Promise<RuntimeMessage> {
     let content = '';
+    let attachments: RuntimeMessage['attachments'];
     let parsedArguments: unknown;
     try {
       throwIfAborted(context.signal);
@@ -238,12 +239,13 @@ export class RuntimeToolCallExecutor {
           resultPreview: execution.result?.preview,
           startedAtMs,
         });
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, execution.result?.attachments);
       }
       const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
         checkApproval: options.skipApproval !== true,
       });
       content = execution.content;
+      attachments = execution.result?.attachments;
       if (execution.status === 'success' && execution.result) {
         await this.options.memory.markPollutedByExternalContext(context.threadId, context.turnId, toolCall, execution.result, runtimeConfig);
       }
@@ -252,7 +254,7 @@ export class RuntimeToolCallExecutor {
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
       await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
     }
-    return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
+    return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, attachments);
   }
 
   private appServerDynamicToolForCall(threadId: string, turnId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
@@ -414,8 +416,15 @@ export class RuntimeToolCallExecutor {
    * @param turnId 当前 turn ID。
    * @param toolCall 对应的模型工具调用。
    * @param content 工具返回给模型的文本内容。
+   * @param attachments 工具返回给模型的图片等附件。
    */
-  private async publishToolMessage(threadId: string, turnId: string, toolCall: RuntimeToolCall, content: string): Promise<RuntimeMessage> {
+  private async publishToolMessage(
+    threadId: string,
+    turnId: string,
+    toolCall: RuntimeToolCall,
+    content: string,
+    attachments?: RuntimeMessage['attachments'],
+  ): Promise<RuntimeMessage> {
     const message: RuntimeMessage = {
       id: this.options.ids.id('msg'),
       turnId,
@@ -423,6 +432,7 @@ export class RuntimeToolCallExecutor {
       toolCallId: toolCall.id,
       toolName: toolCall.name,
       content,
+      ...(attachments?.length ? { attachments: attachments.map((attachment) => ({ ...attachment })) } : {}),
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
     };

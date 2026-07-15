@@ -37,6 +37,19 @@ describe('BrowserToolHost', () => {
             url: 'https://example.com/',
           };
         }
+        if (command.kind === 'screenshot') {
+          return {
+            dataUrl: 'data:image/png;base64,aW1hZ2U=',
+            height: 720,
+            kind: 'screenshot',
+            mimeType: 'image/png',
+            size: 5,
+            tabId: 'tab-1',
+            title: 'Example',
+            url: 'https://example.com/',
+            width: 1280,
+          };
+        }
         return { kind: 'tabs', tabs: [] };
       },
     };
@@ -61,10 +74,39 @@ describe('BrowserToolHost', () => {
       containsExternalContext: true,
       content: expect.stringContaining('[s1:t0:n1] textbox "Search"'),
     });
+    const visionContext = {
+      modelCapabilities: { supportsImages: true },
+      threadId: 'thread_1',
+      toolCallId: 'call_screenshot',
+    };
+    await expect(host.listTools(visionContext)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'browser_screenshot' }),
+    ]));
+    await expect(host.runTool('browser_screenshot', { tabId: 'tab-1' }, visionContext)).resolves.toMatchObject({
+      attachments: [{
+        id: 'browser_screenshot_call_screenshot',
+        size: 5,
+        type: 'image/png',
+        url: 'data:image/png;base64,aW1hZ2U=',
+      }],
+      containsExternalContext: true,
+      data: expect.not.objectContaining({ dataUrl: expect.anything() }),
+    });
     expect(calls).toEqual([
       { kind: 'open', url: 'https://example.com/' },
       { kind: 'snapshot', maxElements: undefined, tabId: 'tab-1' },
+      { kind: 'screenshot', tabId: 'tab-1' },
     ]);
+  });
+
+  it('does not expose or run browser screenshots for text-only models', async () => {
+    const host = new BrowserToolHost({ execute: async () => ({ kind: 'tabs', tabs: [] }) });
+    const context = { modelCapabilities: { supportsImages: false }, threadId: 'thread_1' };
+
+    await expect(host.listTools(context)).resolves.not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'browser_screenshot' }),
+    ]));
+    await expect(host.runTool('browser_screenshot', {}, context)).rejects.toThrow('does not support browser screenshot input');
   });
 
   it('requires approval for click and type without exposing typed text', async () => {

@@ -67,6 +67,7 @@ class FakeAutomation implements BrowserAutomation {
 }
 
 class FakeWebContents extends EventEmitter {
+  captureCount = 0;
   readonly debugger = new FakeBrowserDebugger();
   deviceEmulation: unknown = null;
   userAgent = 'Desktop Chrome/140.0.0.0';
@@ -84,6 +85,15 @@ class FakeWebContents extends EventEmitter {
   getURL(): string { return this.url; }
   isDestroyed(): boolean { return this.destroyed; }
   isLoading(): boolean { return this.loading; }
+
+  async capturePage() {
+    this.captureCount += 1;
+    return {
+      getSize: () => ({ height: 720, width: 1280 }),
+      isEmpty: () => false,
+      toPNG: () => Buffer.from('image'),
+    };
+  }
 
   disableDeviceEmulation(): void {
     this.deviceEmulation = null;
@@ -230,6 +240,31 @@ describe('DesktopBrowserController', () => {
       method: 'Emulation.setUserAgentOverride',
       params: { userAgent: '' },
     });
+  });
+
+  it('captures a registered browser page as PNG data for UI and model tools', async () => {
+    const contents = new FakeWebContents(13);
+    const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
+    controller.registerTab('tab-1', asWebContents(contents));
+
+    await expect(controller.captureScreenshot('tab-1')).resolves.toEqual({
+      dataUrl: 'data:image/png;base64,aW1hZ2U=',
+      height: 720,
+      mimeType: 'image/png',
+      size: 5,
+      width: 1280,
+    });
+    await expect(controller.execute({ kind: 'screenshot', tabId: 'tab-1' })).resolves.toMatchObject({
+      dataUrl: 'data:image/png;base64,aW1hZ2U=',
+      height: 720,
+      kind: 'screenshot',
+      size: 5,
+      tabId: 'tab-1',
+      url: 'https://example.com/',
+      width: 1280,
+    });
+    expect(contents.captureCount).toBe(2);
+    await expect(controller.captureScreenshot('../invalid')).resolves.toBeNull();
   });
 
   it('invalidates old snapshot refs and routes real-input commands through the tab adapter', async () => {

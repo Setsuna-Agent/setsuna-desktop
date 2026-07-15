@@ -7,6 +7,9 @@ export type ToolExecutionContext = {
   projectId?: string;
   turnId?: string;
   toolCallId?: string;
+  modelCapabilities?: {
+    supportsImages: boolean;
+  };
   environment?: ToolExecutionEnvironment;
   permissionProfile?: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
@@ -43,6 +46,7 @@ export type ToolOutputDelta = {
 
 export type ToolExecutionResult = {
   content: string;
+  attachments?: RuntimeMessage['attachments'];
   preview?: string;
   data?: unknown;
   containsExternalContext?: boolean;

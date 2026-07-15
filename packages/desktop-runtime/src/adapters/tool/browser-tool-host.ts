@@ -2,6 +2,7 @@ import {
   BROWSER_CLICK_TOOL_NAME,
   BROWSER_KEY_TOOL_NAME,
   BROWSER_NAVIGATE_TOOL_NAME,
+  BROWSER_SCREENSHOT_TOOL_NAME,
   BROWSER_SCROLL_TOOL_NAME,
   BROWSER_SNAPSHOT_TOOL_NAME,
   BROWSER_TABS_TOOL_NAME,
@@ -59,6 +60,17 @@ const CONTROL_TOOLS: RuntimeToolDefinition[] = [
       properties: {
         ...optionalTabId,
         maxElements: { type: 'number', minimum: 1, maximum: 300, description: 'Maximum interactive elements to return.' },
+      },
+    },
+  },
+  {
+    name: BROWSER_SCREENSHOT_TOOL_NAME,
+    description: 'Capture the visible browser page as an image so you can inspect its rendered visual state.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ...optionalTabId,
       },
     },
   },
@@ -154,17 +166,17 @@ const CONTROL_TOOLS: RuntimeToolDefinition[] = [
 export class BrowserToolHost implements ToolHost {
   constructor(private readonly control: BrowserControlPort | null = null) {}
 
-  async listTools(): Promise<RuntimeToolDefinition[]> {
-    return this.control ? [OPEN_BROWSER_TOOL, ...CONTROL_TOOLS] : [OPEN_BROWSER_TOOL];
+  async listTools(context?: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+    return this.control ? [OPEN_BROWSER_TOOL, ...controlToolsForContext(context)] : [OPEN_BROWSER_TOOL];
   }
 
   toolRuntimeProfile() {
     return { exposure: 'deferred' as const };
   }
 
-  systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
+  systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
     const advertised = new Set(request?.tools.map((tool) => tool.name)
-      ?? (this.control ? [OPEN_BROWSER_TOOL, ...CONTROL_TOOLS].map((tool) => tool.name) : [OPEN_BROWSER_TOOL_NAME]));
+      ?? (this.control ? [OPEN_BROWSER_TOOL, ...controlToolsForContext(context)].map((tool) => tool.name) : [OPEN_BROWSER_TOOL_NAME]));
     const browserTools = [OPEN_BROWSER_TOOL, ...CONTROL_TOOLS].filter((tool) => advertised.has(tool.name));
     if (!browserTools.length) return null;
 
@@ -173,6 +185,7 @@ export class BrowserToolHost implements ToolHost {
     ];
     if (advertised.has(OPEN_BROWSER_TOOL_NAME)) lines.push('Use open_browser when the user asks to open a URL in a new side-browser tab.');
     if (advertised.has('browser_tabs') || advertised.has('browser_snapshot')) lines.push('Inspect the current tabs and page snapshot before interacting.');
+    if (advertised.has(BROWSER_SCREENSHOT_TOOL_NAME)) lines.push('Use browser_screenshot when rendered layout, imagery, or visual state matters.');
     if (advertised.has('browser_click') || advertised.has('browser_type')) {
       lines.push('Element interaction requires refs from the latest page snapshot; navigation and later snapshots invalidate older refs.');
     }
@@ -247,8 +260,27 @@ export class BrowserToolHost implements ToolHost {
       };
     }
     if (!this.control) throw new Error(`Unknown tool: ${name}`);
+    if (name === BROWSER_SCREENSHOT_TOOL_NAME && context.modelCapabilities?.supportsImages !== true) {
+      throw new Error('The active model does not support browser screenshot input.');
+    }
     const command = browserControlCommand(name, input);
     const result = await this.control.execute(command, context.signal);
+    if (result.kind === 'screenshot') {
+      const { dataUrl, ...metadata } = result;
+      return {
+        attachments: [{
+          id: `browser_screenshot_${context.toolCallId ?? Date.now().toString(36)}`,
+          name: `browser-screenshot-${Date.now()}.png`,
+          type: result.mimeType,
+          size: result.size,
+          url: dataUrl,
+        }],
+        content: formatBrowserControlResult(result),
+        containsExternalContext: true,
+        data: metadata,
+        preview: browserCommandPreview(command),
+      };
+    }
     return {
       content: formatBrowserControlResult(result),
       containsExternalContext: true,
@@ -271,6 +303,8 @@ export function browserControlCommand(name: string, input: unknown): DesktopBrow
       return { kind: 'tabs' };
     case BROWSER_SNAPSHOT_TOOL_NAME:
       return { kind: 'snapshot', maxElements: optionalNumber(record.maxElements, 'maxElements'), tabId };
+    case BROWSER_SCREENSHOT_TOOL_NAME:
+      return { kind: 'screenshot', tabId };
     case BROWSER_CLICK_TOOL_NAME:
       return { kind: 'click', ref: requiredString(record.ref, 'ref'), tabId };
     case BROWSER_TYPE_TOOL_NAME:
@@ -330,6 +364,9 @@ function formatBrowserControlResult(result: DesktopBrowserControlResult): string
     else lines.push(...result.elements.map(formatBrowserElement));
     return lines.join('\n');
   }
+  if (result.kind === 'screenshot') {
+    return `Captured the visible page in ${result.tabId} (${result.width}×${result.height}, ${result.url}).`;
+  }
   if (result.kind === 'wait') {
     return `${result.matched ? 'Wait condition matched' : 'Wait condition timed out'} in ${result.tabId} (${result.url}).`;
   }
@@ -356,6 +393,7 @@ function browserCommandPreview(command: DesktopBrowserControlCommand): string {
     case 'open': return `在侧边浏览器打开 ${command.url}`;
     case 'tabs': return '列出侧边浏览器标签页';
     case 'snapshot': return '读取侧边浏览器页面内容';
+    case 'screenshot': return '获取侧边浏览器网页截图';
     case 'click': return `点击网页元素 ${command.ref}`;
     case 'type': return `向网页元素 ${command.ref} 输入 ${command.text.length} 个字符`;
     case 'scroll': return command.ref ? `滚动到网页元素 ${command.ref}` : `滚动网页 ${command.deltaY ?? 600}px`;
@@ -363,6 +401,12 @@ function browserCommandPreview(command: DesktopBrowserControlCommand): string {
     case 'navigate': return `导航到 ${command.url}`;
     case 'wait': return command.text ? `等待网页出现“${compact(command.text, 80)}”` : `等待 ${command.timeoutMs ?? 2000}ms`;
   }
+}
+
+function controlToolsForContext(context?: ToolExecutionContext): RuntimeToolDefinition[] {
+  return context?.modelCapabilities?.supportsImages === true
+    ? CONTROL_TOOLS
+    : CONTROL_TOOLS.filter((tool) => tool.name !== BROWSER_SCREENSHOT_TOOL_NAME);
 }
 
 function objectInput(input: unknown): Record<string, unknown> {

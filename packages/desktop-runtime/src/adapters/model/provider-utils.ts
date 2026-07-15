@@ -95,8 +95,15 @@ export function arrayValue(value: unknown): unknown[] {
 
 export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<string, unknown>> {
   const output: Array<Record<string, unknown>> = [];
+  const pendingToolVisuals: RuntimeMessage[] = [];
+  const flushToolVisuals = () => {
+    for (const message of pendingToolVisuals.splice(0, pendingToolVisuals.length)) {
+      output.push({ role: 'user', content: openAiChatContentParts(toolVisualMessage(message)) });
+    }
+  };
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
+    if (message.role !== 'tool') flushToolVisuals();
     if (message.role === 'system' || message.role === 'developer' || message.role === 'user' || message.role === 'assistant') {
       output.push({
         role: message.role,
@@ -123,8 +130,10 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
         name: message.toolName,
         content: message.content,
       });
+      if (message.attachments?.length) pendingToolVisuals.push(message);
     }
   }
+  flushToolVisuals();
   return output;
 }
 
@@ -175,6 +184,8 @@ export function toOpenAiResponsesInput(messages: RuntimeMessage[]): unknown[] {
         const toolOutput = toolOutputsByCallId.get(toolCall.id);
         if (toolOutput) output.push(toolOutput);
       }
+    } else if (message.role === 'tool' && message.attachments?.length) {
+      output.push({ role: 'user', content: openAiResponsesContentParts(toolVisualMessage(message)) });
     }
   }
   return output;
@@ -236,7 +247,9 @@ export function toAnthropicMessages(messages: RuntimeMessage[]): Array<Record<st
           {
             type: 'tool_result',
             tool_use_id: message.toolCallId,
-            content: message.content,
+            content: message.attachments?.length
+              ? anthropicUserContentParts(message)
+              : message.content,
           },
         ],
       });
@@ -296,6 +309,14 @@ function openAiChatContentParts(message: RuntimeMessage): unknown[] {
       image_url: { url: attachment.url },
     })),
   ];
+}
+
+function toolVisualMessage(message: RuntimeMessage): RuntimeMessage {
+  return {
+    ...message,
+    role: 'user',
+    content: `Image output from tool ${message.toolName || 'tool'}:`,
+  };
 }
 
 function openAiResponsesContentParts(message: RuntimeMessage): unknown {

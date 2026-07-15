@@ -65,6 +65,5 @@ function parseResponseBody(value: string): { error?: string; result?: unknown } 
 function isBrowserControlResult(value: unknown): value is DesktopBrowserControlResult {
   if (!value || typeof value !== 'object') return false;
   const kind = (value as { kind?: unknown }).kind;
-  return kind === 'tabs' || kind === 'snapshot' || kind === 'action' || kind === 'wait';
+  return kind === 'tabs' || kind === 'snapshot' || kind === 'screenshot' || kind === 'action' || kind === 'wait';
 }
-

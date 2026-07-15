@@ -19,7 +19,7 @@ import { hasThinkingSegments } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
-import type { ChatSkillSelectionRequest } from '../../types/app.js';
+import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import { ActionTooltip } from '../primitives.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
@@ -73,6 +73,7 @@ export function ChatWorkspace({
   contextCompacting = false,
   currentThread,
   draft,
+  imageAttachmentRequest,
   skillSelectionRequest,
   skills,
   threadUsage,
@@ -98,6 +99,7 @@ export function ChatWorkspace({
   onReviewRefresh,
   onSetMultiAgentEnabled,
   onStartThreadReview,
+  onImageAttachmentRequestConsumed,
   onSkillSelectionRequestConsumed,
   reviewLoading = false,
   reviewState = null,
@@ -110,6 +112,7 @@ export function ChatWorkspace({
   contextCompacting?: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
+  imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   skills: RuntimeSkillSummary[];
   threadUsage: RuntimeUsageResponse | null;
@@ -135,6 +138,7 @@ export function ChatWorkspace({
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: () => void | Promise<unknown>;
+  onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   reviewLoading?: boolean;
   reviewState?: DesktopReviewState | null;
@@ -399,6 +403,7 @@ export function ChatWorkspace({
       config={config}
       currentThread={currentThread}
       draft={draft}
+      imageAttachmentRequest={imageAttachmentRequest}
       skillSelectionRequest={skillSelectionRequest}
       skills={skills}
       threadUsage={threadUsage}
@@ -418,6 +423,7 @@ export function ChatWorkspace({
       onSend={handleSend}
       onStartThreadReview={onStartThreadReview}
       onThreadMemoryModeChange={onThreadMemoryModeChange}
+      onImageAttachmentRequestConsumed={onImageAttachmentRequestConsumed}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
     />
   );

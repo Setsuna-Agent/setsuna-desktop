@@ -195,6 +195,98 @@ describe('provider model adapters', () => {
     ]);
   });
 
+  it('continues tool screenshot results as model-visible image input', async () => {
+    const screenshotMessages = [
+      request.messages[1],
+      {
+        id: 'assistant-screenshot',
+        role: 'assistant' as const,
+        content: '',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        toolCalls: [{ id: 'call_screenshot', name: 'browser_screenshot', arguments: '{}' }],
+      },
+      {
+        id: 'tool-screenshot',
+        role: 'tool' as const,
+        content: 'Captured the visible page.',
+        createdAt: '2026-06-25T00:00:03.000Z',
+        toolCallId: 'call_screenshot',
+        toolName: 'browser_screenshot',
+        attachments: [{
+          id: 'att_screenshot',
+          name: 'browser-screenshot.png',
+          type: 'image/png',
+          size: 5,
+          url: 'data:image/png;base64,aW1hZ2U=',
+        }],
+      },
+    ];
+
+    const chatCaptured: CapturedRequest = {};
+    await collect(new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', chatCaptured),
+    ), { messages: screenshotMessages });
+    expect(expectBody(chatCaptured).messages).toEqual(expect.arrayContaining([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Image output from tool browser_screenshot:' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,aW1hZ2U=' } },
+        ],
+      },
+    ]));
+
+    const responsesCaptured: CapturedRequest = {};
+    await collect(new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', responsesCaptured),
+    ), { messages: screenshotMessages });
+    expect(expectBody(responsesCaptured).input).toEqual(expect.arrayContaining([
+      { type: 'function_call_output', call_id: 'call_screenshot', output: 'Captured the visible page.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'Image output from tool browser_screenshot:' },
+          { type: 'input_image', image_url: 'data:image/png;base64,aW1hZ2U=' },
+        ],
+      },
+    ]));
+
+    const anthropicCaptured: CapturedRequest = {};
+    await collect(new AnthropicMessagesModelClient(
+      provider('anthropic', 'https://api.anthropic.test'),
+      fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', anthropicCaptured),
+    ), { messages: screenshotMessages });
+    expect(expectBody(anthropicCaptured).messages).toEqual(expect.arrayContaining([
+      {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'call_screenshot',
+          content: [
+            { type: 'text', text: 'Captured the visible page.' },
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aW1hZ2U=' } },
+          ],
+        }],
+      },
+    ]));
+
+    const aiSdkCaptured: CapturedRequest = {};
+    await collect(new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', aiSdkCaptured),
+    ), { messages: screenshotMessages });
+    expect(expectBody(aiSdkCaptured).messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.arrayContaining([
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,aW1hZ2U=' } },
+        ]),
+      }),
+    ]));
+  });
+
   it('streams OpenAI Responses output text deltas', async () => {
     const captured: CapturedRequest = {};
     const client = new OpenAiResponsesModelClient(

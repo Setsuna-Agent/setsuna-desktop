@@ -5,10 +5,12 @@ const minimumBrowserZoomFactor = 0.5;
 const maximumBrowserZoomFactor = 3;
 
 export function BrowserWindowMenu({
+  capturingScreenshot,
   deviceToolbarVisible,
   disabled,
   loading,
   onOpenDevTools,
+  onCaptureScreenshot,
   onPrint,
   onReload,
   onToggleDeviceToolbar,
@@ -17,10 +19,12 @@ export function BrowserWindowMenu({
   onZoomReset,
   zoomFactor,
 }: {
+  capturingScreenshot: boolean;
   deviceToolbarVisible: boolean;
   disabled: boolean;
   loading: boolean;
   onOpenDevTools: () => void;
+  onCaptureScreenshot: () => void;
   onPrint: () => void;
   onReload: () => void;
   onToggleDeviceToolbar: () => void;
@@ -78,6 +82,15 @@ export function BrowserWindowMenu({
         </button>
         <button type="button" role="menuitem" onClick={() => runAndClose(onPrint)}>
           打印页面
+        </button>
+        <button
+          aria-busy={capturingScreenshot}
+          disabled={capturingScreenshot}
+          type="button"
+          role="menuitem"
+          onClick={() => runAndClose(onCaptureScreenshot)}
+        >
+          {capturingScreenshot ? '正在获取屏幕截图…' : '获取屏幕截图'}
         </button>
         <button type="button" role="menuitem" onClick={() => runAndClose(onToggleDeviceToolbar)}>
           {deviceToolbarVisible ? '隐藏设备工具栏' : '显示设备工具栏'}

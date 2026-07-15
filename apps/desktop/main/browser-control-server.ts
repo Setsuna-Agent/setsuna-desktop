@@ -83,6 +83,8 @@ export function parseBrowserControlCommand(value: unknown): DesktopBrowserContro
       return { kind: 'tabs' };
     case 'snapshot':
       return { kind: 'snapshot', maxElements: optionalNumber(input.maxElements, 'maxElements'), tabId };
+    case 'screenshot':
+      return { kind: 'screenshot', tabId };
     case 'click':
       return { kind: 'click', ref: requiredString(input.ref, 'ref'), tabId };
     case 'type':

@@ -1,5 +1,6 @@
 export const BROWSER_TABS_TOOL_NAME = 'browser_tabs';
 export const BROWSER_SNAPSHOT_TOOL_NAME = 'browser_snapshot';
+export const BROWSER_SCREENSHOT_TOOL_NAME = 'browser_screenshot';
 export const BROWSER_CLICK_TOOL_NAME = 'browser_click';
 export const BROWSER_TYPE_TOOL_NAME = 'browser_type';
 export const BROWSER_SCROLL_TOOL_NAME = 'browser_scroll';
@@ -31,6 +32,14 @@ export type DesktopBrowserDeviceUserAgentProfile =
   | 'ios-phone'
   | 'ios-tablet'
   | 'windows-desktop';
+
+export type DesktopBrowserScreenshot = {
+  dataUrl: string;
+  height: number;
+  mimeType: 'image/png';
+  size: number;
+  width: number;
+};
 
 export type DesktopBrowserElement = {
   bounds?: DesktopBrowserBounds;
@@ -66,6 +75,7 @@ export type DesktopBrowserControlCommand =
   | { kind: 'open'; url: string }
   | { kind: 'tabs' }
   | { kind: 'snapshot'; maxElements?: number; tabId?: string }
+  | { kind: 'screenshot'; tabId?: string }
   | { kind: 'click'; ref: string; tabId?: string }
   | { clear?: boolean; kind: 'type'; ref: string; submit?: boolean; tabId?: string; text: string }
   | { deltaY?: number; kind: 'scroll'; ref?: string; tabId?: string }
@@ -76,5 +86,6 @@ export type DesktopBrowserControlCommand =
 export type DesktopBrowserControlResult =
   | { kind: 'tabs'; tabs: DesktopBrowserTab[] }
   | ({ kind: 'snapshot'; tabId: string } & DesktopBrowserSnapshot)
+  | ({ kind: 'screenshot'; tabId: string; title: string; url: string } & DesktopBrowserScreenshot)
   | { kind: 'action'; message: string; tabId: string; url: string }
   | { kind: 'wait'; matched: boolean; tabId: string; url: string };

@@ -117,6 +117,9 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       projectId: thread.projectId,
       turnId,
+      modelCapabilities: {
+        supportsImages: activeModelForConfig(stepRuntimeConfig)?.supportsImages === true,
+      },
       permissionProfile: stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite: stepRuntimeConfig?.sandboxWorkspaceWrite ?? {},
       features: stepRuntimeConfig?.features ?? {},
@@ -246,10 +249,7 @@ function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
 }
 
 function reservedOutputTokensForConfig(config: RuntimeConfigState | null | undefined): number {
-  const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
-    ?? config?.providers.find((provider) => provider.enabled)
-    ?? config?.providers[0];
-  const activeModel = activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0];
+  const activeModel = activeModelForConfig(config);
   const maxContextTokens = positiveSetting(
     activeModel?.contextWindowTokens
       ?? config?.desktopSettings?.modelContextWindow
@@ -257,6 +257,13 @@ function reservedOutputTokensForConfig(config: RuntimeConfigState | null | undef
   ) ?? CONTEXT_COMPACTION_MAX_TOKENS;
   const configuredOutputTokens = Math.max(0, Math.floor(activeModel?.maxOutputTokens ?? 0));
   return Math.min(configuredOutputTokens, Math.floor(maxContextTokens * OUTPUT_RESERVE_CONTEXT_RATIO));
+}
+
+function activeModelForConfig(config: RuntimeConfigState | null | undefined): RuntimeConfigState['providers'][number]['models'][number] | undefined {
+  const activeProvider = config?.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
+    ?? config?.providers.find((provider) => provider.enabled)
+    ?? config?.providers[0];
+  return activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0];
 }
 
 function positiveSetting(value: unknown): number | undefined {

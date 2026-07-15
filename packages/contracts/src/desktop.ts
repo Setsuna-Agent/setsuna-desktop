@@ -1,6 +1,6 @@
 import type { RuntimeEvent } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
-import type { DesktopBrowserDeviceEmulation } from './browser-control.js';
+import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
 import type {
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSourceInput,
@@ -138,6 +138,7 @@ export type DesktopRuntimeBridge = {
 /** Shared contract for the narrow preload API exposed to the renderer. */
 export type SetsunaDesktopBridge = {
   browser: {
+    captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null>;
     registerTab(tabId: string, webContentsId: number): Promise<boolean>;
     unregisterTab(tabId: string, webContentsId: number): Promise<boolean>;
     setActiveTab(tabId: string | null): Promise<boolean>;

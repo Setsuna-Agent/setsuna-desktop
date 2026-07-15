@@ -56,5 +56,9 @@ describe('parseBrowserControlCommand', () => {
       repeat: 2,
       tabId: undefined,
     });
+    expect(parseBrowserControlCommand({ kind: 'screenshot', tabId: 'tab-2' })).toEqual({
+      kind: 'screenshot',
+      tabId: 'tab-2',
+    });
   });
 });

@@ -5,6 +5,7 @@ import type {
   DesktopBrowserDeviceEmulation,
   DesktopBrowserDeviceUserAgentProfile,
   DesktopBrowserKeyModifier,
+  DesktopBrowserScreenshot,
   DesktopBrowserTab,
 } from '@setsuna-desktop/contracts';
 import {
@@ -105,6 +106,18 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     this.activeTabId = tabId ? normalizeTabId(tabId) : null;
   }
 
+  async captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null> {
+    let entry: RegisteredBrowserTab | undefined;
+    try {
+      entry = this.tabs.get(normalizeTabId(tabId));
+    } catch {
+      return null;
+    }
+    if (!entry || entry.contents.isDestroyed()) return null;
+
+    return captureBrowserScreenshot(entry.contents);
+  }
+
   async setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean> {
     let entry: RegisteredBrowserTab | undefined;
     try {
@@ -154,6 +167,8 @@ export class DesktopBrowserController implements BrowserControlExecutor {
         return { kind: 'tabs', tabs: this.listTabs() };
       case 'snapshot':
         return this.snapshot(command.tabId, command.maxElements, signal);
+      case 'screenshot':
+        return this.screenshot(command.tabId, signal);
       case 'click':
         return this.click(command.tabId, command.ref, signal);
       case 'type':
@@ -222,6 +237,24 @@ export class DesktopBrowserController implements BrowserControlExecutor {
       text: snapshot.text,
       title: contents.getTitle() || browserHostLabel(contents.getURL()),
       url: contents.getURL(),
+    };
+  }
+
+  private async screenshot(
+    requestedTabId: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<DesktopBrowserControlResult> {
+    const [tabId, entry] = this.resolveTab(requestedTabId);
+    throwIfAborted(signal);
+    const screenshot = await captureBrowserScreenshot(entry.contents);
+    throwIfAborted(signal);
+    if (!screenshot) throw new Error('The browser page could not be captured.');
+    return {
+      ...screenshot,
+      kind: 'screenshot',
+      tabId,
+      title: entry.contents.getTitle() || browserHostLabel(entry.contents.getURL()),
+      url: entry.contents.getURL(),
     };
   }
 
@@ -353,6 +386,26 @@ function assertCurrentSnapshotRef(revisions: Map<string, number>, tabId: string,
   if (!match) throw new Error(`Invalid browser element reference: ${ref}`);
   if (Number(match[1]) !== revisions.get(tabId)) {
     throw new Error(`Element reference ${ref} is stale. Take a new browser snapshot.`);
+  }
+}
+
+async function captureBrowserScreenshot(contents: WebContents): Promise<DesktopBrowserScreenshot | null> {
+  try {
+    const image = await contents.capturePage();
+    if (image.isEmpty()) return null;
+    const png = image.toPNG();
+    if (!png.byteLength) return null;
+    const { height, width } = image.getSize();
+    return {
+      dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+      height,
+      mimeType: 'image/png',
+      size: png.byteLength,
+      width,
+    };
+  } catch {
+    // The guest may detach while Chromium is producing the bitmap.
+    return null;
   }
 }
 
