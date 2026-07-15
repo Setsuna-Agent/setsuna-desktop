@@ -247,6 +247,7 @@ function registerBrowserIpc(controller: DesktopBrowserController): void {
   ipcMain.removeHandler('browser:register-tab');
   ipcMain.removeHandler('browser:unregister-tab');
   ipcMain.removeHandler('browser:set-active-tab');
+  ipcMain.removeHandler('browser:set-device-emulation');
   ipcMain.handle('browser:register-tab', (event, input) => {
     const webContentsId = Number(input?.webContentsId);
     const tabId = String(input?.tabId ?? '');
@@ -271,6 +272,10 @@ function registerBrowserIpc(controller: DesktopBrowserController): void {
     const tabId = typeof input?.tabId === 'string' ? input.tabId : null;
     controller.setActiveTab(tabId);
     return true;
+  });
+  ipcMain.handle('browser:set-device-emulation', (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return false;
+    return controller.setDeviceEmulation(String(input?.tabId ?? ''), input?.emulation ?? null);
   });
 }
 

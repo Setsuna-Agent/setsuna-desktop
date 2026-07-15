@@ -2,6 +2,8 @@ import type { WebContents } from 'electron';
 import type {
   DesktopBrowserControlCommand,
   DesktopBrowserControlResult,
+  DesktopBrowserDeviceEmulation,
+  DesktopBrowserDeviceUserAgentProfile,
   DesktopBrowserKeyModifier,
   DesktopBrowserTab,
 } from '@setsuna-desktop/contracts';
@@ -10,13 +12,28 @@ import {
   type BrowserAutomation,
   type BrowserDebuggerTransport,
 } from './browser-cdp-automation.js';
+import {
+  ElectronBrowserCdpDeviceEmulator,
+  resolveBrowserUserAgentOverride,
+  type BrowserDeviceEmulator,
+} from './browser-cdp-device-emulation.js';
 
 type RegisteredBrowserTab = {
   automation: BrowserAutomation;
   contents: WebContents;
+  defaultUserAgent: string;
+  deviceEmulator: BrowserDeviceEmulator;
   destroyedListener: () => void;
   navigationListener: () => void;
 };
+
+const desktopBrowserDeviceUserAgentProfiles = new Set<DesktopBrowserDeviceUserAgentProfile>([
+  'android-phone',
+  'desktop',
+  'ios-phone',
+  'ios-tablet',
+  'windows-desktop',
+]);
 
 export type BrowserControlExecutor = {
   execute(command: DesktopBrowserControlCommand, signal?: AbortSignal): Promise<DesktopBrowserControlResult>;
@@ -26,26 +43,34 @@ export type BrowserControlExecutor = {
 export class DesktopBrowserController implements BrowserControlExecutor {
   private activeTabId: string | null = null;
   private readonly createAutomation: (contents: WebContents) => BrowserAutomation;
+  private readonly createDeviceEmulator: (contents: WebContents) => BrowserDeviceEmulator;
   private readonly openTab: ((url: string) => boolean | Promise<boolean>) | null;
   private readonly snapshotRevisions = new Map<string, number>();
   private readonly tabs = new Map<string, RegisteredBrowserTab>();
 
   constructor(options: {
     createAutomation?: (contents: WebContents) => BrowserAutomation;
+    createDeviceEmulator?: (contents: WebContents) => BrowserDeviceEmulator;
     openTab?: (url: string) => boolean | Promise<boolean>;
   } = {}) {
     this.createAutomation = options.createAutomation ?? ((contents) =>
       new ElectronBrowserCdpAutomation(contents.debugger as unknown as BrowserDebuggerTransport));
+    this.createDeviceEmulator = options.createDeviceEmulator ?? ((contents) =>
+      new ElectronBrowserCdpDeviceEmulator(contents.debugger as unknown as BrowserDebuggerTransport));
     this.openTab = options.openTab ?? null;
   }
 
   registerTab(tabId: string, contents: WebContents): void {
     const normalizedTabId = normalizeTabId(tabId);
+    const current = this.tabs.get(normalizedTabId);
+    if (current?.contents.id === contents.id && !contents.isDestroyed()) return;
     this.unregisterTab(normalizedTabId);
     for (const [existingId, entry] of this.tabs) {
       if (entry.contents.id === contents.id) this.unregisterTab(existingId, contents.id);
     }
     const automation = this.createAutomation(contents);
+    const deviceEmulator = this.createDeviceEmulator(contents);
+    const defaultUserAgent = contents.session.getUserAgent();
     const destroyedListener = () => this.unregisterTab(normalizedTabId, contents.id);
     const navigationListener = () => {
       this.snapshotRevisions.set(normalizedTabId, (this.snapshotRevisions.get(normalizedTabId) ?? 0) + 1);
@@ -53,7 +78,14 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     };
     contents.once('destroyed', destroyedListener);
     contents.on('did-start-navigation', navigationListener);
-    this.tabs.set(normalizedTabId, { automation, contents, destroyedListener, navigationListener });
+    this.tabs.set(normalizedTabId, {
+      automation,
+      contents,
+      defaultUserAgent,
+      deviceEmulator,
+      destroyedListener,
+      navigationListener,
+    });
     this.snapshotRevisions.set(normalizedTabId, 0);
   }
 
@@ -63,6 +95,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     entry.contents.off('destroyed', entry.destroyedListener);
     entry.contents.off('did-start-navigation', entry.navigationListener);
     entry.automation.dispose();
+    entry.deviceEmulator.dispose();
     this.tabs.delete(tabId);
     this.snapshotRevisions.delete(tabId);
     if (this.activeTabId === tabId) this.activeTabId = null;
@@ -70,6 +103,41 @@ export class DesktopBrowserController implements BrowserControlExecutor {
 
   setActiveTab(tabId: string | null): void {
     this.activeTabId = tabId ? normalizeTabId(tabId) : null;
+  }
+
+  async setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean> {
+    let entry: RegisteredBrowserTab | undefined;
+    try {
+      entry = this.tabs.get(normalizeTabId(tabId));
+    } catch {
+      return false;
+    }
+    if (!entry || entry.contents.isDestroyed()) return false;
+    try {
+      if (emulation === null) {
+        entry.contents.disableDeviceEmulation();
+        entry.contents.setUserAgent(entry.defaultUserAgent);
+        await entry.deviceEmulator.apply(null);
+        return true;
+      }
+      const normalized = normalizeDeviceEmulation(emulation);
+      if (!normalized) return false;
+      const userAgent = resolveBrowserUserAgentOverride(normalized.userAgentProfile, entry.defaultUserAgent);
+      entry.contents.setUserAgent(userAgent?.userAgent ?? entry.defaultUserAgent);
+      entry.contents.enableDeviceEmulation({
+        deviceScaleFactor: normalized.deviceScaleFactor,
+        scale: normalized.scale,
+        screenPosition: normalized.mobile ? 'mobile' : 'desktop',
+        screenSize: { height: normalized.height, width: normalized.width },
+        viewPosition: { x: 0, y: 0 },
+        viewSize: { height: normalized.height, width: normalized.width },
+      });
+      await entry.deviceEmulator.apply({ touch: normalized.mobile, userAgent });
+      return true;
+    } catch {
+      // The guest may detach or its CDP session may be replaced while applying the override.
+      return false;
+    }
   }
 
   clear(): void {
@@ -308,6 +376,26 @@ function normalizeTabId(value: string): string {
   const tabId = value.trim();
   if (!/^[a-zA-Z0-9._:-]{1,160}$/.test(tabId)) throw new Error('Invalid browser tab ID.');
   return tabId;
+}
+
+function normalizeDeviceEmulation(value: DesktopBrowserDeviceEmulation): DesktopBrowserDeviceEmulation | null {
+  if (!value || typeof value !== 'object') return null;
+  const width = normalizeFiniteNumber(value.width, 240, 5_120, true);
+  const height = normalizeFiniteNumber(value.height, 240, 5_120, true);
+  const deviceScaleFactor = normalizeFiniteNumber(value.deviceScaleFactor, 0.5, 4, false);
+  const scale = normalizeFiniteNumber(value.scale, 0.25, 2, false);
+  const userAgentProfile = normalizeDeviceUserAgentProfile(value.userAgentProfile);
+  if (width === null || height === null || deviceScaleFactor === null || scale === null || typeof value.mobile !== 'boolean' || !userAgentProfile) return null;
+  return { deviceScaleFactor, height, mobile: value.mobile, scale, userAgentProfile, width };
+}
+
+function normalizeDeviceUserAgentProfile(value: DesktopBrowserDeviceUserAgentProfile): DesktopBrowserDeviceUserAgentProfile | null {
+  return desktopBrowserDeviceUserAgentProfiles.has(value) ? value : null;
+}
+
+function normalizeFiniteNumber(value: number, minimum: number, maximum: number, integer: boolean): number | null {
+  if (!Number.isFinite(value) || value < minimum || value > maximum) return null;
+  return integer ? Math.round(value) : value;
 }
 
 function normalizeTextInput(value: string): string {

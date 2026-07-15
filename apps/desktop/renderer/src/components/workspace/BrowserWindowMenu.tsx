@@ -5,21 +5,25 @@ const minimumBrowserZoomFactor = 0.5;
 const maximumBrowserZoomFactor = 3;
 
 export function BrowserWindowMenu({
+  deviceToolbarVisible,
   disabled,
   loading,
   onOpenDevTools,
   onPrint,
   onReload,
+  onToggleDeviceToolbar,
   onZoomIn,
   onZoomOut,
   onZoomReset,
   zoomFactor,
 }: {
+  deviceToolbarVisible: boolean;
   disabled: boolean;
   loading: boolean;
   onOpenDevTools: () => void;
   onPrint: () => void;
   onReload: () => void;
+  onToggleDeviceToolbar: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
@@ -74,6 +78,9 @@ export function BrowserWindowMenu({
         </button>
         <button type="button" role="menuitem" onClick={() => runAndClose(onPrint)}>
           打印页面
+        </button>
+        <button type="button" role="menuitem" onClick={() => runAndClose(onToggleDeviceToolbar)}>
+          {deviceToolbarVisible ? '隐藏设备工具栏' : '显示设备工具栏'}
         </button>
         <span className="desktop-browser-window-menu__separator" role="separator" />
         <span className="desktop-browser-window-menu__zoom" role="group" aria-label="页面缩放">

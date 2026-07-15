@@ -1,5 +1,6 @@
 import type { RuntimeEvent } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
+import type { DesktopBrowserDeviceEmulation } from './browser-control.js';
 import type {
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSourceInput,
@@ -140,6 +141,7 @@ export type SetsunaDesktopBridge = {
     registerTab(tabId: string, webContentsId: number): Promise<boolean>;
     unregisterTab(tabId: string, webContentsId: number): Promise<boolean>;
     setActiveTab(tabId: string | null): Promise<boolean>;
+    setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean>;
     onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void;
   };
   desktop: {

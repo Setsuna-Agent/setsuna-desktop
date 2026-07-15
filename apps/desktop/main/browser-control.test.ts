@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   BrowserAutomation,
   BrowserAutomationSnapshot,
+  BrowserDebuggerTransport,
   BrowserKeyOptions,
   BrowserTypeOptions,
 } from './browser-cdp-automation.js';
@@ -66,6 +67,10 @@ class FakeAutomation implements BrowserAutomation {
 }
 
 class FakeWebContents extends EventEmitter {
+  readonly debugger = new FakeBrowserDebugger();
+  deviceEmulation: unknown = null;
+  userAgent = 'Desktop Chrome/140.0.0.0';
+  readonly session = { getUserAgent: () => 'Desktop Chrome/140.0.0.0' };
   private destroyed = false;
   private loading = false;
   private title = 'Example';
@@ -80,6 +85,18 @@ class FakeWebContents extends EventEmitter {
   isDestroyed(): boolean { return this.destroyed; }
   isLoading(): boolean { return this.loading; }
 
+  disableDeviceEmulation(): void {
+    this.deviceEmulation = null;
+  }
+
+  enableDeviceEmulation(parameters: unknown): void {
+    this.deviceEmulation = parameters;
+  }
+
+  setUserAgent(userAgent: string): void {
+    this.userAgent = userAgent;
+  }
+
   async loadURL(url: string): Promise<void> {
     this.emit('did-start-navigation');
     this.url = url;
@@ -88,6 +105,30 @@ class FakeWebContents extends EventEmitter {
   destroy(): void {
     this.destroyed = true;
     this.emit('destroyed');
+  }
+}
+
+class FakeBrowserDebugger extends EventEmitter implements BrowserDebuggerTransport {
+  attached = false;
+  readonly commands: Array<{ method: string; params?: unknown }> = [];
+
+  attach(): void {
+    this.attached = true;
+  }
+
+  detach(): void {
+    if (!this.attached) return;
+    this.attached = false;
+    this.emit('detach');
+  }
+
+  isAttached(): boolean {
+    return this.attached;
+  }
+
+  async sendCommand(method: string, params?: unknown): Promise<unknown> {
+    this.commands.push({ method, params });
+    return {};
   }
 }
 
@@ -141,6 +182,53 @@ describe('DesktopBrowserController', () => {
     expect(automations.get(11)?.disposed).toBe(true);
     await expect(controller.execute({ kind: 'tabs' })).resolves.toMatchObject({
       tabs: [{ active: true, id: 'tab-1' }],
+    });
+  });
+
+  it('applies validated device emulation and mobile request identity to the registered guest', async () => {
+    const contents = new FakeWebContents(12);
+    const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
+    controller.registerTab('tab-1', asWebContents(contents));
+
+    await expect(controller.setDeviceEmulation('tab-1', {
+      deviceScaleFactor: 3,
+      height: 852,
+      mobile: true,
+      scale: 0.75,
+      userAgentProfile: 'ios-phone',
+      width: 393,
+    })).resolves.toBe(true);
+    expect(contents.deviceEmulation).toEqual({
+      deviceScaleFactor: 3,
+      scale: 0.75,
+      screenPosition: 'mobile',
+      screenSize: { height: 852, width: 393 },
+      viewPosition: { x: 0, y: 0 },
+      viewSize: { height: 852, width: 393 },
+    });
+    expect(contents.userAgent).toContain('iPhone');
+    expect(contents.debugger.commands).toContainEqual({
+      method: 'Emulation.setUserAgentOverride',
+      params: expect.objectContaining({ platform: 'iPhone', userAgent: expect.stringContaining('iPhone') }),
+    });
+    expect(contents.debugger.commands).toContainEqual({
+      method: 'Emulation.setTouchEmulationEnabled',
+      params: { enabled: true, maxTouchPoints: 5 },
+    });
+    await expect(controller.setDeviceEmulation('tab-1', {
+      deviceScaleFactor: 3,
+      height: 852,
+      mobile: true,
+      scale: 0.75,
+      userAgentProfile: 'ios-phone',
+      width: 100,
+    })).resolves.toBe(false);
+    await expect(controller.setDeviceEmulation('tab-1', null)).resolves.toBe(true);
+    expect(contents.deviceEmulation).toBeNull();
+    expect(contents.userAgent).toBe('Desktop Chrome/140.0.0.0');
+    expect(contents.debugger.commands).toContainEqual({
+      method: 'Emulation.setUserAgentOverride',
+      params: { userAgent: '' },
     });
   });
 

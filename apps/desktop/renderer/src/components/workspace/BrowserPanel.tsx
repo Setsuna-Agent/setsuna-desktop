@@ -4,10 +4,17 @@ import { ArrowLeft, ArrowRight, RefreshCw, X } from 'lucide-react';
 import type { DidFailLoadEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
+import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
+import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
 import { BrowserTabStrip } from './BrowserTabStrip.js';
 import { useBrowserTabCommands, useBrowserTabsHeaderPortal } from './BrowserTabsHeaderPortal.js';
 import { BrowserWindowMenu } from './BrowserWindowMenu.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
+import {
+  createDefaultBrowserDeviceEmulation,
+  toDesktopBrowserDeviceEmulation,
+  type BrowserDeviceEmulationState,
+} from './browserDeviceEmulation.js';
 import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
 const browserHomeUrl = 'https://www.bing.com/';
@@ -18,6 +25,7 @@ const enabledWebviewBooleanAttribute = 'true' as unknown as boolean;
 type BrowserTab = {
   canGoBack: boolean;
   canGoForward: boolean;
+  deviceEmulation: BrowserDeviceEmulationState;
   draftUrl: string;
   error: string | null;
   faviconUrl: string | null;
@@ -109,10 +117,13 @@ export function BrowserPanel({
       url,
     });
     if (webview) {
-      void webview.loadURL(url).catch((error) => {
-        if (isAbortedNavigationError(error)) return;
-        updateTab(activeTab.id, { error: error instanceof Error ? error.message : String(error), loading: false });
-      });
+      void applyBrowserDeviceEmulation(activeTab.id, activeTab.deviceEmulation)
+        .catch(() => false)
+        .then(() => webview.loadURL(url))
+        .catch((error) => {
+          if (isAbortedNavigationError(error)) return;
+          updateTab(activeTab.id, { error: error instanceof Error ? error.message : String(error), loading: false });
+        });
     }
   };
 
@@ -129,7 +140,19 @@ export function BrowserPanel({
     const webview = webviewsRef.current.get(activeTab.id);
     if (!webview) return;
     if (activeTab.loading) webview.stop();
-    else webview.reload();
+    else {
+      // The UA/Client-Hints override is asynchronous. Apply it before navigation
+      // so a refresh immediately after selecting a device cannot use desktop headers.
+      void applyBrowserDeviceEmulation(activeTab.id, activeTab.deviceEmulation)
+        .catch(() => false)
+        .then(() => {
+          try {
+            webview.reload();
+          } catch {
+            // The guest may detach while the main-process override is being applied.
+          }
+        });
+    }
   };
 
   const printActivePage = () => {
@@ -170,6 +193,20 @@ export function BrowserPanel({
     updateTab(activeTab.id, { zoomFactor: nextZoomFactor });
   };
 
+  const updateActiveDeviceEmulation = (deviceEmulation: BrowserDeviceEmulationState) => {
+    if (activeTab) updateTab(activeTab.id, { deviceEmulation });
+  };
+
+  const toggleActiveDeviceToolbar = () => {
+    if (!activeTab) return;
+    updateTab(activeTab.id, {
+      deviceEmulation: {
+        ...activeTab.deviceEmulation,
+        enabled: !activeTab.deviceEmulation.enabled,
+      },
+    });
+  };
+
   return (
     <>
       {tabsHeaderHost
@@ -203,6 +240,7 @@ export function BrowserPanel({
             onOpenExternal={(url) => void window.setsunaDesktop?.links.openExternal(url)}
           />
           <BrowserWindowMenu
+            deviceToolbarVisible={Boolean(activeTab?.deviceEmulation.enabled)}
             disabled={!activeTab}
             key={activeTab?.id ?? 'browser-menu'}
             loading={Boolean(activeTab?.loading)}
@@ -210,12 +248,16 @@ export function BrowserPanel({
             onOpenDevTools={openActivePageDevTools}
             onPrint={printActivePage}
             onReload={reload}
+            onToggleDeviceToolbar={toggleActiveDeviceToolbar}
             onZoomIn={() => changeActivePageZoom('in')}
             onZoomOut={() => changeActivePageZoom('out')}
             onZoomReset={() => changeActivePageZoom('reset')}
           />
         </div>
-        <div className="desktop-browser-content">
+        {activeTab?.deviceEmulation.enabled ? (
+          <BrowserDeviceToolbar value={activeTab.deviceEmulation} onChange={updateActiveDeviceEmulation} />
+        ) : null}
+        <div className={`desktop-browser-content ${activeTab?.deviceEmulation.enabled ? 'is-device-emulation' : ''}`}>
           {tabs.map((tab) => (
             <BrowserWebview
               active={tab.id === activeTabId}
@@ -247,6 +289,8 @@ function BrowserWebview({
   tab: BrowserTab;
 }) {
   const nodeRef = useRef<WebviewTag | null>(null);
+  const deviceEmulationRef = useRef(tab.deviceEmulation);
+  deviceEmulationRef.current = tab.deviceEmulation;
 
   useEffect(() => {
     const node = nodeRef.current;
@@ -299,7 +343,10 @@ function BrowserWebview({
         const webContentsId = node.getWebContentsId();
         if (!Number.isSafeInteger(webContentsId) || webContentsId <= 0) return;
         registeredWebContentsId = webContentsId;
-        void window.setsunaDesktop?.browser.registerTab(tab.id, webContentsId);
+        void window.setsunaDesktop?.browser.registerTab(tab.id, webContentsId).then((registered) => {
+          if (!registered) return;
+          return applyBrowserDeviceEmulation(tab.id, deviceEmulationRef.current);
+        }).catch(() => undefined);
       } catch {
         // The webview may not have attached yet; dom-ready retries registration.
       }
@@ -314,18 +361,37 @@ function BrowserWebview({
     };
   }, [tab.id]);
 
+  useEffect(() => {
+    void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation).catch(() => undefined);
+  }, [
+    tab.deviceEmulation.deviceScaleFactor,
+    tab.deviceEmulation.enabled,
+    tab.deviceEmulation.height,
+    tab.deviceEmulation.mobile,
+    tab.deviceEmulation.scale,
+    tab.deviceEmulation.userAgentProfile,
+    tab.deviceEmulation.width,
+    tab.id,
+  ]);
+
   return (
-    <webview
-      allowpopups={enabledWebviewBooleanAttribute}
-      ref={(node) => {
-        const webview = node as unknown as WebviewTag | null;
-        nodeRef.current = webview;
-        onRef(webview);
-      }}
-      className={`desktop-browser-webview ${active ? 'is-active' : ''}`}
-      partition={DESKTOP_BROWSER_PARTITION}
-      src={tab.initialUrl}
-    />
+    <BrowserDeviceViewport
+      active={active}
+      deviceEmulation={tab.deviceEmulation}
+      onChange={(deviceEmulation) => onUpdate(tab.id, { deviceEmulation })}
+    >
+      <webview
+        allowpopups={enabledWebviewBooleanAttribute}
+        ref={(node) => {
+          const webview = node as unknown as WebviewTag | null;
+          nodeRef.current = webview;
+          onRef(webview);
+        }}
+        className="desktop-browser-webview"
+        partition={DESKTOP_BROWSER_PARTITION}
+        src={tab.initialUrl}
+      />
+    </BrowserDeviceViewport>
   );
 }
 
@@ -333,6 +399,7 @@ function createBrowserTab(sequence: number, url = browserHomeUrl): BrowserTab {
   return {
     canGoBack: false,
     canGoForward: false,
+    deviceEmulation: createDefaultBrowserDeviceEmulation(),
     draftUrl: url,
     error: null,
     faviconUrl: null,
@@ -343,6 +410,16 @@ function createBrowserTab(sequence: number, url = browserHomeUrl): BrowserTab {
     url,
     zoomFactor: 1,
   };
+}
+
+function applyBrowserDeviceEmulation(
+  tabId: string,
+  deviceEmulation: BrowserDeviceEmulationState,
+): Promise<boolean> {
+  return window.setsunaDesktop?.browser.setDeviceEmulation(
+    tabId,
+    toDesktopBrowserDeviceEmulation(deviceEmulation),
+  ) ?? Promise.resolve(false);
 }
 
 const browserZoomFactors = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;

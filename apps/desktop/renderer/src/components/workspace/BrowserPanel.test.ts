@@ -59,6 +59,7 @@ describe('BrowserPanel', () => {
     expect(html).toContain('aria-label="浏览器菜单"');
     expect(html).toContain('aria-label="浏览器窗口设置"');
     expect(html).toContain('打印页面');
+    expect(html).toContain('显示设备工具栏');
     expect(html).toContain('100%');
     expect(html).toContain('打开开发者工具');
   });

@@ -16,6 +16,22 @@ export type DesktopBrowserTab = {
   url: string;
 };
 
+export type DesktopBrowserDeviceEmulation = {
+  deviceScaleFactor: number;
+  height: number;
+  mobile: boolean;
+  scale: number;
+  userAgentProfile: DesktopBrowserDeviceUserAgentProfile;
+  width: number;
+};
+
+export type DesktopBrowserDeviceUserAgentProfile =
+  | 'android-phone'
+  | 'desktop'
+  | 'ios-phone'
+  | 'ios-tablet'
+  | 'windows-desktop';
+
 export type DesktopBrowserElement = {
   bounds?: DesktopBrowserBounds;
   checked?: boolean;

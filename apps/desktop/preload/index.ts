@@ -81,6 +81,8 @@ const browser: SetsunaDesktopBridge['browser'] = {
     ipcRenderer.invoke('browser:unregister-tab', { tabId, webContentsId }),
   setActiveTab: (tabId) =>
     ipcRenderer.invoke('browser:set-active-tab', { tabId }),
+  setDeviceEmulation: (tabId, emulation) =>
+    ipcRenderer.invoke('browser:set-device-emulation', { emulation, tabId }),
   onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void {
     const listener = (_event: Electron.IpcRendererEvent, request: { openerWebContentsId: number; url: string }) => callback(request);
     ipcRenderer.on('browser:open-new-tab', listener);
