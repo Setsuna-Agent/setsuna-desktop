@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction } from './context-compaction.js';
+import { createRuntimeContextCompactionCandidate, estimateRuntimeMessageTokens, materializeRuntimeContextCompaction } from './context-compaction.js';
 
 describe('runtime context compaction', () => {
   it('creates a user-context summary and keeps recent messages when forced', () => {
@@ -222,6 +222,97 @@ describe('runtime context compaction', () => {
     expect(candidate?.recentMessages).toHaveLength(0);
     expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['user_1', 'assistant_1', 'tool_1']);
     expect(candidate?.triggerScopes).toEqual(['total', 'latest_tool']);
+  });
+
+  it('does not split an assistant tool call from any of its results', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'old_user',
+        role: 'user',
+        content: 'Inspect both files.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_tools',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+        toolCalls: [
+          { id: 'call_1', name: 'read_file', arguments: '{"file_path":"one.txt"}' },
+          { id: 'call_2', name: 'read_file', arguments: '{"file_path":"two.txt"}' },
+        ],
+      },
+      {
+        id: 'tool_1',
+        role: 'tool',
+        toolCallId: 'call_1',
+        toolName: 'read_file',
+        content: 'one',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'tool_2',
+        role: 'tool',
+        toolCallId: 'call_2',
+        toolName: 'read_file',
+        content: 'two',
+        createdAt: '2026-06-25T00:00:03.000Z',
+        status: 'complete',
+      },
+      ...Array.from({ length: 7 }, (_, index): RuntimeMessage => ({
+        id: `recent_${index}`,
+        role: index % 2 ? 'assistant' : 'user',
+        content: `recent ${index}`,
+        createdAt: `2026-06-25T00:00:${String(index + 4).padStart(2, '0')}.000Z`,
+        status: 'complete',
+      })),
+    ];
+
+    const candidate = createRuntimeContextCompactionCandidate({ force: true, messages });
+    expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['old_user']);
+    expect(candidate?.recentMessages.slice(0, 3).map((message) => message.id)).toEqual([
+      'assistant_tools',
+      'tool_1',
+      'tool_2',
+    ]);
+  });
+
+  it('counts tool-call arguments as model context', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Write the generated file.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_1',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_1', name: 'write_file', arguments: JSON.stringify({ content: 'x'.repeat(4_000) }) }],
+      },
+      {
+        id: 'tool_1',
+        role: 'tool',
+        toolCallId: 'call_1',
+        toolName: 'write_file',
+        content: 'Wrote generated.txt.',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+
+    expect(estimateRuntimeMessageTokens(messages)).toBeGreaterThan(1_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages,
+    })).not.toBeNull();
   });
 
   it('allows oversized latest user text to be summarized when it alone exceeds the budget', () => {

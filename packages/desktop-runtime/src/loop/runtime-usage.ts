@@ -1,0 +1,38 @@
+import type { RuntimeUsage } from '@setsuna-desktop/contracts';
+
+/** Add provider-reported usage from multiple sampling requests in one logical task. */
+export function addRuntimeUsage(previous: RuntimeUsage | undefined, next: RuntimeUsage | undefined): RuntimeUsage | undefined {
+  if (!next) return previous ? { ...previous } : undefined;
+  const inputTokens = sumTokenCounts(previous?.inputTokens, next.inputTokens);
+  const outputTokens = sumTokenCounts(previous?.outputTokens, next.outputTokens);
+  const totalTokens = sumTokenCounts(
+    previous ? reportedRuntimeUsageTokenCount(previous) : undefined,
+    reportedRuntimeUsageTokenCount(next),
+  );
+  return {
+    ...previous,
+    ...next,
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+  };
+}
+
+export function runtimeUsageTokenCount(usage: RuntimeUsage): number {
+  return reportedRuntimeUsageTokenCount(usage) ?? 0;
+}
+
+function reportedRuntimeUsageTokenCount(usage: RuntimeUsage): number | undefined {
+  if (Number.isFinite(usage.totalTokens)) return normalizedTokenCount(usage.totalTokens);
+  return sumTokenCounts(usage.inputTokens, usage.outputTokens);
+}
+
+function sumTokenCounts(...values: Array<number | undefined>): number | undefined {
+  const counts = values.filter((value): value is number => Number.isFinite(value));
+  if (!counts.length) return undefined;
+  return counts.reduce((total, value) => total + normalizedTokenCount(value), 0);
+}
+
+function normalizedTokenCount(value: number | undefined): number {
+  return Math.max(0, Math.floor(value ?? 0));
+}

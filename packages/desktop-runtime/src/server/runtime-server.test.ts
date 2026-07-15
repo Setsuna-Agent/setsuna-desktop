@@ -3564,6 +3564,7 @@ describe('runtime server', () => {
 
   it('resets AppServer memory files without changing thread memory mode', async () => {
     const storagePath = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-memory-reset-test-'));
+    const memoryRoot = path.join(storagePath, '.setsuna-memory');
     await runtimeFetch('/v1/config', {
       method: 'PUT',
       body: JSON.stringify({ storagePath }),
@@ -3576,12 +3577,14 @@ describe('runtime server', () => {
       method: 'POST',
       body: JSON.stringify({ content: 'Reset this memory.', scope: 'global' }),
     });
-    await mkdir(path.join(storagePath, 'rollout_summaries'), { recursive: true });
-    await writeFile(path.join(storagePath, 'rollout_summaries', 'stale.md'), 'stale rollout\n', 'utf8');
+    await mkdir(path.join(memoryRoot, 'rollout_summaries'), { recursive: true });
+    await writeFile(path.join(memoryRoot, 'rollout_summaries', 'stale.md'), 'stale rollout\n', 'utf8');
+    await writeFile(path.join(storagePath, 'keep.txt'), 'unrelated user file\n', 'utf8');
 
     await expect(appServerRpc('memory/reset', {})).resolves.toEqual({});
 
-    await expect(directoryEntries(storagePath)).resolves.toEqual([]);
+    await expect(directoryEntries(memoryRoot)).resolves.toEqual(['.setsuna-memory-root.json']);
+    await expect(readFile(path.join(storagePath, 'keep.txt'), 'utf8')).resolves.toBe('unrelated user file\n');
     await expect(runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`)).resolves.toMatchObject({
       id: thread.id,
       memoryMode: 'disabled',
@@ -3602,7 +3605,7 @@ describe('runtime server', () => {
     const preview = await runtimeFetch('/v1/memories/preview');
 
     expect(config.storagePath).toBe(storagePath);
-    expect(preview.storagePath).toBe(path.resolve(storagePath));
+    expect(preview.storagePath).toBe(path.resolve(storagePath, '.setsuna-memory'));
     expect(preview).toMatchObject({
       total: 1,
       items: [{ id: created.memories[0].id, preview: 'Preview this configured memory.' }],

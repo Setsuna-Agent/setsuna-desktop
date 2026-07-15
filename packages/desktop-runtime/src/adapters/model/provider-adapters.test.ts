@@ -717,11 +717,14 @@ describe('provider model adapters', () => {
       provider('anthropic', 'https://api.anthropic.test'),
       fakeFetch(
         [
+          'event: message_start',
+          'data: {"type":"message_start","message":{"usage":{"input_tokens":3,"output_tokens":0}}}',
+          '',
           'event: content_block_delta',
           'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Claude"}}',
           '',
           'event: message_delta',
-          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":3,"output_tokens":5}}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}',
           '',
           'event: message_stop',
           'data: {"type":"message_stop"}',
@@ -741,7 +744,7 @@ describe('provider model adapters', () => {
     expect(body.system).toBe('System prompt');
     expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Claude' });
     expect(events.find((event) => event.type === 'usage')).toMatchObject({
-      usage: { providerId: 'provider-1', provider: 'Provider 1', totalTokens: 8 },
+      usage: { providerId: 'provider-1', provider: 'Provider 1', inputTokens: 3, outputTokens: 5, totalTokens: 8 },
     });
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'end_turn' });
   });

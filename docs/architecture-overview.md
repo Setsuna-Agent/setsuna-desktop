@@ -100,7 +100,7 @@ BrowserToolHost
 - 每个 sampling step 解析一次 `RuntimeEnvironment`，同一快照同时驱动 prompt、工具执行、sandbox、project workflow、project instructions 和 step snapshot。
 - 流式消费模型输出，发布 assistant delta、reasoning 标记、tool call preview。
 - 执行工具调用，处理审批、并行只读工具批次、工具预算、文件变更预览、shell 输出 delta。
-- 记录 usage，保存显式/被动 memory，发布 `turn.completed`。
+- 累计本轮所有 sampling step 的 usage，保存显式 memory，发布 `turn.completed`，再把被动 memory 抽取放入可取消的后台队列。
 - 支持 cancel、steer、regenerate、review turn。
 
 ## 本地数据边界
@@ -113,7 +113,7 @@ runtime 数据根是 Electron `userData/runtime`：
 - `projects.json`：用户添加的 workspace。
 - `mcp.json`：本地 MCP server 配置。
 - `skills.json` 与 `user-skills/`：Skill 状态和用户 Skill。
-- `memories.json`：默认 memory 存储；用户配置 `storagePath` 后可切换根目录。
+- `memories/`：默认 memory 根，带所有权 marker；用户配置 `storagePath` 后使用 `<storagePath>/.setsuna-memory/` 专属子目录。
 - `usage.jsonl`：模型 token 使用记录。
 
 ## 安全边界

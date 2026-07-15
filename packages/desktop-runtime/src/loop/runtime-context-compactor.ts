@@ -346,9 +346,12 @@ function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
             ? '工具'
             : message.role === 'developer' ? '开发者上下文' : '系统';
       const attachments = message.attachments?.length ? `\n附件：${message.attachments.map((item) => `${item.name || 'attachment'}(${item.type || 'unknown'}, ${item.size || 0} bytes)`).join('；')}` : '';
+      const toolCalls = message.toolCalls?.length
+        ? `\n工具调用：${message.toolCalls.map((call) => `${call.name}(${compactForPrompt(call.arguments, 1200)})`).join('；')}`
+        : '';
       const toolRuns = message.toolRuns?.length ? `\n工具记录：${message.toolRuns.map((run) => `${run.name}:${run.status}${run.resultPreview ? `:${compactForPrompt(run.resultPreview, 800)}` : ''}`).join('；')}` : '';
       const content = compactForPrompt(message.contextCompaction ? stripContextCompactionTags(message.content) : message.content, 3000);
-      return `#${index + 1} ${role} ${message.createdAt}\n${content || '(empty)'}${attachments}${toolRuns}`;
+      return `#${index + 1} ${role} ${message.createdAt}\n${content || '(empty)'}${attachments}${toolCalls}${toolRuns}`;
     })
     .join('\n\n');
 }

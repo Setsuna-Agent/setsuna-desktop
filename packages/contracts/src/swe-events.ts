@@ -760,6 +760,8 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
       : threadStatusChangedNotifications(state, event.threadId);
   }
 
+  if (event.type === 'runtime.warning') return [];
+
   if (event.type === 'message.created') {
     const message = event.payload.message;
     if (message.visibility === 'model') return [];

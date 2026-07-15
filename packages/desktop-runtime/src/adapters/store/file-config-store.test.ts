@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { RuntimeConfigInput } from '@setsuna-desktop/contracts';
@@ -39,5 +39,26 @@ describe('file config store', () => {
     await expect(store.saveConfig({ desktopSettings: invalidDesktopSettings })).resolves.toMatchObject({
       desktopSettings: {},
     });
+  });
+
+  it('removes API keys for providers deleted from config', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    const initial = await store.getConfig();
+    const baseProvider = initial.providers[0];
+    if (!baseProvider) throw new Error('Expected the default provider fixture.');
+
+    await store.saveConfig({
+      providers: [
+        { ...baseProvider, apiKey: 'retained-secret' },
+        { ...baseProvider, id: 'removed-provider', name: 'Removed provider', apiKey: 'removed-secret' },
+      ],
+    });
+    await store.saveConfig({ providers: [baseProvider] });
+
+    const secrets = JSON.parse(await readFile(path.join(dataDir, 'secrets.json'), 'utf8')) as {
+      providerApiKeys: Record<string, string>;
+    };
+    expect(secrets.providerApiKeys).toEqual({ [baseProvider.id]: 'retained-secret' });
   });
 });

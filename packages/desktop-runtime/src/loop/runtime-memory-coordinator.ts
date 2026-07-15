@@ -10,6 +10,7 @@ import type {
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolCall,
+  RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
@@ -20,6 +21,9 @@ import type { ThreadStore } from '../ports/thread-store.js';
 import type { ToolExecutionResult } from '../ports/tool-host.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import { runMemoryConsolidationAgent } from './memory-consolidation-agent.js';
+import { RuntimeBackgroundTaskQueue } from './runtime-background-task-queue.js';
+import { throwIfAborted } from './runtime-turn-errors.js';
+import { addRuntimeUsage } from './runtime-usage.js';
 import {
   compactForPrompt,
   escapeSkillAttribute,
@@ -94,10 +98,18 @@ type RuntimeMemoryCoordinatorOptions = {
  * AgentLoop 只决定这些动作在 turn 生命周期中的调用时机。
  */
 export class RuntimeMemoryCoordinator {
+  private readonly backgroundTasks = new RuntimeBackgroundTaskQueue('memory');
+  private readonly passiveTasks = new Map<string, Promise<void>>();
+
   constructor(private readonly options: RuntimeMemoryCoordinatorOptions) {}
 
   async runStartupExtraction(): Promise<{ claimed: number; extracted: number }> {
+    return this.backgroundTasks.enqueue((signal) => this.runStartupExtractionNow(signal));
+  }
+
+  private async runStartupExtractionNow(signal: AbortSignal): Promise<{ claimed: number; extracted: number }> {
     if (!this.options.memoryStore) return { claimed: 0, extracted: 0 };
+    throwIfAborted(signal);
     const config = await this.options.configStore?.getConfig().catch(() => null);
     if (!canGenerateMemories(config)) return { claimed: 0, extracted: 0 };
 
@@ -118,6 +130,7 @@ export class RuntimeMemoryCoordinator {
     let claimed = 0;
     let extracted = 0;
     for (const summary of candidates) {
+      throwIfAborted(signal);
       const thread = await this.options.threadStore.getThread(summary.id);
       if (!thread || !threadAllowsMemoryGeneration(thread)) continue;
       const messages = startupMemorySourceMessages(thread.messages);
@@ -132,6 +145,7 @@ export class RuntimeMemoryCoordinator {
         sourceTurnId,
         thread,
         messages,
+        signal,
       }).catch(() => 0);
       if (saved > 0) {
         extracted += 1;
@@ -146,8 +160,30 @@ export class RuntimeMemoryCoordinator {
     await this.options.memoryStore?.recordMemoryCitationUsage(citation).catch(() => undefined);
   }
 
-  async extractPassiveMemoriesForTurn(threadId: string, turnId: string): Promise<void> {
+  schedulePassiveMemoriesForTurn(threadId: string, turnId: string): void {
+    const key = passiveTaskKey(threadId, turnId);
+    if (this.passiveTasks.has(key)) return;
+    const task = this.backgroundTasks
+      .enqueue((signal) => this.extractPassiveMemoriesForTurn(threadId, turnId, signal))
+      // Memory improves later turns, but must never fail an already completed turn.
+      .catch(() => undefined);
+    this.passiveTasks.set(key, task);
+    void task.finally(() => {
+      if (this.passiveTasks.get(key) === task) this.passiveTasks.delete(key);
+    });
+  }
+
+  async waitForPassiveMemoriesForTurn(threadId: string, turnId: string): Promise<void> {
+    await this.passiveTasks.get(passiveTaskKey(threadId, turnId));
+  }
+
+  shutdown(timeoutMs: number): Promise<boolean> {
+    return this.backgroundTasks.shutdown(timeoutMs);
+  }
+
+  private async extractPassiveMemoriesForTurn(threadId: string, turnId: string, signal: AbortSignal): Promise<void> {
     if (!this.options.memoryStore) return;
+    throwIfAborted(signal);
     const config = await this.options.configStore?.getConfig().catch(() => null);
     if (!canGenerateMemories(config)) return;
 
@@ -162,6 +198,7 @@ export class RuntimeMemoryCoordinator {
       sourceTurnId: turnId,
       thread,
       messages,
+      signal,
     });
   }
 
@@ -253,27 +290,32 @@ export class RuntimeMemoryCoordinator {
     sourceTurnId,
     thread,
     messages,
+    signal,
   }: {
     config: RuntimeConfigState | null | undefined;
     sourceLabel: string;
     sourceTurnId?: string;
     thread: RuntimeThread;
     messages: RuntimeMessage[];
+    signal: AbortSignal;
   }): Promise<number> {
     const memoryStore = this.options.memoryStore;
     if (!memoryStore || !messages.length) return 0;
+    throwIfAborted(signal);
     await memoryStore.preparePhase2Workspace().catch(() => undefined);
     let text = '';
-    let usage;
+    let usage: RuntimeUsage | undefined;
     for await (const item of this.options.modelClient.stream({
       model: memoryExtractModel(config),
       messages: this.passiveMemoryPromptMessages(thread, messages, sourceLabel),
       maxOutputTokens: PASSIVE_MEMORY_MAX_OUTPUT_TOKENS,
+      signal,
       temperature: 0,
       toolChoice: 'none',
     })) {
+      throwIfAborted(signal);
       if (item.type === 'text_delta') text += item.text;
-      if (item.type === 'usage') usage = item.usage;
+      if (item.type === 'usage') usage = addRuntimeUsage(usage, item.usage);
     }
     if (usage) {
       await this.options.usageStore?.recordUsage({
@@ -305,13 +347,14 @@ export class RuntimeMemoryCoordinator {
       failureReason: stage1.failureReason,
       projectId: thread.projectId,
     }).catch(() => undefined);
-    if (stage1) await this.runPhase2Dispatch(thread.id).catch(() => undefined);
+    if (stage1) await this.runPhase2Dispatch(thread.id, sourceTurnId, signal).catch(() => undefined);
     if (!candidates.length) return 0;
 
     const existing = await memoryStore.listMemories(thread.projectId ? { projectId: thread.projectId, limit: 500 } : { limit: 500 }).catch(() => ({ memories: [] }));
     const seen = new Set(existing.memories.map((memory) => memoryDedupeText(memory.content)));
     let saved = 0;
     for (const candidate of candidates) {
+      throwIfAborted(signal);
       const key = memoryDedupeText(candidate.content);
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -332,9 +375,10 @@ export class RuntimeMemoryCoordinator {
     return saved;
   }
 
-  private async runPhase2Dispatch(ownerId: string): Promise<void> {
+  private async runPhase2Dispatch(ownerId: string, sourceTurnId: string | undefined, signal: AbortSignal): Promise<void> {
     const memoryStore = this.options.memoryStore;
     if (!memoryStore) return;
+    throwIfAborted(signal);
     const claim = await memoryStore.claimPhase2Job({
       ownerId,
       leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
@@ -360,15 +404,25 @@ export class RuntimeMemoryCoordinator {
         });
         return;
       }
-      await runMemoryConsolidationAgent({
+      const consolidation = await runMemoryConsolidationAgent({
         modelClient: this.options.modelClient,
         root: workspace.root,
         now: () => this.options.clock.now(),
+        signal,
         heartbeat: () => memoryStore.heartbeatPhase2Job({
           ownershipToken: claim.ownershipToken!,
           leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
         }),
       });
+      if (consolidation.usage) {
+        await this.options.usageStore?.recordUsage({
+          threadId: ownerId,
+          turnId: sourceTurnId ?? 'memory_startup',
+          createdAt: this.options.clock.now().toISOString(),
+          ...consolidation.usage,
+        });
+      }
+      throwIfAborted(signal);
       const stillOwnsLock = await memoryStore.heartbeatPhase2Job({
         ownershipToken: claim.ownershipToken,
         leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
@@ -534,6 +588,10 @@ function memorySourceLocationText(location: RuntimeMemorySourceLocation): string
 function memorySourceKey(threadId: string | undefined, turnId: string | undefined): string {
   if (!threadId || !turnId) return '';
   return `${threadId}\0${turnId}`;
+}
+
+function passiveTaskKey(threadId: string, turnId: string): string {
+  return `${threadId}\u0000${turnId}`;
 }
 
 function memoryExtractModel(config: RuntimeConfigState | null | undefined): string {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -75,6 +75,18 @@ describe('file workspace project store', () => {
 
     await expect(store.readFile(project.id, '../outside.txt')).rejects.toThrow('escapes');
     await expect(store.writeFile(project.id, '../outside.txt', 'outside')).rejects.toThrow('escapes');
+  });
+
+  it.skipIf(process.platform === 'win32')('does not search through file symlinks outside the project', async () => {
+    const fixture = await createWorkspaceFixture();
+    const outsideSecret = path.join(path.dirname(fixture.projectDir), 'outside-secret.txt');
+    await writeFile(outsideSecret, 'SYMLINK_SECRET_NEEDLE\n', 'utf8');
+    await symlink(outsideSecret, path.join(fixture.projectDir, 'linked-secret.txt'));
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+
+    await expect(store.search(project.id, 'SYMLINK_SECRET_NEEDLE')).resolves.toMatchObject({ results: [] });
+    await expect(store.readFile(project.id, 'linked-secret.txt')).rejects.toThrow('escapes');
   });
 });
 

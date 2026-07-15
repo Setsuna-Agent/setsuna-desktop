@@ -30,6 +30,8 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   await runtime.threadStore.recover();
   // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
   await settleStaleRuntimeTurns(runtime);
+  // Recovery 完成后再排队历史记忆抽取，避免读取尚未结算的 turn；shutdown 会取消该后台队列。
+  void runtime.agentLoop.runMemoryStartupExtraction().catch(() => undefined);
   const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus, {
     ptyFactory: options.commandExecPtyFactory,
   });

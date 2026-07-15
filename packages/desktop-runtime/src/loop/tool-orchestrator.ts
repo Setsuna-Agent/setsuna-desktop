@@ -283,7 +283,7 @@ export class ToolOrchestrator {
     } catch (error) {
       acceptingOutputDeltas = false;
       if (isAbortError(error)) throw error;
-      if (error instanceof ToolExecutionError && error.failureKind === 'sandbox_denied') {
+      if (error instanceof ToolExecutionError && (error.failureKind === 'sandbox_denied' || error.failureKind === 'sandbox_unavailable')) {
         const retry = await this.retryAfterSandboxDenied({
           approvalPolicy,
           context: stepContext,
@@ -676,8 +676,7 @@ export class ToolOrchestrator {
     return answer;
   }
 
-  private async approveSandboxBypassRetry(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], reason: string, environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
-    if (approvalPolicy === 'full') return 'approve';
+  private async approveSandboxBypassRetry(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, _approvalPolicy: RuntimeConfigState['approvalPolicy'], reason: string, environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
     const approvalKeys = sandboxRetryApprovalKeys(toolCall, parsedArguments, context);
     if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
     if (!this.options.approvalGate) return 'reject';
@@ -790,8 +789,15 @@ export class ToolOrchestrator {
     if (fileRequirement) return fileRequirement;
     const additionalPermissionRequirement = assessAdditionalSandboxPermissionsApproval(toolCall, parsedArguments, context, approvalPolicy, Boolean(this.options.approvalGate), environment);
     if (additionalPermissionRequirement) return additionalPermissionRequirement;
-    if (!this.options.approvalGate) return { action: 'skip' };
-    if (approvalPolicy === 'full' && !strictAutoReview) return { action: 'skip' };
+    const requestsSandboxBypass = requestedSandboxBypass(toolCall.name, parsedArguments);
+    if (!this.options.approvalGate) {
+      return requestsSandboxBypass
+        ? { action: 'reject', reason: 'Unsandboxed shell execution requires an interactive approval gate.' }
+        : { action: 'skip' };
+    }
+    // full auto-approval must not silently remove the filesystem and network
+    // boundary. An explicit unsandboxed request always remains user-confirmed.
+    if (approvalPolicy === 'full' && !strictAutoReview && !requestsSandboxBypass) return { action: 'skip' };
     const execApprovalLookupKeys = execApprovalSessionLookupKeys(toolCall, parsedArguments, context);
     if (!strictAutoReview && this.options.approvalStore?.hasAny(execApprovalLookupKeys, context.turnId)) return { action: 'skip' };
 

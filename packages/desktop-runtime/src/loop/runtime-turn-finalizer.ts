@@ -25,7 +25,7 @@ export type RuntimeAssistantTurnFinalization = {
 type RuntimeTurnFinalizerOptions = {
   clock: Clock;
   ids: IdGenerator;
-  memory: Pick<RuntimeMemoryCoordinator, 'extractPassiveMemoriesForTurn' | 'rememberExplicitUserMemory'>;
+  memory: Pick<RuntimeMemoryCoordinator, 'schedulePassiveMemoriesForTurn' | 'rememberExplicitUserMemory'>;
   streamEvents: Pick<RuntimeModelStreamEventPublisher, 'completeMessage' | 'publishMessage'>;
   threadTitles: Pick<RuntimeThreadTitleCoordinator, 'commit'>;
   usageStore?: UsageStore;
@@ -39,12 +39,14 @@ export class RuntimeTurnFinalizer {
   async finish({
     finalization,
     messageId,
+    messageUsage,
     threadId,
     turnId,
     usage,
   }: {
     finalization: RuntimeAssistantTurnFinalization;
     messageId: string;
+    messageUsage?: RuntimeUsage;
     threadId: string;
     turnId: string;
     usage?: RuntimeUsage;
@@ -59,7 +61,7 @@ export class RuntimeTurnFinalizer {
     }
     await this.options.streamEvents.completeMessage(threadId, turnId, messageId, {
       content: finalization.content,
-      usage,
+      usage: messageUsage,
       memoryCitation: finalization.memoryCitation,
       planMode: finalization.planMode,
     });
@@ -76,8 +78,8 @@ export class RuntimeTurnFinalizer {
       createdAt: this.options.clock.now().toISOString(),
       payload: { usage, taskKind: finalization.taskKind },
     });
-    // Passive memory is auxiliary and must not turn a completed answer into a failed turn.
-    await this.options.memory.extractPassiveMemoriesForTurn(threadId, turnId).catch(() => undefined);
+    // Passive memory is auxiliary: enqueue it only after the turn is durably complete.
+    this.options.memory.schedulePassiveMemoriesForTurn(threadId, turnId);
   }
 
   async publishReviewModeMessage(

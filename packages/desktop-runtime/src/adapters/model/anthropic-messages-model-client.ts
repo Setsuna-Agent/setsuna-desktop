@@ -63,7 +63,9 @@ export class AnthropicMessagesModelClient implements ModelClient {
     for await (const { event, data } of parseSse(response)) {
       const payload = objectValue(parseJson(data));
       const type = stringValue(payload.type) || event || '';
-      if (type === 'content_block_start') {
+      if (type === 'message_start') {
+        usage = mergeAnthropicUsage(usage, normalizeAnthropicUsage(objectValue(payload.message).usage));
+      } else if (type === 'content_block_start') {
         const blockState = anthropicBlockState(payload);
         if (blockState) {
           blocks.set(blockState.index, blockState);
@@ -120,7 +122,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
         }
       } else if (type === 'message_delta') {
         const delta = objectValue(payload.delta);
-        usage = normalizeAnthropicUsage(payload.usage);
+        usage = mergeAnthropicUsage(usage, normalizeAnthropicUsage(payload.usage));
         finishReason = stringValue(delta.stop_reason) || finishReason;
         if (finishReason === 'tool_use' && !nativeToolItems) {
           const calls = [...toolCalls.values()].filter((call) => call.name);
@@ -153,6 +155,25 @@ export class AnthropicMessagesModelClient implements ModelClient {
     }
     yield doneEvent(finishReason);
   }
+}
+
+/** Anthropic reports input usage at message_start and output usage at message_delta. */
+function mergeAnthropicUsage(
+  previous: ReturnType<typeof normalizeAnthropicUsage>,
+  next: ReturnType<typeof normalizeAnthropicUsage>,
+): ReturnType<typeof normalizeAnthropicUsage> {
+  if (!next) return previous;
+  const inputTokens = next.inputTokens ?? previous?.inputTokens;
+  const outputTokens = next.outputTokens ?? previous?.outputTokens;
+  return {
+    ...previous,
+    ...next,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens !== undefined || outputTokens !== undefined
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      : undefined,
+  };
 }
 
 function toAnthropicToolChoice(toolChoice: Exclude<ModelRequest['toolChoice'], undefined | 'none'>) {

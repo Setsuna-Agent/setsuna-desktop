@@ -233,11 +233,39 @@ describe('agent loop tools', () => {
         threadId: thread.id,
         provider: 'test-provider',
         model: 'test-model',
-        inputTokens: 3,
-        outputTokens: 5,
-        totalTokens: 8,
+        inputTokens: 5,
+        outputTokens: 6,
+        totalTokens: 11,
       },
     ]);
+  });
+
+  it('keeps a completed turn terminal when tool cleanup fails', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Cleanup warning', projectId: 'project_1' });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new ToolCallingModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new FailingCleanupToolHost(),
+    });
+
+    await expect(loop.sendTurn(thread.id, { input: 'read the file' })).resolves.toBeUndefined();
+
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const turn = saved?.turns?.at(-1);
+    expect(turn).toMatchObject({ status: 'completed' });
+    expect(turn?.error).toBeUndefined();
+    expect(saved?.messages.at(-1)).toMatchObject({ role: 'assistant', status: 'complete' });
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'runtime.warning',
+      payload: expect.objectContaining({ code: 'tool_cleanup_failed' }),
+    }));
+    expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
   });
 
   it('captures a fresh sampling step before each model request', async () => {
@@ -2708,6 +2736,40 @@ describe('agent loop tools', () => {
     });
   });
 
+  it('does not keep the active turn open while passive memory extraction is blocked', async () => {
+    const ids = new RandomIdGenerator();
+    const dataDir = await mkDataDir();
+    const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+    const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Background memory extraction' });
+    const modelClient = new BlockingPassiveMemoryModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      memoryStore,
+    });
+
+    const first = await loop.startTurn(thread.id, { input: 'first turn' });
+    await waitForTurnCompleted(threadStore, thread.id, first.turnId);
+    await modelClient.waitForPassiveStart();
+    await waitForTestState(
+      () => loop.activeTurnId(thread.id),
+      (turnId) => turnId === null,
+      (turnId) => `Expected the first turn to be idle; activeTurnId=${String(turnId)}`,
+    );
+
+    const second = await loop.startTurn(thread.id, { input: 'second turn' });
+    await waitForTurnCompleted(threadStore, thread.id, second.turnId);
+    expect(modelClient.requests.filter((request) => request.model === 'local-runtime-smoke')).toHaveLength(2);
+    expect(modelClient.requests.filter((request) => request.model === 'passive-memory-extraction')).toHaveLength(1);
+
+    await expect(loop.shutdown('test shutdown', 2_000)).resolves.toBe(true);
+    expect(modelClient.passiveAborted).toBe(true);
+  });
+
   it('uses the configured model for passive memory extraction', async () => {
     const ids = new RandomIdGenerator();
     const dataDir = await mkDataDir();
@@ -2790,6 +2852,7 @@ describe('agent loop tools', () => {
     const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Codex phase two', projectId: 'project_1' });
     const modelClient = new ConsolidatingCodexMemoryModelClient();
+    const usageStore = new CapturingUsageStore();
     const loop = new AgentLoop({
       threadStore,
       modelClient,
@@ -2797,6 +2860,7 @@ describe('agent loop tools', () => {
       clock: systemClock,
       ids,
       memoryStore,
+      usageStore,
       configStore: new ActiveMemorySettingsConfigStore({
         useMemories: true,
         generateMemories: true,
@@ -2833,6 +2897,12 @@ describe('agent loop tools', () => {
     await expect(memoryStore.claimPhase2Job({ ownerId: 'after_success', leaseSeconds: 60, retryDelaySeconds: 60 })).resolves.toMatchObject({
       status: 'skipped_no_input',
     });
+    expect(usageStore.records).toMatchObject([{
+      threadId: thread.id,
+      inputTokens: 5,
+      outputTokens: 3,
+      totalTokens: 8,
+    }]);
   });
 
   it('records startup stage-1 no-output results and skips the same rollout later', async () => {
@@ -4721,6 +4791,34 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
   });
 
+  it('still requires explicit approval for unsandboxed exec under full policy', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Full approval escalated exec loop' });
+    const modelClient = new EscalatedExecModelClient();
+    const toolHost = new EscalatedExecToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new FullApprovalConfigStore(),
+    });
+
+    const pendingTurn = loop.sendTurn(thread.id, { input: 'run escalated command under full policy' });
+    const pendingApproval = await waitForPendingApproval(approvalGate);
+    expect(pendingApproval.reason).toContain('needs unsandboxed access');
+    expect(toolHost.attempts).toEqual([]);
+
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
+    await pendingTurn;
+    expect(toolHost.attempts).toEqual(['bypass']);
+  });
+
   it('cancels active turns without publishing runtime errors', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -5541,6 +5639,16 @@ class ToolCallingModelClient implements ModelClient {
       yield {
         type: 'tool_calls',
         toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      };
+      yield {
+        type: 'usage',
+        usage: {
+          provider: 'test-provider',
+          model: 'test-model',
+          inputTokens: 2,
+          outputTokens: 1,
+          totalTokens: 3,
+        },
       };
       yield { type: 'done', finishReason: 'tool_calls' };
       return;
@@ -6443,6 +6551,13 @@ class CapturingToolHost implements ToolHost {
   }
 }
 
+class FailingCleanupToolHost extends CapturingToolHost {
+  override cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): void {
+    super.cleanupTurn(context, outcome);
+    throw new Error('cleanup failed after completion');
+  }
+}
+
 class RefreshingToolHost implements ToolHost {
   listCalls = 0;
   environmentCalls = 0;
@@ -7177,6 +7292,37 @@ class PassiveMemoryModelClient implements ModelClient {
   }
 }
 
+class BlockingPassiveMemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  passiveAborted = false;
+  private passiveStartedResolve!: () => void;
+  private readonly passiveStarted = new Promise<void>((resolve) => {
+    this.passiveStartedResolve = resolve;
+  });
+
+  waitForPassiveStart(): Promise<void> {
+    return this.passiveStarted;
+  }
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      this.passiveStartedResolve();
+      await new Promise<void>((_resolve, reject) => {
+        const onAbort = () => {
+          this.passiveAborted = true;
+          reject(request.signal?.reason instanceof Error ? request.signal.reason : new Error('aborted'));
+        };
+        if (request.signal?.aborted) onAbort();
+        else request.signal?.addEventListener('abort', onAbort, { once: true });
+      });
+      return;
+    }
+    yield { type: 'text_delta', text: 'Done.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class CodexStage1MemoryModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -7306,10 +7452,12 @@ class ConsolidatingCodexMemoryModelClient implements ModelClient {
             },
           ],
         };
+        yield { type: 'usage', usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } };
         yield { type: 'done', finishReason: 'tool_calls' };
         return;
       }
       yield { type: 'text_delta', text: 'Consolidation complete.' };
+      yield { type: 'usage', usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } };
       yield { type: 'done', finishReason: 'stop' };
       return;
     }

@@ -131,7 +131,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     if (!targetStat.isDirectory()) throw new Error('Path is not a directory.');
     const entries = await readdir(target, { withFileTypes: true });
     const visible = entries
-      .filter((entry) => !IGNORED_DIRS.has(entry.name))
+      .filter((entry) => !IGNORED_DIRS.has(entry.name) && !entry.isSymbolicLink())
       .slice(0, MAX_LIST_ENTRIES);
     const mapped = await Promise.all(
       visible.map(async (entry): Promise<WorkspaceEntry> => {
@@ -402,7 +402,7 @@ async function countEntries(root: string): Promise<number> {
 async function walk(root: string, onFile: (filePath: string) => Promise<boolean>): Promise<void> {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
-    if (IGNORED_DIRS.has(entry.name)) continue;
+    if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
     const absolutePath = path.join(root, entry.name);
     if (entry.isDirectory()) {
       await walk(absolutePath, onFile);

@@ -282,12 +282,14 @@ export class AgentLoop {
     this.options.approvalGate?.rejectPending?.(error);
     this.toolExecutor.shutdown(error);
     this.turnInputs.clear();
+    const memoryDrained = this.memory.shutdown(timeoutMs);
     await Promise.allSettled(tasks.map((task) =>
       this.turnTermination.publishCancelledOnce(task.threadId, task.turnId, task.taskKind, reason, { marker: true }),
     ));
     const drained = await this.turnTasks.drain(timeoutMs);
+    const backgroundDrained = await memoryDrained;
     await this.eventWriter.flushAll();
-    return drained;
+    return drained && backgroundDrained;
   }
 
   /**
@@ -352,6 +354,9 @@ export class AgentLoop {
     const run = await this.turnRuns.createRegular(threadId, input);
     this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
     await run.done;
+    // Command-style callers historically waited for passive memory as part of sendTurn.
+    // HTTP/UI callers use startTurn and are released as soon as turn.completed is durable.
+    await this.memory.waitForPassiveMemoriesForTurn(threadId, run.turnId);
   }
 
   /**

@@ -123,7 +123,12 @@ runtime/
 ├── mcp.json
 ├── skills.json
 ├── user-skills/
-├── memories.json
+├── memories/
+│   ├── .setsuna-memory-root.json
+│   ├── memories.json
+│   ├── MEMORY.md
+│   ├── memory_summary.md
+│   └── rollout_summaries/
 ├── usage.jsonl
 └── threads/
     ├── index.json
@@ -131,7 +136,7 @@ runtime/
     └── <threadId>.events.jsonl
 ```
 
-用户配置 `storagePath` 后，memory 的 active root 会变为该路径；runtime data dir 仍作为回退读取 root。
+用户配置 `storagePath` 后，memory 的 active root 是 `<storagePath>/.setsuna-memory/`，不会把所选目录本身视为 runtime 所有。清空记忆只删除带有效所有权 marker 的专属 root 内容；runtime data dir 下的默认 root 仍作为回退读取来源。Phase 2 使用内部 snapshot baseline 生成增量 diff，不初始化、读取或删除用户目录中的 Git 仓库。
 
 ## 数据安全
 

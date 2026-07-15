@@ -438,6 +438,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
+  if (event.type === 'runtime.warning') {
+    // Warnings stay in the append-only event log without rewriting a terminal turn.
+    return next;
+  }
+
   if (event.type === 'turn.cancelled') {
     const reason = event.payload.reason || 'Turn cancelled.';
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;

@@ -19,6 +19,7 @@ import type { RuntimeToolCallExecutor } from './runtime-tool-call-executor.js';
 import type { RuntimeTurnFinalizer } from './runtime-turn-finalizer.js';
 import { HookStoppedTurnError } from './runtime-context-compactor.js';
 import { isAbortError, throwIfAborted } from './runtime-turn-errors.js';
+import { addRuntimeUsage } from './runtime-usage.js';
 import type { RuntimeTurnInputCoordinator } from './runtime-turn-input-coordinator.js';
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';
 import type { RuntimeQueuedSteer } from './turn-input-queue.js';
@@ -240,13 +241,17 @@ export class RuntimeAgentTurnRunner {
           memoryCitation: roundMemoryCitation,
           toolCalls,
         } = sampled;
-        if (sampled.usage) usage = sampled.usage;
+        usage = addRuntimeUsage(usage, sampled.usage);
         let roundText = sampled.text;
 
         if (toolCalls.length) {
           throwIfAborted(signal);
           // 先把 toolCalls 挂到 assistant 消息上，再执行工具，UI 才能把后续 toolRuns 归到正确气泡。
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { toolCalls, memoryCitation: roundMemoryCitation });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, {
+            toolCalls,
+            usage: sampled.usage,
+            memoryCitation: roundMemoryCitation,
+          });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
@@ -264,7 +269,7 @@ export class RuntimeAgentTurnRunner {
         const pendingMailboxMessages = await this.options.turnInputs.drainMailboxMessages(threadId, turnId);
         const pendingSteers = await this.options.turnInputs.drainSteers(threadId, turnId);
         if (pendingMailboxMessages.length || pendingSteers.length) {
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage, memoryCitation: roundMemoryCitation });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
@@ -274,7 +279,6 @@ export class RuntimeAgentTurnRunner {
           });
           appendMailboxMessagesToConversation(pendingMailboxMessages);
           appendSteersToConversation(pendingSteers);
-          usage = undefined;
           continue;
         }
 
@@ -284,7 +288,7 @@ export class RuntimeAgentTurnRunner {
             roundText += COLLABORATION_WAIT_NOTE;
             await this.options.publishAssistantDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
           }
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { memoryCitation: roundMemoryCitation });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
@@ -294,7 +298,6 @@ export class RuntimeAgentTurnRunner {
           });
           // Runtime-enforced join: a parent collaboration turn cannot complete while spawned children are outstanding.
           conversationMessages.push(...await this.options.collaborationCoordinator.collectPendingChildren(threadId, turnId, signal));
-          usage = undefined;
           continue;
         }
 
@@ -305,7 +308,7 @@ export class RuntimeAgentTurnRunner {
           stopHookActive,
         });
         if (stopHookOutcome.shouldBlock && stopHookOutcome.blockReason) {
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { memoryCitation: roundMemoryCitation });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
@@ -315,7 +318,6 @@ export class RuntimeAgentTurnRunner {
           });
           conversationMessages.push(...this.options.hooks.stopContinuationMessages(stopHookOutcome.blockReason, turnId));
           stopHookActive = true;
-          usage = undefined;
           continue;
         }
 
@@ -324,6 +326,7 @@ export class RuntimeAgentTurnRunner {
           threadId,
           turnId,
           messageId: assistantMessageId,
+          messageUsage: sampled.usage,
           usage,
           finalization: {
             explicitMemory: taskKind === 'goal' ? undefined : {
@@ -414,7 +417,7 @@ export class RuntimeAgentTurnRunner {
         id: this.options.ids.id('event'),
         threadId: context.threadId,
         turnId: context.turnId,
-        type: 'runtime.error',
+        type: 'runtime.warning',
         createdAt: this.options.clock.now().toISOString(),
         payload: {
           message: error instanceof Error ? error.message : String(error),

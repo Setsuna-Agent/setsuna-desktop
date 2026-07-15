@@ -95,7 +95,7 @@ REST 路由覆盖：
 - `RuntimeSamplingContextBuilder`：使用 Builder 模式，在每个 sampling step 只解析一次环境，并重新捕获 provider config、压缩后的对话、memory、Skill、工具路由和 world-state snapshot。
 - `RuntimeThreadTitleCoordinator`：管理首轮自动标题策略、模型生成、fallback 资格、usage 和手动改名竞争保护。
 - `RuntimeTurnRunFactory`：使用 Factory 模式统一创建普通、review、mailbox-triggered 和 regenerate turn，把输入准备与任务登记移出主循环。
-- `RuntimeTurnFinalizer`：按固定模板依次结算 usage、完成消息、提交标题、退出 review、保存 memory、发布 `turn.completed`。
+- `RuntimeTurnFinalizer`：按固定模板依次结算累计 usage、完成消息、提交标题、退出 review、保存显式 memory、发布 `turn.completed`，再排队被动 memory。
 - `RuntimeTurnTerminationCoordinator`：串行化取消终态和 aborted marker，确保一个 turn 最多只有一个 terminal event。
 
 `AgentLoop` 本身只保留依赖装配、公开 Facade 和窄事件桥接。新增横切能力时优先判断属于哪个协作者；只有需要暴露新的顶层 runtime 动作时才应修改 `AgentLoop`。
@@ -131,7 +131,7 @@ REST 路由覆盖：
 
 - 所有用户可见状态通过 runtime event 发布。
 - 事件必须先落盘再广播。
-- 被动 memory 失败不能影响主回答完成。
+- 被动 memory 在串行、可取消的后台队列中运行，不占用 active turn；失败不能影响主回答完成，runtime shutdown 会中止仍在执行的抽取。
 - usage 只在模型返回 usage 时记录，不伪造。
 - 工具调用由模型驱动持续 sampling，不按调用次数截断；长链路在每次 sampling 前按上下文边界自动压缩，直到模型正常结束或取消、hook、provider/资源错误终止。
 - 只读检查工具可以批处理，文件写入必须通过 mutation 工具的预览、审批和权限预检。
@@ -282,7 +282,7 @@ REST 路由覆盖：
 - `remember_memory`
 - `recall_memory`
 
-显式 memory 会带 thread/turn 来源；被动 memory 由 AgentLoop 在 turn 完成后抽取。
+显式 memory 会带 thread/turn 来源；被动 memory 由 AgentLoop 在 turn 完成后排队抽取。自定义 `storagePath` 是容器目录，实际数据位于其 `.setsuna-memory/` 专属子目录；清空操作要求有效所有权 marker。Phase 2 用内部 snapshot baseline 计算增量，不依赖或改动 Git 元数据。
 
 ### PC Local Tools
 

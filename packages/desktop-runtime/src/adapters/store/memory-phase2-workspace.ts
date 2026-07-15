@@ -1,20 +1,24 @@
-import { execFile } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import type { RuntimeMemoryPhase2Workspace, RuntimeMemoryPhase2WorkspaceChange, RuntimeMemoryPhase2WorkspaceChangeStatus } from '@setsuna-desktop/contracts';
+import { readJsonFile, writeJsonFile } from './json-file.js';
 
-const execFileAsync = promisify(execFile);
 const PHASE2_WORKSPACE_DIFF_FILE = 'phase2_workspace_diff.md';
-const MEMORY_INDEX_FILE = 'memories.json';
+const PHASE2_BASELINE_FILE = '.setsuna-phase2-baseline.json';
 const PHASE2_WORKSPACE_DIFF_MAX_BYTES = 4 * 1024 * 1024;
-const BASELINE_COMMIT_MESSAGE = 'Initialize Setsuna memory baseline';
+const SNAPSHOT_TOP_LEVEL_FILES = new Set(['MEMORY.md', 'memory_summary.md', 'raw_memories.md']);
+const SNAPSHOT_TOP_LEVEL_DIRECTORIES = new Set(['rollout_summaries', 'skills']);
+
+type Phase2Baseline = {
+  version: 1;
+  files: Record<string, string>;
+};
 
 export async function prepareMemoryPhase2Workspace(root: string): Promise<RuntimeMemoryPhase2Workspace> {
   const resolved = path.resolve(root);
   await mkdir(resolved, { recursive: true });
   await removeWorkspaceDiff(resolved);
-  await ensureGitBaselineRepository(resolved);
+  await ensureBaseline(resolved);
   return { root: resolved, hasChanges: false, changes: [] };
 }
 
@@ -22,14 +26,12 @@ export async function syncMemoryPhase2Workspace(root: string): Promise<RuntimeMe
   const resolved = path.resolve(root);
   await mkdir(resolved, { recursive: true });
   await removeWorkspaceDiff(resolved);
-  await ensureGitBaselineRepository(resolved);
-
-  const changes = parseGitStatus(await git(resolved, ['status', '--porcelain=v1', '--untracked-files=all']));
+  const baseline = await ensureBaseline(resolved);
+  const current = await snapshotMemoryFiles(resolved);
+  const changes = compareSnapshots(baseline.files, current.files);
   if (!changes.length) return { root: resolved, hasChanges: false, changes: [] };
 
-  await git(resolved, ['add', '-N', '.']).catch(() => undefined);
-  const unifiedDiff = await git(resolved, ['diff', '--no-ext-diff', '--', '.', `:(exclude)${MEMORY_INDEX_FILE}`, `:(exclude)${PHASE2_WORKSPACE_DIFF_FILE}`]);
-  const rendered = renderWorkspaceDiffFile(changes, unifiedDiff);
+  const rendered = renderWorkspaceDiffFile(changes, baseline.files, current.files);
   const diffPath = path.join(resolved, PHASE2_WORKSPACE_DIFF_FILE);
   await writeFile(diffPath, rendered, 'utf8');
   return { root: resolved, hasChanges: true, changes, diffPath: PHASE2_WORKSPACE_DIFF_FILE };
@@ -39,94 +41,143 @@ export async function resetMemoryPhase2WorkspaceBaseline(root: string): Promise<
   const resolved = path.resolve(root);
   await mkdir(resolved, { recursive: true });
   await removeWorkspaceDiff(resolved);
-  await resetGitBaselineRepository(resolved);
+  await writeBaseline(resolved, await snapshotMemoryFiles(resolved));
   return { root: resolved, hasChanges: false, changes: [] };
 }
 
-async function ensureGitBaselineRepository(root: string): Promise<void> {
-  const usable = await git(root, ['rev-parse', '--is-inside-work-tree'])
-    .then((value) => value.trim() === 'true')
-    .catch(() => false);
-  const hasHead = usable && await git(root, ['rev-parse', '--verify', 'HEAD'])
-    .then(() => true)
-    .catch(() => false);
-  if (hasHead) return;
-  await resetGitBaselineRepository(root);
+async function ensureBaseline(root: string): Promise<Phase2Baseline> {
+  const baselinePath = path.join(root, PHASE2_BASELINE_FILE);
+  try {
+    const stats = await lstat(baselinePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) throw new Error(`Invalid memory Phase 2 baseline: ${baselinePath}`);
+    const baseline = await readJsonFile<Phase2Baseline>(baselinePath, { version: 1, files: {} });
+    if (baseline.version !== 1 || !isStringRecord(baseline.files)) {
+      throw new Error(`Invalid memory Phase 2 baseline: ${baselinePath}`);
+    }
+    return baseline;
+  } catch (error) {
+    if (!isNodeErrorCode(error, 'ENOENT')) throw error;
+    const baseline = await snapshotMemoryFiles(root);
+    await writeBaseline(root, baseline);
+    return baseline;
+  }
 }
 
-async function resetGitBaselineRepository(root: string): Promise<void> {
-  await rm(path.join(root, '.git'), { recursive: true, force: true });
-  await git(root, ['init']);
-  await git(root, ['config', 'user.name', 'Setsuna']);
-  await git(root, ['config', 'user.email', 'noreply@setsuna.local']);
-  await git(root, ['add', '-A']);
-  await git(root, ['commit', '--allow-empty', '-m', BASELINE_COMMIT_MESSAGE]);
+async function writeBaseline(root: string, baseline: Phase2Baseline): Promise<void> {
+  await writeJsonFile(path.join(root, PHASE2_BASELINE_FILE), baseline, { mode: 0o600 });
+}
+
+async function snapshotMemoryFiles(root: string): Promise<Phase2Baseline> {
+  const files: Record<string, string> = {};
+  for (const fileName of [...SNAPSHOT_TOP_LEVEL_FILES].sort()) {
+    await snapshotRegularFile(root, fileName, files);
+  }
+  for (const dirName of [...SNAPSHOT_TOP_LEVEL_DIRECTORIES].sort()) {
+    await snapshotDirectory(root, dirName, files);
+  }
+  return { version: 1, files };
+}
+
+async function snapshotDirectory(root: string, relativeDir: string, files: Record<string, string>): Promise<void> {
+  const absoluteDir = path.join(root, relativeDir);
+  let entries;
+  try {
+    entries = await readdir(absoluteDir, { withFileTypes: true });
+  } catch (error) {
+    if (isNodeErrorCode(error, 'ENOENT')) return;
+    throw error;
+  }
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+    const relativePath = path.posix.join(relativeDir, entry.name);
+    if (entry.isDirectory()) await snapshotDirectory(root, relativePath, files);
+    if (entry.isFile()) await snapshotRegularFile(root, relativePath, files);
+  }
+}
+
+async function snapshotRegularFile(root: string, relativePath: string, files: Record<string, string>): Promise<void> {
+  const absolutePath = path.join(root, relativePath);
+  try {
+    const stats = await lstat(absolutePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) return;
+    files[relativePath] = await readFile(absolutePath, 'utf8');
+  } catch (error) {
+    if (!isNodeErrorCode(error, 'ENOENT')) throw error;
+  }
+}
+
+function compareSnapshots(before: Record<string, string>, after: Record<string, string>): RuntimeMemoryPhase2WorkspaceChange[] {
+  const paths = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...paths]
+    .filter((filePath) => before[filePath] !== after[filePath])
+    .map((filePath) => ({ status: changeStatus(before, after, filePath), path: filePath }))
+    .sort((left, right) => left.path.localeCompare(right.path) || left.status.localeCompare(right.status));
+}
+
+function changeStatus(
+  before: Record<string, string>,
+  after: Record<string, string>,
+  filePath: string,
+): RuntimeMemoryPhase2WorkspaceChangeStatus {
+  if (!Object.hasOwn(before, filePath)) return 'A';
+  if (!Object.hasOwn(after, filePath)) return 'D';
+  return 'M';
 }
 
 async function removeWorkspaceDiff(root: string): Promise<void> {
   await rm(path.join(root, PHASE2_WORKSPACE_DIFF_FILE), { force: true });
 }
 
-async function git(cwd: string, args: string | string[]): Promise<string> {
-  const list = Array.isArray(args) ? args : [args];
-  const { stdout } = await execFileAsync('git', list, {
-    cwd,
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  return stdout;
-}
-
-function parseGitStatus(value: string): RuntimeMemoryPhase2WorkspaceChange[] {
-  const changes: RuntimeMemoryPhase2WorkspaceChange[] = [];
-  const seen = new Set<string>();
-  for (const line of value.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    const statusText = line.slice(0, 2);
-    const rawPath = line.slice(3).trim();
-    const filePath = normalizeStatusPath(rawPath);
-    if (!filePath || filePath === PHASE2_WORKSPACE_DIFF_FILE || filePath === MEMORY_INDEX_FILE || filePath.startsWith('.git/')) continue;
-    const status = phase2ChangeStatus(statusText);
-    const key = `${status}\0${filePath}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    changes.push({ status, path: filePath });
-  }
-  changes.sort((left, right) => left.path.localeCompare(right.path) || left.status.localeCompare(right.status));
-  return changes;
-}
-
-function normalizeStatusPath(value: string): string {
-  const renamedPath = value.includes(' -> ') ? value.split(' -> ').at(-1) ?? value : value;
-  return renamedPath.replace(/^"|"$/g, '').replace(/\\/g, '/');
-}
-
-function phase2ChangeStatus(statusText: string): RuntimeMemoryPhase2WorkspaceChangeStatus {
-  if (statusText === '??' || statusText.includes('A')) return 'A';
-  if (statusText.includes('D')) return 'D';
-  return 'M';
-}
-
-function renderWorkspaceDiffFile(changes: RuntimeMemoryPhase2WorkspaceChange[], unifiedDiff: string): string {
+function renderWorkspaceDiffFile(
+  changes: RuntimeMemoryPhase2WorkspaceChange[],
+  before: Record<string, string>,
+  after: Record<string, string>,
+): string {
   let rendered = '# Memory Workspace Diff\n\n'
     + 'Generated by Setsuna before Phase 2 memory consolidation. Read this file first and do not edit it.\n\n'
     + '## Status\n';
-  if (!changes.length) {
-    rendered += '- none\n';
-    return rendered;
-  }
   for (const change of changes) rendered += `- ${change.status} ${change.path}\n`;
   rendered += '\n## Diff\n\n```diff\n';
-  rendered += boundedDiff(unifiedDiff);
+  for (const change of changes) {
+    rendered += renderFileDiff(change, before[change.path], after[change.path]);
+  }
   rendered += '```\n';
+  return boundedDiff(rendered);
+}
+
+function renderFileDiff(change: RuntimeMemoryPhase2WorkspaceChange, before: string | undefined, after: string | undefined): string {
+  const oldPath = change.status === 'A' ? '/dev/null' : `a/${change.path}`;
+  const newPath = change.status === 'D' ? '/dev/null' : `b/${change.path}`;
+  const oldLines = splitDiffLines(before);
+  const newLines = splitDiffLines(after);
+  let rendered = `diff --setsuna a/${change.path} b/${change.path}\n--- ${oldPath}\n+++ ${newPath}\n`;
+  rendered += `@@ -1,${oldLines.length} +1,${newLines.length} @@\n`;
+  for (const line of oldLines) rendered += `-${line}\n`;
+  for (const line of newLines) rendered += `+${line}\n`;
   return rendered;
 }
 
+function splitDiffLines(value: string | undefined): string[] {
+  if (value === undefined || value === '') return [];
+  const lines = value.split(/\r?\n/);
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
 function boundedDiff(value: string): string {
-  if (Buffer.byteLength(value, 'utf8') <= PHASE2_WORKSPACE_DIFF_MAX_BYTES) {
-    return value.endsWith('\n') ? value : `${value}\n`;
-  }
-  const buffer = Buffer.from(value, 'utf8').subarray(0, PHASE2_WORKSPACE_DIFF_MAX_BYTES);
+  if (Buffer.byteLength(value, 'utf8') <= PHASE2_WORKSPACE_DIFF_MAX_BYTES) return value;
+  const suffix = `\n[workspace diff truncated at ${PHASE2_WORKSPACE_DIFF_MAX_BYTES} bytes]\n\`\`\`\n`;
+  const bodyLimit = Math.max(0, PHASE2_WORKSPACE_DIFF_MAX_BYTES - Buffer.byteLength(suffix, 'utf8'));
+  const buffer = Buffer.from(value, 'utf8').subarray(0, bodyLimit);
   const text = buffer.toString('utf8').replace(/\uFFFD+$/g, '');
-  return `${text.endsWith('\n') ? text : `${text}\n`}\n[workspace diff truncated at ${PHASE2_WORKSPACE_DIFF_MAX_BYTES} bytes]\n`;
+  return `${text.endsWith('\n') ? text : `${text}\n`}${suffix}`;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value)
+    && Object.values(value).every((item) => typeof item === 'string'));
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }

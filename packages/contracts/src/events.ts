@@ -57,6 +57,7 @@ export type RuntimeEventType =
   | 'approval.resolved'
   | 'turn.completed'
   | 'turn.cancelled'
+  | 'runtime.warning'
   | 'runtime.error';
 
 export type RuntimeEventBase<TType extends RuntimeEventType, TPayload> = {
@@ -133,6 +134,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'approval.resolved', { approvalId: string; decision: RuntimeApprovalDecision; message?: string }>
   | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'turn.cancelled', { reason?: string; taskKind?: RuntimeTaskKind }>
+  | RuntimeEventBase<'runtime.warning', { message: string; code?: string }>
   | RuntimeEventBase<'runtime.error', { message: string; code?: string }>;
 
 export type RuntimeSseEnvelope = {

@@ -96,7 +96,7 @@ export function createRuntimeContextCompactionCandidate({
   const targetContextTokens = compactedContextTargetTokens(originalTokens, conversationTokenLimit);
   const minKeepCount = tailScope ? 0 : 1;
   let keepCount = Math.min(Math.max(minKeepCount, keepRecentMessages), Math.max(minKeepCount, eligibleIndexes.length - 1));
-  let recentStart = recentStartForKeepCount(eligibleIndexes, keepCount, messages.length);
+  let recentStart = recentStartForKeepCount(eligibleIndexes, keepCount, messages);
   let olderRegion = messages.slice(0, recentStart);
   let olderMessages = olderRegion.filter((message) => !messagePinnedAcrossCompaction(message));
   let pinnedMessages = olderRegion.filter(messagePinnedAcrossCompaction);
@@ -104,7 +104,7 @@ export function createRuntimeContextCompactionCandidate({
   // 工具结果可能单条就撑爆窗口；这种情况下继续固定保留最近 8 条会让 mid-turn 压缩无效。
   while (keepCount > minKeepCount && estimateRuntimeMessageTokens(recentMessages) > conversationTokenLimit) {
     keepCount -= 1;
-    recentStart = recentStartForKeepCount(eligibleIndexes, keepCount, messages.length);
+    recentStart = recentStartForKeepCount(eligibleIndexes, keepCount, messages);
     olderRegion = messages.slice(0, recentStart);
     olderMessages = olderRegion.filter((message) => !messagePinnedAcrossCompaction(message));
     pinnedMessages = olderRegion.filter(messagePinnedAcrossCompaction);
@@ -243,9 +243,25 @@ function percentForTokens(usedTokens: number, maxTokens: number): number {
   return Math.min(100, Math.max(0, Math.round((usedTokens / maxTokens) * 100)));
 }
 
-function recentStartForKeepCount(eligibleIndexes: number[], keepCount: number, messagesLength: number): number {
-  if (keepCount <= 0) return messagesLength;
-  return eligibleIndexes[eligibleIndexes.length - keepCount] ?? messagesLength;
+function recentStartForKeepCount(eligibleIndexes: number[], keepCount: number, messages: RuntimeMessage[]): number {
+  if (keepCount <= 0) return messages.length;
+  const requestedStart = eligibleIndexes[eligibleIndexes.length - keepCount] ?? messages.length;
+  return toolExchangeStartAtOrBefore(messages, requestedStart);
+}
+
+/** Keep assistant tool calls and their following results on the same side of a compaction boundary. */
+function toolExchangeStartAtOrBefore(messages: RuntimeMessage[], requestedStart: number): number {
+  const firstRecent = messages[requestedStart];
+  if (firstRecent?.role !== 'tool') return requestedStart;
+
+  for (let index = requestedStart - 1; index >= 0; index -= 1) {
+    const candidate = messages[index];
+    if (candidate.role !== 'assistant' || !candidate.toolCalls?.length) continue;
+    if (!firstRecent.toolCallId || candidate.toolCalls.some((toolCall) => toolCall.id === firstRecent.toolCallId)) {
+      return index;
+    }
+  }
+  return requestedStart;
 }
 
 function compactableTailScope(messages: RuntimeMessage[], eligibleIndexes: number[], autoCompactTokenLimit: number): string | null {
@@ -300,7 +316,20 @@ function estimateMessageTokens(message: RuntimeMessage): number {
     if (!attachment.url.startsWith('data:')) return total + estimateTextTokens(`${attachment.name} ${attachment.type}`);
     return total + estimateTextTokens(attachment.url);
   }, 0);
-  return estimateTextTokens(`${message.role}\n${message.content}`) + attachmentTokens;
+  const toolCallTokens = message.toolCalls?.length
+    ? estimateTextTokens(JSON.stringify(message.toolCalls.map((toolCall) => ({
+        id: toolCall.id,
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+      }))))
+    : 0;
+  const toolResultMetadataTokens = message.role === 'tool'
+    ? estimateTextTokens(`${message.toolCallId ?? ''}\n${message.toolName ?? ''}`)
+    : 0;
+  return estimateTextTokens(`${message.role}\n${message.content}`)
+    + attachmentTokens
+    + toolCallTokens
+    + toolResultMetadataTokens;
 }
 
 export function estimateTextTokens(value: string): number {
@@ -309,7 +338,13 @@ export function estimateTextTokens(value: string): number {
 
 function messageHasContextValue(message: RuntimeMessage): boolean {
   if (message.visibility === 'transcript') return false;
-  return Boolean(message.content.trim() || message.attachments?.length || message.contextCompaction);
+  return Boolean(
+    message.content.trim()
+    || message.attachments?.length
+    || message.contextCompaction
+    || message.toolCalls?.length
+    || (message.role === 'tool' && (message.toolCallId || message.toolName)),
+  );
 }
 
 function messageEligibleForCompaction(message: RuntimeMessage): boolean {

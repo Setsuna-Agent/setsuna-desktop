@@ -670,7 +670,9 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
     mcpConfigPath: MCP_CONFIG_PATH,
     permissionProfile: 'workspace-write',
     sandboxWorkspaceWrite: {},
-    osSandbox: false,
+    // Restricted shell profiles must fail closed when the host has no supported
+    // sandbox provider. An explicitly approved bypass temporarily disables this.
+    osSandbox: true,
     shellPolicyRules: loadShellPolicyRules(workspaceRoot),
     networkPolicyAmendments: [],
     reads: new Map(),
@@ -960,13 +962,13 @@ export function shellSandboxCapability(platform = process.platform, hasMacSandbo
     return {
       supported: false,
       provider: '',
-      reason: 'Windows 当前没有内置的桌面 OS sandbox provider；请关闭 os_sandbox 以使用 runtime policy 预检。硬隔离需要后续接入原生 Job Object/AppContainer provider。',
+      reason: 'Windows 当前没有可用的桌面 OS sandbox provider。受限权限下已拒绝 shell 执行；如确有需要，请显式批准一次无沙箱重试或切换到 danger-full-access。',
     };
   }
   return {
     supported: false,
     provider: '',
-    reason: '当前平台暂不支持 OS sandbox；请关闭 os_sandbox 以使用 runtime policy 预检。',
+    reason: '当前平台没有可用的 OS sandbox provider。受限权限下已拒绝 shell 执行；如确有需要，请显式批准一次无沙箱重试或切换到 danger-full-access。',
   };
 }
 
@@ -2659,7 +2661,9 @@ async function runShellCommand(args, state, options = {}) {
   const sandboxBlock = shellSandboxUnavailableReason(state);
   if (sandboxBlock) {
     return errorResult(sandboxBlock, {
-      failure_kind: 'sandbox_unavailable',
+      // The orchestrator treats this like an OS-level denial and may offer an
+      // explicit unsandboxed retry. Never silently fall back to policy heuristics.
+      failure_kind: 'sandbox_denied',
       failure_stage: 'preflight',
     });
   }
@@ -4634,7 +4638,11 @@ export function shellSandboxProfile(state, capability = shellSandboxCapability()
   ];
   if (state?.sandboxWorkspaceWrite?.networkAccess !== true) lines.push('(deny network*)');
   if (profile === 'read-only') {
-    lines.push('(deny file-write*)');
+    const writableRoots = [...new Set(shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false }).map(realPathIfExists))];
+    lines.push(writableRoots.length ? seatbeltDenyWritesOutsideRoots(writableRoots) : '(deny file-write*)');
+    for (const root of deniedRootsForState(state)) {
+      lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
+    }
     return lines.join('\n');
   }
   if (profile !== 'workspace-write') return '';

@@ -724,6 +724,60 @@ describe('pc local tool host', () => {
     });
   });
 
+  it('fails closed for opaque scripts under restricted shell profiles', async () => {
+    const { host, projectDir } = await createHost();
+    const outsideDir = await mkdtemp(path.join(tmpdir(), 'setsuna-shell-escape-test-'));
+    const outsideTarget = path.join(outsideDir, 'escaped.txt');
+    await writeFile(path.join(projectDir, 'escape.cjs'), [
+      "const { writeFileSync } = require('node:fs');",
+      `writeFileSync(${JSON.stringify(outsideTarget)}, 'escaped');`,
+      '',
+    ].join('\n'), 'utf8');
+
+    await expect(host.runTool('run_shell_command', {
+      command: `${nodeCommand()} escape.cjs`,
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_restricted',
+      turnId: 'turn_restricted',
+      permissionProfile: 'workspace-write',
+    })).rejects.toThrow();
+    await expect(readFile(outsideTarget, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+
+    await expect(host.runTool('run_shell_command', {
+      command: `${nodeCommand()} escape.cjs`,
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_unrestricted',
+      turnId: 'turn_unrestricted',
+      permissionProfile: 'danger-full-access',
+    })).resolves.toMatchObject({ content: expect.stringContaining('Exit Code: 0') });
+    await expect(readFile(outsideTarget, 'utf8')).resolves.toBe('escaped');
+  });
+
+  it('keeps concurrent tool permissions isolated per invocation', async () => {
+    const { host, projectDir } = await createHost();
+    const [readOnlyWrite, workspaceWrite] = await Promise.allSettled([
+      host.runTool('write_file', { file_path: 'read-only.txt', content: 'must not exist\n' }, {
+        threadId: 'thread_read_only',
+        turnId: 'turn_read_only',
+        permissionProfile: 'read-only',
+      }),
+      host.runTool('write_file', { file_path: 'workspace.txt', content: 'allowed\n' }, {
+        threadId: 'thread_workspace',
+        turnId: 'turn_workspace',
+        permissionProfile: 'workspace-write',
+      }),
+    ]);
+
+    expect(readOnlyWrite.status).toBe('rejected');
+    expect(workspaceWrite.status).toBe('fulfilled');
+    await expect(readFile(path.join(projectDir, 'read-only.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(projectDir, 'workspace.txt'), 'utf8')).resolves.toBe('allowed\n');
+  });
+
   it('does not execute MCP configuration through the pc tool path', async () => {
     const { host } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

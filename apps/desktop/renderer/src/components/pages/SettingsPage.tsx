@@ -1380,7 +1380,7 @@ function PersonalizationSettings({
       <div className="chat-user-settings__section-block chat-user-settings__memory-settings-block">
         <div className="chat-user-settings__memory-heading">
           <div className="chat-user-settings__group-title">记忆</div>
-          <p>记忆用于保存你希望长期生效的偏好、项目规则、固定流程和事实信息。开启后，后续对话会按当前项目或全局范围自动召回相关记忆，帮助模型延续你的工作习惯；你可以在预览中查看、删除单条记忆，或在这里重置全部记忆。</p>
+          <p>记忆用于保存你希望长期生效的偏好、项目规则、固定流程和事实信息。开启后，后续对话会按当前项目或全局范围自动召回相关记忆，帮助模型延续你的工作习惯；自定义位置会在所选目录内使用 .setsuna-memory 专属子目录，不会改动同级文件。</p>
         </div>
         {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
@@ -1392,7 +1392,7 @@ function PersonalizationSettings({
           <div className="chat-user-settings__row chat-user-settings__local-field">
             <span className="chat-user-settings__row-label">
               <FolderOpen size={14} />
-              <span>存储位置</span>
+              <span>存储容器</span>
             </span>
             <div className="chat-user-settings__local-storage-control">
               <TextField className="settings-local-control" value={storagePath} readOnly />
@@ -1415,7 +1415,7 @@ function PersonalizationSettings({
               <RefreshCw size={14} />
               <span>重置记忆</span>
             </span>
-            <Popconfirm title="重置全部记忆？" description="这会清空所有已保存记忆，无法撤销。" placement="topRight" okText="重置" cancelText="取消" okButtonProps={{ danger: true, loading: memoryResetting }} onConfirm={() => void resetMemoryItems()}>
+            <Popconfirm title="重置全部记忆？" description="只会清空 Setsuna 管理的记忆子目录，不影响所选目录内其他文件；该操作无法撤销。" placement="topRight" okText="重置" cancelText="取消" okButtonProps={{ danger: true, loading: memoryResetting }} onConfirm={() => void resetMemoryItems()}>
               <Button variant="danger" icon={<RefreshCw size={14} />} disabled={memoryPreviewLoading || Boolean(memoryDeletingId) || memoryResetting}>
                 {memoryResetting ? '重置中' : '重置'}
               </Button>

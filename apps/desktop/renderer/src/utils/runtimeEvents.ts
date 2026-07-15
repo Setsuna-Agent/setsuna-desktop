@@ -10,6 +10,7 @@ export function isActivityEvent(event: RuntimeEvent): boolean {
     isToolEvent(event) ||
     event.type === 'approval.requested' ||
     event.type === 'approval.resolved' ||
+    event.type === 'runtime.warning' ||
     event.type === 'runtime.error' ||
     event.type === 'thread.context_cleared' ||
     event.type === 'thread.context_compacted' ||

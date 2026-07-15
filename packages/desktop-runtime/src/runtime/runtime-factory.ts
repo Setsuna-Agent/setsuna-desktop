@@ -98,9 +98,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     projectWorkflow,
     eventWriter,
   });
-  // Codex 会在 root session 启动时触发 memories startup；桌面端这里做一次轻量历史抽取。
-  const memoryStartup = agentLoop.runMemoryStartupExtraction().catch(() => ({ claimed: 0, extracted: 0 }));
-
   return {
     agentLoop,
     approvalGate,
@@ -110,7 +107,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     eventWriter,
     environmentResolver,
     memoryStore,
-    memoryStartup,
     modelClient,
     mcpStore,
     persistentToolApprovalStore,

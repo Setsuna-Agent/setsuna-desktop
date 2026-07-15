@@ -1,5 +1,5 @@
 import type { Dirent } from 'node:fs';
-import { lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   CreateRuntimeMemoryInput,
@@ -29,8 +29,10 @@ import type {
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { MemoryStore } from '../../ports/memory-store.js';
+import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
+import { MemoryStorageRootManager } from './memory-storage-root.js';
 import { prepareMemoryPhase2Workspace, resetMemoryPhase2WorkspaceBaseline, syncMemoryPhase2Workspace } from './memory-phase2-workspace.js';
 
 type StoredMemoryRecord = RuntimeMemoryRecord & {
@@ -65,7 +67,6 @@ type MemoryIndex = {
 const DEFAULT_MEMORY_LIMIT = 50;
 const MAX_MEMORY_LIMIT = 500;
 const MEMORY_FILE_NAME = 'memories.json';
-const DEFAULT_MEMORY_DIR_NAME = 'memories';
 const MEMORY_MARKDOWN_FILE_NAME = 'MEMORY.md';
 const MEMORY_SUMMARY_FILE_NAME = 'memory_summary.md';
 const RAW_MEMORIES_FILE_NAME = 'raw_memories.md';
@@ -91,12 +92,16 @@ const MEMORY_KINDS = new Set<RuntimeMemoryKind>(['preference', 'project_rule', '
 type StorageRootResolver = () => Promise<string | null | undefined> | string | null | undefined;
 
 export class FileMemoryStore implements MemoryStore {
+  private readonly storageRoots: MemoryStorageRootManager;
+
   constructor(
     private readonly dataDir: string,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
-    private readonly storageRootResolver?: StorageRootResolver,
-  ) {}
+    storageRootResolver?: StorageRootResolver,
+  ) {
+    this.storageRoots = new MemoryStorageRootManager(dataDir, storageRootResolver);
+  }
 
   async listMemories(query: RuntimeMemoryQuery = {}): Promise<RuntimeMemoryList> {
     const entries = await this.readMergedMemoryEntries();
@@ -458,7 +463,7 @@ export class FileMemoryStore implements MemoryStore {
 
   async clearMemories(): Promise<void> {
     await Promise.all((await this.memoryStoreRoots()).map((root) =>
-      withFileStateUpdate(this.memoryPath(root), () => clearMemoryRootContents(root)),
+      withFileStateUpdate(this.memoryPath(root), () => this.storageRoots.clear(root)),
     ));
   }
 
@@ -482,7 +487,8 @@ export class FileMemoryStore implements MemoryStore {
   }
 
   private async readIndex(root: string): Promise<MemoryIndex> {
-    return normalizeMemoryIndex(await readJsonFile<MemoryIndex>(this.memoryPath(root), { version: 1, memories: [] }));
+    const memoryPath = await resolveConfinedPathWithoutSymlinks(root, this.memoryPath(root), { label: 'Memory index' });
+    return normalizeMemoryIndex(await readJsonFile<MemoryIndex>(memoryPath, { version: 1, memories: [] }));
   }
 
   private async writeIndex(index: MemoryIndex, root: string): Promise<void> {
@@ -497,40 +503,22 @@ export class FileMemoryStore implements MemoryStore {
   }
 
   private async memoryStoreRoots(): Promise<string[]> {
-    const roots: string[] = [];
-    const addRoot = (value: string | null | undefined) => {
-      const text = normalizeStorageRoot(value);
-      if (!text) return;
-      const resolved = path.resolve(text);
-      if (!roots.includes(resolved)) roots.push(resolved);
-    };
-    addRoot(await this.resolvedStorageRoot());
-    addRoot(this.defaultMemoryRoot());
-    return roots;
+    return this.storageRoots.allRoots();
   }
 
   private async activeMemoryRoot(): Promise<string> {
-    return path.resolve(normalizeStorageRoot(await this.resolvedStorageRoot()) || this.defaultMemoryRoot());
-  }
-
-  private async resolvedStorageRoot(): Promise<string | null | undefined> {
-    if (!this.storageRootResolver) return undefined;
-    return this.storageRootResolver();
+    return this.storageRoots.activeRoot();
   }
 
   private memoryPath(root: string): string {
     return path.join(root, MEMORY_FILE_NAME);
   }
 
-  private defaultMemoryRoot(): string {
-    return path.join(this.dataDir, DEFAULT_MEMORY_DIR_NAME);
-  }
-
   private async writeMemoryArtifacts(artifacts: RenderedMemoryArtifacts, root: string): Promise<void> {
     await mkdir(path.join(root, ROLLOUT_SUMMARIES_DIR_NAME), { recursive: true });
     await Promise.all([...artifacts.files].map(async ([relativePath, content]) => {
       if (await shouldPreserveExistingArtifact(root, relativePath)) return;
-      const target = path.join(root, relativePath);
+      const target = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativePath), { label: 'Memory artifact' });
       await mkdir(path.dirname(target), { recursive: true });
       await writeFile(target, content, 'utf8');
     }));
@@ -538,7 +526,7 @@ export class FileMemoryStore implements MemoryStore {
   }
 
   private async pruneRolloutSummaries(root: string, artifacts: RenderedMemoryArtifacts): Promise<void> {
-    const dir = path.join(root, ROLLOUT_SUMMARIES_DIR_NAME);
+    const dir = await resolveConfinedPathWithoutSymlinks(root, path.join(root, ROLLOUT_SUMMARIES_DIR_NAME), { label: 'Memory artifact' });
     const keep = new Set([...artifacts.files.keys()].filter((filePath) => filePath.startsWith(`${ROLLOUT_SUMMARIES_DIR_NAME}/`)).map((filePath) => path.basename(filePath)));
     let entries: string[];
     try {
@@ -637,10 +625,6 @@ function normalizeRequiredMemoryFilePath(value: unknown): string {
   return text;
 }
 
-function normalizeStorageRoot(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
 function normalizeMemoryIndex(value: MemoryIndex): MemoryIndex {
   return {
     version: 1,
@@ -675,24 +659,9 @@ function normalizePhase2Job(value: unknown): StoredMemoryPhase2Job {
   };
 }
 
-async function clearMemoryRootContents(root: string): Promise<void> {
-  try {
-    const stats = await lstat(root);
-    if (stats.isSymbolicLink()) {
-      throw new Error(`Refusing to clear symlinked memory root: ${root}`);
-    }
-  } catch (error) {
-    if (!isNodeErrorCode(error, 'ENOENT')) throw error;
-  }
-
-  await mkdir(root, { recursive: true });
-  const entries = await readdir(root, { withFileTypes: true });
-  await Promise.all(entries.map((entry) => rm(path.join(root, entry.name), { recursive: true, force: true })));
-}
-
 async function shouldPreserveExistingArtifact(root: string, relativePath: string): Promise<boolean> {
   if (relativePath !== MEMORY_MARKDOWN_FILE_NAME && relativePath !== MEMORY_SUMMARY_FILE_NAME) return false;
-  const target = path.join(root, relativePath);
+  const target = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativePath), { label: 'Memory artifact' });
   let content = '';
   try {
     content = await readFile(target, 'utf8');
@@ -718,14 +687,15 @@ async function overlayStoredMemoryArtifacts(artifacts: RenderedMemoryArtifacts, 
 
 async function overlayStoredFile(files: Map<string, string>, root: string, relativePath: string): Promise<void> {
   try {
-    files.set(relativePath, await readFile(path.join(root, relativePath), 'utf8'));
+    const target = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativePath), { label: 'Memory artifact' });
+    files.set(relativePath, await readFile(target, 'utf8'));
   } catch (error) {
     if (!isNodeErrorCode(error, 'ENOENT')) throw error;
   }
 }
 
 async function overlayStoredDirectory(files: Map<string, string>, root: string, relativeDir: string): Promise<void> {
-  const dir = path.join(root, relativeDir);
+  const dir = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativeDir), { label: 'Memory artifact' });
   let entries: Dirent[];
   try {
     entries = await readdir(dir, { withFileTypes: true });

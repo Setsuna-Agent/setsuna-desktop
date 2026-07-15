@@ -2019,7 +2019,11 @@ turn 取消错误和 AbortSignal 归一化 helper，供 runner 与 compaction co
 
 ### `runtime-memory-coordinator.ts`
 
-长期记忆协调器。负责 memory context、主动/被动记忆生成、启动回扫、phase-2 调度和外部上下文污染门禁。
+长期记忆协调器。负责 memory context、主动/被动记忆生成、启动回扫、可取消后台队列、phase-2 调度和外部上下文污染门禁。
+
+### `runtime-background-task-queue.ts` / `runtime-usage.ts`
+
+runtime 共享的小型基础设施：前者串行执行并在 shutdown 时取消辅助任务；后者累计一个逻辑 turn/rollout 中多个模型请求的 usage。
 
 ### `runtime-context-compactor.ts`
 
@@ -2330,8 +2334,8 @@ memory 文件存储。
 
 持久化文件：
 
-- 默认 `<runtimeDataDir>/memories.json`
-- 如果 runtime config 设置 `storagePath`，则使用 `<storagePath>/memories.json` 作为 active memory root，同时 preview 会合并多个 root。
+- 默认 `<runtimeDataDir>/memories/`
+- 如果 runtime config 设置 `storagePath`，则使用 `<storagePath>/.setsuna-memory/` 作为 active memory root，同时 preview 会合并默认 root。
 
 职责：
 
@@ -2342,6 +2346,14 @@ memory 文件存储。
 - clear memories。
 - 支持 global/project scope。
 - 支持搜索、limit、去重、inactive memory 过滤。
+
+### `adapters/store/memory-storage-root.ts` / `memory-phase2-workspace.ts`
+
+前者用所有权 marker 管理默认/自定义 memory root，确保清空操作不触及用户所选容器的其他内容；后者用内部 snapshot baseline 生成 Phase 2 增量 diff，不依赖 Git 仓库。
+
+### `security/path-confinement.ts`
+
+为已授权 root 下的敏感读写提供词法边界和逐级 symlink 拒绝，供 memory 与受限 consolidation 文件访问复用。
 
 ### `adapters/store/file-usage-store.ts`
 

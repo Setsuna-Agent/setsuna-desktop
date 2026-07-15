@@ -82,6 +82,7 @@ export class FileConfigStore implements ConfigStore {
       const previous = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
       const secrets = await this.readSecrets();
       const providers = normalizeProviders(input.providers ?? previous.providers, previous.providers, secrets);
+      pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
       const memory = memorySettingsForSave(input, previous);
 
@@ -146,6 +147,16 @@ export class FileConfigStore implements ConfigStore {
         };
       }),
     };
+  }
+}
+
+function pruneRemovedProviderSecrets(
+  secrets: StoredSecrets,
+  providers: Array<StoredConfig['providers'][number] & { apiKey?: string }>,
+): void {
+  const retainedProviderIds = new Set(providers.map((provider) => provider.id));
+  for (const providerId of Object.keys(secrets.providerApiKeys)) {
+    if (!retainedProviderIds.has(providerId)) delete secrets.providerApiKeys[providerId];
   }
 }
 

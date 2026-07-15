@@ -222,13 +222,14 @@ export class PcLocalToolHost implements ToolHost {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
     const projectState = await this.projectStateFor(context);
+    const toolState = this.toolStateForContext(projectState, context);
     if (FILE_MUTATION_TOOL_NAMES.has(normalized.name)) return null;
     if (normalized.name === 'run_shell_command') {
       const risk = pcTools.shellCommandRisk(
         stringArg(normalized.args.command),
         stringArg(normalized.args.risk_level ?? normalized.args.riskLevel),
         stringArg(normalized.args.risk_reason ?? normalized.args.riskReason),
-        projectState.toolState as never,
+        toolState as never,
       );
       if (!risk?.needsConfirmation) return null;
       return {
@@ -257,7 +258,7 @@ export class PcLocalToolHost implements ToolHost {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
     const projectState = await this.projectStateFor(context);
-    const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
+    const preview = await previewForTool(normalized.name, normalized.args, this.toolStateForContext(projectState, context));
     return {
       argumentsPreview: previewArguments(normalized.args),
       ...(preview ? { resultPreview: previewPayload(preview) } : {}),
@@ -275,9 +276,10 @@ export class PcLocalToolHost implements ToolHost {
     const normalizedName = this.normalizeToolName(name);
     if (EXCLUDED_PC_TOOLS.has(normalizedName)) return null;
     const projectState = await this.projectStateFor(context);
+    const toolState = this.toolStateForContext(projectState, context);
     const partialArgs = normalizePartialToolArgs(normalizedName, parsePartialArguments(normalizedName, rawArguments));
     if (!partialArgs) return null;
-    const preview = partialArgs.preview ?? await previewForTool(normalizedName, partialArgs, projectState.toolState);
+    const preview = partialArgs.preview ?? await previewForTool(normalizedName, partialArgs, toolState);
     return {
       argumentsPreview: previewArguments(partialArgs),
       ...(preview ? { resultPreview: previewPayload(preview) } : {}),
@@ -295,20 +297,15 @@ export class PcLocalToolHost implements ToolHost {
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
     const projectState = await this.projectStateFor(context);
-    projectState.toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
-    projectState.toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
-
-    const preview = await previewForTool(normalized.name, normalized.args, projectState.toolState);
-    const previousOsSandbox = Boolean(projectState.toolState.osSandbox);
-    const previousSandboxWorkspaceWrite = projectState.toolState.sandboxWorkspaceWrite ?? {};
-    if (context.sandbox?.mode === 'bypass') projectState.toolState.osSandbox = false;
+    const toolState = this.toolStateForContext(projectState, context);
+    const preview = await previewForTool(normalized.name, normalized.args, toolState);
     if (context.sandbox?.networkAccess === 'enabled') {
-      projectState.toolState.sandboxWorkspaceWrite = {
-        ...previousSandboxWorkspaceWrite,
+      toolState.sandboxWorkspaceWrite = {
+        ...toolState.sandboxWorkspaceWrite,
         networkAccess: true,
       };
     }
-    const result = await pcTools.executeLocalTool(normalized.name, normalized.args, projectState.toolState, {
+    const result = await pcTools.executeLocalTool(normalized.name, normalized.args, toolState, {
       signal: context.signal,
       threadId: context.threadId,
       turnId: context.turnId,
@@ -322,9 +319,6 @@ export class PcLocalToolHost implements ToolHost {
             if (stderrDelta) context.onToolOutputDelta?.({ delta: stderrDelta, stream: 'stderr', processId });
           }
         : undefined,
-    }).finally(() => {
-      projectState.toolState.osSandbox = previousOsSandbox;
-      projectState.toolState.sandboxWorkspaceWrite = previousSandboxWorkspaceWrite;
     }) as Record<string, unknown>;
     if (!result?.ok) {
       throw new ToolExecutionError(stringArg(result?.display || result?.content || `Local tool failed: ${normalized.name}`), {
@@ -369,15 +363,10 @@ export class PcLocalToolHost implements ToolHost {
     const root = path.resolve(environment.workspaceRoot);
     const existing = this.projectStates.get(root);
     if (existing) {
-      existing.toolState.environmentId = environment.id;
-      existing.toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
-      existing.toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
       await this.refreshPolicyAmendments(existing);
       return existing;
     }
     const toolState = pcTools.createLocalToolState(root, { environmentId: environment.id, shellProcessStore: this.shellProcessStore });
-    toolState.permissionProfile = context.permissionProfile ?? 'workspace-write';
-    toolState.sandboxWorkspaceWrite = context.sandboxWorkspaceWrite ?? {};
     const created = {
       toolState,
       baseShellPolicyRules: [...(Array.isArray(toolState.shellPolicyRules) ? toolState.shellPolicyRules : [])],
@@ -385,6 +374,23 @@ export class PcLocalToolHost implements ToolHost {
     await this.refreshPolicyAmendments(created);
     this.projectStates.set(root, created);
     return created;
+  }
+
+  /**
+   * Permission and sandbox fields are request-scoped. The maps and process store
+   * remain shared, but concurrent threads can no longer overwrite each other's
+   * effective permissions while an async tool call is running.
+   */
+  private toolStateForContext(projectState: ProjectToolState, context: ToolExecutionContext): PcToolState {
+    return {
+      ...projectState.toolState,
+      environmentId: context.environment?.id ?? projectState.toolState.environmentId,
+      permissionProfile: context.permissionProfile ?? 'workspace-write',
+      sandboxWorkspaceWrite: cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),
+      osSandbox: context.sandbox?.mode !== 'bypass',
+      shellPolicyRules: [...(projectState.toolState.shellPolicyRules ?? [])],
+      networkPolicyAmendments: [...(projectState.toolState.networkPolicyAmendments ?? [])],
+    };
   }
 
   private async projectStatesForCleanup(context: ToolExecutionContext): Promise<ProjectToolState[]> {
@@ -530,4 +536,14 @@ function shortSingleLine(value: unknown): string {
 
 function stringArg(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
+}
+
+function cloneSandboxWorkspaceWrite(value: ToolExecutionContext['sandboxWorkspaceWrite']): NonNullable<ToolExecutionContext['sandboxWorkspaceWrite']> {
+  return {
+    ...(value ?? {}),
+    ...(value?.readableRoots ? { readableRoots: [...value.readableRoots] } : {}),
+    ...(value?.writableRoots ? { writableRoots: [...value.writableRoots] } : {}),
+    ...(value?.deniedRoots ? { deniedRoots: [...value.deniedRoots] } : {}),
+    ...(value?.deniedGlobPatterns ? { deniedGlobPatterns: [...value.deniedGlobPatterns] } : {}),
+  };
 }
