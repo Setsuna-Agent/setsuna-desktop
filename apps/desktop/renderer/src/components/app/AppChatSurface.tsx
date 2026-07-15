@@ -25,6 +25,7 @@ import type { ChatSkillSelectionRequest } from '../../types/app.js';
 import type {
   DesktopPanelSlotState,
   DesktopPanelTab,
+  DesktopPanelTabPatch,
   DesktopPanelDropPlacement,
   DesktopReviewFocusRequest,
   DesktopReviewLoadOptions,
@@ -34,7 +35,6 @@ import type {
 } from '../workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../workspace/runtimeReviewSummary.js';
 import { useChatImageAttachmentRequest } from '../../hooks/useChatImageAttachmentRequest.js';
-import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 
@@ -45,7 +45,6 @@ export function AppChatSurface({
   bottomActivePanel,
   bottomPanelSlot,
   bottomPanelVisible,
-  browserOpenRequest,
   canClearContext,
   config,
   contextCompacting,
@@ -106,6 +105,7 @@ export function AppChatSurface({
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
+  onUpdateSidePanel,
   terminalHeight,
   terminalMaxHeight,
   terminalMinHeight,
@@ -121,7 +121,6 @@ export function AppChatSurface({
   bottomActivePanel?: DesktopPanelTab | null;
   bottomPanelSlot: DesktopPanelSlotState;
   bottomPanelVisible: boolean;
-  browserOpenRequest: BrowserOpenRequest | null;
   canClearContext: boolean;
   config: RuntimeConfigState | null;
   contextCompacting: boolean;
@@ -182,6 +181,7 @@ export function AppChatSurface({
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onUpdateSidePanel: (panelId: string, patch: DesktopPanelTabPatch) => void;
   terminalHeight: number;
   terminalMaxHeight: number;
   terminalMinHeight: number;
@@ -278,7 +278,8 @@ export function AppChatSurface({
         <BrowserPanel
           hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
           key={panel.id}
-          openRequest={browserOpenRequest}
+          panel={panel}
+          onPanelMetadataChange={onUpdateSidePanel}
           onScreenshotAttachment={requestImageAttachment}
           onResizeStep={onWorkspaceResizeStep}
           onResizeStart={onWorkspaceResizeStart}

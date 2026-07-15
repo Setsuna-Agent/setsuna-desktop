@@ -1,6 +1,4 @@
 .app-shell {
-  --app-topbar-divider-width: 1px;
-
   display: grid;
   grid-template-rows: var(--app-topbar-height) minmax(0, 1fr);
   width: 100%;
@@ -9,10 +7,6 @@
   /* Keep dark translucent sidebars legible over macOS vibrancy without disabling transparency. */
   background: linear-gradient(var(--app-sidebar-surface), var(--app-sidebar-surface)), var(--app-sidebar-backdrop);
   font-weight: var(--app-font-weight);
-}
-
-.app-shell--window-maximized {
-  --app-topbar-divider-width: 0px;
 }
 
 :root[data-desktop-platform='win32'] .app-shell:not(.app-shell--window-maximized) {
@@ -36,26 +30,6 @@
   background: transparent;
   border-bottom: 0;
   -webkit-app-region: drag;
-}
-
-.app-topbar::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: var(--app-topbar-sidebar-width, var(--app-sidebar-width));
-  height: var(--app-topbar-divider-width);
-  background: var(--desktop-agent-subtle-divider);
-  content: '';
-  pointer-events: none;
-}
-
-.desktop-agent-page--sidebar-collapsed .app-topbar::after {
-  left: 0;
-}
-
-.app-shell--window-maximized.app-shell--inspector-open .app-topbar::after {
-  right: var(--desktop-agent-workspace-width);
-  height: 1px;
 }
 
 .app-topbar__brand,
@@ -294,14 +268,6 @@
   grid-template-columns: var(--app-topbar-sidebar-width, var(--desktop-settings-nav-width)) minmax(0, 1fr) var(--desktop-agent-workspace-width);
 }
 
-.desktop-agent-page--settings-open {
-  --app-topbar-divider-width: 0px;
-}
-
-.desktop-agent-page--settings-open .app-topbar::after {
-  display: none;
-}
-
 :root[data-desktop-platform='win32'],
 :root[data-desktop-platform='linux'] {
   --app-topbar-height: 34px;
@@ -313,11 +279,6 @@
   padding-right: 0;
   background: var(--app-titlebar-bg);
   border-bottom: 0;
-}
-
-:root[data-desktop-platform='win32'] .app-topbar::after,
-:root[data-desktop-platform='linux'] .app-topbar::after {
-  display: none;
 }
 
 :root[data-desktop-platform='win32'] .app-topbar__brand,
@@ -476,11 +437,6 @@
   z-index: 15;
 }
 
-:root[data-desktop-platform='win32'] .app-shell--inspector-open .app-workbench__main-title,
-:root[data-desktop-platform='linux'] .app-shell--inspector-open .app-workbench__main-title {
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-}
-
 :root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-workbench__main-title,
 :root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-workbench__main-title {
   display: none;
@@ -495,7 +451,6 @@
   min-width: 0;
   height: var(--desktop-workspace-toolbar-height);
   border-left: 1px solid var(--desktop-agent-subtle-divider);
-  border-bottom: var(--app-topbar-divider-width) solid var(--desktop-agent-subtle-divider);
   background: var(--desktop-agent-main-bg);
   z-index: 14;
 }

@@ -3,37 +3,44 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { DesktopPanelHeader, panelDragPreviewPosition, panelLauncherMenuPosition } from './DesktopPanelHeader.js';
 
-describe('DesktopPanelHeader browser tab slot', () => {
-  it('replaces the active browser panel tab with the browser tabs host', () => {
+describe('DesktopPanelHeader browser tabs', () => {
+  it('renders a browser page through the same ordinary tab path', () => {
     const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
       activePanel: 'browser',
-      activePanelId: 'browser',
+      activePanelId: 'browser-1',
       onClose: vi.fn(),
       onClosePanel: vi.fn(),
       onSelectPanel: vi.fn(),
       panels: [
         { id: 'review', type: 'review' },
-        { id: 'browser', type: 'browser' },
+        {
+          browser: { faviconUrl: 'https://example.com/favicon.ico', loading: false, url: 'https://example.com/' },
+          id: 'browser-1',
+          title: 'Example',
+          type: 'browser',
+        },
       ],
       placement: 'side',
     }));
 
-    expect(html).toContain('class="desktop-browser-tabs-host"');
-    expect(html).toContain('data-desktop-panel-tab-id="browser"');
-    expect(html).not.toContain('title="浏览器"');
+    expect(html).not.toContain('desktop-browser-tabs-host');
+    expect(html).toContain('data-desktop-panel-tab-id="browser-1"');
+    expect(html).toContain('title="Example"');
+    expect(html).toContain('src="https://example.com/favicon.ico"');
+    expect(html).toContain('aria-label="关闭Example"');
     expect(html).toContain('title="审查"');
   });
 
   it('keeps the shared panel launcher when a browser panel already exists', () => {
     const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
       activePanel: 'browser',
-      activePanelId: 'browser',
+      activePanelId: 'browser-1',
       availablePanelTypes: ['browser'],
       onClose: vi.fn(),
       onClosePanel: vi.fn(),
       onOpenPanel: vi.fn(),
       onSelectPanel: vi.fn(),
-      panels: [{ id: 'browser', type: 'browser' }],
+      panels: [{ id: 'browser-1', type: 'browser', title: '新标签页' }],
       placement: 'side',
     }));
 

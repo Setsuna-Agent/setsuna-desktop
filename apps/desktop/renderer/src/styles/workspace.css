@@ -39,30 +39,6 @@
   display: none;
 }
 
-.desktop-browser-tabs-host,
-.desktop-browser-tabs {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  height: 28px;
-}
-
-.desktop-browser-tabs-host {
-  flex: 0 0 auto;
-}
-
-.desktop-browser-tabs {
-  gap: 6px;
-}
-
-.desktop-panel-chrome .desktop-browser-tab {
-  flex: 0 1 150px;
-}
-
-.desktop-browser-tab__select {
-  text-align: left;
-}
-
 .desktop-browser-tab__favicon {
   display: inline-flex;
   flex: 0 0 14px;

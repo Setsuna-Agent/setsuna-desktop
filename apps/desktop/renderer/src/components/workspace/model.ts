@@ -23,12 +23,19 @@ export type {
 
 export type DesktopPanelSlot = 'side' | 'bottom';
 export type DesktopPanelType = 'overview' | 'browser' | 'chat' | 'files' | 'file' | 'review' | 'terminal';
+export type DesktopBrowserPanelState = {
+  faviconUrl: string | null;
+  loading: boolean;
+  url: string;
+};
 export type DesktopPanelTab = {
+  browser?: DesktopBrowserPanelState;
   id: string;
   type: DesktopPanelType;
   title?: string;
   filePath?: string;
 };
+export type DesktopPanelTabPatch = Partial<Pick<DesktopPanelTab, 'browser' | 'title'>>;
 export type DesktopPanelDropPlacement = 'before' | 'after';
 export type DesktopPanelSlotState = {
   active: string | null;
@@ -39,7 +46,7 @@ export const REVIEW_PANEL_ID = 'review';
 export const FILES_PANEL_ID = 'files';
 export const WORKSPACE_OVERVIEW_PANEL_ID = 'workspace-overview';
 export const SIDE_CHAT_PANEL_ID = 'side-chat';
-export const BROWSER_PANEL_ID = 'browser';
+export const DEFAULT_BROWSER_URL = 'https://www.bing.com/';
 
 export const createEmptyPanelSlot = (): DesktopPanelSlotState => ({ active: null, panels: [] });
 export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
@@ -48,7 +55,12 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
 export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边任务'): DesktopPanelTab => ({ id, type: 'chat', title });
-export const createBrowserPanel = (): DesktopPanelTab => ({ id: BROWSER_PANEL_ID, type: 'browser', title: '浏览器' });
+export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): DesktopPanelTab => ({
+  browser: { faviconUrl: null, loading: true, url },
+  id,
+  type: 'browser',
+  title: '新标签页',
+});
 export const createReviewPanel = (): DesktopPanelTab => ({ id: REVIEW_PANEL_ID, type: 'review', title: '审查' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
 export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });
@@ -60,10 +72,6 @@ export const addPanelToSlotState = (slot: DesktopPanelSlotState, panel: DesktopP
     if (existing) return { ...slot, active: existing.id };
   }
   const panelsWithoutOverview = panel.type === 'overview' ? slot.panels : slot.panels.filter((item) => item.type !== 'overview');
-  if (panel.type === 'browser') {
-    const existing = panelsWithoutOverview.find((item) => item.type === 'browser');
-    if (existing) return { active: existing.id, panels: panelsWithoutOverview };
-  }
   if (panel.type === 'review') {
     const existing = panelsWithoutOverview.find((item) => item.type === 'review');
     if (existing) return { active: existing.id, panels: panelsWithoutOverview };
@@ -76,6 +84,28 @@ export const addPanelToSlotState = (slot: DesktopPanelSlotState, panel: DesktopP
     active: panel.id,
     panels: panelsWithoutOverview.some((item) => item.id === panel.id) ? panelsWithoutOverview : [...panelsWithoutOverview, panel],
   };
+};
+export const updatePanelInSlotState = (
+  slot: DesktopPanelSlotState,
+  panelId: string,
+  patch: DesktopPanelTabPatch,
+): DesktopPanelSlotState => {
+  const panelIndex = slot.panels.findIndex((panel) => panel.id === panelId);
+  if (panelIndex < 0) return slot;
+  const panel = slot.panels[panelIndex];
+  if (!panel) return slot;
+  const browserUnchanged = patch.browser === undefined
+    || (
+      panel.browser?.faviconUrl === patch.browser.faviconUrl
+      && panel.browser?.loading === patch.browser.loading
+      && panel.browser?.url === patch.browser.url
+    );
+  const titleUnchanged = patch.title === undefined || panel.title === patch.title;
+  if (browserUnchanged && titleUnchanged) return slot;
+
+  const panels = [...slot.panels];
+  panels[panelIndex] = { ...panel, ...patch };
+  return { ...slot, panels };
 };
 export const activatePanelInSlotState = (slot: DesktopPanelSlotState, panelId: string): DesktopPanelSlotState =>
   slot.panels.some((panel) => panel.id === panelId) ? { ...slot, active: panelId } : slot;

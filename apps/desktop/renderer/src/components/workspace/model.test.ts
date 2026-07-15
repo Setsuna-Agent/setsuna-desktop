@@ -10,6 +10,7 @@ import {
   createSideChatPanel,
   createWorkspaceOverviewPanel,
   reorderPanelInSlotState,
+  updatePanelInSlotState,
 } from './model.js';
 
 describe('desktop workspace panel model', () => {
@@ -49,14 +50,34 @@ describe('desktop workspace panel model', () => {
     expect(withChats.panels).toEqual([first, second]);
   });
 
-  it('keeps a single browser panel and activates it again', () => {
-    const browser = createBrowserPanel();
-    const withBrowser = addPanelToSlotState(createDefaultSidePanelSlot(), browser);
-    const reopened = addPanelToSlotState({ active: 'files', panels: [browser, createFilesPanel()] }, createBrowserPanel());
+  it('keeps browser pages as independent ordinary tabs', () => {
+    const first = createBrowserPanel('browser-1');
+    const second = createBrowserPanel('browser-2', 'https://example.com/');
+    const withBrowsers = addPanelToSlotState(addPanelToSlotState(createDefaultSidePanelSlot(), first), second);
 
-    expect(withBrowser.panels).toEqual([browser]);
-    expect(reopened.active).toBe(browser.id);
-    expect(reopened.panels.filter((panel) => panel.type === 'browser')).toHaveLength(1);
+    expect(withBrowsers.active).toBe(second.id);
+    expect(withBrowsers.panels).toEqual([first, second]);
+  });
+
+  it('updates browser tab metadata without changing its identity or order', () => {
+    const browser = createBrowserPanel('browser-1');
+    const slot = { active: browser.id, panels: [browser, createFilesPanel()] };
+    const next = updatePanelInSlotState(slot, browser.id, {
+      browser: { faviconUrl: 'https://example.com/favicon.ico', loading: false, url: 'https://example.com/' },
+      title: 'Example',
+    });
+
+    expect(next.panels.map((panel) => panel.id)).toEqual(['browser-1', 'files']);
+    expect(next.panels[0]).toMatchObject({
+      browser: { faviconUrl: 'https://example.com/favicon.ico', loading: false, url: 'https://example.com/' },
+      id: 'browser-1',
+      title: 'Example',
+      type: 'browser',
+    });
+    expect(updatePanelInSlotState(next, browser.id, {
+      browser: { faviconUrl: 'https://example.com/favicon.ico', loading: false, url: 'https://example.com/' },
+      title: 'Example',
+    })).toBe(next);
   });
 
   it('reorders multiple side chat tabs', () => {

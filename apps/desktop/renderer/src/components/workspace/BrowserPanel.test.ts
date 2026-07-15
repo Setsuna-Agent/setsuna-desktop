@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { BrowserPanel, nextBrowserZoomFactor, normalizeBrowserInput, resolveBrowserFaviconUrl } from './BrowserPanel.js';
+import { createBrowserPanel } from './model.js';
 
 describe('normalizeBrowserInput', () => {
   it('keeps absolute web URLs', () => {
@@ -43,9 +44,11 @@ describe('nextBrowserZoomFactor', () => {
 });
 
 describe('BrowserPanel', () => {
-  it('allows popup requests so main can route them into internal tabs', () => {
+  it('allows popup requests so main can route them into ordinary workspace tabs', () => {
     const html = renderToStaticMarkup(createElement(BrowserPanel, {
       hidden: false,
+      panel: createBrowserPanel('browser-1'),
+      onPanelMetadataChange: () => undefined,
       onResizeStart: () => undefined,
       onResizeStep: () => undefined,
       resizeMax: 960,
@@ -68,7 +71,8 @@ describe('BrowserPanel', () => {
   it('uses an AI browser request as the initial tab URL', () => {
     const html = renderToStaticMarkup(createElement(BrowserPanel, {
       hidden: false,
-      openRequest: { id: 'event_1', url: 'https://www.baidu.com/' },
+      panel: createBrowserPanel('browser-event-1', 'https://www.baidu.com/'),
+      onPanelMetadataChange: () => undefined,
       onResizeStart: () => undefined,
       onResizeStep: () => undefined,
       resizeMax: 960,

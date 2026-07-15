@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, RefreshCw, X } from 'lucide-react';
 import type { DidFailLoadEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
 import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
-import { BrowserTabStrip } from './BrowserTabStrip.js';
-import { useBrowserTabCommands, useBrowserTabsHeaderPortal } from './BrowserTabsHeaderPortal.js';
 import { BrowserWindowMenu } from './BrowserWindowMenu.js';
+import { DEFAULT_BROWSER_URL, type DesktopPanelTab, type DesktopPanelTabPatch } from './model.js';
 import { useBrowserScreenshot, type BrowserScreenshotAttachmentHandler } from './useBrowserScreenshot.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import {
@@ -16,9 +14,7 @@ import {
   toDesktopBrowserDeviceEmulation,
   type BrowserDeviceEmulationState,
 } from './browserDeviceEmulation.js';
-import type { BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 
-const browserHomeUrl = 'https://www.bing.com/';
 // Electron parses webview boolean attributes by presence, while React only emits
 // custom-element attributes reliably when their runtime value is a string.
 const enabledWebviewBooleanAttribute = 'true' as unknown as boolean;
@@ -40,7 +36,8 @@ type BrowserTab = {
 
 export function BrowserPanel({
   hidden,
-  openRequest,
+  panel,
+  onPanelMetadataChange,
   onResizeStep,
   onResizeStart,
   onScreenshotAttachment,
@@ -49,7 +46,8 @@ export function BrowserPanel({
   resizeValue,
 }: {
   hidden: boolean;
-  openRequest?: BrowserOpenRequest | null;
+  panel: DesktopPanelTab;
+  onPanelMetadataChange: (panelId: string, patch: DesktopPanelTabPatch) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onScreenshotAttachment?: BrowserScreenshotAttachmentHandler;
@@ -57,70 +55,47 @@ export function BrowserPanel({
   resizeMin: number;
   resizeValue: number;
 }) {
-  const tabSequenceRef = useRef(1);
-  const handledOpenRequestIdRef = useRef(openRequest?.id ?? null);
-  const webviewsRef = useRef<Map<string, WebviewTag>>(new Map());
-  const { host: tabsHeaderHost } = useBrowserTabsHeaderPortal();
-  const { registerNewTabHandler } = useBrowserTabCommands();
-  const [tabs, setTabs] = useState<BrowserTab[]>(() => [createBrowserTab(1, openRequest?.url)]);
-  const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id ?? '');
-  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const webviewRef = useRef<WebviewTag | null>(null);
+  const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel));
   const {
     captureScreenshot,
     capturing: screenshotCapturing,
     notice: screenshotNotice,
   } = useBrowserScreenshot({
-    activeTabId: activeTab?.id ?? null,
+    activeTabId: tab.id,
     onAttachment: onScreenshotAttachment,
   });
 
   const updateTab = useCallback((tabId: string, patch: Partial<BrowserTab>) => {
-    setTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)));
+    setTab((current) => (current.id === tabId ? { ...current, ...patch } : current));
+  }, []);
+  const setWebview = useCallback((node: WebviewTag | null) => {
+    webviewRef.current = node;
   }, []);
 
-  const openTab = useCallback((url = browserHomeUrl) => {
-    tabSequenceRef.current += 1;
-    const tab = createBrowserTab(tabSequenceRef.current, url);
-    setTabs((current) => [...current, tab]);
-    setActiveTabId(tab.id);
-  }, []);
-
-  useEffect(() => registerNewTabHandler(openTab), [openTab, registerNewTabHandler]);
+  useEffect(() => {
+    if (hidden) return undefined;
+    void window.setsunaDesktop?.browser.setActiveTab(tab.id);
+    return () => {
+      void window.setsunaDesktop?.browser.setActiveTab(null);
+    };
+  }, [hidden, tab.id]);
 
   useEffect(() => {
-    void window.setsunaDesktop?.browser.setActiveTab(activeTab?.id ?? null);
-  }, [activeTab?.id]);
-
-  useEffect(() => {
-    if (!openRequest || handledOpenRequestIdRef.current === openRequest.id) return;
-    handledOpenRequestIdRef.current = openRequest.id;
-    openTab(openRequest.url);
-  }, [openRequest, openTab]);
-
-  const closeTab = useCallback((tabId: string) => {
-    setTabs((current) => {
-      const closingIndex = current.findIndex((tab) => tab.id === tabId);
-      const remaining = current.filter((tab) => tab.id !== tabId);
-      if (!remaining.length) {
-        tabSequenceRef.current += 1;
-        const replacement = createBrowserTab(tabSequenceRef.current);
-        setActiveTabId(replacement.id);
-        return [replacement];
-      }
-      if (activeTabId === tabId) {
-        setActiveTabId(remaining[Math.min(Math.max(0, closingIndex), remaining.length - 1)]?.id ?? remaining[0]!.id);
-      }
-      return remaining;
+    onPanelMetadataChange(panel.id, {
+      browser: {
+        faviconUrl: tab.faviconUrl,
+        loading: tab.loading,
+        url: tab.url,
+      },
+      title: tab.title,
     });
-  }, [activeTabId]);
-
-  const selectTab = useCallback((tabId: string) => setActiveTabId(tabId), []);
+  }, [onPanelMetadataChange, panel.id, tab.faviconUrl, tab.loading, tab.title, tab.url]);
 
   const navigate = () => {
-    if (!activeTab) return;
-    const url = normalizeBrowserInput(activeTab.draftUrl);
-    const webview = webviewsRef.current.get(activeTab.id);
-    updateTab(activeTab.id, {
+    const url = normalizeBrowserInput(tab.draftUrl);
+    const webview = webviewRef.current;
+    updateTab(tab.id, {
       draftUrl: url,
       error: null,
       ...(webview ? {} : { initialUrl: url }),
@@ -128,33 +103,31 @@ export function BrowserPanel({
       url,
     });
     if (webview) {
-      void applyBrowserDeviceEmulation(activeTab.id, activeTab.deviceEmulation)
+      void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation)
         .catch(() => false)
         .then(() => webview.loadURL(url))
         .catch((error) => {
           if (isAbortedNavigationError(error)) return;
-          updateTab(activeTab.id, { error: error instanceof Error ? error.message : String(error), loading: false });
+          updateTab(tab.id, { error: error instanceof Error ? error.message : String(error), loading: false });
         });
     }
   };
 
   const navigateHistory = (direction: 'back' | 'forward') => {
-    if (!activeTab) return;
-    const webview = webviewsRef.current.get(activeTab.id);
+    const webview = webviewRef.current;
     if (!webview) return;
     if (direction === 'back' && webview.canGoBack()) webview.goBack();
     if (direction === 'forward' && webview.canGoForward()) webview.goForward();
   };
 
   const reload = () => {
-    if (!activeTab) return;
-    const webview = webviewsRef.current.get(activeTab.id);
+    const webview = webviewRef.current;
     if (!webview) return;
-    if (activeTab.loading) webview.stop();
+    if (tab.loading) webview.stop();
     else {
       // The UA/Client-Hints override is asynchronous. Apply it before navigation
       // so a refresh immediately after selecting a device cannot use desktop headers.
-      void applyBrowserDeviceEmulation(activeTab.id, activeTab.deviceEmulation)
+      void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation)
         .catch(() => false)
         .then(() => {
           try {
@@ -167,8 +140,7 @@ export function BrowserPanel({
   };
 
   const printActivePage = () => {
-    if (!activeTab) return;
-    const webview = webviewsRef.current.get(activeTab.id);
+    const webview = webviewRef.current;
     if (!webview) return;
     try {
       void webview.print().catch(() => undefined);
@@ -178,18 +150,16 @@ export function BrowserPanel({
   };
 
   const openActivePageDevTools = () => {
-    if (!activeTab) return;
     try {
-      webviewsRef.current.get(activeTab.id)?.openDevTools();
+      webviewRef.current?.openDevTools();
     } catch {
       // Ignore a guest that detached while its menu was open.
     }
   };
 
   const changeActivePageZoom = (direction: BrowserZoomDirection) => {
-    if (!activeTab) return;
-    const webview = webviewsRef.current.get(activeTab.id);
-    let currentZoomFactor = activeTab.zoomFactor;
+    const webview = webviewRef.current;
+    let currentZoomFactor = tab.zoomFactor;
     try {
       currentZoomFactor = webview?.getZoomFactor() ?? currentZoomFactor;
     } catch {
@@ -201,101 +171,76 @@ export function BrowserPanel({
     } catch {
       // State still tracks the requested value for the next attached guest.
     }
-    updateTab(activeTab.id, { zoomFactor: nextZoomFactor });
+    updateTab(tab.id, { zoomFactor: nextZoomFactor });
   };
 
   const updateActiveDeviceEmulation = (deviceEmulation: BrowserDeviceEmulationState) => {
-    if (activeTab) updateTab(activeTab.id, { deviceEmulation });
+    updateTab(tab.id, { deviceEmulation });
   };
 
   const toggleActiveDeviceToolbar = () => {
-    if (!activeTab) return;
-    updateTab(activeTab.id, {
+    updateTab(tab.id, {
       deviceEmulation: {
-        ...activeTab.deviceEmulation,
-        enabled: !activeTab.deviceEmulation.enabled,
+        ...tab.deviceEmulation,
+        enabled: !tab.deviceEmulation.enabled,
       },
     });
   };
 
   return (
-    <>
-      {tabsHeaderHost
-        ? createPortal(
-            <BrowserTabStrip
-              activeTabId={activeTabId}
-              tabs={tabs}
-              onCloseTab={closeTab}
-              onSelectTab={selectTab}
-            />,
-            tabsHeaderHost,
-          )
-        : null}
-      <aside className="desktop-workspace-panel desktop-browser-panel" aria-label="浏览器" hidden={hidden}>
-        <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
-        <div className="desktop-browser-navigation">
-          <button className="desktop-browser-navigation__button" type="button" disabled={!activeTab?.canGoBack} aria-label="后退" onClick={() => navigateHistory('back')}>
-            <ArrowLeft size={14} />
-          </button>
-          <button className="desktop-browser-navigation__button" type="button" disabled={!activeTab?.canGoForward} aria-label="前进" onClick={() => navigateHistory('forward')}>
-            <ArrowRight size={14} />
-          </button>
-          <button className="desktop-browser-navigation__button" type="button" aria-label={activeTab?.loading ? '停止加载' : '刷新'} onClick={reload}>
-            {activeTab?.loading ? <X size={13} /> : <RefreshCw size={13} />}
-          </button>
-          <BrowserAddressBar
-            externalUrl={activeTab?.url ?? null}
-            value={activeTab?.draftUrl ?? ''}
-            onChange={(value) => activeTab && updateTab(activeTab.id, { draftUrl: value })}
-            onNavigate={navigate}
-            onOpenExternal={(url) => void window.setsunaDesktop?.links.openExternal(url)}
-          />
-          <BrowserWindowMenu
-            capturingScreenshot={screenshotCapturing}
-            deviceToolbarVisible={Boolean(activeTab?.deviceEmulation.enabled)}
-            disabled={!activeTab}
-            key={activeTab?.id ?? 'browser-menu'}
-            loading={Boolean(activeTab?.loading)}
-            zoomFactor={activeTab?.zoomFactor ?? 1}
-            onOpenDevTools={openActivePageDevTools}
-            onCaptureScreenshot={() => void captureScreenshot()}
-            onPrint={printActivePage}
-            onReload={reload}
-            onToggleDeviceToolbar={toggleActiveDeviceToolbar}
-            onZoomIn={() => changeActivePageZoom('in')}
-            onZoomOut={() => changeActivePageZoom('out')}
-            onZoomReset={() => changeActivePageZoom('reset')}
-          />
+    <aside className="desktop-workspace-panel desktop-browser-panel" aria-label="浏览器" hidden={hidden}>
+      <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
+      <div className="desktop-browser-navigation">
+        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label="后退" onClick={() => navigateHistory('back')}>
+          <ArrowLeft size={14} />
+        </button>
+        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label="前进" onClick={() => navigateHistory('forward')}>
+          <ArrowRight size={14} />
+        </button>
+        <button className="desktop-browser-navigation__button" type="button" aria-label={tab.loading ? '停止加载' : '刷新'} onClick={reload}>
+          {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
+        </button>
+        <BrowserAddressBar
+          externalUrl={tab.url}
+          value={tab.draftUrl}
+          onChange={(value) => updateTab(tab.id, { draftUrl: value })}
+          onNavigate={navigate}
+          onOpenExternal={(url) => void window.setsunaDesktop?.links.openExternal(url)}
+        />
+        <BrowserWindowMenu
+          capturingScreenshot={screenshotCapturing}
+          deviceToolbarVisible={tab.deviceEmulation.enabled}
+          disabled={false}
+          key={tab.id}
+          loading={tab.loading}
+          zoomFactor={tab.zoomFactor}
+          onOpenDevTools={openActivePageDevTools}
+          onCaptureScreenshot={() => void captureScreenshot()}
+          onPrint={printActivePage}
+          onReload={reload}
+          onToggleDeviceToolbar={toggleActiveDeviceToolbar}
+          onZoomIn={() => changeActivePageZoom('in')}
+          onZoomOut={() => changeActivePageZoom('out')}
+          onZoomReset={() => changeActivePageZoom('reset')}
+        />
+      </div>
+      {tab.deviceEmulation.enabled ? (
+        <BrowserDeviceToolbar value={tab.deviceEmulation} onChange={updateActiveDeviceEmulation} />
+      ) : null}
+      <div className={`desktop-browser-content ${tab.deviceEmulation.enabled ? 'is-device-emulation' : ''}`}>
+        <BrowserWebview active tab={tab} onRef={setWebview} onUpdate={updateTab} />
+        {tab.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{tab.error}</span></div> : null}
+      </div>
+      {screenshotNotice ? (
+        <div
+          className={`desktop-browser-capture-notice is-${screenshotNotice.kind}`}
+          role={screenshotNotice.kind === 'error' ? 'alert' : 'status'}
+          aria-live="polite"
+        >
+          {screenshotNotice.message}
         </div>
-        {activeTab?.deviceEmulation.enabled ? (
-          <BrowserDeviceToolbar value={activeTab.deviceEmulation} onChange={updateActiveDeviceEmulation} />
-        ) : null}
-        <div className={`desktop-browser-content ${activeTab?.deviceEmulation.enabled ? 'is-device-emulation' : ''}`}>
-          {tabs.map((tab) => (
-            <BrowserWebview
-              active={tab.id === activeTabId}
-              key={tab.id}
-              tab={tab}
-              onRef={(node) => {
-                if (node) webviewsRef.current.set(tab.id, node);
-                else webviewsRef.current.delete(tab.id);
-              }}
-              onUpdate={updateTab}
-            />
-          ))}
-          {activeTab?.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{activeTab.error}</span></div> : null}
-        </div>
-        {screenshotNotice ? (
-          <div
-            className={`desktop-browser-capture-notice is-${screenshotNotice.kind}`}
-            role={screenshotNotice.kind === 'error' ? 'alert' : 'status'}
-            aria-live="polite"
-          >
-            {screenshotNotice.message}
-          </div>
-        ) : null}
-      </aside>
-    </>
+      ) : null}
+    </aside>
   );
 }
 
@@ -417,18 +362,19 @@ function BrowserWebview({
   );
 }
 
-function createBrowserTab(sequence: number, url = browserHomeUrl): BrowserTab {
+function createBrowserTab(panel: DesktopPanelTab): BrowserTab {
+  const url = panel.browser?.url ?? DEFAULT_BROWSER_URL;
   return {
     canGoBack: false,
     canGoForward: false,
     deviceEmulation: createDefaultBrowserDeviceEmulation(),
     draftUrl: url,
     error: null,
-    faviconUrl: null,
-    id: `browser-tab-${Date.now()}-${sequence}`,
+    faviconUrl: panel.browser?.faviconUrl ?? null,
+    id: panel.id,
     initialUrl: url,
-    loading: true,
-    title: '新标签页',
+    loading: panel.browser?.loading ?? true,
+    title: panel.title ?? '新标签页',
     url,
     zoomFactor: 1,
   };
@@ -481,7 +427,7 @@ function isAbortedNavigationError(error: unknown): boolean {
 
 export function normalizeBrowserInput(input: string): string {
   const value = input.trim();
-  if (!value) return browserHomeUrl;
+  if (!value) return DEFAULT_BROWSER_URL;
   if (/^https?:\/\//i.test(value)) return value;
   if (/^(localhost|\d{1,3}(?:\.\d{1,3}){3})(:\d+)?(?:\/|$)/i.test(value)) return `http://${value}`;
   if (/^[\w.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$)/i.test(value)) return `https://${value}`;

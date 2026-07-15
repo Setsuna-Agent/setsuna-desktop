@@ -9,7 +9,8 @@ import type { DesktopWorkspacePanelsState } from '../../hooks/useDesktopWorkspac
 import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../hooks/useRuntimeClientState.js';
 import type { ChatSkillSelectionRequest, MainView } from '../../types/app.js';
-import { latestBrowserOpenRequest, type BrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
+import type { DesktopPanelTabPatch } from '../workspace/model.js';
+import { latestBrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
 
 export function AppRouteContent({
@@ -67,19 +68,18 @@ export function AppRouteContent({
 }) {
   const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
   const [reviewFocusRequest, setReviewFocusRequest] = useState<{ path: string; version: number } | null>(null);
-  const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
-  const browserOpenSequenceRef = useRef(0);
   const handledBrowserOpenRequestIdRef = useRef<string | null>(null);
   const pendingBrowserOpenRequest = useMemo(
     () => latestBrowserOpenRequest(runtime.activityEvents),
     [runtime.activityEvents],
   );
-  const { openDesktopPanel } = workspacePanels;
+  const { openBrowserPanel, updateDesktopPanel } = workspacePanels;
   const openBrowserUrl = useCallback((url: string) => {
-    browserOpenSequenceRef.current += 1;
-    setBrowserOpenRequest({ id: `desktop-browser-${Date.now()}-${browserOpenSequenceRef.current}`, url });
-    openDesktopPanel('side', 'browser');
-  }, [openDesktopPanel]);
+    openBrowserPanel(url);
+  }, [openBrowserPanel]);
+  const updateSidePanel = useCallback((panelId: string, patch: DesktopPanelTabPatch) => {
+    updateDesktopPanel('side', panelId, patch);
+  }, [updateDesktopPanel]);
   const markdownLinkOpenMode = markdownLinkOpenModeFromConfig(runtime.config);
   const openMarkdownWebLink = useCallback((url: string) => {
     if (markdownLinkOpenMode === 'in-app') {
@@ -101,9 +101,8 @@ export function AppRouteContent({
   useEffect(() => {
     if (!pendingBrowserOpenRequest || handledBrowserOpenRequestIdRef.current === pendingBrowserOpenRequest.id) return;
     handledBrowserOpenRequestIdRef.current = pendingBrowserOpenRequest.id;
-    setBrowserOpenRequest(pendingBrowserOpenRequest);
-    openDesktopPanel('side', 'browser');
-  }, [openDesktopPanel, pendingBrowserOpenRequest]);
+    openBrowserPanel(pendingBrowserOpenRequest.url);
+  }, [openBrowserPanel, pendingBrowserOpenRequest]);
   const openFileReviewPanel = (filePath?: string) => {
     if (!activeWorkspace) return;
     const normalizedFilePath = filePath?.trim();
@@ -186,7 +185,6 @@ export function AppRouteContent({
       bottomActivePanel={workspacePanels.bottomActivePanel}
       bottomPanelSlot={workspacePanels.bottomPanelSlot}
       bottomPanelVisible={workspacePanels.bottomPanelVisible}
-      browserOpenRequest={browserOpenRequest}
       canClearContext={Boolean(runtime.currentThread?.messages.length)}
       config={runtime.config}
       contextCompacting={runtime.contextCompacting}
@@ -232,7 +230,7 @@ export function AppRouteContent({
         void workspacePanels.loadReviewState();
       }}
       onOpenBottomTerminalPanel={() => workspacePanels.openDesktopPanel('bottom', 'terminal')}
-      onOpenBrowser={() => workspacePanels.openDesktopPanel('side', 'browser')}
+      onOpenBrowser={() => workspacePanels.openBrowserPanel()}
       onOpenMarkdownWebLink={openMarkdownWebLink}
       onOpenFilesPanel={() => {
         projectWorkspace.setFilePreview(null);
@@ -259,6 +257,7 @@ export function AppRouteContent({
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}
       onTerminalResizeStart={onTerminalResizeStart}
+      onUpdateSidePanel={updateSidePanel}
       terminalHeight={terminalHeight}
       terminalMaxHeight={terminalMaxHeight}
       terminalMinHeight={terminalMinHeight}

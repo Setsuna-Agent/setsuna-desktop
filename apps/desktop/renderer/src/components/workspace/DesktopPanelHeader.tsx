@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type P
 import { createPortal } from 'react-dom';
 import { FileText, FolderOpen, Globe2, MessageSquare, PanelRight, Plus, Terminal, X } from 'lucide-react';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
-import { useBrowserTabsHeaderPortal } from './BrowserTabsHeaderPortal.js';
 import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
 
 export type DesktopPanelPlacement = 'side' | 'bottom';
@@ -76,7 +75,6 @@ export function DesktopPanelHeader({
   const launcherRef = useRef<HTMLSpanElement | null>(null);
   const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
   const launcherMenuRef = useRef<HTMLSpanElement | null>(null);
-  const { registerHost: registerBrowserTabsHost } = useBrowserTabsHeaderPortal();
   const activeId = activePanelId || activePanel;
   const tabPanels = panels?.length ? panels : [{ id: activeId, type: activePanel }];
   const availableTypeSet = new Set(availablePanelTypes || panelLauncherItems.map((item) => item.key));
@@ -247,60 +245,47 @@ export function DesktopPanelHeader({
     <div className={['desktop-panel-chrome', 'chat-file-review-panel__header', dragOverlay ? 'is-reordering-tabs' : ''].filter(Boolean).join(' ')}>
       <div className="chat-file-review-panel__heading">
         <span className="chat-file-review-panel__tabs" ref={tabsRef}>
-          {tabPanels.map((panel) => {
-            if (panel.type === 'browser' && activeId === panel.id) {
-              return (
-                <span
-                  className="desktop-browser-tabs-host"
-                  data-desktop-panel-tab-id={panel.id}
-                  key={`browser-tabs-host:${panel.id}`}
-                  ref={registerBrowserTabsHost}
-                />
-              );
-            }
-
-            return (
-              <span
-                className={[
-                  'chat-file-review-panel__title',
-                  activeId === panel.id ? 'chat-file-review-panel__title--active' : '',
-                  onClosePanel ? 'chat-file-review-panel__title--closable' : '',
-                  sortable ? 'chat-file-review-panel__title--sortable' : '',
-                  draggedPanelId === panel.id ? 'is-dragging' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                data-desktop-panel-tab-id={panel.id}
-                key={panel.id}
-                onPointerCancel={handlePointerEnd}
-                onPointerDown={(event) => handlePointerDown(event, panel)}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerEnd}
+          {tabPanels.map((panel) => (
+            <span
+              className={[
+                'chat-file-review-panel__title',
+                activeId === panel.id ? 'chat-file-review-panel__title--active' : '',
+                onClosePanel ? 'chat-file-review-panel__title--closable' : '',
+                sortable ? 'chat-file-review-panel__title--sortable' : '',
+                draggedPanelId === panel.id ? 'is-dragging' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              data-desktop-panel-tab-id={panel.id}
+              key={panel.id}
+              onPointerCancel={handlePointerEnd}
+              onPointerDown={(event) => handlePointerDown(event, panel)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerEnd}
+            >
+              <button
+                className="chat-file-review-panel__tab-button"
+                type="button"
+                title={desktopPanelTitle(panel)}
+                onClick={(event) => handleTabClick(event, panel.id)}
               >
+                {renderTabLabel(panel)}
+              </button>
+              {onClosePanel ? (
                 <button
-                  className="chat-file-review-panel__tab-button"
+                  className="chat-file-review-panel__tab-close"
                   type="button"
-                  title={desktopPanelTitle(panel)}
-                  onClick={(event) => handleTabClick(event, panel.id)}
+                  aria-label={`关闭${desktopPanelTitle(panel)}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onClosePanel(panel.id);
+                  }}
                 >
-                  {renderTabLabel(panel)}
+                  <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
                 </button>
-                {onClosePanel ? (
-                  <button
-                    className="chat-file-review-panel__tab-close"
-                    type="button"
-                    aria-label={`关闭${desktopPanelTitle(panel)}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onClosePanel(panel.id);
-                    }}
-                  >
-                    <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </span>
-            );
-          })}
+              ) : null}
+            </span>
+          ))}
           {onOpenPanel && launcherItems.length ? (
             <span className="desktop-panel-launcher" ref={launcherRef}>
               <button
