@@ -234,7 +234,6 @@
   width: 100%;
   min-width: 0;
   height: var(--desktop-workspace-toolbar-height);
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
   background: var(--desktop-agent-main-bg);
 }
 
