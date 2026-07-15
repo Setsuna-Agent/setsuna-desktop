@@ -28,7 +28,9 @@ import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
+import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
+import type { BrowserControlPort } from '../ports/browser-control.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest } from '../ports/model-client.js';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../ports/policy-amendment-store.js';
@@ -1559,6 +1561,38 @@ describe('agent loop tools', () => {
     expect(toolSearchCompleted?.payload.data).toMatchObject({ revealedToolNames: ['deferred_lookup'] });
     expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['tool_search', 'deferred_lookup']);
     expect(saved?.messages.at(-1)?.content).toContain('deferred lookup complete');
+  });
+
+  it('finds directly advertised tools without treating them as deferred reveals', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Search visible tools', projectId: 'project_1' });
+    const modelClient = new SingleToolCallModelClient({
+      id: 'call_search_direct_tool',
+      name: 'tool_search',
+      arguments: '{"query":"direct_tool"}',
+    });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new DeferredToolHost(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'find the direct tool' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
+      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
+
+    expect(toolSearchCompleted?.payload.data).toMatchObject({
+      availableToolNames: ['direct_tool'],
+      revealedToolNames: [],
+      tools: [expect.objectContaining({ name: 'direct_tool' })],
+    });
+    expect(toolSearchCompleted?.payload.resultPreview).toContain('Available 1 tool(s): direct_tool');
+    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
   });
 
   it('suggests deferred tools without revealing them before tool_search', async () => {
@@ -3350,6 +3384,54 @@ describe('agent loop tools', () => {
     })).rejects.toThrow('当前模型未启用图片输入。');
 
     expect(modelClient.requests).toHaveLength(0);
+  });
+
+  it('advertises browser screenshots and returns them as image tool attachments for vision models', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Browser screenshot vision' });
+    const modelClient = new BrowserScreenshotModelClient();
+    const browserControl: BrowserControlPort = {
+      async execute(command) {
+        if (command.kind !== 'screenshot') throw new Error(`Unexpected browser command: ${command.kind}`);
+        return {
+          dataUrl: 'data:image/png;base64,aW1hZ2U=',
+          height: 720,
+          kind: 'screenshot',
+          mimeType: 'image/png',
+          size: 5,
+          tabId: 'tab-1',
+          title: 'Example',
+          url: 'https://example.com/',
+          width: 1280,
+        };
+      },
+    };
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new ImageCapabilityConfigStore(true),
+      toolHost: new BrowserToolHost(browserControl),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'inspect the visible page' });
+    const saved = await threadStore.getThread(thread.id);
+    const sampledScreenshot = modelClient.requests[1]?.messages.find((message) =>
+      message.role === 'tool' && message.toolName === 'browser_screenshot');
+
+    expect(modelClient.requests[0]?.tools?.map((tool) => tool.name)).toContain('browser_screenshot');
+    expect(sampledScreenshot?.attachments).toEqual([
+      expect.objectContaining({
+        size: 5,
+        type: 'image/png',
+        url: 'data:image/png;base64,aW1hZ2U=',
+      }),
+    ]);
+    expect(saved?.messages.find((message) => message.toolName === 'browser_screenshot')?.attachments)
+      .toEqual(sampledScreenshot?.attachments);
   });
 
   it('pauses tool execution until approval is answered', async () => {
@@ -5986,6 +6068,24 @@ class SingleToolCallModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'tool handled' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class BrowserScreenshotModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_browser_screenshot', name: 'browser_screenshot', arguments: '{}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'screenshot inspected' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -8994,12 +9094,22 @@ class ImageCapabilityConfigStore implements ConfigStore {
   constructor(private readonly supportsImages: boolean) {}
 
   async getConfig() {
+    const model = this.model();
     return {
       configPath: '/tmp/config.json',
       dataPath: '/tmp',
       storagePath: '/tmp/memories',
       activeProviderId: 'vision-provider',
-      providers: [],
+      providers: [{
+        id: 'vision-provider',
+        name: 'Vision provider',
+        provider: 'openai-compatible' as const,
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        enabled: true,
+        apiKeySet: false,
+        apiKeyPreview: '',
+        models: [model],
+      }],
       globalPrompt: '',
       memory: {
         useMemories: true,
@@ -9019,16 +9129,7 @@ class ImageCapabilityConfigStore implements ConfigStore {
   }
 
   async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    const model = {
-      id: 'vision-model',
-      name: 'Vision model',
-      code: 'vision-model',
-      enabled: true,
-      maxOutputTokens: 1000,
-      thinkingEnabled: false,
-      thinkingEfforts: [],
-      supportsImages: this.supportsImages,
-    };
+    const model = this.model();
     return {
       id: 'vision-provider',
       name: 'Vision provider',
@@ -9038,6 +9139,19 @@ class ImageCapabilityConfigStore implements ConfigStore {
       apiKey: '',
       models: [model],
       activeModel: model,
+    };
+  }
+
+  private model() {
+    return {
+      id: 'vision-model',
+      name: 'Vision model',
+      code: 'vision-model',
+      enabled: true,
+      maxOutputTokens: 1000,
+      thinkingEnabled: false,
+      thinkingEfforts: [],
+      supportsImages: this.supportsImages,
     };
   }
 }

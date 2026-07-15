@@ -22,11 +22,11 @@ const TOOL_SUGGEST_NAME = 'tool_suggest';
 const RESERVED_ROUTER_TOOL_NAMES = new Set([TOOL_SEARCH_NAME, TOOL_SUGGEST_NAME]);
 const TOOL_SEARCH_DEFINITION: RuntimeToolDefinition = {
   name: TOOL_SEARCH_NAME,
-  description: 'Search deferred tools that are not currently advertised. Returns matching tool definitions and makes them available on the next model request.',
+  description: 'Search deferred tools and tools that are already advertised. Returns matching definitions, identifies tools that can be called now, and makes deferred matches available on the next model request.',
   inputSchema: {
     type: 'object',
     properties: {
-      query: { type: 'string', description: 'Search query for deferred tool names, descriptions, or keywords.' },
+      query: { type: 'string', description: 'Search query for available or deferred tool names, descriptions, or keywords.' },
       limit: { type: 'number', description: 'Maximum number of tools to return.' },
     },
     required: ['query'],
@@ -195,7 +195,8 @@ export class RuntimeToolRouter {
       };
     }
     if (toolCall.name !== TOOL_SEARCH_NAME) throw new Error(`Unknown router tool: ${toolCall.name}`);
-    const result = searchDeferredTools(this.deferredTools, parsedArguments);
+    const advertisedTools = this.tools.filter((tool) => !this.isRouterTool(tool.name));
+    const result = searchTools(advertisedTools, this.deferredTools, parsedArguments);
     this.options.revealDeferredTools?.(result.revealedToolNames);
     const content = JSON.stringify(result);
     return {
@@ -255,17 +256,29 @@ function toolExposure(profile: ToolRuntimeProfile): 'direct' | 'deferred' | 'hid
   return profile.visibleToModel === false ? 'hidden' : 'direct';
 }
 
-function searchDeferredTools(tools: RuntimeToolDefinition[], parsedArguments: unknown): { query: string; tools: RuntimeToolDefinition[]; revealedToolNames: string[] } {
-  const scored = rankedDeferredTools(tools, parsedArguments);
+function searchTools(
+  advertisedTools: RuntimeToolDefinition[],
+  deferredTools: RuntimeToolDefinition[],
+  parsedArguments: unknown,
+): {
+  availableToolNames: string[];
+  query: string;
+  revealedToolNames: string[];
+  tools: RuntimeToolDefinition[];
+} {
+  const scored = rankedTools([...advertisedTools, ...deferredTools], parsedArguments);
+  const advertisedNames = new Set(advertisedTools.map((tool) => tool.name));
+  const deferredNames = new Set(deferredTools.map((tool) => tool.name));
   return {
+    availableToolNames: scored.tools.filter((tool) => advertisedNames.has(tool.name)).map((tool) => tool.name),
     query: scored.query,
     tools: scored.tools,
-    revealedToolNames: scored.tools.map((tool) => tool.name),
+    revealedToolNames: scored.tools.filter((tool) => deferredNames.has(tool.name)).map((tool) => tool.name),
   };
 }
 
 function suggestDeferredTools(tools: RuntimeToolDefinition[], parsedArguments: unknown): { query: string; suggestions: Array<{ name: string; description: string; revealWith: 'tool_search' }> } {
-  const scored = rankedDeferredTools(tools, parsedArguments);
+  const scored = rankedTools(tools, parsedArguments);
   return {
     query: scored.query,
     suggestions: scored.tools.map((tool) => ({
@@ -276,7 +289,7 @@ function suggestDeferredTools(tools: RuntimeToolDefinition[], parsedArguments: u
   };
 }
 
-function rankedDeferredTools(tools: RuntimeToolDefinition[], parsedArguments: unknown): { query: string; tools: RuntimeToolDefinition[] } {
+function rankedTools(tools: RuntimeToolDefinition[], parsedArguments: unknown): { query: string; tools: RuntimeToolDefinition[] } {
   const input = isPlainRecord(parsedArguments) ? parsedArguments : {};
   const query = typeof input.query === 'string' ? input.query.trim() : '';
   const limitInput = typeof input.limit === 'number' && Number.isFinite(input.limit) ? input.limit : 8;
@@ -318,9 +331,16 @@ function deferredToolMatchScore(tool: RuntimeToolDefinition, terms: string[], no
   return score;
 }
 
-function toolSearchPreview(result: { tools: RuntimeToolDefinition[] }): string {
-  if (!result.tools.length) return 'No deferred tools matched.';
-  return `Revealed ${result.tools.length} deferred tool(s): ${result.tools.map((tool) => tool.name).join(', ')}`;
+function toolSearchPreview(result: { availableToolNames: string[]; revealedToolNames: string[]; tools: RuntimeToolDefinition[] }): string {
+  if (!result.tools.length) return 'No tools matched.';
+  const parts: string[] = [];
+  if (result.availableToolNames.length) {
+    parts.push(`Available ${result.availableToolNames.length} tool(s): ${result.availableToolNames.join(', ')}`);
+  }
+  if (result.revealedToolNames.length) {
+    parts.push(`Revealed ${result.revealedToolNames.length} deferred tool(s): ${result.revealedToolNames.join(', ')}`);
+  }
+  return parts.join('; ');
 }
 
 function toolSuggestPreview(result: { suggestions: Array<{ name: string }> }): string {

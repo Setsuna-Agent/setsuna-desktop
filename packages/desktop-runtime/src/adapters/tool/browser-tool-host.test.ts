@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserControlPort } from '../../ports/browser-control.js';
+import { RuntimeToolRouter } from '../../loop/tool-router.js';
 import { BrowserToolHost, normalizeBrowserToolUrl } from './browser-tool-host.js';
 
 describe('BrowserToolHost', () => {
@@ -82,6 +83,29 @@ describe('BrowserToolHost', () => {
     await expect(host.listTools(visionContext)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'browser_screenshot' }),
     ]));
+    expect(host.toolRuntimeProfile('browser_screenshot')).toEqual({ exposure: 'direct' });
+    expect(host.toolRuntimeProfile('browser_tabs')).toEqual({ exposure: 'deferred' });
+    const router = await RuntimeToolRouter.create({
+      approvalPolicy: 'on-request',
+      context: {
+        ...visionContext,
+        environment: {
+          id: 'test',
+          cwd: '/workspace',
+          workspaceRoot: '/workspace',
+          workspaceRoots: ['/workspace'],
+        },
+        permissionProfile: 'workspace-write',
+        sandboxWorkspaceWrite: undefined,
+        signal: new AbortController().signal,
+        turnId: 'turn_1',
+      },
+      orchestrator: null,
+      toolHost: host,
+    });
+    expect(router.advertisedToolNames()).toContain('browser_screenshot');
+    expect(router.deferredToolNames()).toContain('browser_tabs');
+    await expect(router.systemPrompt()).resolves.toContain('browser_screenshot is already available');
     await expect(host.runTool('browser_screenshot', { tabId: 'tab-1' }, visionContext)).resolves.toMatchObject({
       attachments: [{
         id: 'browser_screenshot_call_screenshot',
