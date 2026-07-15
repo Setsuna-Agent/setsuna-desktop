@@ -76,6 +76,12 @@ export class ToolApprovalStore {
       this.turnSandboxGrants.get(turnId)?.get(environmentId),
     );
   }
+
+  clearTurn(turnId: string): void {
+    this.approvedForTurn.delete(turnId);
+    this.turnSandboxGrants.delete(turnId);
+    this.strictAutoReviewTurns.delete(turnId);
+  }
 }
 
 

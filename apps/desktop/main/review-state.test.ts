@@ -147,6 +147,23 @@ describe('desktop review state actions', () => {
     })).rejects.toThrow('提交信息不能为空');
   }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
+  it('reports a push failure without hiding the completed local commit', async () => {
+    const repo = await mkGitRepo();
+    await git(repo, ['remote', 'add', 'origin', path.join(repo, 'missing-remote.git')]);
+    await writeFile(path.join(repo, 'tracked.txt'), 'committed locally\n');
+
+    const committed = await commitReviewChanges(repo, {
+      includeUnstaged: true,
+      message: 'fix: preserve partial push result',
+      push: true,
+    });
+
+    expect(committed).toMatchObject({ ok: true, pushed: false });
+    expect(committed.pushError).toBeTruthy();
+    await expect(git(repo, ['log', '-1', '--pretty=%s'])).resolves.toBe('fix: preserve partial push result');
+    await expect(git(repo, ['status', '--short'])).resolves.toBe('');
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
   it('requires unstaged changes to be handled before creating and checking out a branch', async () => {
     const repo = await mkGitRepo();
     await writeFile(path.join(repo, 'tracked.txt'), 'changed\n');

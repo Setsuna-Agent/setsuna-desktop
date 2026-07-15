@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
   AnswerRuntimeApprovalInput,
+  DesktopRuntimeClient,
   ProviderConfigState,
   RuntimeAvailableModelsResponse,
   RuntimeApprovalStatus,
-  RuntimeApprovalRequest,
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeEvent,
@@ -32,6 +32,8 @@ import type {
 import { createDesktopRuntimeClient } from '../runtime/desktop-runtime-client.js';
 import { deleteHookFromConfig, hookConfigLocation, hookInputToMatcherGroup, updateHookInConfig } from '../utils/runtimeHookConfig.js';
 import { applyRuntimeEvent, isActivityEvent } from '../utils/runtimeEvents.js';
+import { startThreadReview } from './startThreadReview.js';
+import { useLatestRequestGuard } from './useLatestRequestGuard.js';
 
 export type LoadState = 'loading' | 'ready' | 'error';
 const lastActiveThreadStorageKey = 'setsuna-desktop:last-active-thread-id';
@@ -56,7 +58,6 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
   const [config, setConfig] = useState<RuntimeConfigState | null>(null);
   const [contextCompacting, setContextCompacting] = useState(false);
-  const [approvals, setApprovals] = useState<RuntimeApprovalRequest[]>([]);
   const [activityEvents, setActivityEvents] = useState<RuntimeEvent[]>([]);
   const [usage, setUsage] = useState<RuntimeUsageResponse | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
@@ -77,7 +78,15 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const threadListRefreshTimerRef = useRef<number | null>(null);
   // 终态 turn 记录在本地，避免延迟快照把已完成 turn 重新推断成 active。
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
+  const hookRequests = useLatestRequestGuard();
+  const memoryListRequests = useLatestRequestGuard();
+  const memoryPreviewRequests = useLatestRequestGuard();
+  const threadMemoryModeRequests = useLatestRequestGuard();
   const currentThreadId = currentThread?.id ?? null;
+  const currentThreadIdRef = useRef(currentThreadId);
+  const activeProjectIdRef = useRef(activeProjectId);
+  currentThreadIdRef.current = currentThreadId;
+  activeProjectIdRef.current = activeProjectId;
   const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
   const hasRunningThreadSummary = threads.some((thread) => Boolean(thread.activeTurnId))
     || archivedThreads.some((thread) => Boolean(thread.activeTurnId));
@@ -86,57 +95,59 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
 
   const refresh = useCallback(async () => {
+    setLoadState('loading');
     setError(null);
-    // 首屏需要多个 runtime 域的数据；并行拉取能避免设置页/侧栏/对话区分批闪烁。
-    const [nextConfig, threadList, allThreadList, skillList, mcpList, hookList, projectList, workspaceStatus, usageSummary, memoryList, approvalList] = await Promise.all([
-      client.getConfig(),
-      client.listThreads(),
-      client.listThreads({ includeArchived: true }),
-      client.listSkills(),
-      client.listMcpServers(),
-      client.listHooks(activeHookCwds),
-      client.listProjects(),
-      client.getWorkspaceStatus(),
-      client.getUsage(),
-      client.listMemories({ limit: 20 }),
-      client.listApprovals(),
-    ]);
-    setConfig(nextConfig);
-    setThreads(threadList.threads);
-    setArchivedThreads(allThreadList.threads.filter((thread) => thread.archived));
-    setSkills(skillList.skills);
-    setMcpState(mcpList);
-    setHookState(hookList);
-    setProjects(projectList.projects);
-    setTemporaryWorkspace(workspaceStatus.project ?? null);
-    setUsage(usageSummary);
-    setMemories(memoryList.memories);
-    setApprovals(approvalList.approvals);
+    try {
+      // Only the state required to enter the workbench is fatal. Optional domains degrade independently.
+      const bootstrap = await loadRuntimeBootstrap(client);
+      const { nextConfig, threadList, allThreadList, projectList, workspaceStatus } = bootstrap.core;
+      const { skillResult, mcpResult, usageResult } = bootstrap.optional;
+      setConfig(nextConfig);
+      setThreads(threadList.threads);
+      setArchivedThreads(allThreadList.threads.filter((thread) => thread.archived));
+      setProjects(projectList.projects);
+      setTemporaryWorkspace(workspaceStatus.project ?? null);
+      if (skillResult.status === 'fulfilled') setSkills(skillResult.value.skills);
+      if (mcpResult.status === 'fulfilled') setMcpState(mcpResult.value);
+      if (usageResult.status === 'fulfilled') setUsage(usageResult.value);
+      reportOptionalLoadFailures([
+        ['skills', skillResult],
+        ['MCP', mcpResult],
+        ['usage', usageResult],
+      ]);
 
-    if (!initializedSelectionRef.current) {
-      initializedSelectionRef.current = true;
-      const initialThread = selectInitialThreadSummary(threadList.threads, readPersistedActiveThreadId());
-      if (initialThread) {
-        const thread = await client.getThread(initialThread.id);
-        setCurrentThread(thread);
-        setActiveProjectId(thread.projectId ?? null);
-      } else {
-        setActiveProjectId((current) => current ?? projectList.projects[0]?.id ?? null);
+      if (!initializedSelectionRef.current) {
+        initializedSelectionRef.current = true;
+        const initialThread = selectInitialThreadSummary(threadList.threads, readPersistedActiveThreadId());
+        if (initialThread) {
+          try {
+            const thread = await client.getThread(initialThread.id);
+            setCurrentThread(thread);
+            setActiveProjectId(thread.projectId ?? null);
+          } catch (unknownError) {
+            console.warn('[runtime] failed to restore the last active thread', unknownError);
+            setCurrentThread(null);
+            setActiveProjectId((current) => current ?? projectList.projects[0]?.id ?? null);
+          }
+        } else {
+          setActiveProjectId((current) => current ?? projectList.projects[0]?.id ?? null);
+        }
       }
-    }
 
-    setLoadState('ready');
-  }, [activeHookCwds, client, setActiveProjectId]);
+      setLoadState('ready');
+    } catch (unknownError) {
+      setLoadState('error');
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      throw unknownError;
+    }
+  }, [client, setActiveProjectId]);
 
   useEffect(() => {
     if (currentThreadId) persistActiveThreadId(currentThreadId);
   }, [currentThreadId]);
 
   useEffect(() => {
-    refresh().catch((unknownError) => {
-      setLoadState('error');
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    });
+    void refresh().catch(() => undefined);
   }, [refresh]);
 
   const refreshThreadsSoon = useCallback(() => {
@@ -181,21 +192,34 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     };
   }, [client, effectiveActiveTurnId, hasRunningThreadSummary]);
 
-  const refreshCapabilities = useCallback(() => {
-    void Promise.all([client.listSkills(), client.listMcpServers(), client.listHooks(activeHookCwds)])
-      .then(([skillList, mcpList, hookList]) => {
-        setSkills(skillList.skills);
-        setMcpState(mcpList);
-        setHookState(hookList);
-      })
-      .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
-  }, [activeHookCwds, client]);
+  const refreshCapabilities = useCallback(async () => {
+    const isLatestHookRequest = hookRequests.begin();
+    const results = await Promise.allSettled([
+      client.listSkills(),
+      client.listMcpServers(),
+      client.listHooks(activeHookCwds),
+    ]);
+    const [skillResult, mcpResult, hookResult] = results;
+    if (isLatestHookRequest()) {
+      if (skillResult.status === 'fulfilled') setSkills(skillResult.value.skills);
+      if (mcpResult.status === 'fulfilled') setMcpState(mcpResult.value);
+      if (hookResult.status === 'fulfilled') setHookState(hookResult.value);
+    }
+    reportOptionalLoadFailures([
+      ['skills', skillResult],
+      ['MCP', mcpResult],
+      ['hooks', hookResult],
+    ]);
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (firstFailure && results.every((result) => result.status === 'rejected')) throw firstFailure.reason;
+  }, [activeHookCwds, client, hookRequests]);
 
   const refreshHooks = useCallback(async () => {
+    const isLatest = hookRequests.begin();
     const hookList = await client.listHooks(activeHookCwds);
-    setHookState(hookList);
+    if (isLatest()) setHookState(hookList);
     return hookList;
-  }, [activeHookCwds, client]);
+  }, [activeHookCwds, client, hookRequests]);
 
   useEffect(() => () => {
     if (threadListRefreshTimerRef.current !== null) {
@@ -230,26 +254,13 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
         setError(event.payload.message);
       }
       if (event.type === 'turn.completed') {
-        refreshCapabilities();
+        void refreshCapabilities().catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
         if (event.payload.usage) void client.getUsage().then(setUsage);
-        if (event.payload.usage) void client.getUsage({ threadId: event.threadId }).then(setThreadUsage);
-      }
-      if (event.type === 'approval.requested') {
-        setApprovals((items) => [event.payload.approval, ...items.filter((item) => item.id !== event.payload.approval.id)]);
-      }
-      if (event.type === 'approval.resolved') {
-        setApprovals((items) =>
-          items.map((item) =>
-            item.id === event.payload.approvalId
-              ? {
-                  ...item,
-                  status: approvalStatusForDecision(event.payload.decision),
-                  decision: event.payload.decision,
-                  message: event.payload.message,
-                }
-              : item,
-          ),
-        );
+        if (event.payload.usage) {
+          void client.getUsage({ threadId: event.threadId }).then((nextUsage) => {
+            if (currentThreadIdRef.current === event.threadId) setThreadUsage(nextUsage);
+          });
+        }
       }
     });
     return () => {
@@ -291,7 +302,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
         } else if (!snapshotActiveTurnId) {
           terminalTurnIdsRef.current.add(turnId);
           setActiveTurnId((current) => (current === turnId ? null : current));
-          refreshCapabilities();
+          void refreshCapabilities().catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
           void client.getUsage().then(setUsage);
           continuePolling = nextThread.goal?.status === 'active';
         } else if (snapshotActiveTurnId !== turnId) {
@@ -312,26 +323,46 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [effectiveActiveTurnId, client, currentThread?.goal?.status, currentThreadId, refreshCapabilities, refreshThreadsSoon]);
 
   useEffect(() => {
-    client
-      .listMemories({ projectId: activeProjectId ?? undefined, limit: 20 })
-      .then((result) => setMemories(result.memories))
-      .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
-  }, [activeProjectId, client]);
+    if (loadState !== 'ready') return undefined;
+    const projectId = activeProjectId;
+    const isLatest = memoryListRequests.begin();
+    setMemories([]);
+    void client
+      .listMemories({ projectId: projectId ?? undefined, limit: 20 })
+      .then((result) => {
+        if (isLatest() && activeProjectIdRef.current === projectId) setMemories(result.memories);
+      })
+      .catch((unknownError) => {
+        if (isLatest()) setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      });
+    return () => memoryListRequests.invalidate();
+  }, [activeProjectId, client, loadState, memoryListRequests]);
 
   useEffect(() => {
     if (!currentThreadId) {
       setThreadUsage(null);
-      return;
+      return undefined;
     }
-    client
+    const threadId = currentThreadId;
+    let cancelled = false;
+    setThreadUsage(null);
+    void client
       .getUsage({ threadId: currentThreadId })
-      .then(setThreadUsage)
-      .catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
+      .then((nextUsage) => {
+        if (!cancelled && currentThreadIdRef.current === threadId) setThreadUsage(nextUsage);
+      })
+      .catch((unknownError) => {
+        if (!cancelled) setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [client, currentThreadId]);
 
   useEffect(() => {
-    refreshHooks().catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
-  }, [refreshHooks]);
+    if (loadState !== 'ready') return;
+    void refreshHooks().catch((unknownError) => setError(unknownError instanceof Error ? unknownError.message : String(unknownError)));
+  }, [loadState, refreshHooks]);
 
   const reloadThreads = useCallback(async () => {
     const [list, allList] = await Promise.all([
@@ -370,12 +401,17 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       const next = await client.saveConfig(input);
       setConfig(next);
       if (Object.hasOwn(input, 'storagePath')) {
-        const list = await client.listMemories({ projectId: activeProjectId ?? undefined, limit: 20 });
-        setMemories(list.memories);
-        setMemoryPreview(null);
+        const projectId = activeProjectId;
+        const isLatest = memoryListRequests.begin();
+        memoryPreviewRequests.invalidate();
+        const list = await client.listMemories({ projectId: projectId ?? undefined, limit: 20 });
+        if (isLatest() && activeProjectIdRef.current === projectId) {
+          setMemories(list.memories);
+          setMemoryPreview(null);
+        }
       }
     },
-    [activeProjectId, client],
+    [activeProjectId, client, memoryListRequests, memoryPreviewRequests],
   );
 
   const fetchProviderModels = useCallback(
@@ -420,12 +456,18 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const updateCurrentThreadMemoryMode = useCallback(
     async (mode: RuntimeThreadMemoryMode) => {
       if (!currentThread) return null;
-      const updated = await client.updateThreadMemoryMode(currentThread.id, { mode });
-      setCurrentThread(updated);
+      const threadId = currentThread.id;
+      const isLatest = threadMemoryModeRequests.begin();
+      const updated = await client.updateThreadMemoryMode(threadId, { mode });
+      if (isLatest() && currentThreadIdRef.current === threadId) {
+        setCurrentThread((thread) => (
+          thread?.id === threadId && updated.lastSeq >= thread.lastSeq ? updated : thread
+        ));
+      }
       await reloadThreads();
       return updated;
     },
-    [client, currentThread, reloadThreads],
+    [client, currentThread, reloadThreads, threadMemoryModeRequests],
   );
 
   const clearCurrentThreadGoal = useCallback(async () => {
@@ -464,11 +506,19 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [client, reloadThreads]);
 
   const startCurrentThreadReview = useCallback(async (target: RuntimeReviewTarget) => {
-    if (!currentThread) return null;
-    const started = await client.startReview(currentThread.id, target);
+    const started = await startThreadReview({
+      activeProjectId,
+      client,
+      currentThread,
+      onThreadCreated: async (thread) => {
+        setCurrentThread(thread);
+        await reloadThreads();
+      },
+      target,
+    });
     setActiveTurnId(started.turnId);
     return started;
-  }, [client, currentThread]);
+  }, [activeProjectId, client, currentThread, reloadThreads]);
 
   const selectProviderModel = useCallback(
     async (providerId: string, modelId: string) => {
@@ -648,52 +698,48 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   );
 
   const previewMemories = useCallback(async () => {
+    const isLatest = memoryPreviewRequests.begin();
     setMemoryPreviewLoading(true);
     try {
       const preview = await client.previewMemories();
-      setMemoryPreview(preview);
+      if (isLatest()) setMemoryPreview(preview);
       return preview;
     } finally {
-      setMemoryPreviewLoading(false);
+      if (isLatest()) setMemoryPreviewLoading(false);
     }
-  }, [client]);
+  }, [client, memoryPreviewRequests]);
 
   const deleteMemory = useCallback(
     async (memoryId: string) => {
+      const projectId = activeProjectId;
+      const isLatest = memoryListRequests.begin();
+      const isLatestPreview = memoryPreviewRequests.begin();
       await client.deleteMemory(memoryId);
-      const list = await client.listMemories({ projectId: activeProjectId ?? undefined, limit: 20 });
-      setMemories(list.memories);
-      const preview = await client.previewMemories();
-      setMemoryPreview(preview);
+      const [list, preview] = await Promise.all([
+        client.listMemories({ projectId: projectId ?? undefined, limit: 20 }),
+        client.previewMemories(),
+      ]);
+      if (isLatest() && activeProjectIdRef.current === projectId) setMemories(list.memories);
+      if (isLatestPreview()) setMemoryPreview(preview);
     },
-    [activeProjectId, client],
+    [activeProjectId, client, memoryListRequests, memoryPreviewRequests],
   );
 
   const clearMemories = useCallback(async () => {
+    const projectId = activeProjectId;
+    const isLatest = memoryListRequests.begin();
+    const isLatestPreview = memoryPreviewRequests.begin();
     const list = await client.clearMemories();
-    setMemories(list.memories);
     const preview = await client.previewMemories();
-    setMemoryPreview(preview);
-  }, [client]);
+    if (isLatest() && activeProjectIdRef.current === projectId) setMemories(list.memories);
+    if (isLatestPreview()) setMemoryPreview(preview);
+  }, [activeProjectId, client, memoryListRequests, memoryPreviewRequests]);
 
   const answerApproval = useCallback(
     async (approvalId: string, input: AnswerRuntimeApprovalInput) => {
       await client.answerApproval(approvalId, input);
       const resolvedAt = new Date().toISOString();
-      // 先乐观更新审批列表和当前线程 toolRun，再异步拉一次线程快照校正 seq。
-      setApprovals((items) =>
-        items.map((item) =>
-          item.id === approvalId
-            ? {
-                ...item,
-                status: approvalStatusForDecision(input.decision),
-                decision: input.decision,
-                message: input.message,
-                resolvedAt,
-              }
-            : item,
-        ),
-      );
+      // 先乐观更新当前线程 toolRun，再异步拉一次线程快照校正 seq。
       setCurrentThread((thread) => updateThreadApprovalRun(thread, approvalId, input, resolvedAt));
       if (currentThreadId) {
         client
@@ -710,7 +756,6 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     archivedThreads,
     activityEvents,
     answerApproval,
-    approvals,
     client,
     config,
     compactCurrentThreadContext,
@@ -738,6 +783,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     previewMemories,
     projects,
     refresh,
+    refreshCapabilities,
     refreshHooks,
     reloadThreads,
     permanentlyDeleteArchivedThreads,
@@ -812,6 +858,42 @@ function updateThreadApprovalRun(
 }
 
 export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
+
+type RuntimeBootstrapClient = Pick<
+  DesktopRuntimeClient,
+  'getConfig' | 'getUsage' | 'getWorkspaceStatus' | 'listMcpServers' | 'listProjects' | 'listSkills' | 'listThreads'
+>;
+
+export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
+  const [core, optional] = await Promise.all([
+    Promise.all([
+      client.getConfig(),
+      client.listThreads(),
+      client.listThreads({ includeArchived: true }),
+      client.listProjects(),
+      client.getWorkspaceStatus(),
+    ]),
+    Promise.allSettled([
+      client.listSkills(),
+      client.listMcpServers(),
+      client.getUsage(),
+    ]),
+  ]);
+  const [nextConfig, threadList, allThreadList, projectList, workspaceStatus] = core;
+  const [skillResult, mcpResult, usageResult] = optional;
+  return {
+    core: { nextConfig, threadList, allThreadList, projectList, workspaceStatus },
+    optional: { skillResult, mcpResult, usageResult },
+  };
+}
+
+function reportOptionalLoadFailures(
+  results: ReadonlyArray<readonly [domain: string, result: PromiseSettledResult<unknown>]>,
+): void {
+  for (const [domain, result] of results) {
+    if (result.status === 'rejected') console.warn(`[runtime] optional ${domain} state failed to load`, result.reason);
+  }
+}
 
 export function selectInitialThreadSummary(
   threads: RuntimeThreadSummary[],

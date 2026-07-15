@@ -265,7 +265,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'messages.deleted') {
     const ids = new Set(event.payload.messageIds);
+    const removedTurnIds = new Set(next.messages
+      .filter((message) => message.turnId && ids.has(message.id))
+      .map((message) => message.turnId!));
     next.messages = next.messages.filter((message) => !ids.has(message.id));
+    pruneRemovedTurns(next, removedTurnIds);
     refreshThreadSummary(next);
     return next;
   }

@@ -22,11 +22,33 @@ describe('desktop terminal store', () => {
     expect(queuedEvents.map((event) => event.seq)).toEqual([...queuedEvents].sort((left, right) => left.seq - right.seq).map((event) => event.seq));
     expect(store.close(session.sessionId)).toBe(true);
   });
+
+  it('retains an exited session and can restart it in place', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-restart-test-'));
+    const events: DesktopTerminalEvent[] = [];
+    const store = new DesktopTerminalStore((event) => events.push(event));
+    const session = await store.open({ workspaceRoot, cols: 80, rows: 24 });
+
+    store.write(session.sessionId, terminalExitCommand());
+    await waitFor(() => events.some((event) => event.event === 'exit'));
+
+    expect(store.read(session.sessionId).some((event) => event.event === 'exit')).toBe(true);
+    expect(() => store.write(session.sessionId, terminalSmokeCommand())).toThrow('重新启动');
+    expect(store.restart(session.sessionId, 90, 30)).toBe(true);
+    store.write(session.sessionId, terminalSmokeCommand());
+    await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text ?? '').includes('setsuna-terminal-smoke')));
+
+    expect(store.close(session.sessionId)).toBe(true);
+  });
 });
 
 function terminalSmokeCommand(): string {
   if (process.platform === 'win32') return 'echo setsuna-terminal-smoke\r\n';
   return "printf 'setsuna-terminal-smoke\\n'\n";
+}
+
+function terminalExitCommand(): string {
+  return process.platform === 'win32' ? 'exit\r\n' : 'exit\n';
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

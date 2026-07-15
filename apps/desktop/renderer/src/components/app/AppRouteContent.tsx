@@ -163,7 +163,7 @@ export function AppRouteContent({
         onDeleteSkill={runtime.deleteSkill}
         onGetSkillDetail={runtime.getSkillDetail}
         onCreateInConversation={onSelectSkillForChat}
-        onRefresh={runtime.refresh}
+        onRefresh={runtime.refreshCapabilities}
         onUpdateSkill={runtime.updateSkill}
         onFetchMcpTools={runtime.fetchMcpServerTools}
         onRefreshHooks={runtime.refreshHooks}

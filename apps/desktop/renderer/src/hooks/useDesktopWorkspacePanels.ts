@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { clearTerminalRestoreBuffer } from '../components/workspace/TerminalPane.js';
 import { readPreferredWorkspaceAppId, writePreferredWorkspaceAppId } from '../utils/workspaceAppPreference.js';
+import { useLatestRequestGuard } from './useLatestRequestGuard.js';
 import {
   activePanelInSlot,
   addPanelToSlotState,
@@ -53,6 +54,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
   const pendingTerminalSessionKeysRef = useRef<Set<string>>(new Set());
   const terminalPanelSeqRef = useRef(0);
   const sideChatPanelSeqRef = useRef(0);
+  const reviewRequests = useLatestRequestGuard();
 
   const selectedWorkspaceApp = workspaceApps.find((app) => app.id === selectedWorkspaceAppId) ?? workspaceApps[0] ?? null;
   const sideActivePanel = activePanelInSlot(sidePanelSlot);
@@ -114,20 +116,23 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
   }, [closeAllTerminalSessions, closeWorkspaceMenus]);
 
   const resetProjectBoundPanels = useCallback(() => {
+    reviewRequests.invalidate();
     closeWorkspaceMenus();
     setReviewState(null);
     setReviewError(null);
     setReviewLoading(false);
     setSidePanelSlot(clearProjectBoundPanelsFromSlot);
     setBottomPanelSlot(clearProjectBoundPanelsFromSlot);
-  }, [closeWorkspaceMenus]);
+  }, [closeWorkspaceMenus, reviewRequests]);
 
   useEffect(() => {
+    reviewRequests.invalidate();
     if (!activeProject?.path) {
       setWorkspaceApps([]);
       setSelectedWorkspaceAppId(null);
       setReviewState(null);
       setReviewError(null);
+      setReviewLoading(false);
       return undefined;
     }
     let cancelled = false;
@@ -151,10 +156,11 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
     return () => {
       cancelled = true;
     };
-  }, [activeProject?.path]);
+  }, [activeProject?.path, reviewRequests]);
 
   const loadReviewState = useCallback(async (options: DesktopReviewLoadOptions = {}) => {
     if (!activeProject?.path) {
+      reviewRequests.invalidate();
       setReviewState(null);
       setReviewError(null);
       return;
@@ -164,18 +170,22 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError 
       setReviewError('Desktop review bridge is unavailable.');
       return;
     }
+    const isLatest = reviewRequests.begin();
+    const projectPath = activeProject.path;
     setReviewLoading(true);
     setReviewError(null);
     try {
-      const state = await api.getState(activeProject.path, options);
+      const state = await api.getState(projectPath, options);
+      if (!isLatest()) return;
       setReviewState(state);
     } catch (unknownError) {
+      if (!isLatest()) return;
       setReviewState(null);
       setReviewError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     } finally {
-      setReviewLoading(false);
+      if (isLatest()) setReviewLoading(false);
     }
-  }, [activeProject?.path]);
+  }, [activeProject?.path, reviewRequests]);
 
   useEffect(() => {
     if (activeView !== 'chat') return;

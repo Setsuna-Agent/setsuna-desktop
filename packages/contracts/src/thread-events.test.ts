@@ -708,6 +708,43 @@ describe('applyRuntimeEventToThread context compaction', () => {
     expect(truncated.activeTurnId).toBeNull();
   });
 
+  it('prunes persisted turn items when every message for a turn is deleted', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 3,
+      lastMessagePreview: 'second',
+      lastSeq: 0,
+      activeTurnId: 'turn_2',
+      turns: [
+        { id: 'turn_1', status: 'completed', items: [] },
+        { id: 'turn_2', status: 'completed', items: [] },
+      ],
+      messages: [
+        { id: 'msg_user_1', role: 'user', turnId: 'turn_1', content: 'first', createdAt: '2026-06-26T00:00:00.000Z', status: 'complete' },
+        { id: 'msg_user_2', role: 'user', turnId: 'turn_2', content: 'second', createdAt: '2026-06-26T00:00:01.000Z', status: 'complete' },
+        { id: 'msg_assistant_2', role: 'assistant', turnId: 'turn_2', content: 'answer', createdAt: '2026-06-26T00:00:02.000Z', status: 'complete' },
+      ],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_delete',
+      seq: 1,
+      threadId: 'thread_1',
+      type: 'messages.deleted',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: { messageIds: ['msg_user_2', 'msg_assistant_2'] },
+    };
+
+    const deleted = applyRuntimeEventToThread(thread, event);
+
+    expect(deleted.messages.map((message) => message.id)).toEqual(['msg_user_1']);
+    expect(deleted.turns?.map((turn) => turn.id)).toEqual(['turn_1']);
+    expect(deleted.activeTurnId).toBeNull();
+  });
+
   it('keeps model-only messages out of transcript summary fields', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',

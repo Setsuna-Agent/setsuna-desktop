@@ -64,6 +64,7 @@ body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
 }
 
 .desktop-terminal-xterm {
+  position: relative;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -71,6 +72,36 @@ body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
   padding: 8px 0 14px 10px;
   overflow: hidden;
   background: var(--app-bg);
+}
+
+.desktop-terminal-xterm__restart {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px 7px 11px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--app-bg) 92%, transparent);
+  color: var(--app-muted);
+  font-size: 12px;
+  box-shadow: var(--app-shadow-popover);
+}
+
+.desktop-terminal-xterm__restart button {
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--app-primary);
+  color: var(--app-primary-text);
+  cursor: pointer;
+}
+
+.desktop-terminal-xterm__restart button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .desktop-terminal-xterm__frame {

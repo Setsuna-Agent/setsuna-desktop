@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
 import { Archive, ArchiveRestore, BadgeCheck, Bold, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
@@ -1599,6 +1599,14 @@ function ProviderSettings({
   const apiKeysByProviderIdRef = useRef(apiKeysByProviderId);
   const latestDirtyRevisionRef = useRef(dirtyRevision);
   const saveRequestIdRef = useRef(0);
+  const lastStartedRevisionRef = useRef(0);
+  const pendingSaveTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  const onSaveRef = useRef(onSave);
+  providersRef.current = providers;
+  apiKeysByProviderIdRef.current = apiKeysByProviderId;
+  latestDirtyRevisionRef.current = dirtyRevision;
+  onSaveRef.current = onSave;
 
   useEffect(() => {
     const nextProviders = normalizeSettingsProviders(config.providers);
@@ -1619,42 +1627,58 @@ function ProviderSettings({
   }, [config.activeProviderId, config.providers]);
 
   useEffect(() => {
-    providersRef.current = providers;
-  }, [providers]);
-
-  useEffect(() => {
-    apiKeysByProviderIdRef.current = apiKeysByProviderId;
-  }, [apiKeysByProviderId]);
-
-  useEffect(() => {
-    latestDirtyRevisionRef.current = dirtyRevision;
-  }, [dirtyRevision]);
-
-  useEffect(() => {
     onSaveStateChange(saveState);
   }, [onSaveStateChange, saveState]);
+
+  const saveRevision = useCallback((revision: number) => {
+    lastStartedRevisionRef.current = Math.max(lastStartedRevisionRef.current, revision);
+    const requestId = saveRequestIdRef.current + 1;
+    saveRequestIdRef.current = requestId;
+    if (mountedRef.current) setSaveState({ status: 'saving', message: '生效中' });
+    return onSaveRef.current(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
+      .then(() => {
+        if (mountedRef.current && saveRequestIdRef.current === requestId && latestDirtyRevisionRef.current === revision) {
+          setSaveState({ status: 'saved', message: '已生效' });
+        }
+      })
+      .catch((error) => {
+        if (mountedRef.current && saveRequestIdRef.current === requestId) {
+          setSaveState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+  }, []);
 
   useEffect(() => {
     if (!dirtyRevision) return undefined;
     const revision = dirtyRevision;
-    const timeoutId = window.setTimeout(() => {
-      const requestId = saveRequestIdRef.current + 1;
-      saveRequestIdRef.current = requestId;
-      setSaveState({ status: 'saving', message: '生效中' });
-      void onSave(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
-        .then(() => {
-          if (saveRequestIdRef.current === requestId && latestDirtyRevisionRef.current === revision) {
-            setSaveState({ status: 'saved', message: '已生效' });
-          }
-        })
-        .catch((error) => {
-          if (saveRequestIdRef.current === requestId) {
-            setSaveState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
-          }
-        });
+    pendingSaveTimerRef.current = window.setTimeout(() => {
+      pendingSaveTimerRef.current = null;
+      void saveRevision(revision);
     }, SETTINGS_AUTO_SAVE_DELAY_MS);
-    return () => window.clearTimeout(timeoutId);
-  }, [dirtyRevision, onSave]);
+    return () => {
+      if (pendingSaveTimerRef.current !== null) {
+        window.clearTimeout(pendingSaveTimerRef.current);
+        pendingSaveTimerRef.current = null;
+      }
+    };
+  }, [dirtyRevision, saveRevision]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (pendingSaveTimerRef.current !== null) {
+        window.clearTimeout(pendingSaveTimerRef.current);
+        pendingSaveTimerRef.current = null;
+      }
+      const revision = latestDirtyRevisionRef.current;
+      if (revision <= lastStartedRevisionRef.current) return;
+      // Leaving Settings must flush the latest draft instead of cancelling its debounce window.
+      lastStartedRevisionRef.current = revision;
+      void onSaveRef.current(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
+        .catch((error) => console.error('[settings] failed to flush provider settings during unmount', error));
+    };
+  }, []);
 
   const markDirty = () => {
     setSaveState({ status: 'saving', message: '生效中' });

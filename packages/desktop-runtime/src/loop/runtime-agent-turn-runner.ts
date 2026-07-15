@@ -36,7 +36,7 @@ type RuntimeAgentTurnRunnerOptions = {
   modelSampler: Pick<RuntimeModelSampler, 'sample'>;
   samplingContexts: Pick<RuntimeSamplingContextBuilder, 'build'>;
   threadTitles: Pick<RuntimeThreadTitleCoordinator, 'start'>;
-  toolExecutor: Pick<RuntimeToolCallExecutor, 'runToolCalls'>;
+  toolExecutor: Pick<RuntimeToolCallExecutor, 'cleanupTurn' | 'runToolCalls'>;
   toolHost?: ToolHost;
   turnFinalizer: Pick<RuntimeTurnFinalizer, 'finish' | 'publishReviewModeMessage'>;
   turnInputs: Pick<RuntimeTurnInputCoordinator, 'drainMailboxMessages' | 'drainSteers'>;
@@ -398,12 +398,17 @@ export class RuntimeAgentTurnRunner {
       });
       throw error;
     } finally {
-      await this.cleanupToolHostTurn({
-        ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
-        threadId,
-        projectId: thread.projectId,
-        turnId,
-      }, { status: cleanupStatus });
+      try {
+        await this.cleanupToolHostTurn({
+          ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
+          threadId,
+          projectId: thread.projectId,
+          turnId,
+        }, { status: cleanupStatus });
+      } finally {
+        // Deferred schemas and turn-scoped approvals are meaningful only while this turn is active.
+        this.options.toolExecutor.cleanupTurn(turnId);
+      }
     }
   }
 

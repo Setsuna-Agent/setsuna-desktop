@@ -17,6 +17,8 @@ type PendingApprovalWaiter = {
   reject: (error: Error) => void;
 };
 
+const MAX_RETAINED_RESOLVED_APPROVALS = 100;
+
 export class InMemoryApprovalGate implements ApprovalGate {
   private readonly approvals = new Map<string, RuntimeApprovalRequest>();
   private readonly pending = new Map<string, PendingDecision>();
@@ -82,6 +84,7 @@ export class InMemoryApprovalGate implements ApprovalGate {
     const pending = this.pending.get(approvalId);
     this.pending.delete(approvalId);
     pending?.resolve(input);
+    this.pruneResolvedApprovals();
     return next;
   }
 
@@ -109,5 +112,15 @@ export class InMemoryApprovalGate implements ApprovalGate {
     const waiters = [...this.pendingApprovalWaiters];
     this.pendingApprovalWaiters.clear();
     for (const waiter of waiters) waiter.resolve(approval);
+  }
+
+  private pruneResolvedApprovals(): void {
+    const resolved = [...this.approvals.values()]
+      .filter((approval) => approval.status !== 'pending')
+      .sort((left, right) => right.resolvedAt!.localeCompare(left.resolvedAt!));
+    for (const approval of resolved.slice(MAX_RETAINED_RESOLVED_APPROVALS)) {
+      this.approvals.delete(approval.id);
+      this.resolvedAnswers.delete(approval.id);
+    }
   }
 }

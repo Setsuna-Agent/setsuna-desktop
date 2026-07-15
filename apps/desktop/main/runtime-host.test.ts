@@ -1,6 +1,7 @@
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { resolveBuiltinSkillsDir, resolvePackagedRuntimeEntry, resolveRuntimeSpawnCwd } from './runtime-host.js';
+import type { WebContents } from 'electron';
+import { describe, expect, it, vi } from 'vitest';
+import { RuntimeHost, resolveBuiltinSkillsDir, resolvePackagedRuntimeEntry, resolveRuntimeSpawnCwd } from './runtime-host.js';
 
 describe('runtime host packaging paths', () => {
   it('uses a real directory for the runtime child process cwd when packaged in asar', () => {
@@ -36,4 +37,67 @@ describe('runtime host packaging paths', () => {
 
     expect(resolveBuiltinSkillsDir(appRoot)).toBe(path.join('/Users/zy/Documents/setsuna-desktop', 'skills'));
   });
+
+  it('reconnects a dropped SSE stream from the last delivered sequence', async () => {
+    const firstEvent = runtimeEvent(1);
+    const secondEvent = runtimeEvent(2);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(sseResponse(firstEvent))
+      .mockResolvedValueOnce(sseResponse(secondEvent));
+    vi.stubGlobal('fetch', fetchMock);
+    const send = vi.fn();
+    const listeners = new Map<string, () => void>();
+    const webContents = {
+      isDestroyed: () => false,
+      once: (event: string, listener: () => void) => {
+        listeners.set(event, listener);
+      },
+      removeListener: (event: string) => {
+        listeners.delete(event);
+      },
+      send,
+    } as unknown as WebContents;
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+      sseRetryBaseDelayMs: 1,
+    });
+
+    const subscriptionId = host.subscribeEvents(webContents, { threadId: 'thread_1' });
+    await waitFor(() => send.mock.calls.some(([, payload]) => payload.event?.seq === 2));
+    host.unsubscribe(subscriptionId);
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('sinceSeq=1');
+    expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq)).toEqual([1, 2]);
+    vi.unstubAllGlobals();
+  });
 });
+
+function runtimeEvent(seq: number) {
+  return {
+    id: `event_${seq}`,
+    seq,
+    threadId: 'thread_1',
+    turnId: 'turn_1',
+    type: 'turn.started',
+    createdAt: '2026-07-15T00:00:00.000Z',
+    payload: { input: 'test', taskKind: 'regular' },
+  } as const;
+}
+
+function sseResponse(event: ReturnType<typeof runtimeEvent>): Response {
+  return new Response(`data: ${JSON.stringify(event)}\n\n`, {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
+  });
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error('Timed out waiting for SSE reconnect.');
+}

@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AppReadyLayout } from './components/app/AppReadyLayout.js';
 import { ShellFrame } from './components/app/ShellFrame.js';
-import { EmptyState, StatusBadge } from './components/primitives.js';
+import { Button, EmptyState, StatusBadge } from './components/primitives.js';
 import { useDesktopAppController } from './hooks/useDesktopAppController.js';
 
 export function App() {
@@ -22,7 +22,11 @@ function AppContent() {
   if (controller.loadState === 'error') {
     return (
       <ShellFrame status={<StatusBadge tone="danger">Runtime error</StatusBadge>}>
-        <EmptyState title="Local runtime failed to start" body={controller.runtime.error ?? 'Unknown error'} />
+        <EmptyState
+          title="Local runtime failed to start"
+          body={controller.runtime.error ?? 'Unknown error'}
+          action={<Button variant="primary" onClick={() => void controller.runtime.refresh().catch(() => undefined)}>重试</Button>}
+        />
       </ShellFrame>
     );
   }

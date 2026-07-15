@@ -4,7 +4,7 @@ import type {
   RuntimeConfigState,
   RuntimeSkillSummary,
   RuntimeThreadSummary,
-  WorkspaceEntrySearchItem,
+  WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { ChatWorkspace } from './ChatWorkspace.js';
@@ -48,7 +48,7 @@ export function SideChatPanel({
   onOpenProjectFile: (filePath: string) => void;
   onOpenSideChat: () => void;
   onReloadThreads: () => Promise<unknown>;
-  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
+  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onWorkspaceResizeStep: (delta: number) => void;

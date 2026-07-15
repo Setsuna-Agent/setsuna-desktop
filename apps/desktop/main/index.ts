@@ -10,7 +10,7 @@ import {
   type NativeImage,
   type OpenDialogOptions,
 } from 'electron';
-import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
+import { DESKTOP_BROWSER_PARTITION, type DesktopUserProfile } from '@setsuna-desktop/contracts';
 import { existsSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
@@ -312,6 +312,7 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('terminal:write');
   ipcMain.removeHandler('terminal:read');
   ipcMain.removeHandler('terminal:resize');
+  ipcMain.removeHandler('terminal:restart');
   ipcMain.removeHandler('terminal:close');
   ipcMain.handle('desktop:select-directory', async (_event, input) => {
     const options: OpenDialogOptions = {
@@ -425,6 +426,13 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.handle('terminal:resize', async (_event, input) =>
     terminal.resize(String(input?.sessionId ?? ''), Number(input?.cols ?? 100), Number(input?.rows ?? 24)),
   );
+  ipcMain.handle('terminal:restart', async (_event, input) =>
+    terminal.restart(
+      String(input?.sessionId ?? ''),
+      typeof input?.cols === 'number' ? input.cols : undefined,
+      typeof input?.rows === 'number' ? input.rows : undefined,
+    ),
+  );
   ipcMain.handle('terminal:close', async (_event, input) => terminal.close(String(input?.sessionId ?? '')));
 }
 
@@ -432,7 +440,7 @@ function isWindowMaximized(window: BrowserWindow): boolean {
   return window.isMaximized() || window.isFullScreen();
 }
 
-function getDesktopUserProfile(): { username: string; displayName: string; homeDir: string | null; shell: string | null; hostName: string | null } {
+function getDesktopUserProfile(): DesktopUserProfile {
   const info = userInfo();
   const username = info.username || 'local';
   return {

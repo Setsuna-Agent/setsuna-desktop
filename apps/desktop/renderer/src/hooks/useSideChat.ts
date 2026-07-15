@@ -10,6 +10,8 @@ import type {
 import { useChatTurnActions } from './useChatTurnActions.js';
 import { activeTurnIdFromThreadSnapshot } from './useRuntimeClientState.js';
 import { applyRuntimeEvent } from '../utils/runtimeEvents.js';
+import { startThreadReview } from './startThreadReview.js';
+import { useLatestRequestGuard } from './useLatestRequestGuard.js';
 
 type SideChatOptions = {
   activeProjectId: string | null;
@@ -34,7 +36,10 @@ export function useSideChat({
   const [contextCompacting, setContextCompacting] = useState(false);
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadLastSeqRef = useRef(0);
+  const memoryModeRequests = useLatestRequestGuard();
   const threadId = currentThread?.id ?? null;
+  const threadIdRef = useRef(threadId);
+  threadIdRef.current = threadId;
   const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
   currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
 
@@ -44,8 +49,9 @@ export function useSideChat({
     setDraft('');
     setActiveTurnId(null);
     setThreadUsage(null);
+    memoryModeRequests.invalidate();
     terminalTurnIdsRef.current.clear();
-  }, [activeProjectId]);
+  }, [activeProjectId, memoryModeRequests]);
 
   useEffect(() => {
     if (!threadId) return undefined;
@@ -66,7 +72,11 @@ export function useSideChat({
       }
       if (event.type === 'runtime.error') setError(event.payload.message);
       if (event.type === 'turn.completed') {
-        if (event.payload.usage) void client.getUsage({ threadId: event.threadId }).then(setThreadUsage);
+        if (event.payload.usage) {
+          void client.getUsage({ threadId: event.threadId }).then((nextUsage) => {
+            if (threadIdRef.current === event.threadId) setThreadUsage(nextUsage);
+          });
+        }
       }
     });
   }, [client, reloadThreads, setError, threadId]);
@@ -76,9 +86,17 @@ export function useSideChat({
       setThreadUsage(null);
       return;
     }
-    void client.getUsage({ threadId }).then(setThreadUsage).catch((error) => {
-      setError(error instanceof Error ? error.message : String(error));
+    let cancelled = false;
+    const requestedThreadId = threadId;
+    setThreadUsage(null);
+    void client.getUsage({ threadId: requestedThreadId }).then((nextUsage) => {
+      if (!cancelled && threadIdRef.current === requestedThreadId) setThreadUsage(nextUsage);
+    }).catch((error) => {
+      if (!cancelled) setError(error instanceof Error ? error.message : String(error));
     });
+    return () => {
+      cancelled = true;
+    };
   }, [client, setError, threadId]);
 
   useEffect(() => {
@@ -147,11 +165,17 @@ export function useSideChat({
 
   const updateMemoryMode = useCallback(async (mode: RuntimeThreadMemoryMode) => {
     if (!currentThread) return null;
-    const updated = await client.updateThreadMemoryMode(currentThread.id, { mode });
-    setCurrentThread(updated);
+    const requestedThreadId = currentThread.id;
+    const isLatest = memoryModeRequests.begin();
+    const updated = await client.updateThreadMemoryMode(requestedThreadId, { mode });
+    if (isLatest() && threadIdRef.current === requestedThreadId) {
+      setCurrentThread((thread) => (
+        thread?.id === requestedThreadId && updated.lastSeq >= thread.lastSeq ? updated : thread
+      ));
+    }
     await reloadThreads();
     return updated;
-  }, [client, currentThread, reloadThreads]);
+  }, [client, currentThread, memoryModeRequests, reloadThreads]);
 
   const clearGoal = useCallback(async () => {
     if (!currentThread) return false;
@@ -171,16 +195,27 @@ export function useSideChat({
   const answerApproval = useCallback(async (approvalId: string, input: AnswerRuntimeApprovalInput) => {
     await client.answerApproval(approvalId, input);
     if (!threadId) return;
-    const updated = await client.getThread(threadId);
-    setCurrentThread((current) => (!current || updated.lastSeq >= current.lastSeq ? updated : current));
+    const requestedThreadId = threadId;
+    const updated = await client.getThread(requestedThreadId);
+    if (threadIdRef.current === requestedThreadId) {
+      setCurrentThread((current) => (!current || updated.lastSeq >= current.lastSeq ? updated : current));
+    }
   }, [client, threadId]);
 
   const startReview = useCallback(async (target: RuntimeReviewTarget) => {
-    if (!currentThread) return null;
-    const started = await client.startReview(currentThread.id, target);
+    const started = await startThreadReview({
+      activeProjectId,
+      client,
+      currentThread,
+      onThreadCreated: async (thread) => {
+        setCurrentThread(thread);
+        await reloadThreads();
+      },
+      target,
+    });
     setActiveTurnId(started.turnId);
     return started;
-  }, [client, currentThread]);
+  }, [activeProjectId, client, currentThread, reloadThreads]);
 
   return useMemo(() => ({
     actions,

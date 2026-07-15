@@ -3,12 +3,7 @@ import { existsSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-
-export type DesktopWorkspaceApp = {
-  id: string;
-  label: string;
-  icon: string;
-};
+import type { DesktopWorkspaceApp } from '@setsuna-desktop/contracts';
 
 type WorkspaceAppDefinition = DesktopWorkspaceApp & {
   macAppName?: string;

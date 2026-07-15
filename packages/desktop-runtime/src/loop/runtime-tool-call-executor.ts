@@ -402,6 +402,11 @@ export class RuntimeToolCallExecutor {
     this.revealedDeferredToolNamesByTurn.delete(turnId);
   }
 
+  cleanupTurn(turnId: string): void {
+    this.clearDeferredToolRevealsForTurn(turnId);
+    this.toolApprovalStore.clearTurn(turnId);
+  }
+
   /**
    * 将工具执行结果写成 role=tool 的消息，供下一轮模型继续读取。
    *

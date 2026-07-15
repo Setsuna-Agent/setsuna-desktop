@@ -3,7 +3,7 @@ import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import { Button, Dropdown, Image } from 'antd';
 import { ArrowUp, Boxes, Check, CircleGauge, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
-import type { RuntimeConfigState, RuntimeMessageAttachment, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeMessageAttachment, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeUsageResponse, WorkspaceEntrySearchItem, WorkspaceEntrySearchResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
@@ -73,7 +73,7 @@ export function ChatComposer({
   onClearThreadGoal: () => void | Promise<unknown>;
   onDraftChange: (value: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
-  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
+  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenSideChat?: () => void;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onSend: (value?: string, options?: ChatComposerSendOptions) => void;
@@ -203,7 +203,7 @@ export function ChatComposer({
         type: 'review',
         title: '审查当前改动',
         description: activeTurnId ? '请等待当前回复结束后再开始审查' : activeProject ? '让 Agent 审查当前项目的未提交改动' : '请先选择项目',
-        disabled: Boolean(activeTurnId) || !activeProject || !currentThread,
+        disabled: Boolean(activeTurnId) || !activeProject,
         scope: '当前项目',
       },
       {
@@ -271,9 +271,10 @@ export function ChatComposer({
     setLoading(true);
     setLoadError('');
     onSearchProjectEntries(mentionQuery)
-      .then((nextEntries) => {
+      .then((result) => {
         if (cancelled) return;
-        setEntries(nextEntries);
+        setEntries(result.entries);
+        if (result.truncated) setLoadError('仅显示部分匹配结果，请继续输入以缩小范围。');
       })
       .catch((unknownError) => {
         if (cancelled) return;

@@ -16,11 +16,17 @@ type RuntimeHostOptions = {
   };
   dataDir: string;
   runtimeEntry?: string;
+  sseRetryBaseDelayMs?: number;
 };
 
 type Subscription = {
   abort: AbortController;
+  handleWebContentsDestroyed: () => void;
+  webContents: WebContents;
 };
+
+const DEFAULT_SSE_RETRY_BASE_DELAY_MS = 250;
+const MAX_SSE_RETRY_DELAY_MS = 5_000;
 
 /**
  * 管理本地 runtime 子进程，并把它的 HTTP/SSE 能力收敛到 Electron bridge 后面。
@@ -111,8 +117,10 @@ export class RuntimeHost {
   subscribeEvents(webContents: WebContents, input: { threadId: string; sinceSeq?: number }): string {
     const subscriptionId = randomUUID();
     const abort = new AbortController();
+    const handleWebContentsDestroyed = () => this.unsubscribe(subscriptionId);
     // 每个 renderer 订阅都有独立 AbortController，窗口切换或销毁时可以精确断开。
-    this.subscriptions.set(subscriptionId, { abort });
+    this.subscriptions.set(subscriptionId, { abort, handleWebContentsDestroyed, webContents });
+    webContents.once('destroyed', handleWebContentsDestroyed);
     void this.readSse(subscriptionId, webContents, input, abort.signal);
     return subscriptionId;
   }
@@ -125,6 +133,7 @@ export class RuntimeHost {
   unsubscribe(subscriptionId: string): void {
     const subscription = this.subscriptions.get(subscriptionId);
     subscription?.abort.abort();
+    subscription?.webContents.removeListener('destroyed', subscription.handleWebContentsDestroyed);
     this.subscriptions.delete(subscriptionId);
   }
 
@@ -187,43 +196,76 @@ export class RuntimeHost {
     input: { threadId: string; sinceSeq?: number },
     signal: AbortSignal,
   ): Promise<void> {
+    let lastSeq = input.sinceSeq;
+    const baseRetryDelay = Math.max(1, this.options.sseRetryBaseDelayMs ?? DEFAULT_SSE_RETRY_BASE_DELAY_MS);
+    let retryDelay = baseRetryDelay;
     try {
-      const params = new URLSearchParams();
-      if (typeof input.sinceSeq === 'number') params.set('sinceSeq', String(input.sinceSeq));
-      // SSE 连接由 main 持有，renderer 重载后可以续订，但不会拿到 runtime token。
-      const response = await fetch(
-        `http://127.0.0.1:${this.port}/v1/threads/${encodeURIComponent(input.threadId)}/events?${params}`,
-        {
-          headers: { Authorization: `Bearer ${this.token}` },
-          signal,
-        },
-      );
-      if (!response.ok || !response.body) throw new Error(`Runtime SSE failed: ${response.status}`);
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      // SSE 按空行分帧；buffer 保留半截事件，避免流式读取拆包时丢事件。
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split('\n\n');
-        buffer = chunks.pop() ?? '';
-        for (const chunk of chunks) {
-          const event = parseSseChunk(chunk);
-          if (event) webContents.send('runtime:event', { subscriptionId, event });
+      while (!signal.aborted && !webContents.isDestroyed()) {
+        let disconnectError: unknown = new Error('Runtime SSE disconnected.');
+        try {
+          lastSeq = await this.readSseConnection(subscriptionId, webContents, input.threadId, lastSeq, signal);
+          retryDelay = baseRetryDelay;
+        } catch (error) {
+          disconnectError = error;
         }
-      }
-    } catch (error) {
-      if (!signal.aborted) {
+        if (signal.aborted || webContents.isDestroyed()) break;
         webContents.send('runtime:event', {
           subscriptionId,
-          error: error instanceof Error ? error.message : String(error),
+          error: `${disconnectError instanceof Error ? disconnectError.message : String(disconnectError)} Reconnecting...`,
         });
+        await abortableDelay(retryDelay, signal);
+        retryDelay = Math.min(retryDelay * 2, MAX_SSE_RETRY_DELAY_MS);
       }
     } finally {
-      this.subscriptions.delete(subscriptionId);
+      const subscription = this.subscriptions.get(subscriptionId);
+      if (subscription?.abort.signal === signal) {
+        subscription.webContents.removeListener('destroyed', subscription.handleWebContentsDestroyed);
+        this.subscriptions.delete(subscriptionId);
+      }
     }
+  }
+
+  private async readSseConnection(
+    subscriptionId: string,
+    webContents: WebContents,
+    threadId: string,
+    sinceSeq: number | undefined,
+    signal: AbortSignal,
+  ): Promise<number | undefined> {
+    const params = new URLSearchParams();
+    if (typeof sinceSeq === 'number') params.set('sinceSeq', String(sinceSeq));
+    const suffix = params.size ? `?${params}` : '';
+    // SSE 连接由 main 持有，renderer 重载后可以续订，但不会拿到 runtime token。
+    const response = await fetch(
+      `http://127.0.0.1:${this.port}/v1/threads/${encodeURIComponent(threadId)}/events${suffix}`,
+      {
+        headers: { Authorization: `Bearer ${this.token}` },
+        signal,
+      },
+    );
+    if (!response.ok || !response.body) throw new Error(`Runtime SSE failed: ${response.status}`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let lastSeq = sinceSeq;
+    // SSE 按空行分帧；buffer 保留半截事件，避免流式读取拆包时丢事件。
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, '\n');
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() ?? '';
+      for (const chunk of chunks) {
+        const event = parseSseChunk(chunk);
+        if (event && (lastSeq === undefined || event.seq > lastSeq)) {
+          if (webContents.isDestroyed()) return lastSeq;
+          webContents.send('runtime:event', { subscriptionId, event });
+          lastSeq = event.seq;
+        }
+      }
+    }
+    return lastSeq;
   }
 }
 
@@ -251,6 +293,19 @@ function parseSseChunk(chunk: string): RuntimeEvent | null {
   const dataLine = chunk.split('\n').find((line) => line.startsWith('data: '));
   if (!dataLine) return null;
   return JSON.parse(dataLine.slice(6)) as RuntimeEvent;
+}
+
+function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(finish, delayMs);
+    function finish() {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    }
+    signal.addEventListener('abort', finish, { once: true });
+  });
 }
 
 async function findAvailablePort(): Promise<number> {

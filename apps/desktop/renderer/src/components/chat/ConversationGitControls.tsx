@@ -147,9 +147,13 @@ export function ConversationGitControls({
         setCommitMessage(message);
         setBusyAction('commit');
       }
-      await api.commit(workspaceRoot, { includeUnstaged, message, push });
-      setCommitOpen(false);
+      const result = await api.commit(workspaceRoot, { includeUnstaged, message, push });
       closeFloatingMenus();
+      if (result.pushError) {
+        setError(`提交 ${result.commitHash || '已完成'}，但推送失败：${result.pushError}`);
+      } else {
+        setCommitOpen(false);
+      }
     });
   };
 

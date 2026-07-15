@@ -163,17 +163,22 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
 
     const entries: WorkspaceEntrySearchResponse['entries'] = [];
     const stack = [startDirectory];
+    const maxResults = parentScoped && !search ? Number.POSITIVE_INFINITY : MAX_ENTRY_SEARCH_RESULTS;
     let stackIndex = 0;
     let scanned = 0;
+    let truncated = false;
 
-    while (stackIndex < stack.length && scanned < MAX_ENTRY_SEARCH_SCAN && entries.length < MAX_ENTRY_SEARCH_RESULTS) {
+    traversal: while (stackIndex < stack.length) {
       const current = stack[stackIndex];
       stackIndex += 1;
       const directoryEntries = await sortedDirectoryEntries(current);
 
       for (const entry of directoryEntries) {
-        if (scanned >= MAX_ENTRY_SEARCH_SCAN || entries.length >= MAX_ENTRY_SEARCH_RESULTS) break;
         if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
+        if (scanned >= MAX_ENTRY_SEARCH_SCAN) {
+          truncated = true;
+          break traversal;
+        }
 
         const absolutePath = path.join(current, entry.name);
         const relativePath = toProjectRelative(project.path, absolutePath).replace(/\\/g, '/');
@@ -187,6 +192,10 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
 
         const haystack = `${relativePath} ${entry.name}`.toLowerCase();
         if (search && !haystack.includes(search)) continue;
+        if (entries.length >= maxResults) {
+          truncated = true;
+          break traversal;
+        }
 
         entries.push({
           kind: entry.isDirectory() ? 'directory' : 'file',
@@ -201,7 +210,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       entries,
       query: search,
       scanned,
-      truncated: scanned >= MAX_ENTRY_SEARCH_SCAN,
+      truncated,
       workspaceRoot: project.path,
     };
   }
@@ -245,7 +254,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     if (!needle) return { query, results: [], truncated: false };
     const results: WorkspaceSearchResult[] = [];
     let truncated = false;
-    await walk(project.path, async (filePath) => {
+    await walkWorkspaceFiles(project.path, async (filePath) => {
       if (results.length >= MAX_SEARCH_RESULTS) {
         truncated = true;
         return false;
@@ -392,22 +401,23 @@ async function findGitRoot(startPath: string): Promise<string | undefined> {
 
 async function countEntries(root: string): Promise<number> {
   let count = 0;
-  await walk(root, async () => {
+  await walkWorkspaceFiles(root, async () => {
     count += 1;
     return count < 10000;
   });
   return count;
 }
 
-async function walk(root: string, onFile: (filePath: string) => Promise<boolean>): Promise<void> {
+export async function walkWorkspaceFiles(root: string, onFile: (filePath: string) => Promise<boolean>): Promise<boolean> {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
     const absolutePath = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      await walk(absolutePath, onFile);
+      if (!(await walkWorkspaceFiles(absolutePath, onFile))) return false;
     } else if (!(await onFile(absolutePath))) {
-      return;
+      return false;
     }
   }
+  return true;
 }

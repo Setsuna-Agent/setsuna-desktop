@@ -4,30 +4,29 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { IDisposable, IPty } from 'node-pty';
+import type {
+  DesktopTerminalEvent as DesktopTerminalEventRecord,
+  DesktopTerminalEventPayload,
+  DesktopTerminalSession,
+} from '@setsuna-desktop/contracts';
 import { desktopShellPath } from './desktop-environment.js';
+
+export type { DesktopTerminalEventPayload as DesktopTerminalEvent } from '@setsuna-desktop/contracts';
 
 const require = createRequire(import.meta.url);
 const pty = require('node-pty') as typeof import('node-pty');
 
-export type DesktopTerminalSession = {
-  sessionId: string;
-  workspaceRoot: string;
-  shell: string;
-};
-
-export type DesktopTerminalEvent = {
-  sessionId: string;
-  seq: number;
-  event: 'ready' | 'output' | 'exit' | 'closed' | 'error';
-  data: Record<string, unknown>;
-};
-
 type TerminalSession = DesktopTerminalSession & {
+  cols: number;
   dataDisposable: IDisposable;
-  events: DesktopTerminalEvent[];
+  events: DesktopTerminalEventPayload[];
+  exited: boolean;
   exitDisposable: IDisposable;
-  ptyProcess: IPty;
+  ptyProcess: IPty | null;
+  rows: number;
   seq: number;
+  shellArgs: string[];
+  shellCommand: string;
 };
 
 type TerminalOpenInput = {
@@ -41,47 +40,29 @@ const MAX_EVENT_QUEUE = 2000;
 export class DesktopTerminalStore {
   private readonly sessions = new Map<string, TerminalSession>();
 
-  constructor(private readonly publish: (event: DesktopTerminalEvent) => void) {}
+  constructor(private readonly publish: (event: DesktopTerminalEventPayload) => void) {}
 
   async open(input: TerminalOpenInput): Promise<DesktopTerminalSession> {
     const workspaceRoot = await resolveWorkspaceRoot(input.workspaceRoot);
     const shell = defaultShellSpec();
     const sessionId = `terminal-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
-    const ptyProcess = pty.spawn(shell.command, shell.args, {
-      cols: terminalDimension(input.cols, 100),
-      cwd: workspaceRoot,
-      encoding: 'utf8',
-      env: terminalEnvironment(),
-      name: 'xterm-256color',
-      rows: terminalDimension(input.rows, 24),
-    });
     const session: TerminalSession = {
       sessionId,
       workspaceRoot,
       shell: shell.displayName,
+      cols: terminalDimension(input.cols, 100),
       dataDisposable: { dispose: () => undefined },
       events: [],
+      exited: false,
       exitDisposable: { dispose: () => undefined },
-      ptyProcess,
+      ptyProcess: null,
+      rows: terminalDimension(input.rows, 24),
       seq: 0,
+      shellArgs: shell.args,
+      shellCommand: shell.command,
     };
     this.sessions.set(sessionId, session);
-
-    session.dataDisposable = ptyProcess.onData((text) => {
-      this.emit(sessionId, 'output', { text });
-    });
-    session.exitDisposable = ptyProcess.onExit(({ exitCode, signal }) => {
-      if (!this.sessions.has(sessionId)) return;
-      this.emit(sessionId, 'exit', { exitCode, signal });
-      this.sessions.delete(sessionId);
-    });
-
-    this.emit(sessionId, 'ready', {
-      shell: shell.displayName,
-      workspaceRoot,
-      cols: input.cols ?? 100,
-      rows: input.rows ?? 24,
-    });
+    this.startSessionProcess(session);
 
     return {
       sessionId,
@@ -92,18 +73,31 @@ export class DesktopTerminalStore {
 
   write(sessionId: string, input: string): boolean {
     const session = this.requireSession(sessionId);
+    if (!session.ptyProcess || session.exited) throw new Error('终端进程已退出，请重新启动。');
     session.ptyProcess.write(input);
     return true;
   }
 
-  read(sessionId: string): DesktopTerminalEvent[] {
+  read(sessionId: string): DesktopTerminalEventPayload[] {
     const session = this.requireSession(sessionId);
     return session.events.splice(0, session.events.length);
   }
 
   resize(sessionId: string, cols: number, rows: number): boolean {
     const session = this.requireSession(sessionId);
-    session.ptyProcess.resize(terminalDimension(cols, 100), terminalDimension(rows, 24));
+    session.cols = terminalDimension(cols, 100);
+    session.rows = terminalDimension(rows, 24);
+    if (!session.ptyProcess || session.exited) return false;
+    session.ptyProcess.resize(session.cols, session.rows);
+    return true;
+  }
+
+  restart(sessionId: string, cols?: number, rows?: number): boolean {
+    const session = this.requireSession(sessionId);
+    if (!session.exited) return false;
+    session.cols = terminalDimension(cols, session.cols);
+    session.rows = terminalDimension(rows, session.rows);
+    this.startSessionProcess(session);
     return true;
   }
 
@@ -114,7 +108,7 @@ export class DesktopTerminalStore {
     session.dataDisposable.dispose();
     session.exitDisposable.dispose();
     try {
-      session.ptyProcess.kill();
+      session.ptyProcess?.kill();
     } catch {
       // The PTY can already be gone when the renderer closes a restored panel.
     }
@@ -132,10 +126,41 @@ export class DesktopTerminalStore {
     return session;
   }
 
-  private emit(sessionId: string, event: DesktopTerminalEvent['event'], data: Record<string, unknown>): void {
+  private startSessionProcess(session: TerminalSession): void {
+    session.dataDisposable.dispose();
+    session.exitDisposable.dispose();
+    const ptyProcess = pty.spawn(session.shellCommand, session.shellArgs, {
+      cols: session.cols,
+      cwd: session.workspaceRoot,
+      encoding: 'utf8',
+      env: terminalEnvironment(),
+      name: 'xterm-256color',
+      rows: session.rows,
+    });
+    session.ptyProcess = ptyProcess;
+    session.exited = false;
+    session.dataDisposable = ptyProcess.onData((text) => {
+      if (session.ptyProcess !== ptyProcess) return;
+      this.emit(session.sessionId, 'output', { text });
+    });
+    session.exitDisposable = ptyProcess.onExit(({ exitCode, signal }) => {
+      if (this.sessions.get(session.sessionId) !== session || session.ptyProcess !== ptyProcess) return;
+      session.exited = true;
+      session.ptyProcess = null;
+      this.emit(session.sessionId, 'exit', { exitCode, signal });
+    });
+    this.emit(session.sessionId, 'ready', {
+      shell: session.shell,
+      workspaceRoot: session.workspaceRoot,
+      cols: session.cols,
+      rows: session.rows,
+    });
+  }
+
+  private emit(sessionId: string, event: DesktopTerminalEventRecord['event'], data: Record<string, unknown>): void {
     const session = this.sessions.get(sessionId);
     const seq = session ? ++session.seq : 0;
-    const payload: DesktopTerminalEvent = { sessionId, seq, event, data };
+    const payload: DesktopTerminalEventPayload = { sessionId, seq, event, data };
     if (session) {
       session.events.push(payload);
       if (session.events.length > MAX_EVENT_QUEUE) session.events.splice(0, session.events.length - MAX_EVENT_QUEUE);

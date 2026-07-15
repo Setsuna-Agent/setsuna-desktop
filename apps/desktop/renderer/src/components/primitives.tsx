@@ -117,11 +117,12 @@ export function PageHeader({
   );
 }
 
-export function EmptyState({ title, body }: { title: string; body?: string }) {
+export function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
   return (
     <div className="sd-empty-state">
       <strong>{title}</strong>
       {body ? <span>{body}</span> : null}
+      {action ? <div>{action}</div> : null}
     </div>
   );
 }

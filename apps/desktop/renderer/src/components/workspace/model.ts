@@ -1,4 +1,25 @@
-import type { RuntimeEvent, WorkspaceEntry } from '@setsuna-desktop/contracts';
+import type {
+  DesktopDiffFile,
+  DesktopDiffLine,
+  DesktopDiffSummary,
+  DesktopReviewState,
+  DesktopReviewStateOptions,
+  DesktopTerminalEvent,
+  DesktopTerminalSession,
+  DesktopWorkspaceApp,
+  RuntimeEvent,
+  WorkspaceEntry,
+} from '@setsuna-desktop/contracts';
+
+export type {
+  DesktopDiffFile,
+  DesktopDiffLine,
+  DesktopDiffSummary,
+  DesktopReviewState,
+  DesktopTerminalEvent,
+  DesktopTerminalSession,
+  DesktopWorkspaceApp,
+};
 
 export type DesktopPanelSlot = 'side' | 'bottom';
 export type DesktopPanelType = 'overview' | 'browser' | 'chat' | 'files' | 'file' | 'review' | 'terminal';
@@ -86,77 +107,12 @@ export const removePanelFromSlotState = (slot: DesktopPanelSlotState, panelId: s
   return { active, panels };
 };
 
-export type DesktopTerminalSession = {
-  sessionId: string;
-  workspaceRoot: string;
-  shell: string;
-};
-
-export type DesktopTerminalEvent = {
-  seq: number;
-  event: 'ready' | 'output' | 'exit' | 'closed' | 'error';
-  data: Record<string, unknown>;
-};
-
-export type DesktopWorkspaceApp = {
-  id: string;
-  label: string;
-  icon: string;
-};
-
-export type DesktopDiffLine = {
-  type: 'context' | 'added' | 'removed' | 'gap';
-  lineNumber: number;
-  oldLine?: number;
-  newLine?: number;
-  content: string;
-};
-
-export type DesktopDiffFile = {
-  path: string;
-  action: string;
-  additions: number;
-  deletions: number;
-  truncated: boolean;
-  lines: DesktopDiffLine[];
-};
-
-export type DesktopDiffSummary = {
-  files: DesktopDiffFile[];
-  additions: number;
-  deletions: number;
-};
-
 export type DesktopReviewFocusRequest = {
   path: string;
   version: number;
 };
 
-export type DesktopReviewBranch = {
-  name: string;
-  current: boolean;
-  remote: boolean;
-  uncommittedFiles: number;
-};
-
-export type DesktopReviewState = {
-  isGitRepository: boolean;
-  workspaceRoot: string;
-  gitRoot: string | null;
-  currentBranch: string | null;
-  currentRemoteRef: string | null;
-  baseRef: string | null;
-  baseRefs: string[];
-  branches: DesktopReviewBranch[];
-  currentRemoteSummary: DesktopDiffSummary | null;
-  branchSummary: DesktopDiffSummary | null;
-  stagedSummary: DesktopDiffSummary | null;
-  unstagedSummary: DesktopDiffSummary | null;
-};
-
-export type DesktopReviewLoadOptions = {
-  baseRef?: string | null;
-};
+export type DesktopReviewLoadOptions = DesktopReviewStateOptions;
 
 export type ProjectTreeNode = {
   children: ProjectTreeNode[];

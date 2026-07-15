@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeThread, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { activeTurnIdFromThreadSnapshot, inferActiveTurnIdFromThread, selectInitialThreadSummary } from './useRuntimeClientState.js';
+import type { DesktopRuntimeClient, RuntimeThread, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { activeTurnIdFromThreadSnapshot, inferActiveTurnIdFromThread, loadRuntimeBootstrap, selectInitialThreadSummary } from './useRuntimeClientState.js';
 
 describe('inferActiveTurnIdFromThread', () => {
   it('prefers the runtime snapshot active turn id even without streaming evidence', () => {
@@ -112,6 +112,30 @@ describe('selectInitialThreadSummary', () => {
   });
 });
 
+describe('loadRuntimeBootstrap', () => {
+  it('keeps optional domain failures from rejecting the core bootstrap', async () => {
+    const client = bootstrapClient();
+    client.listSkills = async () => {
+      throw new Error('skills unavailable');
+    };
+
+    const bootstrap = await loadRuntimeBootstrap(client);
+
+    expect(bootstrap.core.threadList.threads).toEqual([]);
+    expect(bootstrap.optional.skillResult).toMatchObject({ status: 'rejected' });
+    expect(bootstrap.optional.mcpResult).toMatchObject({ status: 'fulfilled' });
+  });
+
+  it('still rejects when required runtime state cannot load', async () => {
+    const client = bootstrapClient();
+    client.getConfig = async () => {
+      throw new Error('config unavailable');
+    };
+
+    await expect(loadRuntimeBootstrap(client)).rejects.toThrow('config unavailable');
+  });
+});
+
 function threadWithMessages(messages: RuntimeThread['messages']): RuntimeThread {
   return {
     id: 'thread_1',
@@ -136,5 +160,20 @@ function threadSummary(id: string, patch: Partial<RuntimeThreadSummary> = {}): R
     messageCount: 0,
     lastMessagePreview: '',
     ...patch,
+  };
+}
+
+function bootstrapClient(): Pick<
+  DesktopRuntimeClient,
+  'getConfig' | 'getUsage' | 'getWorkspaceStatus' | 'listMcpServers' | 'listProjects' | 'listSkills' | 'listThreads'
+> {
+  return {
+    getConfig: async () => ({ providers: [] }) as unknown as Awaited<ReturnType<DesktopRuntimeClient['getConfig']>>,
+    getUsage: async () => ({}) as Awaited<ReturnType<DesktopRuntimeClient['getUsage']>>,
+    getWorkspaceStatus: async () => ({ exists: true, readable: true }),
+    listMcpServers: async () => ({ servers: [] }) as unknown as Awaited<ReturnType<DesktopRuntimeClient['listMcpServers']>>,
+    listProjects: async () => ({ projects: [] }),
+    listSkills: async () => ({ skills: [], extraRoots: [] }),
+    listThreads: async () => ({ threads: [] }),
   };
 }

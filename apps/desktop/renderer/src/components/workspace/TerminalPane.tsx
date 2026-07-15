@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTermTerminal, type ILink, type ILinkProvider, type ITheme } from '@xterm/xterm';
 import { Terminal } from 'lucide-react';
@@ -8,6 +8,7 @@ import type { DesktopTerminalEvent, DesktopTerminalSession } from './model.js';
 
 const terminalRestoreBuffers = new Map<string, string>();
 const terminalLastEventSeqs = new Map<string, number>();
+const exitedTerminalSessionIds = new Set<string>();
 const MAX_TERMINAL_RESTORE_BUFFER = 1_000_000;
 const TERMINAL_URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+/gi;
 const TERMINAL_URL_TRAILING_PUNCTUATION_PATTERN = /[),.;:!?]+$/;
@@ -15,6 +16,7 @@ const TERMINAL_URL_TRAILING_PUNCTUATION_PATTERN = /[),.;:!?]+$/;
 export function clearTerminalRestoreBuffer(sessionId: string): void {
   terminalRestoreBuffers.delete(sessionId);
   terminalLastEventSeqs.delete(sessionId);
+  exitedTerminalSessionIds.delete(sessionId);
 }
 
 function appendTerminalRestoreBuffer(sessionId: string, text: string): void {
@@ -27,11 +29,16 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<XTermTerminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const [exited, setExited] = useState(() => Boolean(session && exitedTerminalSessionIds.has(session.sessionId)));
+  const [restarting, setRestarting] = useState(false);
+  const [restartError, setRestartError] = useState<string | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     const terminalApi = window.setsunaDesktop?.terminal;
     if (!container || !session || !terminalApi) return undefined;
+    setExited(exitedTerminalSessionIds.has(session.sessionId));
+    setRestartError(null);
 
     const terminal = new XTermTerminal({
       allowProposedApi: false,
@@ -78,7 +85,12 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       const lastSeq = terminalLastEventSeqs.get(session.sessionId) ?? 0;
       if (event.seq <= lastSeq) return;
       terminalLastEventSeqs.set(session.sessionId, event.seq);
-      if (event.event === 'ready') return;
+      if (event.event === 'ready') {
+        exitedTerminalSessionIds.delete(session.sessionId);
+        setExited(false);
+        setRestarting(false);
+        return;
+      }
       if (event.event === 'output') {
         const text = String(event.data.text ?? '');
         appendTerminalRestoreBuffer(session.sessionId, text);
@@ -92,6 +104,8 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       if (event.event === 'exit') {
         const exitCode = event.data.exitCode ?? event.data.signal ?? 'unknown';
         writeTerminalSystemLine(terminal, `进程已退出：${exitCode}`, session.sessionId);
+        exitedTerminalSessionIds.add(session.sessionId);
+        setExited(true);
         return;
       }
       if (event.event === 'closed') writeTerminalSystemLine(terminal, '终端已关闭', session.sessionId);
@@ -112,6 +126,23 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     };
   }, [session]);
 
+  const restartTerminal = async () => {
+    if (!session || restarting) return;
+    const terminalApi = window.setsunaDesktop?.terminal;
+    if (!terminalApi) return;
+    setRestarting(true);
+    setRestartError(null);
+    try {
+      const terminal = terminalRef.current;
+      const restarted = await terminalApi.restart(session.sessionId, terminal?.cols, terminal?.rows);
+      if (!restarted) throw new Error('终端仍在运行，无法重新启动。');
+      terminal?.focus();
+    } catch (error) {
+      setRestarting(false);
+      setRestartError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   if (!session) {
     return (
       <div className="terminal-placeholder">
@@ -124,6 +155,14 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
   return (
     <div className="desktop-terminal-xterm">
       <div ref={containerRef} className="desktop-terminal-xterm__frame" />
+      {exited ? (
+        <div className="desktop-terminal-xterm__restart" role="status">
+          <span>{restartError ?? 'Shell 已退出'}</span>
+          <button type="button" disabled={restarting} onClick={() => void restartTerminal()}>
+            {restarting ? '正在重启...' : '重新启动'}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

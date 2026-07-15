@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { systemClock } from '../../ports/clock.js';
-import { FileWorkspaceProjectStore } from './file-workspace-project-store.js';
+import { FileWorkspaceProjectStore, walkWorkspaceFiles } from './file-workspace-project-store.js';
 
 describe('file workspace project store', () => {
   it('serializes concurrent project additions', async () => {
@@ -87,6 +87,46 @@ describe('file workspace project store', () => {
 
     await expect(store.search(project.id, 'SYMLINK_SECRET_NEEDLE')).resolves.toMatchObject({ results: [] });
     await expect(store.readFile(project.id, 'linked-secret.txt')).rejects.toThrow('escapes');
+  });
+
+  it('lists every direct child instead of applying the fuzzy-search result limit', async () => {
+    const fixture = await createWorkspaceFixture();
+    await Promise.all(
+      Array.from({ length: 90 }, (_, index) =>
+        writeFile(path.join(fixture.projectDir, `match-${String(index).padStart(3, '0')}.txt`), 'fixture\n'),
+      ),
+    );
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+
+    const directory = await store.searchEntries(project.id, '', '');
+    const search = await store.searchEntries(project.id, 'match-');
+
+    expect(directory.entries.filter((entry) => entry.name.startsWith('match-'))).toHaveLength(90);
+    expect(directory.truncated).toBe(false);
+    expect(search.entries).toHaveLength(80);
+    expect(search.truncated).toBe(true);
+  });
+
+  it('propagates an early-stop signal out of nested directories', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-walk-test-'));
+    await Promise.all([
+      mkdir(path.join(root, 'first'), { recursive: true }),
+      mkdir(path.join(root, 'second'), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(path.join(root, 'first', 'one.txt'), 'one\n'),
+      writeFile(path.join(root, 'second', 'two.txt'), 'two\n'),
+    ]);
+    const visited: string[] = [];
+
+    const completed = await walkWorkspaceFiles(root, async (filePath) => {
+      visited.push(filePath);
+      return false;
+    });
+
+    expect(completed).toBe(false);
+    expect(visited).toHaveLength(1);
   });
 });
 

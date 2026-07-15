@@ -2,92 +2,22 @@ import { execFile } from 'node:child_process';
 import { readFile, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import type {
+  DesktopCommitMessageGenerationSource,
+  DesktopDiffFile,
+  DesktopDiffLine,
+  DesktopDiffSummary,
+  DesktopReviewActionResult,
+  DesktopReviewBranch,
+  DesktopReviewCommitInput,
+  DesktopReviewCommitResult,
+  DesktopReviewCreateBranchOptions,
+  DesktopReviewPushResult,
+  DesktopReviewState,
+  DesktopReviewStateOptions,
+} from '@setsuna-desktop/contracts';
 
 const execFileAsync = promisify(execFile);
-
-export type DesktopDiffLine = {
-  type: 'context' | 'added' | 'removed' | 'gap';
-  lineNumber: number;
-  oldLine?: number;
-  newLine?: number;
-  content: string;
-};
-
-export type DesktopDiffFile = {
-  path: string;
-  action: string;
-  additions: number;
-  deletions: number;
-  truncated: boolean;
-  lines: DesktopDiffLine[];
-};
-
-export type DesktopDiffSummary = {
-  files: DesktopDiffFile[];
-  additions: number;
-  deletions: number;
-};
-
-export type DesktopReviewBranch = {
-  name: string;
-  current: boolean;
-  remote: boolean;
-  uncommittedFiles: number;
-};
-
-export type DesktopReviewState = {
-  isGitRepository: boolean;
-  workspaceRoot: string;
-  gitRoot: string | null;
-  currentBranch: string | null;
-  currentRemoteRef: string | null;
-  baseRef: string | null;
-  baseRefs: string[];
-  branches: DesktopReviewBranch[];
-  currentRemoteSummary: DesktopDiffSummary | null;
-  branchSummary: DesktopDiffSummary | null;
-  stagedSummary: DesktopDiffSummary | null;
-  unstagedSummary: DesktopDiffSummary | null;
-};
-
-export type DesktopReviewStateOptions = {
-  baseRef?: string | null;
-};
-
-export type DesktopReviewCommitInput = {
-  includeUnstaged?: boolean;
-  message?: string | null;
-  push?: boolean;
-};
-
-export type DesktopReviewCreateBranchOptions = {
-  allowUnstaged?: boolean;
-};
-
-export type DesktopReviewActionResult = {
-  ok: true;
-  files: string[];
-  state: DesktopReviewState;
-};
-
-export type DesktopReviewCommitResult = {
-  ok: true;
-  commitHash: string;
-  pushed: boolean;
-  state: DesktopReviewState;
-};
-
-export type DesktopReviewPushResult = {
-  ok: true;
-  pushed: true;
-  state: DesktopReviewState;
-};
-
-export type DesktopCommitMessageGenerationSource = {
-  branch: string | null;
-  status: string;
-  diff: string;
-};
 
 const MAX_DIFF_LINES_PER_FILE = 2500;
 const MAX_UNTRACKED_FILE_BYTES = 512 * 1024;
@@ -229,11 +159,22 @@ export async function commitReviewChanges(
 
   await runGit(['commit', '-m', message], gitRoot);
   const commitHash = await runGit(['rev-parse', '--short', 'HEAD'], gitRoot).catch(() => '');
-  if (input.push) await pushCurrentBranch(gitRoot);
+  let pushed = false;
+  let pushError: string | undefined;
+  if (input.push) {
+    try {
+      await pushCurrentBranch(gitRoot);
+      pushed = true;
+    } catch (error) {
+      // The commit is already durable at this point, so report push as a partial failure.
+      pushError = error instanceof Error ? error.message : String(error);
+    }
+  }
   return {
     ok: true,
     commitHash,
-    pushed: Boolean(input.push),
+    pushed,
+    ...(pushError ? { pushError } : {}),
     state: await getDesktopReviewState(root),
   };
 }

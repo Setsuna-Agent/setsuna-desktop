@@ -11,7 +11,7 @@ import type {
   RuntimeThreadSummary,
   RuntimeUsageResponse,
   WorkspaceEntry,
-  WorkspaceEntrySearchItem,
+  WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -160,7 +160,7 @@ export function AppChatSurface({
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onGoRoot: () => void;
-  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
+  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
   onOpenBrowser: () => void;

@@ -32,31 +32,34 @@ export function ProjectEntryCommandMenu({
       ) : loadError && !entries.length ? (
         <div className="chat-command-menu__state">{loadError}</div>
       ) : entries.length ? (
-        entries.map((entry, index) => (
-          <button
-            key={`${entry.kind}-${entry.path}`}
-            type="button"
-            className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
-            role="option"
-            aria-selected={index === activeIndex}
-            onMouseDown={(event) => {
-              event.preventDefault();
-              onSelect(entry);
-            }}
-            onMouseMove={() => onHover(index)}
-          >
-            {entry.kind === 'directory' ? (
-              <Folder className="chat-command-menu__item-icon" size={15} />
-            ) : (
-              <File className="chat-command-menu__item-icon" size={15} />
-            )}
-            <span className="chat-command-menu__item-main">
-              <span className="chat-command-menu__item-title">{entry.kind === 'directory' ? `${entry.name}/` : entry.name}</span>
-              {entry.parent ? <span className="chat-command-menu__item-desc">{entry.parent}</span> : null}
-            </span>
-            <span className="chat-command-menu__item-scope">{entry.kind === 'directory' ? '文件夹' : '文件'}</span>
-          </button>
-        ))
+        <>
+          {entries.map((entry, index) => (
+            <button
+              key={`${entry.kind}-${entry.path}`}
+              type="button"
+              className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
+              role="option"
+              aria-selected={index === activeIndex}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onSelect(entry);
+              }}
+              onMouseMove={() => onHover(index)}
+            >
+              {entry.kind === 'directory' ? (
+                <Folder className="chat-command-menu__item-icon" size={15} />
+              ) : (
+                <File className="chat-command-menu__item-icon" size={15} />
+              )}
+              <span className="chat-command-menu__item-main">
+                <span className="chat-command-menu__item-title">{entry.kind === 'directory' ? `${entry.name}/` : entry.name}</span>
+                {entry.parent ? <span className="chat-command-menu__item-desc">{entry.parent}</span> : null}
+              </span>
+              <span className="chat-command-menu__item-scope">{entry.kind === 'directory' ? '文件夹' : '文件'}</span>
+            </button>
+          ))}
+          {loadError ? <div className="chat-command-menu__state">{loadError}</div> : null}
+        </>
       ) : (
         <div className="chat-command-menu__state">没有匹配的文件或文件夹</div>
       )}

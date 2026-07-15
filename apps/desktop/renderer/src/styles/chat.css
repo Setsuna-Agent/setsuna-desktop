@@ -2049,9 +2049,11 @@
 
 .chat-tool-run__file-status {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 5px;
   min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 a.chat-markdown__file-link.chat-tool-run__file-target,
@@ -2060,6 +2062,16 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 .chat-workspace-path-label.chat-tool-run__file-list-target {
   display: inline-flex;
   align-items: center;
+  line-height: 20px;
+}
+
+.chat-tool-run__file-target .chat-markdown__file-icon,
+.chat-tool-run__file-list-target .chat-markdown__file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  vertical-align: 0;
 }
 
 .chat-workspace-path-label {

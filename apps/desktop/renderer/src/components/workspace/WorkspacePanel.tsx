@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Code2, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
-import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceEntrySearchResponse, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState } from '../primitives.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
@@ -53,7 +53,7 @@ export function WorkspacePanel({
   terminalSession: DesktopTerminalSession | null;
   onAddFileToConversation: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
-  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchItem[]>;
+  onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onOpenFilesPanel: () => void;
@@ -76,6 +76,7 @@ export function WorkspacePanel({
   const [treeError, setTreeError] = useState<string | null>(null);
   const [treeQuery, setTreeQuery] = useState('');
   const [treeSearching, setTreeSearching] = useState(false);
+  const [treeTruncated, setTreeTruncated] = useState(false);
   const [treeVisible, setTreeVisible] = useState(true);
   const [treeWidth, setTreeWidth] = useState(248);
   const [contextMenu, setContextMenu] = useState<{ entry: WorkspaceEntry; x: number; y: number } | null>(null);
@@ -92,12 +93,14 @@ export function WorkspacePanel({
       setLoadedDirectoryPaths(new Set());
       setLoadingDirectoryPaths(new Set());
       setTreeError(null);
+      setTreeTruncated(false);
       setTreeQuery('');
       return undefined;
     }
     if (!showsFileExplorer) {
       setTreeSearching(false);
       setTreeError(null);
+      setTreeTruncated(false);
       return undefined;
     }
 
@@ -105,16 +108,19 @@ export function WorkspacePanel({
     const parent = query ? undefined : '';
     setTreeSearching(true);
     setTreeError(null);
+    setTreeTruncated(false);
     onSearchProjectEntries(query, parent)
-      .then((items) => {
+      .then((result) => {
         if (cancelled) return;
-        setTreeEntries(items.map(searchItemToWorkspaceEntry));
+        setTreeEntries(result.entries.map(searchItemToWorkspaceEntry));
+        setTreeTruncated(result.truncated);
         setLoadedDirectoryPaths(query ? new Set() : new Set(['']));
         setLoadingDirectoryPaths(new Set());
       })
       .catch((unknownError) => {
         if (cancelled) return;
         setTreeEntries([]);
+        setTreeTruncated(false);
         setTreeError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       })
       .finally(() => {
@@ -155,7 +161,8 @@ export function WorkspacePanel({
     setTreeError(null);
     try {
       const incoming = await onSearchProjectEntries('', normalizedPath);
-      setTreeEntries((current) => mergeProjectEntries(current, incoming.map(searchItemToWorkspaceEntry)));
+      setTreeEntries((current) => mergeProjectEntries(current, incoming.entries.map(searchItemToWorkspaceEntry)));
+      if (incoming.truncated) setTreeTruncated(true);
       setLoadedDirectoryPaths((current) => new Set(current).add(normalizedPath));
     } catch (unknownError) {
       setTreeError(unknownError instanceof Error ? unknownError.message : String(unknownError));
@@ -369,6 +376,11 @@ export function WorkspacePanel({
                         <div className="desktop-file-tree__empty">暂无匹配文件</div>
                       ) : !treeSearching && !treeError ? (
                         <EmptyState title="暂无文件" />
+                      ) : null}
+                      {!treeSearching && !treeError && treeTruncated ? (
+                        <div className="desktop-file-tree__empty">
+                          {query ? '匹配结果已达到上限，请缩小筛选范围。' : '目录内容过多，仅显示已扫描部分。'}
+                        </div>
                       ) : null}
                     </div>
                   </>
