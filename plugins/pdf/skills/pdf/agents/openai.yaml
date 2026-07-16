@@ -1,0 +1,4 @@
+interface:
+  display_name: "PDF"
+  short_description: "读取、创建、检查并通过页面渲染验证版式可靠的专业 PDF 文件"
+  default_prompt: "使用 $pdf 创建或检查 PDF，并在交付前验证页面渲染。"

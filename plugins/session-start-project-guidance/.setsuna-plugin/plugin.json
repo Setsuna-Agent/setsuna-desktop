@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "session-start-project-guidance",
+  "name": "会话开始读取项目提示",
+  "icon": "session-start-project-guidance",
+  "version": "1.0.0",
+  "description": "会话启动、恢复、清空或压缩后，提醒模型优先遵守工作区约定。",
+  "publisher": "Setsuna",
+  "tags": ["上下文", "AGENTS.md", "项目规范"],
+  "featured": true,
+  "hooks": [
+    {
+      "id": "session-start-project-guidance",
+      "name": "会话开始读取项目提示",
+      "description": "发现 AGENTS.md、CONTRIBUTING.md 或 README.md 后，将文件列表加入会话上下文。",
+      "eventName": "SessionStart",
+      "matcher": "*",
+      "command": "node {{pluginRoot}}/hooks/session-start-project-guidance.mjs",
+      "commandWindows": "node {{pluginRoot}}/hooks/session-start-project-guidance.mjs",
+      "timeoutSec": 10,
+      "statusMessage": "注入项目提示"
+    }
+  ]
+}

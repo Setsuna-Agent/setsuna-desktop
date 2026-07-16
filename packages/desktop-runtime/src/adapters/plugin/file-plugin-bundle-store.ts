@@ -8,7 +8,9 @@ import type {
   RuntimeMcpServerInput,
   RuntimePluginInstallInput,
   RuntimePluginInstallResult,
+  RuntimePluginHook,
   RuntimePluginList,
+  RuntimePluginMcpServerDescriptor,
   RuntimePluginRemoveResult,
   RuntimePluginResource,
   RuntimePluginSkill,
@@ -34,6 +36,7 @@ type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
 type ParsedPluginManifest = {
   id: string;
   name: string;
+  icon?: string;
   version?: string;
   description?: string;
   publisher?: string;
@@ -41,11 +44,13 @@ type ParsedPluginManifest = {
   featured: boolean;
   sourcePath: string;
   manifestPath: string;
-  skillEntries: Array<{ id: string; name: string; relativePath: string }>;
+  skillEntries: Array<{ id: string; name: string; description?: string; relativePath: string }>;
   mcpServers: RuntimeMcpServerInput[];
-  hooks: RuntimeHookInput[];
+  hooks: ParsedPluginHook[];
   resources: RuntimePluginResource[];
 };
+
+type ParsedPluginHook = RuntimeHookInput & Pick<RuntimePluginHook, 'id' | 'name' | 'description'>;
 
 const PLUGIN_MANIFEST_RELATIVE_PATH = path.join('.setsuna-plugin', 'plugin.json');
 const MAX_PLUGIN_MANIFEST_BYTES = 256 * 1024;
@@ -101,6 +106,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
     return {
       id: manifest.id,
       name: manifest.name,
+      ...(manifest.icon ? { icon: manifest.icon } : {}),
       ...(manifest.version ? { version: manifest.version } : {}),
       ...(manifest.description ? { description: manifest.description } : {}),
       ...(manifest.publisher ? { publisher: manifest.publisher } : {}),
@@ -112,6 +118,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
         hooks: manifest.hooks.length,
         resources: manifest.resources.length,
       },
+      skills: manifest.skillEntries.map(({ id, name, description }) => ({
+        id,
+        name,
+        ...(description ? { description } : {}),
+      })),
+      mcpServers: manifest.mcpServers.map(pluginMcpServerDescriptor),
+      hooks: manifest.hooks.map(pluginHookDescriptor),
       sourcePath,
     };
   }
@@ -148,6 +161,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const record: InstalledPluginRecord = {
         id: manifest.id,
         name: manifest.name,
+        ...(manifest.icon ? { icon: manifest.icon } : {}),
         ...(manifest.version ? { version: manifest.version } : {}),
         ...(manifest.description ? { description: manifest.description } : {}),
         ...(manifest.publisher ? { publisher: manifest.publisher } : {}),
@@ -159,10 +173,15 @@ export class FilePluginBundleStore implements PluginBundleStore {
         skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
           id: skill.id,
           name: skill.name,
+          ...(skill.description ? { description: skill.description } : {}),
         })),
         skillEntries: manifest.skillEntries.map(({ id, relativePath }) => ({ id, relativePath })),
-        mcpServers: mcpOwnership,
+        mcpServers: mcpOwnership.map((ownership) => {
+          const server = mcpInputs.find((candidate) => candidate.key === ownership.key)!;
+          return { ...pluginMcpServerDescriptor(server), owned: ownership.owned };
+        }),
         mcpServerInputs: mcpInputs,
+        hooks: manifest.hooks.map(pluginHookDescriptor),
         hookCount: hooks.length,
         resources: manifest.resources.map((resource) => ({ ...resource })),
       };
@@ -354,7 +373,8 @@ async function normalizePluginSkills(
     const id = `${pluginId}.${localId}`;
     if (seen.has(id)) throw new Error(`Duplicate plugin skill id: ${id}`);
     seen.add(id);
-    return { id, name: skillName(await readFile(skillPath, 'utf8'), localId), relativePath: normalizedPath };
+    const metadata = skillMetadata(await readFile(skillPath, 'utf8'), localId);
+    return { id, ...metadata, relativePath: normalizedPath };
   }));
 }
 
@@ -423,22 +443,50 @@ function normalizePluginMcpServers(value: unknown): RuntimeMcpServerInput[] {
   });
 }
 
-function normalizePluginHooks(value: unknown): RuntimeHookInput[] {
+function pluginMcpServerDescriptor(server: RuntimeMcpServerInput): RuntimePluginMcpServerDescriptor {
+  return {
+    key: server.key,
+    label: server.label ?? server.key,
+    ...(server.description ? { description: server.description } : {}),
+    transport: normalizeMcpTransport(server.transport, server.command, server.url),
+  };
+}
+
+function normalizePluginHooks(value: unknown): ParsedPluginHook[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error('Plugin hooks must be an array.');
+  const seen = new Set<string>();
   return value.map((item, index) => {
     const record = objectRecord(item, `Plugin hooks[${index}] must be an object.`);
     const eventName = requiredString(record.eventName ?? record.event_name, `Plugin hooks[${index}].eventName`) as RuntimeHookEventName;
     if (!HOOK_EVENTS.has(eventName)) throw new Error(`Unsupported plugin hook event: ${eventName}`);
+    const statusMessage = optionalString(record.statusMessage ?? record.status_message);
+    const id = normalizeHookId(optionalString(record.id) ?? `${eventName}-${index + 1}`);
+    if (seen.has(id)) throw new Error(`Duplicate plugin Hook id: ${id}`);
+    seen.add(id);
     return removeUndefined({
+      id,
+      name: optionalString(record.name) ?? statusMessage ?? `${eventName} Hook`,
+      description: optionalString(record.description),
       eventName,
       matcher: optionalString(record.matcher),
       command: requiredString(record.command, `Plugin hooks[${index}].command`),
       commandWindows: optionalString(record.commandWindows ?? record.command_windows),
       timeoutSec: optionalPositiveInteger(record.timeoutSec ?? record.timeout_sec),
-      statusMessage: optionalString(record.statusMessage ?? record.status_message),
+      statusMessage,
     });
   });
+}
+
+function pluginHookDescriptor(hook: ParsedPluginHook): RuntimePluginHook {
+  return {
+    id: hook.id,
+    name: hook.name,
+    ...(hook.description ? { description: hook.description } : {}),
+    eventName: hook.eventName,
+    ...(hook.matcher ? { matcher: hook.matcher } : {}),
+    ...(hook.statusMessage ? { statusMessage: hook.statusMessage } : {}),
+  };
 }
 
 function materializePluginMcpServer(server: RuntimeMcpServerInput, installPath: string): RuntimeMcpServerInput {
@@ -451,15 +499,18 @@ function materializePluginMcpServer(server: RuntimeMcpServerInput, installPath: 
 }
 
 function materializePluginHook(
-  hook: RuntimeHookInput,
+  hook: ParsedPluginHook,
   pluginId: string,
   installPath: string,
   manifestPath: string,
 ): RuntimeHookInput & { pluginId: string; sourcePath: string } {
   return {
-    ...hook,
+    eventName: hook.eventName,
+    ...(hook.matcher ? { matcher: hook.matcher } : {}),
     command: replacePluginRoot(hook.command, installPath, true) ?? hook.command,
-    commandWindows: replacePluginRoot(hook.commandWindows, installPath, true),
+    ...(hook.commandWindows ? { commandWindows: replacePluginRoot(hook.commandWindows, installPath, true) } : {}),
+    ...(hook.timeoutSec ? { timeoutSec: hook.timeoutSec } : {}),
+    ...(hook.statusMessage ? { statusMessage: hook.statusMessage } : {}),
     pluginId,
     sourcePath: manifestPath,
   };
@@ -660,7 +711,7 @@ function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePluginSummar
   const {
     installPath: _installPath,
     manifestPath: _manifestPath,
-    mcpServerInputs: _mcpInputs,
+    mcpServerInputs,
     skillEntries: _skillEntries,
     sourcePath: _sourcePath,
     ...summary
@@ -668,8 +719,30 @@ function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePluginSummar
   return {
     ...summary,
     ...(summary.tags ? { tags: [...summary.tags] } : {}),
-    skills: summary.skills.map((skill) => ({ id: skill.id, name: skill.name })),
-    mcpServers: summary.mcpServers.map((server) => ({ ...server })),
+    skills: summary.skills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      ...(skill.description ? { description: skill.description } : {}),
+    })),
+    // Older plugin indexes only stored ownership. Rehydrate display metadata from the saved MCP input.
+    mcpServers: summary.mcpServers.map((server) => {
+      const input = mcpServerInputs.find((candidate) => candidate.key === server.key);
+      const descriptor = input
+        ? pluginMcpServerDescriptor(input)
+        : {
+            key: server.key,
+            label: server.label ?? server.key,
+            transport: server.transport ?? 'stdio' as const,
+          };
+      return {
+        ...descriptor,
+        ...(server.label ? { label: server.label } : {}),
+        ...(server.description ? { description: server.description } : {}),
+        ...(server.transport ? { transport: server.transport } : {}),
+        owned: server.owned,
+      };
+    }),
+    hooks: (summary.hooks ?? []).map((hook) => ({ ...hook })),
     resources: summary.resources.map((resource) => ({ ...resource })),
   };
 }
@@ -678,10 +751,15 @@ function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPluginRec
   return {
     ...plugin,
     ...(plugin.tags ? { tags: [...plugin.tags] } : {}),
-    skills: plugin.skills.map((skill) => ({ id: skill.id, name: skill.name })),
+    skills: plugin.skills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      ...(skill.description ? { description: skill.description } : {}),
+    })),
     skillEntries: plugin.skillEntries.map((skill) => ({ ...skill })),
     mcpServers: plugin.mcpServers.map((server) => ({ ...server })),
     mcpServerInputs: plugin.mcpServerInputs.map((server) => ({ ...server, args: [...(server.args ?? [])] })),
+    hooks: (plugin.hooks ?? []).map((hook) => ({ ...hook })),
     resources: plugin.resources.map((resource) => ({ ...resource })),
   };
 }
@@ -710,12 +788,26 @@ function normalizeResourceId(value: string): string {
   return id;
 }
 
-function skillName(content: string, fallback: string): string {
-  if (!content.startsWith('---\n')) return fallback;
+function normalizeHookId(value: string): string {
+  const id = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 100);
+  if (!id) throw new Error('Plugin Hook requires a valid id.');
+  return id;
+}
+
+function skillMetadata(content: string, fallback: string): { name: string; description?: string } {
+  if (!content.startsWith('---\n')) return { name: fallback };
   const end = content.indexOf('\n---', 4);
-  if (end < 0) return fallback;
-  const nameLine = content.slice(4, end).split('\n').find((line) => /^name:\s*/u.test(line));
-  return nameLine?.replace(/^name:\s*/u, '').trim().replace(/^['"]|['"]$/gu, '') || fallback;
+  if (end < 0) return { name: fallback };
+  const lines = content.slice(4, end).split('\n');
+  const name = frontmatterText(lines, 'name') || fallback;
+  const description = frontmatterText(lines, 'description');
+  return { name, ...(description ? { description } : {}) };
+}
+
+function frontmatterText(lines: string[], key: string): string | undefined {
+  const prefix = `${key}:`;
+  const line = lines.find((item) => item.startsWith(prefix));
+  return line?.slice(prefix.length).trim().replace(/^['"]|['"]$/gu, '') || undefined;
 }
 
 function textMimeType(filePath: string): string {
@@ -740,16 +832,28 @@ function optionalTextFields(record: Record<string, unknown>): { version?: string
 }
 
 function optionalMarketplaceFields(record: Record<string, unknown>): {
+  icon?: string;
   publisher?: string;
   tags: string[];
   featured: boolean;
 } {
+  const icon = normalizePluginIcon(record.icon);
   const publisher = optionalString(record.publisher);
   return {
+    ...(icon ? { icon } : {}),
     ...(publisher ? { publisher } : {}),
     tags: stringArray(record.tags, 'Plugin tags'),
     featured: record.featured === true,
   };
+}
+
+function normalizePluginIcon(value: unknown): string | undefined {
+  const icon = optionalString(value);
+  if (!icon) return undefined;
+  if (!/^[a-z0-9][a-z0-9-]{0,39}$/u.test(icon)) {
+    throw new Error('Plugin icon must be a lowercase renderer icon token.');
+  }
+  return icon;
 }
 
 function objectRecord(value: unknown, error: string): Record<string, unknown> {

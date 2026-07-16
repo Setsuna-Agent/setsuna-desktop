@@ -1,21 +1,24 @@
-import { Boxes, Check, Download, Loader2 } from 'lucide-react';
+import { Check, ChevronRight, Download, Loader2 } from 'lucide-react';
 import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
 import { Button } from '../primitives.js';
+import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 
 export function CapabilitiesPluginMarketCard({
   installing,
   onInstall,
+  onOpen,
   plugin,
 }: {
   installing: boolean;
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
+  onOpen: (plugin: RuntimePluginMarketplaceItem) => void;
   plugin: RuntimePluginMarketplaceItem;
 }) {
   return (
     <article className="desktop-capability-card desktop-capability-card--plugin desktop-capability-card--plugin-market">
       <div className="desktop-capability-card__head">
         <span className="desktop-capability-card__head-main">
-          <span className="desktop-capability-card__icon"><Boxes size={14} /></span>
+          <CapabilitiesPluginIcon name={plugin.icon} />
           <span className="desktop-capability-card__status">{plugin.featured ? '精选' : '插件'}</span>
         </span>
         {plugin.version ? <span className="desktop-capability-card__status">v{plugin.version}</span> : null}
@@ -35,6 +38,9 @@ export function CapabilitiesPluginMarketCard({
         {plugin.capabilities.resources ? <span>{plugin.capabilities.resources} 个资源</span> : null}
       </div>
       <div className="desktop-capability-card__actions">
+        <Button type="button" variant="ghost" icon={<ChevronRight size={14} />} onClick={() => onOpen(plugin)}>
+          查看详情
+        </Button>
         <Button
           type="button"
           variant={plugin.installed ? 'ghost' : 'primary'}

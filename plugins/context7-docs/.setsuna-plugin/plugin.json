@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "context7-docs",
   "name": "Context7 文档查询",
+  "icon": "context7",
   "version": "1.0.0",
   "description": "查询第三方库和框架的最新、版本相关文档与代码示例。",
   "publisher": "Upstash",

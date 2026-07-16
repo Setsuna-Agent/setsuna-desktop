@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "protect-generated-folders",
+  "name": "避免写入生成目录",
+  "icon": "protect-generated-folders",
+  "version": "1.0.0",
+  "description": "阻止直接改动依赖目录和常见构建产物，降低误写文件的概率。",
+  "publisher": "Setsuna",
+  "tags": ["安全", "构建产物", "文件"],
+  "featured": true,
+  "hooks": [
+    {
+      "id": "protect-generated-folders",
+      "name": "避免写入生成目录",
+      "description": "保护 node_modules、dist、build、coverage、target、.next 和 .turbo。",
+      "eventName": "PreToolUse",
+      "matcher": "workspace_write_file|write_file|edit|edit_file|append_file|delete_file|apply_patch",
+      "command": "node {{pluginRoot}}/hooks/protect-generated-folders.mjs",
+      "commandWindows": "node {{pluginRoot}}/hooks/protect-generated-folders.mjs",
+      "timeoutSec": 10,
+      "statusMessage": "检查生成目录"
+    }
+  ]
+}

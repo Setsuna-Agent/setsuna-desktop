@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "openai-docs",
   "name": "OpenAI 官方文档",
+  "icon": "openai-docs",
   "version": "1.0.0",
   "description": "查询 OpenAI API、模型、SDK 和 Codex 的最新官方开发文档。",
   "publisher": "OpenAI",

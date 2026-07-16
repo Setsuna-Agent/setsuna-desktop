@@ -28,11 +28,20 @@ describe('file plugin marketplace', () => {
       plugins: [{
         id: 'docs',
         name: 'Docs Helper',
+        icon: 'openai-docs',
         version: '1.0.0',
         publisher: 'Setsuna',
         tags: ['文档'],
         featured: true,
-        capabilities: { skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
+        skills: [{ id: 'docs.docs', name: 'Docs Skill', description: 'Search current documentation.' }],
+        mcpServers: [{
+          key: 'docs_mcp',
+          label: 'Docs MCP',
+          description: 'Current documentation service.',
+          transport: 'streamableHttp',
+        }],
+        hooks: [],
+        capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
         installed: false,
       }],
     });
@@ -83,14 +92,35 @@ async function createCatalogPlugin(
   metadata: { name: string; publisher?: string; tags?: string[]; featured?: boolean },
 ): Promise<void> {
   const manifestDir = path.join(catalogDir, id, '.setsuna-plugin');
-  await mkdir(manifestDir, { recursive: true });
+  const skillDir = path.join(catalogDir, id, 'skills', 'docs');
+  await Promise.all([
+    mkdir(manifestDir, { recursive: true }),
+    mkdir(skillDir, { recursive: true }),
+  ]);
+  await writeFile(path.join(skillDir, 'SKILL.md'), [
+    '---',
+    'name: Docs Skill',
+    'description: Search current documentation.',
+    '---',
+    '',
+    '# Docs Skill',
+  ].join('\n'));
   await writeFile(path.join(manifestDir, 'plugin.json'), JSON.stringify({
     schemaVersion: 1,
     id,
     name: metadata.name,
+    icon: 'openai-docs',
     version: '1.0.0',
     publisher: metadata.publisher,
     tags: metadata.tags,
     featured: metadata.featured,
+    skills: ['skills/docs'],
+    mcpServers: [{
+      key: 'docs_mcp',
+      label: 'Docs MCP',
+      description: 'Current documentation service.',
+      transport: 'streamable_http',
+      url: 'https://docs.example/mcp',
+    }],
   }, null, 2));
 }

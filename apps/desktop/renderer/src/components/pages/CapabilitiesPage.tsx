@@ -1,12 +1,13 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { BookOpen, Boxes, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import { BookOpen, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, Puzzle, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
 import { CapabilitiesPluginCard } from './CapabilitiesPluginCard.js';
+import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
 import { CapabilitiesPluginMarketCard } from './CapabilitiesPluginMarketCard.js';
-import { hookPresets, type HookPreset } from './hookPresets.js';
+import { pluginMatchesQuery } from './pluginDisplay.js';
 
 type McpDraft = {
   key: string;
@@ -163,13 +164,13 @@ export function CapabilitiesPage({
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
   const [saving, setSaving] = useState(false);
   const [hookSaving, setHookSaving] = useState(false);
-  const [capabilityFilter, setCapabilityFilter] = useState<'mcp' | 'skills' | 'hooks' | 'plugins'>('mcp');
+  const [capabilityFilter, setCapabilityFilter] = useState<'mcp' | 'skills' | 'hooks' | 'plugins'>('plugins');
   const [capabilityQuery, setCapabilityQuery] = useState('');
   const [updatingHookKeys, setUpdatingHookKeys] = useState<Set<string>>(new Set());
   const [mcpAuthPendingKeys, setMcpAuthPendingKeys] = useState<Set<string>>(new Set());
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [hookEditorOpen, setHookEditorOpen] = useState(false);
-  const [pluginSection, setPluginSection] = useState<'discover' | 'installed'>('discover');
+  const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
   const [installingPluginIds, setInstallingPluginIds] = useState<Set<string>>(new Set());
   const [removingPluginIds, setRemovingPluginIds] = useState<Set<string>>(new Set());
   const [pluginError, setPluginError] = useState<string | null>(null);
@@ -203,18 +204,16 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${hook.key} ${hook.eventName} ${hook.matcher ?? ''} ${hook.command ?? ''} ${hook.sourcePath}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
-  const visiblePlugins = plugins.filter((plugin) =>
-    !normalizedCapabilityQuery ||
-    `${plugin.name} ${plugin.description ?? ''} ${plugin.publisher ?? ''} ${plugin.tags?.join(' ') ?? ''}`.toLowerCase().includes(normalizedCapabilityQuery),
-  );
-  const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) =>
-    !normalizedCapabilityQuery ||
-    `${plugin.name} ${plugin.description ?? ''} ${plugin.publisher ?? ''} ${plugin.tags.join(' ')}`.toLowerCase().includes(normalizedCapabilityQuery),
-  );
-  const visibleHookPresets = hookPresets.filter((preset) =>
-    !normalizedCapabilityQuery ||
-    `${preset.name} ${preset.description} ${preset.eventName} ${preset.matcher} ${preset.command}`.toLowerCase().includes(normalizedCapabilityQuery),
-  );
+  const visiblePlugins = plugins.filter((plugin) => pluginMatchesQuery(plugin, normalizedCapabilityQuery));
+  const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) => pluginMatchesQuery(plugin, normalizedCapabilityQuery));
+  const marketplacePluginIds = new Set(pluginMarketplace.map((plugin) => plugin.id));
+  const visibleLocalPlugins = visiblePlugins.filter((plugin) => !marketplacePluginIds.has(plugin.id));
+  const selectedMarketplacePlugin = selectedPluginId
+    ? pluginMarketplace.find((plugin) => plugin.id === selectedPluginId)
+    : undefined;
+  const selectedInstalledPlugin = selectedPluginId
+    ? plugins.find((plugin) => plugin.id === selectedPluginId)
+    : undefined;
   const createCapabilityKind: 'mcp' | 'skills' = capabilityFilter === 'skills' ? 'skills' : 'mcp';
 
   function resetMcpDraft() {
@@ -407,15 +406,6 @@ export function CapabilitiesPage({
     }
   }
 
-  async function installHookPreset(preset: HookPreset) {
-    setHookSaving(true);
-    try {
-      await onCreateHook(presetToHookInput(preset));
-    } finally {
-      setHookSaving(false);
-    }
-  }
-
   async function deleteHook(hook: RuntimeHookMetadata) {
     const confirmed = window.confirm(`确认删除这个 ${hookConfigEventName(hook)} Hook？`);
     if (!confirmed) return;
@@ -455,6 +445,12 @@ export function CapabilitiesPage({
         return next;
       });
     }
+  }
+
+  function openPluginDetail(plugin: Pick<RuntimePluginSummary, 'id'>) {
+    setCapabilityFilter('plugins');
+    setSelectedPluginId(plugin.id);
+    setPluginError(null);
   }
 
   if (mcpEditorOpen) {
@@ -626,6 +622,28 @@ export function CapabilitiesPage({
     );
   }
 
+  if (selectedPluginId && (selectedMarketplacePlugin || selectedInstalledPlugin)) {
+    return (
+      <main className="capabilities-page desktop-capabilities-panel">
+        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
+          <CapabilitiesPluginDetail
+            error={pluginError}
+            installedPlugin={selectedInstalledPlugin}
+            installing={installingPluginIds.has(selectedPluginId)}
+            marketplacePlugin={selectedMarketplacePlugin}
+            removing={removingPluginIds.has(selectedPluginId)}
+            onBack={() => {
+              setSelectedPluginId(null);
+              setPluginError(null);
+            }}
+            onInstall={installMarketplacePlugin}
+            onRemove={removePlugin}
+          />
+        </section>
+      </main>
+    );
+  }
+
   const createConversationTitle = createCapabilityKind === 'mcp' ? '用对话安装 MCP' : '用对话创建技能';
   const createConversationDescription = createCapabilityKind === 'mcp'
     ? '打开对话并选中 MCP 创建向导。'
@@ -711,6 +729,9 @@ export function CapabilitiesPage({
         </header>
 
         <div className="desktop-capabilities-tabs">
+          <button className={capabilityFilter === 'plugins' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('plugins')}>
+            插件
+          </button>
           <button className={capabilityFilter === 'mcp' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('mcp')}>
             MCP
           </button>
@@ -720,76 +741,36 @@ export function CapabilitiesPage({
           <button className={capabilityFilter === 'hooks' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('hooks')}>
             Hooks
           </button>
-          <button className={capabilityFilter === 'plugins' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('plugins')}>
-            插件
-          </button>
           <span>{servers.length} MCP · {enabledSkillCount}/{skills.length} 技能启用 · {selectedSkillCount} 默认 · {executableHookCount}/{hooks.length} Hooks 可执行 · {plugins.length} 个插件</span>
         </div>
 
-        <div className="desktop-capabilities-usage-note">
-          <Info size={14} />
-          <span>
-            {capabilityFilter === 'mcp'
-              ? '启用表示运行时会加载这个 MCP；必需是关键依赖标记，一般服务不建议开启。授权策略控制调用 MCP 工具前是否确认；可用工具和禁用工具在表单里配置。'
-              : capabilityFilter === 'skills'
-                ? '启用表示可在对话中选择；默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文。输入框里的 Skill 词槽只影响当前这次发送。'
-                : capabilityFilter === 'hooks'
-                  ? 'Hook 是本地命令触发器，会在工具调用前后运行，可用于阻止危险命令、补充上下文或审计操作。可以从推荐模板开始，也可以手动创建；保存后需要信任当前 hash 才会执行。'
-                  : '从插件市场选择需要的功能，Setsuna 会自动完成校验、安装和文件管理。涉及运行命令或访问外部服务时，仍会先向你确认。'}
-          </span>
-        </div>
-
         {capabilityFilter === 'plugins' ? (
-          <div className="desktop-capabilities-plugin-sections" role="tablist" aria-label="插件页面">
-            <button
-              className={pluginSection === 'discover' ? 'is-active' : ''}
-              type="button"
-              role="tab"
-              aria-selected={pluginSection === 'discover'}
-              onClick={() => setPluginSection('discover')}
-            >
-              发现
-            </button>
-            <button
-              className={pluginSection === 'installed' ? 'is-active' : ''}
-              type="button"
-              role="tab"
-              aria-selected={pluginSection === 'installed'}
-              onClick={() => setPluginSection('installed')}
-            >
-              已安装 <span>{plugins.length}</span>
-            </button>
+          <div className="desktop-capabilities-plugin-market-hero">
+            <div className="desktop-capabilities-plugin-market-hero__copy">
+              <span><Sparkles size={13} /> Setsuna 精选</span>
+              <h3>把完整工作流装进 Setsuna</h3>
+              <p>安装前先看清每个插件包含的技能与 MCP。安装、更新本机配置或访问外部服务时，仍遵循原有校验和授权策略。</p>
+            </div>
+            <div className="desktop-capabilities-plugin-market-hero__metrics" aria-label="插件市场统计">
+              <span><strong>{pluginMarketplace.length}</strong> 个精选</span>
+              <span><strong>{plugins.length}</strong> 个已安装</span>
+              <Puzzle size={34} />
+            </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="desktop-capabilities-usage-note">
+            <Info size={14} />
+            <span>
+              {capabilityFilter === 'mcp'
+                ? '启用表示运行时会加载这个 MCP；必需是关键依赖标记，一般服务不建议开启。授权策略控制调用 MCP 工具前是否确认；可用工具和禁用工具在表单里配置。'
+                : capabilityFilter === 'skills'
+                  ? '启用表示可在对话中选择；默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文。输入框里的 Skill 词槽只影响当前这次发送。'
+                  : 'Hook 是本地命令触发器。这里仅展示已配置的 Hook；推荐自动化从插件市场按需安装，也可以手动创建。新命令需要信任当前 hash 才会执行。'}
+            </span>
+          </div>
+        )}
 
         <div className="desktop-capabilities-grid">
-          {capabilityFilter === 'hooks'
-            ? visibleHookPresets.map((preset) => (
-              <article className="desktop-capability-card desktop-capability-card--hook-preset" key={`hook-preset:${preset.id}`}>
-                <div className="desktop-capability-card__head">
-                  <span className="desktop-capability-card__head-main">
-                    <span className="desktop-capability-card__icon"><FilePlus2 size={14} /></span>
-                    <span className="desktop-capability-card__status">{preset.categoryLabel}</span>
-                  </span>
-                  <span className="desktop-capability-card__head-actions">
-                    <IconButton label={`添加 Hook 模板：${preset.name}`} variant="ghost" disabled={hookSaving} onClick={() => void installHookPreset(preset)}>
-                      <Plus size={14} />
-                    </IconButton>
-                  </span>
-                </div>
-                <h2>{preset.name}</h2>
-                <p>{preset.description}</p>
-                <div className="desktop-capability-card__meta">
-                  <span>{preset.eventName}</span>
-                  <span>{preset.matcher || '无 matcher'}</span>
-                </div>
-                <div className="desktop-capability-card__tool-policy">
-                  <span>{preset.outcome}</span>
-                  <span>{preset.recommendedFor}</span>
-                </div>
-              </article>
-            ))
-            : null}
           {capabilityFilter === 'mcp'
             ? visibleServers.map((server) => {
                 const endpoint = server.transport === 'stdio' ? [server.command, ...server.args].filter(Boolean).join(' ') : server.url;
@@ -884,7 +865,7 @@ export function CapabilitiesPage({
                 return (
                 <article className="desktop-capability-card" key={`skill:${skill.id}`}>
                   <div className="desktop-capability-card__head">
-                    <span className="desktop-capability-card__icon"><Boxes size={14} /></span>
+                    <span className="desktop-capability-card__icon"><BookOpen size={14} /></span>
                     <span className={`desktop-capability-card__status ${selectedByDefault ? 'is-on' : ''}`}>
                       {selectedByDefault ? '默认使用' : skill.enabled ? '已启用' : '停用'}
                     </span>
@@ -1008,38 +989,52 @@ export function CapabilitiesPage({
                 );
               })
             : null}
-          {capabilityFilter === 'plugins' && pluginSection === 'discover'
+          {capabilityFilter === 'plugins'
             ? visibleMarketplacePlugins.map((plugin) => (
               <CapabilitiesPluginMarketCard
                 key={`marketplace:${plugin.id}`}
                 plugin={plugin}
                 installing={installingPluginIds.has(plugin.id)}
                 onInstall={installMarketplacePlugin}
+                onOpen={openPluginDetail}
               />
             ))
             : null}
-          {capabilityFilter === 'plugins' && pluginSection === 'installed'
-            ? visiblePlugins.map((plugin) => (
+          {capabilityFilter === 'plugins' && visibleLocalPlugins.length ? (
+            <div className="desktop-capabilities-plugin-local-heading">
+              <strong>本地已安装</strong>
+              <span>不属于当前精选市场的插件</span>
+            </div>
+          ) : null}
+          {capabilityFilter === 'plugins'
+            ? visibleLocalPlugins.map((plugin) => (
               <CapabilitiesPluginCard
                 key={`plugin:${plugin.id}`}
                 plugin={plugin}
                 removing={removingPluginIds.has(plugin.id)}
+                onOpen={openPluginDetail}
                 onRemove={removePlugin}
               />
             ))
             : null}
           {((capabilityFilter === 'mcp' && visibleServers.length)
             || (capabilityFilter === 'skills' && visibleSkills.length)
-            || (capabilityFilter === 'hooks' && (visibleHookPresets.length || visibleHooks.length))
-            || (capabilityFilter === 'plugins' && pluginSection === 'discover' && visibleMarketplacePlugins.length)
-            || (capabilityFilter === 'plugins' && pluginSection === 'installed' && visiblePlugins.length)) ? null : (
-            <div className="desktop-capabilities-empty">
-              {capabilityFilter === 'plugins'
-                ? pluginSection === 'discover'
+            || (capabilityFilter === 'hooks' && visibleHooks.length)
+            || (capabilityFilter === 'plugins' && (visibleMarketplacePlugins.length || visibleLocalPlugins.length))) ? null : (
+            capabilityFilter === 'hooks' && !normalizedCapabilityQuery ? (
+              <div className="desktop-capabilities-empty desktop-capabilities-empty--hooks">
+                <Puzzle size={24} />
+                <strong>还没有 Hook</strong>
+                <span>从插件市场按需安装自动化，或使用右上角“创建”添加自己的 Hook。</span>
+                <Button type="button" variant="secondary" onClick={() => setCapabilityFilter('plugins')}>去插件市场</Button>
+              </div>
+            ) : (
+              <div className="desktop-capabilities-empty">
+                {capabilityFilter === 'plugins'
                   ? normalizedCapabilityQuery ? '没有找到匹配的插件' : '插件市场暂时没有可用内容'
-                  : normalizedCapabilityQuery ? '没有找到匹配的已安装插件' : '还没有安装插件，可从“发现”中选择'
-                : '暂无匹配能力'}
-            </div>
+                  : capabilityFilter === 'hooks' ? '没有找到匹配的 Hook' : '暂无匹配能力'}
+              </div>
+            )
           )}
         </div>
 
@@ -1370,17 +1365,6 @@ function hookDraftToInput(draft: HookDraft): RuntimeHookInput {
     ...(draft.commandWindows.trim() ? { commandWindows: draft.commandWindows.trim() } : {}),
     ...(optionalNumber(draft.timeoutSec) ? { timeoutSec: optionalNumber(draft.timeoutSec) } : {}),
     ...(draft.statusMessage.trim() ? { statusMessage: draft.statusMessage.trim() } : {}),
-  };
-}
-
-function presetToHookInput(preset: HookPreset): RuntimeHookInput {
-  return {
-    eventName: preset.eventName,
-    command: preset.command.trim(),
-    ...(preset.matcher?.trim() ? { matcher: preset.matcher.trim() } : {}),
-    ...(preset.commandWindows?.trim() ? { commandWindows: preset.commandWindows.trim() } : {}),
-    ...(typeof preset.timeoutSec === 'number' ? { timeoutSec: preset.timeoutSec } : {}),
-    ...(preset.statusMessage?.trim() ? { statusMessage: preset.statusMessage.trim() } : {}),
   };
 }
 

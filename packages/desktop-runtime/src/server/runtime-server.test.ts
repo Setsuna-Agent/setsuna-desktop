@@ -349,22 +349,61 @@ describe('runtime server', () => {
   });
 
   it('lists the default marketplace and installs a selected plugin by id', async () => {
-    await expect(runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
+    const marketplace = await runtimeFetch('/v1/plugin-marketplace');
+    expect(marketplace).toMatchObject({
       errors: [],
       plugins: expect.arrayContaining([
         expect.objectContaining({
           id: 'openai-docs',
           name: 'OpenAI 官方文档',
+          icon: 'openai-docs',
           installed: false,
+          skills: [expect.objectContaining({
+            id: 'openai-docs.openai-docs',
+            name: 'OpenAI 官方文档',
+            description: expect.stringContaining('OpenAI'),
+          })],
+          mcpServers: [expect.objectContaining({
+            key: 'openai_docs',
+            label: 'OpenAI Developer Docs',
+            transport: 'streamableHttp',
+          })],
           capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
         }),
         expect.objectContaining({
           id: 'context7-docs',
           name: 'Context7 文档查询',
+          icon: 'context7',
           installed: false,
+        }),
+        expect.objectContaining({
+          id: 'pdf',
+          name: 'PDF 文档处理',
+          icon: 'pdf',
+          installed: false,
+          skills: [expect.objectContaining({ id: 'pdf.pdf', name: 'pdf' })],
+          mcpServers: [],
+          capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+        }),
+        expect.objectContaining({
+          id: 'guard-dangerous-shell',
+          name: '阻止危险 Shell 命令',
+          icon: 'guard-dangerous-shell',
+          installed: false,
+          skills: [],
+          mcpServers: [],
+          hooks: [expect.objectContaining({
+            id: 'guard-dangerous-shell',
+            name: '阻止危险 Shell 命令',
+            eventName: 'PreToolUse',
+            matcher: 'run_shell_command|exec_command',
+          })],
+          capabilities: { skills: 0, mcpServers: 0, hooks: 1, resources: 0 },
         }),
       ]),
     });
+    expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
+    expect(JSON.stringify(marketplace)).not.toContain('.mjs');
 
     const installed = await runtimeFetch('/v1/plugin-marketplace/context7-docs/install', {
       method: 'POST',
@@ -409,6 +448,33 @@ describe('runtime server', () => {
     await expect(runtimeFetch('/v1/plugins')).resolves.toEqual({ plugins: [] });
     await expect(runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
       plugins: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs', installed: false })]),
+    });
+
+    const installedHookPlugin = await runtimeFetch('/v1/plugin-marketplace/guard-dangerous-shell/install', {
+      method: 'POST',
+    });
+    expect(installedHookPlugin).toMatchObject({
+      plugin: {
+        id: 'guard-dangerous-shell',
+        hooks: [expect.objectContaining({ id: 'guard-dangerous-shell', eventName: 'PreToolUse' })],
+        hookCount: 1,
+      },
+    });
+    await expect(appServerRpc('hooks/list', { cwds: [] })).resolves.toMatchObject({
+      data: [{
+        hooks: [expect.objectContaining({
+          pluginId: 'guard-dangerous-shell',
+          source: 'plugin',
+          eventName: 'preToolUse',
+          trustStatus: 'untrusted',
+        })],
+      }],
+    });
+    await expect(runtimeFetch('/v1/plugins/guard-dangerous-shell', { method: 'DELETE' })).resolves.toMatchObject({
+      pluginId: 'guard-dangerous-shell',
+    });
+    await expect(appServerRpc('hooks/list', { cwds: [] })).resolves.toMatchObject({
+      data: [{ hooks: [] }],
     });
   });
 
