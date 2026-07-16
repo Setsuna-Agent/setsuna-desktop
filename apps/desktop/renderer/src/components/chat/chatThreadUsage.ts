@@ -34,7 +34,7 @@ export function chatThreadUsageForDisplay(
   const storedByKey = aggregateStoredUsage(storedRecords);
   const storedTurnIds = new Set(storedRecords.map((record) => record.turnId));
   const latestTurnId = thread.turns.at(-1)?.id;
-  const liveRequestCount = thread.turns.reduce((total, turn) => total + (turn.tokenCounts?.length ?? 0), 0);
+  const requestCount = latestTurnModelRequestCount(thread);
   const liveByKey = new Map<string, LiveUsageBucket>();
 
   for (const turn of thread.turns) {
@@ -88,22 +88,39 @@ export function chatThreadUsageForDisplay(
     });
   }
 
-  if (!liveRecords.length) return withLiveRequestCount(storedUsage, liveRequestCount);
+  if (!liveRecords.length) return withRequestCount(storedUsage, requestCount);
   const summary = addRecordsToSummary(storedUsage?.summary ?? emptyUsageSummary(), liveRecords);
-  // Stored usage historically aggregates a whole turn into one record. Keep
-  // the UI call count tied to sampling events so it cannot drop at settlement.
-  summary.recordCount = Math.max(summary.recordCount, liveRequestCount);
+  // A step snapshot is written immediately before every model sampling request,
+  // including requests that later fail or are cancelled without reporting usage.
+  summary.recordCount = requestCount;
   return {
     records: [...liveRecords.map(({ record }) => record), ...storedRecords],
     summary,
   };
 }
 
-function withLiveRequestCount(usage: RuntimeUsageResponse | null, liveRequestCount: number): RuntimeUsageResponse | null {
-  if (!usage || usage.summary.recordCount >= liveRequestCount) return usage;
+function latestTurnModelRequestCount(thread: RuntimeThread): number {
+  const turn = thread.turns?.at(-1);
+  if (!turn) return 0;
+  // Older event logs predate step snapshots; their usage events are the best
+  // available fallback even though failed legacy requests cannot be recovered.
+  return turn.stepSnapshots === undefined
+    ? (turn.tokenCounts?.length ?? 0)
+    : turn.stepSnapshots.length;
+}
+
+function withRequestCount(usage: RuntimeUsageResponse | null, requestCount: number): RuntimeUsageResponse | null {
+  if (!usage) {
+    if (requestCount === 0) return null;
+    return {
+      records: [],
+      summary: { ...emptyUsageSummary(), recordCount: requestCount },
+    };
+  }
+  if (usage.summary.recordCount === requestCount) return usage;
   return {
     ...usage,
-    summary: { ...usage.summary, recordCount: liveRequestCount },
+    summary: { ...usage.summary, recordCount: requestCount },
   };
 }
 

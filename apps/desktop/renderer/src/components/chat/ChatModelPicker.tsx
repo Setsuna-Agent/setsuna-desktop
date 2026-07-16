@@ -4,6 +4,7 @@ import { Check, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
 import type { ProviderConfigState, ProviderModelConfig, RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { useOutsideClose } from './chatComposerControlUtils.js';
 import { formatTokenCount, type ChatContextTokenUsage } from './chatContextUsage.js';
+import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 type ModelOption = {
   key: string;
@@ -46,6 +47,8 @@ export function ChatModelPicker({
   );
   const modelUsage = modelContextUsage(contextUsage);
   const modelSelectorTitle = activeModel ? modelUsage.tooltipLabel ? `切换模型 · ${modelUsage.tooltipLabel}` : '切换模型' : '选择模型';
+  const focusedOptionKey = visibleOptions[activeIndex]?.key;
+  const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(focusedOptionKey, open);
 
   const closePicker = useCallback(() => {
     setOpen(false);
@@ -116,13 +119,14 @@ export function ChatModelPicker({
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          <div className="chat-skill-command-menu__list chat-command-menu__list chat-model-command-menu__list">
+          <div ref={scrollContainerRef} className="chat-skill-command-menu__list chat-command-menu__list chat-model-command-menu__list">
             {visibleOptions.length ? (
               visibleOptions.map((option, index) => {
                 const selected = option.key === activeKey;
                 const focused = index === activeIndex;
                 return (
                   <button
+                    ref={focused ? activeOptionRef : undefined}
                     key={option.key}
                     className={`chat-command-menu__item chat-model-command-menu__item ${focused ? 'is-active' : ''}`}
                     type="button"

@@ -1,6 +1,7 @@
 import { Boxes, File, Folder, LoaderCircle, X } from 'lucide-react';
 import type { RuntimeSkillSummary, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { skillDisplayText } from './chatCommandUtils.js';
+import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 export function ProjectEntryCommandMenu({
   activeIndex,
@@ -19,8 +20,12 @@ export function ProjectEntryCommandMenu({
   onHover: (index: number) => void;
   onSelect: (entry: WorkspaceEntrySearchItem) => void;
 }) {
+  const activeEntry = entries[activeIndex];
+  const activeEntryKey = activeEntry ? `${activeEntry.kind}:${activeEntry.path}` : null;
+  const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(activeEntryKey);
+
   return (
-    <div className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label="项目文件">
+    <div ref={scrollContainerRef} className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label="项目文件">
       <div className="chat-command-menu__title">项目文件</div>
       {!hasProject ? (
         <div className="chat-command-menu__state">请先选择项目目录</div>
@@ -35,6 +40,7 @@ export function ProjectEntryCommandMenu({
         <>
           {entries.map((entry, index) => (
             <button
+              ref={index === activeIndex ? activeOptionRef : undefined}
               key={`${entry.kind}-${entry.path}`}
               type="button"
               className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}

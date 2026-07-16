@@ -28,8 +28,14 @@ describe('chat thread usage projection', () => {
     expect(usage?.summary).toMatchObject({ totalTokens: 90, recordCount: 1 });
   });
 
+  it('counts a model request even when it fails before reporting usage', () => {
+    const usage = chatThreadUsageForDisplay(null, runtimeThread('failed', [], 1));
+
+    expect(usage?.summary).toMatchObject({ totalTokens: 0, recordCount: 1 });
+  });
+
   it('adds only the live delta when part of the turn has already been persisted', () => {
-    const storedRecord = usageRecord(100, 20);
+    const storedRecord = usageRecord('usage_1', 100, 20);
     const usage = chatThreadUsageForDisplay(storedUsage(storedRecord), runtimeThread('in_progress', [
       tokenCount('2026-07-16T00:00:01.000Z', 100, 20),
       tokenCount('2026-07-16T00:00:02.000Z', 50, 10),
@@ -52,7 +58,7 @@ describe('chat thread usage projection', () => {
   });
 
   it('does not double count a completed turn after persistent usage arrives', () => {
-    const storedRecord = usageRecord(150, 30);
+    const storedRecord = usageRecord('usage_1', 150, 30);
     const stored = storedUsage(storedRecord);
     const usage = chatThreadUsageForDisplay(stored, runtimeThread('completed', [
       tokenCount('2026-07-16T00:00:01.000Z', 100, 20),
@@ -62,9 +68,45 @@ describe('chat thread usage projection', () => {
     expect(usage?.summary).toMatchObject({ totalTokens: 180, recordCount: 2 });
     expect(usage?.records).toEqual(stored.records);
   });
+
+  it('does not treat auxiliary persisted usage records as additional model requests', () => {
+    const firstRecord = usageRecord('usage_1', 100, 20);
+    const auxiliaryRecord = usageRecord('usage_2', 20, 5);
+    const usage = chatThreadUsageForDisplay(
+      storedUsage(firstRecord, auxiliaryRecord),
+      runtimeThread('completed', [tokenCount('2026-07-16T00:00:01.000Z', 100, 20)], 1),
+    );
+
+    expect(usage?.summary).toMatchObject({ totalTokens: 145, recordCount: 1 });
+  });
+
+  it('reports requests from the latest turn instead of accumulating retained turn history', () => {
+    const thread = runtimeThread('in_progress', [
+      tokenCount('2026-07-16T00:00:01.000Z', 100, 20),
+      tokenCount('2026-07-16T00:00:02.000Z', 50, 10),
+    ]);
+    thread.turns = [
+      {
+        id: 'turn_old',
+        items: [],
+        status: 'completed',
+        stepSnapshots: Array.from({ length: 7 }, (_, index) => samplingStep(index)),
+        tokenCounts: [],
+      },
+      ...(thread.turns ?? []),
+    ];
+
+    const usage = chatThreadUsageForDisplay(null, thread);
+
+    expect(usage?.summary.recordCount).toBe(2);
+  });
 });
 
-function runtimeThread(status: 'in_progress' | 'completed' | 'failed' | 'cancelled', tokenCounts: NonNullable<NonNullable<RuntimeThread['turns']>[number]['tokenCounts']>): RuntimeThread {
+function runtimeThread(
+  status: 'in_progress' | 'completed' | 'failed' | 'cancelled',
+  tokenCounts: NonNullable<NonNullable<RuntimeThread['turns']>[number]['tokenCounts']>,
+  requestCount = tokenCounts.length,
+): RuntimeThread {
   return {
     id: 'thread_1',
     title: 'Usage fixture',
@@ -75,7 +117,36 @@ function runtimeThread(status: 'in_progress' | 'completed' | 'failed' | 'cancell
     lastMessagePreview: '',
     messages: [],
     lastSeq: 4,
-    turns: [{ id: 'turn_1', items: [], status, tokenCounts }],
+    turns: [{
+      id: 'turn_1',
+      items: [],
+      status,
+      tokenCounts,
+      stepSnapshots: Array.from({ length: requestCount }, (_, index) => samplingStep(index)),
+    }],
+  };
+}
+
+function samplingStep(index: number): NonNullable<NonNullable<RuntimeThread['turns']>[number]['stepSnapshots']>[number] {
+  return {
+    createdAt: `2026-07-16T00:00:${String(index + 1).padStart(2, '0')}.000Z`,
+    snapshot: {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      threadLastSeq: index + 1,
+      conversationMessageIds: [],
+      messageIds: [],
+      toolNames: [],
+      selectedSkills: [],
+      mcpServerKeys: [],
+      mcpServerCount: 0,
+      permissionProfile: 'workspace-write',
+      featureKeys: [],
+      worldState: {
+        threadMessageCount: 0,
+        threadUpdatedAt: '2026-07-16T00:00:00.000Z',
+      },
+    },
   };
 }
 
@@ -93,9 +164,9 @@ function tokenCount(createdAt: string, inputTokens: number, outputTokens: number
   };
 }
 
-function usageRecord(inputTokens: number, outputTokens: number): RuntimeUsageRecord {
+function usageRecord(id: string, inputTokens: number, outputTokens: number): RuntimeUsageRecord {
   return {
-    id: 'usage_1',
+    id,
     threadId: 'thread_1',
     turnId: 'turn_1',
     createdAt: '2026-07-16T00:00:01.500Z',
@@ -115,14 +186,14 @@ function emptyStoredUsage(): RuntimeUsageResponse {
   };
 }
 
-function storedUsage(record: RuntimeUsageRecord): RuntimeUsageResponse {
+function storedUsage(...records: RuntimeUsageRecord[]): RuntimeUsageResponse {
   return {
-    records: [record],
+    records,
     summary: {
-      inputTokens: record.inputTokens ?? 0,
-      outputTokens: record.outputTokens ?? 0,
-      totalTokens: record.totalTokens ?? 0,
-      recordCount: 1,
+      inputTokens: records.reduce((total, record) => total + (record.inputTokens ?? 0), 0),
+      outputTokens: records.reduce((total, record) => total + (record.outputTokens ?? 0), 0),
+      totalTokens: records.reduce((total, record) => total + (record.totalTokens ?? 0), 0),
+      recordCount: records.length,
       byProvider: [],
       byModel: [],
     },

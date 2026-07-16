@@ -1,6 +1,7 @@
 import { Progress } from 'antd';
 import { Boxes, CheckSquare, CircleGauge, Database, ListChecks, MessageSquare, ShieldCheck, Target, Trash2, Users, Zap } from 'lucide-react';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 export type SlashCommandMenuItem =
   | {
@@ -39,12 +40,15 @@ export function ChatSlashCommandMenu({
   onHover: (index: number) => void;
   onSelect: (item: SlashCommandMenuItem) => void;
 }) {
+  const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(items[activeIndex]?.key);
+
   return (
-    <div className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label="命令">
+    <div ref={scrollContainerRef} className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label="命令">
       <div className="chat-command-menu__title">{menuTitle(items[activeIndex] ?? items[0])}</div>
       {items.length ? (
         items.map((item, index) => (
           <button
+            ref={index === activeIndex ? activeOptionRef : undefined}
             key={item.key}
             type="button"
             className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
