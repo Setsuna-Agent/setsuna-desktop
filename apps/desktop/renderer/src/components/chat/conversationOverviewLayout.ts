@@ -25,6 +25,22 @@ export function needsConversationOverviewContentShift({
   return metrics ? metrics.rightGutter < metrics.requiredGutter : false;
 }
 
+export function doesConversationOverviewOverlapContent({
+  conversationWidth,
+  contentWidth,
+  overviewWidth,
+}: {
+  conversationWidth: number;
+  contentWidth: number;
+  overviewWidth: number;
+}): boolean {
+  if (overviewWidth <= 0) return false;
+  const metrics = conversationOverviewGutterMetrics({ conversationWidth, contentWidth });
+  return metrics
+    ? metrics.rightGutter < overviewWidth + overviewPanelRightInsetPx + overviewPanelContentGapPx
+    : false;
+}
+
 export function shouldCompactConversationOverview({
   canExpand,
   manuallyCollapsed,

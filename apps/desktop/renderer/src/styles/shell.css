@@ -24,7 +24,8 @@
   display: grid;
   position: relative;
   z-index: 40;
-  grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(var(--desktop-agent-main-min-width), 1fr) var(--desktop-agent-workspace-width);
+  /* The native controls stay visible when the sidebar collapses, so only the header's main track may shrink. */
+  grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(0, 1fr) var(--desktop-agent-workspace-width);
   min-width: 0;
   height: var(--app-topbar-height);
   background: transparent;
@@ -192,11 +193,15 @@
   padding: 0 10px;
   border-radius: 0;
   background: var(--app-bg);
+  overflow: hidden;
+  container-name: app-main-header;
+  container-type: inline-size;
 }
 
 .app-topbar__workspace {
   gap: 0;
   justify-content: stretch;
+  z-index: 2;
   border-left: 1px solid var(--desktop-agent-subtle-divider);
   background: var(--desktop-agent-main-bg);
   overflow: hidden;
@@ -596,6 +601,11 @@ body.desktop-terminal-resizing {
     box-shadow: none;
   }
 
+  .app-shell--inspector-open .app-topbar__right {
+    margin-right: min(var(--desktop-agent-workspace-width), calc(100vw - var(--app-topbar-sidebar-width, var(--app-sidebar-width))));
+    overflow: hidden;
+  }
+
   :root[data-desktop-platform='win32'] .app-workbench__workspace-toolbar,
   :root[data-desktop-platform='linux'] .app-workbench__workspace-toolbar {
     grid-column: 2;
@@ -616,6 +626,10 @@ body.desktop-terminal-resizing {
 
   .app-topbar__right {
     border-radius: 0;
+  }
+
+  .app-shell--inspector-open .app-topbar__right {
+    margin-right: min(var(--desktop-agent-workspace-width), 100vw);
   }
 
   .app-workbench,

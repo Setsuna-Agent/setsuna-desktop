@@ -808,6 +808,12 @@
   pointer-events: none;
 }
 
+.chat-conversation-overview.is-auto-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 :root[data-desktop-platform='win32'] .chat-conversation-overview,
 :root[data-desktop-platform='linux'] .chat-conversation-overview {
   top: calc(var(--app-topbar-height) + 10px);

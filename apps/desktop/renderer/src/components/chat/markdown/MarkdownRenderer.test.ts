@@ -92,6 +92,14 @@ describe('MarkdownRenderer', () => {
     expect(normalizeMarkdownCodeLanguage('')).toBe('');
   });
 
+  it('renders unlabelled fenced code as a contained plain code block', () => {
+    const html = renderMarkdown('```\nChatWorkspace.tsx\n├── useChatWorkspaceState.ts\n```');
+
+    expect(html).toContain('chat-code-highlighter chat-code-highlighter--plain');
+    expect(html).toContain('>plain text</span>');
+    expect(html).toContain('<pre><code>ChatWorkspace.tsx\n├── useChatWorkspaceState.ts</code></pre>');
+  });
+
   it('skips token-by-token highlighting for very large code blocks', () => {
     const code = Array.from({ length: 501 }, (_, index) => `line ${index}`).join('\n');
     const html = renderMarkdown(`\`\`\`text\n${code}\n\`\`\``);

@@ -9,7 +9,9 @@ describe('AppTopbarActions', () => {
     const html = renderActions({ activeView: 'chat', sidePanelVisible: false });
 
     expect(html).toContain('aria-label="打开右侧栏"');
-    expect(html.match(/app-shell-icon-control/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="隐藏环境信息"');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html.match(/app-shell-icon-control/g)).toHaveLength(3);
   });
 
   it('右侧栏已打开时隐藏重复入口', () => {
@@ -17,18 +19,30 @@ describe('AppTopbarActions', () => {
 
     expect(html).not.toContain('aria-label="打开右侧栏"');
   });
+
+  it('环境信息隐藏时保留顶栏恢复入口', () => {
+    const html = renderActions({ activeView: 'chat', conversationOverviewVisible: false, sidePanelVisible: false });
+
+    expect(html).toContain('aria-label="显示环境信息"');
+    expect(html).toContain('aria-pressed="false"');
+  });
 });
 
 function renderActions({
   activeView,
+  conversationOverviewVisible = true,
   sidePanelVisible,
 }: {
   activeView: 'chat' | 'capabilities' | 'settings';
+  conversationOverviewVisible?: boolean;
   sidePanelVisible: boolean;
 }): string {
   return renderToStaticMarkup(createElement(AppTopbarActions, {
     activeView,
     bottomTerminalPanelOpen: false,
+    conversationOverviewAvailable: true,
+    conversationOverviewVisible,
+    onToggleConversationOverview: vi.fn(),
     onToggleBottomTerminal: vi.fn(),
     onToggleSidePanel: vi.fn(),
     sidePanelVisible,

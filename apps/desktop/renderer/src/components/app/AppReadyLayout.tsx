@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { AppRouteContent } from './AppRouteContent.js';
 import { AppSidebarSurface } from './AppSidebarSurface.js';
 import { AppTopbarActions } from './AppTopbarActions.js';
@@ -7,6 +7,7 @@ import { AppOverlays } from './AppOverlays.js';
 import { ShellFrame } from './ShellFrame.js';
 import { WorkspaceAppLauncher } from '../workspace/WorkspaceAppLauncher.js';
 import type { DesktopAppController } from '../../hooks/useDesktopAppController.js';
+import type { ConversationOverviewVisibility } from '../../types/app.js';
 
 export function AppReadyLayout({ controller }: { controller: DesktopAppController }) {
   const {
@@ -51,7 +52,18 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     workspaceWidth,
     workspacePanels,
   } = controller;
+  const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
+  const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
+  const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
+  const handleToggleConversationOverview = useCallback(() => {
+    if (conversationOverviewRendered) {
+      setConversationOverviewVisibility('hidden');
+      return;
+    }
+    setConversationOverviewVisibility('shown');
+    setConversationOverviewShowRequest((value) => value + 1);
+  }, [conversationOverviewRendered]);
   const windowMenuActions = useMemo(
     () => ({
       onNewChat: () => {
@@ -96,7 +108,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
               activeView={activeView}
               updater={controller.updater}
               bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
+              conversationOverviewAvailable={Boolean(runtime.currentThread)}
+              conversationOverviewVisible={conversationOverviewRendered}
               sidePanelVisible={workspacePanels.sidePanelVisible}
+              onToggleConversationOverview={handleToggleConversationOverview}
               onToggleSidePanel={workspacePanels.toggleSidePanel}
               onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
             />
@@ -130,6 +145,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         activeWorkspace={activeWorkspace}
         activeView={activeView}
         chatActions={chatActions}
+        conversationOverviewShowRequest={conversationOverviewShowRequest}
+        conversationOverviewVisibility={conversationOverviewVisibility}
         draft={draft}
         projectWorkspace={projectWorkspace}
         runtime={runtime}
@@ -139,6 +156,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         updater={controller.updater}
         workspacePanels={workspacePanels}
         onSelectSkillForChat={selectSkillForChat}
+        onConversationOverviewRenderedChange={setConversationOverviewRendered}
         onSelectThread={navigation.selectThread}
         onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
         onTerminalResizeStart={handleTerminalResizeStart}

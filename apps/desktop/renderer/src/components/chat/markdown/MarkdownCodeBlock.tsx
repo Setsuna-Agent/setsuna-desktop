@@ -60,7 +60,10 @@ const codeLanguageAliases: Record<string, string> = {
 export function MarkdownCodeBlock({ code, language = '' }: MarkdownCodeBlockProps) {
   const copiedCode = code.replace(/\n$/, '');
   const normalizedLanguage = normalizeMarkdownCodeLanguage(language);
-  if (!shouldSyntaxHighlightMarkdownCode(copiedCode)) {
+  // CodeHighlighter returns a bare inline <code> when lang is empty, so unlabelled
+  // fences must stay on our contained plain-code path to preserve their line breaks.
+  const shouldHighlight = normalizedLanguage.length > 0 && shouldSyntaxHighlightMarkdownCode(copiedCode);
+  if (!shouldHighlight) {
     return (
       <div className="chat-code-highlighter chat-code-highlighter--plain">
         <CodeBlockHeader code={copiedCode} language={language} />

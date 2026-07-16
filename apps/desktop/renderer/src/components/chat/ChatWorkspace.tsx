@@ -14,7 +14,7 @@ import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { activeModelContextWindowTokens, contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { canFitConversationOverviewPanel, needsConversationOverviewContentShift, shouldCompactConversationOverview, shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
+import { canFitConversationOverviewPanel, doesConversationOverviewOverlapContent, needsConversationOverviewContentShift, shouldCompactConversationOverview, shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, chatDisplayItemRenderKey, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
@@ -22,7 +22,7 @@ import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { chatThreadUsageForDisplay } from './chatThreadUsage.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
-import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest } from '../../types/app.js';
+import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import { ActionTooltip } from '../primitives.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
@@ -77,6 +77,8 @@ export function ChatWorkspace({
   activeProject,
   canClearContext,
   config,
+  conversationOverviewShowRequest = 0,
+  conversationOverviewVisibility = 'auto',
   contextCompacting = false,
   currentThread,
   draft,
@@ -88,6 +90,7 @@ export function ChatWorkspace({
   onCancelActiveTurn,
   onApprovalPolicyChange,
   onAnswerApproval,
+  onConversationOverviewRenderedChange,
   onCompactContext,
   onClearContext,
   onClearThreadGoal,
@@ -116,6 +119,8 @@ export function ChatWorkspace({
   activeProject?: WorkspaceProject;
   canClearContext: boolean;
   config: RuntimeConfigState | null;
+  conversationOverviewShowRequest?: number;
+  conversationOverviewVisibility?: ConversationOverviewVisibility;
   contextCompacting?: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
@@ -127,6 +132,7 @@ export function ChatWorkspace({
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
   onAnswerApproval: AnswerApprovalHandler;
+  onConversationOverviewRenderedChange?: (visible: boolean) => void;
   onCompactContext: () => void;
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
@@ -155,6 +161,7 @@ export function ChatWorkspace({
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const overviewRef = useRef<HTMLDivElement | null>(null);
   const requestedReviewProjectRef = useRef<string | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread, activeModelContextWindowTokens(config)), [config, currentThread]);
   const displayedThreadUsage = useMemo(() => chatThreadUsageForDisplay(threadUsage, currentThread), [currentThread, threadUsage]);
@@ -169,7 +176,16 @@ export function ChatWorkspace({
     manuallyCollapsed: overviewManuallyCollapsed,
     manuallyExpanded: overviewManuallyExpanded,
   });
-  const overviewShiftsContent = shouldShiftConversationOverviewContent({
+  const overviewRequested = conversationOverviewVisibility !== 'hidden';
+  const overviewOverlapsContent = useConversationOverviewContentCollision(
+    conversationRef,
+    contentRef,
+    overviewRef,
+    overviewCompact && overviewRequested && Boolean(conversationOverview && currentThread),
+  );
+  const overviewAutoHidden = overviewCompact && overviewOverlapsContent;
+  const overviewVisible = overviewRequested && !overviewAutoHidden;
+  const overviewShiftsContent = overviewVisible && shouldShiftConversationOverviewContent({
     canExpand: overviewCanExpand,
     compact: overviewCompact,
     needsShift: overviewLayout.needsContentShift,
@@ -188,14 +204,20 @@ export function ChatWorkspace({
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     setShowFullHistory(false);
-    setOverviewManuallyCollapsed(false);
-    setOverviewManuallyExpanded(false);
     setExpandedWorkHistoryItemIds(new Set());
   }, [activeProject?.id, currentThread?.id]);
+  useLayoutEffect(() => {
+    setOverviewManuallyCollapsed(false);
+    setOverviewManuallyExpanded(conversationOverviewVisibility === 'shown');
+  }, [activeProject?.id, conversationOverviewShowRequest, conversationOverviewVisibility, currentThread?.id]);
   useEffect(() => {
+    if (conversationOverviewVisibility === 'shown') return;
     setOverviewManuallyExpanded(false);
     if (!overviewCanExpand) setOverviewManuallyCollapsed(false);
-  }, [overviewCanExpand]);
+  }, [conversationOverviewVisibility, overviewCanExpand]);
+  useEffect(() => {
+    onConversationOverviewRenderedChange?.(Boolean(conversationOverview && currentThread && overviewVisible));
+  }, [conversationOverview, currentThread, onConversationOverviewRenderedChange, overviewVisible]);
   useEffect(() => {
     const workspaceRoot = activeProject?.path ?? null;
     if (requestedReviewProjectRef.current !== workspaceRoot) requestedReviewProjectRef.current = null;
@@ -487,8 +509,12 @@ export function ChatWorkspace({
             </MarkdownViewportProvider>
           </div>
           <ChatScrollOverlay disabled={showEmptyStarter} scrollRef={scrollRef} scrollSignal={scrollSignal} />
-          {conversationOverview && currentThread ? (
-            <div className="chat-conversation-overview">
+          {overviewRequested && conversationOverview && currentThread ? (
+            <div
+              aria-hidden={overviewAutoHidden || undefined}
+              className={`chat-conversation-overview ${overviewAutoHidden ? 'is-auto-hidden' : ''}`}
+              ref={overviewRef}
+            >
               <ConversationOverviewPanel
                 activeProject={activeProject}
                 compact={overviewCompact}
@@ -926,6 +952,53 @@ function useConversationOverviewAutoExpand(conversationRef: RefObject<HTMLElemen
   }, [conversationRef, contentRef]);
 
   return layout;
+}
+
+function useConversationOverviewContentCollision(
+  conversationRef: RefObject<HTMLElement | null>,
+  contentRef: RefObject<HTMLElement | null>,
+  overviewRef: RefObject<HTMLElement | null>,
+  active: boolean,
+): boolean {
+  const [overlapsContent, setOverlapsContent] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!active) {
+      setOverlapsContent(false);
+      return undefined;
+    }
+
+    const conversationNode = conversationRef.current;
+    const contentNode = contentRef.current;
+    const overviewNode = overviewRef.current;
+    if (!conversationNode || !contentNode || !overviewNode || typeof window === 'undefined') {
+      setOverlapsContent(false);
+      return undefined;
+    }
+
+    const sync = () => {
+      const nextValue = doesConversationOverviewOverlapContent({
+        conversationWidth: conversationNode.getBoundingClientRect().width,
+        contentWidth: contentNode.getBoundingClientRect().width,
+        overviewWidth: overviewNode.getBoundingClientRect().width,
+      });
+      setOverlapsContent((current) => (current === nextValue ? current : nextValue));
+    };
+    sync();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', sync);
+      return () => window.removeEventListener('resize', sync);
+    }
+
+    const observer = new ResizeObserver(sync);
+    observer.observe(conversationNode);
+    observer.observe(contentNode);
+    observer.observe(overviewNode);
+    return () => observer.disconnect();
+  }, [active, contentRef, conversationRef, overviewRef]);
+
+  return overlapsContent;
 }
 
 function conversationOverviewContextLabel(usage: ChatContextTokenUsage, compactionStatus?: NonNullable<RuntimeThread['contextCompaction']>['status']): string {

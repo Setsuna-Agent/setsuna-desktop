@@ -730,6 +730,24 @@
   height: 14px;
 }
 
+/* Keep titlebar actions usable when the workspace leaves only a narrow main header. */
+@container app-main-header (max-width: 300px) {
+  .desktop-workspace-launcher {
+    margin-left: 4px;
+    margin-right: 4px;
+  }
+
+  .desktop-workspace-launcher__main {
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0;
+  }
+
+  .desktop-workspace-launcher__label {
+    display: none;
+  }
+}
+
 /* Invert downloaded monochrome marks without altering colored application icons. */
 :root[data-theme='dark'] .desktop-workspace-launcher__glyph--monochrome img {
   filter: invert(1);

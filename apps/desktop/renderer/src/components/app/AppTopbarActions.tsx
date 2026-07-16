@@ -1,4 +1,4 @@
-import { Bell, PanelRight, Terminal } from 'lucide-react';
+import { Bell, CircleGauge, PanelRight, Terminal } from 'lucide-react';
 import { IconButton } from '../primitives.js';
 import type { DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import type { MainView } from '../../types/app.js';
@@ -7,14 +7,20 @@ export function AppTopbarActions({
   updater,
   activeView,
   bottomTerminalPanelOpen,
+  conversationOverviewAvailable,
+  conversationOverviewVisible,
   sidePanelVisible,
+  onToggleConversationOverview,
   onToggleSidePanel,
   onToggleBottomTerminal,
 }: {
   updater: DesktopUpdaterStateView;
   activeView: MainView;
   bottomTerminalPanelOpen: boolean;
+  conversationOverviewAvailable: boolean;
+  conversationOverviewVisible: boolean;
   sidePanelVisible: boolean;
+  onToggleConversationOverview: () => void;
   onToggleSidePanel: () => void;
   onToggleBottomTerminal: () => void;
 }) {
@@ -29,6 +35,16 @@ export function AppTopbarActions({
         >
           <Bell size={15} />
           <span className="app-topbar-update-alert__badge" aria-hidden="true" />
+        </IconButton>
+      ) : null}
+      {activeView === 'chat' && conversationOverviewAvailable ? (
+        <IconButton
+          label={conversationOverviewVisible ? '隐藏环境信息' : '显示环境信息'}
+          aria-pressed={conversationOverviewVisible}
+          className={`app-shell-icon-control ${conversationOverviewVisible ? 'is-active' : ''}`}
+          onClick={onToggleConversationOverview}
+        >
+          <CircleGauge size={16} />
         </IconButton>
       ) : null}
       {activeView === 'chat' && !sidePanelVisible ? (

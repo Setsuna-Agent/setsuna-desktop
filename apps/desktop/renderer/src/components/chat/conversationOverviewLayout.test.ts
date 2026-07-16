@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canFitConversationOverviewPanel,
+  doesConversationOverviewOverlapContent,
   needsConversationOverviewContentShift,
   shouldCompactConversationOverview,
   shouldShiftConversationOverviewContent,
@@ -15,6 +16,12 @@ describe('canFitConversationOverviewPanel', () => {
 
   it('keeps the panel compact when the content frame nearly fills the conversation', () => {
     expect(canFitConversationOverviewPanel({ conversationWidth: 760, contentWidth: 704 })).toBe(false);
+  });
+
+  it('detects when the measured compact chip would enter the content gutter', () => {
+    expect(doesConversationOverviewOverlapContent({ conversationWidth: 900, contentWidth: 750, overviewWidth: 120 })).toBe(true);
+    expect(doesConversationOverviewOverlapContent({ conversationWidth: 1200, contentWidth: 750, overviewWidth: 120 })).toBe(false);
+    expect(doesConversationOverviewOverlapContent({ conversationWidth: 900, contentWidth: 750, overviewWidth: 0 })).toBe(false);
   });
 
   it('does not shift centered content when the right gutter can already hold the overview', () => {

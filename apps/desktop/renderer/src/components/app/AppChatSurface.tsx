@@ -21,7 +21,7 @@ import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationP
 import { BottomToolsPanel } from '../workspace/BottomToolsPanel.js';
 import { BrowserPanel } from '../workspace/BrowserPanel.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
-import type { ChatSkillSelectionRequest } from '../../types/app.js';
+import type { ChatSkillSelectionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import type {
   DesktopPanelSlotState,
   DesktopPanelTab,
@@ -47,6 +47,8 @@ export function AppChatSurface({
   bottomPanelVisible,
   canClearContext,
   config,
+  conversationOverviewShowRequest,
+  conversationOverviewVisibility,
   contextCompacting,
   currentThread,
   draft,
@@ -69,6 +71,7 @@ export function AppChatSurface({
   onAddFileToConversation,
   onCancelActiveTurn,
   onApprovalPolicyChange,
+  onConversationOverviewRenderedChange,
   onAnswerApproval,
   onCompactContext,
   onClearContext,
@@ -123,6 +126,8 @@ export function AppChatSurface({
   bottomPanelVisible: boolean;
   canClearContext: boolean;
   config: RuntimeConfigState | null;
+  conversationOverviewShowRequest: number;
+  conversationOverviewVisibility: ConversationOverviewVisibility;
   contextCompacting: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
@@ -145,6 +150,7 @@ export function AppChatSurface({
   onAddFileToConversation: (filePath: string) => void;
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
+  onConversationOverviewRenderedChange: (visible: boolean) => void;
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
@@ -212,6 +218,8 @@ export function AppChatSurface({
           activeTurnId={activeTurnId}
           activeProject={activeWorkspace}
           canClearContext={canClearContext}
+          conversationOverviewShowRequest={conversationOverviewShowRequest}
+          conversationOverviewVisibility={conversationOverviewVisibility}
           contextCompacting={contextCompacting}
           config={config}
           currentThread={currentThread}
@@ -225,6 +233,7 @@ export function AppChatSurface({
           threads={threads}
           onCancelActiveTurn={onCancelActiveTurn}
           onApprovalPolicyChange={onApprovalPolicyChange}
+          onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
           onAnswerApproval={onAnswerApproval}
           onCompactContext={onCompactContext}
           onClearContext={onClearContext}

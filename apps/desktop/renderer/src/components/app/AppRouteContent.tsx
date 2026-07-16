@@ -8,7 +8,7 @@ import type { DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import type { DesktopWorkspacePanelsState } from '../../hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../hooks/useRuntimeClientState.js';
-import type { ChatSkillSelectionRequest, MainView } from '../../types/app.js';
+import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../../types/app.js';
 import type { DesktopPanelTabPatch } from '../workspace/model.js';
 import { latestBrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
@@ -18,6 +18,8 @@ export function AppRouteContent({
   activeWorkspace,
   activeView,
   chatActions,
+  conversationOverviewShowRequest,
+  conversationOverviewVisibility,
   draft,
   projectWorkspace,
   runtime,
@@ -27,6 +29,7 @@ export function AppRouteContent({
   updater,
   workspacePanels,
   onSelectSkillForChat,
+  onConversationOverviewRenderedChange,
   onSelectThread,
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
@@ -44,6 +47,8 @@ export function AppRouteContent({
   activeWorkspace?: WorkspaceProject;
   activeView: MainView;
   chatActions: ChatTurnActions;
+  conversationOverviewShowRequest: number;
+  conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
@@ -53,6 +58,7 @@ export function AppRouteContent({
   updater: DesktopUpdaterStateView;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
+  onConversationOverviewRenderedChange: (visible: boolean) => void;
   onSelectThread: (threadId: string) => void | Promise<void>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
@@ -196,6 +202,8 @@ export function AppRouteContent({
       bottomPanelVisible={workspacePanels.bottomPanelVisible}
       canClearContext={Boolean(runtime.currentThread?.messages.length)}
       config={runtime.config}
+      conversationOverviewShowRequest={conversationOverviewShowRequest}
+      conversationOverviewVisibility={conversationOverviewVisibility}
       contextCompacting={runtime.contextCompacting}
       currentThread={runtime.currentThread}
       draft={draft}
@@ -220,6 +228,7 @@ export function AppRouteContent({
       onAddFileToConversation={chatActions.addFileToConversation}
       onCancelActiveTurn={() => void chatActions.cancelActiveTurn()}
       onApprovalPolicyChange={(policy) => void runtime.saveRuntimePreferences({ approvalPolicy: policy })}
+      onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
       onAnswerApproval={(approvalId, input) => runtime.answerApproval(approvalId, input)}
       onCompactContext={() => void runtime.compactCurrentThreadContext()}
       onClearContext={() => void runtime.clearCurrentThreadContext()}
