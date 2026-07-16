@@ -225,7 +225,6 @@ export function AppRouteContent({
       sidePanelVisible={workspacePanels.sidePanelVisible}
       terminalSessionsByPanelId={workspacePanels.terminalSessionsByPanelId}
       onActivateBottomPanel={(panelId) => workspacePanels.activateDesktopPanel('bottom', panelId)}
-      onAddFileToConversation={chatActions.addFileToConversation}
       onCancelActiveTurn={() => void chatActions.cancelActiveTurn()}
       onApprovalPolicyChange={(policy) => void runtime.saveRuntimePreferences({ approvalPolicy: policy })}
       onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}

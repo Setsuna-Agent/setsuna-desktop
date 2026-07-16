@@ -22,7 +22,7 @@ import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { chatThreadUsageForDisplay } from './chatThreadUsage.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
-import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ConversationOverviewVisibility } from '../../types/app.js';
+import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ChatWorkspaceMentionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import { ActionTooltip } from '../primitives.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
@@ -84,6 +84,7 @@ export function ChatWorkspace({
   draft,
   imageAttachmentRequest,
   skillSelectionRequest,
+  workspaceMentionRequest,
   skills,
   threadUsage,
   threads,
@@ -111,6 +112,7 @@ export function ChatWorkspace({
   onStartThreadReview,
   onImageAttachmentRequestConsumed,
   onSkillSelectionRequestConsumed,
+  onWorkspaceMentionRequestConsumed,
   reviewLoading = false,
   reviewState = null,
   variant = 'main',
@@ -126,6 +128,7 @@ export function ChatWorkspace({
   draft: string;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
+  workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
   skills: RuntimeSkillSummary[];
   threadUsage: RuntimeUsageResponse | null;
   threads: RuntimeThreadSummary[];
@@ -153,6 +156,7 @@ export function ChatWorkspace({
   onStartThreadReview: () => void | Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
+  onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
   reviewLoading?: boolean;
   reviewState?: DesktopReviewState | null;
   variant?: 'main' | 'side';
@@ -405,6 +409,7 @@ export function ChatWorkspace({
       draft={draft}
       imageAttachmentRequest={imageAttachmentRequest}
       skillSelectionRequest={skillSelectionRequest}
+      workspaceMentionRequest={workspaceMentionRequest}
       skills={skills}
       threadUsage={displayedThreadUsage}
       starter={starter}
@@ -425,6 +430,7 @@ export function ChatWorkspace({
       onThreadMemoryModeChange={onThreadMemoryModeChange}
       onImageAttachmentRequestConsumed={onImageAttachmentRequestConsumed}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
+      onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
     />
   );
   const starterTitle = activeProject ? `我们应该在 ${activeProject.name} 中构建什么？` : '我们该做什么？';

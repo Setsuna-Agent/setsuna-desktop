@@ -1,6 +1,5 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type { DesktopRuntimeClient, RuntimeCollaborationMode, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeThread } from '@setsuna-desktop/contracts';
-import type { MainView } from '../types/app.js';
 
 export function useChatTurnActions({
   activeProjectId,
@@ -11,7 +10,6 @@ export function useChatTurnActions({
   expandProject,
   reloadThreads,
   setActiveTurnId,
-  setActiveView,
   setCurrentThread,
   setDraft,
   setError,
@@ -25,7 +23,6 @@ export function useChatTurnActions({
   expandProject?: (projectId: string) => void;
   reloadThreads: () => Promise<unknown>;
   setActiveTurnId: Dispatch<SetStateAction<string | null>>;
-  setActiveView?: Dispatch<SetStateAction<MainView>>;
   setCurrentThread: Dispatch<SetStateAction<RuntimeThread | null>>;
   setDraft: Dispatch<SetStateAction<string>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -146,20 +143,7 @@ export function useChatTurnActions({
     [activeTurnId, client, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, terminalTurnIdsRef],
   );
 
-  const addFileToConversation = useCallback(
-    (filePath: string) => {
-      const mention = `@${filePath}`;
-      setActiveView?.('chat');
-      setDraft((current) => {
-        const trimmed = current.trimEnd();
-        if (trimmed.includes(mention)) return current;
-        return `${trimmed}${trimmed ? '\n' : ''}${mention} `;
-      });
-    },
-    [setActiveView, setDraft],
-  );
-
-  return { addFileToConversation, cancelActiveTurn, deleteMessages, editUserMessage, sendInput };
+  return { cancelActiveTurn, deleteMessages, editUserMessage, sendInput };
 }
 
 export type ChatTurnActions = ReturnType<typeof useChatTurnActions>;

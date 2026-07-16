@@ -162,7 +162,6 @@ export function useDesktopAppController() {
     expandProject: navigation.expandProject,
     reloadThreads,
     setActiveTurnId,
-    setActiveView,
     setCurrentThread,
     setDraft,
     setError,

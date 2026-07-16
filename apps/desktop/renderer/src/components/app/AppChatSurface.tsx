@@ -1,4 +1,4 @@
-import { useMemo, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { useCallback, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import type {
   AnswerRuntimeApprovalInput,
   DesktopRuntimeClient,
@@ -11,6 +11,7 @@ import type {
   RuntimeThreadSummary,
   RuntimeUsageResponse,
   WorkspaceEntry,
+  WorkspaceEntrySearchItem,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
   WorkspaceProject,
@@ -21,7 +22,7 @@ import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationP
 import { BottomToolsPanel } from '../workspace/BottomToolsPanel.js';
 import { BrowserPanel } from '../workspace/BrowserPanel.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
-import type { ChatSkillSelectionRequest, ConversationOverviewVisibility } from '../../types/app.js';
+import type { ChatSkillSelectionRequest, ChatWorkspaceMentionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import type {
   DesktopPanelSlotState,
   DesktopPanelTab,
@@ -68,7 +69,6 @@ export function AppChatSurface({
   sidePanelVisible,
   terminalSessionsByPanelId,
   onActivateBottomPanel,
-  onAddFileToConversation,
   onCancelActiveTurn,
   onApprovalPolicyChange,
   onConversationOverviewRenderedChange,
@@ -147,7 +147,6 @@ export function AppChatSurface({
   sidePanelVisible: boolean;
   terminalSessionsByPanelId: Record<string, DesktopTerminalSession>;
   onActivateBottomPanel: (panelId: string) => void;
-  onAddFileToConversation: (filePath: string) => void;
   onCancelActiveTurn: () => void;
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
   onConversationOverviewRenderedChange: (visible: boolean) => void;
@@ -202,6 +201,15 @@ export function AppChatSurface({
     requestImageAttachment,
     resolveImageAttachmentRequest,
   } = useChatImageAttachmentRequest();
+  const [workspaceMentionRequest, setWorkspaceMentionRequest] = useState<ChatWorkspaceMentionRequest | null>(null);
+  const workspaceMentionRequestIdRef = useRef(0);
+  const requestWorkspaceMention = useCallback((entry: WorkspaceEntrySearchItem) => {
+    workspaceMentionRequestIdRef.current += 1;
+    setWorkspaceMentionRequest({ entry, requestId: workspaceMentionRequestIdRef.current });
+  }, []);
+  const consumeWorkspaceMentionRequest = useCallback((requestId: number) => {
+    setWorkspaceMentionRequest((current) => current?.requestId === requestId ? null : current);
+  }, []);
   const latestReviewSummary = useMemo(
     () => latestDesktopReviewSummaryFromMessages(currentThread?.messages ?? []),
     [currentThread?.messages],
@@ -228,6 +236,7 @@ export function AppChatSurface({
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           skillSelectionRequest={skillSelectionRequest}
+          workspaceMentionRequest={workspaceMentionRequest}
           skills={skills}
           threadUsage={threadUsage}
           threads={threads}
@@ -255,6 +264,7 @@ export function AppChatSurface({
           onStartThreadReview={onStartThreadReview}
           onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
           onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
+          onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
         />
       </MarkdownNavigationProvider>
       {sidePanelSlot.panels.filter((panel) => panel.type === 'chat').map((panel) => (
@@ -309,7 +319,7 @@ export function AppChatSurface({
           reviewState={reviewState}
           selectedWorkspaceApp={selectedWorkspaceApp}
           terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
-          onAddFileToConversation={onAddFileToConversation}
+          onAddFileToConversation={requestWorkspaceMention}
           onExternalOpenFile={onExternalOpenFile}
           onSearchProjectEntries={onSearchProjectEntries}
           onOpenEntry={onOpenEntry}

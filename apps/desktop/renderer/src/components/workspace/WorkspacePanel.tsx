@@ -52,7 +52,7 @@ export function WorkspacePanel({
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   terminalSession: DesktopTerminalSession | null;
-  onAddFileToConversation: (filePath: string) => void;
+  onAddFileToConversation: (entry: WorkspaceEntrySearchItem) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenEntry: (entry: WorkspaceEntry) => void;
@@ -401,9 +401,9 @@ export function WorkspacePanel({
                 type="button"
                 role="menuitem"
                 onClick={() => {
-                  const filePath = contextMenu.entry.path;
+                  const entry = workspaceEntryToSearchItem(contextMenu.entry);
                   setContextMenu(null);
-                  onAddFileToConversation(filePath);
+                  onAddFileToConversation(entry);
                 }}
               >
                 <MessageSquare size={14} />
@@ -559,6 +559,17 @@ function searchItemToWorkspaceEntry(item: WorkspaceEntrySearchItem): WorkspaceEn
     name: item.name,
     path: item.path,
     type: item.kind,
+  };
+}
+
+function workspaceEntryToSearchItem(entry: WorkspaceEntry): WorkspaceEntrySearchItem {
+  const normalizedPath = normalizeProjectTreePath(entry.path);
+  const separatorIndex = normalizedPath.lastIndexOf('/');
+  return {
+    kind: entry.type,
+    name: entry.name,
+    parent: separatorIndex >= 0 ? normalizedPath.slice(0, separatorIndex) : '',
+    path: normalizedPath,
   };
 }
 

@@ -10,6 +10,7 @@ import { ChatModelPicker } from './ChatModelPicker.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 import { createChatComposerSendOptions, type ChatComposerSendOptions } from './chatComposerSendOptions.js';
 import { createComposerDraftSyncPlan } from './chatComposerDraftSync.js';
+import { createTextSlot, createWorkspaceMentionInsertion, createWorkspaceMentionSlots } from './chatComposerSlots.js';
 import {
   maxChatImageAttachments,
   maxChatImageSize,
@@ -17,8 +18,8 @@ import {
   rejectedChatImageAttachment,
 } from './chatImageAttachments.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
-import { entryLabel, parseMentionCommand, parseSlashCommand, skillDisplayText } from './chatCommandUtils.js';
-import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest } from '../../types/app.js';
+import { parseMentionCommand, parseSlashCommand, skillDisplayText } from './chatCommandUtils.js';
+import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ChatWorkspaceMentionRequest } from '../../types/app.js';
 
 type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
 type ActiveThinkingConfig = {
@@ -39,6 +40,7 @@ export function ChatComposer({
   draft,
   imageAttachmentRequest,
   skillSelectionRequest,
+  workspaceMentionRequest,
   skills,
   threadUsage,
   starter = false,
@@ -58,6 +60,7 @@ export function ChatComposer({
   onThreadMemoryModeChange,
   onImageAttachmentRequestConsumed,
   onSkillSelectionRequestConsumed,
+  onWorkspaceMentionRequestConsumed,
   threadMemoryMode,
 }: {
   activeTurnId: string | null;
@@ -70,6 +73,7 @@ export function ChatComposer({
   draft: string;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   skillSelectionRequest?: ChatSkillSelectionRequest | null;
+  workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
   skills: RuntimeSkillSummary[];
   threadUsage: RuntimeUsageResponse | null;
   starter?: boolean;
@@ -90,6 +94,7 @@ export function ChatComposer({
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
+  onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
@@ -117,6 +122,7 @@ export function ChatComposer({
   const lastEditorDraftRef = useRef(draft);
   const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
+  const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const commandCursorOffset = cursorOffset ?? draft.length;
   const mentionCommand = useMemo(() => parseMentionCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
@@ -321,6 +327,26 @@ export function ChatComposer({
   }, [currentThread?.id]);
 
   useEffect(() => {
+    if (!workspaceMentionRequest || consumedWorkspaceMentionRequestIdRef.current === workspaceMentionRequest.requestId) return;
+    const editor = senderRef.current;
+    if (!editor) return;
+
+    consumedWorkspaceMentionRequestIdRef.current = workspaceMentionRequest.requestId;
+    const currentValue = editor.getValue();
+    const insertion = createWorkspaceMentionInsertion(
+      workspaceMentionRequest.entry,
+      currentValue.value,
+      currentValue.slotConfig,
+    );
+    if (insertion) {
+      editor.focus({ cursor: 'end', preventScroll: true });
+      editor.insert(insertion.slots, 'end', insertion.replaceCharacters, true);
+    }
+    setFocused(true);
+    onWorkspaceMentionRequestConsumed?.(workspaceMentionRequest.requestId);
+  }, [onWorkspaceMentionRequestConsumed, workspaceMentionRequest]);
+
+  useEffect(() => {
     if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
     const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
     if (!skill || !skill.enabled) return;
@@ -379,7 +405,7 @@ export function ChatComposer({
     const command = mentionCommand ?? parseMentionCommand(draft, commandCursorOffset);
     if (!command || !entry) return;
     senderRef.current?.insert?.(
-      [createWorkspaceMentionSlot(entry), createTextSlot(' ')],
+      createWorkspaceMentionSlots(entry),
       'cursor',
       draft.slice(command.start, command.end),
       true,
@@ -968,30 +994,6 @@ function formatThinkingEffort(effort: string): string {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : '思考';
 }
 
-function createWorkspaceMentionSlot(entry: WorkspaceEntrySearchItem): SlotConfigType {
-  const displayText = `@${entryDisplayName(entry)}`;
-  const resultText = `@${entryLabel(entry)}`;
-  return {
-    type: 'tag',
-    key: `workspace:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
-    props: {
-      label: (
-        <span className="chat-workspace-mention-slot" title={entry.path}>
-          {displayText}
-        </span>
-      ),
-      value: resultText,
-    },
-    formatResult: () => resultText,
-  };
-}
-
-function entryDisplayName(entry: WorkspaceEntrySearchItem): string {
-  const fallback = entry.path.split('/').filter(Boolean).pop() || entry.path;
-  const name = (entry.name || fallback).trim() || fallback;
-  return entry.kind === 'directory' ? `${name.replace(/\/$/, '')}/` : name;
-}
-
 const selectedSkillSlotPrefix = 'skill:';
 
 function selectedSkillSlotKey(skillId: string): string {
@@ -1014,10 +1016,6 @@ function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigType {
     },
     formatResult: () => tokenText,
   };
-}
-
-function createTextSlot(value: string): SlotConfigType {
-  return { type: 'text', value };
 }
 
 function readComposerCursorOffset(inputElement?: HTMLElement | null): number | null {
