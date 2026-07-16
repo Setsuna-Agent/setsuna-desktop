@@ -6,6 +6,7 @@ import { ChatComposer } from './ChatComposer.js';
 import { ChatTimelineDivider } from './ChatTimelineDivider.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
+import { WorkspaceMentionText } from './WorkspaceMentionText.js';
 import { MarkdownRenderer } from './markdown/MarkdownRenderer.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
@@ -1127,7 +1128,11 @@ function UserMessageContent({ message, streaming }: { message: RuntimeMessage; s
           ))}
         </div>
       ) : null}
-      {message.content || streaming ? <div className="chat-user-message-content__text">{message.content || '...'}</div> : null}
+      {message.content || streaming ? (
+        <div className="chat-user-message-content__text">
+          <WorkspaceMentionText content={message.content || '...'} />
+        </div>
+      ) : null}
     </div>
   );
 }

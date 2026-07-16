@@ -1,7 +1,8 @@
-import { Boxes, File, Folder, LoaderCircle, X } from 'lucide-react';
+import { Boxes, LoaderCircle, X } from 'lucide-react';
 import type { RuntimeSkillSummary, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { skillDisplayText } from './chatCommandUtils.js';
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
+import { WorkspaceEntryIcon } from '../workspace/WorkspaceEntryIcon.js';
 
 export function ProjectEntryCommandMenu({
   activeIndex,
@@ -52,11 +53,7 @@ export function ProjectEntryCommandMenu({
               }}
               onMouseMove={() => onHover(index)}
             >
-              {entry.kind === 'directory' ? (
-                <Folder className="chat-command-menu__item-icon" size={15} />
-              ) : (
-                <File className="chat-command-menu__item-icon" size={15} />
-              )}
+              <WorkspaceEntryIcon className="chat-command-menu__item-icon" path={entry.path} type={entry.kind} />
               <span className="chat-command-menu__item-main">
                 <span className="chat-command-menu__item-title">{entry.kind === 'directory' ? `${entry.name}/` : entry.name}</span>
                 {entry.parent ? <span className="chat-command-menu__item-desc">{entry.parent}</span> : null}

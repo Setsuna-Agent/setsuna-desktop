@@ -328,6 +328,8 @@
 }
 
 .chat-command-menu__item-icon {
+  width: 15px;
+  height: 15px;
   color: var(--app-text-muted);
 }
 
@@ -543,7 +545,7 @@
   overflow-wrap: anywhere;
 }
 
-.chat-sender .ant-sender-slot:has(.chat-workspace-mention-slot) {
+.chat-sender .ant-sender-slot:has(.chat-workspace-mention) {
   display: inline;
   height: auto;
   margin: 0;
@@ -551,7 +553,7 @@
   word-break: inherit;
 }
 
-.chat-sender .ant-sender-slot-tag:has(.chat-workspace-mention-slot) {
+.chat-sender .ant-sender-slot-tag:has(.chat-workspace-mention) {
   display: inline;
   height: auto;
   padding: 0;
@@ -560,20 +562,6 @@
   color: inherit;
   background: transparent;
   font: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-}
-
-.chat-sender .chat-workspace-mention-slot {
-  display: inline;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  color: #1d4ed8;
-  background: transparent;
-  font: inherit;
-  font-weight: inherit;
   line-height: inherit;
   vertical-align: baseline;
 }
@@ -624,11 +612,6 @@
 
 .chat-sender .chat-skill-slot__name {
   min-width: 0;
-}
-
-:root[data-theme='dark'] .chat-sender .chat-workspace-mention-slot {
-  color: #93c5fd;
-  background: transparent;
 }
 
 :root[data-theme='dark'] .chat-sender .chat-skill-slot {

@@ -45,6 +45,10 @@ describe('workspace mention slots', () => {
     );
 
     expect(mention?.props?.value).toBe('@src/components/Tile.tsx');
-    expect(renderToStaticMarkup(mention?.props?.label)).toContain('>@Tile.tsx</span>');
+    const labelHtml = renderToStaticMarkup(mention?.props?.label);
+    expect(labelHtml).toContain('data-file-icon-theme="seti"');
+    expect(labelHtml).toContain('data-composer-cursor-offset-adjustment=');
+    expect(labelHtml).toContain('>Tile.tsx</span>');
+    expect(labelHtml).not.toContain('@Tile.tsx');
   });
 });

@@ -214,13 +214,14 @@ export function AppChatSurface({
     () => latestDesktopReviewSummaryFromMessages(currentThread?.messages ?? []),
     [currentThread?.messages],
   );
+  const openChatWorkspaceFile = selectedWorkspaceApp ? onExternalOpenFile : onOpenProjectFile;
 
   return (
     <>
       <MarkdownNavigationProvider
         onOpenWebLink={onOpenMarkdownWebLink}
         workspaceRoot={activeWorkspace?.path}
-        onOpenWorkspaceFile={onOpenProjectFile}
+        onOpenWorkspaceFile={openChatWorkspaceFile}
       >
         <ChatWorkspace
           activeTurnId={activeTurnId}
@@ -279,7 +280,7 @@ export function AppChatSurface({
           threads={threads}
           onApprovalPolicyChange={onApprovalPolicyChange}
           onError={onSideChatError}
-          onOpenProjectFile={onOpenProjectFile}
+          onOpenWorkspaceFile={openChatWorkspaceFile}
           onOpenMarkdownWebLink={onOpenMarkdownWebLink}
           onOpenSideChat={onOpenSideChat}
           onReloadThreads={onReloadThreads}

@@ -43,7 +43,7 @@ export function WorkspaceFileLink({
     onClick?.(event);
     if (event.defaultPrevented) return;
     event.preventDefault();
-    openWorkspaceFile(workspaceRoot, target.path, line ?? target.line, onOpenWorkspaceFile);
+    openWorkspaceFileReference(workspaceRoot, target.path, line ?? target.line, onOpenWorkspaceFile);
   };
 
   return (
@@ -78,12 +78,16 @@ export function WorkspacePathLabel({ children, className, path, title, type, ...
   );
 }
 
-function openWorkspaceFile(
+export function openWorkspaceFileReference(
   workspaceRoot: string | undefined,
   filePath: string,
   line: number | undefined,
-  fallback: ((filePath: string, line?: number) => void) | undefined,
+  preferredOpen: ((filePath: string, line?: number) => void) | undefined,
 ): void {
+  if (preferredOpen) {
+    preferredOpen(filePath, line);
+    return;
+  }
   const openFile = typeof window === 'undefined'
     ? undefined
     : window.setsunaDesktop?.desktop?.openWorkspaceFile;
@@ -97,5 +101,4 @@ function openWorkspaceFile(
       });
     return;
   }
-  fallback?.(filePath, line);
 }

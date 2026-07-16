@@ -1,6 +1,7 @@
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { entryLabel } from './chatCommandUtils.js';
+import { WorkspaceMentionLabel } from './WorkspaceMentionLabel.js';
 
 const workspaceMentionSlotKeyPrefix = 'workspace:';
 
@@ -39,16 +40,18 @@ export function createWorkspaceMentionInsertion(
 }
 
 function createWorkspaceMentionSlot(entry: WorkspaceEntrySearchItem): SlotConfigType {
-  const displayText = `@${entryDisplayName(entry)}`;
   const resultText = `@${entryLabel(entry)}`;
   return {
     type: 'tag',
     key: `${workspaceMentionSlotKeyPrefix}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
     props: {
       label: (
-        <span className="chat-workspace-mention-slot" title={entry.path}>
-          {displayText}
-        </span>
+        <WorkspaceMentionLabel
+          name={entry.name}
+          path={entry.path}
+          serializedText={resultText}
+          type={entry.kind}
+        />
       ),
       value: resultText,
     },
@@ -63,10 +66,4 @@ function hasWorkspaceMentionSlot(slots: SlotConfigType[], entry: WorkspaceEntryS
     && slot.key.startsWith(workspaceMentionSlotKeyPrefix)
     && slot.props?.value === resultText
   ));
-}
-
-function entryDisplayName(entry: WorkspaceEntrySearchItem): string {
-  const fallback = entry.path.split('/').filter(Boolean).pop() || entry.path;
-  const name = (entry.name || fallback).trim() || fallback;
-  return entry.kind === 'directory' ? `${name.replace(/\/$/, '')}/` : name;
 }

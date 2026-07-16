@@ -9,6 +9,10 @@ import { ProjectEntryCommandMenu } from './ChatCommandMenus.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 import { createChatComposerSendOptions, type ChatComposerSendOptions } from './chatComposerSendOptions.js';
+import {
+  applyComposerCursorOffsetAdjustments,
+  composerCursorOffsetAdjustmentAttribute,
+} from './chatComposerCursorOffset.js';
 import { createComposerDraftSyncPlan } from './chatComposerDraftSync.js';
 import { createTextSlot, createWorkspaceMentionInsertion, createWorkspaceMentionSlots } from './chatComposerSlots.js';
 import {
@@ -1033,7 +1037,13 @@ function readComposerCursorOffset(inputElement?: HTMLElement | null): number | n
   const range = inputElement.ownerDocument.createRange();
   range.selectNodeContents(inputElement);
   range.setEnd(selection.focusNode, selection.focusOffset);
-  return range.toString().length;
+  const visibleOffset = range.toString().length;
+  // Mention labels omit markers and parent paths that remain in the submitted value.
+  const offsetAdjustments = Array.from(
+    range.cloneContents().querySelectorAll<HTMLElement>(`[${composerCursorOffsetAdjustmentAttribute}]`),
+    (element) => element.getAttribute(composerCursorOffsetAdjustmentAttribute),
+  );
+  return applyComposerCursorOffsetAdjustments(visibleOffset, offsetAdjustments);
 }
 
 function activeModelName(config: RuntimeConfigState | null): string | null {
