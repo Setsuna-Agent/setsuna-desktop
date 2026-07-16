@@ -27,6 +27,15 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('<table>');
   });
 
+  it('renders GFM task items as ordinary list items without checkboxes', () => {
+    const html = renderMarkdown('- [ ] Use `path.join`\n- [x] Done');
+
+    expect(html).toContain('<ul class="contains-task-list">');
+    expect(html).toMatch(/<li class="task-list-item">\s*Use <code>path\.join<\/code><\/li>/);
+    expect(html).toMatch(/<li class="task-list-item">\s*Done<\/li>/);
+    expect(html).not.toContain('<input');
+  });
+
   it('repairs the mutable streaming tail without changing stable block markers', () => {
     const html = renderMarkdown('Stable.\n\nStreaming **bold', true);
 

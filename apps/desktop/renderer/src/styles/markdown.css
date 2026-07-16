@@ -98,26 +98,6 @@
   color: var(--app-text-muted);
 }
 
-.chat-markdown .contains-task-list {
-  padding-left: 0;
-  list-style: none;
-}
-
-.chat-markdown .task-list-item {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: baseline;
-  gap: 7px;
-  padding-left: 0;
-}
-
-.chat-markdown .task-list-item input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--app-primary);
-}
-
 .chat-markdown blockquote {
   padding: 0.05em 0 0.05em 1em;
   border-left: 2px solid color-mix(in srgb, var(--app-text-muted) 42%, var(--app-border));

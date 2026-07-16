@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { FileChangesSummaryCard, RuntimeToolRuns, groupToolRuns, toolRunGroupDefaultOpen, toolRunGroupKindClassName, toolRunPanelDefaultOpen } from './RuntimeToolRuns.js';
+import { FileChangesSummaryCard, RuntimeToolRuns, groupToolRuns, toolRunDisplayStableKey, toolRunGroupKindClassName } from './RuntimeToolRuns.js';
 import { MarkdownNavigationProvider } from './markdown/MarkdownNavigationProvider.js';
 import { fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 
@@ -16,22 +16,36 @@ describe('RuntimeToolRuns kind class names', () => {
   });
 });
 
-describe('RuntimeToolRuns default expansion', () => {
-  it('keeps running and successful shell details collapsed by default', () => {
-    expect(toolRunPanelDefaultOpen(shellRun('running'))).toBe(false);
-    expect(toolRunPanelDefaultOpen(shellRun('success'))).toBe(false);
+describe('RuntimeToolRuns disclosure behavior', () => {
+  it('renders tool details collapsed without controlling their open state', () => {
+    const pendingApprovalRun: RuntimeToolRun = {
+      ...shellRun('pending_approval'),
+      approvalId: 'approval_shell',
+    };
+
+    for (const html of [
+      renderedHtml([shellRun('running')]),
+      renderedHtml([shellRun('success')]),
+      renderedHtml([pendingApprovalRun]),
+      renderedHtml([shellRun('running'), toolRun('generic_1', 'some_tool', { input: 'streaming' }, 'running')]),
+    ]) {
+      expect(html).toContain('<details');
+      expect(html).not.toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
+    }
   });
 
-  it('opens failed shell and generic tool details', () => {
-    expect(toolRunPanelDefaultOpen(shellRun('error'))).toBe(true);
-    expect(toolRunPanelDefaultOpen({ id: 'call_generic', name: 'some_tool', status: 'error' })).toBe(true);
-  });
+  it('keeps the same disclosure identity when a streamed single run becomes a group', () => {
+    const firstRun = toolRun('shell_1', 'run_shell_command', { command: 'pnpm typecheck' }, 'running');
+    const single = groupToolRuns([firstRun])[0];
+    const group = groupToolRuns([
+      firstRun,
+      toolRun('shell_2', 'run_shell_command', { command: 'pnpm lint' }, 'running'),
+    ])[0];
 
-  it('keeps active groups collapsed while preserving failed and approval details', () => {
-    expect(toolRunGroupDefaultOpen('shell', 'running', false)).toBe(false);
-    expect(toolRunGroupDefaultOpen('shell', 'success', false)).toBe(false);
-    expect(toolRunGroupDefaultOpen('inspection', 'error', false)).toBe(true);
-    expect(toolRunGroupDefaultOpen('generic', 'success', true)).toBe(true);
+    expect(single).toBeDefined();
+    expect(group).toBeDefined();
+    expect(toolRunDisplayStableKey(single!)).toBe('shell_1');
+    expect(toolRunDisplayStableKey(group!)).toBe('shell_1');
   });
 
   it('keeps adjacent operation categories as separate display groups', () => {

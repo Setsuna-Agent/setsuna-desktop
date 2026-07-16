@@ -9,6 +9,16 @@ export type ChatTranscriptItem =
 
 export type ChatDisplayItem = ChatTranscriptItem;
 
+/**
+ * React identity must not change when more assistant segments stream into the same
+ * visible run. The item id intentionally tracks the complete delete/copy range and
+ * therefore grows as segments are appended.
+ */
+export function chatDisplayItemRenderKey(item: ChatDisplayItem): string {
+  if (item.type === 'assistant') return `assistant:${item.segments[0]?.id ?? item.id}`;
+  return `${item.type}:${item.id}`;
+}
+
 export type ChatRenderWindow = {
   hiddenItemCount: number;
   hiddenMessageCount: number;

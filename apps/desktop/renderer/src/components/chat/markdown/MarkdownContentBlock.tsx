@@ -38,9 +38,15 @@ const markdownComponents = {
   a: MarkdownLink,
   code: MarkdownInlineCode,
   img: MarkdownImage,
+  input: MarkdownTaskInput,
   pre: MarkdownPre,
   table: MarkdownTable,
 } satisfies Components;
+
+// GFM emits checkbox inputs for task syntax; chat renders every Markdown list as a static list.
+function MarkdownTaskInput() {
+  return null;
+}
 
 function MarkdownLink({ children, href, node: _node, onClick, ...props }: MarkdownElementProps<'a'>) {
   const { onOpenWebLink, workspaceRoot } = useMarkdownNavigation();

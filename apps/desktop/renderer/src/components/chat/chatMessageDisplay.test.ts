@@ -1,8 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { activeAssistantRunItemId, assistantRunCopyText, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal } from './chatMessageDisplay.js';
+import { activeAssistantRunItemId, assistantRunCopyText, chatDisplayItemRenderKey, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal } from './chatMessageDisplay.js';
 
 describe('createChatDisplayItems', () => {
+  it('keeps the assistant render identity stable as streamed segments are appended', () => {
+    const first: RuntimeMessage = {
+      id: 'assistant_first',
+      turnId: 'turn_1',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-07-16T00:00:00.000Z',
+      status: 'streaming',
+      toolRuns: [{ id: 'shell_1', name: 'run_shell_command', status: 'running' }],
+    };
+    const second: RuntimeMessage = {
+      id: 'assistant_second',
+      turnId: 'turn_1',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-07-16T00:00:01.000Z',
+      status: 'streaming',
+      toolRuns: [{ id: 'shell_2', name: 'run_shell_command', status: 'running' }],
+    };
+    const initialItem = createChatDisplayItems([first])[0];
+    const streamedItem = createChatDisplayItems([first, second])[0];
+
+    expect(initialItem).toBeDefined();
+    expect(streamedItem).toBeDefined();
+    expect(initialItem?.id).not.toBe(streamedItem?.id);
+    expect(chatDisplayItemRenderKey(initialItem!)).toBe('assistant:assistant_first');
+    expect(chatDisplayItemRenderKey(streamedItem!)).toBe('assistant:assistant_first');
+  });
+
   it('keeps manually compacted context at its runtime position instead of appending it', () => {
     const messages: RuntimeMessage[] = [
       {
