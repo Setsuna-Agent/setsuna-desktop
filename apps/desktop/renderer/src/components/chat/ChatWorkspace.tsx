@@ -15,7 +15,7 @@ import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
 import { activeModelContextWindowTokens, contextTokenUsageFromThread, type ChatContextTokenUsage } from './chatContextUsage.js';
-import { canFitConversationOverviewPanel, doesConversationOverviewOverlapContent, needsConversationOverviewContentShift, shouldCompactConversationOverview, shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
+import { canFitConversationOverviewPanel, doesConversationOverviewOverlapContent, needsConversationOverviewContentShift, shouldAutoHideConversationOverview, shouldCompactConversationOverview, shouldShiftConversationOverviewContent } from './conversationOverviewLayout.js';
 import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, assistantRunStatus, chatDisplayItemRenderKey, createChatDisplayItems, createChatRenderWindow, createChatScrollSignal, type ChatDisplayItem } from './chatMessageDisplay.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
@@ -188,7 +188,11 @@ export function ChatWorkspace({
     overviewRef,
     overviewCompact && overviewRequested && Boolean(conversationOverview && currentThread),
   );
-  const overviewAutoHidden = overviewCompact && overviewOverlapsContent;
+  const overviewAutoHidden = shouldAutoHideConversationOverview({
+    compact: overviewCompact,
+    explicitlyShown: conversationOverviewVisibility === 'shown',
+    overlapsContent: overviewOverlapsContent,
+  });
   const overviewVisible = overviewRequested && !overviewAutoHidden;
   const overviewShiftsContent = overviewVisible && shouldShiftConversationOverviewContent({
     canExpand: overviewCanExpand,
@@ -213,13 +217,12 @@ export function ChatWorkspace({
   }, [activeProject?.id, currentThread?.id]);
   useLayoutEffect(() => {
     setOverviewManuallyCollapsed(false);
-    setOverviewManuallyExpanded(conversationOverviewVisibility === 'shown');
+    setOverviewManuallyExpanded(false);
   }, [activeProject?.id, conversationOverviewShowRequest, conversationOverviewVisibility, currentThread?.id]);
   useEffect(() => {
-    if (conversationOverviewVisibility === 'shown') return;
     setOverviewManuallyExpanded(false);
     if (!overviewCanExpand) setOverviewManuallyCollapsed(false);
-  }, [conversationOverviewVisibility, overviewCanExpand]);
+  }, [overviewCanExpand]);
   useEffect(() => {
     onConversationOverviewRenderedChange?.(Boolean(conversationOverview && currentThread && overviewVisible));
   }, [conversationOverview, currentThread, onConversationOverviewRenderedChange, overviewVisible]);

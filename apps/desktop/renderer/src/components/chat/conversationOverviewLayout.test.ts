@@ -3,6 +3,7 @@ import {
   canFitConversationOverviewPanel,
   doesConversationOverviewOverlapContent,
   needsConversationOverviewContentShift,
+  shouldAutoHideConversationOverview,
   shouldCompactConversationOverview,
   shouldShiftConversationOverviewContent,
 } from './conversationOverviewLayout.js';
@@ -40,5 +41,13 @@ describe('canFitConversationOverviewPanel', () => {
     expect(shouldCompactConversationOverview({ canExpand: false, manuallyCollapsed: false, manuallyExpanded: false })).toBe(true);
     expect(shouldCompactConversationOverview({ canExpand: false, manuallyCollapsed: false, manuallyExpanded: true })).toBe(false);
     expect(shouldCompactConversationOverview({ canExpand: true, manuallyCollapsed: true, manuallyExpanded: true })).toBe(true);
+  });
+
+  it('keeps an explicitly shown overview compact while preventing collision auto-hide', () => {
+    const compact = shouldCompactConversationOverview({ canExpand: false, manuallyCollapsed: false, manuallyExpanded: false });
+
+    expect(compact).toBe(true);
+    expect(shouldAutoHideConversationOverview({ compact, explicitlyShown: false, overlapsContent: true })).toBe(true);
+    expect(shouldAutoHideConversationOverview({ compact, explicitlyShown: true, overlapsContent: true })).toBe(false);
   });
 });

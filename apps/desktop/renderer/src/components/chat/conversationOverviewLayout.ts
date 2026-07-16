@@ -54,6 +54,20 @@ export function shouldCompactConversationOverview({
   return !canExpand && !manuallyExpanded;
 }
 
+export function shouldAutoHideConversationOverview({
+  compact,
+  explicitlyShown,
+  overlapsContent,
+}: {
+  compact: boolean;
+  explicitlyShown: boolean;
+  overlapsContent: boolean;
+}): boolean {
+  // An explicit show request pins the compact entry in place, but must not force
+  // the full panel open when the available gutter is too narrow.
+  return compact && overlapsContent && !explicitlyShown;
+}
+
 export function shouldShiftConversationOverviewContent({
   canExpand,
   compact,
