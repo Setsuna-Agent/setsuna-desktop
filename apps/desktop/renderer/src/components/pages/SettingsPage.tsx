@@ -12,6 +12,8 @@ import { useSidebarOpacityPreference } from '../../hooks/useSidebarOpacityPrefer
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
+import { ProviderModelReplacementDialog } from './ProviderModelReplacementDialog.js';
+import { providerModelReplacementDecision } from './providerModelReplacement.js';
 
 type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'archives' | 'runtime' | 'about';
 type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>;
@@ -1591,6 +1593,7 @@ function ProviderSettings({
   const [providers, setProviders] = useState<ProviderConfigState[]>(() => normalizeSettingsProviders(config.providers));
   const [selectedProviderId, setSelectedProviderId] = useState(() => selectedProviderIdFromConfig(config));
   const [editingModel, setEditingModel] = useState<EditingModelState | null>(null);
+  const [pendingModelReplacement, setPendingModelReplacement] = useState<PendingModelReplacement | null>(null);
   const [apiKeysByProviderId, setApiKeysByProviderId] = useState<Record<string, string>>({});
   const [fetchStateByProviderId, setFetchStateByProviderId] = useState<Record<string, ModelFetchState>>({});
   const [saveState, setSaveState] = useState<SaveState>(() => idleSaveState());
@@ -1623,6 +1626,7 @@ function ProviderSettings({
       if (current.mode === 'create') return current;
       return hasProviderModel(nextProviders, current.providerId, current.modelId) ? current : null;
     });
+    setPendingModelReplacement((current) => (current && nextProviders.some((provider) => provider.id === current.providerId) ? current : null));
     setFetchStateByProviderId({});
   }, [config.activeProviderId, config.providers]);
 
@@ -1760,7 +1764,7 @@ function ProviderSettings({
   const fetchModels = (provider: ProviderConfigState) => {
     setFetchStateByProviderId((current) => ({
       ...current,
-      [provider.id]: { ...(current[provider.id] ?? emptyModelFetchState()), error: '', fetching: true },
+      [provider.id]: { error: '', fetching: true, message: '' },
     }));
     void onFetchModels({
       providerId: provider.id,
@@ -1769,13 +1773,27 @@ function ProviderSettings({
       apiKey: apiKeysByProviderId[provider.id] || undefined,
     })
       .then((result) => {
-        updateProvider(provider.id, (currentProvider) => {
-          const models = mergeFetchedModels(currentProvider.models, result.models);
-          return { ...currentProvider, models };
-        });
+        const currentProvider = providersRef.current.find((item) => item.id === provider.id);
+        if (!currentProvider) return;
+        const nextModels = mergeFetchedModels(currentProvider.models, result.models);
+        const decision = providerModelReplacementDecision(currentProvider.models, nextModels);
+        if (decision === 'confirm') {
+          setPendingModelReplacement({
+            providerId: provider.id,
+            providerName: currentProvider.name,
+            currentModels: currentProvider.models,
+            nextModels,
+          });
+        } else if (decision === 'apply') {
+          updateProvider(provider.id, (item) => ({ ...item, models: nextModels }));
+        }
         setFetchStateByProviderId((current) => ({
           ...current,
-          [provider.id]: { models: result.models, error: '', fetching: false },
+          [provider.id]: {
+            error: '',
+            fetching: false,
+            message: modelFetchSuccessMessage(decision, result.models.length),
+          },
         }));
       })
       .catch((error) => {
@@ -1785,9 +1803,37 @@ function ProviderSettings({
             ...(current[provider.id] ?? emptyModelFetchState()),
             error: error instanceof Error ? error.message : String(error),
             fetching: false,
+            message: '',
           },
         }));
       });
+  };
+
+  const cancelModelReplacement = () => {
+    const pending = pendingModelReplacement;
+    if (!pending) return;
+    setPendingModelReplacement(null);
+    setFetchStateByProviderId((current) => ({
+      ...current,
+      [pending.providerId]: {
+        ...(current[pending.providerId] ?? emptyModelFetchState()),
+        message: '已取消替换，当前模型配置未修改。',
+      },
+    }));
+  };
+
+  const confirmModelReplacement = () => {
+    const pending = pendingModelReplacement;
+    if (!pending) return;
+    setPendingModelReplacement(null);
+    updateProvider(pending.providerId, (provider) => ({ ...provider, models: pending.nextModels }));
+    setFetchStateByProviderId((current) => ({
+      ...current,
+      [pending.providerId]: {
+        ...(current[pending.providerId] ?? emptyModelFetchState()),
+        message: `已确认替换为 ${pending.nextModels.length} 个模型。`,
+      },
+    }));
   };
 
   const enabledProviderCount = providers.filter((provider) => provider.enabled).length;
@@ -1849,9 +1895,19 @@ function ProviderSettings({
                 </label>
                 <span className="chat-user-settings__provider-meta">{`${providerProtocolLabel(selectedProvider.provider)} · ${selectedProvider.models.length} models`}</span>
                 {providers.length > 1 ? (
-                  <IconButton label="删除厂商" variant="danger" onClick={() => removeProvider(selectedProvider.id)}>
-                    <Trash2 size={14} />
-                  </IconButton>
+                  <Popconfirm
+                    title={`删除厂商“${selectedProvider.name || `厂商 ${selectedProviderIndex + 1}`}”？`}
+                    description={`将同时删除该厂商的 ${selectedProvider.models.length} 个模型和已保存的 API Key，此操作无法撤销。`}
+                    placement="bottomRight"
+                    okText="删除厂商"
+                    cancelText="取消"
+                    okButtonProps={DANGER_CONFIRM_BUTTON_PROPS}
+                    onConfirm={() => removeProvider(selectedProvider.id)}
+                  >
+                    <IconButton label="删除厂商" variant="danger">
+                      <Trash2 size={14} />
+                    </IconButton>
+                  </Popconfirm>
                 ) : null}
               </div>
             </div>
@@ -1948,7 +2004,7 @@ function ProviderSettings({
                     ))}
                   </div>
                   {selectedFetchState.error ? <div className="settings-model-fetch-state settings-model-fetch-state--error">{selectedFetchState.error}</div> : null}
-                  {!selectedFetchState.error && selectedFetchState.models.length ? <div className="settings-model-fetch-state">{`已获取 ${selectedFetchState.models.length} 个模型，改动会自动生效。`}</div> : null}
+                  {!selectedFetchState.error && selectedFetchState.message ? <div className="settings-model-fetch-state">{selectedFetchState.message}</div> : null}
                 </div>
               </section>
             </div>
@@ -1960,6 +2016,15 @@ function ProviderSettings({
           </div>
         )}
       </div>
+      {pendingModelReplacement ? (
+        <ProviderModelReplacementDialog
+          providerName={pendingModelReplacement.providerName}
+          currentModels={pendingModelReplacement.currentModels}
+          nextModels={pendingModelReplacement.nextModels}
+          onCancel={cancelModelReplacement}
+          onConfirm={confirmModelReplacement}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1967,6 +2032,7 @@ function ProviderSettings({
 const DEFAULT_PROVIDER_KIND: ProviderConfigState['provider'] = 'openai-compatible';
 const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 68000;
 const SETTINGS_AUTO_SAVE_DELAY_MS = 300;
+const DANGER_CONFIRM_BUTTON_PROPS = { danger: true } as const;
 const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const providerProtocolOptions: Array<{ value: ProviderConfigState['provider']; label: string; meta: string; placeholder: string }> = [
   {
@@ -1989,9 +2055,9 @@ const providerProtocolOptions: Array<{ value: ProviderConfigState['provider']; l
   },
 ];
 type ModelFetchState = {
-  models: RuntimeAvailableModel[];
   error: string;
   fetching: boolean;
+  message: string;
 };
 
 type SaveState = {
@@ -2003,8 +2069,21 @@ type EditingModelState = {
   providerId: string;
 } & ({ mode: 'edit'; modelId: string } | { mode: 'create'; model: ProviderModelConfig });
 
+type PendingModelReplacement = {
+  providerId: string;
+  providerName: string;
+  currentModels: ProviderModelConfig[];
+  nextModels: ProviderModelConfig[];
+};
+
 function emptyModelFetchState(): ModelFetchState {
-  return { models: [], error: '', fetching: false };
+  return { error: '', fetching: false, message: '' };
+}
+
+function modelFetchSuccessMessage(decision: ReturnType<typeof providerModelReplacementDecision>, modelCount: number): string {
+  if (decision === 'confirm') return `已获取 ${modelCount} 个模型，确认后才会替换当前配置。`;
+  if (decision === 'unchanged') return `已获取 ${modelCount} 个模型，与当前配置一致。`;
+  return `已获取并应用 ${modelCount} 个模型。`;
 }
 
 function idleSaveState(): SaveState {

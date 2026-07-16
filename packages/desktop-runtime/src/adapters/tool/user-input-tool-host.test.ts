@@ -10,6 +10,28 @@ import { REQUEST_USER_INPUT_TOOL_NAME, UserInputToolHost } from './user-input-to
 describe('user input tool host', () => {
   afterEach(() => vi.useRealTimers());
 
+  it('declares explicit string types for enum-constrained tool inputs', async () => {
+    const fixture = createFixture();
+
+    await expect(fixture.host.listTools({ threadId: 'thread_1' })).resolves.toEqual([
+      expect.objectContaining({
+        name: REQUEST_USER_INPUT_TOOL_NAME,
+        inputSchema: expect.objectContaining({
+          properties: expect.objectContaining({
+            fields: expect.objectContaining({
+              items: expect.objectContaining({
+                properties: expect.objectContaining({
+                  type: { type: 'string', enum: ['text', 'textarea', 'number', 'integer', 'boolean', 'select', 'multiselect'] },
+                  format: { type: 'string', enum: ['date', 'date-time', 'email', 'uri'] },
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    ]);
+  });
+
   it('publishes an audited structured form and returns the submitted values to the model', async () => {
     const fixture = createFixture();
     const running = fixture.host.runTool(REQUEST_USER_INPUT_TOOL_NAME, {
