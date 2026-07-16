@@ -461,6 +461,10 @@ function normalizeHookHandlers(value: unknown): RuntimeHookHandlerConfig[] {
       if (record.async === true) handler.async = true;
       const statusMessage = nonEmpty(record.statusMessage ?? record.status_message);
       if (statusMessage) handler.statusMessage = statusMessage;
+      const pluginId = nonEmpty(record.pluginId ?? record.plugin_id);
+      if (pluginId) handler.pluginId = pluginId;
+      const sourcePath = nonEmpty(record.sourcePath ?? record.source_path);
+      if (sourcePath) handler.sourcePath = sourcePath;
       return handler;
     })
     .filter((item): item is RuntimeHookHandlerConfig => Boolean(item));

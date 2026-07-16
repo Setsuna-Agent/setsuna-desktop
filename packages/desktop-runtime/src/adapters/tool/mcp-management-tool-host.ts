@@ -3,11 +3,12 @@ import type {
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpTransport,
+  RuntimeMcpTrustLevel,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
 import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
-import { fetchMcpServerTools } from '../mcp/mcp-tool-discovery.js';
 
 const configureMcpToolName = 'configure_mcp_server';
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -143,6 +144,16 @@ const configureMcpTool: RuntimeToolDefinition = {
         enum: ['auto', 'prompt', 'approve', 'always', 'never'],
         description: 'MCP approval mode. Use auto by default, prompt to ask every time, or approve to run without asking.',
       },
+      trust_level: {
+        type: 'string',
+        enum: ['untrusted', 'trusted'],
+        description: 'Server trust level. Defaults to untrusted. Trusted servers may use read-only annotations to skip per-call approval.',
+      },
+      trustLevel: {
+        type: 'string',
+        enum: ['untrusted', 'trusted'],
+        description: 'Server trust level. Defaults to untrusted. Only set trusted after the user has explicitly authorized it.',
+      },
       enabled: {
         type: 'boolean',
         description: 'Whether the server is enabled. Defaults to true.',
@@ -177,7 +188,10 @@ const configureMcpTool: RuntimeToolDefinition = {
 };
 
 export class McpManagementToolHost implements ToolHost {
-  constructor(private readonly mcpStore: McpStore) {}
+  constructor(
+    private readonly mcpStore: McpStore,
+    private readonly mcpClient: McpClientRuntime,
+  ) {}
 
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [configureMcpTool];
@@ -217,11 +231,13 @@ export class McpManagementToolHost implements ToolHost {
     const normalized = normalizeMcpInput(input);
     const before = await this.mcpStore.listServers();
     const existing = before.servers.find((server) => server.key === normalized.key);
-    const discovery = await discoverToolsForSave(normalized);
+    const existingInput = (await this.mcpStore.listServerInputs()).find((server) => server.key === normalized.key);
+    const discovery = await discoverToolsForSave(mergeMcpServerInput(existingInput, normalized), this.mcpClient);
     const inputToSave = discovery.tools.length ? { ...normalized, tools: discovery.tools } : normalized;
     const savedList = await this.mcpStore.upsertServer(inputToSave);
     const saved = savedList.servers.find((server) => server.key === normalized.key);
     if (!saved) throw new Error(`MCP server was not saved: ${normalized.key}`);
+    await this.mcpClient.invalidateServer(saved.key);
     const enabledToolCount = mcpEnabledToolCount(saved);
 
     return {
@@ -230,6 +246,7 @@ export class McpManagementToolHost implements ToolHost {
         `Key: ${saved.key}`,
         `Config: ${savedList.configPath}`,
         `Transport: ${saved.transport}`,
+        `Trust: ${saved.trustLevel}`,
         saved.transport === 'stdio'
           ? `Command: ${[saved.command, ...saved.args].filter(Boolean).join(' ')}`
           : `URL: ${saved.url}`,
@@ -252,9 +269,9 @@ export class McpManagementToolHost implements ToolHost {
   }
 }
 
-async function discoverToolsForSave(input: RuntimeMcpServerInput) {
+async function discoverToolsForSave(input: RuntimeMcpServerInput, mcpClient: McpClientRuntime) {
   if (input.tools?.length) return { tools: input.tools, errors: [] };
-  return fetchMcpServerTools(input);
+  return mcpClient.discoverTools(input);
 }
 
 function mcpEnabledToolCount(server: RuntimeMcpServer): number {
@@ -282,6 +299,7 @@ function normalizeMcpInput(input: unknown): RuntimeMcpServerInput {
     toolTimeoutMs: timeout(record.toolTimeoutMs ?? record.tool_timeout_ms),
     required: booleanValue(record.required),
     requireApproval: normalizeRequireApproval(record.requireApproval ?? record.require_approval),
+    trustLevel: normalizeTrustLevel(record.trustLevel ?? record.trust_level),
     enabled: booleanValue(record.enabled),
     allowedTools: stringList(record.allowedTools ?? record.allowed_tools),
     disabledTools: stringList(record.disabledTools ?? record.disabled_tools),
@@ -313,6 +331,7 @@ function mcpPreviewPayload(
     url: input.url ?? existing?.url,
     timeoutMs: input.timeoutMs ?? existing?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     requireApproval: input.requireApproval ?? existing?.requireApproval ?? 'auto',
+    trustLevel: input.trustLevel ?? existing?.trustLevel ?? 'untrusted',
     enabled: input.enabled ?? existing?.enabled ?? true,
     required: input.required ?? existing?.required ?? false,
     allowedTools: input.allowedTools ?? existing?.allowedTools ?? [],
@@ -340,6 +359,7 @@ function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer,
     url: server.url,
     timeoutMs: server.timeoutMs,
     requireApproval: server.requireApproval,
+    trustLevel: server.trustLevel,
     enabled: server.enabled,
     required: server.required,
     allowedTools: server.allowedTools,
@@ -354,6 +374,21 @@ function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer,
 
 function inferTransport(input: RuntimeMcpServerInput): RuntimeMcpTransport {
   return input.command || !input.url ? 'stdio' : 'streamableHttp';
+}
+
+function mergeMcpServerInput(
+  existing: RuntimeMcpServerInput | undefined,
+  input: RuntimeMcpServerInput,
+): RuntimeMcpServerInput {
+  if (!existing) return input;
+  return {
+    ...existing,
+    ...input,
+    ...(input.env === undefined ? { env: existing.env } : {}),
+    ...(input.headers === undefined ? { headers: existing.headers } : {}),
+    ...(input.envHttpHeaders === undefined ? { envHttpHeaders: existing.envHttpHeaders } : {}),
+    ...(input.bearerTokenEnvVar === undefined ? { bearerTokenEnvVar: existing.bearerTokenEnvVar } : {}),
+  };
 }
 
 function mcpHeaderKeys(input: RuntimeMcpServerInput): string[] {
@@ -388,6 +423,11 @@ function normalizeRequireApproval(value: unknown): RuntimeMcpRequireApproval | u
   if (value === 'approve' || value === 'never') return 'approve';
   if (value === 'prompt' || value === 'always') return 'prompt';
   if (value === 'smart' || value === 'auto' || value === 'on-write' || value === 'onWrite' || value === 'on_write') return 'auto';
+  return undefined;
+}
+
+function normalizeTrustLevel(value: unknown): RuntimeMcpTrustLevel | undefined {
+  if (value === 'trusted' || value === 'untrusted') return value;
   return undefined;
 }
 

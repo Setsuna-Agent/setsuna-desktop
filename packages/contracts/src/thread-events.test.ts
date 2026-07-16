@@ -303,6 +303,131 @@ describe('applyRuntimeEventToThread context compaction', () => {
     });
   });
 
+  it('projects MCP elicitation payloads onto the active tool run', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [{
+        id: 'msg_1',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'streaming',
+        toolRuns: [{ id: 'call_1', name: 'mcp__profile__collect', status: 'running' }],
+      }],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_elicitation',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.requested',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        approval: {
+          id: 'approval_1',
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          toolCallId: 'call_1',
+          toolName: 'mcp__profile__collect',
+          reason: 'Provide your profile.',
+          argumentsPreview: '{"server":"profile","fields":["name"]}',
+          status: 'pending',
+          createdAt: '2026-06-26T00:00:01.000Z',
+          elicitation: {
+            mode: 'form',
+            serverKey: 'profile',
+            message: 'Provide your profile.',
+            requestedSchema: {
+              type: 'object',
+              properties: { name: { type: 'string' } },
+              required: ['name'],
+            },
+          },
+        },
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, event);
+
+    expect(updated.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      status: 'pending_approval',
+      approvalId: 'approval_1',
+      elicitation: { mode: 'form', serverKey: 'profile' },
+    });
+  });
+
+  it('projects structured user input requests onto the active tool run', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-07-15T00:00:00.000Z',
+      updatedAt: '2026-07-15T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [{
+        id: 'msg_1',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-07-15T00:00:00.000Z',
+        status: 'streaming',
+        toolRuns: [{ id: 'call_1', name: 'request_user_input', status: 'running' }],
+      }],
+    };
+    const event: RuntimeEvent = {
+      id: 'event_user_input',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.requested',
+      createdAt: '2026-07-15T00:00:01.000Z',
+      payload: {
+        approval: {
+          id: 'approval_1',
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          toolCallId: 'call_1',
+          toolName: 'request_user_input',
+          reason: 'Choose a target.',
+          argumentsPreview: '{"fields":["target"]}',
+          status: 'pending',
+          createdAt: '2026-07-15T00:00:01.000Z',
+          userInput: {
+            title: 'Target',
+            message: 'Choose a target.',
+            autoResolutionMs: 60_000,
+            expiresAt: '2026-07-15T00:01:01.000Z',
+            requestedSchema: {
+              type: 'object',
+              properties: { target: { type: 'string', oneOf: [{ const: 'staging', title: 'Staging' }] } },
+              required: ['target'],
+            },
+          },
+        },
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, event);
+
+    expect(updated.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      status: 'pending_approval',
+      approvalId: 'approval_1',
+      userInput: { title: 'Target', autoResolutionMs: 60_000 },
+    });
+  });
+
   it('records assistant completion time from message.completed events', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',

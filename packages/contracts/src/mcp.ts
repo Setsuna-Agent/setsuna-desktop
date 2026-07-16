@@ -4,7 +4,16 @@ export type RuntimeMcpRequireApproval = 'auto' | 'prompt' | 'approve' | 'always'
 
 export type RuntimeMcpServerSource = 'local' | 'workspace' | 'legacy' | 'builtin';
 
-export type RuntimeMcpAuthStatus = 'unsupported' | 'notLoggedIn' | 'bearerToken' | 'oAuth';
+export type RuntimeMcpTrustLevel = 'untrusted' | 'trusted';
+
+export type RuntimeMcpAuthStatus =
+  | 'unsupported'
+  | 'notLoggedIn'
+  | 'bearerToken'
+  | 'oAuth'
+  | 'oAuthLoggingIn'
+  | 'oAuthExpired'
+  | 'oAuthError';
 
 export type RuntimeMcpServer = {
   key: string;
@@ -20,11 +29,14 @@ export type RuntimeMcpServer = {
   toolTimeoutMs: number;
   required: boolean;
   requireApproval: RuntimeMcpRequireApproval;
+  trustLevel: RuntimeMcpTrustLevel;
   enabled: boolean;
   allowedTools: string[];
   disabledTools: string[];
   oauthClientId?: string;
   oauthResource?: string;
+  authStatus?: RuntimeMcpAuthStatus;
+  authError?: string;
   tools: RuntimeMcpToolInfo[];
   envKeys: string[];
   headerKeys: string[];
@@ -42,9 +54,13 @@ export type RuntimeMcpServerList = {
 
 export type RuntimeMcpToolInfo = {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   annotations?: Record<string, unknown>;
+  execution?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
   approvalMode?: RuntimeMcpRequireApproval;
 };
 
@@ -75,6 +91,12 @@ export type RuntimeMcpServerStatus = {
   resources: RuntimeMcpResource[];
   resourceTemplates: RuntimeMcpResourceTemplate[];
   tools: Record<string, RuntimeMcpToolInfo>;
+  serverInfo?: Record<string, unknown> | null;
+  connectionState?: 'connecting' | 'ready' | 'disconnected' | 'error';
+  protocolVersion?: string;
+  connectedAt?: string;
+  updatedAt?: string;
+  error?: string;
 };
 
 export type RuntimeMcpServerStatusList = {
@@ -99,6 +121,7 @@ export type RuntimeMcpServerInput = {
   toolTimeoutMs?: number;
   required?: boolean;
   requireApproval?: RuntimeMcpRequireApproval;
+  trustLevel?: RuntimeMcpTrustLevel;
   enabled?: boolean;
   allowedTools?: string[];
   disabledTools?: string[];

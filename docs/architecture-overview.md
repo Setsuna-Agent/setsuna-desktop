@@ -29,7 +29,7 @@ React renderer
 3. 打包环境通过 `ELECTRON_RUN_AS_NODE=1` 复用 Electron 可执行文件跑 Node runtime；开发环境可通过 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向 `packages/desktop-runtime/dist/cli.js`。
 4. runtime stdout 输出 ready JSON 后，main 做 `/health` 检查。
 5. main 创建 `BrowserWindow`，加载 Vite dev server 或 `dist/renderer/index.html`。
-6. renderer 初始化 `useRuntimeClientState()`，并行拉取 config、threads、skills、MCP、projects、usage、memory、approvals。
+6. renderer 初始化 `useRuntimeClientState()`，并行拉取 config、threads、skills、MCP、插件市场/已安装插件、projects、usage、memory、approvals。
 
 ## 请求与事件
 
@@ -113,6 +113,7 @@ runtime 数据根是 Electron `userData/runtime`：
 - `projects.json`：用户添加的 workspace。
 - `mcp.json`：本地 MCP server 配置。
 - `skills.json` 与 `user-skills/`：Skill 状态和用户 Skill。
+- `plugins.json` 与 `plugins/`：已安装 Plugin 的所有权索引和 runtime 私有副本。应用包内另有只读 `plugins/` 精选市场源；renderer 只看到无路径摘要，格式与安全约束见 `docs/plugin-bundles.md`。
 - `memories/`：默认 memory 根，带所有权 marker；用户配置 `storagePath` 后使用 `<storagePath>/.setsuna-memory/` 专属子目录。
 - `usage.jsonl`：模型 token 使用记录。
 

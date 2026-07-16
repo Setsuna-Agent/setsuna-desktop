@@ -5,6 +5,7 @@ import {
   dialog,
   ipcMain,
   nativeImage,
+  safeStorage,
   session,
   shell,
   webContents as electronWebContents,
@@ -20,6 +21,9 @@ import { hydrateDesktopProcessEnvironment } from './desktop-environment.js';
 import { DesktopBrowserController } from './browser-control.js';
 import { BrowserControlServer } from './browser-control-server.js';
 import { DesktopUpdater } from './desktop-updater.js';
+import { DesktopCredentialVault } from './desktop-credential-vault.js';
+import { DesktopNativeBridgeServer } from './desktop-native-bridge-server.js';
+import { electronCredentialEncryption } from './electron-credential-encryption.js';
 import {
   checkoutReviewBranch,
   commitReviewChanges,
@@ -47,6 +51,7 @@ let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
 let browserController: DesktopBrowserController | null = null;
 let browserControlServer: BrowserControlServer | null = null;
+let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
 const usesCustomFrame = process.platform !== 'darwin';
@@ -70,10 +75,20 @@ async function createWindow(): Promise<void> {
   browserController = currentBrowserController;
   browserControlServer = currentBrowserControlServer;
   const browserControl = await currentBrowserControlServer.start();
+  const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
+    credentialVault: new DesktopCredentialVault(
+      path.join(app.getPath('userData'), 'secure-credentials.json'),
+      electronCredentialEncryption(safeStorage),
+    ),
+    openExternal: async (url) => { await shell.openExternal(url); },
+  });
+  desktopNativeBridgeServer = currentDesktopNativeBridgeServer;
+  const nativeBridge = await currentDesktopNativeBridgeServer.start();
 
   const currentRuntimeHost = new RuntimeHost({
     appRoot: app.getAppPath(),
     browserControl,
+    nativeBridge,
     dataDir: app.getPath('userData'),
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,
   });
@@ -82,6 +97,7 @@ async function createWindow(): Promise<void> {
     await currentRuntimeHost.start();
   } catch (error) {
     await currentBrowserControlServer.stop();
+    await currentDesktopNativeBridgeServer.stop();
     throw error;
   }
   registerRuntimeIpc(currentRuntimeHost);
@@ -132,9 +148,11 @@ async function createWindow(): Promise<void> {
   mainWindow.on('closed', () => {
     currentBrowserController.clear();
     void currentBrowserControlServer.stop();
+    void currentDesktopNativeBridgeServer.stop();
     currentRuntimeHost.stop();
     if (browserController === currentBrowserController) browserController = null;
     if (browserControlServer === currentBrowserControlServer) browserControlServer = null;
+    if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
     if (runtimeHost === currentRuntimeHost) runtimeHost = null;
     desktopUpdater?.stop();
     desktopUpdater = null;
@@ -503,4 +521,5 @@ app.on('before-quit', () => {
   runtimeHost?.stop();
   browserController?.clear();
   void browserControlServer?.stop();
+  void desktopNativeBridgeServer?.stop();
 });

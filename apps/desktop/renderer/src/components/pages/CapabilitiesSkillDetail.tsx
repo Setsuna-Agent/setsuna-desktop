@@ -1,4 +1,4 @@
-import { Boxes, Check, FileText, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { Boxes, Check, FileText, Loader2, LogIn, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
 import type { RuntimeSkillDetail, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, PageHeader } from '../primitives.js';
 
@@ -11,6 +11,9 @@ export function CapabilitiesSkillDetail({
   onDelete,
   onEdit,
   onUpdateSkill,
+  onInstallMcpDependencies,
+  onAuthenticateMcpDependency,
+  pendingDependencyKeys,
 }: {
   detail: RuntimeSkillDetail | null;
   error: string | null;
@@ -20,6 +23,9 @@ export function CapabilitiesSkillDetail({
   onDelete?: (skill: RuntimeSkillSummary) => void;
   onEdit?: () => void;
   onUpdateSkill: (skill: RuntimeSkillSummary, patch: Partial<Pick<RuntimeSkillSummary, 'enabled' | 'selected'>>) => Promise<void>;
+  onInstallMcpDependencies: (skill: RuntimeSkillSummary) => Promise<void>;
+  onAuthenticateMcpDependency: (skill: RuntimeSkillSummary, serverKey: string) => Promise<void>;
+  pendingDependencyKeys: Set<string>;
 }) {
   const activeSkill = detail ?? summary;
   const selectedByDefault = activeSkill.enabled && activeSkill.selected;
@@ -88,6 +94,41 @@ export function CapabilitiesSkillDetail({
 
       {detail ? (
         <>
+          {(detail.mcpDependencies?.length || detail.dependencyErrors?.length) ? (
+            <section className="desktop-capabilities-skill-section">
+              <header>
+                <Plug size={14} />
+                <span>MCP 依赖</span>
+              </header>
+              {detail.mcpDependencies?.length ? (
+                <div className="desktop-capabilities-skill-reference-list">
+                  {detail.mcpDependencies.map((dependency) => {
+                    const installPending = pendingDependencyKeys.has(`install:${detail.id}`);
+                    const authPending = pendingDependencyKeys.has(`auth:${detail.id}:${dependency.value}`);
+                    return (
+                      <div className="desktop-capabilities-skill-dependency" key={dependency.value}>
+                        <code>{dependency.value}</code>
+                        <span>{skillDependencyStatusLabel(dependency.status)}</span>
+                        {(dependency.status === 'missing' || dependency.status === 'disabled' || dependency.status === 'unchecked') ? (
+                          <Button type="button" variant="secondary" icon={installPending ? <Loader2 className="is-spinning" size={14} /> : <Plug size={14} />} disabled={installPending} onClick={() => void onInstallMcpDependencies(detail)}>
+                            {installPending ? '处理中' : '安装并启用'}
+                          </Button>
+                        ) : dependency.status === 'authRequired' || dependency.status === 'error' ? (
+                          <Button type="button" variant="secondary" icon={authPending ? <Loader2 className="is-spinning" size={14} /> : <LogIn size={14} />} disabled={authPending} onClick={() => void onAuthenticateMcpDependency(detail, dependency.value)}>
+                            {authPending ? '等待授权' : '登录'}
+                          </Button>
+                        ) : null}
+                        {dependency.error ? <small>{dependency.error}</small> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {detail.dependencyErrors?.map((dependencyError) => (
+                <div className="desktop-capabilities-skill-empty" key={dependencyError}>{dependencyError}</div>
+              ))}
+            </section>
+          ) : null}
           <section className="desktop-capabilities-skill-section">
             <header>
               <FileText size={14} />
@@ -114,4 +155,14 @@ export function CapabilitiesSkillDetail({
       ) : null}
     </section>
   );
+}
+
+function skillDependencyStatusLabel(status: NonNullable<RuntimeSkillDetail['mcpDependencies']>[number]['status']): string {
+  if (status === 'ready') return '已就绪';
+  if (status === 'missing') return '未安装';
+  if (status === 'disabled') return '已停用';
+  if (status === 'authRequired') return '需要登录';
+  if (status === 'conflict') return '配置冲突';
+  if (status === 'error') return '连接或登录失败';
+  return '待检查';
 }

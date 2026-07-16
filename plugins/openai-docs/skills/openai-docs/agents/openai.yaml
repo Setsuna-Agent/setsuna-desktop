@@ -1,0 +1,8 @@
+dependencies:
+  tools:
+    - type: mcp
+      value: openai_docs
+      label: OpenAI Developer Docs
+      description: Official OpenAI developer documentation MCP server.
+      transport: streamable_http
+      url: https://developers.openai.com/mcp

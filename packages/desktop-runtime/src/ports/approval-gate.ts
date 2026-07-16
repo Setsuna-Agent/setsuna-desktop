@@ -5,8 +5,10 @@ import type {
   RuntimeExecPolicyAmendment,
   RuntimeNetworkPolicyAmendment,
   RuntimeNetworkApprovalContext,
+  RuntimeMcpElicitation,
   RuntimePermissionApprovalContext,
   RuntimeApprovalRequest,
+  RuntimeUserInputRequest,
 } from '@setsuna-desktop/contracts';
 
 export type CreateApprovalInput = {
@@ -23,6 +25,8 @@ export type CreateApprovalInput = {
   environmentId?: string;
   additionalPermissions?: unknown;
   permissionApprovalContext?: RuntimePermissionApprovalContext;
+  elicitation?: RuntimeMcpElicitation;
+  userInput?: RuntimeUserInputRequest;
 };
 
 export type ApprovalGate = {
@@ -30,5 +34,6 @@ export type ApprovalGate = {
   waitForDecision(approvalId: string): Promise<AnswerRuntimeApprovalInput>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<RuntimeApprovalRequest>;
   listApprovals(): Promise<RuntimeApprovalList>;
+  forgetApproval(approvalId: string): void;
   rejectPending?(error: Error): void;
 };

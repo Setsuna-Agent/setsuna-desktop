@@ -1,12 +1,7 @@
 import path from 'node:path';
 import { DEFAULT_THREAD_TITLE, type RuntimeCollaborationMode, type RuntimePlanDecision, type ThreadQuery } from '@setsuna-desktop/contracts';
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
-import {
-  callMcpServerToolResponse,
-  listMcpServerResources,
-  listMcpServerResourceTemplates,
-  readMcpServerResource,
-} from '../../adapters/mcp/mcp-tool-discovery.js';
+import { threadScopeId } from '../../adapters/mcp/sdk-mcp-connection-manager.js';
 import type { AppServerCommandExecManager } from './command-exec.js';
 import type { AppServerConnectionRegistry } from './connections.js';
 import { appServerDynamicToolsInput } from './dynamic-tools.js';
@@ -187,7 +182,8 @@ export async function dispatchAppServerRpcRequest(
   }
 
   if (method === 'config/mcpServer/reload') {
-    await runtime.mcpStore.listServers();
+    const servers = await runtime.mcpStore.listServerInputs();
+    await Promise.all(servers.map((server) => runtime.mcpConnections.invalidateServer(server.key)));
     return {};
   }
 
@@ -201,10 +197,35 @@ export async function dispatchAppServerRpcRequest(
     if (server.transport !== 'streamableHttp') {
       throw new AppServerRpcError(-32600, 'OAuth login is only supported for streamable HTTP servers.');
     }
-    throw new AppServerRpcError(
-      -32603,
-      `failed to login to MCP server '${name}': MCP OAuth browser login is not available in the local HTTP app-server adapter yet`,
-    );
+    const timeoutSecs = numericInput(input.timeoutSecs ?? input.timeout_secs);
+    void runtime.mcpConnections.login(server, {
+      timeoutMs: timeoutSecs === undefined ? undefined : Math.min(10 * 60_000, Math.max(1_000, timeoutSecs * 1_000)),
+    }).then(() => {
+      runtime.appServerNotificationBus.publish({
+        method: 'mcpServer/oauthLogin/completed',
+        params: { name, threadId: threadId ?? null, success: true },
+      }, { connectionId });
+    }).catch((error: unknown) => {
+      runtime.appServerNotificationBus.publish({
+        method: 'mcpServer/oauthLogin/completed',
+        params: {
+          name,
+          threadId: threadId ?? null,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }, { connectionId });
+    });
+    return {};
+  }
+
+  if (method === 'mcpServer/oauth/logout') {
+    const input = recordInput(params);
+    const name = requiredString(input.name, 'name');
+    const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === name);
+    if (!server) throw new AppServerRpcError(-32600, `No MCP server named '${name}' found.`);
+    await runtime.mcpConnections.logout(server);
+    return {};
   }
 
   if (method === 'mcpServer/resource/read') {
@@ -215,7 +236,9 @@ export async function dispatchAppServerRpcRequest(
     const uri = requiredString(input.uri, 'uri');
     const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === serverKey);
     if (!server) throw new AppServerRpcError(-32602, `MCP server not found: ${serverKey}`);
-    return readMcpServerResource(server, uri);
+    return runtime.mcpConnections.readResource(server, uri, {
+      scopeId: threadId ? threadScopeId(threadId) : 'app-server:resources',
+    });
   }
 
   if (method === 'mcpServer/tool/call') {
@@ -226,7 +249,9 @@ export async function dispatchAppServerRpcRequest(
     const toolName = requiredString(input.tool, 'tool');
     const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === serverKey);
     if (!server) throw new AppServerRpcError(-32602, `MCP server not found: ${serverKey}`);
-    return callMcpServerToolResponse(server, toolName, input.arguments);
+    return runtime.mcpConnections.callTool(server, toolName, input.arguments, {
+      scopeId: threadScopeId(threadId),
+    });
   }
 
   if (method === 'fs/readFile') {
@@ -523,6 +548,7 @@ export async function dispatchAppServerRpcRequest(
       payload: {},
     });
     runtime.agentLoop.clearAppServerDynamicTools(threadId);
+    await runtime.mcpConnections.releaseThread(threadId);
     await runtime.threadStore.deleteThread(threadId);
     return {};
   }
@@ -678,16 +704,22 @@ async function appServerMcpStatusInventory(
   input: Record<string, unknown>,
 ): Promise<AppServerMcpStatusInventory> {
   const detail = stringInput(input.detail);
+  if (detail && detail !== 'full' && detail !== 'toolsAndAuthOnly') {
+    throw new AppServerRpcError(-32602, `Invalid MCP server status detail: ${detail}`);
+  }
+  // This lightweight status is polled by clients and must not open remote
+  // connections (or trigger an OAuth challenge) merely to render auth state.
   if (detail === 'toolsAndAuthOnly') return {};
-  if (detail && detail !== 'full') throw new AppServerRpcError(-32602, `Invalid MCP server status detail: ${detail}`);
 
   const servers = (await runtime.mcpStore.listServerInputs()).filter((server) => server.enabled !== false);
   const entries = await Promise.all(servers.map(async (server) => {
-    const [resources, resourceTemplates] = await Promise.all([
-      listMcpServerResources(server).catch(() => []),
-      listMcpServerResourceTemplates(server).catch(() => []),
-    ]);
-    return [server.key, { resources, resourceTemplates }] as const;
+    const snapshot = await runtime.mcpConnections.snapshot(server, {
+      scopeId: 'app-server:status',
+    }, {
+      includeTools: true,
+      includeResources: detail !== 'toolsAndAuthOnly',
+    });
+    return [server.key, snapshot] as const;
   }));
   return Object.fromEntries(entries);
 }

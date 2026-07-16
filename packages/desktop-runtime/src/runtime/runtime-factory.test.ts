@@ -13,6 +13,11 @@ describe('runtime factory tool wiring', () => {
     const tools = await runtime.toolHost.listTools(context);
     expect(tools.filter((tool) => tool.name === 'configure_skill')).toHaveLength(1);
     expect(tools.filter((tool) => tool.name === 'open_browser')).toHaveLength(1);
+    expect(tools.filter((tool) => tool.name === 'request_user_input')).toHaveLength(1);
+    await expect(runtime.toolHost.toolRuntimeProfile?.('request_user_input', context)).resolves.toMatchObject({
+      approvalMode: 'selfManaged',
+      supportsParallel: false,
+    });
 
     await expect(runtime.toolHost.runTool('open_browser', { url: 'https://www.baidu.com' }, context)).resolves.toMatchObject({
       data: { kind: 'browser.open', url: 'https://www.baidu.com/' },

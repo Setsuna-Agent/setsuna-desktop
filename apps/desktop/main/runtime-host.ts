@@ -14,6 +14,10 @@ type RuntimeHostOptions = {
     token: string;
     url: string;
   };
+  nativeBridge?: {
+    token: string;
+    url: string;
+  };
   dataDir: string;
   runtimeEntry?: string;
   sseRetryBaseDelayMs?: number;
@@ -48,6 +52,7 @@ export class RuntimeHost {
     this.port = await findAvailablePort();
     const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
     const builtinSkillsDir = resolveBuiltinSkillsDir(this.options.appRoot);
+    const builtinPluginsDir = resolveBuiltinPluginsDir(this.options.appRoot);
     // Electron 打包后仍复用当前可执行文件，通过 ELECTRON_RUN_AS_NODE 切换成 Node runtime 进程。
     const child = spawn(process.execPath, [runtimeEntry, '--port', String(this.port)], {
       cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
@@ -59,7 +64,12 @@ export class RuntimeHost {
           SETSUNA_DESKTOP_BROWSER_CONTROL_TOKEN: this.options.browserControl.token,
           SETSUNA_DESKTOP_BROWSER_CONTROL_URL: this.options.browserControl.url,
         } : {}),
+        ...(this.options.nativeBridge ? {
+          SETSUNA_DESKTOP_NATIVE_BRIDGE_TOKEN: this.options.nativeBridge.token,
+          SETSUNA_DESKTOP_NATIVE_BRIDGE_URL: this.options.nativeBridge.url,
+        } : {}),
         SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR: builtinSkillsDir,
+        SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR: builtinPluginsDir,
         SETSUNA_DESKTOP_DATA_DIR: this.options.dataDir,
         SETSUNA_DESKTOP_RUNTIME_TOKEN: this.token,
       },
@@ -275,6 +285,10 @@ export function resolvePackagedRuntimeEntry(appRoot: string): string {
 
 export function resolveBuiltinSkillsDir(appRoot: string): string {
   return path.join(appRoot, 'skills');
+}
+
+export function resolveBuiltinPluginsDir(appRoot: string): string {
+  return path.join(appRoot, 'plugins');
 }
 
 export function resolveRuntimeSpawnCwd(appRoot: string): string {

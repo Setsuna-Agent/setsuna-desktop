@@ -1,9 +1,11 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { BookOpen, Boxes, FilePlus2, Info, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
-import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { BookOpen, Boxes, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
+import { CapabilitiesPluginCard } from './CapabilitiesPluginCard.js';
+import { CapabilitiesPluginMarketCard } from './CapabilitiesPluginMarketCard.js';
 import { hookPresets, type HookPreset } from './hookPresets.js';
 
 type McpDraft = {
@@ -24,6 +26,7 @@ type McpDraft = {
   enabled: boolean;
   required: boolean;
   requireApproval: RuntimeMcpRequireApproval;
+  trustLevel: RuntimeMcpTrustLevel;
   timeoutMs: string;
   startupTimeoutMs: string;
   toolTimeoutMs: string;
@@ -59,6 +62,7 @@ const emptyMcpDraft: McpDraft = {
   enabled: true,
   required: false,
   requireApproval: 'auto',
+  trustLevel: 'untrusted',
   timeoutMs: '',
   startupTimeoutMs: '',
   toolTimeoutMs: '',
@@ -99,10 +103,15 @@ export function CapabilitiesPage({
   selectedSkillCount,
   mcpState,
   hookState,
+  plugins,
+  pluginMarketplace,
+  pluginMarketplaceErrors,
   onCreateHook,
   onCreateSkill,
   onDeleteSkill,
   onGetSkillDetail,
+  onInstallSkillMcpDependencies,
+  onAuthenticateSkillMcpDependency,
   onCreateInConversation,
   onRefresh,
   onUpdateSkill,
@@ -115,15 +124,24 @@ export function CapabilitiesPage({
   onDeleteHook,
   onUpdateMcpServer,
   onDeleteMcpServer,
+  onLoginMcpServer,
+  onLogoutMcpServer,
+  onInstallMarketplacePlugin,
+  onRemovePlugin,
 }: {
   skills: RuntimeSkillSummary[];
   selectedSkillCount: number;
   mcpState: RuntimeMcpServerList | null;
   hookState: RuntimeHookListResponse | null;
+  plugins: RuntimePluginSummary[];
+  pluginMarketplace: RuntimePluginMarketplaceItem[];
+  pluginMarketplaceErrors: string[];
   onCreateHook: (input: RuntimeHookInput) => Promise<void>;
   onCreateSkill: (input: RuntimeSkillInput) => Promise<RuntimeSkillDetail>;
   onDeleteSkill: (skill: RuntimeSkillSummary) => Promise<void>;
   onGetSkillDetail: (skillId: string) => Promise<RuntimeSkillDetail>;
+  onInstallSkillMcpDependencies: (skill: RuntimeSkillSummary) => Promise<RuntimeSkillDetail>;
+  onAuthenticateSkillMcpDependency: (skill: RuntimeSkillSummary, serverKey: string) => Promise<RuntimeSkillDetail>;
   onCreateInConversation: (skillId: string) => void;
   onRefresh: () => Promise<void>;
   onUpdateSkill: (skill: RuntimeSkillSummary, patch: Partial<RuntimeSkillInput>) => Promise<RuntimeSkillDetail>;
@@ -136,16 +154,25 @@ export function CapabilitiesPage({
   onDeleteHook: (hook: RuntimeHookMetadata) => Promise<void>;
   onUpdateMcpServer: (server: RuntimeMcpServer, patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>) => Promise<void>;
   onDeleteMcpServer: (server: RuntimeMcpServer) => void;
+  onLoginMcpServer: (server: RuntimeMcpServer) => Promise<void>;
+  onLogoutMcpServer: (server: RuntimeMcpServer) => Promise<void>;
+  onInstallMarketplacePlugin: (pluginId: string) => Promise<unknown>;
+  onRemovePlugin: (pluginId: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
   const [saving, setSaving] = useState(false);
   const [hookSaving, setHookSaving] = useState(false);
-  const [capabilityFilter, setCapabilityFilter] = useState<'mcp' | 'skills' | 'hooks'>('mcp');
+  const [capabilityFilter, setCapabilityFilter] = useState<'mcp' | 'skills' | 'hooks' | 'plugins'>('mcp');
   const [capabilityQuery, setCapabilityQuery] = useState('');
   const [updatingHookKeys, setUpdatingHookKeys] = useState<Set<string>>(new Set());
+  const [mcpAuthPendingKeys, setMcpAuthPendingKeys] = useState<Set<string>>(new Set());
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [hookEditorOpen, setHookEditorOpen] = useState(false);
+  const [pluginSection, setPluginSection] = useState<'discover' | 'installed'>('discover');
+  const [installingPluginIds, setInstallingPluginIds] = useState<Set<string>>(new Set());
+  const [removingPluginIds, setRemovingPluginIds] = useState<Set<string>>(new Set());
+  const [pluginError, setPluginError] = useState<string | null>(null);
   const [editingHook, setEditingHook] = useState<RuntimeHookMetadata | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<RuntimeMcpServer | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
@@ -155,6 +182,7 @@ export function CapabilitiesPage({
   const [skillDetailLoading, setSkillDetailLoading] = useState(false);
   const [skillDetailError, setSkillDetailError] = useState<string | null>(null);
   const [skillSaving, setSkillSaving] = useState(false);
+  const [skillDependencyPendingKeys, setSkillDependencyPendingKeys] = useState<Set<string>>(new Set());
   const servers = mcpState?.servers ?? [];
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
@@ -174,6 +202,14 @@ export function CapabilitiesPage({
   const visibleHooks = hooks.filter((hook) =>
     !normalizedCapabilityQuery ||
     `${hook.key} ${hook.eventName} ${hook.matcher ?? ''} ${hook.command ?? ''} ${hook.sourcePath}`.toLowerCase().includes(normalizedCapabilityQuery),
+  );
+  const visiblePlugins = plugins.filter((plugin) =>
+    !normalizedCapabilityQuery ||
+    `${plugin.name} ${plugin.description ?? ''} ${plugin.publisher ?? ''} ${plugin.tags?.join(' ') ?? ''}`.toLowerCase().includes(normalizedCapabilityQuery),
+  );
+  const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) =>
+    !normalizedCapabilityQuery ||
+    `${plugin.name} ${plugin.description ?? ''} ${plugin.publisher ?? ''} ${plugin.tags.join(' ')}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
   const visibleHookPresets = hookPresets.filter((preset) =>
     !normalizedCapabilityQuery ||
@@ -254,6 +290,7 @@ export function CapabilitiesPage({
       enabled: server.enabled,
       required: server.required,
       requireApproval: server.requireApproval,
+      trustLevel: server.trustLevel,
       timeoutMs: server.timeoutMs ? String(server.timeoutMs) : '',
       startupTimeoutMs: server.startupTimeoutMs ? String(server.startupTimeoutMs) : '',
       toolTimeoutMs: server.toolTimeoutMs ? String(server.toolTimeoutMs) : '',
@@ -321,12 +358,33 @@ export function CapabilitiesPage({
     setSkillPageMode(null);
   }
 
+  async function updateSkillDependency(
+    skill: RuntimeSkillSummary,
+    key: string,
+    action: () => Promise<RuntimeSkillDetail>,
+  ) {
+    setSkillDependencyPendingKeys((items) => new Set(items).add(key));
+    try {
+      const updated = await action();
+      if (skillDetailSummary?.id === updated.id) {
+        setSkillDetailSummary(updated);
+        setSkillDetail(updated);
+      }
+    } finally {
+      setSkillDependencyPendingKeys((items) => {
+        const next = new Set(items);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
   async function submitMcpServer() {
     const key = draft.key.trim();
     if (!key) return;
     setSaving(true);
     try {
-      await onSaveMcpServer(mcpDraftToInput(draft, key));
+      await onSaveMcpServer(mcpDraftToInput(draft, key, editingMcpServer));
       resetMcpDraft();
     } finally {
       setSaving(false);
@@ -362,6 +420,41 @@ export function CapabilitiesPage({
     const confirmed = window.confirm(`确认删除这个 ${hookConfigEventName(hook)} Hook？`);
     if (!confirmed) return;
     await updateHook(hook, () => onDeleteHook(hook));
+  }
+
+  async function removePlugin(plugin: RuntimePluginSummary) {
+    const confirmed = window.confirm(`确认卸载「${plugin.name}」？插件添加的技能、服务连接和自动化会一并移除。你的对话和项目不会受影响。`);
+    if (!confirmed) return;
+    setRemovingPluginIds((items) => new Set(items).add(plugin.id));
+    setPluginError(null);
+    try {
+      await onRemovePlugin(plugin.id);
+    } catch (unknownError) {
+      setPluginError(pluginActionError(unknownError, '卸载插件失败，请重试。'));
+    } finally {
+      setRemovingPluginIds((items) => {
+        const next = new Set(items);
+        next.delete(plugin.id);
+        return next;
+      });
+    }
+  }
+
+  async function installMarketplacePlugin(plugin: RuntimePluginMarketplaceItem) {
+    if (plugin.installed || installingPluginIds.has(plugin.id)) return;
+    setInstallingPluginIds((items) => new Set(items).add(plugin.id));
+    setPluginError(null);
+    try {
+      await onInstallMarketplacePlugin(plugin.id);
+    } catch (unknownError) {
+      setPluginError(pluginActionError(unknownError, '安装插件失败，请重试。'));
+    } finally {
+      setInstallingPluginIds((items) => {
+        const next = new Set(items);
+        next.delete(plugin.id);
+        return next;
+      });
+    }
   }
 
   if (mcpEditorOpen) {
@@ -516,6 +609,17 @@ export function CapabilitiesPage({
             onDelete={deleteSkill}
             onEdit={() => setSkillPageMode('edit')}
             onUpdateSkill={updateSkillFromDetail}
+            onInstallMcpDependencies={(skill) => updateSkillDependency(
+              skill,
+              `install:${skill.id}`,
+              () => onInstallSkillMcpDependencies(skill),
+            )}
+            onAuthenticateMcpDependency={(skill, serverKey) => updateSkillDependency(
+              skill,
+              `auth:${skill.id}:${serverKey}`,
+              () => onAuthenticateSkillMcpDependency(skill, serverKey),
+            )}
+            pendingDependencyKeys={skillDependencyPendingKeys}
           />
         </section>
       </main>
@@ -546,6 +650,19 @@ export function CapabilitiesPage({
     }
   }
 
+  async function updateMcpAuth(server: RuntimeMcpServer, action: () => Promise<void>) {
+    setMcpAuthPendingKeys((items) => new Set([...items, server.key]));
+    try {
+      await action();
+    } finally {
+      setMcpAuthPendingKeys((items) => {
+        const next = new Set(items);
+        next.delete(server.key);
+        return next;
+      });
+    }
+  }
+
   return (
     <main className="capabilities-page desktop-capabilities-panel">
       <section className="desktop-capabilities-panel__inner">
@@ -565,7 +682,7 @@ export function CapabilitiesPage({
               <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={openHookFormCreate}>
                 创建
               </Button>
-            ) : (
+            ) : capabilityFilter === 'plugins' ? null : (
             <div className="desktop-capabilities-create">
               <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={() => setCreateMenuOpen((value) => !value)}>
                 创建
@@ -603,7 +720,10 @@ export function CapabilitiesPage({
           <button className={capabilityFilter === 'hooks' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('hooks')}>
             Hooks
           </button>
-          <span>{servers.length} MCP · {enabledSkillCount}/{skills.length} 技能启用 · {selectedSkillCount} 默认 · {executableHookCount}/{hooks.length} Hooks 可执行</span>
+          <button className={capabilityFilter === 'plugins' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('plugins')}>
+            插件
+          </button>
+          <span>{servers.length} MCP · {enabledSkillCount}/{skills.length} 技能启用 · {selectedSkillCount} 默认 · {executableHookCount}/{hooks.length} Hooks 可执行 · {plugins.length} 个插件</span>
         </div>
 
         <div className="desktop-capabilities-usage-note">
@@ -613,9 +733,34 @@ export function CapabilitiesPage({
               ? '启用表示运行时会加载这个 MCP；必需是关键依赖标记，一般服务不建议开启。授权策略控制调用 MCP 工具前是否确认；可用工具和禁用工具在表单里配置。'
               : capabilityFilter === 'skills'
                 ? '启用表示可在对话中选择；默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文。输入框里的 Skill 词槽只影响当前这次发送。'
-                : 'Hook 是本地命令触发器，会在工具调用前后运行，可用于阻止危险命令、补充上下文或审计操作。可以从推荐模板开始，也可以手动创建；保存后需要信任当前 hash 才会执行。'}
+                : capabilityFilter === 'hooks'
+                  ? 'Hook 是本地命令触发器，会在工具调用前后运行，可用于阻止危险命令、补充上下文或审计操作。可以从推荐模板开始，也可以手动创建；保存后需要信任当前 hash 才会执行。'
+                  : '从插件市场选择需要的功能，Setsuna 会自动完成校验、安装和文件管理。涉及运行命令或访问外部服务时，仍会先向你确认。'}
           </span>
         </div>
+
+        {capabilityFilter === 'plugins' ? (
+          <div className="desktop-capabilities-plugin-sections" role="tablist" aria-label="插件页面">
+            <button
+              className={pluginSection === 'discover' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={pluginSection === 'discover'}
+              onClick={() => setPluginSection('discover')}
+            >
+              发现
+            </button>
+            <button
+              className={pluginSection === 'installed' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={pluginSection === 'installed'}
+              onClick={() => setPluginSection('installed')}
+            >
+              已安装 <span>{plugins.length}</span>
+            </button>
+          </div>
+        ) : null}
 
         <div className="desktop-capabilities-grid">
           {capabilityFilter === 'hooks'
@@ -649,6 +794,10 @@ export function CapabilitiesPage({
             ? visibleServers.map((server) => {
                 const endpoint = server.transport === 'stdio' ? [server.command, ...server.args].filter(Boolean).join(' ') : server.url;
                 const toolStats = mcpToolStats(server.tools, server.allowedTools, server.disabledTools);
+                const authPending = mcpAuthPendingKeys.has(server.key) || server.authStatus === 'oAuthLoggingIn';
+                const canUseOAuth = server.transport === 'streamableHttp'
+                  && server.authStatus !== 'bearerToken'
+                  && Boolean(server.oauthClientId || server.oauthResource || server.authStatus === 'oAuth' || server.authStatus === 'oAuthExpired' || server.authStatus === 'oAuthError');
                 return (
                   <article className="desktop-capability-card desktop-capability-card--mcp" key={`mcp:${server.key}`}>
                     <div className="desktop-capability-card__head desktop-capability-card__head--mcp">
@@ -675,6 +824,7 @@ export function CapabilitiesPage({
                       </div>
                       <div className="desktop-capability-card__tool-policy">
                         <span>{toolStats.total ? `${toolStats.enabled}/${toolStats.total} 工具启用` : '未获取工具'}</span>
+                        <span title={server.authError}>{mcpAuthStatusLabel(server.authStatus)}</span>
                       </div>
                     </div>
                     <div className="desktop-capability-card__actions desktop-capability-card__actions--mcp">
@@ -704,6 +854,20 @@ export function CapabilitiesPage({
                           <option value="approve">无需确认</option>
                         </SelectField>
                       </div>
+                      {canUseOAuth ? (
+                        <div className="desktop-capability-card__mcp-setting">
+                          <span className="desktop-capability-card__mcp-setting-label">OAuth</span>
+                          {server.authStatus === 'oAuth' ? (
+                            <Button type="button" variant="secondary" icon={<LogOut size={14} />} disabled={authPending} onClick={() => void updateMcpAuth(server, () => onLogoutMcpServer(server))}>
+                              {authPending ? '处理中' : '退出登录'}
+                            </Button>
+                          ) : (
+                            <Button type="button" variant="secondary" icon={authPending ? <Loader2 className="is-spinning" size={14} /> : <LogIn size={14} />} disabled={authPending} onClick={() => void updateMcpAuth(server, () => onLoginMcpServer(server))}>
+                              {authPending ? '等待授权' : '登录'}
+                            </Button>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   </article>
                 );
@@ -712,6 +876,11 @@ export function CapabilitiesPage({
           {capabilityFilter === 'skills'
             ? visibleSkills.map((skill) => {
                 const selectedByDefault = skill.enabled && skill.selected;
+                const dependencies = skill.mcpDependencies ?? [];
+                const installableDependencies = dependencies.filter((dependency) => dependency.status === 'missing' || dependency.status === 'disabled' || dependency.status === 'unchecked');
+                const authDependency = dependencies.find((dependency) => dependency.status === 'authRequired' || dependency.status === 'error');
+                const dependencyPending = skillDependencyPendingKeys.has(`install:${skill.id}`)
+                  || Boolean(authDependency && skillDependencyPendingKeys.has(`auth:${skill.id}:${authDependency.value}`));
                 return (
                 <article className="desktop-capability-card" key={`skill:${skill.id}`}>
                   <div className="desktop-capability-card__head">
@@ -724,6 +893,10 @@ export function CapabilitiesPage({
                   <p>{skill.description || skill.id}</p>
                   <div className="desktop-capability-card__meta">
                     <span>{skill.id}</span>
+                    {dependencies.length ? (
+                      <span>{dependencies.filter((dependency) => dependency.status === 'ready').length}/{dependencies.length} MCP 就绪</span>
+                    ) : null}
+                    {skill.dependencyErrors?.length ? <span>依赖声明错误</span> : null}
                   </div>
                   <div className="desktop-capability-card__actions">
                     <Button type="button" variant="ghost" icon={<BookOpen size={14} />} onClick={() => void openSkillDetail(skill, 'view')}>
@@ -733,6 +906,35 @@ export function CapabilitiesPage({
                       <IconButton label="Edit Skill" variant="ghost" onClick={() => void openSkillDetail(skill, 'edit')}>
                         <Pencil size={14} />
                       </IconButton>
+                    ) : null}
+                    {installableDependencies.length ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        icon={dependencyPending ? <Loader2 className="is-spinning" size={14} /> : <Plug size={14} />}
+                        disabled={dependencyPending}
+                        onClick={() => void updateSkillDependency(
+                          skill,
+                          `install:${skill.id}`,
+                          () => onInstallSkillMcpDependencies(skill),
+                        )}
+                      >
+                        {dependencyPending ? '处理中' : '安装 MCP 依赖'}
+                      </Button>
+                    ) : authDependency ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        icon={dependencyPending ? <Loader2 className="is-spinning" size={14} /> : <LogIn size={14} />}
+                        disabled={dependencyPending}
+                        onClick={() => void updateSkillDependency(
+                          skill,
+                          `auth:${skill.id}:${authDependency.value}`,
+                          () => onAuthenticateSkillMcpDependency(skill, authDependency.value),
+                        )}
+                      >
+                        {dependencyPending ? '等待授权' : `登录 ${authDependency.value}`}
+                      </Button>
                     ) : null}
                     <label className="sd-check" title="启用后可在对话中选择这个 Skill">
                       <input type="checkbox" checked={skill.enabled} onChange={(event) => updateSkillEnabled(skill, event.currentTarget.checked)} />
@@ -756,7 +958,7 @@ export function CapabilitiesPage({
             ? visibleHooks.map((hook) => {
                 const canRun = hook.enabled && (hook.trustStatus === 'trusted' || hook.trustStatus === 'managed');
                 const updating = updatingHookKeys.has(hook.key);
-                const editable = !hook.isManaged;
+                const editable = !hook.isManaged && hook.source !== 'plugin';
                 return (
                   <article className="desktop-capability-card desktop-capability-card--hook" key={`hook:${hook.key}`}>
                     <div className="desktop-capability-card__head">
@@ -806,8 +1008,38 @@ export function CapabilitiesPage({
                 );
               })
             : null}
-          {((capabilityFilter === 'mcp' && visibleServers.length) || (capabilityFilter === 'skills' && visibleSkills.length) || (capabilityFilter === 'hooks' && (visibleHookPresets.length || visibleHooks.length))) ? null : (
-            <div className="desktop-capabilities-empty">暂无匹配能力</div>
+          {capabilityFilter === 'plugins' && pluginSection === 'discover'
+            ? visibleMarketplacePlugins.map((plugin) => (
+              <CapabilitiesPluginMarketCard
+                key={`marketplace:${plugin.id}`}
+                plugin={plugin}
+                installing={installingPluginIds.has(plugin.id)}
+                onInstall={installMarketplacePlugin}
+              />
+            ))
+            : null}
+          {capabilityFilter === 'plugins' && pluginSection === 'installed'
+            ? visiblePlugins.map((plugin) => (
+              <CapabilitiesPluginCard
+                key={`plugin:${plugin.id}`}
+                plugin={plugin}
+                removing={removingPluginIds.has(plugin.id)}
+                onRemove={removePlugin}
+              />
+            ))
+            : null}
+          {((capabilityFilter === 'mcp' && visibleServers.length)
+            || (capabilityFilter === 'skills' && visibleSkills.length)
+            || (capabilityFilter === 'hooks' && (visibleHookPresets.length || visibleHooks.length))
+            || (capabilityFilter === 'plugins' && pluginSection === 'discover' && visibleMarketplacePlugins.length)
+            || (capabilityFilter === 'plugins' && pluginSection === 'installed' && visiblePlugins.length)) ? null : (
+            <div className="desktop-capabilities-empty">
+              {capabilityFilter === 'plugins'
+                ? pluginSection === 'discover'
+                  ? normalizedCapabilityQuery ? '没有找到匹配的插件' : '插件市场暂时没有可用内容'
+                  : normalizedCapabilityQuery ? '没有找到匹配的已安装插件' : '还没有安装插件，可从“发现”中选择'
+                : '暂无匹配能力'}
+            </div>
           )}
         </div>
 
@@ -824,6 +1056,20 @@ export function CapabilitiesPage({
             {mcpState.errors.map((item) => (
               <span key={item}>{item}</span>
             ))}
+          </div>
+        ) : null}
+
+        {capabilityFilter === 'plugins' && pluginError ? (
+          <div className="desktop-capabilities-errors" role="alert">{pluginError}</div>
+        ) : null}
+
+        {capabilityFilter === 'plugins' && pluginMarketplaceErrors.length ? (
+          <div
+            className="desktop-capabilities-errors"
+            role="status"
+            title={pluginMarketplaceErrors.join('\n')}
+          >
+            部分插件暂时无法显示，请稍后重试。
           </div>
         ) : null}
 
@@ -844,6 +1090,15 @@ function trustStatusLabel(status: RuntimeHookMetadata['trustStatus']): string {
     default:
       return '待信任';
   }
+}
+
+function pluginActionError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[plugins] action failed', error);
+  if (/already installed/iu.test(message)) return '这个插件已经安装。';
+  if (/conflict/iu.test(message)) return '这个插件与现有能力冲突，暂时无法安装。';
+  if (/not found/iu.test(message)) return '这个插件已不在当前市场中，请刷新后重试。';
+  return fallback;
 }
 
 function CapabilitiesMcpEditor({
@@ -870,7 +1125,7 @@ function CapabilitiesMcpEditor({
     setToolFetchLoading(true);
     setToolFetchError(null);
     try {
-      const input = mcpDraftToInput(draft, draft.key.trim() || 'preview');
+      const input = mcpDraftToInput(draft, draft.key.trim() || 'preview', editingMcpServer);
       const result = await onFetchTools(input);
       if (result.errors.length) setToolFetchError(result.errors.join('\n'));
       const toolNames = result.tools.map((tool) => tool.name);
@@ -959,6 +1214,15 @@ function CapabilitiesMcpEditor({
             <option value="approve">无需确认</option>
           </SelectField>
         </McpFormField>
+        <McpFormField label="信任级别" help="默认不信任；只有明确可信的服务才允许只读工具依据 annotation 免确认。">
+          <SelectField
+            value={draft.trustLevel}
+            onValueChange={(nextValue) => setDraftField(setDraft, 'trustLevel', nextValue as RuntimeMcpTrustLevel)}
+          >
+            <option value="untrusted">不信任（推荐）</option>
+            <option value="trusted">已信任</option>
+          </SelectField>
+        </McpFormField>
         <McpFormField className="desktop-capabilities-mcp-form__full" label="描述">
           <TextField value={draft.description} onChange={(event) => setDraftField(setDraft, 'description', event.target.value)} placeholder="这个 MCP 提供什么能力" />
         </McpFormField>
@@ -984,7 +1248,7 @@ function CapabilitiesMcpEditor({
             <McpFormField label="工作目录">
               <TextField value={draft.cwd} onChange={(event) => setDraftField(setDraft, 'cwd', event.target.value)} placeholder="/path/to/project" />
             </McpFormField>
-            <McpFormField className="desktop-capabilities-mcp-form__wide" label="环境变量" help="一行一个 KEY=value。">
+            <McpFormField className="desktop-capabilities-mcp-form__wide" label="环境变量" help={editingMcpServer?.envKeys.length ? `已有 ${editingMcpServer.envKeys.join(', ')}；值不回显，留空会保留。` : '一行一个 KEY=value，值会写入系统安全存储。'}>
               <TextArea value={draft.env} onChange={(event) => setDraftField(setDraft, 'env', event.target.value)} placeholder="API_KEY=value" />
             </McpFormField>
           </>
@@ -993,7 +1257,7 @@ function CapabilitiesMcpEditor({
             <McpFormField className="desktop-capabilities-mcp-form__full" label="URL">
               <TextField value={draft.url} onChange={(event) => setDraftField(setDraft, 'url', event.target.value)} placeholder="https://example.com/mcp" />
             </McpFormField>
-            <McpFormField className="desktop-capabilities-mcp-form__full" label="请求头" help="一行一个 Header=value。">
+            <McpFormField className="desktop-capabilities-mcp-form__full" label="请求头" help={editingMcpServer?.headerKeys.length ? `已有 ${editingMcpServer.headerKeys.join(', ')}；值不回显，留空会保留。` : '一行一个 Header=value，值会写入系统安全存储。'}>
               <TextArea value={draft.headers} onChange={(event) => setDraftField(setDraft, 'headers', event.target.value)} placeholder="Authorization=Bearer ..." />
             </McpFormField>
             <McpFormField className="desktop-capabilities-mcp-form__full" label="环境变量请求头" help="一行一个 Header=ENV_VAR；发送时从环境变量读取值。">
@@ -1145,13 +1409,14 @@ function hookConfigEventName(hook: RuntimeHookMetadata): RuntimeHookEventName {
   }
 }
 
-function mcpDraftToInput(draft: McpDraft, key: string): RuntimeMcpServerInput {
+function mcpDraftToInput(draft: McpDraft, key: string, existing?: RuntimeMcpServer | null): RuntimeMcpServerInput {
   return {
     key,
     label: draft.label.trim() || key,
     description: optionalText(draft.description),
     transport: draft.transport,
     requireApproval: draft.requireApproval,
+    trustLevel: draft.trustLevel,
     enabled: draft.enabled,
     required: draft.required,
     timeoutMs: optionalNumber(draft.timeoutMs),
@@ -1165,11 +1430,11 @@ function mcpDraftToInput(draft: McpDraft, key: string): RuntimeMcpServerInput {
           command: draft.command.trim(),
           args: splitList(draft.args),
           cwd: optionalText(draft.cwd),
-          env: keyValueLines(draft.env),
+          ...(!existing || draft.env.trim() ? { env: keyValueLines(draft.env) } : {}),
         }
       : {
           url: draft.url.trim(),
-          headers: keyValueLines(draft.headers),
+          ...(!existing || draft.headers.trim() ? { headers: keyValueLines(draft.headers) } : {}),
           ...(draft.envHttpHeaders.trim() ? { envHttpHeaders: keyValueLines(draft.envHttpHeaders) } : {}),
           ...(draft.bearerTokenEnvVar.trim() ? { bearerTokenEnvVar: draft.bearerTokenEnvVar.trim() } : {}),
           ...(draft.oauthClientId.trim() ? { oauthClientId: draft.oauthClientId.trim() } : {}),
@@ -1208,6 +1473,26 @@ function mcpToolStats(tools: RuntimeMcpToolInfo[], allowedTools: string[], disab
     total: tools.length,
     enabled: tools.filter((tool) => (!allowed.size || allowed.has(tool.name)) && !disabled.has(tool.name)).length,
   };
+}
+
+function mcpAuthStatusLabel(status: RuntimeMcpServer['authStatus']): string {
+  switch (status) {
+    case 'bearerToken':
+      return 'Bearer Token';
+    case 'oAuth':
+      return 'OAuth 已登录';
+    case 'oAuthLoggingIn':
+      return 'OAuth 登录中';
+    case 'oAuthExpired':
+      return 'OAuth 已过期';
+    case 'oAuthError':
+      return 'OAuth 异常';
+    case 'notLoggedIn':
+      return 'OAuth 未登录';
+    case 'unsupported':
+    default:
+      return '无需鉴权';
+  }
 }
 
 function keyValueLines(value: string): Record<string, string> | undefined {

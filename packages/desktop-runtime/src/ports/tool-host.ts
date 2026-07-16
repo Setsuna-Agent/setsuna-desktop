@@ -75,11 +75,19 @@ export type ToolExecutionPreview = {
   resultPreview?: string;
 };
 
+export type ToolExternalContext = {
+  id: string;
+  label: string;
+  content: string;
+};
+
 export type ToolRuntimeProfile = {
   exposure?: 'direct' | 'deferred' | 'hidden';
   supportsParallel?: boolean;
   waitsForRuntimeCancellation?: boolean;
   visibleToModel?: boolean;
+  /** The tool owns an audited interaction lifecycle and must not receive a second generic approval. */
+  approvalMode?: 'orchestrated' | 'selfManaged';
 };
 
 export type ToolApprovalRequirement = {
@@ -93,6 +101,7 @@ export type ToolHost = {
   listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]>;
   environmentForToolContext?(context: ToolExecutionContext): Promise<ToolExecutionEnvironment | null> | ToolExecutionEnvironment | null;
   systemPrompt?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> | string | null;
+  externalContext?(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<ToolExternalContext[]> | ToolExternalContext[];
   toolChoice?(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> | RuntimeToolChoice | null;
   toolRuntimeProfile?(name: string, context: ToolExecutionContext): Promise<ToolRuntimeProfile | null> | ToolRuntimeProfile | null;
   approvalForTool?(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolApprovalRequirement | null>;

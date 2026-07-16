@@ -97,7 +97,8 @@
       "package.json",
       "packages/contracts/package.json",
       "packages/desktop-runtime/package.json",
-      "skills/**/*"
+      "skills/**/*",
+      "plugins/**/*"
     ],
     "asarUnpack": [
       "**/node_modules/node-pty/prebuilds/**/*"

@@ -251,7 +251,7 @@ export const RUNTIME_HOOK_EVENTS: RuntimeHookDiscoveryEvent[] = [
 
 export function discoverRuntimeHooks(config: RuntimeConfigState): RuntimeHookDiscovery {
   if (config.features?.hooks === false) return { hooks: [], warnings: [] };
-  const sourcePath = path.resolve(config.configPath);
+  const configSourcePath = path.resolve(config.configPath);
   const hookState = config.hooks?.state ?? {};
   const hooks: RuntimeDiscoveredHook[] = [];
   const warnings: string[] = [];
@@ -264,24 +264,25 @@ export function discoverRuntimeHooks(config: RuntimeConfigState): RuntimeHookDis
         try {
           validateHookMatcher(matcher);
         } catch (error) {
-          warnings.push(`invalid matcher ${JSON.stringify(matcher)} in ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`);
+          warnings.push(`invalid matcher ${JSON.stringify(matcher)} in ${configSourcePath}: ${error instanceof Error ? error.message : String(error)}`);
           continue;
         }
       }
       for (const [handlerIndex, handler] of group.hooks.entries()) {
         if (handler.type !== 'command') {
-          warnings.push(`skipping ${handler.type} hook in ${sourcePath}: ${handler.type} hooks are not supported yet`);
+          warnings.push(`skipping ${handler.type} hook in ${configSourcePath}: ${handler.type} hooks are not supported yet`);
           continue;
         }
         if (handler.async) {
-          warnings.push(`skipping async hook in ${sourcePath}: async hooks are not supported yet`);
+          warnings.push(`skipping async hook in ${configSourcePath}: async hooks are not supported yet`);
           continue;
         }
         const command = hookCommandForPlatform(handler);
         if (!command) {
-          warnings.push(`skipping empty hook command in ${sourcePath}`);
+          warnings.push(`skipping empty hook command in ${configSourcePath}`);
           continue;
         }
+        const sourcePath = handler.sourcePath ? path.resolve(handler.sourcePath) : configSourcePath;
         const timeoutSec = Math.max(1, Math.floor(handler.timeoutSec ?? 600));
         const currentHash = commandHookHash(event.keyLabel, matcher, handler, command, timeoutSec);
         const key = `${sourcePath}:${event.keyLabel}:${groupIndex}:${handlerIndex}`;
@@ -297,8 +298,8 @@ export function discoverRuntimeHooks(config: RuntimeConfigState): RuntimeHookDis
           timeoutSec,
           statusMessage: handler.statusMessage?.trim() || null,
           sourcePath,
-          source: 'user',
-          pluginId: null,
+          source: handler.pluginId ? 'plugin' : 'user',
+          pluginId: handler.pluginId ?? null,
           displayOrder,
           enabled: state?.enabled !== false,
           isManaged: false,

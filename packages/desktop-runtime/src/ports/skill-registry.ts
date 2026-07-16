@@ -1,10 +1,24 @@
-import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillList, RuntimeSkillPatch } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeSkillDetail,
+  RuntimeSkillInput,
+  RuntimeSkillList,
+  RuntimeSkillMcpDependency,
+  RuntimeSkillMcpDependencyInstallResult,
+  RuntimeSkillPatch,
+} from '@setsuna-desktop/contracts';
 
 export type SkillInjection = {
   id: string;
   name: string;
   content: string;
   path?: string;
+  mcpDependencies?: RuntimeSkillMcpDependency[];
+  dependencyErrors?: string[];
+};
+
+export type SkillMcpDependencyManager = {
+  installMcpDependencies(skillId: string): Promise<RuntimeSkillMcpDependencyInstallResult>;
+  authenticateMcpDependency(skillId: string, serverKey: string): Promise<RuntimeSkillDetail>;
 };
 
 export type SkillRegistry = {

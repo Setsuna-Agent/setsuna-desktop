@@ -56,6 +56,86 @@ export type RuntimePermissionApprovalContext = {
   availableScopes: RuntimePermissionGrantScope[];
 };
 
+export type RuntimeStructuredInputValue = string | number | boolean | string[];
+
+export type RuntimeStructuredInputOption = {
+  const: string;
+  title: string;
+  description?: string;
+};
+
+export type RuntimeStructuredInputField = {
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'array';
+  title?: string;
+  description?: string;
+  placeholder?: string;
+  multiline?: boolean;
+  default?: RuntimeStructuredInputValue;
+  enum?: string[];
+  enumNames?: string[];
+  oneOf?: RuntimeStructuredInputOption[];
+  items?: {
+    enum?: string[];
+    anyOf?: RuntimeStructuredInputOption[];
+  };
+  format?: 'date' | 'date-time' | 'email' | 'uri';
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  minItems?: number;
+  maxItems?: number;
+};
+
+export type RuntimeStructuredInputSchema = {
+  type: 'object';
+  properties: Record<string, RuntimeStructuredInputField>;
+  required?: string[];
+};
+
+export type RuntimeMcpElicitationValue = RuntimeStructuredInputValue;
+export type RuntimeMcpElicitationOption = RuntimeStructuredInputOption;
+export type RuntimeMcpElicitationField = RuntimeStructuredInputField;
+export type RuntimeMcpElicitationSchema = RuntimeStructuredInputSchema;
+
+export type RuntimeUserInputRequest = {
+  title?: string;
+  message: string;
+  requestedSchema: RuntimeStructuredInputSchema;
+  autoResolutionMs?: number;
+  expiresAt?: string;
+};
+
+export type RuntimeUserInputResponse = {
+  action: 'submit' | 'decline' | 'cancel' | 'timeout';
+  values?: Record<string, RuntimeStructuredInputValue>;
+};
+
+/**
+ * Safe, persistable projection of an MCP elicitation. URL query/fragment data
+ * is intentionally omitted; the connection manager retains the actionable URL
+ * only for the lifetime of the pending request.
+ */
+export type RuntimeMcpElicitation =
+  | {
+      mode: 'form';
+      serverKey: string;
+      message: string;
+      requestedSchema: RuntimeMcpElicitationSchema;
+    }
+  | {
+      mode: 'url';
+      serverKey: string;
+      message: string;
+      displayUrl: string;
+      elicitationId: string;
+    };
+
+export type RuntimeMcpElicitationResponse = {
+  action: 'accept' | 'decline' | 'cancel';
+  content?: Record<string, RuntimeMcpElicitationValue>;
+};
+
 export type RuntimeApprovalRequest = {
   id: string;
   threadId: string;
@@ -70,6 +150,8 @@ export type RuntimeApprovalRequest = {
   environmentId?: string;
   additionalPermissions?: unknown;
   permissionApprovalContext?: RuntimePermissionApprovalContext;
+  elicitation?: RuntimeMcpElicitation;
+  userInput?: RuntimeUserInputRequest;
   availableDecisions?: RuntimeApprovalAvailableDecision[];
   status: RuntimeApprovalStatus;
   createdAt: string;
@@ -87,5 +169,7 @@ export type AnswerRuntimeApprovalInput = {
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
   networkPolicyAmendment?: RuntimeNetworkPolicyAmendment;
   permissionGrant?: RuntimePermissionGrantResponse;
+  elicitationResponse?: RuntimeMcpElicitationResponse;
+  userInputResponse?: RuntimeUserInputResponse;
   message?: string;
 };

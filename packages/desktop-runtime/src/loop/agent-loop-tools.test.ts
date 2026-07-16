@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -30,6 +30,8 @@ import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
+import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-host.js';
+import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
 import type { BrowserControlPort } from '../ports/browser-control.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest } from '../ports/model-client.js';
@@ -3432,6 +3434,53 @@ describe('agent loop tools', () => {
     ]);
     expect(saved?.messages.find((message) => message.toolName === 'browser_screenshot')?.attachments)
       .toEqual(sampledScreenshot?.attachments);
+  });
+
+  it('loads workspace images and sends them back to vision models as tool attachments', async () => {
+    const dataDir = await mkDataDir();
+    const projectDir = path.join(dataDir, 'project');
+    mkdirSync(projectDir, { recursive: true });
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    );
+    writeFileSync(path.join(projectDir, 'design.png'), png);
+    const projects = new FileWorkspaceProjectStore(path.join(dataDir, 'workspace-state'), systemClock);
+    const project = await projects.addProject({ path: projectDir });
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(path.join(dataDir, 'thread-state'), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Workspace image vision', projectId: project.id });
+    const modelClient = new SingleToolCallModelClient({
+      id: 'call_view_image',
+      name: 'view_image',
+      arguments: JSON.stringify({ path: 'design.png' }),
+    });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new ImageCapabilityConfigStore(true),
+      toolHost: new WorkspaceImageToolHost(projects),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'inspect the design asset' });
+    const sampledImage = modelClient.requests[1]?.messages.find((message) =>
+      message.role === 'tool' && message.toolName === 'view_image');
+    const saved = await threadStore.getThread(thread.id);
+
+    expect(modelClient.requests[0]?.tools?.map((tool) => tool.name)).toContain('view_image');
+    expect(sampledImage?.attachments).toEqual([
+      expect.objectContaining({
+        name: 'design.png',
+        size: png.byteLength,
+        type: 'image/png',
+        url: `data:image/png;base64,${png.toString('base64')}`,
+      }),
+    ]);
+    expect(saved?.messages.find((message) => message.toolName === 'view_image')?.attachments)
+      .toEqual(sampledImage?.attachments);
   });
 
   it('pauses tool execution until approval is answered', async () => {

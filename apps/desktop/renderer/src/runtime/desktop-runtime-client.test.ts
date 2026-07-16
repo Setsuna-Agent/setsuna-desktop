@@ -65,6 +65,18 @@ describe('desktop runtime client advanced thread methods', () => {
     await expect(client.listMcpServerStatuses()).resolves.toEqual({ data: [], nextCursor: null });
     await expect(client.readMcpServerResource('thread_1', 'docs', 'memory://one')).resolves.toEqual({ contents: [{ text: 'hello' }] });
   });
+
+  it('installs marketplace plugins by id without sending a local path', async () => {
+    const request = installRuntimeBridge(() => ({ plugin: { id: 'openai-docs' } }));
+    const client = createDesktopRuntimeClient();
+
+    await client.installMarketplacePlugin('openai-docs');
+
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/plugin-marketplace/openai-docs/install',
+      method: 'POST',
+    });
+  });
 });
 
 function installRuntimeBridge(handler: (input: RuntimeRequestInput) => unknown) {

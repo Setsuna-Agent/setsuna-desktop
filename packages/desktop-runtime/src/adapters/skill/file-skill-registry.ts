@@ -1,10 +1,21 @@
 import { watch, type FSWatcher } from 'node:fs';
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillKind, RuntimeSkillList, RuntimeSkillPatch, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import type {
+  RuntimeSkillDetail,
+  RuntimeSkillInput,
+  RuntimeSkillKind,
+  RuntimeSkillList,
+  RuntimeSkillMcpDependency,
+  RuntimeSkillMcpDependencyInput,
+  RuntimeSkillPatch,
+  RuntimeSkillSummary,
+} from '@setsuna-desktop/contracts';
 import type { SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
+import type { InstalledPluginRecord } from '../../ports/plugin-bundle-store.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
-import { readJsonFile, writeJsonFile } from '../store/json-file.js';
+import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
 
 type SkillStateFile = {
   version: 1;
@@ -19,15 +30,22 @@ type ParsedSkill = {
   content: string;
   path: string;
   references: string[];
+  mcpDependencies: RuntimeSkillMcpDependency[];
+  dependencyErrors: string[];
+  pluginId?: string;
 };
 
+type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
+
 const SKILL_CHANGE_DEBOUNCE_MS = 200;
+const MAX_SKILL_AGENT_MANIFEST_BYTES = 128 * 1024;
 
 export class FileSkillRegistry implements SkillRegistry {
   private changeTimer: NodeJS.Timeout | undefined;
   private readonly changeSubscribers = new Set<() => void>();
   private extraSkillRoots: string[] = [];
   private readonly statePath: string;
+  private readonly pluginIndexPath: string;
   private readonly userSkillsDir: string;
   private readonly watchers = new Map<string, FSWatcher>();
 
@@ -36,6 +54,7 @@ export class FileSkillRegistry implements SkillRegistry {
     dataDir: string,
   ) {
     this.statePath = path.join(dataDir, 'skills.json');
+    this.pluginIndexPath = path.join(dataDir, 'plugins.json');
     this.userSkillsDir = path.join(dataDir, 'user-skills');
   }
 
@@ -52,16 +71,18 @@ export class FileSkillRegistry implements SkillRegistry {
       if (!id) throw new Error('Skill id is required');
       const existing = await this.readSkills();
       if (existing.some((skill) => skill.id === id)) throw new Error(`Skill already exists: ${id}`);
+      const preparedFiles = prepareUserSkillFiles(input);
       const state = await this.readState();
       state.states[id] = {
         enabled: input.enabled ?? true,
         selected: input.selected ?? false,
       };
       await this.writeState(state);
-      const skillPath = await this.writeUserSkill(id, input);
+      const skillPath = await this.writeUserSkill(id, preparedFiles);
       const content = await readFile(skillPath, 'utf8');
+      const dependencyManifest = await readSkillDependencyManifest(skillPath);
       this.queueChangeNotification();
-      return toDetail(parseSkill(id, 'user', skillPath, content), state);
+      return toDetail(parseSkill(id, 'user', skillPath, content, dependencyManifest), state);
     });
   }
 
@@ -76,8 +97,11 @@ export class FileSkillRegistry implements SkillRegistry {
       const skills = await this.readSkills();
       const skill = skills.find((item) => item.id === skillId);
       if (!skill) throw new Error(`Skill not found: ${skillId}`);
-      const contentPatch = patch.name !== undefined || patch.description !== undefined || patch.content !== undefined;
-      if (contentPatch && skill.kind !== 'user') throw new Error(`Built-in skill is read-only: ${skillId}`);
+      const contentPatch = patch.name !== undefined
+        || patch.description !== undefined
+        || patch.content !== undefined
+        || patch.mcpDependencies !== undefined;
+      if (contentPatch && skill.kind !== 'user') throw readOnlySkillError(skill.kind, skillId);
 
       const state = await this.readState();
       state.states[skillId] = {
@@ -85,8 +109,8 @@ export class FileSkillRegistry implements SkillRegistry {
         enabled: patch.enabled ?? state.states[skillId]?.enabled,
         selected: patch.selected ?? state.states[skillId]?.selected,
       };
-      await this.writeState(state);
       if (!contentPatch) {
+        await this.writeState(state);
         this.queueChangeNotification();
         return toDetail(skill, state);
       }
@@ -95,13 +119,18 @@ export class FileSkillRegistry implements SkillRegistry {
         name: patch.name ?? skill.name,
         description: patch.description ?? skill.description,
         content: patch.content ?? skill.content,
+        mcpDependencies: patch.mcpDependencies ?? skill.mcpDependencies.map(dependencyInput),
         enabled: state.states[skillId]?.enabled,
         selected: state.states[skillId]?.selected,
       };
-      const skillPath = await this.writeUserSkill(skillId, nextInput);
+      // Normalize and validate both files before changing either persisted file.
+      const preparedFiles = prepareUserSkillFiles(nextInput);
+      await this.writeState(state);
+      const skillPath = await this.writeUserSkill(skillId, preparedFiles);
       const content = await readFile(skillPath, 'utf8');
+      const dependencyManifest = await readSkillDependencyManifest(skillPath);
       this.queueChangeNotification();
-      return toDetail(parseSkill(skillId, 'user', skillPath, content), state);
+      return toDetail(parseSkill(skillId, 'user', skillPath, content, dependencyManifest), state);
     });
   }
 
@@ -110,7 +139,7 @@ export class FileSkillRegistry implements SkillRegistry {
       const skills = await this.readSkills();
       const skill = skills.find((item) => item.id === skillId);
       if (!skill) return;
-      if (skill.kind !== 'user') throw new Error(`Built-in skill is read-only: ${skillId}`);
+      if (skill.kind !== 'user') throw readOnlySkillError(skill.kind, skillId);
       await rm(path.join(this.userSkillsDir, skillId), { recursive: true, force: true });
       const state = await this.readState();
       delete state.states[skillId];
@@ -130,6 +159,8 @@ export class FileSkillRegistry implements SkillRegistry {
         name: skill.name,
         content: skill.content,
         path: skill.path,
+        mcpDependencies: skill.mcpDependencies,
+        dependencyErrors: skill.dependencyErrors,
       }));
   }
 
@@ -149,12 +180,27 @@ export class FileSkillRegistry implements SkillRegistry {
   }
 
   private async readSkills(): Promise<ParsedSkill[]> {
-    const [builtinSkills, userSkills, extraSkills] = await Promise.all([
+    const [builtinSkills, userSkills, extraSkills, pluginSkills] = await Promise.all([
       this.readSkillDirectory(this.builtinSkillsDir, 'builtin'),
       this.readSkillDirectory(this.userSkillsDir, 'user'),
       Promise.all(this.extraSkillRoots.map((root) => this.readSkillDirectory(root, 'user'))).then((groups) => groups.flat()),
+      this.readPluginSkills(),
     ]);
-    return [...builtinSkills, ...userSkills, ...extraSkills].sort((a, b) => a.name.localeCompare(b.name));
+    return [...builtinSkills, ...userSkills, ...extraSkills, ...pluginSkills].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private async readPluginSkills(): Promise<ParsedSkill[]> {
+    const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
+    const skills = await Promise.all(index.plugins.flatMap((plugin) => plugin.skillEntries.map(async (entry) => {
+      const pluginRoot = path.resolve(plugin.installPath);
+      const skillPath = path.resolve(pluginRoot, entry.relativePath, 'SKILL.md');
+      if (!pathIsInside(pluginRoot, skillPath)) return null;
+      const content = await readFile(skillPath, 'utf8').catch(() => '');
+      if (!content) return null;
+      const dependencyManifest = await readSkillDependencyManifest(skillPath);
+      return parseSkill(entry.id, 'plugin', skillPath, content, dependencyManifest, plugin.id);
+    })));
+    return skills.filter((skill): skill is ParsedSkill => Boolean(skill));
   }
 
   private async readSkillDirectory(directory: string, kind: RuntimeSkillKind): Promise<ParsedSkill[]> {
@@ -165,7 +211,8 @@ export class FileSkillRegistry implements SkillRegistry {
         .map(async (entry) => {
           const skillPath = path.join(directory, entry.name, 'SKILL.md');
           const content = await readFile(skillPath, 'utf8').catch(() => '');
-          return content ? parseSkill(entry.name, kind, skillPath, content) : null;
+          const dependencyManifest = content ? await readSkillDependencyManifest(skillPath) : emptyDependencyManifest();
+          return content ? parseSkill(entry.name, kind, skillPath, content, dependencyManifest) : null;
         }),
     );
     return skills.filter((skill): skill is ParsedSkill => Boolean(skill));
@@ -180,10 +227,13 @@ export class FileSkillRegistry implements SkillRegistry {
     await writeJsonFile(this.statePath, state);
   }
 
-  private async writeUserSkill(id: string, input: RuntimeSkillInput): Promise<string> {
+  private async writeUserSkill(id: string, files: PreparedUserSkillFiles): Promise<string> {
     const skillPath = path.join(this.userSkillsDir, id, 'SKILL.md');
     await mkdir(path.dirname(skillPath), { recursive: true });
-    await writeFile(skillPath, formatSkillMarkdown(input), 'utf8');
+    await writeTextFile(skillPath, files.markdown);
+    if (files.dependencyManifest !== undefined) {
+      await writeSkillDependencyManifest(skillPath, files.dependencyManifest);
+    }
     return skillPath;
   }
 
@@ -222,7 +272,12 @@ export class FileSkillRegistry implements SkillRegistry {
   }
 
   private async watchDirectories(): Promise<string[]> {
-    const roots = [this.builtinSkillsDir, this.userSkillsDir, ...this.extraSkillRoots].map((root) => path.resolve(root));
+    const pluginIndex = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
+    const pluginRoots = pluginIndex.plugins.flatMap((plugin) => [
+      plugin.installPath,
+      ...plugin.skillEntries.map((entry) => path.join(plugin.installPath, entry.relativePath)),
+    ]);
+    const roots = [this.builtinSkillsDir, this.userSkillsDir, ...this.extraSkillRoots, ...pluginRoots].map((root) => path.resolve(root));
     const directories = new Set<string>();
     await Promise.all(roots.map(async (root) => {
       if (!await isDirectory(root)) return;
@@ -249,7 +304,14 @@ async function isDirectory(directory: string): Promise<boolean> {
   return stat(directory).then((stats) => stats.isDirectory(), () => false);
 }
 
-function parseSkill(id: string, kind: RuntimeSkillKind, skillPath: string, rawContent: string): ParsedSkill {
+function parseSkill(
+  id: string,
+  kind: RuntimeSkillKind,
+  skillPath: string,
+  rawContent: string,
+  dependencyManifest: SkillDependencyManifest,
+  pluginId?: string,
+): ParsedSkill {
   const frontmatter = parseFrontmatter(rawContent);
   const content = frontmatter.body.trim();
   return {
@@ -260,6 +322,9 @@ function parseSkill(id: string, kind: RuntimeSkillKind, skillPath: string, rawCo
     content,
     path: skillPath,
     references: referencePaths(content),
+    mcpDependencies: dependencyManifest.mcpDependencies,
+    dependencyErrors: dependencyManifest.errors,
+    ...(pluginId ? { pluginId } : {}),
   };
 }
 
@@ -316,7 +381,194 @@ function toSummary(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillSumma
     selected: skillState?.selected ?? false,
     description: skill.description,
     path: skill.path,
+    mcpDependencies: skill.mcpDependencies,
+    dependencyErrors: skill.dependencyErrors,
+    ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
   };
+}
+
+type SkillDependencyManifest = {
+  mcpDependencies: RuntimeSkillMcpDependency[];
+  errors: string[];
+};
+
+async function readSkillDependencyManifest(skillPath: string): Promise<SkillDependencyManifest> {
+  const manifestPath = path.join(path.dirname(skillPath), 'agents', 'openai.yaml');
+  const raw = await readFile(manifestPath, 'utf8').catch(() => '');
+  if (!raw) return emptyDependencyManifest();
+  if (Buffer.byteLength(raw, 'utf8') > MAX_SKILL_AGENT_MANIFEST_BYTES) {
+    return { mcpDependencies: [], errors: [`${manifestPath}: manifest exceeds ${MAX_SKILL_AGENT_MANIFEST_BYTES} bytes.`] };
+  }
+  try {
+    const parsed = parseYaml(raw, { maxAliasCount: 0, uniqueKeys: true });
+    const root = recordValue(parsed);
+    const dependencies = recordValue(root.dependencies);
+    const tools = dependencies.tools;
+    if (tools === undefined) return emptyDependencyManifest();
+    if (!Array.isArray(tools)) return { mcpDependencies: [], errors: [`${manifestPath}: dependencies.tools must be an array.`] };
+    const mcpDependencies: RuntimeSkillMcpDependency[] = [];
+    const errors: string[] = [];
+    tools.forEach((value, index) => {
+      const input = recordValue(value);
+      if (input.type !== 'mcp') return;
+      try {
+        mcpDependencies.push({ ...normalizeMcpDependency(input), status: 'unchecked' });
+      } catch (error) {
+        errors.push(`${manifestPath}: dependencies.tools[${index}] ${errorMessage(error)}`);
+      }
+    });
+    return { mcpDependencies, errors };
+  } catch (error) {
+    return { mcpDependencies: [], errors: [`${manifestPath}: ${errorMessage(error)}`] };
+  }
+}
+
+type PreparedUserSkillFiles = {
+  markdown: string;
+  /** Undefined preserves an existing manifest; null removes it. */
+  dependencyManifest?: string | null;
+};
+
+function prepareUserSkillFiles(input: RuntimeSkillInput): PreparedUserSkillFiles {
+  return {
+    markdown: formatSkillMarkdown(input),
+    ...(input.mcpDependencies !== undefined
+      ? { dependencyManifest: serializeSkillDependencyManifest(input.mcpDependencies) }
+      : {}),
+  };
+}
+
+function serializeSkillDependencyManifest(dependencies: RuntimeSkillMcpDependencyInput[]): string | null {
+  if (!dependencies.length) return null;
+  const normalized = dependencies.map((dependency) => normalizeMcpDependency(dependency));
+  const keys = new Set<string>();
+  for (const dependency of normalized) {
+    if (keys.has(dependency.value)) throw new Error(`Duplicate MCP dependency key: ${dependency.value}`);
+    keys.add(dependency.value);
+  }
+  const tools = normalized.map(dependencyManifestValue);
+  return stringifyYaml({ dependencies: { tools } }, { lineWidth: 0 });
+}
+
+async function writeSkillDependencyManifest(skillPath: string, content: string | null): Promise<void> {
+  const agentsDir = path.join(path.dirname(skillPath), 'agents');
+  const manifestPath = path.join(agentsDir, 'openai.yaml');
+  if (content === null) {
+    await rm(manifestPath, { force: true });
+    return;
+  }
+  await mkdir(agentsDir, { recursive: true });
+  await writeTextFile(manifestPath, content);
+}
+
+function normalizeMcpDependency(value: Record<string, unknown> | RuntimeSkillMcpDependencyInput): RuntimeSkillMcpDependencyInput {
+  const input = value as Record<string, unknown>;
+  const serverKey = normalizeMcpKey(stringValue(input.value));
+  const transport = normalizeMcpDependencyTransport(input.transport, input.command, input.url);
+  const dependency: RuntimeSkillMcpDependencyInput = {
+    type: 'mcp',
+    value: serverKey,
+    transport,
+    ...(optionalString(input.label) ? { label: optionalString(input.label) } : {}),
+    ...(optionalString(input.description) ? { description: optionalString(input.description) } : {}),
+    ...(optionalString(input.oauthClientId ?? input.oauth_client_id) ? { oauthClientId: optionalString(input.oauthClientId ?? input.oauth_client_id) } : {}),
+    ...(optionalString(input.oauthResource ?? input.oauth_resource) ? { oauthResource: optionalString(input.oauthResource ?? input.oauth_resource) } : {}),
+  };
+  if (transport === 'streamableHttp') {
+    const rawUrl = optionalString(input.url);
+    if (!rawUrl) throw new Error('requires url for streamable_http transport.');
+    dependency.url = safeSkillMcpUrl(rawUrl).toString();
+  } else {
+    const command = optionalString(input.command);
+    if (!command) throw new Error('requires command for stdio transport.');
+    dependency.command = command;
+    dependency.args = stringArray(input.args, 'args');
+  }
+  return dependency;
+}
+
+function dependencyManifestValue(dependency: RuntimeSkillMcpDependencyInput): Record<string, unknown> {
+  return {
+    type: 'mcp',
+    value: dependency.value,
+    transport: dependency.transport === 'streamableHttp' ? 'streamable_http' : 'stdio',
+    ...(dependency.label ? { label: dependency.label } : {}),
+    ...(dependency.description ? { description: dependency.description } : {}),
+    ...(dependency.url ? { url: dependency.url } : {}),
+    ...(dependency.command ? { command: dependency.command } : {}),
+    ...(dependency.args?.length ? { args: dependency.args } : {}),
+    ...(dependency.oauthClientId ? { oauth_client_id: dependency.oauthClientId } : {}),
+    ...(dependency.oauthResource ? { oauth_resource: dependency.oauthResource } : {}),
+  };
+}
+
+function dependencyInput(dependency: RuntimeSkillMcpDependency): RuntimeSkillMcpDependencyInput {
+  const { status: _status, authStatus: _authStatus, error: _error, ...input } = dependency;
+  return input;
+}
+
+function normalizeMcpKey(value: string): string {
+  const key = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/gu, '_').replace(/^_+|_+$/gu, '');
+  if (!key) throw new Error('requires a non-empty value.');
+  return key;
+}
+
+function normalizeMcpDependencyTransport(transport: unknown, command: unknown, url: unknown): 'stdio' | 'streamableHttp' {
+  if (transport === 'stdio') return 'stdio';
+  if (transport === 'streamableHttp' || transport === 'streamable_http' || transport === 'streamable-http' || transport === 'http') {
+    return 'streamableHttp';
+  }
+  if (typeof command === 'string' && command.trim()) return 'stdio';
+  if (typeof url === 'string' && url.trim()) return 'streamableHttp';
+  throw new Error('requires transport stdio or streamable_http.');
+}
+
+function safeSkillMcpUrl(value: string): URL {
+  const url = new URL(value);
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    throw new Error('URL must use HTTPS or loopback HTTP.');
+  }
+  if (url.username || url.password) throw new Error('URL cannot contain embedded credentials.');
+  return url;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function optionalString(value: unknown): string | undefined {
+  const text = stringValue(value).trim();
+  return text || undefined;
+}
+
+function stringArray(value: unknown, name: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) throw new Error(`${name} must be a string array.`);
+  return value.map((item) => item.trim()).filter(Boolean);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function emptyDependencyManifest(): SkillDependencyManifest {
+  return { mcpDependencies: [], errors: [] };
+}
+
+function pathIsInside(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function readOnlySkillError(kind: RuntimeSkillKind, skillId: string): Error {
+  return new Error(kind === 'builtin'
+    ? `Built-in skill is read-only: ${skillId}`
+    : `Plugin skill is read-only: ${skillId}`);
 }
 
 function toDetail(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillDetail {

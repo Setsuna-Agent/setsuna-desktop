@@ -307,6 +307,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         networkApprovalContext: approval.networkApprovalContext,
         proposedNetworkPolicyAmendments: approval.proposedNetworkPolicyAmendments,
         permissionApprovalContext: approval.permissionApprovalContext,
+        elicitation: approval.elicitation,
+        userInput: approval.userInput,
         startedAt: approval.createdAt,
       });
     }
@@ -974,6 +976,8 @@ function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): RuntimeToo
     networkApprovalContext: next.networkApprovalContext ?? current.networkApprovalContext,
     proposedNetworkPolicyAmendments: next.proposedNetworkPolicyAmendments ?? current.proposedNetworkPolicyAmendments,
     permissionApprovalContext: next.permissionApprovalContext ?? current.permissionApprovalContext,
+    elicitation: next.elicitation ?? current.elicitation,
+    userInput: next.userInput ?? current.userInput,
     hookRuns: mergeHookRuns(current.hookRuns, next.hookRuns),
     status: next.status as RuntimeToolRunStatus,
   };

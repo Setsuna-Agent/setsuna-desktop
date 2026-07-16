@@ -6,6 +6,7 @@ import type {
   RuntimeMemorySettings,
   RuntimeMcpAuthStatus,
   RuntimeMcpServer,
+  RuntimeMcpToolInfo,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeFactory } from '../types.js';
 import { AppServerRpcError } from './errors.js';
@@ -37,8 +38,18 @@ type AppServerPermissionProfileSummary = {
 };
 
 export type AppServerMcpStatusInventory = Record<string, {
+  state?: 'connecting' | 'ready' | 'disconnected' | 'error';
+  tools?: RuntimeMcpToolInfo[];
   resources?: Array<Record<string, unknown>>;
   resourceTemplates?: Array<Record<string, unknown>>;
+  serverInfo?: Record<string, unknown>;
+  instructions?: string;
+  protocolVersion?: string;
+  connectedAt?: string;
+  updatedAt?: string;
+  error?: string;
+  authStatus?: RuntimeMcpAuthStatus;
+  authError?: string;
 }>;
 
 type AppServerExperimentalFeatureStage = 'beta' | 'underDevelopment' | 'stable' | 'deprecated' | 'removed';
@@ -74,9 +85,11 @@ const APP_SERVER_CONFIG_LAYER_VERSION = '1';
 
 const APP_SERVER_CONFIG_ENABLEMENT_FEATURES = [
   'auth_elicitation',
+  'default_mode_request_user_input',
   'hooks',
   'memories',
   'mentions_v2',
+  'plugins',
   'remote_control',
   'remote_plugin',
   'tool_suggest',
@@ -147,7 +160,7 @@ const APP_SERVER_EXPERIMENTAL_FEATURES: readonly AppServerExperimentalFeatureSpe
   { name: 'non_prefixed_mcp_tool_names', stage: 'underDevelopment', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'unavailable_dummy_tools', stage: 'removed', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'tool_suggest', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
-  { name: 'plugins', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null, forceDisabled: true },
+  { name: 'plugins', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'plugin_hooks', stage: 'removed', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'in_app_browser', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'browser_use', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
@@ -165,7 +178,7 @@ const APP_SERVER_EXPERIMENTAL_FEATURES: readonly AppServerExperimentalFeatureSpe
   { name: 'skill_env_var_dependency_prompt', stage: 'removed', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'mentions_v2', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'steer', stage: 'removed', defaultEnabled: true, displayName: null, description: null, announcement: null },
-  { name: 'default_mode_request_user_input', stage: 'underDevelopment', defaultEnabled: false, displayName: null, description: null, announcement: null },
+  { name: 'default_mode_request_user_input', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'terminal_visualization_instructions', stage: 'underDevelopment', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'guardian_approval', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'goals', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
@@ -833,18 +846,27 @@ export function sweMcpServerStatusListResponse(
 }
 
 function sweMcpServerStatus(server: RuntimeMcpServer, inventory?: AppServerMcpStatusInventory[string]) {
+  const tools = inventory?.tools ?? server.tools;
   return {
     name: server.key,
-    serverInfo: null,
-    tools: Object.fromEntries(server.tools.map((tool) => [tool.name, {
+    serverInfo: inventory?.serverInfo ?? null,
+    tools: Object.fromEntries(tools.map((tool) => [tool.name, {
       name: tool.name,
+      ...(tool.title ? { title: tool.title } : {}),
       ...(tool.description ? { description: tool.description } : {}),
       inputSchema: tool.inputSchema ?? { type: 'object', properties: {}, additionalProperties: true },
+      ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
         ...(tool.annotations ? { annotations: tool.annotations } : {}),
       }])),
     resources: inventory?.resources ?? [],
     resourceTemplates: inventory?.resourceTemplates ?? [],
-    authStatus: sweMcpAuthStatus(server),
+    authStatus: inventory?.authStatus ?? sweMcpAuthStatus(server),
+    ...(inventory?.authError ? { authError: inventory.authError } : {}),
+    ...(inventory?.state ? { connectionState: inventory.state } : {}),
+    ...(inventory?.protocolVersion ? { protocolVersion: inventory.protocolVersion } : {}),
+    ...(inventory?.connectedAt ? { connectedAt: inventory.connectedAt } : {}),
+    ...(inventory?.updatedAt ? { updatedAt: inventory.updatedAt } : {}),
+    ...(inventory?.error ? { error: inventory.error } : {}),
   };
 }
 

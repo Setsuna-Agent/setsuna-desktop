@@ -9,6 +9,7 @@ import type {
   RegenerateMessageInput,
   RuntimeFetchModelsInput,
   RuntimeMcpServerInput,
+  RuntimeMcpServerList,
   RuntimeMcpServerPatch,
   RuntimeMemoryQuery,
   RuntimeMessage,
@@ -22,7 +23,6 @@ import type {
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
-import { fetchMcpServerTools } from '../adapters/mcp/mcp-tool-discovery.js';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
@@ -84,8 +84,49 @@ export async function handleRuntimeRestRequest(
     return true;
   }
 
+  if (request.method === 'GET' && url.pathname === '/v1/plugins') {
+    sendJson(response, 200, await runtime.pluginStore.listPlugins());
+    return true;
+  }
+
+  if (request.method === 'GET' && url.pathname === '/v1/plugin-marketplace') {
+    sendJson(response, 200, await runtime.pluginMarketplace.listPlugins());
+    return true;
+  }
+
+  const marketplaceInstallMatch = url.pathname.match(/^\/v1\/plugin-marketplace\/([^/]+)\/install$/u);
+  if (marketplaceInstallMatch && request.method === 'POST') {
+    sendJson(response, 201, await runtime.pluginMarketplace.installPlugin(
+      assertSafeRuntimeId(decodeURIComponent(marketplaceInstallMatch[1]), 'plugin id'),
+    ));
+    return true;
+  }
+
+  const pluginMatch = url.pathname.match(/^\/v1\/plugins\/([^/]+)$/u);
+  if (pluginMatch && request.method === 'DELETE') {
+    sendJson(response, 200, await runtime.pluginStore.removePlugin(decodeURIComponent(pluginMatch[1])));
+    return true;
+  }
+
   if (request.method === 'POST' && url.pathname === '/v1/skills') {
     sendJson(response, 201, await runtime.skillRegistry.createSkill(await readBody(request)));
+    return true;
+  }
+
+  const skillDependencyInstallMatch = url.pathname.match(/^\/v1\/skills\/([^/]+)\/mcp-dependencies\/install$/u);
+  if (skillDependencyInstallMatch && request.method === 'POST') {
+    sendJson(response, 200, await runtime.skillRegistry.installMcpDependencies(
+      decodeURIComponent(skillDependencyInstallMatch[1]),
+    ));
+    return true;
+  }
+
+  const skillDependencyLoginMatch = url.pathname.match(/^\/v1\/skills\/([^/]+)\/mcp-dependencies\/([^/]+)\/login$/u);
+  if (skillDependencyLoginMatch && request.method === 'POST') {
+    sendJson(response, 200, await runtime.skillRegistry.authenticateMcpDependency(
+      decodeURIComponent(skillDependencyLoginMatch[1]),
+      decodeURIComponent(skillDependencyLoginMatch[2]),
+    ));
     return true;
   }
 
@@ -180,36 +221,66 @@ export async function handleRuntimeRestRequest(
   }
 
   if (request.method === 'GET' && url.pathname === '/v1/mcp/servers') {
-    sendJson(response, 200, await runtime.mcpStore.listServers());
+    sendJson(response, 200, await withMcpAuthStatuses(runtime, await runtime.mcpStore.listServers()));
     return true;
   }
 
   if (request.method === 'POST' && url.pathname === '/v1/mcp/tools') {
-    sendJson(response, 200, await fetchMcpServerTools(await readBody<RuntimeMcpServerInput>(request)));
+    const input = await readBody<RuntimeMcpServerInput>(request);
+    const existing = (await runtime.mcpStore.listServerInputs())
+      .find((server) => server.key === normalizeMcpServerKey(input.key));
+    sendJson(response, 200, await runtime.mcpConnections.discoverTools(mergeMcpServerInput(existing, input), {
+      scopeId: `discovery:${normalizeMcpServerKey(input.key)}`,
+    }));
     return true;
   }
 
   if (request.method === 'POST' && url.pathname === '/v1/mcp/servers') {
-    sendJson(response, 201, await runtime.mcpStore.upsertServer(await readBody<RuntimeMcpServerInput>(request)));
+    const input = await readBody<RuntimeMcpServerInput>(request);
+    const key = normalizeMcpServerKey(input.key);
+    const result = await runtime.mcpStore.upsertServer(input);
+    await runtime.mcpConnections.invalidateServer(key);
+    sendJson(response, 201, await withMcpAuthStatuses(runtime, result));
     return true;
   }
 
   const mcpServerMatch = url.pathname.match(/^\/v1\/mcp\/servers\/([^/]+)$/);
   if (mcpServerMatch && request.method === 'PATCH') {
+    const serverKey = normalizeMcpServerKey(decodeURIComponent(mcpServerMatch[1]));
+    const result = await runtime.mcpStore.updateServer(
+      serverKey,
+      await readBody<RuntimeMcpServerPatch>(request),
+    );
+    await runtime.mcpConnections.invalidateServer(serverKey);
     sendJson(
       response,
       200,
-      await runtime.mcpStore.updateServer(
-        decodeURIComponent(mcpServerMatch[1]),
-        await readBody<RuntimeMcpServerPatch>(request),
-      ),
+      await withMcpAuthStatuses(runtime, result),
     );
     return true;
   }
 
   if (mcpServerMatch && request.method === 'DELETE') {
-    await runtime.mcpStore.deleteServer(decodeURIComponent(mcpServerMatch[1]));
+    const serverKey = normalizeMcpServerKey(decodeURIComponent(mcpServerMatch[1]));
+    await runtime.mcpStore.deleteServer(serverKey);
+    await runtime.mcpConnections.invalidateServer(serverKey);
     sendJson(response, 200, { ok: true });
+    return true;
+  }
+
+  const mcpOAuthMatch = url.pathname.match(/^\/v1\/mcp\/servers\/([^/]+)\/oauth\/(login|logout)$/u);
+  if (mcpOAuthMatch && request.method === 'POST') {
+    const serverKey = normalizeMcpServerKey(decodeURIComponent(mcpOAuthMatch[1]));
+    const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === serverKey);
+    if (!server) throw new RuntimeHttpError(404, `MCP server not found: ${serverKey}`, 'mcp_server_not_found');
+    if (mcpOAuthMatch[2] === 'logout') {
+      await runtime.mcpConnections.logout(server);
+    } else {
+      const abort = new AbortController();
+      request.once('aborted', () => abort.abort(new Error('MCP OAuth login request disconnected.')));
+      await runtime.mcpConnections.login(server, { signal: abort.signal });
+    }
+    sendJson(response, 200, await withMcpAuthStatuses(runtime, await runtime.mcpStore.listServers()));
     return true;
   }
 
@@ -623,4 +694,42 @@ function decodeRuntimeId(value: string, label: string): string {
   } catch {
     throw new RuntimeHttpError(400, `${label} is invalid.`, 'invalid_runtime_id');
   }
+}
+
+function normalizeMcpServerKey(value: string): string {
+  const key = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!key) throw new RuntimeHttpError(400, 'MCP server key is required.', 'invalid_mcp_server_key');
+  return key;
+}
+
+function mergeMcpServerInput(
+  existing: RuntimeMcpServerInput | undefined,
+  input: RuntimeMcpServerInput,
+): RuntimeMcpServerInput {
+  if (!existing) return input;
+  return {
+    ...existing,
+    ...input,
+    ...(input.env === undefined ? { env: existing.env } : {}),
+    ...(input.headers === undefined ? { headers: existing.headers } : {}),
+    ...(input.envHttpHeaders === undefined ? { envHttpHeaders: existing.envHttpHeaders } : {}),
+    ...(input.bearerTokenEnvVar === undefined ? { bearerTokenEnvVar: existing.bearerTokenEnvVar } : {}),
+  };
+}
+
+async function withMcpAuthStatuses(
+  runtime: RuntimeFactory,
+  list: RuntimeMcpServerList,
+): Promise<RuntimeMcpServerList> {
+  return {
+    ...list,
+    servers: await Promise.all(list.servers.map(async (server) => {
+      const auth = await runtime.mcpConnections.authStatus(server);
+      return {
+        ...server,
+        authStatus: auth.status,
+        ...(auth.error ? { authError: auth.error } : {}),
+      };
+    })),
+  };
 }

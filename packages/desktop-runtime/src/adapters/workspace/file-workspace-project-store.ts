@@ -16,12 +16,14 @@ import {
   type WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
-import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import type { WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
 const MAX_LIST_ENTRIES = 200;
 const MAX_READ_BYTES = 256 * 1024;
+export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_ENTRY_SEARCH_RESULTS = 80;
 const MAX_ENTRY_SEARCH_SCAN = 12000;
 const MAX_SEARCH_RESULTS = 100;
@@ -229,6 +231,28 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       size: buffer.byteLength,
       modifiedAt: targetStat.mtime.toISOString(),
       truncated,
+    };
+  }
+
+  async readImage(projectId: string, relativePath: string): Promise<WorkspaceImageRead> {
+    const project = await this.requireProject(projectId);
+    const target = await safeResolve(project.path, relativePath);
+    const targetStat = await stat(target);
+    if (!targetStat.isFile()) throw new Error('Path is not a file.');
+    if (!targetStat.size) throw new Error('Image file is empty.');
+    if (targetStat.size > MAX_WORKSPACE_IMAGE_BYTES) {
+      throw new Error(`Image exceeds the ${MAX_WORKSPACE_IMAGE_BYTES} byte workspace limit.`);
+    }
+    const buffer = await readFile(target);
+    const mimeType = detectSafeImageMimeType(buffer);
+    if (!mimeType) throw new Error('Unsupported image format. Use PNG, JPEG, GIF, or WebP.');
+    return {
+      projectId,
+      path: toProjectRelative(project.path, target),
+      mimeType,
+      size: buffer.byteLength,
+      modifiedAt: targetStat.mtime.toISOString(),
+      base64: buffer.toString('base64'),
     };
   }
 

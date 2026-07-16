@@ -1,4 +1,35 @@
-export type RuntimeSkillKind = 'builtin' | 'user';
+import type { RuntimeMcpAuthStatus, RuntimeMcpTransport } from './mcp.js';
+
+export type RuntimeSkillKind = 'builtin' | 'plugin' | 'user';
+
+export type RuntimeSkillMcpDependencyInput = {
+  type: 'mcp';
+  /** Stable MCP server key referenced by model-facing tool names. */
+  value: string;
+  transport: RuntimeMcpTransport;
+  label?: string;
+  description?: string;
+  url?: string;
+  command?: string;
+  args?: string[];
+  oauthClientId?: string;
+  oauthResource?: string;
+};
+
+export type RuntimeSkillMcpDependencyStatus =
+  | 'unchecked'
+  | 'missing'
+  | 'disabled'
+  | 'ready'
+  | 'authRequired'
+  | 'conflict'
+  | 'error';
+
+export type RuntimeSkillMcpDependency = RuntimeSkillMcpDependencyInput & {
+  status: RuntimeSkillMcpDependencyStatus;
+  authStatus?: RuntimeMcpAuthStatus;
+  error?: string;
+};
 
 export type RuntimeSkillSummary = {
   id: string;
@@ -8,6 +39,9 @@ export type RuntimeSkillSummary = {
   selected: boolean;
   description?: string;
   path?: string;
+  pluginId?: string;
+  mcpDependencies?: RuntimeSkillMcpDependency[];
+  dependencyErrors?: string[];
 };
 
 export type RuntimeSkillDetail = RuntimeSkillSummary & {
@@ -26,6 +60,7 @@ export type RuntimeSkillInput = {
   content: string;
   enabled?: boolean;
   selected?: boolean;
+  mcpDependencies?: RuntimeSkillMcpDependencyInput[];
 };
 
 export type RuntimeSkillPatch = {
@@ -34,4 +69,11 @@ export type RuntimeSkillPatch = {
   name?: string;
   description?: string;
   content?: string;
+  mcpDependencies?: RuntimeSkillMcpDependencyInput[];
+};
+
+export type RuntimeSkillMcpDependencyInstallResult = {
+  skill: RuntimeSkillDetail;
+  installed: string[];
+  enabled: string[];
 };

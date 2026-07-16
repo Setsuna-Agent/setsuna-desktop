@@ -36,4 +36,41 @@ describe('InMemoryApprovalGate', () => {
     expect(approvals.approvals).toContainEqual(expect.objectContaining({ id: pending.id, status: 'pending' }));
     expect(approvals.approvals.some((approval) => approval.id === 'approval_1')).toBe(false);
   });
+
+  it('validates structured user input decisions and field values', async () => {
+    const ids: IdGenerator = { id: (prefix) => `${prefix}_1` };
+    const clock: Clock = { now: () => new Date('2026-07-15T00:00:00.000Z') };
+    const gate = new InMemoryApprovalGate(clock, ids);
+    const approval = await gate.createApproval({
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      toolCallId: 'call_1',
+      toolName: 'request_user_input',
+      reason: 'Choose an environment.',
+      argumentsPreview: '{}',
+      userInput: {
+        message: 'Choose an environment.',
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            environment: { type: 'string', oneOf: [{ const: 'staging', title: 'Staging' }] },
+          },
+          required: ['environment'],
+        },
+      },
+    });
+
+    await expect(gate.answerApproval(approval.id, {
+      decision: 'approve',
+      userInputResponse: { action: 'submit', values: {} },
+    })).rejects.toThrow("User input field 'environment' is required");
+    await expect(gate.answerApproval(approval.id, {
+      decision: 'reject',
+      userInputResponse: { action: 'submit', values: { environment: 'staging' } },
+    })).rejects.toThrow('does not match the approval decision');
+    await expect(gate.answerApproval(approval.id, {
+      decision: 'approve',
+      userInputResponse: { action: 'submit', values: { environment: 'staging' } },
+    })).resolves.toMatchObject({ status: 'approved' });
+  });
 });

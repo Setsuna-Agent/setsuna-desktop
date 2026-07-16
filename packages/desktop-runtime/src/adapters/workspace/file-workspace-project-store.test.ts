@@ -1,9 +1,14 @@
-import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { systemClock } from '../../ports/clock.js';
-import { FileWorkspaceProjectStore, walkWorkspaceFiles } from './file-workspace-project-store.js';
+import { FileWorkspaceProjectStore, MAX_WORKSPACE_IMAGE_BYTES, walkWorkspaceFiles } from './file-workspace-project-store.js';
+
+const ONE_PIXEL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
 
 describe('file workspace project store', () => {
   it('serializes concurrent project additions', async () => {
@@ -36,6 +41,27 @@ describe('file workspace project store', () => {
     expect(readme.content).toContain('needle');
     expect(search.results).toMatchObject([{ path: 'README.md', line: 1 }]);
     expect(written).toMatchObject({ path: 'src/generated.txt', created: true });
+  });
+
+  it('reads bounded workspace images by file signature', async () => {
+    const fixture = await createWorkspaceFixture();
+    await writeFile(path.join(fixture.projectDir, 'preview.bin'), ONE_PIXEL_PNG);
+    await writeFile(path.join(fixture.projectDir, 'spoofed.png'), 'not an image');
+    const oversizedPath = path.join(fixture.projectDir, 'oversized.png');
+    await writeFile(oversizedPath, ONE_PIXEL_PNG);
+    await truncate(oversizedPath, MAX_WORKSPACE_IMAGE_BYTES + 1);
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+
+    await expect(store.readImage(project.id, 'preview.bin')).resolves.toMatchObject({
+      path: 'preview.bin',
+      mimeType: 'image/png',
+      size: ONE_PIXEL_PNG.byteLength,
+      base64: ONE_PIXEL_PNG.toString('base64'),
+    });
+    await expect(store.readImage(project.id, 'spoofed.png')).rejects.toThrow('Unsupported image format');
+    await expect(store.readImage(project.id, 'oversized.png')).rejects.toThrow('workspace limit');
+    await expect(store.readImage(project.id, '../outside.txt')).rejects.toThrow('escapes');
   });
 
   it('archives a project without losing its identity when the same path is added again', async () => {
@@ -87,6 +113,7 @@ describe('file workspace project store', () => {
 
     await expect(store.search(project.id, 'SYMLINK_SECRET_NEEDLE')).resolves.toMatchObject({ results: [] });
     await expect(store.readFile(project.id, 'linked-secret.txt')).rejects.toThrow('escapes');
+    await expect(store.readImage(project.id, 'linked-secret.txt')).rejects.toThrow('escapes');
   });
 
   it('lists every direct child instead of applying the fuzzy-search result limit', async () => {

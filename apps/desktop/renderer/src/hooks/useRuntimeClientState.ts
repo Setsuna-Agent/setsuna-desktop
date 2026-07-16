@@ -18,6 +18,9 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpToolList,
+  RuntimePluginInstallResult,
+  RuntimePluginMarketplaceItem,
+  RuntimePluginSummary,
   RuntimeReviewTarget,
   RuntimeSkillDetail,
   RuntimeSkillInput,
@@ -68,6 +71,9 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [skillExtraRoots, setSkillExtraRootsState] = useState<string[]>([]);
   const [mcpState, setMcpState] = useState<RuntimeMcpServerList | null>(null);
   const [hookState, setHookState] = useState<RuntimeHookListResponse | null>(null);
+  const [plugins, setPlugins] = useState<RuntimePluginSummary[]>([]);
+  const [pluginMarketplace, setPluginMarketplace] = useState<RuntimePluginMarketplaceItem[]>([]);
+  const [pluginMarketplaceErrors, setPluginMarketplaceErrors] = useState<string[]>([]);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
   const [temporaryWorkspace, setTemporaryWorkspace] = useState<WorkspaceProject | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
@@ -101,7 +107,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       // Only the state required to enter the workbench is fatal. Optional domains degrade independently.
       const bootstrap = await loadRuntimeBootstrap(client);
       const { nextConfig, threadList, allThreadList, projectList, workspaceStatus } = bootstrap.core;
-      const { skillResult, mcpResult, usageResult } = bootstrap.optional;
+      const { skillResult, mcpResult, pluginResult, pluginMarketplaceResult, usageResult } = bootstrap.optional;
       setConfig(nextConfig);
       setThreads(threadList.threads);
       setArchivedThreads(allThreadList.threads.filter((thread) => thread.archived));
@@ -109,10 +115,17 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       setTemporaryWorkspace(workspaceStatus.project ?? null);
       if (skillResult.status === 'fulfilled') setSkills(skillResult.value.skills);
       if (mcpResult.status === 'fulfilled') setMcpState(mcpResult.value);
+      if (pluginResult.status === 'fulfilled') setPlugins(pluginResult.value.plugins);
+      if (pluginMarketplaceResult.status === 'fulfilled') {
+        setPluginMarketplace(pluginMarketplaceResult.value.plugins);
+        setPluginMarketplaceErrors(pluginMarketplaceResult.value.errors);
+      }
       if (usageResult.status === 'fulfilled') setUsage(usageResult.value);
       reportOptionalLoadFailures([
         ['skills', skillResult],
         ['MCP', mcpResult],
+        ['plugins', pluginResult],
+        ['plugin marketplace', pluginMarketplaceResult],
         ['usage', usageResult],
       ]);
 
@@ -198,17 +211,26 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
       client.listSkills(),
       client.listMcpServers(),
       client.listHooks(activeHookCwds),
+      client.listPlugins(),
+      client.listPluginMarketplace(),
     ]);
-    const [skillResult, mcpResult, hookResult] = results;
+    const [skillResult, mcpResult, hookResult, pluginResult, pluginMarketplaceResult] = results;
     if (isLatestHookRequest()) {
       if (skillResult.status === 'fulfilled') setSkills(skillResult.value.skills);
       if (mcpResult.status === 'fulfilled') setMcpState(mcpResult.value);
       if (hookResult.status === 'fulfilled') setHookState(hookResult.value);
+      if (pluginResult.status === 'fulfilled') setPlugins(pluginResult.value.plugins);
+      if (pluginMarketplaceResult.status === 'fulfilled') {
+        setPluginMarketplace(pluginMarketplaceResult.value.plugins);
+        setPluginMarketplaceErrors(pluginMarketplaceResult.value.errors);
+      }
     }
     reportOptionalLoadFailures([
       ['skills', skillResult],
       ['MCP', mcpResult],
       ['hooks', hookResult],
+      ['plugins', pluginResult],
+      ['plugin marketplace', pluginMarketplaceResult],
     ]);
     const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (firstFailure && results.every((result) => result.status === 'rejected')) throw firstFailure.reason;
@@ -573,6 +595,25 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     [client],
   );
 
+  const installSkillMcpDependencies = useCallback(async (skill: RuntimeSkillSummary): Promise<RuntimeSkillDetail> => {
+    const result = await client.installSkillMcpDependencies(skill.id);
+    const [skillList, nextMcpState] = await Promise.all([client.listSkills(), client.listMcpServers()]);
+    setSkills(skillList.skills);
+    setMcpState(nextMcpState);
+    return result.skill;
+  }, [client]);
+
+  const authenticateSkillMcpDependency = useCallback(async (
+    skill: RuntimeSkillSummary,
+    serverKey: string,
+  ): Promise<RuntimeSkillDetail> => {
+    const updated = await client.authenticateSkillMcpDependency(skill.id, serverKey);
+    const [skillList, nextMcpState] = await Promise.all([client.listSkills(), client.listMcpServers()]);
+    setSkills(skillList.skills);
+    setMcpState(nextMcpState);
+    return updated;
+  }, [client]);
+
   const setSkillExtraRoots = useCallback(async (roots: string[]) => {
     const normalizedRoots = [...new Set(roots.map((root) => root.trim()).filter(Boolean))];
     await client.setSkillExtraRoots(normalizedRoots);
@@ -697,6 +738,43 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     [client],
   );
 
+  const loginMcpServer = useCallback(async (server: RuntimeMcpServer) => {
+    setMcpState(await client.loginMcpServer(server.key));
+  }, [client]);
+
+  const logoutMcpServer = useCallback(async (server: RuntimeMcpServer) => {
+    setMcpState(await client.logoutMcpServer(server.key));
+  }, [client]);
+
+  const refreshPluginCapabilities = useCallback(async () => {
+    const [pluginList, marketplace, skillList, nextMcpState, nextConfig, nextHookState] = await Promise.all([
+      client.listPlugins(),
+      client.listPluginMarketplace(),
+      client.listSkills(),
+      client.listMcpServers(),
+      client.getConfig(),
+      client.listHooks(activeHookCwds),
+    ]);
+    setPlugins(pluginList.plugins);
+    setPluginMarketplace(marketplace.plugins);
+    setPluginMarketplaceErrors(marketplace.errors);
+    setSkills(skillList.skills);
+    setMcpState(nextMcpState);
+    setConfig(nextConfig);
+    setHookState(nextHookState);
+  }, [activeHookCwds, client]);
+
+  const installMarketplacePlugin = useCallback(async (pluginId: string): Promise<RuntimePluginInstallResult> => {
+    const result = await client.installMarketplacePlugin(pluginId);
+    await refreshPluginCapabilities();
+    return result;
+  }, [client, refreshPluginCapabilities]);
+
+  const removePlugin = useCallback(async (pluginId: string): Promise<void> => {
+    await client.removePlugin(pluginId);
+    await refreshPluginCapabilities();
+  }, [client, refreshPluginCapabilities]);
+
   const previewMemories = useCallback(async () => {
     const isLatest = memoryPreviewRequests.begin();
     setMemoryPreviewLoading(true);
@@ -756,6 +834,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     archivedThreads,
     activityEvents,
     answerApproval,
+    authenticateSkillMcpDependency,
     client,
     config,
     compactCurrentThreadContext,
@@ -776,12 +855,19 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     getSkillDetail,
     hookState,
     loadState,
+    loginMcpServer,
+    installMarketplacePlugin,
+    installSkillMcpDependencies,
     mcpState,
     memories,
     memoryPreview,
     memoryPreviewLoading,
     previewMemories,
+    logoutMcpServer,
     projects,
+    plugins,
+    pluginMarketplace,
+    pluginMarketplaceErrors,
     refresh,
     refreshCapabilities,
     refreshHooks,
@@ -789,6 +875,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     permanentlyDeleteArchivedThreads,
     permanentlyDeleteThread,
     restoreArchivedThread,
+    removePlugin,
     saveMcpServer,
     saveProviders,
     saveRuntimePreferences,
@@ -861,7 +948,7 @@ export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
 
 type RuntimeBootstrapClient = Pick<
   DesktopRuntimeClient,
-  'getConfig' | 'getUsage' | 'getWorkspaceStatus' | 'listMcpServers' | 'listProjects' | 'listSkills' | 'listThreads'
+  'getConfig' | 'getUsage' | 'getWorkspaceStatus' | 'listMcpServers' | 'listPluginMarketplace' | 'listPlugins' | 'listProjects' | 'listSkills' | 'listThreads'
 >;
 
 export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
@@ -876,14 +963,16 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
     Promise.allSettled([
       client.listSkills(),
       client.listMcpServers(),
+      client.listPlugins(),
+      client.listPluginMarketplace(),
       client.getUsage(),
     ]),
   ]);
   const [nextConfig, threadList, allThreadList, projectList, workspaceStatus] = core;
-  const [skillResult, mcpResult, usageResult] = optional;
+  const [skillResult, mcpResult, pluginResult, pluginMarketplaceResult, usageResult] = optional;
   return {
     core: { nextConfig, threadList, allThreadList, projectList, workspaceStatus },
-    optional: { skillResult, mcpResult, usageResult },
+    optional: { skillResult, mcpResult, pluginResult, pluginMarketplaceResult, usageResult },
   };
 }
 

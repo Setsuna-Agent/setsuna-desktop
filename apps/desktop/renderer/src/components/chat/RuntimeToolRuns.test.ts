@@ -356,6 +356,93 @@ describe('RuntimeToolRuns default expansion', () => {
     expect(html).not.toContain('chat-tool-run__preview');
   });
 
+  it('renders MCP form and URL elicitations as structured, query-redacted interactions', () => {
+    const formHtml = renderedHtml([{
+      id: 'call_form',
+      name: 'mcp__profile__collect',
+      status: 'pending_approval',
+      approvalId: 'approval_form',
+      approvalStatus: 'pending',
+      elicitation: {
+        mode: 'form',
+        serverKey: 'profile',
+        message: 'Provide your profile.',
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            displayName: { type: 'string', title: '显示名称' },
+            newsletter: { type: 'boolean', title: '订阅更新' },
+          },
+          required: ['displayName'],
+        },
+      },
+    }]);
+    const urlHtml = renderedHtml([{
+      id: 'call_url',
+      name: 'mcp__auth__login',
+      status: 'pending_approval',
+      approvalId: 'approval_url',
+      approvalStatus: 'pending',
+      elicitation: {
+        mode: 'url',
+        serverKey: 'auth',
+        message: 'Authorize access.',
+        displayUrl: 'https://example.com/authorize',
+        elicitationId: 'elicit_1',
+      },
+    }]);
+
+    expect(renderedTextFromHtml(formHtml)).toContain('MCP Server 请求输入');
+    expect(renderedTextFromHtml(formHtml)).toContain('显示名称必填');
+    expect(formHtml).toContain('name="displayName"');
+    expect(renderedTextFromHtml(urlHtml)).toContain('允许并打开');
+    expect(urlHtml).toContain('https://example.com/authorize');
+    expect(urlHtml).not.toContain('one_time_token');
+  });
+
+  it('renders request_user_input as a structured form with options, defaults, and timeout status', () => {
+    const html = renderedHtml([{
+      id: 'call_input',
+      name: 'request_user_input',
+      status: 'pending_approval',
+      approvalId: 'approval_input',
+      approvalStatus: 'pending',
+      userInput: {
+        title: '发布目标',
+        message: '请选择本次发布环境。',
+        autoResolutionMs: 60_000,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            environment: {
+              type: 'string',
+              title: '环境',
+              default: 'staging',
+              oneOf: [
+                { const: 'staging', title: '预发布', description: '先进行安全验证。' },
+                { const: 'production', title: '生产' },
+              ],
+            },
+            notes: { type: 'string', title: '备注', multiline: true, placeholder: '可选' },
+          },
+          required: ['environment'],
+        },
+      },
+    }]);
+    const text = renderedTextFromHtml(html);
+
+    expect(text).toContain('发布目标');
+    expect(text).toContain('请选择本次发布环境');
+    expect(text).toContain('秒后自动继续');
+    expect(text).toContain('环境必填');
+    expect(text).toContain('先进行安全验证');
+    expect(text).toContain('请勿在此填写密码');
+    expect(html).toContain('<textarea');
+    expect(html).toContain('value="staging" selected=""');
+    expect(text).toContain('跳过');
+  });
+
   it('filters failed runs from the rendered process list', () => {
     expect(renderedText([
       toolRun('failed_file', 'write_file', { file_path: 'selection_sort.py' }, 'error'),

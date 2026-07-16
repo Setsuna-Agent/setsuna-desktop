@@ -11,7 +11,13 @@ import type {
   RuntimeMcpToolCallResult,
   RuntimeMcpToolList,
 } from './mcp.js';
-import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillList, RuntimeSkillPatch } from './skills.js';
+import type {
+  RuntimePluginInstallResult,
+  RuntimePluginList,
+  RuntimePluginMarketplaceList,
+  RuntimePluginRemoveResult,
+} from './plugins.js';
+import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillList, RuntimeSkillMcpDependencyInstallResult, RuntimeSkillPatch } from './skills.js';
 import type {
   CreateThreadInput,
   MessageDeleteInput,
@@ -87,6 +93,12 @@ export type DesktopRuntimeClient = {
   getSkill(skillId: string): Promise<RuntimeSkillDetail>;
   updateSkill(skillId: string, patch: RuntimeSkillPatch): Promise<RuntimeSkillDetail>;
   deleteSkill(skillId: string): Promise<void>;
+  installSkillMcpDependencies(skillId: string): Promise<RuntimeSkillMcpDependencyInstallResult>;
+  authenticateSkillMcpDependency(skillId: string, serverKey: string): Promise<RuntimeSkillDetail>;
+  listPlugins(): Promise<RuntimePluginList>;
+  listPluginMarketplace(): Promise<RuntimePluginMarketplaceList>;
+  installMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
+  removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;
@@ -107,6 +119,8 @@ export type DesktopRuntimeClient = {
   upsertMcpServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;
   updateMcpServer(key: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList>;
   deleteMcpServer(key: string): Promise<void>;
+  loginMcpServer(key: string): Promise<RuntimeMcpServerList>;
+  logoutMcpServer(key: string): Promise<RuntimeMcpServerList>;
   listMcpServerStatuses(): Promise<RuntimeMcpServerStatusList>;
   readMcpServerResource(threadId: string, server: string, uri: string): Promise<RuntimeMcpResourceReadResult>;
   callMcpServerTool(threadId: string, server: string, tool: string, args?: unknown): Promise<RuntimeMcpToolCallResult>;

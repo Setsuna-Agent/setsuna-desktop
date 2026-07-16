@@ -5,9 +5,11 @@ import type { RuntimeUsage } from './usage.js';
 import type {
   RuntimeApprovalAvailableDecision,
   RuntimeExecPolicyAmendment,
+  RuntimeMcpElicitation,
   RuntimeNetworkApprovalContext,
   RuntimeNetworkPolicyAmendment,
   RuntimePermissionApprovalContext,
+  RuntimeUserInputRequest,
 } from './approvals.js';
 
 export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool';
@@ -226,6 +228,8 @@ export type RuntimeToolRun = {
   networkApprovalContext?: RuntimeNetworkApprovalContext;
   proposedNetworkPolicyAmendments?: RuntimeNetworkPolicyAmendment[];
   permissionApprovalContext?: RuntimePermissionApprovalContext;
+  elicitation?: RuntimeMcpElicitation;
+  userInput?: RuntimeUserInputRequest;
   hookRuns?: RuntimeHookRun[];
 };
 

@@ -14,8 +14,20 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import type { AnswerRuntimeApprovalInput, RuntimeApprovalAvailableDecision, RuntimeHookRun, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import type {
+  AnswerRuntimeApprovalInput,
+  RuntimeApprovalAvailableDecision,
+  RuntimeHookRun,
+  RuntimeStructuredInputValue,
+  RuntimeToolRun,
+} from '@setsuna-desktop/contracts';
 import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
+import { RuntimeUserInputActions } from './RuntimeUserInputActions.js';
+import {
+  compactStructuredInputValues,
+  RuntimeStructuredInputField,
+  structuredInputDefaults,
+} from './RuntimeStructuredInputField.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from './markdown/WorkspaceFileLink.js';
 import {
   fileChangeFromToolRun,
@@ -642,6 +654,13 @@ function ToolRunDetails({
   const permissionSummary = permissionApprovalSummary(run);
   const networkSummary = networkApprovalSummary(run);
   const hookRuns = <HookRunList runs={run.hookRuns} />;
+  const approvalActions = pendingApprovalId
+    ? run.userInput
+      ? <RuntimeUserInputActions approvalId={pendingApprovalId} run={run} onAnswerApproval={onAnswerApproval} />
+      : run.elicitation
+        ? <McpElicitationActions approvalId={pendingApprovalId} run={run} onAnswerApproval={onAnswerApproval} />
+        : <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} />
+    : null;
   if (isShellRun(run)) {
     return (
       <>
@@ -650,7 +669,7 @@ function ToolRunDetails({
         {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
         {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
         {hookRuns}
-        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
+        {approvalActions}
       </>
     );
   }
@@ -662,7 +681,7 @@ function ToolRunDetails({
         {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
         {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
         {hookRuns}
-        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
+        {approvalActions}
       </>
     );
   }
@@ -674,7 +693,7 @@ function ToolRunDetails({
         {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
         {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
         {hookRuns}
-        {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
+        {approvalActions}
       </>
     );
   }
@@ -686,7 +705,7 @@ function ToolRunDetails({
       {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
       {diagnostic ? <ToolPreview label={run.status === 'cancelled' ? '已取消' : run.status === 'rejected' ? '已拒绝' : '错误'} value={diagnostic} /> : null}
       {hookRuns}
-      {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
+      {approvalActions}
     </>
   );
 }
@@ -898,6 +917,89 @@ function ApprovalActions({
       </div>
       {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
     </div>
+  );
+}
+
+function McpElicitationActions({
+  approvalId,
+  run,
+  onAnswerApproval,
+}: {
+  approvalId: string;
+  run: RuntimeToolRun;
+  onAnswerApproval: AnswerApprovalHandler;
+}) {
+  const elicitation = run.elicitation;
+  const [values, setValues] = useState<Record<string, RuntimeStructuredInputValue>>(() =>
+    elicitation?.mode === 'form' ? structuredInputDefaults(elicitation.requestedSchema.properties) : {},
+  );
+  const [submittingAction, setSubmittingAction] = useState<'accept' | 'decline' | 'cancel' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!elicitation) return null;
+
+  const submit = async (action: 'accept' | 'decline' | 'cancel') => {
+    if (submittingAction) return;
+    setSubmittingAction(action);
+    setError(null);
+    try {
+      const decision = action === 'accept' ? 'approve' : action === 'decline' ? 'reject' : 'cancel';
+      await onAnswerApproval(approvalId, {
+        decision,
+        elicitationResponse: {
+          action,
+          ...(action === 'accept' && elicitation.mode === 'form'
+            ? { content: compactStructuredInputValues(values) }
+            : {}),
+        },
+      });
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      setSubmittingAction(null);
+    }
+  };
+
+  return (
+    <form
+      className="chat-tool-run__elicitation"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit('accept');
+      }}
+    >
+      <div className="chat-tool-run__elicitation-header">
+        <strong>{elicitation.mode === 'form' ? 'MCP Server 请求输入' : 'MCP Server 请求打开外部页面'}</strong>
+        <span>{elicitation.serverKey}</span>
+      </div>
+      <p className="chat-tool-run__elicitation-message">{elicitation.message}</p>
+      {elicitation.mode === 'form' ? (
+        <div className="chat-tool-run__elicitation-fields">
+          {Object.entries(elicitation.requestedSchema.properties).map(([name, field]) => (
+            <RuntimeStructuredInputField
+              field={field}
+              key={name}
+              name={name}
+              required={elicitation.requestedSchema.required?.includes(name) === true}
+              value={values[name]}
+              onChange={(value) => setValues((current) => ({ ...current, [name]: value }))}
+            />
+          ))}
+        </div>
+      ) : (
+        <code className="chat-tool-run__elicitation-url">{elicitation.displayUrl}</code>
+      )}
+      <div className="chat-tool-run__actions">
+        <button type="submit" disabled={Boolean(submittingAction)}>
+          {submittingAction === 'accept' ? '提交中' : elicitation.mode === 'form' ? '提交' : '允许并打开'}
+        </button>
+        <button type="button" disabled={Boolean(submittingAction)} onClick={() => void submit('decline')}>
+          {submittingAction === 'decline' ? '拒绝中' : '拒绝'}
+        </button>
+        <button type="button" disabled={Boolean(submittingAction)} onClick={() => void submit('cancel')}>
+          {submittingAction === 'cancel' ? '取消中' : '取消本轮'}
+        </button>
+      </div>
+      {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
+    </form>
   );
 }
 

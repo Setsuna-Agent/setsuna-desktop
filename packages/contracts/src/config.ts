@@ -67,6 +67,9 @@ export type RuntimeHookHandlerConfig = {
   timeoutSec?: number;
   async?: boolean;
   statusMessage?: string;
+  /** Set by the local plugin runtime; plugin hooks remain untrusted until approved. */
+  pluginId?: string;
+  sourcePath?: string;
 };
 
 export type RuntimeHookMatcherGroup = {

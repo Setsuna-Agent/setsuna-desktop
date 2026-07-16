@@ -25,6 +25,12 @@ describe('skill management tool host', () => {
       description: 'Helps create local skills from chat',
       content: '# Conversation Helper\n\nUse chat context.',
       selected: true,
+      mcp_dependencies: [{
+        type: 'mcp',
+        value: 'docs',
+        transport: 'streamable_http',
+        url: 'https://developers.openai.com/mcp',
+      }],
     });
 
     expect(created.content).toContain('Skill configured: Conversation Helper');
@@ -37,6 +43,8 @@ describe('skill management tool host', () => {
       name: 'Conversation Helper',
     });
     expect(saved?.path ? await readFile(saved.path, 'utf8') : '').toContain('name: "Conversation Helper"');
+    expect(saved?.path ? await readFile(path.join(path.dirname(saved.path), 'agents', 'openai.yaml'), 'utf8') : '')
+      .toContain('value: docs');
 
     await expect(host.previewToolCall('configure_skill', {
       id: 'conversation-helper',

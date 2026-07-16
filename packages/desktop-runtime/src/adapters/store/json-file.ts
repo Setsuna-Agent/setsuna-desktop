@@ -19,9 +19,13 @@ export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T>
 }
 
 export async function writeJsonFile(filePath: string, value: unknown, options: { mode?: number } = {}): Promise<void> {
+  await writeTextFile(filePath, `${JSON.stringify(value, null, 2)}\n`, options);
+}
+
+export async function writeTextFile(filePath: string, content: string, options: { mode?: number } = {}): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: options.mode });
+  await writeFile(tempPath, content, { encoding: 'utf8', mode: options.mode });
   try {
     await renameWithRetry(tempPath, filePath);
   } catch (error) {

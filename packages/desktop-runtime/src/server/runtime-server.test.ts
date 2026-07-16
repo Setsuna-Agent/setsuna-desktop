@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { appServerCommandSandboxProfile } from './app-server/command-exec.js';
 import type { AppServerPtyFactory } from './app-server/command-exec.js';
 import { createRuntimeServer, type RuntimeServer } from './runtime-server.js';
+import { InMemoryDesktopNativeBridge } from '../adapters/store/in-memory-secret-store.js';
 
 describe('runtime server', () => {
   let server: RuntimeServer;
@@ -336,6 +337,83 @@ describe('runtime server', () => {
       selected: true,
       enabled: true,
     });
+  });
+
+  it('lists the default marketplace and installs a selected plugin by id', async () => {
+    await expect(runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
+      errors: [],
+      plugins: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'openai-docs',
+          name: 'OpenAI 官方文档',
+          installed: false,
+          capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
+        }),
+        expect.objectContaining({
+          id: 'context7-docs',
+          name: 'Context7 文档查询',
+          installed: false,
+        }),
+      ]),
+    });
+
+    const installed = await runtimeFetch('/v1/plugin-marketplace/context7-docs/install', {
+      method: 'POST',
+    });
+
+    expect(installed).toMatchObject({
+      plugin: {
+        id: 'context7-docs',
+        skills: [{ id: 'context7-docs.context7-docs', name: 'Context7 文档查询' }],
+      },
+      installedMcpServers: ['context7'],
+    });
+    await expect(runtimeFetch('/v1/mcp/servers')).resolves.toMatchObject({
+      servers: [expect.objectContaining({
+        key: 'context7',
+        transport: 'streamableHttp',
+        url: 'https://mcp.context7.com/mcp',
+        enabled: true,
+        requireApproval: 'prompt',
+        trustLevel: 'untrusted',
+      })],
+    });
+    await expect(runtimeFetch('/v1/plugins')).resolves.toMatchObject({
+      plugins: [expect.objectContaining({ id: 'context7-docs' })],
+    });
+    await expect(runtimeFetch('/v1/skills')).resolves.toMatchObject({
+      skills: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context7-docs.context7-docs',
+          kind: 'plugin',
+          pluginId: 'context7-docs',
+          mcpDependencies: [expect.objectContaining({ value: 'context7', status: 'ready' })],
+        }),
+      ]),
+    });
+
+    await expect(runtimeFetch('/v1/plugins/context7-docs', { method: 'DELETE' })).resolves.toEqual({
+      pluginId: 'context7-docs',
+      removedMcpServers: ['context7'],
+      preservedMcpServers: [],
+    });
+    await expect(runtimeFetch('/v1/plugins')).resolves.toEqual({ plugins: [] });
+    await expect(runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
+      plugins: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs', installed: false })]),
+    });
+  });
+
+  it('does not expose local path side-loading through the renderer REST surface', async () => {
+    const response = await fetch(`${baseUrl}/v1/plugins`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ path: '/tmp/plugin' }),
+    });
+
+    expect(response.status).toBe(404);
   });
 
   it('supports AppServer skills list, extra roots, and config writes', async () => {
@@ -3702,12 +3780,16 @@ describe('runtime server', () => {
         data: [
           {
             name: 'docs',
-            serverInfo: null,
+            serverInfo: { name: 'test-mcp', version: '1.0.0' },
             tools: {
-              search: {
-                name: 'search',
-                description: 'Search docs',
-                inputSchema: { type: 'object', properties: {}, additionalProperties: true },
+              search_web: {
+                name: 'search_web',
+                description: 'Search the web',
+                inputSchema: { type: 'object' },
+              },
+              summarize_page: {
+                name: 'summarize_page',
+                inputSchema: { type: 'object' },
               },
             },
             resources: [
@@ -3729,6 +3811,10 @@ describe('runtime server', () => {
               },
             ],
             authStatus: 'bearerToken',
+            connectionState: 'ready',
+            protocolVersion: '2025-11-25',
+            connectedAt: expect.any(String),
+            updatedAt: expect.any(String),
           },
         ],
         nextCursor: null,
@@ -3830,12 +3916,9 @@ describe('runtime server', () => {
       id: 'http_oauth_server',
       method: 'mcpServer/oauth/login',
       params: { name: 'docs', threadId: null, scopes: ['read'], timeoutSecs: 1 },
-    })).resolves.toMatchObject({
+    })).resolves.toEqual({
       id: 'http_oauth_server',
-      error: {
-        code: -32603,
-        message: expect.stringContaining("failed to login to MCP server 'docs'"),
-      },
+      result: {},
     });
   });
 
@@ -3854,8 +3937,8 @@ describe('runtime server', () => {
 
       expect(tools).toEqual({
         tools: [
-          { name: 'search_web', description: 'Search the web' },
-          { name: 'summarize_page' },
+          { name: 'search_web', description: 'Search the web', inputSchema: { type: 'object' } },
+          { name: 'summarize_page', inputSchema: { type: 'object' } },
         ],
         errors: [],
       });
@@ -3978,6 +4061,7 @@ describe('runtime server', () => {
       dataDir,
       token,
       version: 'test',
+      nativeBridge: new InMemoryDesktopNativeBridge(),
       // Windows CI can lack an attachable ConPTY console; keep these protocol tests off real node-pty there.
       commandExecPtyFactory: process.platform === 'win32' ? createTestAppServerPtyFactory() : undefined,
     });
@@ -4795,9 +4879,20 @@ async function createMcpToolsServer(): Promise<{
     resolveRequests = resolve;
   });
   const server = createServer(async (request, response) => {
+    if (request.method === 'GET') {
+      response.writeHead(405);
+      response.end();
+      return;
+    }
+    if (request.method === 'DELETE') {
+      response.writeHead(200);
+      response.end();
+      return;
+    }
     const body = JSON.parse(await readRequestText(request)) as {
+      id?: string | number;
       method?: string;
-      params?: { name?: string; uri?: string; arguments?: { query?: string } };
+      params?: { protocolVersion?: string; name?: string; uri?: string; arguments?: { query?: string } };
     };
     requests.push({
       method: body.method,
@@ -4812,10 +4907,10 @@ async function createMcpToolsServer(): Promise<{
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'mcp-session-id': 'session_1' });
       response.end(JSON.stringify({
         jsonrpc: '2.0',
-        id: 1,
+        id: body.id,
         result: {
-          protocolVersion: '2024-11-05',
-          capabilities: { tools: {} },
+          protocolVersion: body.params?.protocolVersion,
+          capabilities: { tools: {}, resources: {} },
           serverInfo: { name: 'test-mcp', version: '1.0.0' },
         },
       }));
@@ -4830,7 +4925,7 @@ async function createMcpToolsServer(): Promise<{
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify({
         jsonrpc: '2.0',
-        id: 2,
+        id: body.id,
         result: {
           resources: [
             {
@@ -4850,7 +4945,7 @@ async function createMcpToolsServer(): Promise<{
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify({
         jsonrpc: '2.0',
-        id: 2,
+        id: body.id,
         result: {
           resourceTemplates: [
             {
@@ -4870,7 +4965,7 @@ async function createMcpToolsServer(): Promise<{
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify({
         jsonrpc: '2.0',
-        id: 2,
+        id: body.id,
         result: {
           contents: [
             {
@@ -4888,7 +4983,7 @@ async function createMcpToolsServer(): Promise<{
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify({
         jsonrpc: '2.0',
-        id: 2,
+        id: body.id,
         result: {
           content: [{ type: 'text', text: `result for ${body.params?.arguments?.query ?? ''}` }],
           structuredContent: { query: body.params?.arguments?.query, count: 1 },
@@ -4902,11 +4997,11 @@ async function createMcpToolsServer(): Promise<{
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     response.end(JSON.stringify({
       jsonrpc: '2.0',
-      id: 2,
+      id: body.id,
       result: {
         tools: [
-          { name: 'summarize_page' },
-          { name: 'search_web', description: 'Search the web' },
+          { name: 'summarize_page', inputSchema: { type: 'object' } },
+          { name: 'search_web', description: 'Search the web', inputSchema: { type: 'object' } },
         ],
       },
     }));

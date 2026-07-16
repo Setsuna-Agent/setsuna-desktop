@@ -2803,6 +2803,103 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 6px;
 }
 
+.chat-tool-run__elicitation {
+  display: flex;
+  width: min(560px, 100%);
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-muted);
+}
+
+.chat-tool-run__elicitation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.chat-tool-run__elicitation-header span,
+.chat-tool-run__elicitation-field small {
+  color: var(--app-text-muted);
+}
+
+.chat-tool-run__elicitation-message {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+
+.chat-tool-run__elicitation-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.chat-tool-run__elicitation-field {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.chat-tool-run__elicitation-field > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-tool-run__elicitation-field em {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.chat-tool-run__elicitation-field input:not([type='checkbox']),
+.chat-tool-run__elicitation-field select,
+.chat-tool-run__elicitation-field textarea {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  font: inherit;
+}
+
+.chat-tool-run__elicitation-field textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.chat-tool-run__elicitation-field select[multiple] {
+  min-height: 72px;
+}
+
+.chat-tool-run__elicitation-field--boolean {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.chat-tool-run__elicitation-field--boolean small {
+  grid-column: 1 / -1;
+}
+
+.chat-tool-run__elicitation-url {
+  overflow-wrap: anywhere;
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.chat-tool-run__user-input-note {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
 .chat-tool-run__actions button {
   min-width: 54px;
   height: 28px;

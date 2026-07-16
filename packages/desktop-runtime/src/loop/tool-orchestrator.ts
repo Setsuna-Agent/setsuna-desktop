@@ -796,6 +796,8 @@ export class ToolOrchestrator {
     const additionalPermissionRequirement = assessAdditionalSandboxPermissionsApproval(toolCall, parsedArguments, context, approvalPolicy, Boolean(this.options.approvalGate), environment);
     if (additionalPermissionRequirement) return additionalPermissionRequirement;
     const requestsSandboxBypass = requestedSandboxBypass(toolCall.name, parsedArguments);
+    const runtimeProfile = await this.options.toolHost.toolRuntimeProfile?.(toolCall.name, context);
+    if (runtimeProfile?.approvalMode === 'selfManaged' && !requestsSandboxBypass) return { action: 'skip' };
     if (!this.options.approvalGate) {
       return requestsSandboxBypass
         ? { action: 'reject', reason: 'Unsandboxed shell execution requires an interactive approval gate.' }

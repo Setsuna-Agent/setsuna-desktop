@@ -17,6 +17,10 @@ import type {
   RuntimeMcpResourceReadResult,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolList,
+  RuntimePluginInstallResult,
+  RuntimePluginList,
+  RuntimePluginMarketplaceList,
+  RuntimePluginRemoveResult,
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeFetchModelsInput,
@@ -27,6 +31,7 @@ import type {
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillList,
+  RuntimeSkillMcpDependencyInstallResult,
   RuntimeSkillPatch,
   RuntimeReviewTarget,
   RuntimeThread,
@@ -208,6 +213,36 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         method: 'DELETE',
       });
     },
+    installSkillMcpDependencies(skillId: string) {
+      return request<RuntimeSkillMcpDependencyInstallResult>({
+        path: `/v1/skills/${encodeURIComponent(skillId)}/mcp-dependencies/install`,
+        method: 'POST',
+      });
+    },
+    authenticateSkillMcpDependency(skillId: string, serverKey: string) {
+      return request<RuntimeSkillDetail>({
+        path: `/v1/skills/${encodeURIComponent(skillId)}/mcp-dependencies/${encodeURIComponent(serverKey)}/login`,
+        method: 'POST',
+      });
+    },
+    listPlugins() {
+      return request<RuntimePluginList>({ path: '/v1/plugins' });
+    },
+    listPluginMarketplace() {
+      return request<RuntimePluginMarketplaceList>({ path: '/v1/plugin-marketplace' });
+    },
+    installMarketplacePlugin(pluginId: string) {
+      return request<RuntimePluginInstallResult>({
+        path: `/v1/plugin-marketplace/${encodeURIComponent(pluginId)}/install`,
+        method: 'POST',
+      });
+    },
+    removePlugin(pluginId: string) {
+      return request<RuntimePluginRemoveResult>({
+        path: `/v1/plugins/${encodeURIComponent(pluginId)}`,
+        method: 'DELETE',
+      });
+    },
     listProjects() {
       return request<WorkspaceProjectList>({ path: '/v1/projects' });
     },
@@ -293,6 +328,12 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     deleteMcpServer(key: string) {
       return request<void>({ path: `/v1/mcp/servers/${encodeURIComponent(key)}`, method: 'DELETE' });
+    },
+    loginMcpServer(key: string) {
+      return request<RuntimeMcpServerList>({ path: `/v1/mcp/servers/${encodeURIComponent(key)}/oauth/login`, method: 'POST' });
+    },
+    logoutMcpServer(key: string) {
+      return request<RuntimeMcpServerList>({ path: `/v1/mcp/servers/${encodeURIComponent(key)}/oauth/logout`, method: 'POST' });
     },
     listMcpServerStatuses() {
       return appServerRequest<RuntimeMcpServerStatusList>('mcpServerStatus/list', { detail: 'full' });

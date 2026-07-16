@@ -17,13 +17,16 @@ runtime CLI 读取端口、数据目录、token、内置 skills 目录，创建 
 - `FileUsageStore`：usage jsonl。
 - `FileMcpStore`：MCP server 配置。
 - `FileMemoryStore`：本地 memory。
-- `FileSkillRegistry`：内置和用户 Skill。
+- `FileSkillRegistry`：内置、Plugin 和用户 Skill。
+- `FilePluginBundleStore`：校验、安装和可逆卸载本地 Plugin Bundle，并协调 Skill、MCP、Hook 和资源所有权。
+- `FilePluginMarketplace`：扫描应用随包发布的精选目录，只向 renderer 投影无路径市场摘要，并按插件 ID 委托 Bundle Store 安装。
 - `FileWorkspaceProjectStore`：workspace 项目、文件、搜索。
 - `WorkspaceRuntimeEnvironmentResolver`：从选中的 workspace 生成一次规范化环境快照，并补充 Git root / workspace prefix。
 - `InMemoryApprovalGate`：审批状态。
 - `InMemoryEventBus`：SSE 广播。
 - `ConfiguredModelClient`：按配置选择 provider。
-- `CompositeToolHost`：组合 MCP 管理、MCP runtime、本地 PC 工具、Skill 管理、memory 工具。
+- `CompositeToolHost`：组合 MCP 管理、MCP runtime、本地 PC 工具、Skill/Plugin 管理、Plugin 资源、memory 工具和工作区图片读取。
+- `UserInputToolHost`：把模型发起的结构化选择/表单接入可审计的暂停与恢复流程，并处理可选自动超时。
 - `BrowserToolHost`：通过 main 所拥有的 browser control adapter 暴露 tabs/snapshot/click/type/scroll/key/navigate/wait。
 - `AgentLoop`：执行对话和工具循环。
 
@@ -57,6 +60,7 @@ REST 路由覆盖：
 - approvals。
 - memories。
 - MCP servers/tools。
+- 默认插件市场列表、按插件 ID 安装、已安装插件列表和卸载；路径侧载不通过 renderer REST 暴露。
 
 新增路由时保持这条扩散路径：
 
@@ -263,6 +267,15 @@ REST 路由覆盖：
 ### `CompositeToolHost`
 
 把多个 ToolHost 合并为一个工具面。新增工具时要考虑名称冲突、system prompt 顺序、审批和 preview。
+
+### 结构化用户输入
+
+`UserInputToolHost` 暴露 `request_user_input`，支持文本、多行文本、数字、布尔、单选和多选字段：
+
+- 工具自己维护 `approval.requested -> 用户回答/超时 -> approval.resolved` 生命周期，`approvalMode: "selfManaged"` 避免严格模式额外生成一层通用审批。
+- 60–240 秒的 `auto_resolution_ms` 只用于非阻塞问题；超时后只返回字段中显式声明的默认值。
+- schema 和超时可以写入事件，表单值只在内存审批中短暂存在，消费后清理；正常工具结果再把用户答案传给模型。
+- UI 和 `InMemoryApprovalGate` 都做字段校验，运行时提示禁止通过该工具索取密码、API Key 或 token。
 
 ### MCP 管理和运行
 

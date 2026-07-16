@@ -1,7 +1,13 @@
 import path from 'node:path';
 import type { WebContents } from 'electron';
 import { describe, expect, it, vi } from 'vitest';
-import { RuntimeHost, resolveBuiltinSkillsDir, resolvePackagedRuntimeEntry, resolveRuntimeSpawnCwd } from './runtime-host.js';
+import {
+  RuntimeHost,
+  resolveBuiltinPluginsDir,
+  resolveBuiltinSkillsDir,
+  resolvePackagedRuntimeEntry,
+  resolveRuntimeSpawnCwd,
+} from './runtime-host.js';
 
 describe('runtime host packaging paths', () => {
   it('uses a real directory for the runtime child process cwd when packaged in asar', () => {
@@ -36,6 +42,14 @@ describe('runtime host packaging paths', () => {
     const appRoot = '/Users/zy/Documents/setsuna-desktop';
 
     expect(resolveBuiltinSkillsDir(appRoot)).toBe(path.join('/Users/zy/Documents/setsuna-desktop', 'skills'));
+  });
+
+  it('points the default plugin marketplace at the app-managed catalog', () => {
+    const appRoot = path.join('/Applications/Setsuna Desktop.app/Contents/Resources', 'app.asar');
+
+    expect(resolveBuiltinPluginsDir(appRoot)).toBe(
+      path.join('/Applications/Setsuna Desktop.app/Contents/Resources/app.asar/plugins'),
+    );
   });
 
   it('reconnects a dropped SSE stream from the last delivered sequence', async () => {

@@ -1,5 +1,5 @@
 import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import type { ToolExecutionContext, ToolExecutionResult, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
+import type { ToolExecutionContext, ToolExecutionResult, ToolExternalContext, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 
 export class CompositeToolHost implements ToolHost {
   private readonly toolNamesByContext = new WeakMap<ToolExecutionContext, Map<ToolHost, Set<string>>>();
@@ -35,6 +35,19 @@ export class CompositeToolHost implements ToolHost {
       return typeof prompt === 'string' && prompt.trim() ? prompt.trim() : '';
     }));
     return prompts.filter(Boolean).join('\n\n') || null;
+  }
+
+  async externalContext(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<ToolExternalContext[]> {
+    const advertisedNames = request ? new Set(request.tools.map((tool) => tool.name)) : null;
+    const ownedToolNames = advertisedNames ? await this.ownershipFor(context) : null;
+    const contexts = await Promise.all(this.hosts.map(async (host) => {
+      if (advertisedNames) {
+        const hostToolNames = ownedToolNames?.get(host);
+        if (!hostToolNames || !setsOverlap(hostToolNames, advertisedNames)) return [];
+      }
+      return await host.externalContext?.(context, request) ?? [];
+    }));
+    return contexts.flat();
   }
 
   async toolChoice(context: ToolExecutionContext, request: { tools: RuntimeToolDefinition[]; messages: RuntimeMessage[] }): Promise<RuntimeToolChoice | null> {

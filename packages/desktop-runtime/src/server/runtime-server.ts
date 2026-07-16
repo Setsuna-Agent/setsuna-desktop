@@ -19,14 +19,17 @@ export type { RuntimeServer, RuntimeServerOptions } from './types.js';
 /**
  * 创建本地 HTTP runtime，只允许 Electron main 通过 loopback + bearer token 访问。
  *
- * @param options runtime server 的数据目录、认证 token、版本和内置 skills 目录。
+ * @param options runtime server 的数据目录、认证 token、版本、内置 skills 与精选插件目录。
  */
 export async function createRuntimeServer(options: RuntimeServerOptions): Promise<RuntimeServer> {
   const startedAt = new Date().toISOString();
   const runtime = createRuntimeFactory({
     dataDir: options.dataDir,
     builtinSkillsDir: options.builtinSkillsDir,
+    builtinPluginsDir: options.builtinPluginsDir,
+    nativeBridge: options.nativeBridge,
   });
+  await runtime.mcpStore.migrateLegacySecrets();
   await runtime.threadStore.recover();
   // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
   await settleStaleRuntimeTurns(runtime);
@@ -138,6 +141,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         commandExecManager.terminateAll();
         fsManager.terminateAll();
         await runtime.agentLoop.shutdown();
+        await runtime.mcpConnections.shutdown();
         await runtime.eventWriter.flushAll();
         await runtime.threadStore.flush();
         await serverClosed;

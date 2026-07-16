@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type {
@@ -8,8 +9,10 @@ import type {
   RuntimeMcpServerPatch,
   RuntimeMcpToolInfo,
   RuntimeMcpTransport,
+  RuntimeMcpTrustLevel,
 } from '@setsuna-desktop/contracts';
 import type { McpStore } from '../../ports/mcp-store.js';
+import type { SecretStore } from '../../ports/secret-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
@@ -53,6 +56,8 @@ type StoredMcpServer = {
   required?: boolean;
   requireApproval?: string;
   require_approval?: string;
+  trustLevel?: string;
+  trust_level?: string;
   defaultToolsApprovalMode?: string;
   default_tools_approval_mode?: string;
   enabled?: boolean;
@@ -65,6 +70,8 @@ type StoredMcpServer = {
   disabled_tools?: unknown;
   tools?: unknown;
   env?: Record<string, unknown>;
+  envCredentialRefs?: Record<string, unknown>;
+  env_credential_refs?: Record<string, unknown>;
   headers?: Record<string, unknown>;
   httpHeaders?: Record<string, unknown>;
   http_headers?: Record<string, unknown>;
@@ -72,6 +79,8 @@ type StoredMcpServer = {
   env_http_headers?: Record<string, unknown>;
   extraHeaders?: Record<string, unknown>;
   extra_headers?: Record<string, unknown>;
+  httpHeaderCredentialRefs?: Record<string, unknown>;
+  http_header_credential_refs?: Record<string, unknown>;
   bearerTokenEnvVar?: string;
   bearer_token_env_var?: string;
   bearer_token?: unknown;
@@ -85,7 +94,10 @@ type StoredMcpServer = {
 export class FileMcpStore implements McpStore {
   readonly configPath: string;
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    private readonly secretStore: SecretStore,
+  ) {
     this.configPath = path.join(dataDir, 'mcp.json');
   }
 
@@ -105,8 +117,11 @@ export class FileMcpStore implements McpStore {
 
   async listServerInputs(): Promise<RuntimeMcpServerInput[]> {
     const { config } = await this.readConfig();
-    return Object.entries(config.mcpServers ?? {})
-      .map(([key, server]) => normalizeServerInput(key, server))
+    const servers = await Promise.all(Object.entries(config.mcpServers ?? {}).map(async ([key, stored]) => {
+      const server = normalizeServerInput(key, stored);
+      return server ? this.hydrateServerSecrets(server, stored) : null;
+    }));
+    return servers
       .filter((server): server is RuntimeMcpServerInput => Boolean(server))
       .sort((left, right) => (left.label ?? left.key).localeCompare(right.label ?? right.key) || left.key.localeCompare(right.key));
   }
@@ -116,13 +131,15 @@ export class FileMcpStore implements McpStore {
       const key = normalizeKey(input.key);
       const { config } = await this.readConfig();
       const previous = config.mcpServers?.[key] ?? {};
-      const next = applyServerInput(previous, input);
+      const next = await this.applyServerInputWithSecrets(key, previous, input);
       validateStoredServer(key, next);
+      const stored = pruneTransportFields(next);
       config.mcpServers = {
         ...(config.mcpServers ?? {}),
-        [key]: pruneTransportFields(next),
+        [key]: stored,
       };
       await this.writeConfig(config);
+      await this.deleteOrphanedCredentials(previous, stored);
       return this.listServers();
     });
   }
@@ -132,13 +149,16 @@ export class FileMcpStore implements McpStore {
       const key = normalizeKey(keyInput);
       const { config } = await this.readConfig();
       if (!config.mcpServers?.[key]) throw new Error(`MCP server not found: ${key}`);
-      const next = applyServerInput(config.mcpServers[key], { ...patch, key });
+      const previous = config.mcpServers[key];
+      const next = await this.applyServerInputWithSecrets(key, previous, { ...patch, key });
       validateStoredServer(key, next);
+      const stored = pruneTransportFields(next);
       config.mcpServers = {
         ...config.mcpServers,
-        [key]: pruneTransportFields(next),
+        [key]: stored,
       };
       await this.writeConfig(config);
+      await this.deleteOrphanedCredentials(previous, stored);
       return this.listServers();
     });
   }
@@ -170,11 +190,111 @@ export class FileMcpStore implements McpStore {
     await withFileStateUpdate(this.configPath, async () => {
       const key = normalizeKey(keyInput);
       const { config } = await this.readConfig();
-      if (!config.mcpServers?.[key]) return;
+      const deleted = config.mcpServers?.[key];
+      if (!deleted) return;
       const { [key]: _deleted, ...rest } = config.mcpServers;
       config.mcpServers = rest;
       await this.writeConfig(config);
+      await this.deleteCredentials(storedCredentialRefs(deleted));
     });
+  }
+
+  /** Moves legacy inline env/header values into the native credential vault. */
+  async migrateLegacySecrets(): Promise<void> {
+    const status = await this.secretStore.status().catch(() => ({ available: false, backend: 'unavailable' }));
+    if (!status.available) return;
+    await withFileStateUpdate(this.configPath, async () => {
+      const { config } = await this.readConfig();
+      let changed = false;
+      for (const [key, server] of Object.entries(config.mcpServers)) {
+        const env = stringMap(server.env);
+        const headers = stringMap(serverStaticHeaders(server));
+        if (env && Object.keys(env).length) {
+          setStoredEnvCredentialRefs(server, {
+            ...storedEnvCredentialRefs(server),
+            ...await this.storeSecretMap(key, 'env', env),
+          });
+          delete server.env;
+          changed = true;
+        }
+        if (headers && Object.keys(headers).length) {
+          setStoredHeaderCredentialRefs(server, {
+            ...storedHeaderCredentialRefs(server),
+            ...await this.storeSecretMap(key, 'header', headers),
+          });
+          deleteStoredStaticHeaders(server);
+          changed = true;
+        }
+      }
+      if (changed) await this.writeConfig(config);
+    });
+  }
+
+  private async applyServerInputWithSecrets(
+    key: string,
+    previous: StoredMcpServer,
+    input: RuntimeMcpServerInput,
+  ): Promise<StoredMcpServer> {
+    const next = applyServerInput(previous, { ...input, env: undefined, headers: undefined });
+    if (input.env !== undefined) {
+      const refs = await this.storeSecretMap(key, 'env', input.env);
+      setStoredEnvCredentialRefs(next, refs);
+      delete next.env;
+    }
+    if (input.headers !== undefined) {
+      const refs = await this.storeSecretMap(key, 'header', input.headers);
+      setStoredHeaderCredentialRefs(next, refs);
+      deleteStoredStaticHeaders(next);
+    }
+    return next;
+  }
+
+  private async hydrateServerSecrets(
+    server: RuntimeMcpServerInput,
+    stored: StoredMcpServer,
+  ): Promise<RuntimeMcpServerInput> {
+    const env = await this.resolveSecretMap(storedEnvCredentialRefs(stored));
+    const headers = await this.resolveSecretMap(storedHeaderCredentialRefs(stored));
+    return {
+      ...server,
+      ...(Object.keys(env).length ? { env: { ...(server.env ?? {}), ...env } } : {}),
+      ...(Object.keys(headers).length ? { headers: { ...(server.headers ?? {}), ...headers } } : {}),
+    };
+  }
+
+  private async storeSecretMap(
+    serverKey: string,
+    kind: 'env' | 'header',
+    values: Record<string, string>,
+  ): Promise<Record<string, string>> {
+    const normalized = normalizeStringMap(values) ?? {};
+    if (Object.keys(normalized).length) {
+      const status = await this.secretStore.status();
+      if (!status.available) {
+        throw new Error(`Secure credential storage is unavailable (backend: ${status.backend}).`);
+      }
+    }
+    const refs = Object.fromEntries(Object.keys(normalized).map((name) => [name, mcpCredentialKey(serverKey, kind, name)]));
+    await Promise.all(Object.entries(normalized).map(([name, value]) => this.secretStore.set(refs[name], value)));
+    return refs;
+  }
+
+  private async resolveSecretMap(refs: Record<string, string>): Promise<Record<string, string>> {
+    const entries = await Promise.all(Object.entries(refs).map(async ([name, ref]) => {
+      const value = await this.secretStore.get(ref);
+      if (value === undefined) throw new Error(`Stored MCP credential is missing for '${name}'.`);
+      return [name, value] as const;
+    }));
+    return Object.fromEntries(entries);
+  }
+
+  private async deleteOrphanedCredentials(previous: StoredMcpServer, next: StoredMcpServer): Promise<void> {
+    const retained = new Set(storedCredentialRefs(next));
+    await this.deleteCredentials(storedCredentialRefs(previous).filter((ref) => !retained.has(ref)));
+  }
+
+  private async deleteCredentials(refs: string[]): Promise<void> {
+    await Promise.allSettled([...new Set(refs)].map((ref) => this.secretStore.delete(ref)));
   }
 
   private async readConfig(): Promise<{ config: NormalizedStoredMcpConfig; errors: string[] }> {
@@ -204,7 +324,7 @@ export class FileMcpStore implements McpStore {
 
   private async writeConfig(config: NormalizedStoredMcpConfig): Promise<void> {
     await mkdir(path.dirname(this.configPath), { recursive: true });
-    await writeJsonFile(this.configPath, { [config.topLevelKey]: config.mcpServers });
+    await writeJsonFile(this.configPath, { [config.topLevelKey]: config.mcpServers }, { mode: 0o600 });
   }
 }
 
@@ -244,6 +364,7 @@ function normalizeServer(
       toolTimeoutMs,
       required: rawServer.required === true,
       requireApproval: normalizeRequireApproval(serverApprovalMode(rawServer)),
+      trustLevel: normalizeTrustLevel(rawServer.trustLevel ?? rawServer.trust_level),
       enabled: rawServer.enabled !== false && rawServer.disabled !== true,
       allowedTools: stringList(rawServer.allowedTools ?? rawServer.allowed_tools ?? rawServer.enabledTools ?? rawServer.enabled_tools),
       disabledTools: stringList(rawServer.disabledTools ?? rawServer.disabled_tools),
@@ -287,6 +408,7 @@ function normalizeServerInput(rawKey: string, rawServer: StoredMcpServer): Runti
       toolTimeoutMs,
       required: rawServer.required === true,
       requireApproval: normalizeRequireApproval(serverApprovalMode(rawServer)),
+      trustLevel: normalizeTrustLevel(rawServer.trustLevel ?? rawServer.trust_level),
       enabled: rawServer.enabled !== false && rawServer.disabled !== true,
       allowedTools: stringList(rawServer.allowedTools ?? rawServer.allowed_tools ?? rawServer.enabledTools ?? rawServer.enabled_tools),
       disabledTools: stringList(rawServer.disabledTools ?? rawServer.disabled_tools),
@@ -321,6 +443,10 @@ function applyServerInput(previous: StoredMcpServer, input: RuntimeMcpServerInpu
     delete next.defaultToolsApprovalMode;
     delete next.requireApproval;
     delete next.require_approval;
+  }
+  if (input.trustLevel !== undefined) {
+    next.trust_level = normalizeTrustLevel(input.trustLevel);
+    delete next.trustLevel;
   }
   if (input.enabled !== undefined) next.enabled = input.enabled;
   if (input.allowedTools !== undefined) {
@@ -382,6 +508,8 @@ function pruneTransportFields(server: StoredMcpServer): StoredMcpServer {
     delete next.env_http_headers;
     delete next.extraHeaders;
     delete next.extra_headers;
+    delete next.httpHeaderCredentialRefs;
+    delete next.http_header_credential_refs;
     delete next.bearerTokenEnvVar;
     delete next.bearer_token_env_var;
     delete next.bearer_token;
@@ -395,6 +523,8 @@ function pruneTransportFields(server: StoredMcpServer): StoredMcpServer {
     delete next.args;
     delete next.cwd;
     delete next.env;
+    delete next.envCredentialRefs;
+    delete next.env_credential_refs;
   }
   return next;
 }
@@ -423,6 +553,46 @@ function serverEnvHttpHeaders(server: StoredMcpServer): unknown {
   return server.envHttpHeaders ?? server.env_http_headers;
 }
 
+function storedEnvCredentialRefs(server: StoredMcpServer): Record<string, string> {
+  return stringMap(server.envCredentialRefs ?? server.env_credential_refs) ?? {};
+}
+
+function storedHeaderCredentialRefs(server: StoredMcpServer): Record<string, string> {
+  return stringMap(server.httpHeaderCredentialRefs ?? server.http_header_credential_refs) ?? {};
+}
+
+function setStoredEnvCredentialRefs(server: StoredMcpServer, refs: Record<string, string>): void {
+  if (Object.keys(refs).length) server.env_credential_refs = refs;
+  else delete server.env_credential_refs;
+  delete server.envCredentialRefs;
+}
+
+function setStoredHeaderCredentialRefs(server: StoredMcpServer, refs: Record<string, string>): void {
+  if (Object.keys(refs).length) server.http_header_credential_refs = refs;
+  else delete server.http_header_credential_refs;
+  delete server.httpHeaderCredentialRefs;
+}
+
+function deleteStoredStaticHeaders(server: StoredMcpServer): void {
+  delete server.headers;
+  delete server.httpHeaders;
+  delete server.http_headers;
+  delete server.extraHeaders;
+  delete server.extra_headers;
+}
+
+function storedCredentialRefs(server: StoredMcpServer): string[] {
+  return uniqueSorted([
+    ...Object.values(storedEnvCredentialRefs(server)),
+    ...Object.values(storedHeaderCredentialRefs(server)),
+  ]);
+}
+
+function mcpCredentialKey(serverKey: string, kind: 'env' | 'header', name: string): string {
+  const digest = createHash('sha256').update(`${kind}\0${name}`).digest('hex');
+  return `mcp.server.${serverKey}.${kind}.${digest}`;
+}
+
 function serverOauthClientId(server: StoredMcpServer): string | undefined {
   const oauth = plainRecord(server.oauth);
   return nonEmpty(server.oauthClientId ?? server.oauth_client_id ?? oauth?.clientId ?? oauth?.client_id);
@@ -433,13 +603,21 @@ function serverOauthResource(server: StoredMcpServer): string | undefined {
 }
 
 function serverHeaderKeys(server: StoredMcpServer): string[] {
-  const keys = [...objectKeys(serverStaticHeaders(server)), ...objectKeys(serverEnvHttpHeaders(server))];
+  const keys = [
+    ...objectKeys(serverStaticHeaders(server)),
+    ...objectKeys(storedHeaderCredentialRefs(server)),
+    ...objectKeys(serverEnvHttpHeaders(server)),
+  ];
   if (nonEmpty(server.bearerTokenEnvVar ?? server.bearer_token_env_var)) keys.push('Authorization');
   return uniqueSorted(keys);
 }
 
 function serverEnvKeys(server: StoredMcpServer): string[] {
-  const keys = [...objectKeys(server.env), ...objectStringValues(serverEnvHttpHeaders(server))];
+  const keys = [
+    ...objectKeys(server.env),
+    ...objectKeys(storedEnvCredentialRefs(server)),
+    ...objectStringValues(serverEnvHttpHeaders(server)),
+  ];
   const bearerTokenEnvVar = nonEmpty(server.bearerTokenEnvVar ?? server.bearer_token_env_var);
   if (bearerTokenEnvVar) keys.push(bearerTokenEnvVar);
   return uniqueSorted(keys);
@@ -461,6 +639,10 @@ function normalizeRequireApproval(value: unknown): RuntimeMcpRequireApproval {
 function normalizeOptionalRequireApproval(value: unknown): RuntimeMcpRequireApproval | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   return normalizeRequireApproval(value);
+}
+
+function normalizeTrustLevel(value: unknown): RuntimeMcpTrustLevel {
+  return value === 'trusted' ? 'trusted' : 'untrusted';
 }
 
 function stringList(value: unknown): string[] {
@@ -490,15 +672,23 @@ function mcpToolList(value: unknown): RuntimeMcpToolInfo[] {
 }
 
 function toolInfoFromRecord(name: string, record: Record<string, unknown>): RuntimeMcpToolInfo {
+  const title = nonEmpty(record.title);
   const description = nonEmpty(record.description);
   const inputSchema = plainRecord(record.inputSchema ?? record.input_schema);
+  const outputSchema = plainRecord(record.outputSchema ?? record.output_schema);
   const annotations = plainRecord(record.annotations);
+  const execution = plainRecord(record.execution);
+  const meta = plainRecord(record._meta);
   const approvalMode = normalizeOptionalRequireApproval(record.approvalMode ?? record.approval_mode ?? record.requireApproval ?? record.require_approval);
   return {
     name,
+    ...(title ? { title } : {}),
     ...(description ? { description } : {}),
     ...(inputSchema ? { inputSchema } : {}),
+    ...(outputSchema ? { outputSchema } : {}),
     ...(annotations ? { annotations } : {}),
+    ...(execution ? { execution } : {}),
+    ...(meta ? { _meta: meta } : {}),
     ...(approvalMode ? { approvalMode } : {}),
   };
 }

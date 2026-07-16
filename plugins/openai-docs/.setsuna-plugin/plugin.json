@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "openai-docs",
+  "name": "OpenAI 官方文档",
+  "version": "1.0.0",
+  "description": "查询 OpenAI API、模型、SDK 和 Codex 的最新官方开发文档。",
+  "publisher": "OpenAI",
+  "tags": ["官方", "开发文档", "OpenAI"],
+  "featured": true,
+  "skills": ["skills/openai-docs"],
+  "mcpServers": [
+    {
+      "key": "openai_docs",
+      "label": "OpenAI Developer Docs",
+      "description": "OpenAI 官方开发文档服务",
+      "transport": "streamable_http",
+      "url": "https://developers.openai.com/mcp"
+    }
+  ]
+}

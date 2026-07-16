@@ -13,6 +13,7 @@ const port = Number(argValue('--port') ?? DEFAULT_PORT);
 const dataDir = process.env.SETSUNA_DESKTOP_DATA_DIR;
 const token = process.env.SETSUNA_DESKTOP_RUNTIME_TOKEN;
 const builtinSkillsDir = process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR;
+const builtinPluginsDir = process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR;
 
 if (!dataDir) {
   console.error('SETSUNA_DESKTOP_DATA_DIR is required');
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
     token: runtimeToken,
     version: process.env.npm_package_version ?? '0.1.0',
     builtinSkillsDir,
+    builtinPluginsDir,
   });
 
   await server.listen(port);

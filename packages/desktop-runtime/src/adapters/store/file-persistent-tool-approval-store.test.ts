@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileMcpStore } from './file-mcp-store.js';
+import { InMemorySecretStore } from './in-memory-secret-store.js';
 import { FilePersistentToolApprovalStore } from './file-persistent-tool-approval-store.js';
 
 describe('file persistent tool approval store', () => {
@@ -21,7 +22,7 @@ describe('file persistent tool approval store', () => {
 
   it('writes MCP persistent approvals back to per-tool approval mode', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-tool-approval-store-test-'));
-    const mcpStore = new FileMcpStore(dataDir);
+    const mcpStore = new FileMcpStore(dataDir, new InMemorySecretStore());
     await mcpStore.upsertServer({
       key: 'docs',
       transport: 'streamableHttp',

@@ -4,14 +4,17 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileMcpStore } from '../store/file-mcp-store.js';
+import { InMemorySecretStore } from '../store/in-memory-secret-store.js';
+import { SdkMcpConnectionManager } from '../mcp/sdk-mcp-connection-manager.js';
 import { McpManagementToolHost } from './mcp-management-tool-host.js';
 
 describe('mcp management tool host', () => {
   it('creates and updates MCP servers through the runtime MCP store', async () => {
     const mcpServer = await createDiscoveryMcpServer();
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-toolhost-test-'));
-    const store = new FileMcpStore(dataDir);
-    const host = new McpManagementToolHost(store);
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
+    const mcpConnections = new SdkMcpConnectionManager();
+    const host = new McpManagementToolHost(store, mcpConnections);
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
     const configPath = path.join(dataDir, 'mcp.json');
 
@@ -39,6 +42,7 @@ describe('mcp management tool host', () => {
         oauth_client_id: 'client-123',
         oauth_resource: 'https://resource.example.com',
         require_approval: 'smart',
+        trust_level: 'trusted',
       }, context);
 
       expect(created.content).toContain(`Config: ${configPath}`);
@@ -56,6 +60,7 @@ describe('mcp management tool host', () => {
             transport: 'streamableHttp',
             url: mcpServer.baseUrl,
             requireApproval: 'auto',
+            trustLevel: 'trusted',
             headerKeys: ['Authorization'],
             oauthClientId: 'client-123',
             oauthResource: 'https://resource.example.com',
@@ -67,7 +72,7 @@ describe('mcp management tool host', () => {
           },
         ],
       });
-      await expect(readFile(configPath, 'utf8')).resolves.toContain('secret-token');
+      await expect(readFile(configPath, 'utf8')).resolves.not.toContain('secret-token');
 
       await expect(host.previewToolCall('configure_mcp_server', {
         key: 'search_mcp',
@@ -94,6 +99,7 @@ describe('mcp management tool host', () => {
         ],
       });
     } finally {
+      await mcpConnections.shutdown();
       await mcpServer.close();
     }
   });
@@ -104,14 +110,28 @@ async function createDiscoveryMcpServer(): Promise<{
   close(): Promise<void>;
 }> {
   const server = createServer(async (request, response) => {
-    const body = JSON.parse(await readRequestText(request)) as { method?: string };
+    if (request.method === 'GET') {
+      response.writeHead(405);
+      response.end();
+      return;
+    }
+    if (request.method === 'DELETE') {
+      response.writeHead(200);
+      response.end();
+      return;
+    }
+    const body = JSON.parse(await readRequestText(request)) as {
+      id?: string | number;
+      method?: string;
+      params?: { protocolVersion?: string };
+    };
     if (body.method === 'initialize') {
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'mcp-session-id': 'session_1' });
       response.end(JSON.stringify({
         jsonrpc: '2.0',
-        id: 1,
+        id: body.id,
         result: {
-          protocolVersion: '2024-11-05',
+          protocolVersion: body.params?.protocolVersion,
           capabilities: { tools: {} },
           serverInfo: { name: 'test-mcp', version: '1.0.0' },
         },
@@ -126,11 +146,11 @@ async function createDiscoveryMcpServer(): Promise<{
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     response.end(JSON.stringify({
       jsonrpc: '2.0',
-      id: 2,
+      id: body.id,
       result: {
         tools: [
-          { name: 'summarize_page' },
-          { name: 'search_web', description: 'Search the web' },
+          { name: 'summarize_page', inputSchema: { type: 'object' } },
+          { name: 'search_web', description: 'Search the web', inputSchema: { type: 'object' } },
         ],
       },
     }));

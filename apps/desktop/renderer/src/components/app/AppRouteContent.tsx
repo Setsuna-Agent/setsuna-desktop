@@ -157,10 +157,15 @@ export function AppRouteContent({
         selectedSkillCount={selectedSkillCount}
         mcpState={runtime.mcpState}
         hookState={runtime.hookState}
+        plugins={runtime.plugins}
+        pluginMarketplace={runtime.pluginMarketplace}
+        pluginMarketplaceErrors={runtime.pluginMarketplaceErrors}
         onCreateHook={runtime.createHook}
         onCreateSkill={runtime.createSkill}
         onDeleteSkill={runtime.deleteSkill}
         onGetSkillDetail={runtime.getSkillDetail}
+        onInstallSkillMcpDependencies={runtime.installSkillMcpDependencies}
+        onAuthenticateSkillMcpDependency={runtime.authenticateSkillMcpDependency}
         onCreateInConversation={onSelectSkillForChat}
         onRefresh={runtime.refreshCapabilities}
         onUpdateSkill={runtime.updateSkill}
@@ -173,6 +178,10 @@ export function AppRouteContent({
         onDeleteHook={runtime.deleteHook}
         onUpdateMcpServer={runtime.updateMcpServer}
         onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
+        onLoginMcpServer={runtime.loginMcpServer}
+        onLogoutMcpServer={runtime.logoutMcpServer}
+        onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
+        onRemovePlugin={runtime.removePlugin}
       />
     );
   }

@@ -3,13 +3,16 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import { FileMcpStore } from '../store/file-mcp-store.js';
+import { InMemorySecretStore } from '../store/in-memory-secret-store.js';
+import { SdkMcpConnectionManager } from '../mcp/sdk-mcp-connection-manager.js';
 import { McpRuntimeToolHost } from './mcp-runtime-tool-host.js';
 
 describe('mcp runtime tool host', () => {
   it('exposes enabled stored MCP tools and calls the backing server', async () => {
     const mcpServer = await createCallableMcpServer();
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')));
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'search',
       label: 'Search MCP',
@@ -29,12 +32,13 @@ describe('mcp runtime tool host', () => {
       disabledTools: ['write_note'],
     });
 
+    const mcpConnections = new SdkMcpConnectionManager();
     try {
-      const host = new McpRuntimeToolHost(store);
+      const host = new McpRuntimeToolHost(store, mcpConnections);
       const context = { threadId: 'thread_1', turnId: 'turn_1' };
       const tools = await host.listTools(context);
 
-      expect(tools).toEqual([
+      expect(tools.filter((tool) => tool.name.startsWith('mcp__'))).toEqual([
         expect.objectContaining({
           name: 'mcp__search__search_web',
           description: expect.stringContaining('Search MCP: search_web'),
@@ -47,11 +51,13 @@ describe('mcp runtime tool host', () => {
       expect(result.content).toBe('result for setsuna');
       expect(result.data).toMatchObject({ serverKey: 'search', toolName: 'search_web' });
       expect(await mcpServer.requests).toEqual([
-        { method: 'initialize', authorization: 'Bearer secret', session: '' },
-        { method: 'notifications/initialized', authorization: 'Bearer secret', session: 'session_1' },
-        { method: 'tools/call', authorization: 'Bearer secret', session: 'session_1', tool: 'search_web', query: 'setsuna' },
+        { method: 'initialize', authorization: 'Bearer secret', protocolVersion: '', session: '' },
+        { method: 'notifications/initialized', authorization: 'Bearer secret', protocolVersion: '2025-11-25', session: 'session_1' },
+        { method: 'tools/list', authorization: 'Bearer secret', protocolVersion: '2025-11-25', session: 'session_1' },
+        { method: 'tools/call', authorization: 'Bearer secret', protocolVersion: '2025-11-25', session: 'session_1', tool: 'search_web', query: 'setsuna' },
       ]);
     } finally {
+      await mcpConnections.shutdown();
       await mcpServer.close();
     }
   });
@@ -62,7 +68,7 @@ describe('mcp runtime tool host', () => {
     const previousAccount = process.env.SETSUNA_MCP_RUNTIME_ACCOUNT;
     process.env.SETSUNA_MCP_RUNTIME_TOKEN = 'runtime-secret';
     process.env.SETSUNA_MCP_RUNTIME_ACCOUNT = 'runtime-account';
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')));
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'search',
       label: 'Search MCP',
@@ -75,27 +81,30 @@ describe('mcp runtime tool host', () => {
       tools: [{ name: 'search_web', description: 'Search the web' }],
     });
 
+    const mcpConnections = new SdkMcpConnectionManager();
     try {
-      const host = new McpRuntimeToolHost(store);
+      const host = new McpRuntimeToolHost(store, mcpConnections);
       const result = await host.runTool('mcp__search__search_web', { query: 'setsuna' }, { threadId: 'thread_1', turnId: 'turn_1' });
 
       expect(result.content).toBe('result for setsuna');
       expect(await mcpServer.requests).toEqual([
-        { method: 'initialize', authorization: 'Bearer runtime-secret', session: '', account: 'runtime-account', staticHeader: 'static-value' },
-        { method: 'notifications/initialized', authorization: 'Bearer runtime-secret', session: 'session_1', account: 'runtime-account', staticHeader: 'static-value' },
-        { method: 'tools/call', authorization: 'Bearer runtime-secret', session: 'session_1', account: 'runtime-account', staticHeader: 'static-value', tool: 'search_web', query: 'setsuna' },
+        { method: 'initialize', authorization: 'Bearer runtime-secret', protocolVersion: '', session: '', account: 'runtime-account', staticHeader: 'static-value' },
+        { method: 'notifications/initialized', authorization: 'Bearer runtime-secret', protocolVersion: '2025-11-25', session: 'session_1', account: 'runtime-account', staticHeader: 'static-value' },
+        { method: 'tools/list', authorization: 'Bearer runtime-secret', protocolVersion: '2025-11-25', session: 'session_1', account: 'runtime-account', staticHeader: 'static-value' },
+        { method: 'tools/call', authorization: 'Bearer runtime-secret', protocolVersion: '2025-11-25', session: 'session_1', account: 'runtime-account', staticHeader: 'static-value', tool: 'search_web', query: 'setsuna' },
       ]);
     } finally {
       if (previousToken === undefined) delete process.env.SETSUNA_MCP_RUNTIME_TOKEN;
       else process.env.SETSUNA_MCP_RUNTIME_TOKEN = previousToken;
       if (previousAccount === undefined) delete process.env.SETSUNA_MCP_RUNTIME_ACCOUNT;
       else process.env.SETSUNA_MCP_RUNTIME_ACCOUNT = previousAccount;
+      await mcpConnections.shutdown();
       await mcpServer.close();
     }
   });
 
   it('uses codex-style MCP approval modes', async () => {
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')));
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'search',
       label: 'Search MCP',
@@ -112,7 +121,7 @@ describe('mcp runtime tool host', () => {
       ],
     });
 
-    const host = new McpRuntimeToolHost(store);
+    const host = new McpRuntimeToolHost(store, storedInventoryMcpClient());
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
 
     await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, context)).resolves.toMatchObject({
@@ -120,8 +129,12 @@ describe('mcp runtime tool host', () => {
       approvalKeys: ['mcp:search:fetchWebContent'],
       persistentApprovalKeys: ['mcp:search:fetchWebContent'],
     });
-    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toBeNull();
-    await expect(host.approvalForTool('mcp__search__local_index', {}, context)).resolves.toBeNull();
+    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toMatchObject({
+      approvalKeys: ['mcp:search:read_status'],
+    });
+    await expect(host.approvalForTool('mcp__search__local_index', {}, context)).resolves.toMatchObject({
+      approvalKeys: ['mcp:search:local_index'],
+    });
     await expect(host.approvalForTool('mcp__search__force_prompt', {}, context)).resolves.toEqual({
       reason: '调用 MCP 工具：Search MCP / force_prompt',
     });
@@ -132,40 +145,66 @@ describe('mcp runtime tool host', () => {
       persistentApprovalKeys: ['mcp:search:write_note'],
     });
 
+    await store.updateServer('search', { trustLevel: 'trusted' });
+    const trustedContext = { ...context, turnId: 'turn_trusted' };
+    await expect(host.approvalForTool('mcp__search__read_status', {}, trustedContext)).resolves.toBeNull();
+    await expect(host.approvalForTool('mcp__search__fetchWebContent', {}, trustedContext)).resolves.toMatchObject({
+      approvalKeys: ['mcp:search:fetchWebContent'],
+    });
+    await expect(host.approvalForTool('mcp__search__force_prompt', {}, trustedContext)).resolves.toEqual({
+      reason: '调用 MCP 工具：Search MCP / force_prompt',
+    });
+
     await store.updateServer('search', { requireApproval: 'prompt' });
-    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toEqual({
+    await expect(host.approvalForTool('mcp__search__read_status', {}, { ...context, turnId: 'turn_2' })).resolves.toEqual({
       reason: '调用 MCP 工具：Search MCP / read_status',
     });
 
     await store.updateServer('search', { requireApproval: 'approve' });
-    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, context)).resolves.toBeNull();
-    await expect(host.approvalForTool('mcp__search__write_note', { text: 'note' }, context)).resolves.toBeNull();
+    const approvedContext = { ...context, turnId: 'turn_3' };
+    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, approvedContext)).resolves.toBeNull();
+    await expect(host.approvalForTool('mcp__search__write_note', { text: 'note' }, approvedContext)).resolves.toBeNull();
 
     await store.updateServer('search', { requireApproval: 'always' });
-    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toEqual({
+    await expect(host.approvalForTool('mcp__search__read_status', {}, { ...context, turnId: 'turn_4' })).resolves.toEqual({
       reason: '调用 MCP 工具：Search MCP / read_status',
     });
 
     await store.updateServer('search', { requireApproval: 'never' });
-    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, context)).resolves.toBeNull();
+    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, { ...context, turnId: 'turn_5' })).resolves.toBeNull();
   });
 });
 
 async function createCallableMcpServer(): Promise<{
   baseUrl: string;
-  requests: Promise<Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>>;
+  requests: Promise<Array<{ method?: string; authorization?: string; protocolVersion?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>>;
   close(): Promise<void>;
 }> {
-  const requests: Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }> = [];
-  let resolveRequests: (requests: Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>) => void = () => undefined;
-  const requestsPromise = new Promise<Array<{ method?: string; authorization?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>>((resolve) => {
+  const requests: Array<{ method?: string; authorization?: string; protocolVersion?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }> = [];
+  let resolveRequests: (requests: Array<{ method?: string; authorization?: string; protocolVersion?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>) => void = () => undefined;
+  const requestsPromise = new Promise<Array<{ method?: string; authorization?: string; protocolVersion?: string; session?: string; account?: string; staticHeader?: string; tool?: string; query?: string }>>((resolve) => {
     resolveRequests = resolve;
   });
   const server = createServer(async (request, response) => {
-    const body = JSON.parse(await readRequestText(request)) as { method?: string; params?: { name?: string; arguments?: { query?: string } } };
+    if (request.method === 'GET') {
+      response.writeHead(405);
+      response.end();
+      return;
+    }
+    if (request.method === 'DELETE') {
+      response.writeHead(200);
+      response.end();
+      return;
+    }
+    const body = JSON.parse(await readRequestText(request)) as {
+      id?: string | number;
+      method?: string;
+      params?: { protocolVersion?: string; name?: string; arguments?: { query?: string } };
+    };
     requests.push({
       method: body.method,
       authorization: request.headers.authorization,
+      protocolVersion: String(request.headers['mcp-protocol-version'] ?? ''),
       session: String(request.headers['mcp-session-id'] ?? ''),
       ...(request.headers['x-account'] ? { account: String(request.headers['x-account']) } : {}),
       ...(request.headers['x-static'] ? { staticHeader: String(request.headers['x-static']) } : {}),
@@ -175,10 +214,10 @@ async function createCallableMcpServer(): Promise<{
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'mcp-session-id': 'session_1' });
       response.end(JSON.stringify({
         jsonrpc: '2.0',
-        id: 1,
+        id: body.id,
         result: {
-          protocolVersion: '2024-11-05',
-          capabilities: { tools: {} },
+          protocolVersion: body.params?.protocolVersion,
+          capabilities: { tools: {}, resources: {} },
           serverInfo: { name: 'test-mcp', version: '1.0.0' },
         },
       }));
@@ -189,10 +228,29 @@ async function createCallableMcpServer(): Promise<{
       response.end();
       return;
     }
+    if (body.method === 'tools/list') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        jsonrpc: '2.0',
+        id: body.id,
+        result: {
+          tools: [
+            {
+              name: 'search_web',
+              description: 'Search the web',
+              inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+              annotations: { readOnlyHint: true },
+            },
+            { name: 'write_note', description: 'Write a note', inputSchema: { type: 'object' } },
+          ],
+        },
+      }));
+      return;
+    }
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     response.end(JSON.stringify({
       jsonrpc: '2.0',
-      id: 2,
+      id: body.id,
       result: {
         content: [{ type: 'text', text: `result for ${body.params?.arguments?.query ?? ''}` }],
       },
@@ -207,6 +265,32 @@ async function createCallableMcpServer(): Promise<{
     baseUrl: `http://127.0.0.1:${address.port}`,
     requests: requestsPromise,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+  };
+}
+
+function storedInventoryMcpClient(): McpClientRuntime {
+  return {
+    discoverTools: async (server) => ({ tools: server.tools ?? [], errors: [] }),
+    listTools: async (server) => server.tools ?? [],
+    listResources: async () => [],
+    listResourceTemplates: async () => [],
+    readResource: async () => ({ contents: [] }),
+    callTool: async () => ({ content: [], isError: false }),
+    snapshot: async (server) => ({
+      serverKey: server.key,
+      state: 'ready',
+      tools: server.tools ?? [],
+      resources: [],
+      resourceTemplates: [],
+      updatedAt: new Date(0).toISOString(),
+    }),
+    login: async () => undefined,
+    logout: async () => undefined,
+    authStatus: async () => ({ status: 'unsupported' }),
+    invalidateServer: async () => undefined,
+    releaseScope: async () => undefined,
+    releaseThread: async () => undefined,
+    shutdown: async () => undefined,
   };
 }
 

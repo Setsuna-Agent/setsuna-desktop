@@ -464,6 +464,55 @@
   min-height: 184px;
 }
 
+.desktop-capability-card--plugin {
+  min-height: 204px;
+}
+
+.desktop-capability-card--plugin .desktop-capability-card__tool-policy {
+  flex-wrap: wrap;
+}
+
+.desktop-capabilities-plugin-sections {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
+  border-radius: var(--app-radius-md);
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+}
+
+.desktop-capabilities-plugin-sections button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--app-radius-md) - 3px);
+  color: var(--app-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.desktop-capabilities-plugin-sections button:hover,
+.desktop-capabilities-plugin-sections button.is-active {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-bg) 70%, var(--app-surface));
+}
+
+.desktop-capabilities-plugin-sections button.is-active {
+  box-shadow: 0 1px 2px color-mix(in srgb, #000000 10%, transparent);
+}
+
+.desktop-capabilities-plugin-sections button span {
+  color: var(--app-text-subtle);
+  font-size: 11px;
+}
+
 .desktop-capability-card__command {
   font-family: var(--app-code-font-family);
 }
@@ -712,6 +761,25 @@
   max-height: 180px;
   padding: 10px;
   overflow: auto;
+}
+
+.desktop-capabilities-skill-dependency {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-capabilities-skill-dependency > span,
+.desktop-capabilities-skill-dependency > small {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.desktop-capabilities-skill-dependency > small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
 }
 
 .desktop-capabilities-skill-empty {

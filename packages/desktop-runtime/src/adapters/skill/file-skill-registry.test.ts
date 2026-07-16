@@ -1,4 +1,4 @@
-import { mkdir, writeFile, mkdtemp } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -96,6 +96,96 @@ describe('file skill registry', () => {
 
     await registry.deleteSkill('workspace-helper');
     expect(await registry.getSkill('workspace-helper')).toBeNull();
+  });
+
+  it('reads and writes Codex-compatible agents/openai.yaml MCP dependencies', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const dependencySkillDir = path.join(builtinDir, 'docs-helper');
+    await mkdir(path.join(dependencySkillDir, 'agents'), { recursive: true });
+    await writeFile(path.join(dependencySkillDir, 'SKILL.md'), '# Docs Helper\n\nUse current docs.');
+    await writeFile(path.join(dependencySkillDir, 'agents', 'openai.yaml'), [
+      'dependencies:',
+      '  tools:',
+      '    - type: mcp',
+      '      value: openaiDeveloperDocs',
+      '      transport: streamable_http',
+      '      url: https://developers.openai.com/mcp',
+    ].join('\n'));
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await expect(registry.getSkill('docs-helper')).resolves.toMatchObject({
+      mcpDependencies: [{
+        type: 'mcp',
+        value: 'openaideveloperdocs',
+        transport: 'streamableHttp',
+        url: 'https://developers.openai.com/mcp',
+        status: 'unchecked',
+      }],
+      dependencyErrors: [],
+    });
+
+    const created = await registry.createSkill({
+      name: 'Sentry Helper',
+      content: '# Sentry Helper',
+      mcpDependencies: [{
+        type: 'mcp',
+        value: 'sentry',
+        transport: 'streamableHttp',
+        url: 'https://mcp.sentry.dev/',
+        oauthResource: 'https://mcp.sentry.dev/',
+      }],
+    });
+    const manifestPath = path.join(path.dirname(created.path!), 'agents', 'openai.yaml');
+    expect(await readFile(manifestPath, 'utf8')).toContain('transport: streamable_http');
+    await registry.updateSkill(created.id, { content: '# Updated Sentry Helper' });
+    await expect(registry.getSkill(created.id)).resolves.toMatchObject({
+      mcpDependencies: [expect.objectContaining({ value: 'sentry', status: 'unchecked' })],
+    });
+
+    await registry.updateSkill(created.id, {
+      mcpDependencies: [{
+        type: 'mcp',
+        value: 'context7',
+        transport: 'streamableHttp',
+        url: 'https://mcp.context7.com/mcp',
+      }],
+    });
+    await expect(registry.getSkill(created.id)).resolves.toMatchObject({
+      content: '# Updated Sentry Helper',
+      mcpDependencies: [expect.objectContaining({ value: 'context7', status: 'unchecked' })],
+    });
+
+    const manifestBeforeInvalidUpdate = await readFile(manifestPath, 'utf8');
+    await expect(registry.updateSkill(created.id, {
+      content: '# Must Not Be Written',
+      mcpDependencies: [
+        { type: 'mcp', value: 'duplicate', transport: 'streamableHttp', url: 'https://first.example/mcp' },
+        { type: 'mcp', value: 'duplicate', transport: 'streamableHttp', url: 'https://second.example/mcp' },
+      ],
+    })).rejects.toThrow('Duplicate MCP dependency key');
+    expect(await readFile(manifestPath, 'utf8')).toBe(manifestBeforeInvalidUpdate);
+    await expect(registry.getSkill(created.id)).resolves.toMatchObject({ content: '# Updated Sentry Helper' });
+  });
+
+  it('reports invalid dependency manifests without loading unsafe MCP URLs', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const skillDir = path.join(builtinDir, 'unsafe-helper');
+    await mkdir(path.join(skillDir, 'agents'), { recursive: true });
+    await writeFile(path.join(skillDir, 'SKILL.md'), '# Unsafe Helper');
+    await writeFile(path.join(skillDir, 'agents', 'openai.yaml'), [
+      'dependencies:',
+      '  tools:',
+      '    - type: mcp',
+      '      value: unsafe',
+      '      transport: streamable_http',
+      '      url: http://example.com/mcp',
+    ].join('\n'));
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await expect(registry.getSkill('unsafe-helper')).resolves.toMatchObject({
+      mcpDependencies: [],
+      dependencyErrors: [expect.stringContaining('HTTPS or loopback HTTP')],
+    });
   });
 
   it('loads runtime extra roots without persisting them', async () => {

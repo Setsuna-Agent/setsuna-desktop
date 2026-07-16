@@ -63,7 +63,13 @@ export function ChatSlashCommandMenu({
             <span className="chat-command-menu__item-main">
               <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.title}</span>
               {item.kind === 'skill' ? (
-                item.skill.description ? <span className="chat-command-menu__item-desc">{item.skill.description}</span> : null
+                (item.skill.description || unresolvedSkillMcpDependencyCount(item.skill)) ? (
+                  <span className="chat-command-menu__item-desc">
+                    {unresolvedSkillMcpDependencyCount(item.skill)
+                      ? `需要配置 ${unresolvedSkillMcpDependencyCount(item.skill)} 个 MCP 依赖${item.skill.description ? ` · ${item.skill.description}` : ''}`
+                      : item.skill.description}
+                  </span>
+                ) : null
               ) : item.description ? (
                 <span className="chat-command-menu__item-desc">{item.description}</span>
               ) : null}
@@ -72,7 +78,11 @@ export function ChatSlashCommandMenu({
               <MemoryCommandSwitch checked={Boolean(item.checked)} disabled={Boolean(item.disabled)} />
             ) : (
               <span className="chat-command-menu__item-scope">
-                {item.kind === 'skill' ? (item.skill.kind === 'user' ? '个人' : '内置') : item.scope}
+                {item.kind === 'skill'
+                  ? unresolvedSkillMcpDependencyCount(item.skill)
+                    ? '需配置'
+                    : item.skill.kind === 'user' ? '个人' : item.skill.kind === 'plugin' ? '插件' : '内置'
+                  : item.scope}
               </span>
             )}
           </button>
@@ -82,6 +92,11 @@ export function ChatSlashCommandMenu({
       )}
     </div>
   );
+}
+
+function unresolvedSkillMcpDependencyCount(skill: Extract<SlashCommandMenuItem, { kind: 'skill' }>['skill']): number {
+  return (skill.mcpDependencies ?? []).filter((dependency) => dependency.status !== 'ready').length
+    + (skill.dependencyErrors?.length ? 1 : 0);
 }
 
 function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {

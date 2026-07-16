@@ -137,6 +137,10 @@ export class RuntimeToolRouter {
     return this.options.toolHost.systemPrompt?.(this.options.context, { tools: this.tools }) ?? null;
   }
 
+  async externalContext() {
+    return this.options.toolHost.externalContext?.(this.options.context, { tools: this.tools }) ?? [];
+  }
+
   async toolChoice(messages: RuntimeMessage[]): Promise<ModelRequest['toolChoice']> {
     if (!this.tools.length) return undefined;
     let forcedChoice: ModelRequest['toolChoice'] | null = null;

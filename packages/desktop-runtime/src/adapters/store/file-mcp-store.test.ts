@@ -1,12 +1,13 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { InMemorySecretStore } from './in-memory-secret-store.js';
 import { FileMcpStore } from './file-mcp-store.js';
 
 describe('file mcp store', () => {
   it('serializes concurrent server upserts without losing either server', async () => {
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')));
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')), new InMemorySecretStore());
 
     await Promise.all([
       store.upsertServer({ key: 'alpha', transport: 'stdio', command: 'alpha-server' }),
@@ -18,7 +19,7 @@ describe('file mcp store', () => {
 
   it('stores local MCP servers and only exposes secret key names', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
-    const store = new FileMcpStore(dataDir);
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
 
     const saved = await store.upsertServer({
       key: 'Docs MCP',
@@ -28,6 +29,7 @@ describe('file mcp store', () => {
       args: ['server.js'],
       env: { DOCS_TOKEN: 'secret-token' },
       requireApproval: 'prompt',
+      trustLevel: 'trusted',
     });
 
     expect(saved.servers).toMatchObject([
@@ -39,18 +41,23 @@ describe('file mcp store', () => {
         args: ['server.js'],
         envKeys: ['DOCS_TOKEN'],
         requireApproval: 'prompt',
+        trustLevel: 'trusted',
         readOnly: false,
       },
     ]);
     expect(JSON.stringify(saved)).not.toContain('secret-token');
 
     const raw = await readFile(path.join(dataDir, 'mcp.json'), 'utf8');
-    expect(raw).toContain('secret-token');
+    expect(raw).not.toContain('secret-token');
+    expect(raw).toContain('env_credential_refs');
     expect(JSON.parse(raw)).toHaveProperty('mcp_servers.docs_mcp');
+    if (process.platform !== 'win32') {
+      expect((await stat(path.join(dataDir, 'mcp.json'))).mode & 0o777).toBe(0o600);
+    }
   });
 
   it('updates and deletes HTTP MCP servers', async () => {
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')));
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')), new InMemorySecretStore());
 
     await store.upsertServer({
       key: 'remote',
@@ -64,8 +71,12 @@ describe('file mcp store', () => {
         {
           name: 'search_web',
           description: 'Search the web',
+          title: 'Search',
           inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+          outputSchema: { type: 'object', properties: { results: { type: 'array' } } },
           annotations: { readOnlyHint: true },
+          execution: { taskSupport: 'forbidden' },
+          _meta: { ui: 'compact' },
           approvalMode: 'prompt',
         },
       ],
@@ -85,8 +96,12 @@ describe('file mcp store', () => {
         {
           name: 'search_web',
           description: 'Search the web',
+          title: 'Search',
           inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+          outputSchema: { type: 'object', properties: { results: { type: 'array' } } },
           annotations: { readOnlyHint: true },
+          execution: { taskSupport: 'forbidden' },
+          _meta: { ui: 'compact' },
           approvalMode: 'prompt',
         },
       ],
@@ -97,6 +112,7 @@ describe('file mcp store', () => {
     };
     expect(raw.mcp_servers?.remote.oauth?.client_id).toBe('client-123');
     expect(raw.mcp_servers?.remote.oauth_resource).toBe('https://resource.example.com');
+    expect(JSON.stringify(raw)).not.toContain('Bearer token');
     await expect(store.listServerInputs()).resolves.toMatchObject([
       {
         key: 'remote',
@@ -113,7 +129,7 @@ describe('file mcp store', () => {
 
   it('reads codex-compatible HTTP header fields without exposing values', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
-    const store = new FileMcpStore(dataDir);
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
     await writeFile(path.join(dataDir, 'mcp.json'), JSON.stringify({
       mcp_servers: {
         remote: {
@@ -161,7 +177,7 @@ describe('file mcp store', () => {
 
   it('rejects unsupported inline bearer tokens like codex', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
-    const store = new FileMcpStore(dataDir);
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
     await writeFile(path.join(dataDir, 'mcp.json'), JSON.stringify({
       mcp_servers: {
         remote: {
@@ -177,9 +193,39 @@ describe('file mcp store', () => {
     });
   });
 
+  it('migrates legacy inline env and HTTP headers into credential references', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
+    const secrets = new InMemorySecretStore();
+    const store = new FileMcpStore(dataDir, secrets);
+    await writeFile(path.join(dataDir, 'mcp.json'), JSON.stringify({
+      mcp_servers: {
+        remote: {
+          url: 'https://example.com/mcp',
+          headers: { Authorization: 'Bearer legacy-secret' },
+        },
+        local: {
+          command: 'node',
+          env: { API_TOKEN: 'legacy-token' },
+        },
+      },
+    }));
+
+    await store.migrateLegacySecrets();
+
+    const raw = await readFile(store.configPath, 'utf8');
+    expect(raw).not.toContain('legacy-secret');
+    expect(raw).not.toContain('legacy-token');
+    expect(raw).toContain('http_header_credential_refs');
+    expect(raw).toContain('env_credential_refs');
+    await expect(store.listServerInputs()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'remote', headers: { Authorization: 'Bearer legacy-secret' } }),
+      expect.objectContaining({ key: 'local', env: { API_TOKEN: 'legacy-token' } }),
+    ]));
+  });
+
   it('normalizes legacy approval modes to codex modes', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
-    const store = new FileMcpStore(dataDir);
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
     await writeFile(path.join(dataDir, 'mcp.json'), JSON.stringify({
       mcpServers: {
         remote: {
@@ -219,7 +265,7 @@ describe('file mcp store', () => {
 
   it('reads and writes codex-compatible MCP server fields', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
-    const store = new FileMcpStore(dataDir);
+    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
     await writeFile(path.join(dataDir, 'mcp.json'), JSON.stringify({
       mcp_servers: {
         docs: {
@@ -262,7 +308,7 @@ describe('file mcp store', () => {
   });
 
   it('sets per-tool approval modes without dropping tool metadata', async () => {
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')));
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'docs',
       transport: 'streamableHttp',

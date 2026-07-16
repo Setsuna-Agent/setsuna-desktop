@@ -69,7 +69,7 @@ function appServerSkillMetadata(skill: RuntimeSkillSummary): AppServerSkillMetad
     name: skill.name,
     description,
     path: skill.path ?? '',
-    scope: skill.kind === 'builtin' ? 'system' : 'user',
+    scope: skill.kind === 'user' ? 'user' : 'system',
     enabled: skill.enabled,
   };
   if (description) {
