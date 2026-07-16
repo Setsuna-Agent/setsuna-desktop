@@ -67,12 +67,15 @@ export class FileConfigStore implements ConfigStore {
         stored.providers.find((item) => item.id === stored.activeProviderId && item.enabled) ??
         stored.providers.find((item) => item.enabled) ??
         stored.providers[0];
-      if (!provider) return null;
-      return {
-        ...provider,
-        apiKey: secrets.providerApiKeys[provider.id] ?? '',
-        activeModel: provider.models.find((model) => model.enabled) ?? provider.models[0],
-      };
+      return runtimeProviderConfig(provider, secrets);
+    });
+  }
+
+  async getProviderConfig(providerId: string): Promise<RuntimeProviderConfig | null> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const secrets = await this.readSecrets();
+      return runtimeProviderConfig(stored.providers.find((provider) => provider.id === providerId), secrets);
     });
   }
 
@@ -263,7 +266,21 @@ function normalizeSecrets(value: unknown): StoredSecrets {
 }
 
 function normalizeBaseUrl(value: string): string {
-  return value.trim().replace(/\/$/, '');
+  // Settings are auto-saved while typing; stripping a trailing slash here turns
+  // an in-progress `https:/` back into `https:` and makes `https://` impossible to enter.
+  return value.trim();
+}
+
+function runtimeProviderConfig(
+  provider: StoredConfig['providers'][number] | undefined,
+  secrets: StoredSecrets,
+): RuntimeProviderConfig | null {
+  if (!provider) return null;
+  return {
+    ...provider,
+    apiKey: secrets.providerApiKeys[provider.id] ?? '',
+    activeModel: provider.models.find((model) => model.enabled) ?? provider.models[0],
+  };
 }
 
 function nonEmpty(value: unknown): string | undefined {

@@ -219,18 +219,27 @@ describe('runtime server', () => {
     });
 
     expect(JSON.stringify(config)).not.toContain('sk-example-secret');
-    expect(config.providers[0].baseUrl).toBe('https://example.com/v1');
+    expect(config.providers[0].baseUrl).toBe('https://example.com/v1/');
     expect(config.providers[0].apiKeySet).toBe(true);
   });
 
-  it('fetches local provider models through the runtime API', async () => {
+  it('fetches models with the selected provider saved API key', async () => {
     const modelServer = await createModelListCaptureServer();
     try {
       await runtimeFetch('/v1/config', {
         method: 'PUT',
         body: JSON.stringify({
-          activeProviderId: 'local-models',
+          activeProviderId: 'active-provider',
           providers: [
+            {
+              id: 'active-provider',
+              name: 'Active provider',
+              provider: 'openai-compatible',
+              baseUrl: 'https://active.example/v1',
+              apiKey: 'sk-active',
+              enabled: true,
+              models: [{ id: 'active', name: 'Active', code: 'active', enabled: true, maxOutputTokens: 1000, thinkingEnabled: false, thinkingEfforts: [] }],
+            },
             {
               id: 'local-models',
               name: 'Local models',

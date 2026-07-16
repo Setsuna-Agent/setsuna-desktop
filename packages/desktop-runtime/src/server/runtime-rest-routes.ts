@@ -52,8 +52,9 @@ export async function handleRuntimeRestRequest(
 
   if (request.method === 'POST' && url.pathname === '/v1/config/models') {
     const input = await readBody<RuntimeFetchModelsInput>(request, {});
-    const activeProvider = await runtime.configStore.getActiveProviderConfig();
-    const savedProvider = !input.providerId || activeProvider?.id === input.providerId ? activeProvider : null;
+    const savedProvider = input.providerId
+      ? await runtime.configStore.getProviderConfig(input.providerId)
+      : await runtime.configStore.getActiveProviderConfig();
     sendJson(response, 200, { models: await fetchAvailableModels(input, savedProvider) });
     return true;
   }
