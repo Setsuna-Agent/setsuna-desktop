@@ -10,7 +10,7 @@ import { App } from './App.js';
 import { initializeAccentColorPreference } from './hooks/useAccentColorPreference.js';
 import { initializeAppearancePreference } from './hooks/useAppearancePreferences.js';
 import { initializeCodeAppearancePreference } from './hooks/useCodeAppearancePreferences.js';
-import { initializeSidebarOpacityPreference } from './hooks/useSidebarOpacityPreference.js';
+import { initializeSidebarBackgroundPreference } from './hooks/useSidebarBackgroundPreference.js';
 import { initializeThemePreference } from './hooks/useThemeTransition.js';
 import { applyDesktopPlatformAttribute } from './utils/desktopPlatform.js';
 import './styles/tokens.css';
@@ -36,7 +36,7 @@ initializeThemePreference();
 initializeAccentColorPreference();
 initializeAppearancePreference();
 initializeCodeAppearancePreference();
-initializeSidebarOpacityPreference();
+initializeSidebarBackgroundPreference();
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -13,9 +13,6 @@
   --app-bg: #ffffff;
   --app-window-bg: #fafafa;
   --app-sidebar-bg: #f7f7f7;
-  --app-sidebar-opacity: 100%;
-  --app-sidebar-surface: color-mix(in srgb, var(--app-sidebar-bg) var(--app-sidebar-opacity), transparent);
-  --app-sidebar-backdrop: transparent;
   --app-sidebar-text: #404040;
   --app-sidebar-text-secondary: #737373;
   --app-surface: #ffffff;
@@ -33,6 +30,7 @@
   --app-shadow-popover: 0 14px 42px color-mix(in srgb, #000000 12%, transparent), 0 2px 8px color-mix(in srgb, #000000 6%, transparent);
   --app-shadow-modal: 0 24px 64px color-mix(in srgb, #000000 18%, transparent), 0 4px 16px color-mix(in srgb, #000000 8%, transparent);
   --app-tooltip-bg: #ffffff;
+  --app-tooltip-border: #dedede;
   --app-primary: #15171a;
   --app-primary-hover: #24272c;
   --app-primary-text: #ffffff;
@@ -61,7 +59,7 @@
   --app-topbar-height: 42px;
   --app-topbar-collapsed-sidebar-width: 164px;
   --desktop-workspace-toolbar-height: 42px;
-  /* Reuse the shell substrate so the titlebar and sidebar share one opacity layer. */
+  /* Reuse the solid shell substrate so the titlebar and sidebar stay visually continuous. */
   --app-titlebar-bg: transparent;
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --app-titlebar-control-width: 140px;
@@ -152,7 +150,6 @@
   --app-bg: #181818;
   --app-window-bg: #181818;
   --app-sidebar-bg: #282b2e;
-  --app-sidebar-backdrop: rgb(0 0 0 / 78%);
   --app-sidebar-text: #d4d4d4;
   --app-sidebar-text-secondary: #8f8f8f;
   --app-surface: #202020;
@@ -167,6 +164,7 @@
   --app-muted: #737373;
   --app-focus: rgba(255, 255, 255, 0.14);
   --app-tooltip-bg: #2b2b2b;
+  --app-tooltip-border: #454545;
   --app-primary: #f4f4f5;
   --app-primary-hover: #ffffff;
   --app-primary-text: #181818;
@@ -199,6 +197,34 @@
   --chat-send-bg: #f4f4f5;
   --chat-send-bg-hover: #ffffff;
   --chat-send-bg-active: #e4e4e7;
+}
+
+:root[data-theme='light'][data-sidebar-background-style='plain'] {
+  --app-sidebar-bg: #ffffff;
+  --desktop-agent-sidebar-hover-bg: #f5f5f5;
+  --desktop-agent-sidebar-active-bg: #ededed;
+  --desktop-agent-sidebar-edge: #e5e5e5;
+}
+
+:root[data-theme='light'][data-sidebar-background-style='contrast'] {
+  --app-sidebar-bg: #edf1f5;
+  --desktop-agent-sidebar-hover-bg: #e3e8ee;
+  --desktop-agent-sidebar-active-bg: #ffffff;
+  --desktop-agent-sidebar-edge: #d3dae3;
+}
+
+:root[data-theme='dark'][data-sidebar-background-style='plain'] {
+  --app-sidebar-bg: #202020;
+  --desktop-agent-sidebar-hover-bg: #2a2a2a;
+  --desktop-agent-sidebar-active-bg: #303030;
+  --desktop-agent-sidebar-edge: #343434;
+}
+
+:root[data-theme='dark'][data-sidebar-background-style='contrast'] {
+  --app-sidebar-bg: #30343a;
+  --desktop-agent-sidebar-hover-bg: #3a3f46;
+  --desktop-agent-sidebar-active-bg: #424850;
+  --desktop-agent-sidebar-edge: #484e56;
 }
 
 /* Accent presets are reserved for primary actions, links, focus rings, and explicit emphasis. */

@@ -9,8 +9,9 @@ import {
   type UIEvent as ReactUIEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react';
+import { useStreamingScrollPinController } from './StreamingScrollPinProvider.js';
 
-const streamingScrollBottomTolerancePx = 1;
+const streamingScrollBottomTolerancePx = 0;
 
 type ScrollMetrics = {
   clientHeight: number;
@@ -35,17 +36,23 @@ export function nextStreamingScrollPinned(_current: boolean, action: StreamingSc
  * Keeps a streaming overflow panel at the bottom until the user takes control.
  * Scrolling all the way back down opts into automatic following again.
  */
-export function useStreamingScrollPin(updateSignal: string): {
+export function useStreamingScrollPin(updateSignal: string, stateKey: string): {
   handlePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   handleScroll: (event: ReactUIEvent<HTMLDivElement>) => void;
   handleTouchMove: (event: ReactTouchEvent<HTMLDivElement>) => void;
   handleWheel: (event: ReactWheelEvent<HTMLDivElement>) => void;
   scrollRef: RefObject<HTMLDivElement>;
 } {
+  const persistedPin = useStreamingScrollPinController();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const pinnedRef = useRef(true);
+  const pinnedRef = useRef(persistedPin.getPinned(stateKey));
   const scheduledFrameRef = useRef<number | null>(null);
   const scheduleTokenRef = useRef(0);
+
+  const setPinned = useCallback((pinned: boolean) => {
+    pinnedRef.current = pinned;
+    persistedPin.setPinned(stateKey, pinned);
+  }, [persistedPin, stateKey]);
 
   const cancelScheduledScroll = useCallback(() => {
     scheduleTokenRef.current += 1;
@@ -56,9 +63,9 @@ export function useStreamingScrollPin(updateSignal: string): {
   }, []);
 
   const releaseForUser = useCallback(() => {
-    pinnedRef.current = nextStreamingScrollPinned(pinnedRef.current, { type: 'user-scroll-up' });
+    setPinned(nextStreamingScrollPinned(pinnedRef.current, { type: 'user-scroll-up' }));
     cancelScheduledScroll();
-  }, [cancelScheduledScroll]);
+  }, [cancelScheduledScroll, setPinned]);
 
   const scrollToBottom = useCallback(() => {
     const node = scrollRef.current;
@@ -82,11 +89,11 @@ export function useStreamingScrollPin(updateSignal: string): {
   }, [scrollToBottom]);
 
   const handleScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
-    pinnedRef.current = nextStreamingScrollPinned(pinnedRef.current, {
+    setPinned(nextStreamingScrollPinned(pinnedRef.current, {
       type: 'scroll-position',
       distanceToBottom: scrollDistanceToBottom(event.currentTarget),
-    });
-  }, []);
+    }));
+  }, [setPinned]);
 
   const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
     if (event.deltaY < 0) releaseForUser();
@@ -102,6 +109,10 @@ export function useStreamingScrollPin(updateSignal: string): {
     const scrollbarHitWidth = Math.max(12, node.offsetWidth - node.clientWidth);
     if (event.clientX >= node.getBoundingClientRect().right - scrollbarHitWidth) releaseForUser();
   }, [releaseForUser]);
+
+  useLayoutEffect(() => {
+    pinnedRef.current = persistedPin.getPinned(stateKey);
+  }, [persistedPin, stateKey]);
 
   useLayoutEffect(() => {
     if (pinnedRef.current) scheduleScrollToBottom();

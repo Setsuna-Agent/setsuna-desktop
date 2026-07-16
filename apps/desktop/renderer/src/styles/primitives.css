@@ -252,10 +252,10 @@
   width: max-content;
   max-width: min(220px, calc(100vw - 24px));
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
+  border: 1px solid var(--app-tooltip-border);
   border-radius: 7px;
   color: var(--app-text);
-  background: var(--app-tooltip-bg);
+  background-color: var(--app-tooltip-bg);
   box-shadow: var(--app-shadow-popover);
   font-size: 12px;
   font-weight: var(--app-font-weight);

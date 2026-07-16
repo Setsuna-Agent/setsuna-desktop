@@ -8,7 +8,7 @@ import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
 import { fontFamilyOptions, fontSizeOptions, fontWeightOptions, getFontFamilyOptionsForPlatform, useAppearancePreferences, type FontFamilyMode, type FontWeightMode } from '../../hooks/useAppearancePreferences.js';
 import { codeColorSchemeOptions, codeFontFamilyOptions, codeHighlightThemeOptions, getCodeFontFamilyOptionsForPlatform, useCodeAppearancePreferences, type CodeColorScheme, type CodeFontFamilyMode, type CodeHighlightTheme } from '../../hooks/useCodeAppearancePreferences.js';
-import { useSidebarOpacityPreference } from '../../hooks/useSidebarOpacityPreference.js';
+import { sidebarBackgroundOptions, useSidebarBackgroundPreference, type SidebarBackgroundStyle } from '../../hooks/useSidebarBackgroundPreference.js';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
@@ -62,6 +62,20 @@ const accentColorChoiceOptions: Array<SettingsChoiceOption<AccentColor>> = accen
       style={{
         '--settings-accent-swatch-light': option.lightSwatch,
         '--settings-accent-swatch-dark': option.darkSwatch,
+      } as CSSProperties}
+    />
+  ),
+}));
+
+const sidebarBackgroundChoiceOptions: Array<SettingsChoiceOption<SidebarBackgroundStyle>> = sidebarBackgroundOptions.map((option) => ({
+  value: option.value,
+  label: option.label,
+  icon: (
+    <span
+      className="chat-user-settings__sidebar-background-swatch"
+      style={{
+        '--settings-sidebar-background-swatch-light': option.lightSwatch,
+        '--settings-sidebar-background-swatch-dark': option.darkSwatch,
       } as CSSProperties}
     />
   ),
@@ -303,7 +317,7 @@ function GeneralSettings({
 }) {
   const { fontFamily, fontSize, fontWeight, setFontFamily, setFontSize, setFontWeight } = useAppearancePreferences();
   const { codeColorScheme, codeFontFamily, codeHighlightTheme, setCodeColorScheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
-  const { sidebarTransparencyEnabled, setSidebarTransparencyEnabled } = useSidebarOpacityPreference();
+  const { sidebarBackgroundStyle, setSidebarBackgroundStyle } = useSidebarBackgroundPreference();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const { accentColor, setAccentColor } = useAccentColorPreference();
   const availableFontFamilyOptions = getFontFamilyOptionsForPlatform();
@@ -468,16 +482,14 @@ function GeneralSettings({
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <PanelLeft size={14} />
-              <span>侧栏与标题栏半透明</span>
+              <span>侧栏背景</span>
             </span>
-            <label className="sd-check" title="开启后侧栏与标题栏背景固定为 95% 不透明度">
-              <input
-                aria-label="侧栏与标题栏半透明"
-                type="checkbox"
-                checked={sidebarTransparencyEnabled}
-                onChange={(event) => setSidebarTransparencyEnabled(event.currentTarget.checked)}
-              />
-            </label>
+            <SettingsChoiceGroup
+              ariaLabel="侧栏背景"
+              options={sidebarBackgroundChoiceOptions}
+              value={sidebarBackgroundStyle}
+              onChange={setSidebarBackgroundStyle}
+            />
           </div>
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">

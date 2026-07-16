@@ -9,6 +9,11 @@ import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { MarkdownRenderer } from './markdown/MarkdownRenderer.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
+import {
+  ToolRunDisclosureProvider,
+  useToolRunDisclosureController,
+} from './ToolRunDisclosureProvider.js';
+import { StreamingScrollPinProvider } from './StreamingScrollPinProvider.js';
 import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
 import { conversationOverviewFromMessages } from './chatConversationOverview.js';
@@ -20,6 +25,10 @@ import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { chatThreadUsageForDisplay } from './chatThreadUsage.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
+import {
+  assistantToolRunDisclosureScopeId,
+  hasExpandedAssistantToolRunDisclosure,
+} from './toolRunDisclosureState.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
 import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
@@ -445,40 +454,44 @@ export function ChatWorkspace({
                 {showEmptyStarter ? (
                   <ChatStarter composer={composer(true)} title={starterTitle} onSelectSuggestion={onDraftChange} />
                 ) : (
-                  <div className="chat-bubble-list" ref={listRef}>
-                    {renderWindow.hiddenItemCount ? <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} /> : null}
-                    {renderedDisplayItems.map((item) => (
-                      <Fragment key={item.id}>
-                        <MessageItem
-                          activeAssistantItemId={activeAssistantItemId}
-                          activeTurnId={activeTurnId}
-                          assistantItemIdByTurnId={assistantItemIdByTurnId}
-                          deleteMode={deleteMode}
-                          editingDraft={editingDraft}
-                          editingMessageId={editingMessageId}
-                          editingSubmitting={editingSubmitting}
-                          expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
-                          item={item}
-                          onAnswerApproval={onAnswerApproval}
-                          onCancelEdit={cancelEditingMessage}
-                          onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
-                          onEditDraftChange={setEditingDraft}
-                          onOpenFileReview={onOpenFileReview}
-                          onPlanDecision={onPlanDecision}
-                          onStartEdit={startEditingMessage}
-                          onStartDelete={startDeleteSelection}
-                          onSubmitEdit={submitEditingMessage}
-                          onToggleDelete={toggleDeleteSelection}
-                          onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
-                          selectedForDelete={selectedDeleteItemIds.has(item.id)}
-                        />
-                        {item.type === 'user' && item.id === activePlaceholderUserItemId ? <ActiveWorkPlaceholder segments={[item.message]} /> : null}
-                      </Fragment>
-                    ))}
-                    {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
-                    {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
-                    <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
-                  </div>
+                  <StreamingScrollPinProvider key={currentThread?.id ?? 'no-thread'}>
+                    <ToolRunDisclosureProvider>
+                      <div className="chat-bubble-list" ref={listRef}>
+                        {renderWindow.hiddenItemCount ? <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} /> : null}
+                        {renderedDisplayItems.map((item) => (
+                          <Fragment key={item.id}>
+                            <MessageItem
+                              activeAssistantItemId={activeAssistantItemId}
+                              activeTurnId={activeTurnId}
+                              assistantItemIdByTurnId={assistantItemIdByTurnId}
+                              deleteMode={deleteMode}
+                              editingDraft={editingDraft}
+                              editingMessageId={editingMessageId}
+                              editingSubmitting={editingSubmitting}
+                              expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
+                              item={item}
+                              onAnswerApproval={onAnswerApproval}
+                              onCancelEdit={cancelEditingMessage}
+                              onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
+                              onEditDraftChange={setEditingDraft}
+                              onOpenFileReview={onOpenFileReview}
+                              onPlanDecision={onPlanDecision}
+                              onStartEdit={startEditingMessage}
+                              onStartDelete={startDeleteSelection}
+                              onSubmitEdit={submitEditingMessage}
+                              onToggleDelete={toggleDeleteSelection}
+                              onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
+                              selectedForDelete={selectedDeleteItemIds.has(item.id)}
+                            />
+                            {item.type === 'user' && item.id === activePlaceholderUserItemId ? <ActiveWorkPlaceholder segments={[item.message]} /> : null}
+                          </Fragment>
+                        ))}
+                        {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
+                        {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
+                        <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
+                      </div>
+                    </ToolRunDisclosureProvider>
+                  </StreamingScrollPinProvider>
                 )}
               </div>
             </MarkdownViewportProvider>
@@ -1225,6 +1238,8 @@ function AssistantRunContent({
   const hasWorkBlock = timelineBlocks.some((block) => block.type === 'work');
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
+  const { preferences: toolRunDisclosurePreferences } = useToolRunDisclosureController();
+  const userExpandedToolDetails = hasExpandedAssistantToolRunDisclosure(toolRunDisclosurePreferences, item.id);
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
   const awaitingApproval = toolRuns.some((run) => run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected' && run.approvalStatus !== 'cancelled');
   // 活动回合已有内容时，等待反馈始终跟在最新内容之后；等待用户审批时则不显示假进度。
@@ -1279,7 +1294,7 @@ function AssistantRunContent({
         onAnswerApproval,
         onWorkHistoryExpandedChange,
         plan: timelinePlan,
-        workHistoryExpanded: workHistoryState.expanded,
+        workHistoryExpanded: workHistoryState.expanded || userExpandedToolDetails,
       })}
       {showTrailingLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
       {fileChangeSummary ? (
@@ -1437,7 +1452,13 @@ function assistantWorkHistoryNode({
   plan: Extract<AssistantGuidanceTimelinePlan['nodes'][number], { type: 'workHistory' }>;
   workHistoryExpanded: boolean;
 }): ReactNode {
-  const workNodes = assistantWorkEntriesNodes(plan.entries, onAnswerApproval, hasFollowingContent, handledGuidanceMessageIds);
+  const workNodes = assistantWorkEntriesNodes(
+    plan.entries,
+    onAnswerApproval,
+    hasFollowingContent,
+    handledGuidanceMessageIds,
+    itemId,
+  );
   const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
   const hasWorkDetails = workNodes.length > 0;
   if (!hasWorkDetails && !plan.active) return null;
@@ -1473,7 +1494,13 @@ function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type:
   }
 }
 
-function assistantWorkEntriesNodes(entries: AssistantWorkHistoryPlanEntry[], onAnswerApproval: AnswerApprovalHandler, hasFollowingContent: boolean, handledGuidanceMessageIds: Set<string>): ReactNode[] {
+function assistantWorkEntriesNodes(
+  entries: AssistantWorkHistoryPlanEntry[],
+  onAnswerApproval: AnswerApprovalHandler,
+  hasFollowingContent: boolean,
+  handledGuidanceMessageIds: Set<string>,
+  assistantItemId: string,
+): ReactNode[] {
   const toolRunSummaryMode: ToolRunSummaryMode = hasFollowingContent ? 'aggregate' : 'latest';
   const nodes: ReactNode[] = [];
   entries.forEach((entry) => {
@@ -1481,22 +1508,45 @@ function assistantWorkEntriesNodes(entries: AssistantWorkHistoryPlanEntry[], onA
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={entry.id} markerMode="handled" messages={entry.messages} />);
       return;
     }
-    nodes.push(...assistantWorkItemNodes(entry.item, entry.blockActive, toolRunSummaryMode, onAnswerApproval));
+    nodes.push(...assistantWorkItemNodes(entry.item, entry.blockActive, toolRunSummaryMode, onAnswerApproval, assistantItemId));
   });
   return nodes;
 }
 
-function assistantWorkItemNodes(item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number], blockActive: boolean, toolRunSummaryMode: ToolRunSummaryMode, onAnswerApproval: AnswerApprovalHandler): ReactNode[] {
+function assistantWorkItemNodes(
+  item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
+  blockActive: boolean,
+  toolRunSummaryMode: ToolRunSummaryMode,
+  onAnswerApproval: AnswerApprovalHandler,
+  assistantItemId: string,
+): ReactNode[] {
   if (item.type === 'content') {
     return [<MarkdownRenderer key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />];
   }
   if (item.type === 'thinking') {
-    return blockActive && item.segment.content.trim() ? [<ActiveThinkingBox key={item.segment.id} content={item.segment.content} />] : [];
+    return blockActive && item.segment.content.trim()
+      ? [
+          <ActiveThinkingBox
+            key={item.segment.id}
+            content={item.segment.content}
+            scrollStateKey={item.segment.id}
+          />,
+        ]
+      : [];
   }
   const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
-  // Consecutive streamed tool items are merged by changing item.id. The first
-  // segment remains stable, so key the disclosure state to that segment instead.
-  return visibleToolRuns.length ? [<RuntimeToolRuns key={`${item.segment.id}:tool-runs`} runs={visibleToolRuns} summaryMode={toolRunSummaryMode} onAnswerApproval={onAnswerApproval} />] : [];
+  const disclosureScopeId = assistantToolRunDisclosureScopeId(assistantItemId, item.segment.id);
+  // Consecutive streamed tool items are merged by changing item.id. The assistant
+  // and first segment remain stable, so disclosure state survives timeline regrouping.
+  return visibleToolRuns.length ? [
+    <RuntimeToolRuns
+      key={disclosureScopeId}
+      runs={visibleToolRuns}
+      scopeId={disclosureScopeId}
+      summaryMode={toolRunSummaryMode}
+      onAnswerApproval={onAnswerApproval}
+    />,
+  ] : [];
 }
 
 function ActiveWorkPlaceholder({ children, segments, showLoading = true }: { children?: ReactNode; segments: RuntimeMessage[]; showLoading?: boolean }) {
@@ -1568,8 +1618,8 @@ function parseDateMs(value?: string | null): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-function ActiveThinkingBox({ content }: { content: string }): JSX.Element {
-  const { handlePointerDown, handleScroll, handleTouchMove, handleWheel, scrollRef } = useStreamingScrollPin(content);
+function ActiveThinkingBox({ content, scrollStateKey }: { content: string; scrollStateKey: string }): JSX.Element {
+  const { handlePointerDown, handleScroll, handleTouchMove, handleWheel, scrollRef } = useStreamingScrollPin(content, scrollStateKey);
 
   return (
     <div className="chat-thinking-box" aria-live="polite" aria-label="正在思考">

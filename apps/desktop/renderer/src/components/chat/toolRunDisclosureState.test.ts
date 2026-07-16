@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assistantToolRunDisclosureScopeId,
+  hasExpandedAssistantToolRunDisclosure,
   hasExpandedToolRunDisclosure,
   resolveToolRunDisclosureOpen,
   updateToolRunDisclosurePreference,
@@ -27,5 +29,19 @@ describe('tool run disclosure state', () => {
 
     expect(hasExpandedToolRunDisclosure(preferences, ['run_1', 'run_2'])).toBe(true);
     expect(hasExpandedToolRunDisclosure(preferences, ['run_2'])).toBe(false);
+  });
+
+  it('keeps disclosure preferences isolated to their assistant run', () => {
+    let preferences: ToolRunDisclosurePreferences = new Map();
+    const scopeId = assistantToolRunDisclosureScopeId('assistant_1', 'segment_1');
+    preferences = updateToolRunDisclosurePreference(
+      preferences,
+      `${scopeId}:group:run_1`,
+      `${scopeId}:anchor:run_1`,
+      true,
+    );
+
+    expect(hasExpandedAssistantToolRunDisclosure(preferences, 'assistant_1')).toBe(true);
+    expect(hasExpandedAssistantToolRunDisclosure(preferences, 'assistant_2')).toBe(false);
   });
 });

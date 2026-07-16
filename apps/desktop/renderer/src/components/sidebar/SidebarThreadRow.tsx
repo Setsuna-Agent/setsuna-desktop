@@ -93,12 +93,12 @@ export function SidebarThreadRow({
       ref={rowRef}
       role="button"
       tabIndex={0}
-      title={thread.title}
       onClick={() => onSelect(thread.id)}
       onContextMenu={handleContextMenu}
       onKeyDown={handleSelectKeyDown}
     >
-      <span className="desktop-agent-session__title">{thread.title}</span>
+      {/* Scope the native title to the text so it cannot overlap the archive action tooltip. */}
+      <span className="desktop-agent-session__title" title={thread.title}>{thread.title}</span>
       {meta}
       {menu}
     </div>

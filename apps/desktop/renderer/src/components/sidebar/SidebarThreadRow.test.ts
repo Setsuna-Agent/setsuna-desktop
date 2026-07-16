@@ -23,9 +23,12 @@ describe('SidebarThreadRow', () => {
 
   it('shows a direct archive action without relative time or an overflow trigger', () => {
     const html = renderRow(thread);
+    const rowStartTag = html.match(/^<div[^>]+>/)?.[0] ?? '';
 
     expect(html).toContain('aria-label="归档对话"');
     expect(html).toContain('data-tooltip="归档对话"');
+    expect(html).toContain('<span class="desktop-agent-session__title" title="Running thread">');
+    expect(rowStartTag).not.toContain('title=');
     expect(html).not.toContain('aria-label="对话操作"');
     expect(html).not.toContain('2026-07-11');
   });

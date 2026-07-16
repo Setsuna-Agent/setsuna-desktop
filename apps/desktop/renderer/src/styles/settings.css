@@ -792,8 +792,21 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-surface) 84%, transparent);
 }
 
+.desktop-settings-panel .chat-user-settings__sidebar-background-swatch {
+  width: 13px;
+  height: 13px;
+  border: 1px solid color-mix(in srgb, var(--app-text) 18%, transparent);
+  border-radius: 4px;
+  background: var(--settings-sidebar-background-swatch-light);
+  box-shadow: inset -3px 0 0 color-mix(in srgb, var(--app-text) 14%, transparent);
+}
+
 :root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__accent-swatch {
   background: var(--settings-accent-swatch-dark);
+}
+
+:root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__sidebar-background-swatch {
+  background: var(--settings-sidebar-background-swatch-dark);
 }
 
 .desktop-settings-panel .chat-user-settings__accent-row .chat-user-settings__option-button.is-active {

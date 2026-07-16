@@ -12,7 +12,7 @@ describe('streaming overflow scroll pin', () => {
 
   it('resumes automatic following only after the user returns to the bottom', () => {
     expect(nextStreamingScrollPinned(false, { type: 'scroll-position', distanceToBottom: 0 })).toBe(true);
-    expect(nextStreamingScrollPinned(false, { type: 'scroll-position', distanceToBottom: 1 })).toBe(true);
+    expect(nextStreamingScrollPinned(false, { type: 'scroll-position', distanceToBottom: 1 })).toBe(false);
   });
 
   it('calculates the remaining scroll distance without returning negative values', () => {

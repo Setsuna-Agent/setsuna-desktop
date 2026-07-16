@@ -5,6 +5,16 @@ export type ToolRunDisclosurePreference = {
 
 export type ToolRunDisclosurePreferences = ReadonlyMap<string, ToolRunDisclosurePreference>;
 
+const assistantDisclosureScopeSeparator = '::tool-runs::';
+
+export function assistantToolRunDisclosureScopePrefix(assistantItemId: string): string {
+  return `${assistantItemId}${assistantDisclosureScopeSeparator}`;
+}
+
+export function assistantToolRunDisclosureScopeId(assistantItemId: string, segmentId: string): string {
+  return `${assistantToolRunDisclosureScopePrefix(assistantItemId)}${segmentId}`;
+}
+
 export function resolveToolRunDisclosureOpen({
   defaultOpen,
   descendantExpanded,
@@ -37,6 +47,17 @@ export function hasExpandedToolRunDisclosure(
   const visibleRunIds = new Set(runIds);
   for (const preference of preferences.values()) {
     if (preference.open && visibleRunIds.has(preference.anchorRunId)) return true;
+  }
+  return false;
+}
+
+export function hasExpandedAssistantToolRunDisclosure(
+  preferences: ToolRunDisclosurePreferences,
+  assistantItemId: string,
+): boolean {
+  const scopePrefix = assistantToolRunDisclosureScopePrefix(assistantItemId);
+  for (const [disclosureId, preference] of preferences) {
+    if (preference.open && disclosureId.startsWith(scopePrefix)) return true;
   }
   return false;
 }
