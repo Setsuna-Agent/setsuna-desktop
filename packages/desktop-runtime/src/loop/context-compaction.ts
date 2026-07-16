@@ -27,6 +27,7 @@ export type RuntimeContextCompactionCandidate = {
   recentMessages: RuntimeMessage[];
   reservedTokens: number;
   targetContextTokens: number;
+  transcriptAfterMessageId?: string;
   triggerScopes: string[];
 };
 
@@ -125,6 +126,7 @@ export function createRuntimeContextCompactionCandidate({
     recentMessages: recentMessages.map(cloneRuntimeMessage),
     reservedTokens: normalizedBudget.reservedTokens,
     targetContextTokens,
+    transcriptAfterMessageId: messages.at(-1)?.id,
     triggerScopes: compactionTriggerScopes(force, tailScope),
   };
 }
@@ -187,6 +189,7 @@ export function materializeRuntimeContextCompaction({
     summaryTokens,
     targetContextTokens: candidate.targetContextTokens,
     tokensUntilCompaction,
+    transcriptAfterMessageId: candidate.transcriptAfterMessageId,
     triggerScopes: candidate.triggerScopes,
   };
 

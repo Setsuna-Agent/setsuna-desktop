@@ -112,25 +112,27 @@ export class RuntimeToolRouter {
   }
 
   async toolRuntimeMetadata(): Promise<RuntimeModelRequestToolRuntime[]> {
-    return Promise.all(this.tools.map(async (tool) => {
-      if (this.isRouterTool(tool.name)) {
+    return Promise.all(
+      this.tools.map(async (tool) => {
+        if (this.isRouterTool(tool.name)) {
+          return {
+            name: tool.name,
+            source: 'router' as const,
+            exposure: 'direct' as const,
+            supportsParallel: false,
+            waitsForRuntimeCancellation: true,
+          };
+        }
+        const profile = await this.profileFor(tool.name);
         return {
           name: tool.name,
-          source: 'router' as const,
-          exposure: 'direct' as const,
-          supportsParallel: false,
-          waitsForRuntimeCancellation: true,
+          source: 'host' as const,
+          exposure: toolExposure(profile),
+          supportsParallel: profile.supportsParallel === true,
+          waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation !== false,
         };
-      }
-      const profile = await this.profileFor(tool.name);
-      return {
-        name: tool.name,
-        source: 'host' as const,
-        exposure: toolExposure(profile),
-        supportsParallel: profile.supportsParallel === true,
-        waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation !== false,
-      };
-    }));
+      }),
+    );
   }
 
   async systemPrompt(): Promise<string | null> {
@@ -352,16 +354,34 @@ function toolSuggestPreview(result: { suggestions: Array<{ name: string }> }): s
   return `Suggested ${result.suggestions.length} deferred tool(s): ${result.suggestions.map((tool) => tool.name).join(', ')}`;
 }
 
+/**
+ * 从查询字符串中提取搜索词元，支持多语言和 Unicode
+ *
+ * @param value 查询字符串
+ * @returns 标准化的搜索词元数组
+ */
 function searchTerms(value: string): string[] {
-  return normalizeSearchText(value).split(/[^a-z0-9_:-]+/).filter(Boolean);
+  return normalizeSearchText(value).match(/[\p{L}\p{N}_:-]+/gu) ?? [];
 }
 
+/**
+ * 将查询文本标准化：小写化并去除首尾空白
+ *
+ * @param value 原始查询文本
+ * @returns 标准化后的文本
+ */
 function normalizeSearchText(value: string): string {
   return value.toLowerCase().trim();
 }
 
+/**
+ * 将文本紧凑化，移除所有非字母数字字符
+ *
+ * @param value 原始文本
+ * @returns 紧凑化后的文本
+ */
 function compactSearchText(value: string): string {
-  return normalizeSearchText(value).replace(/[^a-z0-9]+/g, '');
+  return normalizeSearchText(value).replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
 function tryParseJsonObject(value: string): Record<string, unknown> | null {

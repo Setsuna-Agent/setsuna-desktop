@@ -66,6 +66,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'thread.context_compacting') {
     next.contextCompaction = {
+      turnId: event.turnId,
       forced: event.payload.forced,
       maxContextTokens: event.payload.maxContextTokens,
       maxContextTokensK: event.payload.maxContextTokensK,
@@ -80,6 +81,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'thread.context_compacted') {
     const pendingHookRuns = next.pendingHookRuns;
     next.contextCompaction = {
+      turnId: event.turnId,
       completedAt: event.createdAt,
       forced: event.payload.notice.forced,
       maxContextTokens: event.payload.notice.maxContextTokens,
@@ -132,10 +134,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'turn.step_snapshot') {
     const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
     if (turn) {
-      turn.stepSnapshots = [
-        ...(turn.stepSnapshots ?? []),
-        { createdAt: event.createdAt, snapshot: cloneStepSnapshot(event.payload.snapshot) },
-      ];
+      turn.stepSnapshots = [...(turn.stepSnapshots ?? []), { createdAt: event.createdAt, snapshot: cloneStepSnapshot(event.payload.snapshot) }];
     }
     return next;
   }
@@ -265,9 +264,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'messages.deleted') {
     const ids = new Set(event.payload.messageIds);
-    const removedTurnIds = new Set(next.messages
-      .filter((message) => message.turnId && ids.has(message.id))
-      .map((message) => message.turnId!));
+    const removedTurnIds = new Set(next.messages.filter((message) => message.turnId && ids.has(message.id)).map((message) => message.turnId!));
     next.messages = next.messages.filter((message) => !ids.has(message.id));
     pruneRemovedTurns(next, removedTurnIds);
     refreshThreadSummary(next);
@@ -278,9 +275,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const index = next.messages.findIndex((message) => message.id === event.payload.messageId);
     if (index >= 0) {
       const removedMessageIds = new Set(event.payload.removedMessageIds);
-      const removedTurnIds = new Set(next.messages
-        .filter((message) => message.turnId && removedMessageIds.has(message.id))
-        .map((message) => message.turnId!));
+      const removedTurnIds = new Set(next.messages.filter((message) => message.turnId && removedMessageIds.has(message.id)).map((message) => message.turnId!));
       const keepUntil = event.payload.includeSelf ? index : index + 1;
       next.messages = next.messages.slice(0, keepUntil);
       pruneRemovedTurns(next, removedTurnIds);
@@ -412,9 +407,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         upsertToolHookRun(message, event.payload, event.createdAt);
       }
     } else {
-      const message = userMessageForTurn(next.messages, event.turnId)
-        ?? assistantMessageForTurn(next.messages, event.turnId)
-        ?? contextMessageForTurn(next.messages, event.turnId);
+      const message = userMessageForTurn(next.messages, event.turnId) ?? assistantMessageForTurn(next.messages, event.turnId) ?? contextMessageForTurn(next.messages, event.turnId);
       if (message) {
         upsertMessageHookRun(message, event.payload, event.createdAt);
       } else {
@@ -426,6 +419,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'runtime.error') {
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
+    clearRunningContextCompaction(next, event.turnId);
     const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
     if (turn) {
       turn.status = 'failed';
@@ -438,8 +432,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       message.status = 'error';
       message.completedAt = event.createdAt;
       message.error = event.payload.message;
-    } else if (next.contextCompaction?.status === 'running') {
-      next.contextCompaction = undefined;
     }
     return next;
   }
@@ -452,6 +444,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'turn.cancelled') {
     const reason = event.payload.reason || 'Turn cancelled.';
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
+    clearRunningContextCompaction(next, event.turnId);
     const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
     if (turn) {
       turn.status = 'cancelled';
@@ -475,6 +468,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'turn.completed') {
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
+    clearRunningContextCompaction(next, event.turnId);
     const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
     if (turn) {
       turn.status = turn.status === 'failed' || turn.status === 'cancelled' ? turn.status : 'completed';
@@ -484,6 +478,13 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   return next;
+}
+
+function clearRunningContextCompaction(thread: RuntimeThread, turnId: string | undefined): void {
+  const compaction = thread.contextCompaction;
+  if (compaction?.status !== 'running') return;
+  if (compaction.turnId && turnId && compaction.turnId !== turnId) return;
+  thread.contextCompaction = undefined;
 }
 
 function cloneMessage(message: RuntimeMessage): RuntimeMessage {
@@ -523,9 +524,7 @@ function cloneThreadTurn(turn: RuntimeThreadTurn): RuntimeThreadTurn {
   };
 }
 
-function cloneStepSnapshot(
-  snapshot: NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot'],
-): NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot'] {
+function cloneStepSnapshot(snapshot: NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot']): NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot'] {
   return {
     ...snapshot,
     conversationMessageIds: [...snapshot.conversationMessageIds],
@@ -608,12 +607,7 @@ function upsertThreadTurnItem(turn: RuntimeThreadTurn, item: RuntimeThreadTurn['
   };
 }
 
-function appendThreadTurnItemDelta(
-  turn: RuntimeThreadTurn,
-  itemId: string,
-  delta: string,
-  fallbackKind: RuntimeThreadTurn['items'][number]['kind'] = 'agent_message',
-): void {
+function appendThreadTurnItemDelta(turn: RuntimeThreadTurn, itemId: string, delta: string, fallbackKind: RuntimeThreadTurn['items'][number]['kind'] = 'agent_message'): void {
   if (!itemId || !delta) return;
   let item = turn.items.find((current) => current.id === itemId);
   if (!item) {
@@ -654,9 +648,7 @@ function cloneMemoryCitation(citation: NonNullable<RuntimeMessage['memoryCitatio
 function mergeCompactedMessages(previousMessages: RuntimeMessage[], compactedMessages: RuntimeMessage[]): RuntimeMessage[] {
   const compactedIds = new Set(compactedMessages.map((message) => message.id));
   // 保留用户可见历史为 transcript，同时用压缩结果替换模型可见窗口。
-  const archivedMessages = previousMessages
-    .filter((message) => !compactedIds.has(message.id) && message.visibility !== 'model')
-    .map(cloneTranscriptMessage);
+  const archivedMessages = previousMessages.filter((message) => !compactedIds.has(message.id) && message.visibility !== 'model').map(cloneTranscriptMessage);
   return [...archivedMessages, ...compactedMessages.map(cloneMessage)];
 }
 
@@ -667,9 +659,7 @@ function cloneTranscriptMessage(message: RuntimeMessage): RuntimeMessage {
   };
 }
 
-function cloneThreadContextCompaction(
-  compaction: NonNullable<RuntimeThread['contextCompaction']>,
-): NonNullable<RuntimeThread['contextCompaction']> {
+function cloneThreadContextCompaction(compaction: NonNullable<RuntimeThread['contextCompaction']>): NonNullable<RuntimeThread['contextCompaction']> {
   return {
     ...compaction,
     notice: compaction.notice ? { ...compaction.notice } : undefined,
@@ -718,10 +708,13 @@ function contextMessageForTurn(messages: RuntimeMessage[], turnId?: string): Run
 }
 
 function upsertPendingHookRun(thread: RuntimeThread, input: RuntimeHookRun, createdAt: string, turnId?: string): void {
-  const hookRun = normalizeHookRun({
-    ...input,
-    turnId: input.turnId ?? turnId,
-  }, createdAt);
+  const hookRun = normalizeHookRun(
+    {
+      ...input,
+      turnId: input.turnId ?? turnId,
+    },
+    createdAt,
+  );
   thread.pendingHookRuns = upsertHookRunList(thread.pendingHookRuns, hookRun);
 }
 
@@ -791,7 +784,7 @@ function normalizeHookRun(input: RuntimeHookRun, createdAt: string): RuntimeHook
   return {
     ...input,
     startedAt: input.startedAt ?? createdAt,
-    completedAt: input.status === 'running' ? input.completedAt : input.completedAt ?? createdAt,
+    completedAt: input.status === 'running' ? input.completedAt : (input.completedAt ?? createdAt),
   };
 }
 
@@ -812,10 +805,7 @@ function upsertHookRunList(current: RuntimeHookRun[] | undefined, input: Runtime
  * @param message 要更新的 assistant 消息。
  * @param input 工具输出增量和所属工具信息。
  */
-function appendToolRunOutputDelta(
-  message: RuntimeMessage,
-  input: Pick<RuntimeToolRun, 'id' | 'name' | 'source'> & { createdAt: string; delta: string },
-): void {
+function appendToolRunOutputDelta(message: RuntimeMessage, input: Pick<RuntimeToolRun, 'id' | 'name' | 'source'> & { createdAt: string; delta: string }): void {
   if (!input.delta) return;
   const runs = message.toolRuns ? [...message.toolRuns] : [];
   const index = runs.findIndex((item) => item.id === input.id);
@@ -857,10 +847,7 @@ function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, re
       return { ...run, hookRuns: nextHookRuns };
     }
     changed = true;
-    const cancelApproval = run.status === 'pending_approval'
-      && run.approvalStatus !== 'approved'
-      && run.approvalStatus !== 'rejected'
-      && run.approvalStatus !== 'cancelled';
+    const cancelApproval = run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected' && run.approvalStatus !== 'cancelled';
     return {
       ...run,
       status: 'cancelled' as RuntimeToolRunStatus,
@@ -938,12 +925,7 @@ function hasActiveToolRun(message: RuntimeMessage): boolean {
 }
 
 function isActiveToolRun(run: RuntimeToolRun): boolean {
-  return run.status === 'running' || (
-    run.status === 'pending_approval'
-    && run.approvalStatus !== 'approved'
-    && run.approvalStatus !== 'rejected'
-    && run.approvalStatus !== 'cancelled'
-  );
+  return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected' && run.approvalStatus !== 'cancelled');
 }
 
 /**

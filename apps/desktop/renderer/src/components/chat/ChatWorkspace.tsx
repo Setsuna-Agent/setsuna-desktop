@@ -18,16 +18,22 @@ import { activeAssistantRunItemId, assistantRunCopyText, assistantRunIsActive, a
 import { hasThinkingSegments } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
+import { chatThreadUsageForDisplay } from './chatThreadUsage.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
+import { useStreamingScrollPin } from './useStreamingScrollPin.js';
 import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import { ActionTooltip } from '../primitives.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
 
+// 滚动吸附阈值：用户滚动距离底部超过此值时视为"未贴底"
 const scrollBottomThresholdPx = 96;
+// 滚动距离底部小于此值时视为"已贴底"
 const stickyBottomThresholdPx = 4;
+// 流式内容自动贴底需要连续多帧 settle，避免滚动少一截
 const pinnedScrollSettleFrameCount = 3;
+// 键盘滚动意图快捷键
 const keyboardScrollIntentKeys = new Set(['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' ']);
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 type WorkHistoryExpandedChangeHandler = (itemId: string, expanded: boolean) => void;
@@ -149,15 +155,10 @@ export function ChatWorkspace({
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const requestedReviewProjectRef = useRef<string | null>(null);
-  const contextUsage = useMemo(
-    () => contextTokenUsageFromThread(currentThread, activeModelContextWindowTokens(config)),
-    [config, currentThread],
-  );
+  const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread, activeModelContextWindowTokens(config)), [config, currentThread]);
+  const displayedThreadUsage = useMemo(() => chatThreadUsageForDisplay(threadUsage, currentThread), [currentThread, threadUsage]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
-  const conversationOverview = useMemo(
-    () => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null),
-    [currentThread, messages, variant],
-  );
+  const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);
   const overviewLayout = useConversationOverviewAutoExpand(conversationRef, contentRef);
   const overviewCanExpand = overviewLayout.canExpand;
   const [overviewManuallyCollapsed, setOverviewManuallyCollapsed] = useState(false);
@@ -172,20 +173,13 @@ export function ChatWorkspace({
     compact: overviewCompact,
     needsShift: overviewLayout.needsContentShift,
   });
-  const overviewContextLabel = useMemo(
-    () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status),
-    [contextUsage, currentThread?.contextCompaction?.status],
-  );
+  const overviewContextLabel = useMemo(() => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status), [contextUsage, currentThread?.contextCompaction?.status]);
   const showEmptyStarter = variant === 'main' && displayItems.length === 0 && !activeTurnId;
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
   const [editingSubmitting, setEditingSubmitting] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
-  const conversationClassName = [
-    'chat-main-conversation',
-    showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender',
-    conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : '',
-  ].filter(Boolean).join(' ');
+  const conversationClassName = ['chat-main-conversation', showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender', conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : ''].filter(Boolean).join(' ');
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
@@ -228,50 +222,31 @@ export function ChatWorkspace({
       return next;
     });
   }, []);
-  const renderWindow = useMemo(
-    () => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory }),
-    [activeTurnId, deleteMode, displayItems, showFullHistory],
-  );
+  const renderWindow = useMemo(() => createChatRenderWindow(displayItems, { activeTurnId, enabled: !deleteMode && !showFullHistory }), [activeTurnId, deleteMode, displayItems, showFullHistory]);
   const renderedDisplayItems = renderWindow.items;
-  const activeAssistantItemId = useMemo(
-    () => activeAssistantRunItemId(renderedDisplayItems, activeTurnId),
-    [activeTurnId, renderedDisplayItems],
-  );
+  const activeAssistantItemId = useMemo(() => activeAssistantRunItemId(renderedDisplayItems, activeTurnId), [activeTurnId, renderedDisplayItems]);
   const activeAssistantVisible = Boolean(activeAssistantItemId);
-  const activeUserVisible = useMemo(
-    () => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'user' && item.message.turnId === activeTurnId)),
-    [activeTurnId, renderedDisplayItems],
-  );
+  const activeUserVisible = useMemo(() => Boolean(activeTurnId && renderedDisplayItems.some((item) => item.type === 'user' && item.message.turnId === activeTurnId)), [activeTurnId, renderedDisplayItems]);
   const showActiveTurnPlaceholder = Boolean(activeTurnId && !contextCompactionRunning && !activeAssistantVisible);
   const activePlaceholderUserItemId = useMemo(() => {
     if (!showActiveTurnPlaceholder || !activeTurnId) return null;
     return [...renderedDisplayItems].reverse().find((item) => item.type === 'user' && item.message.turnId === activeTurnId)?.id ?? null;
   }, [activeTurnId, renderedDisplayItems, showActiveTurnPlaceholder]);
-  const scrollSignal = useMemo(
-    () => createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id }),
-    [activeTurnId, contextCompactionRunning, currentThread?.id, renderWindow],
-  );
-  const {
-    handleScroll,
-    handleScrollKeyDown,
-    handleScrollTouchMove,
-    handleScrollWheel,
-    listRef,
-    markScrollbarDragIntent,
-    scrollRef,
-    scrollToBottom,
-    showScrollBottom,
-  } = usePinnedChatScroll({
+  const scrollSignal = useMemo(() => createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id }), [activeTurnId, contextCompactionRunning, currentThread?.id, renderWindow]);
+  const { handleScroll, handleScrollKeyDown, handleScrollTouchMove, handleScrollWheel, listRef, markScrollbarDragIntent, scrollRef, scrollToBottom, showScrollBottom } = usePinnedChatScroll({
     contentRef,
     scrollSignal,
     showEmptyStarter,
     threadId: currentThread?.id ?? null,
   });
-  const handleSend = useCallback<NonNullable<typeof onSend>>((value, options) => {
-    // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
-    scrollToBottom();
-    onSend(value, options);
-  }, [onSend, scrollToBottom]);
+  const handleSend = useCallback<NonNullable<typeof onSend>>(
+    (value, options) => {
+      // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
+      scrollToBottom();
+      onSend(value, options);
+    },
+    [onSend, scrollToBottom],
+  );
 
   useLayoutEffect(() => {
     setEditingMessageId(null);
@@ -283,6 +258,7 @@ export function ChatWorkspace({
     setActionError(null);
   }, [currentThread?.id]);
 
+  // 缓存可删除项，避免每次渲染都重新 filter
   const selectableDeleteItems = useMemo(
     () =>
       displayItems
@@ -294,6 +270,7 @@ export function ChatWorkspace({
         })),
     [displayItems],
   );
+  // 缓存删除消息 ID 集合，避免重复计算
   const selectedDeleteMessageIds = useMemo(() => {
     const ids = new Set<string>();
     for (const item of selectableDeleteItems) {
@@ -406,7 +383,7 @@ export function ChatWorkspace({
       imageAttachmentRequest={imageAttachmentRequest}
       skillSelectionRequest={skillSelectionRequest}
       skills={skills}
-      threadUsage={threadUsage}
+      threadUsage={displayedThreadUsage}
       starter={starter}
       threadMemoryMode={currentThread?.memoryMode}
       placeholder={variant === 'side' ? '给侧边任务发送消息' : undefined}
@@ -462,28 +439,14 @@ export function ChatWorkspace({
     <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
       <div className="chat-main-workspace">
         <div className={conversationClassName} ref={conversationRef}>
-          <div
-            className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`}
-            ref={scrollRef}
-            onKeyDownCapture={handleScrollKeyDown}
-            onPointerDownCapture={markScrollbarDragIntent}
-            onScroll={handleScroll}
-            onTouchMoveCapture={handleScrollTouchMove}
-            onWheelCapture={handleScrollWheel}
-          >
+          <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRef} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={markScrollbarDragIntent} onScroll={handleScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
             <MarkdownViewportProvider scrollRef={scrollRef}>
               <div className="chat-content-frame" ref={contentRef}>
                 {showEmptyStarter ? (
-                  <ChatStarter
-                    composer={composer(true)}
-                    title={starterTitle}
-                    onSelectSuggestion={onDraftChange}
-                  />
+                  <ChatStarter composer={composer(true)} title={starterTitle} onSelectSuggestion={onDraftChange} />
                 ) : (
                   <div className="chat-bubble-list" ref={listRef}>
-                    {renderWindow.hiddenItemCount ? (
-                      <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} />
-                    ) : null}
+                    {renderWindow.hiddenItemCount ? <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} /> : null}
                     {renderedDisplayItems.map((item) => (
                       <Fragment key={item.id}>
                         <MessageItem
@@ -509,9 +472,7 @@ export function ChatWorkspace({
                           onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
                           selectedForDelete={selectedDeleteItemIds.has(item.id)}
                         />
-                        {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
-                          <ActiveWorkPlaceholder segments={[item.message]} />
-                        ) : null}
+                        {item.type === 'user' && item.id === activePlaceholderUserItemId ? <ActiveWorkPlaceholder segments={[item.message]} /> : null}
                       </Fragment>
                     ))}
                     {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
@@ -545,7 +506,7 @@ export function ChatWorkspace({
                 onOpenReview={onOpenFileReview}
                 onReviewRefresh={onReviewRefresh}
                 currentThread={currentThread}
-                threadUsage={threadUsage}
+                threadUsage={displayedThreadUsage}
                 threads={threads}
               />
             </div>
@@ -579,15 +540,7 @@ export function ChatWorkspace({
   );
 }
 
-function ChatStarter({
-  composer,
-  title,
-  onSelectSuggestion,
-}: {
-  composer: ReactNode;
-  title: string;
-  onSelectSuggestion: (prompt: string) => void;
-}) {
+function ChatStarter({ composer, title, onSelectSuggestion }: { composer: ReactNode; title: string; onSelectSuggestion: (prompt: string) => void }) {
   return (
     <div className="chat-starter">
       <div className="chat-starter__intro">
@@ -599,12 +552,7 @@ function ChatStarter({
           {starterSuggestions.map((suggestion) => {
             const Icon = suggestion.icon;
             return (
-              <button
-                key={suggestion.label}
-                className={`chat-starter-suggestion chat-starter-suggestion--${suggestion.accent}`}
-                type="button"
-                onClick={() => onSelectSuggestion(suggestion.prompt)}
-              >
+              <button key={suggestion.label} className={`chat-starter-suggestion chat-starter-suggestion--${suggestion.accent}`} type="button" onClick={() => onSelectSuggestion(suggestion.prompt)}>
                 <Icon size={16} strokeWidth={1.8} aria-hidden="true" />
                 <span>{suggestion.label}</span>
               </button>
@@ -617,15 +565,7 @@ function ChatStarter({
   );
 }
 
-function ChatScrollOverlay({
-  disabled,
-  scrollRef,
-  scrollSignal,
-}: {
-  disabled: boolean;
-  scrollRef: RefObject<HTMLDivElement | null>;
-  scrollSignal: string;
-}) {
+function ChatScrollOverlay({ disabled, scrollRef, scrollSignal }: { disabled: boolean; scrollRef: RefObject<HTMLDivElement | null>; scrollSignal: string }) {
   const dragRef = useRef<{
     scrollRange: number;
     startScrollTop: number;
@@ -659,15 +599,7 @@ function ChatScrollOverlay({
       top: node.offsetTop,
       visible,
     };
-    setMetrics((current) => (
-      current.height === next.height
-      && current.thumbHeight === next.thumbHeight
-      && current.thumbTop === next.thumbTop
-      && current.top === next.top
-      && current.visible === next.visible
-        ? current
-        : next
-    ));
+    setMetrics((current) => (current.height === next.height && current.thumbHeight === next.thumbHeight && current.thumbTop === next.thumbTop && current.top === next.top && current.visible === next.visible ? current : next));
   }, [disabled, scrollRef]);
 
   useLayoutEffect(() => {
@@ -686,26 +618,32 @@ function ChatScrollOverlay({
     };
   }, [disabled, scrollRef, scrollSignal, updateMetrics]);
 
-  const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const node = scrollRef.current;
-    if (!node || !metrics.visible) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      scrollRange: Math.max(0, node.scrollHeight - node.clientHeight),
-      startScrollTop: node.scrollTop,
-      startY: event.clientY,
-      thumbRange: Math.max(1, metrics.height - metrics.thumbHeight),
-    };
-  }, [metrics.height, metrics.thumbHeight, metrics.visible, scrollRef]);
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const node = scrollRef.current;
+      if (!node || !metrics.visible) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dragRef.current = {
+        scrollRange: Math.max(0, node.scrollHeight - node.clientHeight),
+        startScrollTop: node.scrollTop,
+        startY: event.clientY,
+        thumbRange: Math.max(1, metrics.height - metrics.thumbHeight),
+      };
+    },
+    [metrics.height, metrics.thumbHeight, metrics.visible, scrollRef],
+  );
 
-  const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const node = scrollRef.current;
-    const drag = dragRef.current;
-    if (!node || !drag) return;
-    const delta = event.clientY - drag.startY;
-    node.scrollTop = drag.startScrollTop + (delta / drag.thumbRange) * drag.scrollRange;
-  }, [scrollRef]);
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const node = scrollRef.current;
+      const drag = dragRef.current;
+      if (!node || !drag) return;
+      const delta = event.clientY - drag.startY;
+      node.scrollTop = drag.startScrollTop + (delta / drag.thumbRange) * drag.scrollRange;
+    },
+    [scrollRef],
+  );
 
   const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     dragRef.current = null;
@@ -718,14 +656,7 @@ function ChatScrollOverlay({
 
   return (
     <div className="chat-scrollbar-overlay" aria-hidden="true" style={{ height: metrics.height, top: metrics.top }}>
-      <div
-        className="chat-scrollbar-overlay__thumb"
-        style={{ height: metrics.thumbHeight, transform: `translateY(${metrics.thumbTop}px)` }}
-        onPointerCancel={handlePointerUp}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-      />
+      <div className="chat-scrollbar-overlay__thumb" style={{ height: metrics.thumbHeight, transform: `translateY(${metrics.thumbTop}px)` }} onPointerCancel={handlePointerUp} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} />
     </div>
   );
 }
@@ -737,17 +668,7 @@ function ChatScrollOverlay({
  * @param showEmptyStarter 当前是否处于空线程 starter 页面。
  * @param threadId 当前线程 ID，切换线程时用于重置滚动状态。
  */
-function usePinnedChatScroll({
-  contentRef,
-  scrollSignal,
-  showEmptyStarter,
-  threadId,
-}: {
-  contentRef: RefObject<HTMLDivElement | null>;
-  scrollSignal: string;
-  showEmptyStarter: boolean;
-  threadId: string | null;
-}) {
+function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter, threadId }: { contentRef: RefObject<HTMLDivElement | null>; scrollSignal: string; showEmptyStarter: boolean; threadId: string | null }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   // sticky 状态放在 ref 里，滚动事件高频触发时不需要每次 rerender。
@@ -773,30 +694,33 @@ function usePinnedChatScroll({
     node.scrollTop = node.scrollHeight;
     setShowScrollBottom(false);
   }, []);
-  const schedulePinnedScroll = useCallback((frameCount = pinnedScrollSettleFrameCount) => {
-    if (showEmptyStarter || !shouldStickToBottomRef.current) return;
-    if (typeof window === 'undefined') {
-      scrollToBottomNow();
-      return;
-    }
-
-    // 流式 Markdown 和工具面板可能连续几帧增高，多帧 settle 可以避免滚动少一截。
-    const token = scrollScheduleTokenRef.current + 1;
-    scrollScheduleTokenRef.current = token;
-    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
-
-    const tick = (remainingFrames: number) => {
-      scrollFrameRef.current = window.requestAnimationFrame(() => {
-        if (token !== scrollScheduleTokenRef.current) return;
-        scrollFrameRef.current = null;
-        if (!shouldStickToBottomRef.current) return;
+  const schedulePinnedScroll = useCallback(
+    (frameCount = pinnedScrollSettleFrameCount) => {
+      if (showEmptyStarter || !shouldStickToBottomRef.current) return;
+      if (typeof window === 'undefined') {
         scrollToBottomNow();
-        if (remainingFrames > 1) tick(remainingFrames - 1);
-      });
-    };
+        return;
+      }
 
-    tick(Math.max(1, frameCount));
-  }, [scrollToBottomNow, showEmptyStarter]);
+      // 流式 Markdown 和工具面板可能连续几帧增高，多帧 settle 可以避免滚动少一截。
+      const token = scrollScheduleTokenRef.current + 1;
+      scrollScheduleTokenRef.current = token;
+      if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+
+      const tick = (remainingFrames: number) => {
+        scrollFrameRef.current = window.requestAnimationFrame(() => {
+          if (token !== scrollScheduleTokenRef.current) return;
+          scrollFrameRef.current = null;
+          if (!shouldStickToBottomRef.current) return;
+          scrollToBottomNow();
+          if (remainingFrames > 1) tick(remainingFrames - 1);
+        });
+      };
+
+      tick(Math.max(1, frameCount));
+    },
+    [scrollToBottomNow, showEmptyStarter],
+  );
 
   const syncScrollBottomState = useCallback(() => {
     const node = scrollRef.current;
@@ -832,15 +756,18 @@ function usePinnedChatScroll({
     setShowScrollBottom(true);
   }, [schedulePinnedScroll, scrollDistanceToBottom, showEmptyStarter]);
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const node = scrollRef.current;
-    if (!node) return;
-    userScrollIntentRef.current = false;
-    shouldStickToBottomRef.current = true;
-    setShowScrollBottom(false);
-    node.scrollTo({ top: node.scrollHeight, behavior });
-    if (behavior === 'auto') schedulePinnedScroll(2);
-  }, [schedulePinnedScroll]);
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto') => {
+      const node = scrollRef.current;
+      if (!node) return;
+      userScrollIntentRef.current = false;
+      shouldStickToBottomRef.current = true;
+      setShowScrollBottom(false);
+      node.scrollTo({ top: node.scrollHeight, behavior });
+      if (behavior === 'auto') schedulePinnedScroll(2);
+    },
+    [schedulePinnedScroll],
+  );
 
   const markUserScrollIntent = useCallback(() => {
     if (!showEmptyStarter) userScrollIntentRef.current = true;
@@ -857,41 +784,53 @@ function usePinnedChatScroll({
     setShowScrollBottom(scrollDistanceToBottom(node) > scrollBottomThresholdPx);
   }, [cancelScheduledScroll, scrollDistanceToBottom, showEmptyStarter]);
 
-  const handleScrollWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    if (showEmptyStarter) return;
-    const node = scrollRef.current;
-    if (!node) return;
-    const distanceToBottom = scrollDistanceToBottom(node);
-    if (event.deltaY < 0 || distanceToBottom > stickyBottomThresholdPx) {
-      releasePinnedScrollForUser();
-      return;
-    }
-    markUserScrollIntent();
-  }, [markUserScrollIntent, releasePinnedScrollForUser, scrollDistanceToBottom, showEmptyStarter]);
-
-  const handleScrollTouchMove = useCallback((_event: ReactTouchEvent<HTMLDivElement>) => {
-    releasePinnedScrollForUser();
-  }, [releasePinnedScrollForUser]);
-
-  const handleScrollKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    if (!keyboardScrollIntentKeys.has(event.key)) return;
-    if (event.key === 'End') {
+  const handleScrollWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (showEmptyStarter) return;
+      const node = scrollRef.current;
+      if (!node) return;
+      const distanceToBottom = scrollDistanceToBottom(node);
+      if (event.deltaY < 0 || distanceToBottom > stickyBottomThresholdPx) {
+        releasePinnedScrollForUser();
+        return;
+      }
       markUserScrollIntent();
-      return;
-    }
-    releasePinnedScrollForUser();
-  }, [markUserScrollIntent, releasePinnedScrollForUser]);
+    },
+    [markUserScrollIntent, releasePinnedScrollForUser, scrollDistanceToBottom, showEmptyStarter],
+  );
 
-  const markScrollbarDragIntent = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const node = scrollRef.current;
-    if (!node || node.scrollHeight <= node.clientHeight || showEmptyStarter) return;
-    const scrollbarHitWidth = Math.max(12, node.offsetWidth - node.clientWidth);
-    const { right } = node.getBoundingClientRect();
-    // 只在点击滚动条轨道区域时认为是拖拽意图，普通内容点击不解除 sticky。
-    if (event.clientX >= right - scrollbarHitWidth) {
+  const handleScrollTouchMove = useCallback(
+    (_event: ReactTouchEvent<HTMLDivElement>) => {
       releasePinnedScrollForUser();
-    }
-  }, [releasePinnedScrollForUser, showEmptyStarter]);
+    },
+    [releasePinnedScrollForUser],
+  );
+
+  const handleScrollKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (!keyboardScrollIntentKeys.has(event.key)) return;
+      if (event.key === 'End') {
+        markUserScrollIntent();
+        return;
+      }
+      releasePinnedScrollForUser();
+    },
+    [markUserScrollIntent, releasePinnedScrollForUser],
+  );
+
+  const markScrollbarDragIntent = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const node = scrollRef.current;
+      if (!node || node.scrollHeight <= node.clientHeight || showEmptyStarter) return;
+      const scrollbarHitWidth = Math.max(12, node.offsetWidth - node.clientWidth);
+      const { right } = node.getBoundingClientRect();
+      // 只在点击滚动条轨道区域时认为是拖拽意图，普通内容点击不解除 sticky。
+      if (event.clientX >= right - scrollbarHitWidth) {
+        releasePinnedScrollForUser();
+      }
+    },
+    [releasePinnedScrollForUser, showEmptyStarter],
+  );
 
   useLayoutEffect(() => {
     cancelScheduledScroll();
@@ -953,10 +892,7 @@ function usePinnedChatScroll({
   };
 }
 
-function useConversationOverviewAutoExpand(
-  conversationRef: RefObject<HTMLElement | null>,
-  contentRef: RefObject<HTMLElement | null>,
-): { canExpand: boolean; needsContentShift: boolean } {
+function useConversationOverviewAutoExpand(conversationRef: RefObject<HTMLElement | null>, contentRef: RefObject<HTMLElement | null>): { canExpand: boolean; needsContentShift: boolean } {
   const [layout, setLayout] = useState(() => ({ canExpand: false, needsContentShift: false }));
 
   useLayoutEffect(() => {
@@ -971,11 +907,7 @@ function useConversationOverviewAutoExpand(
         canExpand: canFitConversationOverviewPanel({ conversationWidth, contentWidth }),
         needsContentShift: needsConversationOverviewContentShift({ conversationWidth, contentWidth }),
       };
-      setLayout((current) =>
-        current.canExpand === nextLayout.canExpand && current.needsContentShift === nextLayout.needsContentShift
-          ? current
-          : nextLayout,
-      );
+      setLayout((current) => (current.canExpand === nextLayout.canExpand && current.needsContentShift === nextLayout.needsContentShift ? current : nextLayout));
     };
     sync();
 
@@ -993,10 +925,7 @@ function useConversationOverviewAutoExpand(
   return layout;
 }
 
-function conversationOverviewContextLabel(
-  usage: ChatContextTokenUsage,
-  compactionStatus?: NonNullable<RuntimeThread['contextCompaction']>['status'],
-): string {
+function conversationOverviewContextLabel(usage: ChatContextTokenUsage, compactionStatus?: NonNullable<RuntimeThread['contextCompaction']>['status']): string {
   if (compactionStatus === 'running') return '压缩中';
   const percent = usage.visiblePercent || usage.percent;
   if (percent > 0) return `${formatPercent(percent)}%`;
@@ -1083,70 +1012,24 @@ function MessageItem({
   const steered = item.steered;
   const assistantItemId = message.turnId ? assistantItemIdByTurnId.get(message.turnId) : undefined;
   const workHistoryExpanded = assistantItemId ? expandedWorkHistoryItemIds.has(assistantItemId) : false;
-  const showExtractedGuidance = Boolean(
-    !steered
-      && message.turnId
-      && message.turnId !== activeTurnId
-      && item.guidanceProcessed
-      && item.steerMessages.length
-      && !workHistoryExpanded,
-  );
+  const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && item.guidanceProcessed && item.steerMessages.length && !workHistoryExpanded);
   if (editing) {
-    return (
-      <UserMessageEditor
-        disabled={Boolean(activeTurnId) || editingSubmitting}
-        message={message}
-        submitting={editingSubmitting}
-        value={editingDraft}
-        onCancel={onCancelEdit}
-        onChange={onEditDraftChange}
-        onSubmit={() => onSubmitEdit(message.id)}
-      />
-    );
+    return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} message={message} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit(message.id)} />;
   }
   const hasAttachments = Boolean(message.attachments?.length);
   return (
-    <article
-      className={[
-        'chat-bubble-item',
-        'chat-bubble-item--user',
-        deleteMode ? 'chat-bubble-item--selecting' : '',
-        selectedForDelete ? 'is-selected-for-delete' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      {deleteMode ? (
-        <MessageSelectionControl
-          checked={selectedForDelete}
-          label="选择这条消息"
-          onChange={(checked) => onToggleDelete(item.id, checked)}
-        />
-      ) : null}
+    <article className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
+      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label="选择这条消息" onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <div className="chat-user-turn">
         <Bubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={
-            <MessageFooter
-              actionsDisabled={Boolean(activeTurnId) || deleteMode}
-              align="end"
-              message={message}
-              onDelete={steered ? undefined : () => onStartDelete(item.id)}
-              onEdit={steered ? undefined : () => onStartEdit(message)}
-              timePosition={steered ? 'none' : 'before-actions'}
-            />
-          }
+          footer={<MessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           placement="end"
           variant="filled"
         />
         <RuntimeHookRuns runs={message.hookRuns} />
-        {showExtractedGuidance ? (
-          <GuidanceMessageList
-            handledMessageIds={new Set(item.handledSteerMessageIds)}
-            messages={item.steerMessages}
-          />
-        ) : null}
+        {showExtractedGuidance ? <GuidanceMessageList handledMessageIds={new Set(item.handledSteerMessageIds)} messages={item.steerMessages} /> : null}
       </div>
     </article>
   );
@@ -1204,47 +1087,12 @@ function AssistantRunItem({
     content: assistantRunCopyText(item),
   } as RuntimeMessage;
   return (
-    <article
-      className={[
-        'chat-bubble-item',
-        'chat-bubble-item--assistant',
-        streaming ? 'chat-bubble-item--active' : '',
-        deleteMode ? 'chat-bubble-item--selecting' : '',
-        selectedForDelete ? 'is-selected-for-delete' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      {deleteMode ? (
-        <MessageSelectionControl
-          checked={selectedForDelete}
-          label="选择这条回复"
-          onChange={(checked) => onToggleDelete(item.id, checked)}
-        />
-      ) : null}
+    <article className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
+      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label="选择这条回复" onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
-        content={
-          <AssistantRunContent
-            active={active}
-            item={item}
-            onAnswerApproval={onAnswerApproval}
-            onDiscardFileChanges={onDiscardFileChanges}
-            onOpenFileReview={onOpenFileReview}
-            onPlanDecision={onPlanDecision}
-            onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
-          />
-        }
-        footer={
-          belongsToActiveTurn ? undefined : (
-            <MessageFooter
-              actionsDisabled={Boolean(activeTurnId) || deleteMode}
-              message={footerMessage}
-              onDelete={() => onStartDelete(item.id)}
-              timePosition="after-actions"
-            />
-          )
-        }
+        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onPlanDecision={onPlanDecision} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} />}
+        footer={belongsToActiveTurn ? undefined : <MessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={() => onStartDelete(item.id)} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
         variant="borderless"
@@ -1253,23 +1101,7 @@ function AssistantRunItem({
   );
 }
 
-function UserMessageEditor({
-  disabled,
-  message,
-  onCancel,
-  onChange,
-  onSubmit,
-  submitting,
-  value,
-}: {
-  disabled: boolean;
-  message: RuntimeMessage;
-  onCancel: () => void;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  submitting: boolean;
-  value: string;
-}) {
+function UserMessageEditor({ disabled, message, onCancel, onChange, onSubmit, submitting, value }: { disabled: boolean; message: RuntimeMessage; onCancel: () => void; onChange: (value: string) => void; onSubmit: () => void; submitting: boolean; value: string }) {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1279,13 +1111,7 @@ function UserMessageEditor({
   return (
     <article className="chat-bubble-item chat-bubble-item--user">
       <form className="chat-user-edit" onSubmit={submit}>
-        <textarea
-          autoFocus
-          disabled={disabled}
-          value={value}
-          rows={Math.min(8, Math.max(2, value.split('\n').length))}
-          onChange={(event) => onChange(event.currentTarget.value)}
-        />
+        <textarea autoFocus disabled={disabled} value={value} rows={Math.min(8, Math.max(2, value.split('\n').length))} onChange={(event) => onChange(event.currentTarget.value)} />
         <div className="chat-user-edit__footer">
           <time>{formatTime(message.createdAt)}</time>
           <span className="chat-user-edit__actions">
@@ -1302,15 +1128,7 @@ function UserMessageEditor({
   );
 }
 
-function MessageSelectionControl({
-  checked,
-  label,
-  onChange,
-}: {
-  checked: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
+function MessageSelectionControl({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
   return (
     <label className="chat-message-select" onClick={(event) => event.stopPropagation()}>
       <input type="checkbox" aria-label={label} checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />
@@ -1332,13 +1150,7 @@ function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
 
 function TranscriptWindowDivider({ hiddenMessageCount, onShowAll }: { hiddenMessageCount: number; onShowAll: () => void }) {
   const count = Math.max(0, hiddenMessageCount);
-  return (
-    <ChatTimelineDivider
-      accessibilityLabel="较早记录已折叠"
-      label={count > 0 ? `已折叠较早的 ${count} 条消息` : '已折叠较早的消息'}
-      onClick={onShowAll}
-    />
-  );
+  return <ChatTimelineDivider accessibilityLabel="较早记录已折叠" label={count > 0 ? `已折叠较早的 ${count} 条消息` : '已折叠较早的消息'} onClick={onShowAll} />;
 }
 
 function DeleteSelectionBar({
@@ -1371,13 +1183,7 @@ function DeleteSelectionBar({
     <div className="chat-delete-bar">
       <div className="chat-delete-bar__inner">
         <label className="chat-delete-bar__select-all">
-          <input
-            ref={checkboxRef}
-            type="checkbox"
-            checked={allChecked}
-            disabled={loading || totalCount === 0}
-            onChange={(event) => onToggleAll(event.currentTarget.checked)}
-          />
+          <input ref={checkboxRef} type="checkbox" checked={allChecked} disabled={loading || totalCount === 0} onChange={(event) => onToggleAll(event.currentTarget.checked)} />
           <span>全选</span>
         </label>
         <span className="chat-delete-bar__count">已选 {selectedCount}</span>
@@ -1420,34 +1226,24 @@ function AssistantRunContent({
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
-  const awaitingApproval = toolRuns.some(
-    (run) => run.status === 'pending_approval'
-      && run.approvalStatus !== 'approved'
-      && run.approvalStatus !== 'rejected'
-      && run.approvalStatus !== 'cancelled',
-  );
+  const awaitingApproval = toolRuns.some((run) => run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected' && run.approvalStatus !== 'cancelled');
   // 活动回合已有内容时，等待反馈始终跟在最新内容之后；等待用户审批时则不显示假进度。
   const showTrailingLoading = active && status !== 'error' && hasRenderableContent && !awaitingApproval;
   const guidanceMessageIds = useMemo(() => new Set(item.handledSteerMessageIds), [item.handledSteerMessageIds]);
   const assistantGuidanceMessages = item.steerMessages;
   const timelinePlan = useMemo(
-    () => createAssistantGuidanceTimelinePlan({
-      active,
-      blocks: timelineBlocks,
-      guidanceMessages: assistantGuidanceMessages,
-      messageOrderIds: item.messageIds,
-      workHistoryActive: workHistoryState.active,
-    }),
+    () =>
+      createAssistantGuidanceTimelinePlan({
+        active,
+        blocks: timelineBlocks,
+        guidanceMessages: assistantGuidanceMessages,
+        messageOrderIds: item.messageIds,
+        workHistoryActive: workHistoryState.active,
+      }),
     [active, assistantGuidanceMessages, item.messageIds, timelineBlocks, workHistoryState.active],
   );
   const activeGuidanceBeforeFirstBlock = timelinePlan.placeholderGuidance;
-  const activePlaceholderGuidance = activeGuidanceBeforeFirstBlock.length ? (
-    <GuidanceMessageList
-      handledMessageIds={guidanceMessageIds}
-      markerMode="handled"
-      messages={activeGuidanceBeforeFirstBlock}
-    />
-  ) : null;
+  const activePlaceholderGuidance = activeGuidanceBeforeFirstBlock.length ? <GuidanceMessageList handledMessageIds={guidanceMessageIds} markerMode="handled" messages={activeGuidanceBeforeFirstBlock} /> : null;
   const fileChangeSummary = useMemo(() => {
     if (active || !hasFinalAnswerContent) return null;
     return fileChangeSummaryFromRuns(toolRuns);
@@ -1458,7 +1254,9 @@ function AssistantRunContent({
       <div className="chat-assistant-run">
         <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder>
       </div>
-    ) : <AssistantLoadingIndicator label="思考中" />;
+    ) : (
+      <AssistantLoadingIndicator label="思考中" />
+    );
   }
   if (planSegment) {
     return (
@@ -1486,11 +1284,7 @@ function AssistantRunContent({
       {showTrailingLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
-          <FileChangesSummaryCard
-            summary={fileChangeSummary}
-            onDiscardChanges={onDiscardFileChanges}
-            onOpenReview={onOpenFileReview}
-          />
+          <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
         </div>
       ) : null}
       {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}
@@ -1508,7 +1302,10 @@ function MemoryCitationCard({ entries }: { entries: NonNullable<RuntimeMessage['
       <div className="chat-memory-citations__list">
         {entries.map((entry) => (
           <div key={`${entry.path}:${entry.lineStart}:${entry.lineEnd}`}>
-            <code>{entry.path}:{entry.lineStart}{entry.lineEnd !== entry.lineStart ? `-${entry.lineEnd}` : ''}</code>
+            <code>
+              {entry.path}:{entry.lineStart}
+              {entry.lineEnd !== entry.lineStart ? `-${entry.lineEnd}` : ''}
+            </code>
             <span>{entry.note}</span>
           </div>
         ))}
@@ -1517,15 +1314,7 @@ function MemoryCitationCard({ entries }: { entries: NonNullable<RuntimeMessage['
   );
 }
 
-function PlanCard({
-  message,
-  active,
-  onPlanDecision,
-}: {
-  message: RuntimeMessage;
-  active: boolean;
-  onPlanDecision: (decision: RuntimePlanDecision) => void;
-}) {
+function PlanCard({ message, active, onPlanDecision }: { message: RuntimeMessage; active: boolean; onPlanDecision: (decision: RuntimePlanDecision) => void }) {
   const planMode = message.planMode;
   if (!planMode) return null;
   const status = planMode.status;
@@ -1533,11 +1322,7 @@ function PlanCard({
   const awaiting = status === 'awaiting_confirmation';
   const canDecide = awaiting && !active;
   const statusLabel = awaiting ? '待确认' : status === 'accepted' ? '已接受' : '已放弃';
-  const body = message.content.trim()
-    ? <MarkdownRenderer content={message.content} streaming={streaming} />
-    : streaming
-      ? <AssistantLoadingIndicator label="正在拟定计划" />
-      : null;
+  const body = message.content.trim() ? <MarkdownRenderer content={message.content} streaming={streaming} /> : streaming ? <AssistantLoadingIndicator label="正在拟定计划" /> : null;
   return (
     <section className={`chat-plan-card chat-plan-card--${status}${streaming ? ' is-streaming' : ''}`}>
       <header className="chat-plan-card__header">
@@ -1559,15 +1344,7 @@ function PlanCard({
   );
 }
 
-function GuidanceMessageList({
-  handledMessageIds,
-  markerMode = 'none',
-  messages,
-}: {
-  handledMessageIds: Set<string>;
-  markerMode?: 'none' | 'handled' | 'always';
-  messages: RuntimeMessage[];
-}) {
+function GuidanceMessageList({ handledMessageIds, markerMode = 'none', messages }: { handledMessageIds: Set<string>; markerMode?: 'none' | 'handled' | 'always'; messages: RuntimeMessage[] }) {
   if (!messages.length) return null;
   const showMarker = markerMode === 'always' || (markerMode === 'handled' && messages.some((message) => handledMessageIds.has(message.id)));
   return (
@@ -1592,7 +1369,11 @@ function GuidanceMessage({ message }: { message: RuntimeMessage }) {
 }
 
 function GuidanceProcessedMarker() {
-  return <div className="chat-guidance-marker" aria-label="已引导对话">已引导对话</div>;
+  return (
+    <div className="chat-guidance-marker" aria-label="已引导对话">
+      已引导对话
+    </div>
+  );
 }
 
 function renderAssistantTimelinePlan({
@@ -1616,28 +1397,23 @@ function renderAssistantTimelinePlan({
 
   plan.nodes.forEach((node) => {
     if (node.type === 'workHistory') {
-      nodes.push(assistantWorkHistoryNode({
-        hasFollowingContent: plan.hasFollowingContent,
-        handledGuidanceMessageIds,
-        itemId,
-        onAnswerApproval,
-        onExpandedChange: onWorkHistoryExpandedChange,
-        plan: node,
-        workHistoryExpanded,
-      }));
+      nodes.push(
+        assistantWorkHistoryNode({
+          hasFollowingContent: plan.hasFollowingContent,
+          handledGuidanceMessageIds,
+          itemId,
+          onAnswerApproval,
+          onExpandedChange: onWorkHistoryExpandedChange,
+          plan: node,
+          workHistoryExpanded,
+        }),
+      );
       return;
     }
 
     nodes.push(assistantTimelineNode(node.block, active));
     if (active && node.guidanceAfter.length) {
-      nodes.push(
-        <GuidanceMessageList
-          handledMessageIds={handledGuidanceMessageIds}
-          key={`${node.block.id}:guidance`}
-          markerMode="handled"
-          messages={node.guidanceAfter}
-        />,
-      );
+      nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={`${node.block.id}:guidance`} markerMode="handled" messages={node.guidanceAfter} />);
     }
   });
 
@@ -1661,35 +1437,18 @@ function assistantWorkHistoryNode({
   plan: Extract<AssistantGuidanceTimelinePlan['nodes'][number], { type: 'workHistory' }>;
   workHistoryExpanded: boolean;
 }): ReactNode {
-  const workNodes = assistantWorkEntriesNodes(
-    plan.entries,
-    onAnswerApproval,
-    hasFollowingContent,
-    handledGuidanceMessageIds,
-  );
+  const workNodes = assistantWorkEntriesNodes(plan.entries, onAnswerApproval, hasFollowingContent, handledGuidanceMessageIds);
   const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
   const hasWorkDetails = workNodes.length > 0;
   if (!hasWorkDetails && !plan.active) return null;
   return (
-    <WorkHistoryPanel
-      active={plan.active}
-      completedAtMs={workTiming.completedAtMs}
-      hasDetails={hasWorkDetails}
-      key="assistant-work-history"
-      keepExpanded={workHistoryExpanded}
-      panelId={itemId}
-      startedAtMs={workTiming.startedAtMs}
-      onExpandedChange={onExpandedChange}
-    >
+    <WorkHistoryPanel active={plan.active} completedAtMs={workTiming.completedAtMs} hasDetails={hasWorkDetails} key="assistant-work-history" keepExpanded={workHistoryExpanded} panelId={itemId} startedAtMs={workTiming.startedAtMs} onExpandedChange={onExpandedChange}>
       {workNodes}
     </WorkHistoryPanel>
   );
 }
 
-function assistantTimelineNode(
-  block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>,
-  runActive: boolean,
-): ReactNode {
+function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>, runActive: boolean): ReactNode {
   if (block.type === 'content') {
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
@@ -1714,24 +1473,12 @@ function assistantTimelineNode(
   }
 }
 
-function assistantWorkEntriesNodes(
-  entries: AssistantWorkHistoryPlanEntry[],
-  onAnswerApproval: AnswerApprovalHandler,
-  hasFollowingContent: boolean,
-  handledGuidanceMessageIds: Set<string>,
-): ReactNode[] {
+function assistantWorkEntriesNodes(entries: AssistantWorkHistoryPlanEntry[], onAnswerApproval: AnswerApprovalHandler, hasFollowingContent: boolean, handledGuidanceMessageIds: Set<string>): ReactNode[] {
   const toolRunSummaryMode: ToolRunSummaryMode = hasFollowingContent ? 'aggregate' : 'latest';
   const nodes: ReactNode[] = [];
   entries.forEach((entry) => {
     if (entry.type === 'guidance') {
-      nodes.push(
-        <GuidanceMessageList
-          handledMessageIds={handledGuidanceMessageIds}
-          key={entry.id}
-          markerMode="handled"
-          messages={entry.messages}
-        />,
-      );
+      nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={entry.id} markerMode="handled" messages={entry.messages} />);
       return;
     }
     nodes.push(...assistantWorkItemNodes(entry.item, entry.blockActive, toolRunSummaryMode, onAnswerApproval));
@@ -1739,42 +1486,22 @@ function assistantWorkEntriesNodes(
   return nodes;
 }
 
-function assistantWorkItemNodes(
-  item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
-  blockActive: boolean,
-  toolRunSummaryMode: ToolRunSummaryMode,
-  onAnswerApproval: AnswerApprovalHandler,
-): ReactNode[] {
+function assistantWorkItemNodes(item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number], blockActive: boolean, toolRunSummaryMode: ToolRunSummaryMode, onAnswerApproval: AnswerApprovalHandler): ReactNode[] {
   if (item.type === 'content') {
     return [<MarkdownRenderer key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />];
   }
   if (item.type === 'thinking') {
-    return blockActive && item.segment.content.trim()
-      ? [<ActiveThinkingBox key={item.segment.id} content={item.segment.content} />]
-      : [];
+    return blockActive && item.segment.content.trim() ? [<ActiveThinkingBox key={item.segment.id} content={item.segment.content} />] : [];
   }
   const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
-  return visibleToolRuns.length
-    ? [<RuntimeToolRuns key={item.id} runs={visibleToolRuns} summaryMode={toolRunSummaryMode} onAnswerApproval={onAnswerApproval} />]
-    : [];
+  // Consecutive streamed tool items are merged by changing item.id. The first
+  // segment remains stable, so key the disclosure state to that segment instead.
+  return visibleToolRuns.length ? [<RuntimeToolRuns key={`${item.segment.id}:tool-runs`} runs={visibleToolRuns} summaryMode={toolRunSummaryMode} onAnswerApproval={onAnswerApproval} />] : [];
 }
 
-function ActiveWorkPlaceholder({
-  children,
-  segments,
-  showLoading = true,
-}: {
-  children?: ReactNode;
-  segments: RuntimeMessage[];
-  showLoading?: boolean;
-}) {
+function ActiveWorkPlaceholder({ children, segments, showLoading = true }: { children?: ReactNode; segments: RuntimeMessage[]; showLoading?: boolean }) {
   return (
-    <WorkHistoryPanel
-      active
-      completedAtMs={null}
-      hasDetails={Boolean(children) || showLoading}
-      startedAtMs={inferActiveTurnStartedAtMs(segments)}
-    >
+    <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
       {children}
       {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
       {showLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
@@ -1842,25 +1569,11 @@ function parseDateMs(value?: string | null): number | null {
 }
 
 function ActiveThinkingBox({ content }: { content: string }): JSX.Element {
-  const contentRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const node = contentRef.current;
-    if (!node) return undefined;
-
-    const scrollToBottom = () => {
-      node.scrollTop = node.scrollHeight;
-    };
-    scrollToBottom();
-
-    if (typeof window === 'undefined') return undefined;
-    const frame = window.requestAnimationFrame(scrollToBottom);
-    return () => window.cancelAnimationFrame(frame);
-  }, [content]);
+  const { handlePointerDown, handleScroll, handleTouchMove, handleWheel, scrollRef } = useStreamingScrollPin(content);
 
   return (
     <div className="chat-thinking-box" aria-live="polite" aria-label="正在思考">
-      <div className="chat-thinking-box__content" ref={contentRef}>
+      <div className="chat-thinking-box__content" ref={scrollRef} onPointerDownCapture={handlePointerDown} onScroll={handleScroll} onTouchMoveCapture={handleTouchMove} onWheelCapture={handleWheel}>
         <MarkdownRenderer content={content} streaming />
       </div>
       <div className="chat-thinking-box__status">正在思考</div>
@@ -1942,11 +1655,7 @@ function WorkHistoryPanel({
 
   const title = active ? '工作中' : '已处理';
   const durationEndMs = active ? nowMs : (capturedCompletedAtMs ?? completedAtMs ?? null);
-  const durationLabel = formatDurationMs(
-    startedAtMs !== null && startedAtMs !== undefined && durationEndMs !== null
-      ? Math.max(0, durationEndMs - startedAtMs)
-      : null,
-  );
+  const durationLabel = formatDurationMs(startedAtMs !== null && startedAtMs !== undefined && durationEndMs !== null ? Math.max(0, durationEndMs - startedAtMs) : null);
   const summaryContent = (
     <>
       <span className="chat-work-history__title">{title}</span>
@@ -1962,13 +1671,7 @@ function WorkHistoryPanel({
   return (
     <div className={`chat-work-history ${expanded ? 'is-expanded' : ''} ${canToggle ? 'is-toggleable' : ''}`}>
       {canToggle ? (
-        <button
-          className="chat-work-history__summary"
-          type="button"
-          aria-expanded={expanded}
-          title={expanded ? '收起工作详情' : '展开工作详情'}
-          onClick={toggleExpanded}
-        >
+        <button className="chat-work-history__summary" type="button" aria-expanded={expanded} title={expanded ? '收起工作详情' : '展开工作详情'} onClick={toggleExpanded}>
           {summaryContent}
         </button>
       ) : (
@@ -1992,21 +1695,7 @@ function AssistantLoadingIndicator({ label, showLabel = true }: { label: string;
   );
 }
 
-function MessageFooter({
-  actionsDisabled = false,
-  message,
-  align = 'start',
-  onDelete,
-  onEdit,
-  timePosition = 'before-actions',
-}: {
-  actionsDisabled?: boolean;
-  message: RuntimeMessage;
-  align?: 'start' | 'end';
-  onDelete?: () => void;
-  onEdit?: () => void;
-  timePosition?: 'before-actions' | 'after-actions' | 'none';
-}) {
+function MessageFooter({ actionsDisabled = false, message, align = 'start', onDelete, onEdit, timePosition = 'before-actions' }: { actionsDisabled?: boolean; message: RuntimeMessage; align?: 'start' | 'end'; onDelete?: () => void; onEdit?: () => void; timePosition?: 'before-actions' | 'after-actions' | 'none' }) {
   const [copied, setCopied] = useState(false);
   const copyMessage = async () => {
     if (!message.content) return;
@@ -2025,29 +1714,16 @@ function MessageFooter({
   );
   const actionNodes = (
     <>
-      <MessageFooterAction
-        active={copied}
-        disabled={!message.content}
-        label={copied ? '已复制' : '复制'}
-        onClick={() => void copyMessage()}
-      >
+      <MessageFooterAction active={copied} disabled={!message.content} label={copied ? '已复制' : '复制'} onClick={() => void copyMessage()}>
         <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
       </MessageFooterAction>
       {onDelete ? (
-        <MessageFooterAction
-          disabled={actionsDisabled}
-          label="删除"
-          onClick={onDelete}
-        >
+        <MessageFooterAction disabled={actionsDisabled} label="删除" onClick={onDelete}>
           <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
         </MessageFooterAction>
       ) : null}
       {onEdit ? (
-        <MessageFooterAction
-          disabled={actionsDisabled}
-          label="编辑"
-          onClick={onEdit}
-        >
+        <MessageFooterAction disabled={actionsDisabled} label="编辑" onClick={onEdit}>
           <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
         </MessageFooterAction>
       ) : null}
@@ -2062,19 +1738,7 @@ function MessageFooter({
   );
 }
 
-function MessageFooterAction({
-  active = false,
-  children,
-  disabled = false,
-  label,
-  onClick,
-}: {
-  active?: boolean;
-  children: ReactNode;
-  disabled?: boolean;
-  label: string;
-  onClick: () => void;
-}) {
+function MessageFooterAction({ active = false, children, disabled = false, label, onClick }: { active?: boolean; children: ReactNode; disabled?: boolean; label: string; onClick: () => void }) {
   return (
     <ActionTooltip placement="top" title={label}>
       <button

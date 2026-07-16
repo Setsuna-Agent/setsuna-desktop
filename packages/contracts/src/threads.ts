@@ -2,15 +2,7 @@ import type { RuntimeModelRequestStepSnapshot, RuntimeModelVerification, Runtime
 import type { RuntimeMemoryCitation } from './memory.js';
 import type { RuntimeHookSource } from './config.js';
 import type { RuntimeUsage } from './usage.js';
-import type {
-  RuntimeApprovalAvailableDecision,
-  RuntimeExecPolicyAmendment,
-  RuntimeMcpElicitation,
-  RuntimeNetworkApprovalContext,
-  RuntimeNetworkPolicyAmendment,
-  RuntimePermissionApprovalContext,
-  RuntimeUserInputRequest,
-} from './approvals.js';
+import type { RuntimeApprovalAvailableDecision, RuntimeExecPolicyAmendment, RuntimeMcpElicitation, RuntimeNetworkApprovalContext, RuntimeNetworkPolicyAmendment, RuntimePermissionApprovalContext, RuntimeUserInputRequest } from './approvals.js';
 
 export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool';
 export type RuntimeMessagePromptSource = 'hook' | 'plan' | 'review' | 'goal' | 'runtime_context';
@@ -67,6 +59,7 @@ export type RuntimeContextCompactionNotice = {
   summaryTokens?: number;
   targetContextTokens?: number;
   tokensUntilCompaction?: number;
+  transcriptAfterMessageId?: string;
   triggerScopes?: string[];
 };
 
@@ -128,6 +121,7 @@ export type RuntimeThreadTurn = {
 
 export type RuntimeThreadContextCompactionState = {
   status: 'running' | 'completed';
+  turnId?: string;
   completedAt?: string;
   forced?: boolean;
   maxContextTokens?: number;
@@ -251,6 +245,7 @@ export type RuntimeThreadSummary = {
 };
 
 export type RuntimeThread = RuntimeThreadSummary & {
+  activeTurnId?: string | null;
   contextCompaction?: RuntimeThreadContextCompactionState;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
   pendingHookRuns?: RuntimeHookRun[];
@@ -332,8 +327,4 @@ export type RegenerateMessageInput = {
   thinkingEffort?: string;
 };
 
-export type RuntimeReviewTarget =
-  | { type: 'uncommittedChanges' }
-  | { type: 'baseBranch'; branch: string }
-  | { type: 'commit'; sha: string; title?: string }
-  | { type: 'custom'; instructions: string };
+export type RuntimeReviewTarget = { type: 'uncommittedChanges' } | { type: 'baseBranch'; branch: string } | { type: 'commit'; sha: string; title?: string } | { type: 'custom'; instructions: string };

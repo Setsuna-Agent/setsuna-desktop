@@ -44,6 +44,148 @@ describe('createChatDisplayItems', () => {
     ]);
   });
 
+  it('restores a legacy compaction boundary to its event time without splitting the retained assistant turn', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'old_user',
+        turnId: 'turn_old',
+        role: 'user',
+        content: 'Review this repository.',
+        createdAt: '2026-07-16T03:05:00.000Z',
+        status: 'complete',
+        visibility: 'transcript',
+      },
+      {
+        id: 'old_assistant_before',
+        turnId: 'turn_old',
+        role: 'assistant',
+        content: 'Inspecting files.',
+        createdAt: '2026-07-16T03:06:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'old_tool',
+        turnId: 'turn_old',
+        role: 'tool',
+        toolCallId: 'call_old',
+        toolName: 'read_file',
+        content: 'File contents',
+        createdAt: '2026-07-16T03:06:20.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'compact_legacy',
+        turnId: 'turn_continue',
+        role: 'user',
+        content: '<context_compaction_summary>older context</context_compaction_summary>',
+        createdAt: '2026-07-16T03:48:29.056Z',
+        status: 'complete',
+        contextCompaction: {
+          compactedMessageCount: 495,
+          compactedTokens: 1000,
+          keptRecentMessageCount: 8,
+          maxContextTokensK: 256,
+          originalMessageCount: 503,
+          originalTokens: 217819,
+          triggerScopes: ['total'],
+        },
+      },
+      {
+        id: 'old_assistant_after',
+        turnId: 'turn_old',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-07-16T03:06:34.553Z',
+        status: 'error',
+        error: 'Context compaction model request failed.',
+      },
+      {
+        id: 'continue_user',
+        turnId: 'turn_continue',
+        role: 'user',
+        content: '继续啊',
+        createdAt: '2026-07-16T03:47:27.802Z',
+        status: 'complete',
+      },
+      {
+        id: 'new_assistant',
+        turnId: 'turn_continue',
+        role: 'assistant',
+        content: 'Continuing.',
+        createdAt: '2026-07-16T03:48:29.242Z',
+        status: 'streaming',
+      },
+    ];
+
+    const items = createChatDisplayItems(messages);
+
+    expect(items.map((item) => `${item.type}:${item.id}`)).toEqual([
+      'user:old_user',
+      'assistant:old_assistant_before__assistant_run__old_assistant_after',
+      'user:continue_user',
+      'context:compact_legacy',
+      'assistant:new_assistant',
+    ]);
+    expect(items[1]).toMatchObject({
+      type: 'assistant',
+      messageIds: ['old_assistant_before', 'old_tool', 'old_assistant_after'],
+    });
+  });
+
+  it('uses the recorded transcript anchor instead of model-window position', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'compact_anchored',
+        turnId: 'turn_2',
+        role: 'user',
+        content: '<context_compaction_summary>older context</context_compaction_summary>',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+        contextCompaction: {
+          compactedMessageCount: 1,
+          compactedTokens: 128,
+          keptRecentMessageCount: 1,
+          maxContextTokensK: 256,
+          originalMessageCount: 2,
+          originalTokens: 512,
+          transcriptAfterMessageId: 'user_2',
+          triggerScopes: ['total'],
+        },
+      },
+      {
+        id: 'user_1',
+        turnId: 'turn_1',
+        role: 'user',
+        content: 'First request',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_2',
+        turnId: 'turn_2',
+        role: 'user',
+        content: 'Continue',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_2',
+        turnId: 'turn_2',
+        role: 'assistant',
+        content: 'Continuing',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        status: 'complete',
+      },
+    ];
+
+    expect(createChatDisplayItems(messages).map((item) => `${item.type}:${item.id}`)).toEqual([
+      'user:user_1',
+      'user:user_2',
+      'context:compact_anchored',
+      'assistant:assistant_2',
+    ]);
+  });
+
   it('keeps review mode markers in their runtime order', () => {
     const messages: RuntimeMessage[] = [
       {

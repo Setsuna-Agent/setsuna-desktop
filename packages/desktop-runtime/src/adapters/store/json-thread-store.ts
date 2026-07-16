@@ -391,18 +391,21 @@ export class JsonThreadStore implements ThreadStore {
       return null;
     }
     assertThreadSnapshot(snapshot, threadId);
-    let thread = normalizeThreadSnapshot(snapshot);
+    const normalized = normalizeThreadSnapshot(snapshot);
+    let thread = normalized.thread;
     const highestSeq = events.at(-1)?.seq ?? 0;
     if (thread.lastSeq > highestSeq) {
       throw new Error(`Thread snapshot is ahead of its event log: ${threadId}`);
     }
-    let recovered = false;
+    let recovered = normalized.changed;
     for (const event of events) {
       if (event.seq <= thread.lastSeq) continue;
       thread = applyRuntimeEventToThread(thread, event);
       recovered = true;
     }
-    thread = await this.hydrateMessageCompletionTimesFromEvents(thread, events);
+    const hydrated = await this.hydrateMessageCompletionTimesFromEvents(thread, events);
+    if (hydrated !== thread) recovered = true;
+    thread = hydrated;
     if (recovered) {
       await writeJsonFile(this.snapshotPath(threadId), thread);
       if (updateIndex) await this.writeIndexWithThread(thread);
@@ -521,15 +524,25 @@ function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
   };
 }
 
-function normalizeThreadSnapshot(thread: RuntimeThread): RuntimeThread {
-  const normalized = {
+function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boolean; thread: RuntimeThread } {
+  const parentThreadId = typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
+    ? (thread as { parentThreadId: string }).parentThreadId
+    : undefined;
+  const memoryMode = normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode);
+  let changed = parentThreadId !== thread.parentThreadId || memoryMode !== thread.memoryMode;
+  let normalized: RuntimeThread = changed ? {
     ...thread,
-    parentThreadId: typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
-      ? (thread as { parentThreadId: string }).parentThreadId
-      : undefined,
-    memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
-  };
-  return normalizeLegacyCancelledToolRuns(normalized);
+    parentThreadId,
+    memoryMode,
+  } : thread;
+  if (normalized.contextCompaction?.status === 'running') {
+    // A model request cannot survive reconstruction of the store. Persistently
+    // running compaction state is therefore from an interrupted older process.
+    normalized = { ...normalized, contextCompaction: undefined };
+    changed = true;
+  }
+  const migrated = normalizeLegacyCancelledToolRuns(normalized);
+  return { changed: changed || migrated !== normalized, thread: migrated };
 }
 
 /** 将旧快照里由 turn 取消错误折叠成 rejected 的工具记录迁移为 cancelled。 */

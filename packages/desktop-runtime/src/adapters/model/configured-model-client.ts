@@ -28,13 +28,24 @@ export class ConfiguredModelClient implements ModelClient {
 
     const requestModel = requestProvider.activeModel?.code || request.model;
     const client = providerModelClient(requestProvider, this.fetchImpl);
-    yield* streamWithModelTimeout((signal) => client.stream({
+    const configuredRequest: ModelRequest = {
       ...request,
-      signal,
       model: requestModel,
       maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
       ...thinkingRequestDefaults(requestProvider, { ...request, model: requestModel }),
-    }), request.signal, this.timeoutOptions);
+    };
+    let emitted = false;
+    try {
+      for await (const event of this.streamConfiguredRequest(client, configuredRequest, request.signal)) {
+        emitted = true;
+        yield event;
+      }
+    } catch (error) {
+      if (emitted || request.signal?.aborted || !shouldRetryWithoutTemperature(configuredRequest, error)) throw error;
+      // Some compatible endpoints accept only their default sampling temperature.
+      // Retry before any output is visible so callers never observe duplicate content.
+      yield* this.streamConfiguredRequest(client, { ...configuredRequest, temperature: undefined }, request.signal);
+    }
   }
 
   async compactConversation(request: ModelCompactionRequest): Promise<ModelCompactionResult> {
@@ -48,12 +59,25 @@ export class ConfiguredModelClient implements ModelClient {
     const requestModel = requestProvider.activeModel?.code || request.model;
     const client = providerModelClient(requestProvider, this.fetchImpl);
     if (!client.compactConversation) throw new Error(`Remote context compaction is not supported by provider ${requestProvider.provider}.`);
-    return runWithModelTimeout((signal) => client.compactConversation!({
+    const configuredRequest: ModelCompactionRequest = {
       ...request,
-      signal,
       model: requestModel,
       maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
+    };
+    const compact = (nextRequest: ModelCompactionRequest) => runWithModelTimeout((signal) => client.compactConversation!({
+      ...nextRequest,
+      signal,
     }), request.signal, this.timeoutOptions);
+    try {
+      return await compact(configuredRequest);
+    } catch (error) {
+      if (request.signal?.aborted || !shouldRetryWithoutTemperature(configuredRequest, error)) throw error;
+      return compact({ ...configuredRequest, temperature: undefined });
+    }
+  }
+
+  private streamConfiguredRequest(client: ModelClient, request: ModelRequest, parentSignal?: AbortSignal) {
+    return streamWithModelTimeout((signal) => client.stream({ ...request, signal }), parentSignal, this.timeoutOptions);
   }
 }
 
@@ -75,4 +99,23 @@ function providerModelClient(provider: RuntimeProviderConfig, fetchImpl: FetchIm
   if (provider.provider === 'anthropic') return new AnthropicMessagesModelClient(provider, fetchImpl);
   if (process.env.SETSUNA_USE_LEGACY_OPENAI_COMPATIBLE_ADAPTER === '1') return new OpenAiChatModelClient(provider, fetchImpl);
   return new AiSdkOpenAiCompatibleModelClient(provider, fetchImpl);
+}
+
+function shouldRetryWithoutTemperature(request: Pick<ModelRequest, 'temperature'>, error: unknown): boolean {
+  if (typeof request.temperature !== 'number') return false;
+  const details = collectErrorDetails(error).toLowerCase();
+  if (!details.includes('temperature')) return false;
+  return /\b(?:invalid|unsupported|not supported|not allowed|only|must(?:\s+be)?|does not support|unknown|unrecognized)\b/.test(details);
+}
+
+function collectErrorDetails(value: unknown, seen = new Set<object>(), depth = 0): string {
+  if (depth > 4 || value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object' || seen.has(value)) return '';
+  seen.add(value);
+  const record = value as Record<string, unknown>;
+  return ['name', 'message', 'responseBody', 'data', 'error', 'cause']
+    .map((key) => collectErrorDetails(record[key], seen, depth + 1))
+    .filter(Boolean)
+    .join(' ');
 }

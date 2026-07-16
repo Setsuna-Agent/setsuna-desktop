@@ -282,6 +282,71 @@ describe('json thread store', () => {
     });
   });
 
+  it('repairs and persists context compaction state left running by an older failed snapshot', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
+    const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Interrupted compaction' });
+    await store.appendEvent(thread.id, {
+      id: 'event_turn_started',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.started',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      payload: { input: 'inspect repository' },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_assistant',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        message: {
+          id: 'msg_assistant',
+          turnId: 'turn_1',
+          role: 'assistant',
+          content: 'Inspecting the repository.',
+          createdAt: '2026-06-26T00:00:01.000Z',
+          status: 'streaming',
+        },
+      },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_compacting',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'thread.context_compacting',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: { maxContextTokensK: 256, usedTokens: 217817 },
+    });
+    await store.appendEvent(thread.id, {
+      id: 'event_failed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'runtime.error',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: { code: 'turn_failed', message: 'Context compaction model request failed.' },
+    });
+
+    const snapshotPath = path.join(dataDir, 'threads', `${thread.id}.json`);
+    const legacySnapshot = JSON.parse(await readFile(snapshotPath, 'utf8'));
+    legacySnapshot.contextCompaction = {
+      status: 'running',
+      startedAt: '2026-06-26T00:00:02.000Z',
+      maxContextTokensK: 256,
+      usedTokens: 217817,
+    };
+    await writeFile(snapshotPath, `${JSON.stringify(legacySnapshot, null, 2)}\n`, 'utf8');
+
+    const recoveredStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const recovered = await recoveredStore.getThread(thread.id);
+    const persisted = JSON.parse(await readFile(snapshotPath, 'utf8'));
+
+    expect(recovered?.contextCompaction).toBeUndefined();
+    expect(recovered?.turns?.[0]).toMatchObject({ status: 'failed' });
+    expect(persisted.contextCompaction).toBeUndefined();
+  });
+
   it('normalizes legacy turn cancellations that were stored as rejected tool runs', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-'));
     const store = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());

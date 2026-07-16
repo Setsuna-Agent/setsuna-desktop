@@ -31,6 +31,7 @@ describe('runtime context compaction', () => {
         keptRecentMessageCount: 8,
         maxContextTokensK: 256,
         summaryRole: 'user',
+        transcriptAfterMessageId: 'msg_11',
         triggerScopes: ['manual'],
       },
     });

@@ -1146,6 +1146,118 @@ describe('provider model adapters', () => {
     });
   });
 
+  it('retries a configured model request without temperature when the provider rejects that parameter', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    let callCount = 0;
+    const fetchImpl: FetchImpl = async (_input, init) => {
+      callCount += 1;
+      bodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          error: { message: 'invalid temperature: only 1 is allowed for this model', type: 'invalid_request_error' },
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('data: {"choices":[{"delta":{"content":"Compacted"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => provider('openai-compatible', 'https://api.kimi.test/coding/v1'),
+      },
+      fetchImpl,
+    );
+
+    const events = await collect(client, { model: 'context-compaction', temperature: 0 });
+
+    expect(callCount).toBe(2);
+    expect(bodies[0].temperature).toBe(0);
+    expect(bodies[1].temperature).toBeUndefined();
+    expect(events).toContainEqual({ type: 'item_delta', itemId: 'ai_sdk_agent_message_0', delta: 'Compacted' });
+  });
+
+  it('does not retry configured model errors unrelated to temperature', async () => {
+    let callCount = 0;
+    const fetchImpl: FetchImpl = async () => {
+      callCount += 1;
+      return new Response(JSON.stringify({
+        error: { message: 'invalid max_tokens for this model', type: 'invalid_request_error' },
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => provider('openai-compatible', 'https://llm.example/v1'),
+      },
+      fetchImpl,
+    );
+
+    await expect(collect(client, { temperature: 0 })).rejects.toThrow();
+    expect(callCount).toBe(1);
+  });
+
+  it('retries provider-native compaction without a rejected temperature parameter', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    let callCount = 0;
+    const fetchImpl: FetchImpl = async (_input, init) => {
+      callCount += 1;
+      bodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          error: { message: 'invalid temperature: only 1 is allowed for this model' },
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ output: [{ type: 'compaction', summary: 'Provider summary.' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => provider('openai-responses', 'https://api.openai.test/v1'),
+      },
+      fetchImpl,
+    );
+
+    const result = await client.compactConversation({
+      model: 'context-compaction',
+      messages: request.messages,
+      temperature: 0,
+    });
+
+    expect(callCount).toBe(2);
+    expect(bodies[0].temperature).toBe(0);
+    expect(bodies[1].temperature).toBeUndefined();
+    expect(result.summary).toBe('Provider summary.');
+  });
+
   it('uses a requested model when it exists on the active provider', async () => {
     const captured: CapturedRequest = {};
     const memoryModel = {

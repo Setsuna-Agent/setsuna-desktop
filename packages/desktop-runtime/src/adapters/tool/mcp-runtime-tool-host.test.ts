@@ -4,12 +4,72 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
+import { RuntimeToolRouter } from '../../loop/tool-router.js';
 import { FileMcpStore } from '../store/file-mcp-store.js';
 import { InMemorySecretStore } from '../store/in-memory-secret-store.js';
 import { SdkMcpConnectionManager } from '../mcp/sdk-mcp-connection-manager.js';
 import { McpRuntimeToolHost } from './mcp-runtime-tool-host.js';
 
 describe('mcp runtime tool host', () => {
+  it('advertises a small MCP inventory directly so providers can discover it without tool_search', async () => {
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
+    await store.upsertServer({
+      key: 'search_mcp',
+      label: 'Search MCP',
+      transport: 'streamableHttp',
+      url: 'https://example.com/mcp',
+      tools: [
+        { name: 'fetchCsdnArticle' },
+        { name: 'fetchGithubReadme' },
+        { name: 'fetchJuejinArticle' },
+        { name: 'fetchLinuxDoArticle' },
+        { name: 'fetchWebContent' },
+        { name: 'search', description: 'Search the live web' },
+      ],
+    });
+    const host = new McpRuntimeToolHost(store, storedInventoryMcpClient());
+    const context = runtimeToolContext();
+    const router = await RuntimeToolRouter.create({
+      approvalPolicy: 'on-request',
+      context,
+      orchestrator: null,
+      toolHost: host,
+    });
+
+    expect(router.advertisedToolNames()).toEqual(expect.arrayContaining([
+      'mcp__search_mcp__fetchWebContent',
+      'mcp__search_mcp__search',
+    ]));
+    expect(router.deferredToolNames()).not.toContain('mcp__search_mcp__search');
+    expect(router.routerOwnedToolNames()).toEqual([]);
+    await expect(router.systemPrompt()).resolves.toContain('Matching MCP tools are advertised in the current step');
+    await expect(router.systemPrompt()).resolves.toContain('mcp__search_mcp__search');
+  });
+
+  it('keeps large MCP inventories deferred while exposing a bounded discovery inventory', async () => {
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
+    await store.upsertServer({
+      key: 'large',
+      transport: 'streamableHttp',
+      url: 'https://example.com/mcp',
+      tools: Array.from({ length: 20 }, (_, index) => ({ name: `lookup_${index + 1}` })),
+    });
+    const host = new McpRuntimeToolHost(store, storedInventoryMcpClient());
+    const context = runtimeToolContext();
+    const router = await RuntimeToolRouter.create({
+      approvalPolicy: 'on-request',
+      context,
+      orchestrator: null,
+      toolHost: host,
+    });
+
+    expect(router.advertisedToolNames()).toContain('tool_search');
+    expect(router.advertisedToolNames()).not.toContain('mcp__large__lookup_1');
+    expect(router.deferredToolNames()).toHaveLength(20);
+    await expect(router.systemPrompt()).resolves.toContain('call tool_search');
+    await expect(router.systemPrompt()).resolves.toContain('mcp__large__lookup_1');
+  });
+
   it('exposes enabled stored MCP tools and calls the backing server', async () => {
     const mcpServer = await createCallableMcpServer();
     const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
@@ -291,6 +351,22 @@ function storedInventoryMcpClient(): McpClientRuntime {
     releaseScope: async () => undefined,
     releaseThread: async () => undefined,
     shutdown: async () => undefined,
+  };
+}
+
+function runtimeToolContext() {
+  return {
+    environment: {
+      id: 'temporary_workspace',
+      cwd: '/workspace',
+      workspaceRoot: '/workspace',
+      workspaceRoots: ['/workspace'],
+    },
+    permissionProfile: 'workspace-write' as const,
+    sandboxWorkspaceWrite: {},
+    signal: new AbortController().signal,
+    threadId: 'thread_1',
+    turnId: 'turn_1',
   };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -23,6 +23,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
 import { RuntimeUserInputActions } from './RuntimeUserInputActions.js';
+import { PersistentDetails } from './PersistentDetails.js';
 import {
   compactStructuredInputValues,
   RuntimeStructuredInputField,
@@ -36,6 +37,12 @@ import {
   isRuntimeFileMutationRun,
   type RuntimeFileChangeSummary,
 } from './runtimeFileChanges.js';
+import {
+  hasExpandedToolRunDisclosure,
+  resolveToolRunDisclosureOpen,
+  updateToolRunDisclosurePreference,
+  type ToolRunDisclosurePreferences,
+} from './toolRunDisclosureState.js';
 
 export type ToolRunGroup =
   | { type: 'single'; run: RuntimeToolRun }
@@ -49,6 +56,11 @@ export type ToolRunGroupKind = 'inspection' | 'search' | 'shell' | 'fileMutation
 export type ToolRunSummaryMode = 'aggregate' | 'latest';
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 const fileChangePreviewLimit = 3;
+
+type ToolRunDisclosureController = {
+  preferences: ToolRunDisclosurePreferences;
+  setPreference: (disclosureId: string, anchorRunId: string, open: boolean) => void;
+};
 
 export function toolRunGroupKindClassName(kind: ToolRunGroupKind): string {
   const modifier = kind === 'fileMutation' ? 'file-mutation' : kind;
@@ -64,12 +76,20 @@ export function RuntimeToolRuns({
   onAnswerApproval: AnswerApprovalHandler;
   summaryMode?: ToolRunSummaryMode;
 }) {
+  const [disclosurePreferences, setDisclosurePreferences] = useState<ToolRunDisclosurePreferences>(() => new Map());
+  const setDisclosurePreference = useCallback((disclosureId: string, anchorRunId: string, open: boolean) => {
+    setDisclosurePreferences((current) => updateToolRunDisclosurePreference(current, disclosureId, anchorRunId, open));
+  }, []);
   const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
   const groups = compactToolRunGroups(groupToolRuns(visibleRuns), summaryMode);
+  const disclosureController: ToolRunDisclosureController = {
+    preferences: disclosurePreferences,
+    setPreference: setDisclosurePreference,
+  };
   return (
     <div className="chat-tool-runs">
-      {groups.map((group) => renderToolRunDisplayGroup(group, onAnswerApproval))}
+      {groups.map((group) => renderToolRunDisplayGroup(group, onAnswerApproval, disclosureController))}
     </div>
   );
 }
@@ -92,13 +112,27 @@ function hasHookRuns(run: RuntimeToolRun): boolean {
   return Boolean(run.hookRuns?.length);
 }
 
-function renderToolRunDisplayGroup(group: ToolRunDisplayGroup, onAnswerApproval: AnswerApprovalHandler): JSX.Element {
-  if (group.type === 'mixed') return <MixedToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />;
+function renderToolRunDisplayGroup(
+  group: ToolRunDisplayGroup,
+  onAnswerApproval: AnswerApprovalHandler,
+  disclosureController: ToolRunDisclosureController,
+): JSX.Element {
+  if (group.type === 'mixed') {
+    return (
+      <MixedToolRunGroupPanel
+        key="mixed-tool-runs"
+        disclosureController={disclosureController}
+        group={group}
+        onAnswerApproval={onAnswerApproval}
+      />
+    );
+  }
   if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
     if (fileOperationEntries([group.run]).length > 1) {
       return (
         <ToolRunGroupPanel
-          key={group.run.id}
+          key={toolRunGroupDisclosureId([group.run])}
+          disclosureController={disclosureController}
           group={{ type: 'group', id: `${group.run.id}:files`, kind: 'fileMutation', runs: [group.run] }}
           onAnswerApproval={onAnswerApproval}
         />
@@ -107,14 +141,32 @@ function renderToolRunDisplayGroup(group: ToolRunDisplayGroup, onAnswerApproval:
     return <FileMutationRunRow key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />;
   }
   if (group.type === 'single' && isFlatInspectionRun(group.run) && !hasHookRuns(group.run)) return <FlatToolRunRow key={group.run.id} run={group.run} />;
-  if (group.type === 'single') return <ToolRunPanel key={group.run.id} run={group.run} onAnswerApproval={onAnswerApproval} />;
-  return <ToolRunGroupPanel key={group.id} group={group} onAnswerApproval={onAnswerApproval} />;
+  if (group.type === 'single') {
+    return (
+      <ToolRunPanel
+        key={toolRunPanelDisclosureId(group.run)}
+        disclosureController={disclosureController}
+        run={group.run}
+        onAnswerApproval={onAnswerApproval}
+      />
+    );
+  }
+  return (
+    <ToolRunGroupPanel
+      key={toolRunGroupDisclosureId(group.runs)}
+      disclosureController={disclosureController}
+      group={group}
+      onAnswerApproval={onAnswerApproval}
+    />
+  );
 }
 
 function ToolRunPanel({
+  disclosureController,
   run,
   onAnswerApproval,
 }: {
+  disclosureController: ToolRunDisclosureController;
   run: RuntimeToolRun;
   onAnswerApproval: AnswerApprovalHandler;
 }) {
@@ -124,28 +176,41 @@ function ToolRunPanel({
   const kind = toolRunGroupKind(run);
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
   if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
-  const open = toolRunPanelDefaultOpen(run);
+  const disclosureId = toolRunPanelDisclosureId(run);
+  const open = resolveToolRunDisclosureOpen({
+    defaultOpen: toolRunPanelDefaultOpen(run),
+    preference: disclosureController.preferences.get(disclosureId),
+  });
   return (
-    <details className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`} open={open}>
-      <summary className="chat-tool-run__summary">
-        <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
-        <span className="chat-tool-run__summary-text">
-          <span className="chat-tool-run__title">{summary.title}</span>
-          <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={kind} target={summary.target} />
-        </span>
-        <ToolRunStatus status={run.status} />
-      </summary>
+    <PersistentDetails
+      className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}
+      open={open}
+      summary={(
+        <>
+          <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
+          <span className="chat-tool-run__summary-text">
+            <span className="chat-tool-run__title">{summary.title}</span>
+            <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={kind} target={summary.target} />
+          </span>
+          <ToolRunStatus status={run.status} />
+        </>
+      )}
+      summaryClassName="chat-tool-run__summary"
+      onOpenChange={(nextOpen) => disclosureController.setPreference(disclosureId, run.id, nextOpen)}
+    >
       <div className="chat-tool-run__body">
         <ToolRunDetails run={run} onAnswerApproval={onAnswerApproval} pendingApprovalId={pendingApprovalId} />
       </div>
-    </details>
+    </PersistentDetails>
   );
 }
 
 function ToolRunGroupPanel({
+  disclosureController,
   group,
   onAnswerApproval,
 }: {
+  disclosureController: ToolRunDisclosureController;
   group: Extract<ToolRunGroup, { type: 'group' }>;
   onAnswerApproval: AnswerApprovalHandler;
 }) {
@@ -153,7 +218,13 @@ function ToolRunGroupPanel({
   const summary = toolRunGroupSummary(group);
   const hasPendingApproval = group.runs.some(isPendingApprovalRun);
   const visibleRuns = hasPendingApproval ? group.runs.filter(isPendingApprovalRun) : group.runs;
-  const open = toolRunGroupDefaultOpen(group.kind, status, hasPendingApproval);
+  const anchorRunId = group.runs[0]?.id ?? group.id;
+  const disclosureId = toolRunGroupDisclosureId(group.runs);
+  const open = resolveToolRunDisclosureOpen({
+    defaultOpen: toolRunGroupDefaultOpen(group.kind, status, hasPendingApproval),
+    descendantExpanded: hasExpandedToolRunDisclosure(disclosureController.preferences, group.runs.map((run) => run.id)),
+    preference: disclosureController.preferences.get(disclosureId),
+  });
   const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
   const shellGroup = group.kind === 'shell';
   const fileOperationGroup = group.kind === 'fileMutation';
@@ -164,22 +235,29 @@ function ToolRunGroupPanel({
     ? fileOperationSummary.changeCounts
     : undefined;
   return (
-    <details className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`} open={open}>
-      <summary className="chat-tool-run__summary">
-        <span className="chat-tool-run__icon">{toolRunGroupIcon(group)}</span>
-        <span className="chat-tool-run__summary-text">
-          <span className="chat-tool-run__title">{summary.title}</span>
-          <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={group.kind} target={summary.target} />
-          {fileOperationSummaryChangeCounts ? (
-            <ChangeCounts
-              additions={fileOperationSummaryChangeCounts.additions}
-              deletions={fileOperationSummaryChangeCounts.deletions}
-              showZero={fileOperationSummaryChangeCounts.showZero}
-            />
-          ) : null}
-        </span>
-        <ToolRunStatus status={status} />
-      </summary>
+    <PersistentDetails
+      className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}
+      open={open}
+      summary={(
+        <>
+          <span className="chat-tool-run__icon">{toolRunGroupIcon(group)}</span>
+          <span className="chat-tool-run__summary-text">
+            <span className="chat-tool-run__title">{summary.title}</span>
+            <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={group.kind} target={summary.target} />
+            {fileOperationSummaryChangeCounts ? (
+              <ChangeCounts
+                additions={fileOperationSummaryChangeCounts.additions}
+                deletions={fileOperationSummaryChangeCounts.deletions}
+                showZero={fileOperationSummaryChangeCounts.showZero}
+              />
+            ) : null}
+          </span>
+          <ToolRunStatus status={status} />
+        </>
+      )}
+      summaryClassName="chat-tool-run__summary"
+      onOpenChange={(nextOpen) => disclosureController.setPreference(disclosureId, anchorRunId, nextOpen)}
+    >
       <div
         className={`chat-tool-run__body ${
           shellGroup
@@ -200,7 +278,14 @@ function ToolRunGroupPanel({
             <GroupedHookRunList runs={visibleRuns} />
           </>
         ) : shellGroup ? (
-          visibleRuns.map((run) => <ToolRunPanel key={run.id} run={run} onAnswerApproval={onAnswerApproval} />)
+          visibleRuns.map((run) => (
+            <ToolRunPanel
+              key={toolRunPanelDisclosureId(run)}
+              disclosureController={disclosureController}
+              run={run}
+              onAnswerApproval={onAnswerApproval}
+            />
+          ))
         ) : (
           visibleRuns.map((run) => {
             const pendingApproval = isPendingApprovalRun(run);
@@ -220,14 +305,16 @@ function ToolRunGroupPanel({
           })
         )}
       </div>
-    </details>
+    </PersistentDetails>
   );
 }
 
 function MixedToolRunGroupPanel({
+  disclosureController,
   group,
   onAnswerApproval,
 }: {
+  disclosureController: ToolRunDisclosureController;
   group: Extract<ToolRunDisplayGroup, { type: 'mixed' }>;
   onAnswerApproval: AnswerApprovalHandler;
 }) {
@@ -235,40 +322,57 @@ function MixedToolRunGroupPanel({
   const status = toolRunGroupStatus(runs);
   const hasPendingApproval = runs.some(isPendingApprovalRun);
   const visibleGroups = hasPendingApproval ? group.groups.map(onlyPendingApprovalGroup).filter(isToolRunGroup) : group.groups;
-  const open = toolRunGroupDefaultOpen('generic', status, hasPendingApproval);
+  const anchorRunId = runs[0]?.id ?? group.id;
+  const disclosureId = 'mixed-tool-runs';
+  const open = resolveToolRunDisclosureOpen({
+    defaultOpen: toolRunGroupDefaultOpen('generic', status, hasPendingApproval),
+    descendantExpanded: hasExpandedToolRunDisclosure(disclosureController.preferences, runs.map((run) => run.id)),
+    preference: disclosureController.preferences.get(disclosureId),
+  });
   const compactSummary = mixedToolRunGroupSummary(group.groups, group.summaryMode);
   const compactSummaryChangeCounts = compactSummary.target && isConcreteFileOperationTarget(compactSummary.target)
     ? compactSummary.changeCounts
     : undefined;
   return (
-    <details className={`chat-tool-run chat-tool-run--group chat-tool-run--mixed chat-tool-run--${status}`} open={open}>
-      <summary className="chat-tool-run__summary">
-        <span className="chat-tool-run__icon">{mixedToolRunGroupIcon(status)}</span>
-        <span className="chat-tool-run__summary-text">
-          <span className="chat-tool-run__title">{compactSummary.title}</span>
-          <ToolRunSummaryTarget
-            inspectionKind={compactSummary.inspectionKind}
-            kind={compactSummary.targetKind}
-            target={compactSummary.target}
-          />
-          {compactSummaryChangeCounts ? (
-            <ChangeCounts
-              additions={compactSummaryChangeCounts.additions}
-              deletions={compactSummaryChangeCounts.deletions}
-              showZero={compactSummaryChangeCounts.showZero}
+    <PersistentDetails
+      className={`chat-tool-run chat-tool-run--group chat-tool-run--mixed chat-tool-run--${status}`}
+      open={open}
+      summary={(
+        <>
+          <span className="chat-tool-run__icon">{mixedToolRunGroupIcon(status)}</span>
+          <span className="chat-tool-run__summary-text">
+            <span className="chat-tool-run__title">{compactSummary.title}</span>
+            <ToolRunSummaryTarget
+              inspectionKind={compactSummary.inspectionKind}
+              kind={compactSummary.targetKind}
+              target={compactSummary.target}
             />
-          ) : null}
-        </span>
-        <ToolRunStatus status={status} />
-      </summary>
+            {compactSummaryChangeCounts ? (
+              <ChangeCounts
+                additions={compactSummaryChangeCounts.additions}
+                deletions={compactSummaryChangeCounts.deletions}
+                showZero={compactSummaryChangeCounts.showZero}
+              />
+            ) : null}
+          </span>
+          <ToolRunStatus status={status} />
+        </>
+      )}
+      summaryClassName="chat-tool-run__summary"
+      onOpenChange={(nextOpen) => disclosureController.setPreference(disclosureId, anchorRunId, nextOpen)}
+    >
       <div className="chat-tool-run__body chat-tool-run__body--mixed-list">
-        {visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))}
+        {visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval, disclosureController))}
       </div>
-    </details>
+    </PersistentDetails>
   );
 }
 
-function renderMixedToolRunChildGroup(group: ToolRunGroup, onAnswerApproval: AnswerApprovalHandler): JSX.Element | null {
+function renderMixedToolRunChildGroup(
+  group: ToolRunGroup,
+  onAnswerApproval: AnswerApprovalHandler,
+  disclosureController: ToolRunDisclosureController,
+): JSX.Element | null {
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
   if (kind === 'fileMutation') {
@@ -279,7 +383,15 @@ function renderMixedToolRunChildGroup(group: ToolRunGroup, onAnswerApproval: Ans
       </div>
     );
   }
-  return renderToolRunDisplayGroup(group, onAnswerApproval);
+  return renderToolRunDisplayGroup(group, onAnswerApproval, disclosureController);
+}
+
+function toolRunPanelDisclosureId(run: RuntimeToolRun): string {
+  return `run:${run.id}`;
+}
+
+function toolRunGroupDisclosureId(runs: RuntimeToolRun[]): string {
+  return `group:${runs[0]?.id ?? 'empty'}`;
 }
 
 function onlyPendingApprovalGroup(group: ToolRunGroup): ToolRunGroup | null {

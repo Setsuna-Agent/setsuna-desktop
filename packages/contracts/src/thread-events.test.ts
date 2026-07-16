@@ -647,6 +647,11 @@ describe('applyRuntimeEventToThread context compaction', () => {
       createdAt: '2026-06-26T00:00:00.000Z',
       updatedAt: '2026-06-26T00:00:00.000Z',
       archived: false,
+      contextCompaction: {
+        status: 'running',
+        turnId: 'turn_1',
+        startedAt: '2026-06-26T00:00:01.500Z',
+      },
       messageCount: 2,
       lastMessagePreview: 'request',
       lastSeq: 0,
@@ -705,6 +710,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
 
     const cancelled = applyRuntimeEventToThread(thread, event);
 
+    expect(cancelled.contextCompaction).toBeUndefined();
     expect(cancelled.messages[1]).toMatchObject({
       status: 'complete',
       completedAt: '2026-06-26T00:00:03.000Z',
@@ -1119,6 +1125,94 @@ describe('applyRuntimeEventToThread context compaction', () => {
     expect(completed.messages).toHaveLength(2);
     expect(completed.messages[0]).toMatchObject({ id: 'msg_1', visibility: 'transcript' });
     expect(completed.messages[1]).toMatchObject({ id: 'msg_compact', contextCompaction: compactedMessage.contextCompaction });
+  });
+
+  it('clears running context compaction when a turn fails after assistant output exists', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:01.000Z',
+      archived: false,
+      activeTurnId: 'turn_1',
+      contextCompaction: {
+        status: 'running',
+        turnId: 'turn_1',
+        startedAt: '2026-06-26T00:00:01.000Z',
+        usedTokens: 217817,
+      },
+      messageCount: 1,
+      lastMessagePreview: 'Inspecting the repository.',
+      lastSeq: 2,
+      turns: [{
+        id: 'turn_1',
+        startedAt: '2026-06-26T00:00:00.000Z',
+        status: 'in_progress',
+        items: [],
+      }],
+      messages: [{
+        id: 'msg_assistant',
+        turnId: 'turn_1',
+        role: 'assistant',
+        content: 'Inspecting the repository.',
+        createdAt: '2026-06-26T00:00:00.500Z',
+        status: 'streaming',
+      }],
+    };
+    const failed: RuntimeEvent = {
+      id: 'event_failed',
+      seq: 3,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'runtime.error',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        code: 'turn_failed',
+        message: 'Context compaction model request failed.',
+      },
+    };
+
+    const projected = applyRuntimeEventToThread(thread, failed);
+
+    expect(projected.contextCompaction).toBeUndefined();
+    expect(projected.activeTurnId).toBeNull();
+    expect(projected.turns?.[0]).toMatchObject({ status: 'failed', completedAt: failed.createdAt });
+    expect(projected.messages[0]).toMatchObject({ status: 'error', completedAt: failed.createdAt });
+  });
+
+  it('does not clear running context compaction for an unrelated terminal turn', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      activeTurnId: 'turn_compact',
+      contextCompaction: {
+        status: 'running',
+        turnId: 'turn_compact',
+        startedAt: '2026-06-26T00:00:01.000Z',
+      },
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 1,
+      turns: [{ id: 'turn_compact', items: [], status: 'in_progress' }],
+      messages: [],
+    };
+    const unrelatedCompleted: RuntimeEvent = {
+      id: 'event_shell_completed',
+      seq: 2,
+      threadId: 'thread_1',
+      turnId: 'turn_shell',
+      type: 'turn.completed',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: { taskKind: 'user_shell' },
+    };
+
+    const projected = applyRuntimeEventToThread(thread, unrelatedCompleted);
+
+    expect(projected.contextCompaction).toMatchObject({ status: 'running', turnId: 'turn_compact' });
+    expect(projected.activeTurnId).toBe('turn_compact');
   });
 
   it('keeps hook runs pending until a context compaction message exists for the turn', () => {

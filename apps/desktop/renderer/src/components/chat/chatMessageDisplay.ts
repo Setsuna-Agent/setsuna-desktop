@@ -21,8 +21,13 @@ export type ChatScrollSignalOptions = {
   threadId?: string | null;
 };
 
+type TranscriptMessageEntry = {
+  message: RuntimeMessage;
+  sourceIndex: number;
+};
+
 /**
- * 将存储中的 runtime messages 转成用户可见的 transcript 行，同时保持源事件顺序。
+ * 将存储中的 runtime messages 转成用户可见的 transcript 行，并恢复压缩边界的事件位置。
  *
  * @param messages reducer 投影后的线程消息列表。
  */
@@ -57,8 +62,8 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
     assistantRunTurnId = undefined;
   };
 
-  // transcript 顺序以 reducer 投影为准，包括上下文压缩分隔符的位置。
-  for (const message of messages) {
+  // 压缩结果里的 messages 是模型窗口顺序；分隔符需要恢复到真实 transcript 时间线。
+  for (const message of messagesInTranscriptOrder(messages)) {
     // model-only 消息只服务 prompt，不应该出现在用户 transcript。
     if (message.visibility === 'model') continue;
     if (message.role === 'tool') {
@@ -145,6 +150,45 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
 
   flushAssistantRun();
   return items;
+}
+
+function messagesInTranscriptOrder(messages: RuntimeMessage[]): RuntimeMessage[] {
+  const entries = messages.map((message, sourceIndex): TranscriptMessageEntry => ({ message, sourceIndex }));
+  const boundaries = entries.filter(({ message }) => Boolean(message.contextCompaction));
+  if (!boundaries.length) return messages;
+
+  const timeline = entries.filter(({ message }) => !message.contextCompaction);
+  boundaries.sort(compareTranscriptBoundaryEntries);
+  for (const boundary of boundaries) {
+    const anchorId = boundary.message.contextCompaction?.transcriptAfterMessageId;
+    const anchorIndex = anchorId ? timeline.findIndex(({ message }) => message.id === anchorId) : -1;
+    const insertAt = anchorIndex >= 0
+      ? anchorIndex + 1
+      : inferredTranscriptBoundaryIndex(timeline, boundary);
+    timeline.splice(insertAt, 0, boundary);
+  }
+  return timeline.map(({ message }) => message);
+}
+
+function compareTranscriptBoundaryEntries(left: TranscriptMessageEntry, right: TranscriptMessageEntry): number {
+  const leftTime = Date.parse(left.message.createdAt);
+  const rightTime = Date.parse(right.message.createdAt);
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) return leftTime - rightTime;
+  return left.sourceIndex - right.sourceIndex;
+}
+
+function inferredTranscriptBoundaryIndex(timeline: TranscriptMessageEntry[], boundary: TranscriptMessageEntry): number {
+  const boundaryTime = Date.parse(boundary.message.createdAt);
+  if (Number.isFinite(boundaryTime)) {
+    let insertAfter = -1;
+    for (const [index, entry] of timeline.entries()) {
+      const entryTime = Date.parse(entry.message.createdAt);
+      if (Number.isFinite(entryTime) && entryTime <= boundaryTime) insertAfter = index;
+    }
+    return insertAfter + 1;
+  }
+  const sourcePosition = timeline.findIndex((entry) => entry.sourceIndex > boundary.sourceIndex);
+  return sourcePosition >= 0 ? sourcePosition : timeline.length;
 }
 
 export function createChatDisplayItems(messages: RuntimeMessage[]): ChatDisplayItem[] {
