@@ -6,7 +6,6 @@ import type { ThreadStore } from '../ports/thread-store.js';
 import { createRuntimeContextCompactionCandidate, materializeRuntimeContextCompaction } from './context-compaction.js';
 import type { RuntimeHookCoordinator } from './runtime-hook-coordinator.js';
 import { compactHookTrigger, type RuntimeContextCompactor } from './runtime-context-compactor.js';
-import type { RuntimeToolCallExecutor } from './runtime-tool-call-executor.js';
 import { isAbortError } from './runtime-turn-errors.js';
 import { RuntimeTurnTaskRegistry } from './turn-task-registry.js';
 import type { RuntimeTurnTerminationCoordinator } from './runtime-turn-termination-coordinator.js';
@@ -21,7 +20,6 @@ type RuntimeCompactionTurnCoordinatorOptions = {
   hooks: Pick<RuntimeHookCoordinator, 'queueSessionStartSource' | 'runCompactHooks'>;
   ids: IdGenerator;
   threadStore: ThreadStore;
-  toolExecutor: Pick<RuntimeToolCallExecutor, 'clearDeferredToolRevealsForTurn'>;
   turnTasks: RuntimeTurnTaskRegistry;
   turnTermination: Pick<RuntimeTurnTerminationCoordinator, 'publishCancelledOnce'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
@@ -146,8 +144,6 @@ export class RuntimeCompactionTurnCoordinator {
         },
       });
       throw error;
-    } finally {
-      this.options.toolExecutor.clearDeferredToolRevealsForTurn(turnId);
     }
   }
 

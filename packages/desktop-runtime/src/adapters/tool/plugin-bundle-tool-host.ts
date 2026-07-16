@@ -64,12 +64,6 @@ export class PluginBundleToolHost implements ToolHost {
     return context.features?.plugins === false ? [] : [...RESOURCE_TOOLS, ...MANAGEMENT_TOOLS];
   }
 
-  toolRuntimeProfile(name: string) {
-    if (name === LIST_PLUGIN_RESOURCES_TOOL || name === READ_PLUGIN_RESOURCE_TOOL) return { exposure: 'direct' as const };
-    if (name === INSTALL_PLUGIN_TOOL || name === REMOVE_PLUGIN_TOOL) return { exposure: 'deferred' as const };
-    return null;
-  }
-
   systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
     const names = new Set(request?.tools.map((tool) => tool.name) ?? []);
     if (![...names].some((name) => name.includes('plugin'))) return null;

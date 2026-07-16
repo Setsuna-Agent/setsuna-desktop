@@ -16,7 +16,6 @@ const RESERVED_DYNAMIC_TOOL_NAMESPACES = new Set([
   'python_user_visible',
   'submodel_delegator',
   'terminal',
-  'tool_search',
   'web',
 ]);
 const RESERVED_DYNAMIC_TOOL_MODEL_NAMES = new Set([
@@ -24,7 +23,6 @@ const RESERVED_DYNAMIC_TOOL_MODEL_NAMES = new Set([
   'resume_agent',
   'send_input',
   'spawn_agent',
-  'tool_search',
   'wait',
 ]);
 
@@ -76,7 +74,6 @@ function appServerDynamicFunctionTool(
     name: modelName,
     namespace,
     toolName,
-    deferLoading: input.deferLoading === true || input.defer_loading === true,
     description: dynamicToolDescription(namespace, namespaceDescription, toolDescription),
     inputSchema: Object.keys(inputSchema).length ? inputSchema : { type: 'object', properties: {} },
   };

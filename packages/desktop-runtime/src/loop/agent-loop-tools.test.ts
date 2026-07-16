@@ -308,8 +308,6 @@ describe('agent loop tools', () => {
       ['step_tool_1'],
       ['step_tool_2'],
     ]);
-    expect(snapshotEvents.map((event) => event.payload.snapshot.deferredToolNames)).toEqual([[], []]);
-    expect(snapshotEvents.map((event) => event.payload.snapshot.routerToolNames)).toEqual([[], []]);
     expect(saved?.turns?.[0]?.stepSnapshots?.map((step) => step.snapshot.toolNames)).toEqual([
       ['step_tool_1'],
       ['step_tool_2'],
@@ -324,8 +322,6 @@ describe('agent loop tools', () => {
       projectId: 'project_1',
       toolNames: ['step_tool_1'],
       advertisedToolNames: ['step_tool_1'],
-      deferredToolNames: [],
-      routerToolNames: [],
       toolChoice: 'auto',
       toolEnvironment: {
         id: expect.stringMatching(/^step_env_\d+$/),
@@ -486,7 +482,6 @@ describe('agent loop tools', () => {
     expect(modelClient.requests[0].toolChoice).toBe('none');
     expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual([]);
     expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual([]);
-    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual([]);
     expect(modelClient.requests[0].messages.some((message) => message.id === 'desktop_local_tool_rules')).toBe(false);
     expect(modelClient.requests[0].stepSnapshot?.contextWindow?.toolDefinitionTokens).toBe(0);
     expect(modelClient.requests[0].messages.some((message) => message.id === 'desktop_plan_mode' && message.content.includes('<plan_mode>'))).toBe(true);
@@ -1489,12 +1484,12 @@ describe('agent loop tools', () => {
     expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['read_file', 'search_text']);
   });
 
-  it('reveals deferred tools through tool_search on the next sampling step', async () => {
+  it('advertises host tools directly on the first sampling step', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Deferred tools', projectId: 'project_1' });
-    const modelClient = new DeferredToolSearchModelClient();
-    const toolHost = new DeferredToolHost();
+    const thread = await threadStore.createThread({ title: 'Direct tools', projectId: 'project_1' });
+    const modelClient = new DirectLookupToolModelClient();
+    const toolHost = new LookupToolHost();
     const loop = new AgentLoop({
       threadStore,
       modelClient,
@@ -1504,18 +1499,13 @@ describe('agent loop tools', () => {
       toolHost,
     });
 
-    await loop.sendTurn(thread.id, { input: 'find the deferred lookup tool' });
+    await loop.sendTurn(thread.id, { input: 'look up the project fact' });
     const saved = await threadStore.getThread(thread.id);
-    const events = await threadStore.listEvents(thread.id, 0);
-    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
-      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
 
-    expect(modelClient.requests).toHaveLength(3);
-    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['direct_tool', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
-    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
+    expect(modelClient.requests).toHaveLength(2);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'project_lookup']);
+    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['direct_tool', 'project_lookup']);
+    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'project_lookup']);
     expect(modelClient.requests[0].stepSnapshot?.toolRuntimes).toEqual([
       {
         name: 'direct_tool',
@@ -1525,191 +1515,24 @@ describe('agent loop tools', () => {
         waitsForRuntimeCancellation: true,
       },
       {
-        name: 'tool_search',
-        source: 'router',
-        exposure: 'direct',
-        supportsParallel: false,
-        waitsForRuntimeCancellation: true,
-      },
-    ]);
-    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'deferred_lookup']);
-    expect(modelClient.requests[1].stepSnapshot?.toolNames).toEqual(['direct_tool', 'deferred_lookup']);
-    expect(modelClient.requests[1].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'deferred_lookup']);
-    expect(modelClient.requests[1].stepSnapshot?.deferredToolNames).toEqual([]);
-    expect(modelClient.requests[1].stepSnapshot?.routerToolNames).toEqual([]);
-    expect(modelClient.requests[1].stepSnapshot?.toolRuntimes).toEqual([
-      {
-        name: 'direct_tool',
+        name: 'project_lookup',
         source: 'host',
         exposure: 'direct',
         supportsParallel: false,
         waitsForRuntimeCancellation: true,
       },
-      {
-        name: 'deferred_lookup',
-        source: 'host',
-        exposure: 'deferred',
-        supportsParallel: false,
-        waitsForRuntimeCancellation: true,
-      },
     ]);
-    expect(modelClient.requests[1].messages.some((message) =>
-      message.role === 'tool'
-      && message.toolName === 'tool_search'
-      && message.content.includes('deferred_lookup'))).toBe(true);
-    expect(toolHost.calls).toEqual([{ name: 'deferred_lookup', input: { id: 'alpha' }, projectId: 'project_1' }]);
-    expect(events.some((event) => event.type === 'tool.started' && event.payload.toolName === 'tool_search')).toBe(true);
-    expect(toolSearchCompleted?.payload.resultPreview).toContain('Revealed 1 deferred tool');
-    expect(toolSearchCompleted?.payload.data).toMatchObject({ revealedToolNames: ['deferred_lookup'] });
-    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['tool_search', 'deferred_lookup']);
-    expect(saved?.messages.at(-1)?.content).toContain('deferred lookup complete');
+    expect(toolHost.calls).toEqual([{ name: 'project_lookup', input: { id: 'alpha' }, projectId: 'project_1' }]);
+    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['project_lookup']);
+    expect(saved?.messages.at(-1)?.content).toContain('direct lookup complete');
   });
 
-  it('finds directly advertised tools without treating them as deferred reveals', async () => {
+  it('advertises AppServer dynamic tools directly', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Search visible tools', projectId: 'project_1' });
+    const thread = await threadStore.createThread({ title: 'Direct dynamic tool', projectId: 'project_1' });
     const modelClient = new SingleToolCallModelClient({
-      id: 'call_search_direct_tool',
-      name: 'tool_search',
-      arguments: '{"query":"direct_tool"}',
-    });
-    const loop = new AgentLoop({
-      threadStore,
-      modelClient,
-      eventBus: new InMemoryEventBus(),
-      clock: systemClock,
-      ids,
-      toolHost: new DeferredToolHost(),
-    });
-
-    await loop.sendTurn(thread.id, { input: 'find the direct tool' });
-    const events = await threadStore.listEvents(thread.id, 0);
-    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
-      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
-
-    expect(toolSearchCompleted?.payload.data).toMatchObject({
-      availableToolNames: ['direct_tool'],
-      revealedToolNames: [],
-      tools: [expect.objectContaining({ name: 'direct_tool' })],
-    });
-    expect(toolSearchCompleted?.payload.resultPreview).toContain('Available 1 tool(s): direct_tool');
-    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
-  });
-
-  it('suggests deferred tools without revealing them before tool_search', async () => {
-    const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Suggested deferred tools', projectId: 'project_1' });
-    const modelClient = new ToolSuggestThenSearchModelClient();
-    const toolHost = new DeferredToolHost();
-    const loop = new AgentLoop({
-      threadStore,
-      modelClient,
-      eventBus: new InMemoryEventBus(),
-      clock: systemClock,
-      ids,
-      toolHost,
-      configStore: new ToolSuggestConfigStore(),
-    });
-
-    await loop.sendTurn(thread.id, { input: 'suggest then reveal lookup tool' });
-    const saved = await threadStore.getThread(thread.id);
-    const events = await threadStore.listEvents(thread.id, 0);
-    const toolSuggestCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
-      event.type === 'tool.completed' && event.payload.toolName === 'tool_suggest');
-    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
-      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
-
-    expect(modelClient.requests).toHaveLength(4);
-    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
-    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
-    expect(modelClient.requests[2].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'deferred_lookup']);
-    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
-    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
-    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search', 'tool_suggest']);
-    expect(modelClient.requests[1].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search', 'tool_suggest']);
-    expect(modelClient.requests[1].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
-    expect(modelClient.requests[1].stepSnapshot?.routerToolNames).toEqual(['tool_search', 'tool_suggest']);
-    expect(modelClient.requests[2].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'deferred_lookup']);
-    expect(modelClient.requests[2].stepSnapshot?.deferredToolNames).toEqual([]);
-    expect(modelClient.requests[2].stepSnapshot?.routerToolNames).toEqual([]);
-    expect(toolSuggestCompleted?.payload.resultPreview).toContain('Suggested 1 deferred tool');
-    expect(toolSuggestCompleted?.payload.data).toMatchObject({
-      suggestions: [{ name: 'deferred_lookup', revealWith: 'tool_search' }],
-    });
-    expect(toolSuggestCompleted?.payload.data).not.toMatchObject({ revealedToolNames: expect.any(Array) });
-    expect(toolSearchCompleted?.payload.data).toMatchObject({ revealedToolNames: ['deferred_lookup'] });
-    expect(toolHost.calls).toEqual([{ name: 'deferred_lookup', input: { id: 'alpha' }, projectId: 'project_1' }]);
-    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['tool_suggest', 'tool_search', 'deferred_lookup']);
-    expect(saved?.messages.at(-1)?.content).toContain('suggested deferred lookup complete');
-  });
-
-  it('keeps router-owned tool_search from being shadowed by host tools', async () => {
-    const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Reserved tool search', projectId: 'project_1' });
-    const modelClient = new DeferredToolSearchModelClient();
-    const toolHost = new ToolSearchCollisionHost();
-    const loop = new AgentLoop({
-      threadStore,
-      modelClient,
-      eventBus: new InMemoryEventBus(),
-      clock: systemClock,
-      ids,
-      toolHost,
-    });
-
-    await loop.sendTurn(thread.id, { input: 'discover lookup tool' });
-
-    expect(modelClient.requests[0].tools?.find((tool) => tool.name === 'tool_search')?.description).toContain('Search deferred tools');
-    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
-    expect(toolHost.calls).toEqual([{ name: 'deferred_lookup', input: { id: 'alpha' }, projectId: 'project_1' }]);
-  });
-
-  it('rejects tool calls that were not advertised in the current sampling step', async () => {
-    const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Unadvertised deferred tool', projectId: 'project_1' });
-    const modelClient = new UnadvertisedDeferredToolModelClient();
-    const toolHost = new DeferredToolHost();
-    const loop = new AgentLoop({
-      threadStore,
-      modelClient,
-      eventBus: new InMemoryEventBus(),
-      clock: systemClock,
-      ids,
-      toolHost,
-    });
-
-    await loop.sendTurn(thread.id, { input: 'call hidden lookup directly' });
-    const saved = await threadStore.getThread(thread.id);
-    const events = await threadStore.listEvents(thread.id, 0);
-
-    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['direct_tool', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
-    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
-    expect(toolHost.calls).toEqual([]);
-    expect(events).toContainEqual(expect.objectContaining({
-      type: 'tool.completed',
-      payload: expect.objectContaining({
-        toolName: 'deferred_lookup',
-        status: 'error',
-        content: expect.stringContaining('not advertised'),
-      }),
-    }));
-    expect(saved?.messages.find((message) => message.role === 'tool' && message.toolName === 'deferred_lookup')?.content).toContain('not advertised');
-    expect(saved?.messages.at(-1)?.content).toContain('handled unadvertised tool rejection');
-  });
-
-  it('rejects deferred AppServer dynamic tool calls before discovery', async () => {
-    const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Unadvertised dynamic tool', projectId: 'project_1' });
-    const modelClient = new SingleToolCallModelClient({
-      id: 'call_unadvertised_dynamic_lookup',
+      id: 'call_dynamic_lookup',
       name: 'tickets__lookup_ticket',
       arguments: '{"id":"ABC-123"}',
     });
@@ -1726,7 +1549,6 @@ describe('agent loop tools', () => {
       name: 'tickets__lookup_ticket',
       namespace: 'tickets',
       toolName: 'lookup_ticket',
-      deferLoading: true,
       description: 'Look up a ticket by id.',
       inputSchema: {
         type: 'object',
@@ -1735,57 +1557,25 @@ describe('agent loop tools', () => {
       },
     }], 'dynamic-connection-1');
 
-    await loop.sendTurn(thread.id, { input: 'call hidden dynamic lookup directly' });
+    await loop.sendTurn(thread.id, { input: 'call the dynamic lookup directly' });
     const saved = await threadStore.getThread(thread.id);
     const events = await threadStore.listEvents(thread.id, 0);
 
-    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['workspace_read_file', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['workspace_read_file', 'tool_search']);
-    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['tickets__lookup_ticket']);
-    expect(modelClient.requests[0].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['workspace_read_file', 'tickets__lookup_ticket']);
+    expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual(['workspace_read_file', 'tickets__lookup_ticket']);
+    expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual(['workspace_read_file', 'tickets__lookup_ticket']);
     expect(toolHost.calls).toEqual([]);
     expect(events).toContainEqual(expect.objectContaining({
       type: 'tool.completed',
       payload: expect.objectContaining({
         toolName: 'tickets__lookup_ticket',
         status: 'error',
-        content: expect.stringContaining('not advertised'),
+        content: expect.stringContaining('AppServer dynamic tool runtime is unavailable'),
       }),
     }));
-    expect(saved?.messages.find((message) => message.role === 'tool' && message.toolName === 'tickets__lookup_ticket')?.content).toContain('not advertised');
+    expect(saved?.messages.find((message) => message.role === 'tool' && message.toolName === 'tickets__lookup_ticket')?.content)
+      .toContain('AppServer dynamic tool runtime is unavailable');
     expect(saved?.messages.at(-1)?.content).toContain('tool handled');
-  });
-
-  it('prioritizes exact deferred tool names in tool_search results', async () => {
-    const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Exact deferred search', projectId: 'project_1' });
-    const modelClient = new ExactDeferredToolSearchModelClient();
-    const loop = new AgentLoop({
-      threadStore,
-      modelClient,
-      eventBus: new InMemoryEventBus(),
-      clock: systemClock,
-      ids,
-      toolHost: new ManyDeferredToolHost(),
-    });
-
-    await loop.sendTurn(thread.id, { input: 'load search_graph only' });
-    const events = await threadStore.listEvents(thread.id, 0);
-    const toolSearchCompleted = events.find((event): event is Extract<RuntimeEvent, { type: 'tool.completed' }> =>
-      event.type === 'tool.completed' && event.payload.toolName === 'tool_search');
-
-    expect(toolSearchCompleted?.payload.data).toMatchObject({ revealedToolNames: ['search_graph'] });
-    expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'search_graph', 'tool_search']);
-    expect(modelClient.requests[1].stepSnapshot?.advertisedToolNames).toEqual(['direct_tool', 'search_graph', 'tool_search']);
-    expect(modelClient.requests[1].stepSnapshot?.deferredToolNames).toEqual(['graph_search_history', 'search_projects']);
-    expect(modelClient.requests[1].stepSnapshot?.routerToolNames).toEqual(['tool_search']);
-    expect(modelClient.requests[1].tools?.some((tool) => tool.name === 'graph_search_history')).toBe(false);
-    expect(modelClient.requests[1].messages.some((message) =>
-      message.role === 'tool'
-      && message.toolName === 'tool_search'
-      && message.content.includes('"search_graph"'))).toBe(true);
   });
 
   it('executes all inspection calls without injecting progress copy', async () => {
@@ -1953,12 +1743,12 @@ describe('agent loop tools', () => {
     }));
   });
 
-  it('does not publish streaming previews for deferred tools before discovery', async () => {
+  it('publishes streaming previews for directly advertised tools', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Deferred delta preview', projectId: 'project_1' });
-    const modelClient = new UnadvertisedDeferredToolDeltaModelClient();
-    const toolHost = new DeferredPreviewingToolHost();
+    const thread = await threadStore.createThread({ title: 'Direct delta preview', projectId: 'project_1' });
+    const modelClient = new LookupToolDeltaModelClient();
+    const toolHost = new LookupPreviewingToolHost();
     const loop = new AgentLoop({
       threadStore,
       modelClient,
@@ -1968,12 +1758,14 @@ describe('agent loop tools', () => {
       toolHost,
     });
 
-    await loop.sendTurn(thread.id, { input: 'stream hidden lookup arguments' });
+    await loop.sendTurn(thread.id, { input: 'stream lookup arguments' });
     const events = await threadStore.listEvents(thread.id, 0);
 
-    expect(toolHost.partialPreviewCalls).toEqual([]);
-    expect(events.some((event) => event.type === 'tool.preview' && event.payload.toolName === 'deferred_lookup')).toBe(false);
-    expect(modelClient.requests[0].stepSnapshot?.deferredToolNames).toEqual(['deferred_lookup']);
+    expect(toolHost.partialPreviewCalls).toEqual([
+      { name: 'project_lookup', rawArguments: '{"id":"alpha"}' },
+    ]);
+    expect(events.some((event) => event.type === 'tool.preview' && event.payload.toolName === 'project_lookup')).toBe(true);
+    expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['direct_tool', 'project_lookup']);
   });
 
   it('uses the model client to compact context manually', async () => {
@@ -6188,7 +5980,7 @@ class ParallelReadModelClient implements ModelClient {
   }
 }
 
-class DeferredToolSearchModelClient implements ModelClient {
+class DirectLookupToolModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
@@ -6196,94 +5988,12 @@ class DeferredToolSearchModelClient implements ModelClient {
     if (this.requests.length === 1) {
       yield {
         type: 'tool_calls',
-        toolCalls: [{ id: 'call_tool_search', name: 'tool_search', arguments: '{"query":"lookup"}' }],
+        toolCalls: [{ id: 'call_project_lookup', name: 'project_lookup', arguments: '{"id":"alpha"}' }],
       };
       yield { type: 'done', finishReason: 'tool_calls' };
       return;
     }
-    if (this.requests.length === 2) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{ id: 'call_deferred_lookup', name: 'deferred_lookup', arguments: '{"id":"alpha"}' }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    yield { type: 'text_delta', text: 'deferred lookup complete' };
-    yield { type: 'done', finishReason: 'stop' };
-  }
-}
-
-class ToolSuggestThenSearchModelClient implements ModelClient {
-  requests: ModelRequest[] = [];
-
-  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    this.requests.push(request);
-    if (this.requests.length === 1) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{ id: 'call_tool_suggest', name: 'tool_suggest', arguments: '{"query":"lookup","limit":1}' }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    if (this.requests.length === 2) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{ id: 'call_tool_search_after_suggest', name: 'tool_search', arguments: '{"query":"lookup","limit":1}' }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    if (this.requests.length === 3) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{ id: 'call_suggested_deferred_lookup', name: 'deferred_lookup', arguments: '{"id":"alpha"}' }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    yield { type: 'text_delta', text: 'suggested deferred lookup complete' };
-    yield { type: 'done', finishReason: 'stop' };
-  }
-}
-
-class UnadvertisedDeferredToolModelClient implements ModelClient {
-  requests: ModelRequest[] = [];
-
-  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    this.requests.push(request);
-    if (this.requests.length === 1) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{ id: 'call_unadvertised_deferred_lookup', name: 'deferred_lookup', arguments: '{"id":"alpha"}' }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    yield { type: 'text_delta', text: 'handled unadvertised tool rejection' };
-    yield { type: 'done', finishReason: 'stop' };
-  }
-}
-
-class ExactDeferredToolSearchModelClient implements ModelClient {
-  requests: ModelRequest[] = [];
-
-  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    this.requests.push(request);
-    if (this.requests.length === 1) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{
-          id: 'call_exact_tool_search',
-          name: 'tool_search',
-          arguments: '{"query":"search_graph graph search projects","limit":1}',
-        }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    yield { type: 'text_delta', text: 'exact deferred search complete' };
+    yield { type: 'text_delta', text: 'direct lookup complete' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -6376,13 +6086,13 @@ class NoisyToolDeltaModelClient implements ModelClient {
   }
 }
 
-class UnadvertisedDeferredToolDeltaModelClient implements ModelClient {
+class LookupToolDeltaModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    yield { type: 'tool_call_delta', call: { id: 'call_hidden_delta', name: 'deferred_lookup', argumentsDelta: '{"id":"alpha"}' } };
-    yield { type: 'text_delta', text: 'handled hidden delta without preview' };
+    yield { type: 'tool_call_delta', call: { id: 'call_lookup_delta', name: 'project_lookup', argumentsDelta: '{"id":"alpha"}' } };
+    yield { type: 'text_delta', text: 'handled direct lookup delta' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -7046,7 +6756,7 @@ class SerialProfileReadToolHost extends ParallelReadToolHost {
   }
 }
 
-class DeferredToolHost implements ToolHost {
+class LookupToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown; projectId?: string }> = [];
 
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
@@ -7057,8 +6767,8 @@ class DeferredToolHost implements ToolHost {
         inputSchema: { type: 'object', additionalProperties: false, properties: {} },
       },
       {
-        name: 'deferred_lookup',
-        description: 'Lookup hidden project facts after discovery',
+        name: 'project_lookup',
+        description: 'Look up project facts',
         inputSchema: {
           type: 'object',
           properties: { id: { type: 'string' } },
@@ -7068,80 +6778,9 @@ class DeferredToolHost implements ToolHost {
     ];
   }
 
-  toolRuntimeProfile(name: string, _context: ToolExecutionContext): ToolRuntimeProfile {
-    return name === 'deferred_lookup' ? { exposure: 'deferred' } : { exposure: 'direct' };
-  }
-
   async runTool(name: string, input: unknown, context: ToolExecutionContext) {
     this.calls.push({ name, input, projectId: context.projectId });
     return { content: `${name} result` };
-  }
-}
-
-class ToolSearchCollisionHost extends DeferredToolHost {
-  override async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return [
-      {
-        name: 'tool_search',
-        description: 'Host-provided tool search that must not shadow runtime discovery',
-        inputSchema: {
-          type: 'object',
-          properties: { query: { type: 'string' } },
-          required: ['query'],
-        },
-      },
-      ...(await super.listTools(context)),
-    ];
-  }
-
-  override async runTool(name: string, input: unknown, context: ToolExecutionContext) {
-    if (name === 'tool_search') throw new Error('Host tool_search should not be executed.');
-    return super.runTool(name, input, context);
-  }
-}
-
-class ManyDeferredToolHost implements ToolHost {
-  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    return [
-      {
-        name: 'direct_tool',
-        description: 'A directly visible tool',
-        inputSchema: { type: 'object', additionalProperties: false, properties: {} },
-      },
-      {
-        name: 'graph_search_history',
-        description: 'Search graph history and projects with many overlapping graph search terms',
-        inputSchema: {
-          type: 'object',
-          properties: { project: { type: 'string' } },
-        },
-      },
-      {
-        name: 'search_projects',
-        description: 'Search projects and graph indexes',
-        inputSchema: {
-          type: 'object',
-          properties: { graph: { type: 'string' } },
-        },
-      },
-      {
-        name: 'search_graph',
-        description: 'Exact graph search tool',
-        inputSchema: {
-          type: 'object',
-          properties: { query: { type: 'string' } },
-          required: ['query'],
-        },
-      },
-    ];
-  }
-
-  toolRuntimeProfile(name: string, _context: ToolExecutionContext): ToolRuntimeProfile {
-    return name === 'direct_tool' ? { exposure: 'direct' } : { exposure: 'deferred' };
-  }
-
-  async runTool() {
-    return { content: 'unused' };
   }
 }
 
@@ -7238,7 +6877,7 @@ class LargePreviewingToolHost extends PreviewingToolHost {
   }
 }
 
-class DeferredPreviewingToolHost extends DeferredToolHost {
+class LookupPreviewingToolHost extends LookupToolHost {
   partialPreviewCalls: Array<{ name: string; rawArguments: string }> = [];
 
   async previewPartialToolCall(name: string, rawArguments: string) {
@@ -8824,40 +8463,6 @@ class MultiAgentConfigStore implements ConfigStore {
       sandboxWorkspaceWrite: {},
       features: {
         multi_agent: true,
-      },
-    };
-  }
-
-  async saveConfig() {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
-  }
-}
-
-class ToolSuggestConfigStore implements ConfigStore {
-  async getConfig() {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: '',
-      memory: {
-        useMemories: false,
-        generateMemories: false,
-        dedicatedTools: false,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: false,
-      setsunaStyle: 'developer' as const,
-      approvalPolicy: 'on-request' as const,
-      permissionProfile: 'workspace-write' as const,
-      features: {
-        tool_suggest: true,
       },
     };
   }

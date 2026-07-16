@@ -77,7 +77,6 @@ export function modelFacingTools(
   tools: RuntimeToolDefinition[] | undefined,
   config: RuntimeConfigState | null | undefined,
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
-  revealedDeferredToolNames: ReadonlySet<string>,
   threadHasGoal = false,
 ): RuntimeToolDefinition[] | undefined {
   const names = new Set((tools ?? []).map((tool) => tool.name));
@@ -99,7 +98,7 @@ export function modelFacingTools(
     }
   }
   for (const tool of dynamicTools ?? []) {
-    if ((tool.deferLoading && !revealedDeferredToolNames.has(tool.name)) || names.has(tool.name)) continue;
+    if (names.has(tool.name)) continue;
     names.add(tool.name);
     merged.push(tool);
   }

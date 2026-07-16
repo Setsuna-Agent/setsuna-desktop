@@ -170,15 +170,6 @@ export class BrowserToolHost implements ToolHost {
     return this.control ? [OPEN_BROWSER_TOOL, ...controlToolsForContext(context)] : [OPEN_BROWSER_TOOL];
   }
 
-  toolRuntimeProfile(name: string) {
-    // A vision model needs screenshot as a stable perception primitive across
-    // turns. Deferred reveals are turn-scoped, while their tool-search result
-    // remains in conversation history and can otherwise produce stale calls.
-    return {
-      exposure: name === BROWSER_SCREENSHOT_TOOL_NAME ? 'direct' as const : 'deferred' as const,
-    };
-  }
-
   systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
     const advertised = new Set(request?.tools.map((tool) => tool.name)
       ?? (this.control ? [OPEN_BROWSER_TOOL, ...controlToolsForContext(context)].map((tool) => tool.name) : [OPEN_BROWSER_TOOL_NAME]));
@@ -191,7 +182,7 @@ export class BrowserToolHost implements ToolHost {
     if (advertised.has(OPEN_BROWSER_TOOL_NAME)) lines.push('Use open_browser when the user asks to open a URL in a new side-browser tab.');
     if (advertised.has('browser_tabs') || advertised.has('browser_snapshot')) lines.push('Inspect the current tabs and page snapshot before interacting.');
     if (advertised.has(BROWSER_SCREENSHOT_TOOL_NAME)) {
-      lines.push('browser_screenshot is already available in this step. Call it directly when rendered layout, imagery, or visual state matters; do not search for it with tool_search.');
+      lines.push('Call browser_screenshot directly when rendered layout, imagery, or visual state matters.');
     }
     if (advertised.has('browser_click') || advertised.has('browser_type')) {
       lines.push('Element interaction requires refs from the latest page snapshot; navigation and later snapshots invalidate older refs.');

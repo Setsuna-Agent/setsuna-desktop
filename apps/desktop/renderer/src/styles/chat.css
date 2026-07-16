@@ -1555,7 +1555,10 @@
   pointer-events: none;
   transform: translateX(4px) scale(0.98);
   transform-origin: bottom right;
-  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 120ms ease;
 }
 
 .chat-conversation-overview-panel__plan-popover::after {
@@ -1564,7 +1567,7 @@
   right: -8px;
   width: 8px;
   height: 100%;
-  content: "";
+  content: '';
 }
 
 .chat-conversation-overview-panel__plan:hover .chat-conversation-overview-panel__plan-popover,
@@ -2078,6 +2081,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   justify-content: center;
   flex: 0 0 auto;
   vertical-align: 0;
+  position: relative;
+  top: 0.2em;
 }
 
 .chat-workspace-path-label {
@@ -2096,6 +2101,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  position: relative;
+  top: 0.2em;
 }
 
 .chat-tool-run__file-list-target {
@@ -2123,7 +2130,9 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   flex: 0 0 auto;
   color: var(--app-text-muted);
   font-family: var(--app-font-family);
-  font-feature-settings: 'tnum' 1, 'zero' 0;
+  font-feature-settings:
+    'tnum' 1,
+    'zero' 0;
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   line-height: 18px;

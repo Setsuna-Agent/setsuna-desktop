@@ -164,12 +164,12 @@ a.chat-markdown__file-link:focus-visible {
 
 .chat-markdown__file-icon {
   display: inline-block;
-  width: 1em;
-  height: 1em;
+  width: 1.2em;
+  height: 1.2em;
   margin-right: 0.18em;
   font-size: 1em;
   line-height: 1;
-  vertical-align: -0.125em;
+  vertical-align: -0.3em;
 }
 
 .chat-markdown__unavailable-link,
@@ -370,7 +370,10 @@ a.chat-markdown__file-link:focus-visible {
   font-weight: 500;
   line-height: 24px;
   cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease;
 }
 
 .chat-code-highlighter__copy-icon {

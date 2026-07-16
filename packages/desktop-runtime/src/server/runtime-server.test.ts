@@ -1275,7 +1275,6 @@ describe('runtime server', () => {
         mentions_v2: true,
         remote_control: false,
         remote_plugin: false,
-        tool_suggest: true,
       },
       desktop: {
         setsuna_style: 'daily',
@@ -3266,90 +3265,6 @@ describe('runtime server', () => {
     });
   });
 
-  it('reveals deferred AppServer dynamic tools through tool_search', async () => {
-    const modelServer = await createOpenAiDeferredDynamicToolServer();
-    const connectionId = 'deferred-dynamic-tool-session';
-    await appServerRpc('initialize', {
-      clientInfo: { name: 'setsuna-deferred-dynamic-tool-test', version: 'test' },
-      capabilities: { experimentalApi: true },
-    }, { connectionId });
-    const stream = await openAppServerNotificationStream({ connectionId });
-    try {
-      await configureOpenAiProvider('deferred-dynamic-tool-provider', modelServer.baseUrl);
-      const startedThread = await appServerRpc('thread/start', {
-        name: 'Deferred dynamic tool AppServer turn',
-        cwd: process.cwd(),
-        dynamicTools: [
-          {
-            name: 'tickets',
-            description: 'Ticket tools.',
-            tools: [
-              {
-                name: 'lookup_ticket',
-                description: 'Look up a ticket by id.',
-                deferLoading: true,
-                inputSchema: {
-                  type: 'object',
-                  properties: { id: { type: 'string' } },
-                  required: ['id'],
-                },
-              },
-            ],
-          },
-        ],
-      }, { connectionId });
-
-      const startedTurn = await appServerRpc('turn/start', {
-        threadId: startedThread.thread.id,
-        input: [{ type: 'text', text: 'Find the deferred lookup tool, then look up ticket ABC-123.' }],
-      }, { connectionId });
-      const request = await stream.readNotification((notification) => (
-        notification.method === 'item/tool/call'
-        && notification.params?.threadId === startedThread.thread.id
-      ), { timeoutMs: 3000 });
-
-      expect(request).toMatchObject({
-        method: 'item/tool/call',
-        id: expect.any(String),
-        params: {
-          threadId: startedThread.thread.id,
-          turnId: startedTurn.turn.id,
-          callId: 'call_deferred_dynamic_1',
-          namespace: 'tickets',
-          tool: 'lookup_ticket',
-          arguments: { id: 'ABC-123' },
-        },
-      });
-
-      await expect(appServerRpcResponseEnvelope({
-        id: request?.id,
-        result: {
-          contentItems: [{ type: 'inputText', text: 'Deferred ticket ABC-123 is open.' }],
-          success: true,
-        },
-      }, { connectionId })).resolves.toBeNull();
-
-      await waitForThread(
-        startedThread.thread.id,
-        (item) => item.messages.some((message) =>
-          message.turnId === startedTurn.turn.id
-          && message.role === 'assistant'
-          && message.status === 'complete'
-          && message.content.includes('Deferred dynamic tool result received.')
-        ),
-      );
-      const requests = await withTimeout(modelServer.requests, providerCaptureTimeoutMs, 'Timed out waiting for deferred dynamic model requests');
-
-      expect(JSON.stringify(requests[0])).toContain('tool_search');
-      expect(JSON.stringify(requests[0])).not.toContain('tickets__lookup_ticket');
-      expect(JSON.stringify(requests[1])).toContain('tickets__lookup_ticket');
-      expect(JSON.stringify(requests[2])).toContain('Deferred ticket ABC-123 is open.');
-    } finally {
-      await stream.close();
-      await modelServer.close();
-    }
-  });
-
   it('steers additional REST user input into the active turn', async () => {
     const capture = await createDelayedOpenAiCaptureServer();
     try {
@@ -4709,90 +4624,6 @@ async function createOpenAiDynamicToolServer(): Promise<{
     requests: requestsPromise,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
-}
-
-async function createOpenAiDeferredDynamicToolServer(): Promise<{
-  baseUrl: string;
-  requests: Promise<Record<string, unknown>[]>;
-  close(): Promise<void>;
-}> {
-  const requests: Record<string, unknown>[] = [];
-  let resolveRequests: (requests: Record<string, unknown>[]) => void = () => undefined;
-  let rejectRequests: (error: unknown) => void = () => undefined;
-  const requestsPromise = new Promise<Record<string, unknown>[]>((resolve, reject) => {
-    resolveRequests = resolve;
-    rejectRequests = reject;
-  });
-  const server = createServer(async (request, response) => {
-    try {
-      if (request.method !== 'POST') {
-        response.writeHead(404);
-        response.end();
-        return;
-      }
-      const body = JSON.parse(await readRequestText(request)) as Record<string, unknown>;
-      requests.push(body);
-      response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' });
-      if (requests.length === 1) {
-        writeOpenAiToolCallChunk(response, {
-          id: 'call_tool_search_1',
-          name: 'tool_search',
-          argumentsText: '{"query":"lookup_ticket"}',
-        });
-      } else if (requests.length === 2) {
-        writeOpenAiToolCallChunk(response, {
-          id: 'call_deferred_dynamic_1',
-          name: 'tickets__lookup_ticket',
-          argumentsText: '{"id":"ABC-123"}',
-        });
-      } else {
-        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Deferred dynamic tool result received.' } }] })}\n\n`);
-        response.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
-        resolveRequests([...requests]);
-      }
-      response.write('data: [DONE]\n\n');
-      response.end();
-    } catch (error) {
-      rejectRequests(error);
-      response.writeHead(500);
-      response.end(error instanceof Error ? error.message : String(error));
-    }
-  });
-
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Expected TCP address for deferred dynamic tool server');
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    requests: requestsPromise,
-    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
-  };
-}
-
-function writeOpenAiToolCallChunk(
-  response: { write(chunk: string): unknown },
-  toolCall: { id: string; name: string; argumentsText: string },
-): void {
-  response.write(`data: ${JSON.stringify({
-    choices: [
-      {
-        delta: {
-          tool_calls: [
-            {
-              index: 0,
-              id: toolCall.id,
-              type: 'function',
-              function: {
-                name: toolCall.name,
-                arguments: toolCall.argumentsText,
-              },
-            },
-          ],
-        },
-        finish_reason: 'tool_calls',
-      },
-    ],
-  })}\n\n`);
 }
 
 async function createDelayedOpenAiCaptureServer(): Promise<{

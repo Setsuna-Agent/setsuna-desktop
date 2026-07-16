@@ -4,40 +4,51 @@ import type { RuntimeToolExecutionContext, ToolHost } from '../ports/tool-host.j
 import { RuntimeToolRouter } from './tool-router.js';
 
 describe('RuntimeToolRouter', () => {
-  it('matches Unicode terms in deferred tool descriptions', async () => {
-    const revealed: string[] = [];
+  it('advertises every model-visible host tool directly', async () => {
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
       context: runtimeToolContext(),
       orchestrator: null,
-      revealDeferredTools: (names) => revealed.push(...names),
-      toolHost: unicodeToolHost(),
+      toolHost: directToolHost(),
     });
 
-    const input = { query: '实时新闻' };
-    const result = await router.runToolCall({
-      id: 'call_unicode_tool_search',
-      name: 'tool_search',
-      arguments: JSON.stringify(input),
-    }, input);
+    expect(router.advertisedToolNames()).toEqual(['direct_tool', 'news_lookup']);
+    await expect(router.toolRuntimeMetadata()).resolves.toEqual([
+      expect.objectContaining({ name: 'direct_tool', exposure: 'direct', source: 'host' }),
+      expect.objectContaining({ name: 'news_lookup', exposure: 'direct', source: 'host' }),
+    ]);
+  });
 
-    expect(result.status).toBe('success');
-    expect(result.result?.data).toMatchObject({
-      revealedToolNames: ['news_lookup'],
-      tools: [expect.objectContaining({ name: 'news_lookup' })],
+  it('continues to exclude explicitly hidden tools', async () => {
+    const router = await RuntimeToolRouter.create({
+      approvalPolicy: 'on-request',
+      context: runtimeToolContext(),
+      orchestrator: null,
+      toolHost: hiddenToolHost(),
     });
-    expect(revealed).toEqual(['news_lookup']);
+
+    expect(router.advertisedToolNames()).toEqual(['direct_tool']);
   });
 });
 
-function unicodeToolHost(): ToolHost {
+function directToolHost(): ToolHost {
   const tools: RuntimeToolDefinition[] = [
     { name: 'direct_tool', description: 'Already available', inputSchema: { type: 'object' } },
     { name: 'news_lookup', description: '搜索实时新闻和网页内容', inputSchema: { type: 'object' } },
   ];
   return {
     listTools: async () => tools,
-    toolRuntimeProfile: (name) => ({ exposure: name === 'news_lookup' ? 'deferred' : 'direct' }),
+    runTool: async () => ({ content: 'unused' }),
+  };
+}
+
+function hiddenToolHost(): ToolHost {
+  return {
+    listTools: async () => [
+      { name: 'direct_tool', description: 'Visible', inputSchema: { type: 'object' } },
+      { name: 'internal_tool', description: 'Internal only', inputSchema: { type: 'object' } },
+    ],
+    toolRuntimeProfile: (name) => ({ exposure: name === 'internal_tool' ? 'hidden' : 'direct' }),
     runTool: async () => ({ content: 'unused' }),
   };
 }

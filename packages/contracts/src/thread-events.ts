@@ -535,7 +535,6 @@ function cloneStepSnapshot(snapshot: NonNullable<RuntimeThreadTurn['stepSnapshot
           compactionSummaryMessageIds: [...snapshot.contextWindow.compactionSummaryMessageIds],
         }
       : undefined,
-    deferredToolNames: snapshot.deferredToolNames ? [...snapshot.deferredToolNames] : undefined,
     featureKeys: [...snapshot.featureKeys],
     inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
     mcpServerKeys: [...snapshot.mcpServerKeys],
@@ -559,7 +558,6 @@ function cloneStepSnapshot(snapshot: NonNullable<RuntimeThreadTurn['stepSnapshot
         }
       : snapshot.toolEnvironment,
     toolNames: [...snapshot.toolNames],
-    routerToolNames: snapshot.routerToolNames ? [...snapshot.routerToolNames] : undefined,
     toolRuntimes: snapshot.toolRuntimes ? snapshot.toolRuntimes.map((runtime) => ({ ...runtime })) : undefined,
     worldState: { ...snapshot.worldState },
   };

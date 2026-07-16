@@ -1269,13 +1269,11 @@ function cloneRuntimeModelRequestStepSnapshot(snapshot: RuntimeModelRequestStepS
         }
       : undefined,
     conversationMessageIds: [...snapshot.conversationMessageIds],
-    deferredToolNames: snapshot.deferredToolNames ? [...snapshot.deferredToolNames] : undefined,
     featureKeys: [...snapshot.featureKeys],
     inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
     mcpServerKeys: [...snapshot.mcpServerKeys],
     messageIds: [...snapshot.messageIds],
     promptManifest: snapshot.promptManifest ? snapshot.promptManifest.map((entry) => ({ ...entry })) : undefined,
-    routerToolNames: snapshot.routerToolNames ? [...snapshot.routerToolNames] : undefined,
     sandboxWorkspaceWrite: snapshot.sandboxWorkspaceWrite
       ? {
           ...snapshot.sandboxWorkspaceWrite,

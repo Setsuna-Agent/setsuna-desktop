@@ -11,7 +11,7 @@ import { SdkMcpConnectionManager } from '../mcp/sdk-mcp-connection-manager.js';
 import { McpRuntimeToolHost } from './mcp-runtime-tool-host.js';
 
 describe('mcp runtime tool host', () => {
-  it('advertises a small MCP inventory directly so providers can discover it without tool_search', async () => {
+  it('advertises MCP tools directly so providers can discover them', async () => {
     const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'search_mcp',
@@ -40,13 +40,10 @@ describe('mcp runtime tool host', () => {
       'mcp__search_mcp__fetchWebContent',
       'mcp__search_mcp__search',
     ]));
-    expect(router.deferredToolNames()).not.toContain('mcp__search_mcp__search');
-    expect(router.routerOwnedToolNames()).toEqual([]);
     await expect(router.systemPrompt()).resolves.toContain('Matching MCP tools are advertised in the current step');
-    await expect(router.systemPrompt()).resolves.toContain('mcp__search_mcp__search');
   });
 
-  it('keeps large MCP inventories deferred while exposing a bounded discovery inventory', async () => {
+  it('advertises large MCP inventories without a model-driven discovery step', async () => {
     const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'large',
@@ -63,11 +60,11 @@ describe('mcp runtime tool host', () => {
       toolHost: host,
     });
 
-    expect(router.advertisedToolNames()).toContain('tool_search');
-    expect(router.advertisedToolNames()).not.toContain('mcp__large__lookup_1');
-    expect(router.deferredToolNames()).toHaveLength(20);
-    await expect(router.systemPrompt()).resolves.toContain('call tool_search');
-    await expect(router.systemPrompt()).resolves.toContain('mcp__large__lookup_1');
+    expect(router.advertisedToolNames()).toEqual(expect.arrayContaining([
+      'mcp__large__lookup_1',
+      'mcp__large__lookup_20',
+    ]));
+    await expect(router.systemPrompt()).resolves.toContain('call them directly');
   });
 
   it('exposes enabled stored MCP tools and calls the backing server', async () => {

@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { BrowserPanel, nextBrowserZoomFactor, normalizeBrowserInput, resolveBrowserFaviconUrl } from './BrowserPanel.js';
+import { BrowserPanel, nextBrowserZoomFactor, normalizeBrowserInput, resolveBrowserFaviconUrl, resolveBrowserFaviconUrls } from './BrowserPanel.js';
 import { createBrowserPanel } from './model.js';
 
 describe('normalizeBrowserInput', () => {
@@ -26,6 +26,16 @@ describe('resolveBrowserFaviconUrl', () => {
   it('uses the first supported favicon URL', () => {
     expect(resolveBrowserFaviconUrl(['javascript:alert(1)', 'https://example.com/favicon.ico'])).toBe('https://example.com/favicon.ico');
     expect(resolveBrowserFaviconUrl(['data:image/png;base64,aWNvbg=='])).toBe('data:image/png;base64,aWNvbg==');
+  });
+
+  it('retains later supported favicon candidates for retry', () => {
+    expect(resolveBrowserFaviconUrls([
+      'https://example.com/missing.ico',
+      'https://example.com/icon.png',
+    ])).toEqual([
+      'https://example.com/missing.ico',
+      'https://example.com/icon.png',
+    ]);
   });
 
   it('rejects unsupported favicon URLs', () => {

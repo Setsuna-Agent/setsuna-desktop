@@ -83,8 +83,6 @@ describe('BrowserToolHost', () => {
     await expect(host.listTools(visionContext)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'browser_screenshot' }),
     ]));
-    expect(host.toolRuntimeProfile('browser_screenshot')).toEqual({ exposure: 'direct' });
-    expect(host.toolRuntimeProfile('browser_tabs')).toEqual({ exposure: 'deferred' });
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
       context: {
@@ -104,8 +102,8 @@ describe('BrowserToolHost', () => {
       toolHost: host,
     });
     expect(router.advertisedToolNames()).toContain('browser_screenshot');
-    expect(router.deferredToolNames()).toContain('browser_tabs');
-    await expect(router.systemPrompt()).resolves.toContain('browser_screenshot is already available');
+    expect(router.advertisedToolNames()).toContain('browser_tabs');
+    await expect(router.systemPrompt()).resolves.toContain('Call browser_screenshot directly');
     await expect(host.runTool('browser_screenshot', { tabId: 'tab-1' }, visionContext)).resolves.toMatchObject({
       attachments: [{
         id: 'browser_screenshot_call_screenshot',

@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowLeft, ArrowRight, RefreshCw, X } from 'lucide-react';
-import type { DidFailLoadEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
+import type { DidFailLoadEvent, DidStartNavigationEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
 import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
 import { BrowserWindowMenu } from './BrowserWindowMenu.js';
+import {
+  createBrowserFaviconCoordinator,
+  resolveBrowserFaviconUrl,
+  resolveBrowserFaviconUrls,
+} from './browserFaviconCoordinator.js';
 import { DEFAULT_BROWSER_URL, type DesktopPanelTab, type DesktopPanelTabPatch } from './model.js';
 import { useBrowserScreenshot, type BrowserScreenshotAttachmentHandler } from './useBrowserScreenshot.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
@@ -14,6 +19,8 @@ import {
   toDesktopBrowserDeviceEmulation,
   type BrowserDeviceEmulationState,
 } from './browserDeviceEmulation.js';
+
+export { resolveBrowserFaviconUrl, resolveBrowserFaviconUrls };
 
 // Electron parses webview boolean attributes by presence, while React only emits
 // custom-element attributes reliably when their runtime value is a string.
@@ -272,17 +279,26 @@ function BrowserWebview({
         zoomFactor: node.getZoomFactor(),
       });
     };
-    const handleStart = () => onUpdate(tab.id, { faviconUrl: null, loading: true, error: null });
+    const faviconCoordinator = createBrowserFaviconCoordinator({
+      onChange: (faviconUrl) => onUpdate(tab.id, { faviconUrl }),
+      resolve: (faviconUrls) => requestBrowserFavicon(node, faviconUrls),
+    });
+    const handleNavigationStart = (event: DidStartNavigationEvent) => {
+      if (event.isMainFrame && !event.isInPlace) faviconCoordinator.navigationStarted();
+    };
+    const handleStart = () => onUpdate(tab.id, { loading: true, error: null });
     const handleStop = () => {
       syncNavigation();
       onUpdate(tab.id, { loading: false });
+      faviconCoordinator.loadingStopped();
     };
     const handleTitle = (event: PageTitleUpdatedEvent) => onUpdate(tab.id, { title: event.title || browserHostLabel(node.getURL()) });
-    const handleFavicon = (event: PageFaviconUpdatedEvent) => onUpdate(tab.id, { faviconUrl: resolveBrowserFaviconUrl(event.favicons) });
+    const handleFavicon = (event: PageFaviconUpdatedEvent) => faviconCoordinator.faviconUpdated(resolveBrowserFaviconUrls(event.favicons));
     const handleFailure = (event: DidFailLoadEvent) => {
       if (event.errorCode === -3) return;
       onUpdate(tab.id, { error: event.errorDescription || '无法加载网页', loading: false });
     };
+    node.addEventListener('did-start-navigation', handleNavigationStart);
     node.addEventListener('did-start-loading', handleStart);
     node.addEventListener('did-stop-loading', handleStop);
     node.addEventListener('did-navigate', syncNavigation);
@@ -291,6 +307,8 @@ function BrowserWebview({
     node.addEventListener('page-favicon-updated', handleFavicon);
     node.addEventListener('did-fail-load', handleFailure);
     return () => {
+      faviconCoordinator.dispose();
+      node.removeEventListener('did-start-navigation', handleNavigationStart);
       node.removeEventListener('did-start-loading', handleStart);
       node.removeEventListener('did-stop-loading', handleStop);
       node.removeEventListener('did-navigate', syncNavigation);
@@ -404,25 +422,20 @@ export function nextBrowserZoomFactor(current: number, direction: BrowserZoomDir
   return browserZoomFactors[0];
 }
 
-const maxBrowserFaviconUrlLength = 512_000;
-
-export function resolveBrowserFaviconUrl(favicons: readonly string[]): string | null {
-  for (const favicon of favicons) {
-    if (!favicon || favicon.length > maxBrowserFaviconUrlLength) continue;
-    if (/^data:image\//i.test(favicon)) return favicon;
-    try {
-      const url = new URL(favicon);
-      if (url.protocol === 'https:' || url.protocol === 'http:') return url.href;
-    } catch {
-      // Ignore malformed and unsupported favicon URLs from untrusted pages.
-    }
-  }
-  return null;
-}
-
 function isAbortedNavigationError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /ERR_ABORTED|\(-3\)/.test(message);
+}
+
+function requestBrowserFavicon(webview: WebviewTag, faviconUrls: readonly string[]): Promise<string | null> {
+  const resolveFavicon = window.setsunaDesktop?.browser.resolveFavicon;
+  if (!resolveFavicon) return Promise.resolve(resolveBrowserFaviconUrl(faviconUrls));
+  try {
+    return resolveFavicon(webview.getWebContentsId(), faviconUrls)
+      .catch(() => resolveBrowserFaviconUrl(faviconUrls));
+  } catch {
+    return Promise.resolve(resolveBrowserFaviconUrl(faviconUrls));
+  }
 }
 
 export function normalizeBrowserInput(input: string): string {

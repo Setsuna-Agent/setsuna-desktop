@@ -15,7 +15,6 @@ type ProjectToolState = {
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
-const DEFERRED_COMPAT_TOOL_NAMES = new Set(['request_permissions', 'exec_command', 'write_stdin']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_PATH_ARGUMENT_TOOLS = new Set(['read_file', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
@@ -198,10 +197,6 @@ export class PcLocalToolHost implements ToolHost {
       projectId: context.projectId,
       threadId: context.threadId,
     });
-  }
-
-  toolRuntimeProfile(name: string) {
-    return DEFERRED_COMPAT_TOOL_NAMES.has(name) ? { exposure: 'deferred' as const } : null;
   }
 
   /**

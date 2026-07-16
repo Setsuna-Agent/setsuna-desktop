@@ -199,7 +199,6 @@ export class AgentLoop {
       hooks: this.hooks,
       ids: options.ids,
       threadStore: options.threadStore,
-      toolExecutor: this.toolExecutor,
       turnTasks: this.turnTasks,
       turnTermination: this.turnTermination,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),

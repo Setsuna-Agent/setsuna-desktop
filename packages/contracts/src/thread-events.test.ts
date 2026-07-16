@@ -1333,8 +1333,6 @@ describe('applyRuntimeEventToThread context compaction', () => {
       inputMessageIds: ['msg_user'],
       toolNames: ['read_file'],
       advertisedToolNames: ['read_file'],
-      deferredToolNames: ['hidden_lookup'],
-      routerToolNames: ['tool_search'],
       toolRuntimes: [{
         name: 'read_file',
         source: 'host' as const,
@@ -1405,18 +1403,14 @@ describe('applyRuntimeEventToThread context compaction', () => {
     });
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolNames.push('mutated');
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.advertisedToolNames!.push('mutated');
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.deferredToolNames!.push('mutated');
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.inputMessageIds!.push('mutated');
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.routerToolNames!.push('mutated');
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolRuntimes![0]!.name = 'mutated';
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.contextWindow!.compactionSummaryMessageIds.push('mutated');
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolEnvironment!.workspaceRoots!.push('/mutated');
     cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolEnvironment!.repository!.workspacePrefix = 'mutated';
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolNames).toEqual(['read_file']);
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.advertisedToolNames).toEqual(['read_file']);
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.deferredToolNames).toEqual(['hidden_lookup']);
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.inputMessageIds).toEqual(['msg_user']);
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.routerToolNames).toEqual(['tool_search']);
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolRuntimes?.[0]?.name).toBe('read_file');
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.contextWindow?.compactionSummaryMessageIds).toEqual(['msg_compact']);
     expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolEnvironment?.workspaceRoots).toEqual(['/tmp/project']);

@@ -55,9 +55,10 @@ type AppServerDynamicToolRegistration = {
   toolsByName: Map<string, RuntimeDynamicToolDefinition>;
 };
 
-type AppServerDynamicToolLookup =
-  | { status: 'available'; registration: AppServerDynamicToolRegistration; tool: RuntimeDynamicToolDefinition }
-  | { status: 'not_advertised' };
+type AppServerDynamicToolLookup = {
+  registration: AppServerDynamicToolRegistration;
+  tool: RuntimeDynamicToolDefinition;
+};
 
 type PendingAppServerDynamicToolCall = {
   reject(error: Error): void;
@@ -79,10 +80,9 @@ type RuntimeToolCallExecutorOptions = {
   publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
 };
 
-/** Owns tool exposure state, approvals, execution, and tool-related event projection. */
+/** Owns tool approvals, execution, and tool-related event projection. */
 export class RuntimeToolCallExecutor {
   private readonly toolApprovalStore = new ToolApprovalStore();
-  private readonly revealedDeferredToolNamesByTurn = new Map<string, Set<string>>();
   private readonly appServerDynamicToolsByThread = new Map<string, AppServerDynamicToolRegistration>();
   private readonly pendingAppServerDynamicToolCalls = new Map<string, PendingAppServerDynamicToolCall>();
 
@@ -92,7 +92,6 @@ export class RuntimeToolCallExecutor {
     for (const pending of this.pendingAppServerDynamicToolCalls.values()) pending.reject(error);
     this.pendingAppServerDynamicToolCalls.clear();
     this.appServerDynamicToolsByThread.clear();
-    this.revealedDeferredToolNamesByTurn.clear();
   }
 
   registerDynamicTools(threadId: string, tools: RuntimeDynamicToolDefinition[], connectionId: string): void {
@@ -206,13 +205,8 @@ export class RuntimeToolCallExecutor {
         const execution = await this.runGoalToolCall(toolCall, parsedArguments, context);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
       }
-      const dynamicTool = this.appServerDynamicToolForCall(context.threadId, context.turnId, toolCall.name, toolRouter);
-      if (dynamicTool?.status === 'not_advertised') {
-        content = `Tool ${toolCall.name} failed: it was not advertised in this sampling step.`;
-        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
-      }
-      if (dynamicTool?.status === 'available') {
+      const dynamicTool = this.appServerDynamicToolForCall(context.threadId, toolCall.name, toolRouter);
+      if (dynamicTool) {
         const execution = await this.runAppServerDynamicToolCall(toolCall, parsedArguments, context, dynamicTool.registration, dynamicTool.tool);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
       }
@@ -226,20 +220,6 @@ export class RuntimeToolCallExecutor {
         content = `Tool ${toolCall.name} failed: no tool host is available.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
-      }
-      if (toolRouter.isRouterTool(toolCall.name)) {
-        const startedAtMs = this.options.clock.now().getTime();
-        await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
-        const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
-          checkApproval: options.skipApproval !== true,
-        });
-        content = execution.content;
-        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, execution.status, execution.content, {
-          data: execution.result?.data,
-          resultPreview: execution.result?.preview,
-          startedAtMs,
-        });
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, execution.result?.attachments);
       }
       const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
         checkApproval: options.skipApproval !== true,
@@ -257,17 +237,14 @@ export class RuntimeToolCallExecutor {
     return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, attachments);
   }
 
-  private appServerDynamicToolForCall(threadId: string, turnId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
+  private appServerDynamicToolForCall(threadId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
     const registration = this.appServerDynamicToolsByThread.get(threadId);
     const tool = registration?.toolsByName.get(name);
     if (!registration || !tool) return null;
     // If a local ToolHost tool with the same model-facing name exists, the local
     // runtime owns execution; dynamic tools are appended only for free names.
     if (toolRouter?.hasTool(name)) return null;
-    if (tool.deferLoading && !this.revealedDeferredToolNamesForTurn(turnId).has(name)) {
-      return { status: 'not_advertised' };
-    }
-    return { status: 'available', registration, tool };
+    return { registration, tool };
   }
 
   private async runAppServerDynamicToolCall(
@@ -384,28 +361,7 @@ export class RuntimeToolCallExecutor {
     });
   }
 
-  revealedDeferredToolNamesForTurn(turnId: string): Set<string> {
-    let names = this.revealedDeferredToolNamesByTurn.get(turnId);
-    if (!names) {
-      names = new Set<string>();
-      this.revealedDeferredToolNamesByTurn.set(turnId, names);
-    }
-    return names;
-  }
-
-  revealDeferredToolsForTurn(turnId: string, names: string[]): void {
-    const revealed = this.revealedDeferredToolNamesForTurn(turnId);
-    for (const name of names) {
-      if (name) revealed.add(name);
-    }
-  }
-
-  clearDeferredToolRevealsForTurn(turnId: string): void {
-    this.revealedDeferredToolNamesByTurn.delete(turnId);
-  }
-
   cleanupTurn(turnId: string): void {
-    this.clearDeferredToolRevealsForTurn(turnId);
     this.toolApprovalStore.clearTurn(turnId);
   }
 
@@ -487,7 +443,7 @@ export class RuntimeToolCallExecutor {
     };
     partialToolCalls.set(id, next);
     if (!next.name) return;
-    if (!toolRouter.isRouterTool(next.name) && !toolRouter.hasTool(next.name)) return;
+    if (!toolRouter.hasTool(next.name)) return;
 
     const previous = announcedToolPreviews.get(id);
     const argumentsLength = next.arguments.length;

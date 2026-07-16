@@ -139,6 +139,7 @@ export type DesktopRuntimeBridge = {
 export type SetsunaDesktopBridge = {
   browser: {
     captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null>;
+    resolveFavicon(webContentsId: number, faviconUrls: readonly string[]): Promise<string | null>;
     registerTab(tabId: string, webContentsId: number): Promise<boolean>;
     unregisterTab(tabId: string, webContentsId: number): Promise<boolean>;
     setActiveTab(tabId: string | null): Promise<boolean>;

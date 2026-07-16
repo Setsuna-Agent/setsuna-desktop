@@ -92,7 +92,6 @@ const APP_SERVER_CONFIG_ENABLEMENT_FEATURES = [
   'plugins',
   'remote_control',
   'remote_plugin',
-  'tool_suggest',
 ] as const;
 
 const APP_SERVER_EXPERIMENTAL_FEATURES: readonly AppServerExperimentalFeatureSpec[] = [
@@ -155,11 +154,8 @@ const APP_SERVER_EXPERIMENTAL_FEATURES: readonly AppServerExperimentalFeatureSpe
   { name: 'apps', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null, forceDisabled: true },
   { name: 'enable_mcp_apps', stage: 'underDevelopment', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'apps_mcp_path_override', stage: 'removed', defaultEnabled: false, displayName: null, description: null, announcement: null },
-  { name: 'tool_search', stage: 'removed', defaultEnabled: false, displayName: null, description: null, announcement: null },
-  { name: 'tool_search_always_defer_mcp_tools', stage: 'removed', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'non_prefixed_mcp_tool_names', stage: 'underDevelopment', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'unavailable_dummy_tools', stage: 'removed', defaultEnabled: false, displayName: null, description: null, announcement: null },
-  { name: 'tool_suggest', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'plugins', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
   { name: 'plugin_hooks', stage: 'removed', defaultEnabled: false, displayName: null, description: null, announcement: null },
   { name: 'in_app_browser', stage: 'stable', defaultEnabled: true, displayName: null, description: null, announcement: null },
@@ -779,7 +775,6 @@ function sweFeatureEnabledByName(name: string, config: RuntimeConfigState, fallb
     case 'remote_plugin':
       return false;
     case 'mentions_v2':
-    case 'tool_suggest':
       return true;
     default:
       return fallback;

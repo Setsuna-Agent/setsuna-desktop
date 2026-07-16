@@ -16,7 +16,6 @@ export type RuntimeToolDefinition = {
 export type RuntimeDynamicToolDefinition = RuntimeToolDefinition & {
   namespace?: string;
   toolName: string;
-  deferLoading?: boolean;
 };
 
 export type RuntimeDynamicToolContentItem =
@@ -91,8 +90,8 @@ export type RuntimeModelRequestContextWindow = {
 
 export type RuntimeModelRequestToolRuntime = {
   name: string;
-  source: 'host' | 'router' | 'dynamic' | 'collaboration' | 'goal';
-  exposure: 'direct' | 'deferred' | 'hidden';
+  source: 'host' | 'dynamic' | 'collaboration' | 'goal';
+  exposure: 'direct';
   supportsParallel: boolean;
   waitsForRuntimeCancellation: boolean;
 };
@@ -111,8 +110,6 @@ export type RuntimeModelRequestStepSnapshot = {
    * Older snapshots only have toolNames; new snapshots write both for debuggability.
    */
   advertisedToolNames?: string[];
-  deferredToolNames?: string[];
-  routerToolNames?: string[];
   toolRuntimes?: RuntimeModelRequestToolRuntime[];
   toolChoice?: RuntimeToolChoice;
   toolEnvironment?: RuntimeModelRequestToolEnvironment | null;

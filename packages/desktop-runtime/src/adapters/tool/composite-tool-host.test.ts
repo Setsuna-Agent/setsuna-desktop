@@ -6,8 +6,8 @@ import { CompositeToolHost } from './composite-tool-host.js';
 describe('CompositeToolHost', () => {
   it('includes prompt text only for hosts with advertised tools', async () => {
     const direct = promptHost('direct_tool', 'Direct tool policy');
-    const deferred = promptHost('deferred_tool', 'Deferred tool policy');
-    const host = new CompositeToolHost([direct, deferred]);
+    const secondary = promptHost('secondary_tool', 'Secondary tool policy');
+    const host = new CompositeToolHost([direct, secondary]);
     const context: ToolExecutionContext = { threadId: 'thread_1' };
 
     await expect(host.systemPrompt(context, {
@@ -17,16 +17,16 @@ describe('CompositeToolHost', () => {
 
   it('delegates runtime profiles without rediscovering tools after the initial listing', async () => {
     let listCalls = 0;
-    const deferred = promptHost('deferred_tool', 'Deferred tool policy', () => {
+    const internal = promptHost('internal_tool', 'Internal tool policy', () => {
       listCalls += 1;
     });
-    deferred.toolRuntimeProfile = () => ({ exposure: 'deferred' });
-    const host = new CompositeToolHost([deferred]);
+    internal.toolRuntimeProfile = () => ({ exposure: 'hidden' });
+    const host = new CompositeToolHost([internal]);
     const context: ToolExecutionContext = { threadId: 'thread_1' };
 
     await host.listTools(context);
 
-    await expect(host.toolRuntimeProfile('deferred_tool', context)).resolves.toEqual({ exposure: 'deferred' });
+    await expect(host.toolRuntimeProfile('internal_tool', context)).resolves.toEqual({ exposure: 'hidden' });
     expect(listCalls).toBe(1);
   });
 });

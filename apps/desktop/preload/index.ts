@@ -77,6 +77,8 @@ const links: SetsunaDesktopBridge['links'] = {
 const browser: SetsunaDesktopBridge['browser'] = {
   captureScreenshot: (tabId) =>
     ipcRenderer.invoke('browser:capture-screenshot', { tabId }),
+  resolveFavicon: (webContentsId, faviconUrls) =>
+    ipcRenderer.invoke('browser:resolve-favicon', { faviconUrls: [...faviconUrls], webContentsId }),
   registerTab: (tabId, webContentsId) =>
     ipcRenderer.invoke('browser:register-tab', { tabId, webContentsId }),
   unregisterTab: (tabId, webContentsId) =>

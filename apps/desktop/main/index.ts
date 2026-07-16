@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { hydrateDesktopProcessEnvironment } from './desktop-environment.js';
 import { DesktopBrowserController } from './browser-control.js';
 import { BrowserControlServer } from './browser-control-server.js';
+import { loadBrowserFavicon } from './browser-favicon.js';
 import { DesktopUpdater } from './desktop-updater.js';
 import { DesktopCredentialVault } from './desktop-credential-vault.js';
 import { DesktopNativeBridgeServer } from './desktop-native-bridge-server.js';
@@ -264,6 +265,7 @@ function registerRuntimeIpc(host: RuntimeHost): void {
 
 function registerBrowserIpc(controller: DesktopBrowserController): void {
   ipcMain.removeHandler('browser:capture-screenshot');
+  ipcMain.removeHandler('browser:resolve-favicon');
   ipcMain.removeHandler('browser:register-tab');
   ipcMain.removeHandler('browser:unregister-tab');
   ipcMain.removeHandler('browser:set-active-tab');
@@ -279,13 +281,17 @@ function registerBrowserIpc(controller: DesktopBrowserController): void {
     clipboard.writeImage(image);
     return screenshot;
   });
+  ipcMain.handle('browser:resolve-favicon', async (event, input) => {
+    const guest = resolveEmbeddedBrowserGuest(event.sender, Number(input?.webContentsId));
+    if (!guest) return null;
+    const faviconUrls = Array.isArray(input?.faviconUrls) ? input.faviconUrls : [];
+    return loadBrowserFavicon(guest.session, guest.getURL(), faviconUrls);
+  });
   ipcMain.handle('browser:register-tab', (event, input) => {
     const webContentsId = Number(input?.webContentsId);
     const tabId = String(input?.tabId ?? '');
-    if (!Number.isSafeInteger(webContentsId) || !isDesktopRendererSender(event.sender)) return false;
-    const guest = electronWebContents.fromId(webContentsId);
-    const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
-    if (!guest || guest.hostWebContents?.id !== event.sender.id || guest.session !== browserSession) return false;
+    const guest = resolveEmbeddedBrowserGuest(event.sender, webContentsId);
+    if (!guest) return false;
     controller.registerTab(tabId, guest);
     return true;
   });
@@ -312,6 +318,17 @@ function registerBrowserIpc(controller: DesktopBrowserController): void {
 
 function isDesktopRendererSender(sender: Electron.WebContents): boolean {
   return Boolean(mainWindow && !mainWindow.isDestroyed() && sender.id === mainWindow.webContents.id);
+}
+
+function resolveEmbeddedBrowserGuest(
+  sender: Electron.WebContents,
+  webContentsId: number,
+): Electron.WebContents | null {
+  if (!Number.isSafeInteger(webContentsId) || !isDesktopRendererSender(sender)) return null;
+  const guest = electronWebContents.fromId(webContentsId);
+  const browserSession = session.fromPartition(DESKTOP_BROWSER_PARTITION);
+  if (!guest || guest.hostWebContents?.id !== sender.id || guest.session !== browserSession) return null;
+  return guest;
 }
 
 function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpdater): void {

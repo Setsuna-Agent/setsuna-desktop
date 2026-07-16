@@ -174,7 +174,6 @@ function noToolStepSnapshot(snapshot: RuntimeModelRequestStepSnapshot): RuntimeM
     ...snapshot,
     toolNames: [],
     advertisedToolNames: [],
-    routerToolNames: [],
     toolRuntimes: [],
     toolChoice: 'none',
   };

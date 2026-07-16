@@ -104,10 +104,6 @@ export class SkillManagementToolHost implements ToolHost {
     ];
   }
 
-  toolRuntimeProfile() {
-    return { exposure: 'deferred' as const };
-  }
-
   systemPrompt(): string {
     return [
       'When the user asks to create, update, or save a Setsuna Desktop Skill from chat, use configure_skill.',

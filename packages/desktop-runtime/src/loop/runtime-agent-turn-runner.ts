@@ -406,7 +406,7 @@ export class RuntimeAgentTurnRunner {
           turnId,
         }, { status: cleanupStatus });
       } finally {
-        // Deferred schemas and turn-scoped approvals are meaningful only while this turn is active.
+        // Turn-scoped approvals are meaningful only while this turn is active.
         this.options.toolExecutor.cleanupTurn(turnId);
       }
     }

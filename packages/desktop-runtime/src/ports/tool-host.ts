@@ -82,7 +82,7 @@ export type ToolExternalContext = {
 };
 
 export type ToolRuntimeProfile = {
-  exposure?: 'direct' | 'deferred' | 'hidden';
+  exposure?: 'direct' | 'hidden';
   supportsParallel?: boolean;
   waitsForRuntimeCancellation?: boolean;
   visibleToModel?: boolean;

@@ -59,8 +59,6 @@ type RuntimeSamplingContextBuilderOptions = {
   toolExecutor: Pick<
     RuntimeToolCallExecutor,
     | 'dynamicToolsForThread'
-    | 'revealDeferredToolsForTurn'
-    | 'revealedDeferredToolNamesForTurn'
     | 'toolOrchestratorFor'
   >;
   toolHost?: ToolHost;
@@ -126,24 +124,20 @@ export class RuntimeSamplingContextBuilder {
       signal,
     };
     const dynamicTools = this.options.toolExecutor.dynamicToolsForThread(threadId);
-    const revealedDeferredToolNames = this.options.toolExecutor.revealedDeferredToolNamesForTurn(turnId);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
           orchestrator: this.options.toolExecutor.toolOrchestratorFor(toolContext, stepRuntimeConfig),
           context: toolContext,
           approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
-          additionalDeferredTools: dynamicTools?.filter((tool) => tool.deferLoading),
           ...(toolAccess === 'read-only' ? { allowTool: (tool: RuntimeToolDefinition) => isReviewReadOnlyTool(tool.name) } : {}),
-          revealedDeferredToolNames,
-          revealDeferredTools: (names) => this.options.toolExecutor.revealDeferredToolsForTurn(turnId, names),
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
         })
       : null;
     const threadHasGoal = Boolean(thread.goal);
     const availableTools = toolAccess === 'none'
       ? undefined
-      : modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, revealedDeferredToolNames, threadHasGoal);
+      : modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, threadHasGoal);
     const tools = toolAccess === 'read-only'
       ? availableTools?.filter((tool) => isReviewReadOnlyTool(tool.name))
       : availableTools;
@@ -193,8 +187,6 @@ export class RuntimeSamplingContextBuilder {
       inputMessageIds: samplingInputMessageIds(messages, turnId),
       toolNames: advertisedToolNames,
       advertisedToolNames,
-      deferredToolNames: toolRouter?.deferredToolNames() ?? [],
-      routerToolNames: toolRouter?.routerOwnedToolNames() ?? [],
       toolRuntimes,
       ...(toolChoice ? { toolChoice } : {}),
       toolEnvironment: environment,
