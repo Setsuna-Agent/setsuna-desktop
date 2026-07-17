@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { GeneratedImageStore, GeneratedImageStoreInput } from '../../ports/generated-image-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -13,6 +13,11 @@ export class FileGeneratedImageStore implements GeneratedImageStore {
 
   constructor(dataDir: string, private readonly ids: IdGenerator) {
     this.root = path.join(dataDir, 'generated-images');
+  }
+
+  async clone(assetId: string): Promise<{ assetId: string }> {
+    const { data, name, type } = await this.readAsset(assetId);
+    return this.create({ data, name, type });
   }
 
   async create(input: GeneratedImageStoreInput): Promise<{ assetId: string }> {
@@ -36,6 +41,58 @@ export class FileGeneratedImageStore implements GeneratedImageStore {
       throw error;
     }
     return { assetId };
+  }
+
+  async delete(assetId: string): Promise<void> {
+    const safeAssetId = assertSafeRuntimeId(assetId, 'Generated image asset id');
+    await rm(path.join(this.root, safeAssetId), { recursive: true, force: true });
+  }
+
+  async recover(retainedAssetIds: string[]): Promise<void> {
+    const retained = new Set<string>();
+    for (const assetId of retainedAssetIds) {
+      try {
+        retained.add(assertSafeRuntimeId(assetId, 'Generated image asset id'));
+      } catch {
+        // Corrupt attachment metadata should not prevent the runtime from recovering other threads.
+      }
+    }
+    await mkdir(this.root, { recursive: true });
+    const entries = await readdir(this.root, { withFileTypes: true });
+    await Promise.all(entries.flatMap((entry) => {
+      if (!entry.isDirectory() || retained.has(entry.name)) return [];
+      // Directory names come from readdir, but validate containment before recursive removal.
+      const candidate = path.resolve(this.root, entry.name);
+      if (path.dirname(candidate) !== path.resolve(this.root)) return [];
+      return [rm(candidate, { recursive: true, force: true })];
+    }));
+  }
+
+  private async readAsset(assetId: string): Promise<{ data: Buffer; name: string; type: SafeImageMimeType }> {
+    const safeAssetId = assertSafeRuntimeId(assetId, 'Generated image asset id');
+    const canonicalRoot = await realpath(this.root);
+    const canonicalAssetDirectory = await realpath(path.join(this.root, safeAssetId));
+    if (path.dirname(canonicalAssetDirectory) !== canonicalRoot) {
+      throw new Error('Generated image asset escapes its storage root.');
+    }
+    const entries = await readdir(canonicalAssetDirectory, { withFileTypes: true });
+    const images: Array<{ data: Buffer; name: string; type: SafeImageMimeType }> = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      try {
+        const imagePath = await realpath(path.join(canonicalAssetDirectory, entry.name));
+        const imageStat = await stat(imagePath);
+        if (path.dirname(imagePath) !== canonicalAssetDirectory || !imageStat.isFile()) continue;
+        if (!imageStat.size || imageStat.size > MAX_GENERATED_IMAGE_BYTES) continue;
+        const data = await readFile(imagePath);
+        const type = detectSafeImageMimeType(data);
+        if (type) images.push({ data, name: entry.name, type });
+      } catch {
+        // OS metadata files may be created or removed after revealing this directory.
+      }
+    }
+    if (images.length !== 1) throw new Error('Generated image asset is unavailable.');
+    return images[0]!;
   }
 }
 

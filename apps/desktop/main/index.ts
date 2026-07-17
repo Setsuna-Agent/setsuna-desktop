@@ -25,7 +25,7 @@ import { DesktopUpdater } from './desktop-updater.js';
 import { DesktopCredentialVault } from './desktop-credential-vault.js';
 import { DesktopNativeBridgeServer } from './desktop-native-bridge-server.js';
 import { electronCredentialEncryption } from './electron-credential-encryption.js';
-import { copyImageDataUrlToClipboard, revealChatImage } from './generated-image-actions.js';
+import { copyChatImage, readGeneratedImageAsset, revealChatImage } from './generated-image-actions.js';
 import {
   checkoutReviewBranch,
   commitReviewChanges,
@@ -354,6 +354,7 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('desktop:get-user-profile');
   ipcMain.removeHandler('desktop:open-external');
   ipcMain.removeHandler('desktop:copy-image-to-clipboard');
+  ipcMain.removeHandler('desktop:read-image-asset');
   ipcMain.removeHandler('desktop:reveal-image-in-folder');
   ipcMain.removeHandler('desktop:open-path');
   ipcMain.removeHandler('desktop:open-workspace-file');
@@ -401,13 +402,19 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
     await shell.openExternal(String(url ?? ''));
     return true;
   });
-  ipcMain.handle('desktop:copy-image-to-clipboard', (event, dataUrl) => {
+  ipcMain.handle('desktop:copy-image-to-clipboard', async (event, input) => {
     if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
-    return copyImageDataUrlToClipboard(
-      dataUrl,
+    return copyChatImage(
+      app.getPath('userData'),
+      input,
       (value) => nativeImage.createFromDataURL(value),
+      (value) => nativeImage.createFromPath(value),
       (image) => clipboard.writeImage(image),
     );
+  });
+  ipcMain.handle('desktop:read-image-asset', async (event, assetId) => {
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return readGeneratedImageAsset(app.getPath('userData'), assetId);
   });
   ipcMain.handle('desktop:reveal-image-in-folder', async (event, input) => {
     if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };

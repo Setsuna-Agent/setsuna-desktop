@@ -70,7 +70,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
   const generatedImageStore = new FileGeneratedImageStore(runtimeDataDir, ids);
   const eventWriter = new RuntimeEventWriter(persistedThreadStore, eventBus);
-  const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter);
+  const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter, generatedImageStore);
   const configStore = new FileConfigStore(runtimeDataDir);
   const nativeBridge = options.nativeBridge ?? HttpDesktopNativeBridge.fromEnvironment();
   const usageStore = new FileUsageStore(runtimeDataDir, ids, async () => (await configStore.getConfig()).providers);
@@ -102,7 +102,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpManagementToolHost(mcpStore, mcpConnections),
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore),
-    new OpenAiImageGenerationToolHost(configStore, pluginStore, generatedImageStore),
+    new OpenAiImageGenerationToolHost(configStore, pluginStore, generatedImageStore, { threadStore }),
     new WorkspaceImageToolHost(workspaceProjects),
     new ArtifactToolHost(workspaceProjects),
     new PcLocalToolHost(workspaceProjects, policyAmendmentStore, workspaceDependencies),
@@ -141,6 +141,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     eventBus,
     eventWriter,
     environmentResolver,
+    generatedImageStore,
     memoryStore,
     modelClient,
     mcpConnections,

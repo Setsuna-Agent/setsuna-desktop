@@ -31,7 +31,7 @@ export type PluginResourceRead = {
 
 export type PluginBundleInspection = Omit<
   RuntimePluginMarketplaceItem,
-  'installed' | 'installedVersion'
+  'installed' | 'installedVersion' | 'updateAvailable'
 > & {
   /** 仅供内置市场排序使用，不投影给 renderer。 */
   featuredOrder?: number;
@@ -42,6 +42,7 @@ export type PluginBundleStore = {
   listPlugins(): Promise<RuntimePluginList>;
   inspectPlugin(input: RuntimePluginInstallInput): Promise<PluginBundleInspection>;
   installPlugin(input: RuntimePluginInstallInput): Promise<RuntimePluginInstallResult>;
+  updatePlugin(input: RuntimePluginInstallInput): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   listInstalledRecords(): Promise<InstalledPluginRecord[]>;
   readResource(pluginId: string, resourceId: string): Promise<PluginResourceRead>;

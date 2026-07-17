@@ -12,6 +12,7 @@ import { InMemoryDesktopNativeBridge } from '../adapters/store/in-memory-secret-
 describe('runtime server', () => {
   let server: RuntimeServer;
   let baseUrl: string;
+  let runtimeDataDir: string;
   const token = 'test-token';
   const isSlowCiPlatform = Boolean(process.env.CI) || process.platform === 'win32';
   const providerCaptureTimeoutMs = isSlowCiPlatform ? 5_000 : 2_500;
@@ -24,8 +25,8 @@ describe('runtime server', () => {
   const longIntegrationTestTimeoutMs = isSlowCiPlatform ? 60_000 : 30_000;
 
   beforeEach(async () => {
-    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-test-'));
-    await startRuntimeServer(dataDir);
+    runtimeDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-test-'));
+    await startRuntimeServer(runtimeDataDir);
   });
 
   afterEach(async () => {
@@ -498,8 +499,8 @@ describe('runtime server', () => {
           })],
           mcpServers: [],
           resources: expect.arrayContaining([
-            expect.objectContaining({ id: 'content-spec', path: 'skills/documents/references/content-spec.md' }),
-            expect.objectContaining({ id: 'sample-document-spec', path: 'skills/documents/examples/sample-document.json' }),
+            expect.objectContaining({ id: 'content-spec', path: path.join('skills', 'documents', 'references', 'content-spec.md') }),
+            expect.objectContaining({ id: 'sample-document-spec', path: path.join('skills', 'documents', 'examples', 'sample-document.json') }),
           ]),
           capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 7 },
         }),
@@ -545,7 +546,7 @@ describe('runtime server', () => {
       pluginId: 'documents',
       kind: 'skill',
       files: [expect.objectContaining({
-        path: 'skills/documents/SKILL.md',
+        path: path.join('skills', 'documents', 'SKILL.md'),
         mimeType: 'text/markdown',
         text: expect.stringContaining('Word'),
       })],
@@ -554,7 +555,7 @@ describe('runtime server', () => {
       pluginId: 'documents',
       kind: 'resource',
       files: [expect.objectContaining({
-        path: 'skills/documents/examples/sample-document.json',
+        path: path.join('skills', 'documents', 'examples', 'sample-document.json'),
         mimeType: 'application/json',
       })],
     });
@@ -562,7 +563,7 @@ describe('runtime server', () => {
       pluginId: 'guard-dangerous-shell',
       kind: 'hook',
       files: [expect.objectContaining({
-        path: 'hooks/guard-dangerous-shell.mjs',
+        path: path.join('hooks', 'guard-dangerous-shell.mjs'),
         mimeType: 'text/javascript',
         text: expect.stringContaining('process'),
       })],
@@ -643,6 +644,36 @@ describe('runtime server', () => {
     });
     await expect(appServerRpc('hooks/list', { cwds: [] })).resolves.toMatchObject({
       data: [{ hooks: [] }],
+    });
+  });
+
+  it('updates an installed marketplace plugin through its id-only REST endpoint', async () => {
+    await runtimeFetch('/v1/plugin-marketplace/context7-docs/install', { method: 'POST' });
+    const pluginIndexPath = path.join(runtimeDataDir, 'runtime', 'plugins.json');
+    const pluginIndex = JSON.parse(await readFile(pluginIndexPath, 'utf8')) as {
+      plugins: Array<{ id: string; version?: string }>;
+    };
+    const context7Record = pluginIndex.plugins.find((plugin) => plugin.id === 'context7-docs');
+    if (!context7Record) throw new Error('Expected the Context7 plugin to be installed');
+    context7Record.version = '0.9.0';
+    await writeFile(pluginIndexPath, JSON.stringify(pluginIndex, null, 2));
+
+    await expect(runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
+      plugins: expect.arrayContaining([expect.objectContaining({
+        id: 'context7-docs',
+        installedVersion: '0.9.0',
+        updateAvailable: true,
+      })]),
+    });
+    await expect(runtimeFetch('/v1/plugin-marketplace/context7-docs/update', { method: 'POST' })).resolves.toMatchObject({
+      plugin: { id: 'context7-docs', version: '1.0.0' },
+    });
+    await expect(runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
+      plugins: expect.arrayContaining([expect.objectContaining({
+        id: 'context7-docs',
+        installedVersion: '1.0.0',
+        updateAvailable: false,
+      })]),
     });
   });
 

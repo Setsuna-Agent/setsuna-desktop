@@ -272,6 +272,12 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         method: 'POST',
       });
     },
+    updateMarketplacePlugin(pluginId: string) {
+      return request<RuntimePluginInstallResult>({
+        path: `/v1/plugin-marketplace/${encodeURIComponent(pluginId)}/update`,
+        method: 'POST',
+      });
+    },
     removePlugin(pluginId: string) {
       return request<RuntimePluginRemoveResult>({
         path: `/v1/plugins/${encodeURIComponent(pluginId)}`,

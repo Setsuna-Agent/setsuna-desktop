@@ -5,5 +5,8 @@ export type GeneratedImageStoreInput = {
 };
 
 export type GeneratedImageStore = {
+  clone(assetId: string): Promise<{ assetId: string }>;
   create(input: GeneratedImageStoreInput): Promise<{ assetId: string }>;
+  delete(assetId: string): Promise<void>;
+  recover(retainedAssetIds: string[]): Promise<void>;
 };

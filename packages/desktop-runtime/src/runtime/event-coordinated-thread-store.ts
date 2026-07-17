@@ -1,13 +1,18 @@
-import type {
-  CreateThreadInput,
-  MessageDeleteInput,
-  MessagePatch,
-  RuntimeEvent,
-  RuntimeThreadMemoryMode,
-  ThreadPatch,
-  ThreadQuery,
+import {
+  type CreateThreadInput,
+  type MessageDeleteInput,
+  type MessagePatch,
+  type RuntimeEvent,
+  type RuntimeThreadMemoryMode,
+  type ThreadPatch,
+  type ThreadQuery,
 } from '@setsuna-desktop/contracts';
+import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type { ThreadStore } from '../ports/thread-store.js';
+import {
+  managedGeneratedImageAssetIds,
+  managedGeneratedImageAssetIdsFromStore,
+} from '../utils/generated-image-assets.js';
 import { RuntimeEventWriter } from '../loop/runtime-event-writer.js';
 
 export type RecoverableThreadStore = ThreadStore & {
@@ -23,6 +28,7 @@ export class EventCoordinatedThreadStore implements ThreadStore {
   constructor(
     private readonly inner: RecoverableThreadStore,
     private readonly eventWriter: RuntimeEventWriter,
+    private readonly generatedImageStore?: GeneratedImageStore,
   ) {}
 
   listThreads(query?: ThreadQuery) {
@@ -38,7 +44,7 @@ export class EventCoordinatedThreadStore implements ThreadStore {
   }
 
   deleteThread(threadId: string) {
-    return this.afterPendingEvents(threadId, () => this.inner.deleteThread(threadId));
+    return this.afterPendingEventsWithImageCleanup(threadId, () => this.inner.deleteThread(threadId));
   }
 
   updateThread(threadId: string, patch: ThreadPatch) {
@@ -54,15 +60,18 @@ export class EventCoordinatedThreadStore implements ThreadStore {
   }
 
   deleteMessages(threadId: string, input: MessageDeleteInput) {
-    return this.afterPendingEvents(threadId, () => this.inner.deleteMessages(threadId, input));
+    return this.afterPendingEventsWithImageCleanup(threadId, () => this.inner.deleteMessages(threadId, input));
   }
 
   truncateMessagesAfter(threadId: string, messageId: string, includeSelf?: boolean) {
-    return this.afterPendingEvents(threadId, () => this.inner.truncateMessagesAfter(threadId, messageId, includeSelf));
+    return this.afterPendingEventsWithImageCleanup(
+      threadId,
+      () => this.inner.truncateMessagesAfter(threadId, messageId, includeSelf),
+    );
   }
 
   clearThreadMessages(threadId: string) {
-    return this.afterPendingEvents(threadId, () => this.inner.clearThreadMessages(threadId));
+    return this.afterPendingEventsWithImageCleanup(threadId, () => this.inner.clearThreadMessages(threadId));
   }
 
   appendEvent(threadId: string, event: Omit<RuntimeEvent, 'seq'>) {
@@ -85,5 +94,34 @@ export class EventCoordinatedThreadStore implements ThreadStore {
   private async afterPendingEvents<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
     await this.eventWriter.flushThread(threadId);
     return operation();
+  }
+
+  private async afterPendingEventsWithImageCleanup<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+    await this.eventWriter.flushThread(threadId);
+    const generatedImageStore = this.generatedImageStore;
+    if (!generatedImageStore) return operation();
+
+    const before = await this.inner.getThread(threadId).catch(() => null);
+    const result = await operation();
+    try {
+      const after = await this.inner.getThread(threadId);
+      const remainingAssetIds = managedGeneratedImageAssetIds(after);
+      const removedAssetIds = [...managedGeneratedImageAssetIds(before)]
+        .filter((assetId) => !remainingAssetIds.has(assetId));
+      if (!removedAssetIds.length) return result;
+
+      const referencedAssetIds = await managedGeneratedImageAssetIdsFromStore(
+        this.inner,
+        new Set(removedAssetIds),
+      );
+      const unreferencedAssetIds = removedAssetIds.filter((assetId) => !referencedAssetIds.has(assetId));
+
+      // The thread mutation has already committed. Cleanup is best-effort so callers never retry a
+      // destructive mutation that actually succeeded. Startup recovery sweeps anything retained here.
+      await Promise.allSettled(unreferencedAssetIds.map((assetId) => generatedImageStore.delete(assetId)));
+    } catch {
+      // Keep assets when reference scanning fails; deleting a still-referenced image is worse than an orphan.
+    }
+    return result;
   }
 }

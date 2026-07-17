@@ -70,15 +70,28 @@ export function CapabilitiesPluginDetail({
         backLabel="返回插件"
         onBack={onBack}
         actions={installedPlugin ? (
-          <Button
-            type="button"
-            variant="danger"
-            icon={removing ? <Loader2 className="is-spinning" size={14} /> : <Trash2 size={14} />}
-            disabled={removing}
-            onClick={() => void onRemove(installedPlugin)}
-          >
-            {removing ? '卸载中' : '卸载'}
-          </Button>
+          <>
+            {marketplacePlugin?.updateAvailable ? (
+              <Button
+                type="button"
+                variant="primary"
+                icon={installing ? <Loader2 className="is-spinning" size={14} /> : <Download size={14} />}
+                disabled={installing || removing}
+                onClick={() => void onInstall(marketplacePlugin)}
+              >
+                {installing ? '更新中' : marketplacePlugin.version ? `更新到 v${marketplacePlugin.version}` : '更新插件'}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="danger"
+              icon={removing ? <Loader2 className="is-spinning" size={14} /> : <Trash2 size={14} />}
+              disabled={installing || removing}
+              onClick={() => void onRemove(installedPlugin)}
+            >
+              {removing ? '卸载中' : '卸载'}
+            </Button>
+          </>
         ) : marketplacePlugin && !installed ? (
           <Button
             type="button"

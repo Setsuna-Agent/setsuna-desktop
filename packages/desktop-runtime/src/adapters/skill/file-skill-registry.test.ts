@@ -52,6 +52,27 @@ describe('file skill registry', () => {
     ]);
   });
 
+  it('parses Skill frontmatter checked out with CRLF line endings', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const skillDir = path.join(builtinDir, 'windows-skill');
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, 'SKILL.md'), [
+      '---',
+      'name: Windows Skill',
+      'description: Parses on every platform.',
+      '---',
+      '',
+      '# Windows Skill',
+    ].join('\r\n'));
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await expect(registry.getSkill('windows-skill')).resolves.toMatchObject({
+      name: 'Windows Skill',
+      description: 'Parses on every platform.',
+      content: '# Windows Skill',
+    });
+  });
+
   it('keeps installed Plugin metadata with injected Plugin Skills', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installDocumentsPluginFixture(dataDir);

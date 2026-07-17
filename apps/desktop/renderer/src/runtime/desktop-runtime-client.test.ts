@@ -102,6 +102,18 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('updates marketplace plugins by id without sending a local path', async () => {
+    const request = installRuntimeBridge(() => ({ plugin: { id: 'openai-docs', version: '2.0.0' } }));
+    const client = createDesktopRuntimeClient();
+
+    await client.updateMarketplacePlugin('openai docs');
+
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/plugin-marketplace/openai%20docs/update',
+      method: 'POST',
+    });
+  });
+
   it('routes installed and marketplace plugin item previews through encoded, read-only paths', async () => {
     const request = installRuntimeBridge(() => ({ pluginId: 'documents', itemId: 'documents.documents', kind: 'skill', files: [] }));
     const client = createDesktopRuntimeClient();

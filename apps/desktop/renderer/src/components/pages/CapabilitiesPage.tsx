@@ -129,6 +129,7 @@ export function CapabilitiesPage({
   onLoginMcpServer,
   onLogoutMcpServer,
   onInstallMarketplacePlugin,
+  onUpdateMarketplacePlugin,
   onRemovePlugin,
   onSaveImageGenerationConfig,
 }: {
@@ -162,6 +163,7 @@ export function CapabilitiesPage({
   onLoginMcpServer: (server: RuntimeMcpServer) => Promise<void>;
   onLogoutMcpServer: (server: RuntimeMcpServer) => Promise<void>;
   onInstallMarketplacePlugin: (pluginId: string) => Promise<unknown>;
+  onUpdateMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onRemovePlugin: (pluginId: string) => Promise<void>;
   onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
 }) {
@@ -440,14 +442,16 @@ export function CapabilitiesPage({
     }
   }
 
-  async function installMarketplacePlugin(plugin: RuntimePluginMarketplaceItem) {
-    if (plugin.installed || installingPluginIds.has(plugin.id)) return;
+  async function installOrUpdateMarketplacePlugin(plugin: RuntimePluginMarketplaceItem) {
+    const updating = Boolean(plugin.installed && plugin.updateAvailable);
+    if ((plugin.installed && !updating) || installingPluginIds.has(plugin.id)) return;
     setInstallingPluginIds((items) => new Set(items).add(plugin.id));
     setPluginError(null);
     try {
-      await onInstallMarketplacePlugin(plugin.id);
+      if (updating) await onUpdateMarketplacePlugin(plugin.id);
+      else await onInstallMarketplacePlugin(plugin.id);
     } catch (unknownError) {
-      setPluginError(pluginActionError(unknownError, '安装插件失败，请重试。'));
+      setPluginError(pluginActionError(unknownError, updating ? '更新插件失败，请重试。' : '安装插件失败，请重试。'));
     } finally {
       setInstallingPluginIds((items) => {
         const next = new Set(items);
@@ -649,7 +653,7 @@ export function CapabilitiesPage({
               setSelectedPluginId(null);
               setPluginError(null);
             }}
-            onInstall={installMarketplacePlugin}
+            onInstall={installOrUpdateMarketplacePlugin}
             onGetItemContent={getSelectedPluginItemContent}
             onRemove={removePlugin}
             onSaveImageGenerationConfig={onSaveImageGenerationConfig}
@@ -1005,7 +1009,7 @@ export function CapabilitiesPage({
               localPlugins={visibleLocalPlugins}
               installingPluginIds={installingPluginIds}
               searching={Boolean(normalizedCapabilityQuery)}
-              onInstall={installMarketplacePlugin}
+              onInstall={installOrUpdateMarketplacePlugin}
               onOpenMarketplace={openPluginDetail}
               onOpenLocal={openPluginDetail}
             />

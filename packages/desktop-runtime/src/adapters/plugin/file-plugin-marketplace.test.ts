@@ -44,6 +44,7 @@ describe('file plugin marketplace', () => {
         resources: [],
         capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
         installed: false,
+        updateAvailable: false,
       }],
     });
     await expect(marketplace.readItemContent('docs', 'skill', 'docs.docs')).resolves.toMatchObject({
@@ -90,6 +91,50 @@ describe('file plugin marketplace', () => {
     const catalog = await marketplace.listPlugins();
     expect(catalog.plugins.map((plugin) => plugin.id)).toEqual(['documents', 'pdf', 'openai-docs']);
   });
+
+  it('offers and applies only strictly newer marketplace versions', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-update-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: '1.9.0-beta.2' });
+    const runtime = await createPluginRuntime(root);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await marketplace.installPlugin('docs');
+
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: '1.10.0-beta.10' });
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [{
+        id: 'docs',
+        version: '1.10.0-beta.10',
+        installedVersion: '1.9.0-beta.2',
+        installed: true,
+        updateAvailable: true,
+      }],
+    });
+
+    await expect(marketplace.updatePlugin('docs')).resolves.toMatchObject({
+      plugin: { id: 'docs', version: '1.10.0-beta.10' },
+    });
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [{ installedVersion: '1.10.0-beta.10', updateAvailable: false }],
+    });
+    await expect(marketplace.updatePlugin('docs')).rejects.toThrow('update is not available');
+
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: 'not-semver' });
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [{ installedVersion: '1.10.0-beta.10', updateAvailable: false }],
+    });
+  });
+
+  it('rejects updates for unknown or uninstalled marketplace plugins', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-update-errors-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: '2.0.0' });
+    const runtime = await createPluginRuntime(root);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+
+    await expect(marketplace.updatePlugin('missing')).rejects.toThrow('Marketplace plugin not found');
+    await expect(marketplace.updatePlugin('docs')).rejects.toThrow('Marketplace plugin is not installed');
+  });
 });
 
 async function createPluginRuntime(root: string) {
@@ -113,7 +158,14 @@ async function createPluginRuntime(root: string) {
 async function createCatalogPlugin(
   catalogDir: string,
   id: string,
-  metadata: { name: string; publisher?: string; tags?: string[]; featured?: boolean; featuredOrder?: number },
+  metadata: {
+    name: string;
+    version?: string;
+    publisher?: string;
+    tags?: string[];
+    featured?: boolean;
+    featuredOrder?: number;
+  },
 ): Promise<void> {
   const manifestDir = path.join(catalogDir, id, '.setsuna-plugin');
   const skillDir = path.join(catalogDir, id, 'skills', 'docs');
@@ -134,7 +186,7 @@ async function createCatalogPlugin(
     id,
     name: metadata.name,
     icon: 'openai-docs',
-    version: '1.0.0',
+    version: metadata.version ?? '1.0.0',
     publisher: metadata.publisher,
     tags: metadata.tags,
     featured: metadata.featured,

@@ -12,7 +12,7 @@ import type { PluginMarketplace } from '../../ports/plugin-marketplace.js';
 
 type MarketplaceBundleStore = Pick<
   PluginBundleStore,
-  'inspectPlugin' | 'installPlugin' | 'listPlugins' | 'readBundleItemContent'
+  'inspectPlugin' | 'installPlugin' | 'listPlugins' | 'readBundleItemContent' | 'updatePlugin'
 >;
 
 /** 暴露应用内置的精选插件，同时不向渲染进程泄露其文件系统位置。 */
@@ -48,6 +48,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
           capabilities: { ...plugin.capabilities },
           installed: Boolean(installed),
           ...(installed?.version ? { installedVersion: installed.version } : {}),
+          updateAvailable: isVersionGreater(plugin.version, installed?.version),
         };
       });
     return { plugins, errors: catalog.errors };
@@ -71,6 +72,22 @@ export class FilePluginMarketplace implements PluginMarketplace {
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     return this.bundles.installPlugin({ path: plugin.sourcePath });
+  }
+
+  async updatePlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
+    const id = pluginId.trim().toLowerCase();
+    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
+      this.bundles.listPlugins(),
+      this.readCatalog(),
+    ]);
+    const plugin = catalog.plugins.find((item) => item.id === id);
+    if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
+    const installed = installedPlugins.find((item) => item.id === id);
+    if (!installed) throw new Error(`Marketplace plugin is not installed: ${pluginId}`);
+    if (!isVersionGreater(plugin.version, installed.version)) {
+      throw new Error(`Marketplace plugin update is not available: ${pluginId}`);
+    }
+    return this.bundles.updatePlugin({ path: plugin.sourcePath });
   }
 
   private async readCatalog(): Promise<{ plugins: PluginBundleInspection[]; errors: string[] }> {
@@ -105,4 +122,58 @@ function compareMarketplacePlugins(left: PluginBundleInspection, right: PluginBu
 function pathIsInside(root: string, target: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(target));
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+type ParsedVersion = {
+  core: string[];
+  prerelease: string[] | null;
+};
+
+/** Compare version-like manifest values without treating 1.10 as older than 1.9. */
+function isVersionGreater(candidate: string | undefined, installed: string | undefined): boolean {
+  if (!candidate || !installed) return false;
+  const left = parseVersion(candidate);
+  const right = parseVersion(installed);
+  if (!left || !right) return false;
+
+  const coreLength = Math.max(left.core.length, right.core.length);
+  for (let index = 0; index < coreLength; index += 1) {
+    const comparison = compareNumericIdentifier(left.core[index] ?? '0', right.core[index] ?? '0');
+    if (comparison !== 0) return comparison > 0;
+  }
+
+  if (!left.prerelease && right.prerelease) return true;
+  if (left.prerelease && !right.prerelease) return false;
+  if (!left.prerelease || !right.prerelease) return false;
+
+  const prereleaseLength = Math.max(left.prerelease.length, right.prerelease.length);
+  for (let index = 0; index < prereleaseLength; index += 1) {
+    const leftPart = left.prerelease[index];
+    const rightPart = right.prerelease[index];
+    if (leftPart === undefined) return false;
+    if (rightPart === undefined) return true;
+    if (leftPart === rightPart) continue;
+    const leftNumeric = /^\d+$/u.test(leftPart);
+    const rightNumeric = /^\d+$/u.test(rightPart);
+    if (leftNumeric && rightNumeric) return compareNumericIdentifier(leftPart, rightPart) > 0;
+    if (leftNumeric !== rightNumeric) return !leftNumeric;
+    return leftPart > rightPart;
+  }
+  return false;
+}
+
+function parseVersion(value: string): ParsedVersion | null {
+  const match = value.trim().match(/^v?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u);
+  if (!match) return null;
+  return {
+    core: match[1].split('.'),
+    prerelease: match[2]?.split('.') ?? null,
+  };
+}
+
+function compareNumericIdentifier(left: string, right: string): number {
+  const normalizedLeft = left.replace(/^0+(?=\d)/u, '');
+  const normalizedRight = right.replace(/^0+(?=\d)/u, '');
+  if (normalizedLeft.length !== normalizedRight.length) return normalizedLeft.length - normalizedRight.length;
+  return normalizedLeft === normalizedRight ? 0 : normalizedLeft > normalizedRight ? 1 : -1;
 }

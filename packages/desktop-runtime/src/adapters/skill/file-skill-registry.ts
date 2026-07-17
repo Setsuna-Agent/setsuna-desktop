@@ -359,23 +359,23 @@ function parseSkill(
 }
 
 function parseFrontmatter(rawContent: string): { name?: string; description?: string; autoActivate: string[]; body: string } {
-  if (!rawContent.startsWith('---\n')) return { autoActivate: [], body: rawContent };
-  const endIndex = rawContent.indexOf('\n---', 4);
-  if (endIndex === -1) return { autoActivate: [], body: rawContent };
-  const block = rawContent.slice(4, endIndex);
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(rawContent);
+  if (!match) return { autoActivate: [], body: rawContent };
+  const block = match[1];
+  const body = rawContent.slice(match[0].length);
   try {
     const fields = recordValue(parseYaml(block, { maxAliasCount: 0, uniqueKeys: true }));
     return {
       name: optionalString(fields.name),
       description: optionalString(fields.description),
       autoActivate: frontmatterStringArray(fields.autoActivate ?? fields.auto_activate ?? fields['auto-activate']),
-      body: rawContent.slice(endIndex + 4),
+      body,
     };
   } catch {
     // 可选的 frontmatter 块格式错误时，不能让其他内容仍可读取的 Skill 消失。
     return {
       autoActivate: [],
-      body: rawContent.slice(endIndex + 4),
+      body,
     };
   }
 }

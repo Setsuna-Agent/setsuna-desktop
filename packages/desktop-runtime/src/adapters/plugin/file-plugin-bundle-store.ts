@@ -77,6 +77,11 @@ const HOOK_EVENTS = new Set<RuntimeHookEventName>([
 
 type PluginMcpClient = Pick<McpClientRuntime, 'invalidateServer'>;
 
+type PluginMcpUpdateAction =
+  | { type: 'upsert'; server: RuntimeMcpServerInput }
+  | { type: 'replace'; server: RuntimeMcpServerInput }
+  | { type: 'delete'; key: string };
+
 /** 安装自包含的本地插件包，并管理其可逆集成。 */
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
@@ -223,6 +228,240 @@ export class FilePluginBundleStore implements PluginBundleStore {
         installedMcpServers,
         reusedMcpServers: mcpOwnership.filter((item) => !item.owned).map((item) => item.key),
       };
+    });
+  }
+
+  async updatePlugin(input: RuntimePluginInstallInput): Promise<RuntimePluginInstallResult> {
+    return withFileStateUpdate(this.indexPath, async () => {
+      const sourcePath = await requiredBundleDirectory(input.path);
+      if (pathsOverlap(sourcePath, this.pluginsDir)) {
+        throw new Error('Plugin source and runtime plugin directory cannot contain one another.');
+      }
+
+      // The first pass identifies the installed plugin. The staged pass below is
+      // authoritative, so a source tree changed while copying cannot bypass validation.
+      await inspectBundleTree(sourcePath);
+      const sourceManifest = await readPluginManifest(sourcePath);
+      const index = await this.readIndex();
+      const plugin = index.plugins.find((item) => item.id === sourceManifest.id);
+      if (!plugin) throw new Error(`Plugin not found: ${sourceManifest.id}`);
+
+      const expectedInstallPath = path.join(this.pluginsDir, plugin.id);
+      if (path.resolve(plugin.installPath) !== path.resolve(expectedInstallPath)) {
+        throw new Error(`Installed plugin path is invalid: ${plugin.id}`);
+      }
+      const installStat = await stat(plugin.installPath).catch(() => null);
+      if (!installStat?.isDirectory()) throw new Error(`Installed plugin directory not found: ${plugin.id}`);
+
+      await mkdir(this.pluginsDir, { recursive: true });
+      const operationId = randomUUID();
+      const stagingPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.tmp`);
+      const backupPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.backup`);
+      const failedPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.failed`);
+      let staged = true;
+
+      try {
+        await copyBundleTree(sourcePath, stagingPath);
+        await inspectBundleTree(stagingPath);
+        const manifest = await readPluginManifest(await realpath(stagingPath));
+        if (manifest.id !== sourceManifest.id) {
+          throw new Error('Plugin manifest id changed while staging the update.');
+        }
+
+        const ownSkillIds = new Set(plugin.skillEntries.map((skill) => skill.id));
+        const existingSkillIds = new Set(
+          (await this.skills.listSkills()).skills
+            .map((skill) => skill.id)
+            .filter((skillId) => !ownSkillIds.has(skillId)),
+        );
+        const conflictingSkill = manifest.skillEntries.find((skill) => existingSkillIds.has(skill.id));
+        if (conflictingSkill) {
+          throw new Error(`Plugin skill id conflicts with an existing skill: ${conflictingSkill.id}`);
+        }
+
+        const installPath = plugin.installPath;
+        const installedManifestPath = path.join(installPath, PLUGIN_MANIFEST_RELATIVE_PATH);
+        const nextMcpInputs = manifest.mcpServers.map((server) => materializePluginMcpServer(server, installPath));
+        const currentServers = await this.mcpStore.listServerInputs();
+        const currentServerByKey = new Map(currentServers.map((server) => [server.key, server]));
+        const oldOwnershipByKey = new Map(plugin.mcpServers.map((server) => [server.key, server]));
+        const oldInputByKey = new Map(plugin.mcpServerInputs.map((server) => [server.key, server]));
+        const nextMcpKeys = new Set(nextMcpInputs.map((server) => server.key));
+        const mcpActions: PluginMcpUpdateAction[] = [];
+        const nextMcpOwnership: Array<{ key: string; owned: boolean }> = [];
+        const installedMcpServers: string[] = [];
+        const reusedMcpServers: string[] = [];
+
+        for (const server of nextMcpInputs) {
+          const oldOwnership = oldOwnershipByKey.get(server.key);
+          const oldExpected = oldInputByKey.get(server.key);
+          const current = currentServerByKey.get(server.key);
+
+          if (oldOwnership?.owned) {
+            nextMcpOwnership.push({ key: server.key, owned: true });
+            // Missing or changed plugin-owned entries are user changes. Keep them
+            // untouched; the new expected input still lets removal preserve them.
+            if (current && oldExpected && pluginMcpServerUnmodified(current, oldExpected)
+              && !pluginMcpServerUnmodified(current, server)) {
+              mcpActions.push({ type: 'replace', server });
+            }
+            continue;
+          }
+
+          if (current) {
+            if (!compatibleMcpServer(current, server)) {
+              throw new Error(`Plugin MCP server conflicts with existing key: ${server.key}`);
+            }
+            nextMcpOwnership.push({ key: server.key, owned: false });
+            reusedMcpServers.push(server.key);
+            continue;
+          }
+
+          nextMcpOwnership.push({ key: server.key, owned: true });
+          mcpActions.push({ type: 'upsert', server });
+          installedMcpServers.push(server.key);
+        }
+
+        for (const oldOwnership of plugin.mcpServers) {
+          if (!oldOwnership.owned || nextMcpKeys.has(oldOwnership.key)) continue;
+          const current = currentServerByKey.get(oldOwnership.key);
+          const oldExpected = oldInputByKey.get(oldOwnership.key);
+          if (current && oldExpected && pluginMcpServerUnmodified(current, oldExpected)) {
+            mcpActions.push({ type: 'delete', key: oldOwnership.key });
+          }
+        }
+
+        const hooks = manifest.hooks.map((hook) => (
+          materializePluginHook(hook, manifest.id, installPath, installedManifestPath)
+        ));
+        const configBefore = await this.configStore.getConfig();
+        const shouldSaveHooks = Boolean(plugin.hookCount || hooks.length);
+        const nextHooks = shouldSaveHooks
+          ? addPluginHooks(
+            removePluginHooks(configBefore.hooks ?? {}, plugin.id, plugin.manifestPath),
+            hooks,
+          )
+          : configBefore.hooks ?? {};
+        const record: InstalledPluginRecord = {
+          id: manifest.id,
+          name: manifest.name,
+          ...(manifest.icon ? { icon: manifest.icon } : {}),
+          ...(manifest.version ? { version: manifest.version } : {}),
+          ...(manifest.description ? { description: manifest.description } : {}),
+          ...(manifest.publisher ? { publisher: manifest.publisher } : {}),
+          ...(manifest.tags.length ? { tags: [...manifest.tags] } : {}),
+          sourcePath,
+          installPath,
+          installedAt: plugin.installedAt,
+          manifestPath: installedManifestPath,
+          skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
+            id: skill.id,
+            name: skill.name,
+            ...(skill.description ? { description: skill.description } : {}),
+          })),
+          skillEntries: manifest.skillEntries.map(({ id, relativePath }) => ({ id, relativePath })),
+          mcpServers: nextMcpOwnership.map((ownership) => {
+            const server = nextMcpInputs.find((candidate) => candidate.key === ownership.key)!;
+            return { ...pluginMcpServerDescriptor(server), owned: ownership.owned };
+          }),
+          mcpServerInputs: nextMcpInputs,
+          hooks: manifest.hooks.map(pluginHookDescriptor),
+          hookCount: hooks.length,
+          resources: manifest.resources.map((resource) => ({ ...resource })),
+        };
+
+        let oldDirectoryMoved = false;
+        let newDirectoryActivated = false;
+        let hookSaveStarted = false;
+        let indexSaveStarted = false;
+        const mcpActionsStarted: PluginMcpUpdateAction[] = [];
+        try {
+          await rename(installPath, backupPath);
+          oldDirectoryMoved = true;
+          await rename(stagingPath, installPath);
+          staged = false;
+          newDirectoryActivated = true;
+
+          for (const action of mcpActions) {
+            mcpActionsStarted.push(action);
+            if (action.type === 'replace') {
+              await this.mcpStore.deleteServer(action.server.key);
+              await this.mcpStore.upsertServer(action.server);
+            } else if (action.type === 'upsert') {
+              await this.mcpStore.upsertServer(action.server);
+            } else {
+              await this.mcpStore.deleteServer(action.key);
+            }
+          }
+          if (shouldSaveHooks) {
+            hookSaveStarted = true;
+            // Removing first clears prior trust state. Hook script contents can
+            // change while the command stays identical, so trust must be re-granted.
+            await this.configStore.saveConfig({ hooks: nextHooks });
+          }
+          indexSaveStarted = true;
+          await writeJsonFile(this.indexPath, {
+            version: 1,
+            plugins: index.plugins.map((item) => item.id === plugin.id ? record : item),
+          } satisfies PluginIndexFile);
+        } catch (error) {
+          const rollbackErrors: unknown[] = [];
+          if (hookSaveStarted) {
+            await this.configStore.saveConfig({ hooks: configBefore.hooks ?? {} })
+              .catch((rollbackError) => rollbackErrors.push(rollbackError));
+          }
+          for (const action of [...mcpActionsStarted].reverse()) {
+            const key = action.type === 'delete' ? action.key : action.server.key;
+            const previous = currentServerByKey.get(key);
+            const rollback = previous
+              ? this.mcpStore.upsertServer(previous)
+              : this.mcpStore.deleteServer(key);
+            await rollback.catch((rollbackError) => rollbackErrors.push(rollbackError));
+          }
+          if (newDirectoryActivated) {
+            await rename(installPath, failedPath).catch(async (renameError) => {
+              await rm(installPath, { recursive: true, force: true })
+                .catch((removeError) => rollbackErrors.push(new AggregateError(
+                  [renameError, removeError],
+                  'Could not move or remove the failed plugin update.',
+                )));
+            });
+          }
+          if (oldDirectoryMoved) {
+            await rename(backupPath, installPath)
+              .catch((rollbackError) => rollbackErrors.push(rollbackError));
+          }
+          if (indexSaveStarted) {
+            await writeJsonFile(this.indexPath, index)
+              .catch((rollbackError) => rollbackErrors.push(rollbackError));
+          }
+          await Promise.allSettled([
+            rm(stagingPath, { recursive: true, force: true }),
+            rm(failedPath, { recursive: true, force: true }),
+          ]);
+          await Promise.allSettled(
+            [...new Set([...plugin.mcpServers.map(({ key }) => key), ...nextMcpInputs.map(({ key }) => key)])]
+              .map((key) => this.mcpClient.invalidateServer(key)),
+          );
+          if (rollbackErrors.length) {
+            throw new AggregateError([error, ...rollbackErrors], 'Plugin update failed and rollback was incomplete.');
+          }
+          throw error;
+        }
+
+        await rm(backupPath, { recursive: true, force: true }).catch(() => undefined);
+        await Promise.allSettled(
+          [...new Set([...plugin.mcpServers.map(({ key }) => key), ...nextMcpInputs.map(({ key }) => key)])]
+            .map((key) => this.mcpClient.invalidateServer(key)),
+        );
+        return {
+          plugin: publicPluginSummary(record),
+          installedMcpServers,
+          reusedMcpServers,
+        };
+      } finally {
+        if (staged) await rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
+      }
     });
   }
 
@@ -746,6 +985,79 @@ function compatibleMcpServer(left: RuntimeMcpServerInput, right: RuntimeMcpServe
     && normalizeOptionalPath(left.cwd) === normalizeOptionalPath(right.cwd);
 }
 
+function pluginMcpServerUnmodified(current: RuntimeMcpServerInput, expected: RuntimeMcpServerInput): boolean {
+  return JSON.stringify(comparablePluginMcpServer(current)) === JSON.stringify(comparablePluginMcpServer(expected));
+}
+
+function comparablePluginMcpServer(server: RuntimeMcpServerInput): Record<string, unknown> {
+  const transport = normalizeMcpTransport(server.transport, server.command, server.url);
+  const timeoutMs = normalizedMcpTimeout(server.timeoutMs, 120_000);
+  return {
+    key: server.key,
+    label: server.label?.trim() || server.key,
+    description: server.description?.trim() || null,
+    transport,
+    command: transport === 'stdio' ? server.command?.trim() || null : null,
+    args: transport === 'stdio' ? normalizedStringList(server.args) : [],
+    cwd: transport === 'stdio' ? normalizeOptionalPath(server.cwd) || null : null,
+    url: transport === 'streamableHttp' ? comparableUrl(server.url) || null : null,
+    timeoutMs,
+    startupTimeoutMs: normalizedMcpTimeout(server.startupTimeoutMs, timeoutMs),
+    toolTimeoutMs: normalizedMcpTimeout(server.toolTimeoutMs, timeoutMs),
+    required: server.required === true,
+    requireApproval: comparableMcpApproval(server.requireApproval),
+    trustLevel: server.trustLevel === 'trusted' ? 'trusted' : 'untrusted',
+    enabled: server.enabled !== false,
+    allowedTools: normalizedStringSet(server.allowedTools),
+    disabledTools: normalizedStringSet(server.disabledTools),
+    tools: canonicalValue(server.tools ?? []),
+    env: canonicalStringMap(server.env),
+    headers: canonicalStringMap(server.headers),
+    envHttpHeaders: canonicalStringMap(server.envHttpHeaders),
+    bearerTokenEnvVar: server.bearerTokenEnvVar?.trim() || null,
+    oauthClientId: server.oauthClientId?.trim() || null,
+    oauthResource: server.oauthResource?.trim() || null,
+  };
+}
+
+function comparableMcpApproval(value: RuntimeMcpServerInput['requireApproval']): 'auto' | 'prompt' | 'approve' {
+  if (value === 'approve' || value === 'never') return 'approve';
+  if (value === 'prompt' || value === 'always') return 'prompt';
+  return 'auto';
+}
+
+function normalizedMcpTimeout(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  return Math.min(Math.floor(value), 30 * 60 * 1_000);
+}
+
+function normalizedStringList(values: string[] | undefined): string[] {
+  return (values ?? []).map((value) => value.trim()).filter(Boolean);
+}
+
+function normalizedStringSet(values: string[] | undefined): string[] {
+  return [...new Set(normalizedStringList(values))].sort((left, right) => left.localeCompare(right));
+}
+
+function canonicalStringMap(value: Record<string, string> | undefined): Record<string, string> | null {
+  if (!value) return null;
+  const entries = Object.entries(value)
+    .map(([key, item]) => [key.trim(), item.trim()] as const)
+    .filter(([key, item]) => key && item)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return entries.length ? Object.fromEntries(entries) : null;
+}
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, canonicalValue(item)]),
+  );
+}
+
 function comparableUrl(value: string | undefined): string {
   if (!value) return '';
   try {
@@ -787,9 +1099,17 @@ function safeHttpUrl(value: string): string {
 
 function replacePluginRoot(value: string | undefined, installPath: string, shellQuote: boolean): string | undefined {
   if (!value) return undefined;
-  if (!shellQuote) return value.replaceAll('{{pluginRoot}}', installPath);
-  return value.replace(/\{\{pluginRoot\}\}([^\s'"`]*)/gu, (_match, suffix: string) =>
-    shellQuotedPath(`${installPath}${suffix}`));
+  return value.replace(/\{\{pluginRoot\}\}([^\s'"`]*)/gu, (_match, suffix: string) => {
+    const pluginPath = pluginRootPath(installPath, suffix);
+    return shellQuote ? shellQuotedPath(pluginPath) : pluginPath;
+  });
+}
+
+function pluginRootPath(installPath: string, suffix: string): string {
+  if (!suffix) return installPath;
+  if (!/^[\\/]/u.test(suffix)) return `${installPath}${suffix}`;
+  const segments = suffix.replace(/^[\\/]+/u, '').split(/[\\/]+/u).filter(Boolean);
+  return path.join(installPath, ...segments);
 }
 
 function shellQuotedPath(value: string): string {
@@ -886,10 +1206,9 @@ function normalizeHookId(value: string): string {
 }
 
 function skillMetadata(content: string, fallback: string): { name: string; description?: string } {
-  if (!content.startsWith('---\n')) return { name: fallback };
-  const end = content.indexOf('\n---', 4);
-  if (end < 0) return { name: fallback };
-  const lines = content.slice(4, end).split('\n');
+  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(content)?.[1];
+  if (frontmatter === undefined) return { name: fallback };
+  const lines = frontmatter.split(/\r?\n/u);
   const name = frontmatterText(lines, 'name') || fallback;
   const description = frontmatterText(lines, 'description');
   return { name, ...(description ? { description } : {}) };

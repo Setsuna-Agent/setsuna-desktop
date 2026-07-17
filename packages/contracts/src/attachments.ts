@@ -22,9 +22,18 @@ type RuntimeMessageAttachmentBase = {
 export type RuntimeInlineMessageAttachment = RuntimeMessageAttachmentBase & {
   source?: 'inline';
   url: string;
-  /** 本地持久化副本的不透明 ID；渲染进程不会获得真实文件路径。 */
+  /** 旧版生成图可能同时携带本地副本 ID；新生成图使用 generated 附件。 */
   localAssetId?: string;
   assetId?: never;
+};
+
+/** runtime 持久化的生成图；按需通过 preload 窄桥接读取，不把 Base64 写入线程事件。 */
+export type RuntimeGeneratedMessageAttachment = RuntimeMessageAttachmentBase & {
+  source: 'generated';
+  assetId: string;
+  modelVisible?: false;
+  url?: never;
+  localAssetId?: never;
 };
 
 /** 由 runtime 管理的文件引用；渲染进程和持久化线程都不会获得其本地路径。 */
@@ -34,7 +43,10 @@ export type RuntimeStoredMessageAttachment = RuntimeMessageAttachmentBase & {
   url?: never;
 };
 
-export type RuntimeMessageAttachment = RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment;
+/** User/model input attachments. Generated assets are output-only and never accepted at a send boundary. */
+export type RuntimeInputMessageAttachment = RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment;
+
+export type RuntimeMessageAttachment = RuntimeGeneratedMessageAttachment | RuntimeInputMessageAttachment;
 
 export type RuntimeAttachmentUploadInput = {
   name: string;
@@ -55,5 +67,17 @@ export function isRuntimeStoredMessageAttachment(
 export function isRuntimeInlineMessageAttachment(
   attachment: RuntimeMessageAttachment,
 ): attachment is RuntimeInlineMessageAttachment {
-  return attachment.source !== 'runtime';
+  return attachment.source !== 'generated' && attachment.source !== 'runtime';
+}
+
+export function isRuntimeGeneratedMessageAttachment(
+  attachment: RuntimeMessageAttachment,
+): attachment is RuntimeGeneratedMessageAttachment {
+  return attachment.source === 'generated';
+}
+
+export function isRuntimeInputMessageAttachment(
+  attachment: RuntimeMessageAttachment,
+): attachment is RuntimeInputMessageAttachment {
+  return attachment.source !== 'generated';
 }

@@ -80,5 +80,6 @@ export function isRuntimeMessageAttachment(value: unknown): value is NonNullable
   );
   if (!baseValid) return false;
   if (record.source === 'runtime') return typeof record.assetId === 'string' && Boolean(record.assetId.trim());
+  if (record.source !== undefined && record.source !== 'inline') return false;
   return typeof record.url === 'string' && Boolean(record.url.trim());
 }

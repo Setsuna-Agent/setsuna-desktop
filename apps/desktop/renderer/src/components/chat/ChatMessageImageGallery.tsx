@@ -1,9 +1,16 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { Dropdown, Image, type MenuProps } from 'antd';
 import { Copy, FolderOpen } from 'lucide-react';
-import type { RuntimeInlineMessageAttachment } from '@setsuna-desktop/contracts';
+import {
+  isRuntimeGeneratedMessageAttachment,
+  isRuntimeInlineMessageAttachment,
+  type DesktopImageInput,
+  type RuntimeGeneratedMessageAttachment,
+  type RuntimeInlineMessageAttachment,
+} from '@setsuna-desktop/contracts';
 
 type ChatImageAction = 'copy' | 'reveal';
+type ChatImageAttachment = RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment;
 type GalleryStyle = CSSProperties & {
   '--chat-image-gallery-columns': number;
   '--chat-image-gallery-width': string;
@@ -19,7 +26,7 @@ export function ChatMessageImageGallery({
   attachments,
   variant,
 }: {
-  attachments: RuntimeInlineMessageAttachment[];
+  attachments: ChatImageAttachment[];
   variant: 'user' | 'assistant';
 }) {
   const [actionStatus, setActionStatus] = useState<string | null>(null);
@@ -31,20 +38,17 @@ export function ChatMessageImageGallery({
     '--chat-image-gallery-width': `${columns * 176 + (columns - 1) * 8}px`,
   };
 
-  const runAction = async (action: ChatImageAction, attachment: RuntimeInlineMessageAttachment) => {
+  const runAction = async (action: ChatImageAction, attachment: ChatImageAttachment) => {
     try {
       const desktop = window.setsunaDesktop?.desktop;
       if (!desktop) {
         setActionStatus('当前环境无法执行图片操作');
         return;
       }
+      const input = desktopImageInput(attachment);
       const result = action === 'copy'
-        ? await desktop.copyImageToClipboard(attachment.url)
-        : await desktop.revealImageInFolder({
-            ...(attachment.localAssetId ? { assetId: attachment.localAssetId } : {}),
-            dataUrl: attachment.url,
-            name: attachment.name,
-          });
+        ? await desktop.copyImageToClipboard(input)
+        : await desktop.revealImageInFolder(input);
       setActionStatus(result.ok
         ? action === 'copy' ? '图片已复制' : '已在文件夹中显示图片'
         : result.error);
@@ -79,9 +83,13 @@ function ChatMessageImage({
   attachment,
   onAction,
 }: {
-  attachment: RuntimeInlineMessageAttachment;
+  attachment: ChatImageAttachment;
   onAction: (action: ChatImageAction) => void;
 }) {
+  const imageRef = useRef<HTMLDivElement>(null);
+  const { loadError, reservedAspectRatio, source } = useChatImageSource(attachment, imageRef);
+  const reservesLayout = !source && reservedAspectRatio !== null;
+
   const items: MenuProps['items'] = [
     {
       key: 'copy',
@@ -105,14 +113,113 @@ function ChatMessageImage({
         onClick: ({ key }) => onAction(key as ChatImageAction),
       }}
     >
-      <div className="chat-message-image" title={attachment.name}>
-        <Image
-          src={attachment.url}
-          alt={attachment.name}
-          className="chat-message-image__content"
-          preview={{ mask: null }}
-        />
+      <div
+        className={`chat-message-image${reservesLayout ? ' chat-message-image--reserved' : ''}`}
+        ref={imageRef}
+        style={reservesLayout ? { aspectRatio: reservedAspectRatio } : undefined}
+        title={attachment.name}
+      >
+        {source ? (
+          <Image
+            src={source}
+            alt={attachment.name}
+            className="chat-message-image__content"
+            preview={{ mask: null }}
+          />
+        ) : (
+          <div className="chat-message-image__placeholder" role={loadError ? 'alert' : 'status'}>
+            {loadError ? '图片不可用' : '正在加载图片'}
+          </div>
+        )}
       </div>
     </Dropdown>
   );
+}
+
+function useChatImageSource(
+  attachment: ChatImageAttachment,
+  targetRef: RefObject<HTMLDivElement | null>,
+): { loadError: string | null; reservedAspectRatio: number | null; source: string | null } {
+  const inlineSource = isRuntimeInlineMessageAttachment(attachment) ? attachment.url : null;
+  const generatedAssetId = isRuntimeGeneratedMessageAttachment(attachment) ? attachment.assetId : null;
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const [generatedSource, setGeneratedSource] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reservedAspectRatio, setReservedAspectRatio] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!generatedAssetId) {
+      setShouldLoad(false);
+      return;
+    }
+    const target = targetRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true);
+      return;
+    }
+    setShouldLoad(false);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const isIntersecting = entry?.isIntersecting === true;
+        if (!isIntersecting) {
+          const bounds = target.getBoundingClientRect();
+          if (bounds.width > 0 && bounds.height > 0) {
+            setReservedAspectRatio(bounds.width / bounds.height);
+          }
+        }
+        setShouldLoad(isIntersecting);
+      },
+      { rootMargin: '480px 0px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [generatedAssetId, targetRef]);
+
+  useEffect(() => {
+    if (!generatedAssetId || !shouldLoad) {
+      setGeneratedSource(null);
+      setLoadError(null);
+      return;
+    }
+    const desktop = window.setsunaDesktop?.desktop;
+    if (!desktop) {
+      setLoadError('当前环境无法读取图片');
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setGeneratedSource(null);
+    setLoadError(null);
+    void desktop.readImageAsset(generatedAssetId)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setLoadError(result.error);
+          return;
+        }
+        const bytes = Uint8Array.from(result.data);
+        objectUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: result.type }));
+        setGeneratedSource(objectUrl);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : '图片读取失败');
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [generatedAssetId, shouldLoad]);
+
+  return { loadError, reservedAspectRatio, source: inlineSource ?? generatedSource };
+}
+
+function desktopImageInput(attachment: ChatImageAttachment): DesktopImageInput {
+  if (isRuntimeGeneratedMessageAttachment(attachment)) {
+    return { assetId: attachment.assetId, name: attachment.name };
+  }
+  return {
+    ...(attachment.localAssetId ? { assetId: attachment.localAssetId } : {}),
+    dataUrl: attachment.url,
+    name: attachment.name,
+  };
 }

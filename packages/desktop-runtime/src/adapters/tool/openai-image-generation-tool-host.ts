@@ -2,17 +2,27 @@ import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_IMAGE_GENERATION_TOOL_NAME,
   type RuntimeMessageAttachment,
+  type RuntimeThread,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeImageGenerationProviderConfig } from '../../ports/config-store.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
-import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
+import type {
+  ToolExecutionContext,
+  ToolExecutionPreview,
+  ToolExecutionResult,
+  ToolHost,
+  ToolTurnCleanupOutcome,
+} from '../../ports/tool-host.js';
+import { managedGeneratedImageAssetIdsFromStore } from '../../utils/generated-image-assets.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import { boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 50 * 1024 * 1024;
+const MAX_ENCODED_IMAGE_CHARS = Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 1_024;
+const MAX_RESPONSE_BYTES = Math.ceil((MAX_TOTAL_IMAGE_BYTES * 4) / 3) + 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 
 type ImageGenerationConfigStore = {
@@ -20,6 +30,16 @@ type ImageGenerationConfigStore = {
 };
 
 type ImageGenerationPluginStore = Pick<PluginBundleStore, 'listPlugins'>;
+
+type GeneratedImageReferenceStore = {
+  listThreads(query?: { includeArchived?: boolean }): Promise<Array<{ id: string }>>;
+  getThread(threadId: string): Promise<Pick<RuntimeThread, 'messages'> | null>;
+};
+
+type OpenAiImageGenerationToolHostOptions = {
+  fetchImpl?: typeof fetch;
+  threadStore?: GeneratedImageReferenceStore;
+};
 
 type OpenAiImageResponseItem = {
   b64_json?: unknown;
@@ -35,8 +55,8 @@ const IMAGE_GENERATION_TOOL: RuntimeToolDefinition = {
     additionalProperties: false,
     properties: {
       prompt: { type: 'string', description: 'A detailed description of the image to generate.' },
-      model: { type: 'string', description: 'Optional model override. Uses the configured model when omitted.' },
-      n: { type: 'integer', minimum: 1, maximum: 10, description: 'Number of images to generate. Defaults to 1.' },
+      model: { type: 'string', description: 'Optional model override. Use only when the user explicitly requests a model.' },
+      n: { type: 'integer', minimum: 1, maximum: 10, description: 'Number of variants for this same prompt. Omit for one image.' },
       size: { type: 'string', description: 'Provider-supported image size, for example 1024x1024.' },
       quality: { type: 'string', description: 'Provider-supported quality, for example auto, standard, hd, low, medium, or high.' },
       background: { type: 'string', description: 'Provider-supported background mode, for example auto, transparent, or opaque.' },
@@ -55,12 +75,19 @@ const IMAGE_GENERATION_TOOL: RuntimeToolDefinition = {
  * 插件本身只负责分发生图意图；卸载插件后本工具会立即从模型能力中消失。
  */
 export class OpenAiImageGenerationToolHost implements ToolHost {
+  private readonly pendingAssetIdsByTurn = new Map<string, Set<string>>();
+  private readonly fetchImpl: typeof fetch;
+  private readonly threadStore?: GeneratedImageReferenceStore;
+
   constructor(
     private readonly configStore: ImageGenerationConfigStore,
     private readonly pluginStore: ImageGenerationPluginStore,
-    private readonly generatedImageStore: GeneratedImageStore | null = null,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    private readonly generatedImageStore: GeneratedImageStore,
+    options: OpenAiImageGenerationToolHostOptions = {},
+  ) {
+    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.threadStore = options.threadStore;
+  }
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     if (context.features?.plugins === false) return [];
@@ -87,7 +114,12 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
   async systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
     if (request && !request.tools.some((tool) => tool.name === OPENAI_IMAGE_GENERATION_TOOL_NAME)) return null;
     return await this.isAvailable()
-      ? 'Use generate_image when the user explicitly asks to create a new image. Put all visual requirements into prompt. Do not ask for or reveal API keys in chat.'
+      ? [
+          'Use generate_image only when the user explicitly asks to create a new image; it does not edit existing images.',
+          'Put the intended use, subject, scene, style, composition, lighting, exact requested text, and constraints into one concise prompt.',
+          'Use n only for variants of the same prompt. Generate distinct assets with separate calls.',
+          'Omit optional provider parameters unless the user requested them or support is known. Never ask for or reveal API keys.',
+        ].join(' ')
       : null;
   }
 
@@ -110,7 +142,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
 
     const args = objectInput(input);
     const prompt = requiredStringArg(args.prompt, 'prompt');
-    const n = boundedIntegerArg(args.n, 1, 1, 10);
+    const n = optionalBoundedIntegerArg(args.n, 1, 10);
     const model = optionalStringArg(args.model) ?? (config.model || undefined);
     const endpoint = imageGenerationEndpoint(config.baseUrl);
     const body = compactObject({
@@ -142,18 +174,24 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     const items = imageResponseItems(payload).slice(0, 10);
     if (!items.length) throw new Error('图片生成服务返回成功，但响应中没有 data 图片。');
     const attachments: RuntimeMessageAttachment[] = [];
+    const storedAssetIds: string[] = [];
     let totalBytes = 0;
-    for (const [index, item] of items.entries()) {
-      const attachment = await this.toAttachment(item, index, endpoint, context.toolCallId, signal);
-      totalBytes += attachment.size;
-      if (totalBytes > MAX_TOTAL_IMAGE_BYTES) throw new Error('本次生成图片总大小超过 50 MB 限制。');
-      attachments.push(attachment);
+    try {
+      for (const [index, item] of items.entries()) {
+        const converted = await this.toAttachment(item, index, endpoint, context.toolCallId, signal, totalBytes);
+        totalBytes += converted.attachment.size;
+        storedAssetIds.push(converted.assetId);
+        attachments.push(converted.attachment);
+      }
+    } catch (error) {
+      await Promise.allSettled(storedAssetIds.map((assetId) => this.generatedImageStore.delete(assetId)));
+      throw error;
     }
     const revisedPrompts = items
       .map((item) => typeof item.revised_prompt === 'string' ? item.revised_prompt.trim() : '')
       .filter(Boolean);
 
-    return {
+    const result: ToolExecutionResult = {
       content: [
         `Generated ${attachments.length} image${attachments.length === 1 ? '' : 's'} successfully.`,
         ...(revisedPrompts.length ? [`Revised prompt: ${revisedPrompts.join('\n')}`] : []),
@@ -168,6 +206,21 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
       },
       containsExternalContext: true,
     };
+    this.trackPendingAssets(context, storedAssetIds);
+    return result;
+  }
+
+  async cleanupTurn(context: ToolExecutionContext, _outcome: ToolTurnCleanupOutcome): Promise<void> {
+    const turnKey = generatedImageTurnKey(context);
+    if (!turnKey) return;
+    const pendingAssetIds = this.pendingAssetIdsByTurn.get(turnKey);
+    this.pendingAssetIdsByTurn.delete(turnKey);
+    const threadStore = this.threadStore;
+    if (!pendingAssetIds?.size || !threadStore) return;
+
+    const referencedAssetIds = await managedGeneratedImageAssetIdsFromStore(threadStore, pendingAssetIds);
+    const orphanedAssetIds = [...pendingAssetIds].filter((assetId) => !referencedAssetIds.has(assetId));
+    await Promise.allSettled(orphanedAssetIds.map((assetId) => this.generatedImageStore.delete(assetId)));
   }
 
   private async isAvailable(): Promise<boolean> {
@@ -185,13 +238,22 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
       : null;
   }
 
+  private trackPendingAssets(context: ToolExecutionContext, assetIds: string[]): void {
+    const turnKey = generatedImageTurnKey(context);
+    if (!turnKey) return;
+    const pending = this.pendingAssetIdsByTurn.get(turnKey) ?? new Set<string>();
+    for (const assetId of assetIds) pending.add(assetId);
+    this.pendingAssetIdsByTurn.set(turnKey, pending);
+  }
+
   private async toAttachment(
     item: OpenAiImageResponseItem,
     index: number,
     endpoint: string,
     toolCallId: string | undefined,
     signal: AbortSignal,
-  ): Promise<RuntimeMessageAttachment> {
+    currentTotalBytes: number,
+  ): Promise<{ assetId: string; attachment: RuntimeMessageAttachment }> {
     const buffer = typeof item.b64_json === 'string' && item.b64_json.trim()
       ? decodeBase64Image(item.b64_json)
       : typeof item.url === 'string' && item.url.trim()
@@ -199,25 +261,34 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
         : null;
     if (!buffer) throw new Error(`图片生成响应中的第 ${index + 1} 项缺少 b64_json 或 url。`);
     if (buffer.byteLength > MAX_IMAGE_BYTES) throw new Error(`第 ${index + 1} 张图片超过 20 MB 限制。`);
+    if (currentTotalBytes + buffer.byteLength > MAX_TOTAL_IMAGE_BYTES) {
+      throw new Error('本次生成图片总大小超过 50 MB 限制。');
+    }
     const mimeType = detectSafeImageMimeType(buffer);
     if (!mimeType) throw new Error(`第 ${index + 1} 张图片不是受支持的 PNG、JPEG、GIF 或 WebP。`);
     const suffix = imageExtension(mimeType);
     const name = `generated-${index + 1}.${suffix}`;
-    const storedImage = await this.generatedImageStore?.create({
+    const storedImage = await this.generatedImageStore.create({
       name,
       type: mimeType,
       data: buffer,
     });
-    return {
+    const baseAttachment = {
       id: `generated_image_${safeIdPart(toolCallId ?? String(Date.now()))}_${index + 1}`,
       name,
       type: mimeType,
       size: buffer.byteLength,
-      url: `data:${mimeType};base64,${buffer.toString('base64')}`,
-      ...(storedImage ? { localAssetId: storedImage.assetId } : {}),
-      modelVisible: false,
+      modelVisible: false as const,
+    };
+    return {
+      assetId: storedImage.assetId,
+      attachment: { ...baseAttachment, source: 'generated', assetId: storedImage.assetId },
     };
   }
+}
+
+function generatedImageTurnKey(context: ToolExecutionContext): string | null {
+  return context.turnId ? `${context.threadId}\u0000${context.turnId}` : null;
 }
 
 export function imageGenerationEndpoint(baseUrl: string): string {
@@ -250,7 +321,7 @@ function combinedSignal(parent?: AbortSignal): AbortSignal {
 }
 
 async function readJsonResponse(response: Response): Promise<unknown> {
-  const text = await response.text();
+  const text = (await readBoundedResponse(response, MAX_RESPONSE_BYTES, '图片生成服务响应超过大小限制。')).toString('utf8');
   if (!text.trim()) return null;
   try {
     return JSON.parse(text) as unknown;
@@ -286,17 +357,40 @@ function imageResponseItems(payload: unknown): OpenAiImageResponseItem[] {
 
 function decodeBase64Image(value: string): Buffer {
   const encoded = value.trim().replace(/^data:image\/[a-z0-9.+-]+;base64,/iu, '');
+  if (encoded.length > MAX_ENCODED_IMAGE_CHARS) throw new Error('生成图片超过 20 MB 限制。');
   return Buffer.from(encoded, 'base64');
 }
 
 async function downloadImage(fetchImpl: typeof fetch, url: string, signal: AbortSignal): Promise<Buffer> {
   const response = await fetchImpl(url, { signal });
   if (!response.ok) throw new Error(`下载生成图片失败（HTTP ${response.status}）。`);
+  return readBoundedResponse(response, MAX_IMAGE_BYTES, '生成图片超过 20 MB 限制。');
+}
+
+async function readBoundedResponse(response: Response, maxBytes: number, tooLargeMessage: string): Promise<Buffer> {
   const announcedSize = Number(response.headers.get('content-length'));
-  if (Number.isFinite(announcedSize) && announcedSize > MAX_IMAGE_BYTES) throw new Error('生成图片超过 20 MB 限制。');
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > MAX_IMAGE_BYTES) throw new Error('生成图片超过 20 MB 限制。');
-  return buffer;
+  if (Number.isFinite(announcedSize) && announcedSize > maxBytes) throw new Error(tooLargeMessage);
+  if (!response.body) return Buffer.alloc(0);
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      totalBytes += chunk.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(tooLargeMessage);
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, totalBytes);
 }
 
 function imageExtension(mimeType: SafeImageMimeType): string {

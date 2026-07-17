@@ -99,6 +99,7 @@ function marketplacePlugin(
     resources: [],
     capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
     installed: false,
+    updateAvailable: false,
     ...input,
   };
 }

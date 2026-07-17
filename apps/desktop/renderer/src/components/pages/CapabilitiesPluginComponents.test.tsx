@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
 import { CapabilitiesInstalledPluginListItem } from './CapabilitiesInstalledPluginListItem.js';
 import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
 import { CapabilitiesPluginEditorial } from './CapabilitiesPluginEditorial.js';
@@ -55,6 +56,7 @@ describe('capabilities plugin components', () => {
           resources: [],
           capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
           installed: false,
+          updateAvailable: false,
         }}
         installing={false}
         onInstall={async () => undefined}
@@ -69,6 +71,73 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('desktop-capability-card');
     expect(html).not.toContain('目录');
     expect(html).not.toContain('plugin.json');
+  });
+
+  it('offers an update for an installed marketplace plugin with a newer bundled version', () => {
+    const marketplacePlugin = {
+      id: 'openai-image-generation',
+      name: '图片生成',
+      icon: 'image-generation',
+      version: '1.0.1',
+      description: '通过 Images API 生成图片。',
+      publisher: 'Setsuna',
+      tags: ['图片'],
+      featured: true,
+      skills: [{ id: 'openai-image-generation.image-generation', name: '图片生成' }],
+      mcpServers: [],
+      hooks: [],
+      resources: [],
+      capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+      installed: true,
+      installedVersion: '1.0.0',
+      updateAvailable: true,
+    } satisfies RuntimePluginMarketplaceItem;
+    const rowHtml = renderToStaticMarkup(
+      <CapabilitiesPluginListItem
+        plugin={marketplacePlugin}
+        installing={false}
+        onInstall={async () => undefined}
+        onOpen={() => undefined}
+      />,
+    );
+    const loadingRowHtml = renderToStaticMarkup(
+      <CapabilitiesPluginListItem
+        plugin={marketplacePlugin}
+        installing
+        onInstall={async () => undefined}
+        onOpen={() => undefined}
+      />,
+    );
+    const detailHtml = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        installedPlugin={{
+          id: marketplacePlugin.id,
+          name: marketplacePlugin.name,
+          icon: marketplacePlugin.icon,
+          version: '1.0.0',
+          installedAt: '2026-07-17T00:00:00.000Z',
+          skills: marketplacePlugin.skills,
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+        }}
+        installing={false}
+        marketplacePlugin={marketplacePlugin}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+      />,
+    );
+
+    expect(rowHtml).toContain('aria-label="更新：图片生成"');
+    expect(rowHtml).not.toContain('disabled=""');
+    expect(loadingRowHtml).toContain('aria-label="更新中：图片生成"');
+    expect(loadingRowHtml).toContain('disabled=""');
+    expect(detailHtml).toContain('更新到 v1.0.1');
+    expect(detailHtml).toContain('卸载');
   });
 
   it('renders a featured plugin as editorial artwork instead of a card', () => {
@@ -89,6 +158,7 @@ describe('capabilities plugin components', () => {
           resources: [],
           capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
           installed: false,
+          updateAvailable: false,
         }}
         installing={false}
         onInstall={async () => undefined}
@@ -122,6 +192,7 @@ describe('capabilities plugin components', () => {
           resources: [],
           capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
           installed: false,
+          updateAvailable: false,
         }}
         removing={false}
         onBack={() => undefined}
@@ -166,6 +237,7 @@ describe('capabilities plugin components', () => {
           resources: [],
           capabilities: { skills: 0, mcpServers: 0, hooks: 1, resources: 0 },
           installed: false,
+          updateAvailable: false,
         }}
         removing={false}
         onBack={() => undefined}

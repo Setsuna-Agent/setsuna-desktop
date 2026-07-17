@@ -105,6 +105,7 @@ export type RuntimePluginMarketplaceItem = {
   };
   installed: boolean;
   installedVersion?: string;
+  updateAvailable: boolean;
 };
 
 export type RuntimePluginMarketplaceList = {

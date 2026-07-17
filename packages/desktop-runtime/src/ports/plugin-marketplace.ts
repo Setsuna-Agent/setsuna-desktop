@@ -9,4 +9,5 @@ export type PluginMarketplace = {
   listPlugins(): Promise<RuntimePluginMarketplaceList>;
   readItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
   installPlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
+  updatePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
 };

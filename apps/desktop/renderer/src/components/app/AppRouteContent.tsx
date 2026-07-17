@@ -189,6 +189,7 @@ export function AppRouteContent({
         onLoginMcpServer={runtime.loginMcpServer}
         onLogoutMcpServer={runtime.logoutMcpServer}
         onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
+        onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
         onRemovePlugin={runtime.removePlugin}
         onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
       />

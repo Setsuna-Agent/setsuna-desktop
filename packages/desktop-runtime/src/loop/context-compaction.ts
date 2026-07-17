@@ -1,4 +1,4 @@
-import { isRuntimeStoredMessageAttachment, type RuntimeContextCompactionNotice, type RuntimeMessage, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { isRuntimeInlineMessageAttachment, isRuntimeStoredMessageAttachment, type RuntimeContextCompactionNotice, type RuntimeMessage, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { neutralizePromptClosingTags } from './prompt-utils.js';
 
 export const CONTEXT_COMPACTION_MAX_TOKENS_K = 256;
@@ -322,7 +322,9 @@ function estimateMessageTokens(message: RuntimeMessage): number {
     if (isRuntimeStoredMessageAttachment(attachment)) {
       return total + estimateTextTokens(`${attachment.name} ${attachment.type} ${attachment.size}`);
     }
-    if (!attachment.url.startsWith('data:')) return total + estimateTextTokens(`${attachment.name} ${attachment.type}`);
+    if (!isRuntimeInlineMessageAttachment(attachment) || !attachment.url.startsWith('data:')) {
+      return total + estimateTextTokens(`${attachment.name} ${attachment.type} ${attachment.size}`);
+    }
     return total + estimateTextTokens(attachment.url);
   }, 0);
   const toolCallTokens = message.toolCalls?.length

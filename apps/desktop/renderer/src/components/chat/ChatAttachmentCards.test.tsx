@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { RuntimeInlineMessageAttachment, RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
+import type { RuntimeGeneratedMessageAttachment, RuntimeInlineMessageAttachment, RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
 import { ChatAttachmentTray } from './ChatAttachmentTray.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
 import { chatImageGalleryColumns } from './ChatMessageImageGallery.js';
@@ -59,6 +59,24 @@ describe('chat attachment cards', () => {
     expect(html).toContain('chat-image-gallery--multiple');
     expect(html).toContain('--chat-image-gallery-columns:2');
     expect(html.match(/class="ant-image-img/g)).toHaveLength(2);
+  });
+
+  it('renders generated asset references without requiring persisted Base64 data', () => {
+    const generated: RuntimeGeneratedMessageAttachment = {
+      id: 'generated_1',
+      source: 'generated',
+      assetId: 'generated_image_asset_1',
+      name: 'generated-1.png',
+      type: 'image/png',
+      size: 1024,
+      modelVisible: false,
+    };
+
+    const html = renderToStaticMarkup(<ChatMessageAttachments attachments={[generated]} variant="assistant" />);
+
+    expect(html).toContain('chat-image-gallery--single');
+    expect(html).toContain('正在加载图片');
+    expect(html).not.toContain('data:image');
   });
 
   it('uses balanced gallery columns for common image counts', () => {

@@ -3,7 +3,7 @@ import type { RuntimeMemoryCitation } from './memory.js';
 import type { RuntimeHookSource } from './config.js';
 import type { RuntimeUsage } from './usage.js';
 import type { RuntimeApprovalAvailableDecision, RuntimeExecPolicyAmendment, RuntimeMcpElicitation, RuntimeNetworkApprovalContext, RuntimeNetworkPolicyAmendment, RuntimePermissionApprovalContext, RuntimeUserInputRequest } from './approvals.js';
-import type { RuntimeMessageAttachment } from './attachments.js';
+import type { RuntimeInputMessageAttachment, RuntimeMessageAttachment } from './attachments.js';
 import type { RuntimePluginReference } from './plugins.js';
 
 export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool';
@@ -285,7 +285,7 @@ export type RuntimeCollaborationMode = 'default' | 'plan';
 export type SendTurnInput = {
   input: string;
   clientId?: string;
-  attachments?: RuntimeMessageAttachment[];
+  attachments?: RuntimeInputMessageAttachment[];
   collaborationMode?: RuntimeCollaborationMode;
   planDecision?: RuntimePlanDecision;
   skillIds?: string[];
@@ -297,7 +297,7 @@ export type SteerTurnInput = {
   input: string;
   expectedTurnId: string;
   clientId?: string;
-  attachments?: RuntimeMessageAttachment[];
+  attachments?: RuntimeInputMessageAttachment[];
   skillIds?: string[];
   thinking?: boolean;
   thinkingEffort?: string;

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -152,6 +152,141 @@ describe('file plugin bundle store', () => {
     ]);
   });
 
+  it('updates staged Skill and Hook content while clearing stale Hook trust', async () => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+
+    const originalHook = discoverRuntimeHooks(await runtime.config.getConfig()).hooks[0];
+    expect(originalHook).toBeDefined();
+    const config = await runtime.config.getConfig();
+    await runtime.config.saveConfig({
+      hooks: {
+        ...(config.hooks ?? {}),
+        state: {
+          ...(config.hooks?.state ?? {}),
+          [originalHook.key]: { trustedHash: originalHook.currentHash },
+        },
+      },
+    });
+    expect(discoverRuntimeHooks(await runtime.config.getConfig()).hooks[0]?.trustStatus).toBe('trusted');
+
+    await writeFile(path.join(fixture.bundleDir, 'skills', 'docs-helper', 'SKILL.md'), [
+      '---',
+      'name: Updated Docs Helper',
+      'description: Reads the updated bundled documentation.',
+      '---',
+      '',
+      '# Updated Docs Helper',
+      '',
+      'Use the updated bundled docs.',
+    ].join('\n'));
+    await writeFile(path.join(fixture.bundleDir, 'hooks', 'post.mjs'), 'process.stdout.write("updated");\n');
+    await patchPluginManifest(fixture.bundleDir, { version: '1.1.0' });
+
+    const updated = await runtime.plugins.updatePlugin({ path: fixture.bundleDir });
+
+    expect(updated.plugin).toMatchObject({
+      id: 'demo',
+      version: '1.1.0',
+      skills: [{
+        id: 'demo.docs-helper',
+        name: 'Updated Docs Helper',
+        description: 'Reads the updated bundled documentation.',
+      }],
+    });
+    await expect(runtime.skills.getSkill('demo.docs-helper')).resolves.toMatchObject({
+      content: expect.stringContaining('Use the updated bundled docs.'),
+    });
+    await expect(runtime.plugins.readItemContent('demo', 'hook', 'audit-read')).resolves.toMatchObject({
+      files: [expect.objectContaining({ text: 'process.stdout.write("updated");\n' })],
+    });
+    const updatedHook = discoverRuntimeHooks(await runtime.config.getConfig()).hooks[0];
+    expect(updatedHook.currentHash).toBe(originalHook.currentHash);
+    expect(updatedHook.trustStatus).toBe('untrusted');
+    expect((await runtime.config.getConfig()).hooks?.state?.[originalHook.key]).toBeUndefined();
+  });
+
+  it('rolls back the bundle and MCP state when an update integration fails', async () => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+
+    await writeFile(path.join(fixture.bundleDir, 'skills', 'docs-helper', 'SKILL.md'), [
+      '---',
+      'name: Broken Update',
+      '---',
+      '',
+      'This content must not become active.',
+    ].join('\n'));
+    const manifest = await readPluginManifestFixture(fixture.bundleDir);
+    (manifest.mcpServers as Array<Record<string, unknown>>)[0].url = 'https://updated.example/mcp';
+    (manifest.hooks as Array<Record<string, unknown>>)[0].matcher = 'write_file';
+    manifest.version = '2.0.0';
+    await writePluginManifestFixture(fixture.bundleDir, manifest);
+    const originalSaveConfig = runtime.config.saveConfig.bind(runtime.config);
+    const saveConfig = vi.spyOn(runtime.config, 'saveConfig').mockImplementationOnce(async (input) => {
+      await originalSaveConfig(input);
+      throw new Error('config write failed');
+    });
+    const upsertServer = vi.spyOn(runtime.mcp, 'upsertServer');
+
+    await expect(runtime.plugins.updatePlugin({ path: fixture.bundleDir })).rejects.toThrow('config write failed');
+    saveConfig.mockRestore();
+    expect(upsertServer).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://updated.example/mcp' }));
+    expect(upsertServer).toHaveBeenLastCalledWith(expect.objectContaining({ url: 'https://docs.example/mcp' }));
+    upsertServer.mockRestore();
+
+    await expect(runtime.skills.getSkill('demo.docs-helper')).resolves.toMatchObject({
+      name: 'Plugin Docs Helper',
+      content: expect.stringContaining('Use the bundled docs'),
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [expect.objectContaining({ id: 'demo', version: '1.0.0' })],
+    });
+    await expect(runtime.mcp.listServerInputs()).resolves.toEqual([
+      expect.objectContaining({ key: 'plugin_docs', url: 'https://docs.example/mcp' }),
+    ]);
+    expect(discoverRuntimeHooks(await runtime.config.getConfig()).hooks).toEqual([
+      expect.objectContaining({ pluginId: 'demo', matcher: 'read_file' }),
+    ]);
+    await expect(readdir(path.join(runtime.dataDir, 'plugins'))).resolves.toEqual(['demo']);
+  });
+
+  it('preserves a user-modified owned MCP server across update and later removal', async () => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    await runtime.mcp.updateServer('plugin_docs', { url: 'https://user-modified.example/mcp' });
+
+    const manifest = await readPluginManifestFixture(fixture.bundleDir);
+    (manifest.mcpServers as Array<Record<string, unknown>>)[0].url = 'https://plugin-v2.example/mcp';
+    manifest.version = '1.1.0';
+    await writePluginManifestFixture(fixture.bundleDir, manifest);
+
+    await expect(runtime.plugins.updatePlugin({ path: fixture.bundleDir })).resolves.toMatchObject({
+      plugin: {
+        id: 'demo',
+        version: '1.1.0',
+        mcpServers: [expect.objectContaining({ key: 'plugin_docs', owned: true })],
+      },
+    });
+    await expect(runtime.mcp.listServerInputs()).resolves.toEqual([
+      expect.objectContaining({ key: 'plugin_docs', url: 'https://user-modified.example/mcp' }),
+    ]);
+    expect((await runtime.plugins.listInstalledRecords())[0].mcpServerInputs).toEqual([
+      expect.objectContaining({ key: 'plugin_docs', url: 'https://plugin-v2.example/mcp' }),
+    ]);
+
+    await expect(runtime.plugins.removePlugin('demo')).resolves.toMatchObject({
+      removedMcpServers: [],
+      preservedMcpServers: ['plugin_docs'],
+    });
+    await expect(runtime.mcp.listServerInputs()).resolves.toEqual([
+      expect.objectContaining({ key: 'plugin_docs', url: 'https://user-modified.example/mcp' }),
+    ]);
+  });
+
   it('rejects credential-bearing manifests before copying or mutating stores', async () => {
     const fixture = await createPluginFixture();
     const manifestPath = path.join(fixture.bundleDir, '.setsuna-plugin', 'plugin.json');
@@ -200,7 +335,19 @@ async function createPluginRuntime(root: string) {
   const config = new FileConfigStore(dataDir);
   const invalidateServer = vi.fn(async () => undefined);
   const plugins = new FilePluginBundleStore(dataDir, skills, mcp, { invalidateServer }, config, systemClock);
-  return { config, invalidateServer, mcp, plugins, skills };
+  return { config, dataDir, invalidateServer, mcp, plugins, skills };
+}
+
+async function readPluginManifestFixture(bundleDir: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(path.join(bundleDir, '.setsuna-plugin', 'plugin.json'), 'utf8')) as Record<string, unknown>;
+}
+
+async function writePluginManifestFixture(bundleDir: string, manifest: Record<string, unknown>): Promise<void> {
+  await writeFile(path.join(bundleDir, '.setsuna-plugin', 'plugin.json'), JSON.stringify(manifest, null, 2));
+}
+
+async function patchPluginManifest(bundleDir: string, patch: Record<string, unknown>): Promise<void> {
+  await writePluginManifestFixture(bundleDir, { ...await readPluginManifestFixture(bundleDir), ...patch });
 }
 
 async function createPluginFixture(parent?: string): Promise<{ root: string; bundleDir: string }> {
@@ -223,7 +370,7 @@ async function createPluginFixture(parent?: string): Promise<{ root: string; bun
       '# Plugin Docs Helper',
       '',
       'Use the bundled docs.',
-    ].join('\n')),
+    ].join('\r\n')),
     writeFile(path.join(bundleDir, 'hooks', 'post.mjs'), 'process.exit(0);\n'),
     writeFile(path.join(bundleDir, 'resources', 'guide.md'), '# Bundled guide\n'),
     writeFile(path.join(bundleDir, 'resources', 'logo.png'), ONE_PIXEL_PNG),

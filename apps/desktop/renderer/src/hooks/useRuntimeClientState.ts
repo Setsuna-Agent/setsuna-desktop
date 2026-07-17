@@ -789,6 +789,12 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     return result;
   }, [client, refreshPluginCapabilities]);
 
+  const updateMarketplacePlugin = useCallback(async (pluginId: string): Promise<RuntimePluginInstallResult> => {
+    const result = await client.updateMarketplacePlugin(pluginId);
+    await refreshPluginCapabilities();
+    return result;
+  }, [client, refreshPluginCapabilities]);
+
   const removePlugin = useCallback(async (pluginId: string): Promise<void> => {
     await client.removePlugin(pluginId);
     await refreshPluginCapabilities();
@@ -877,6 +883,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     loadState,
     loginMcpServer,
     installMarketplacePlugin,
+    updateMarketplacePlugin,
     installSkillMcpDependencies,
     mcpState,
     memories,

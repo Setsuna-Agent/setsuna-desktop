@@ -110,6 +110,7 @@ export type DesktopRuntimeClient = {
   getPluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
   getMarketplacePluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
   installMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
+  updateMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;

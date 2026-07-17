@@ -10,12 +10,16 @@ export function CapabilitiesPluginInstallButton({
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   plugin: RuntimePluginMarketplaceItem;
 }) {
-  const disabled = plugin.installed || installing;
-  const label = plugin.installed ? '已安装' : installing ? '获取中' : '获取';
+  const updateAvailable = plugin.installed && plugin.updateAvailable;
+  const disabled = (plugin.installed && !updateAvailable) || installing;
+  const label = installing
+    ? updateAvailable ? '更新中' : '获取中'
+    : updateAvailable ? '更新'
+      : plugin.installed ? '已安装' : '获取';
 
   return (
     <button
-      className={`desktop-plugin-market__get${plugin.installed ? ' is-installed' : ''}`}
+      className={`desktop-plugin-market__get${plugin.installed && !updateAvailable ? ' is-installed' : ''}`}
       type="button"
       aria-label={`${label}：${plugin.name}`}
       disabled={disabled}

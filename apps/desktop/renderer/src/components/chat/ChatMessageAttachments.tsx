@@ -1,5 +1,7 @@
 import {
+  isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
+  type RuntimeGeneratedMessageAttachment,
   type RuntimeInlineMessageAttachment,
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
@@ -14,10 +16,12 @@ export function ChatMessageAttachments({
   attachments: RuntimeMessageAttachment[];
   variant?: 'user' | 'assistant';
 }) {
-  const imageAttachments = attachments.filter((attachment): attachment is RuntimeInlineMessageAttachment => (
-    isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/')
+  const imageAttachments = attachments.filter((attachment): attachment is RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment => (
+    attachment.type.startsWith('image/')
+    && (isRuntimeGeneratedMessageAttachment(attachment) || isRuntimeInlineMessageAttachment(attachment))
   ));
-  const fileAttachments = attachments.filter((attachment) => !imageAttachments.includes(attachment as RuntimeInlineMessageAttachment));
+  const imageAttachmentIds = new Set(imageAttachments.map((attachment) => attachment.id));
+  const fileAttachments = attachments.filter((attachment) => !imageAttachmentIds.has(attachment.id));
   return (
     <div className={`chat-user-message-attachments chat-user-message-attachments--${variant}`} aria-label="消息附件">
       <ChatMessageImageGallery attachments={imageAttachments} variant={variant} />

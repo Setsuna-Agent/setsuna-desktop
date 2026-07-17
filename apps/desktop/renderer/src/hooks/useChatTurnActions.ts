@@ -1,5 +1,13 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
-import type { DesktopRuntimeClient, RuntimeCollaborationMode, RuntimeMessageAttachment, RuntimePlanDecision, RuntimeThread } from '@setsuna-desktop/contracts';
+import {
+  isRuntimeInputMessageAttachment,
+  type DesktopRuntimeClient,
+  type RuntimeCollaborationMode,
+  type RuntimeInputMessageAttachment,
+  type RuntimeMessageAttachment,
+  type RuntimePlanDecision,
+  type RuntimeThread,
+} from '@setsuna-desktop/contracts';
 
 export function useChatTurnActions({
   activeProjectId,
@@ -31,7 +39,7 @@ export function useChatTurnActions({
   const sendInput = useCallback(
     async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
       const input = (value ?? draft).trim();
-      const attachments = options.attachments ?? [];
+      const attachments = (options.attachments ?? []).filter(isRuntimeInputMessageAttachment);
       if (!input && !attachments.length && !options.planDecision) return false;
       // 计划决策只能针对已有线程里的 awaiting 计划，没有线程时无从裁决。
       if (options.planDecision && !currentThread) return false;
@@ -181,7 +189,7 @@ async function steerActiveTurn({
   threadId,
 }: {
   activeTurnId: string;
-  attachments: RuntimeMessageAttachment[];
+  attachments: RuntimeInputMessageAttachment[];
   client: DesktopRuntimeClient;
   input: string;
   skillIds?: string[];

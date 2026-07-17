@@ -166,6 +166,14 @@ export async function handleRuntimeRestRequest(
     return true;
   }
 
+  const marketplaceUpdateMatch = url.pathname.match(/^\/v1\/plugin-marketplace\/([^/]+)\/update$/u);
+  if (marketplaceUpdateMatch && request.method === 'POST') {
+    sendJson(response, 200, await runtime.pluginMarketplace.updatePlugin(
+      assertSafeRuntimeId(decodeURIComponent(marketplaceUpdateMatch[1]), 'plugin id'),
+    ));
+    return true;
+  }
+
   const pluginMatch = url.pathname.match(/^\/v1\/plugins\/([^/]+)$/u);
   const pluginItemMatch = url.pathname.match(/^\/v1\/plugins\/([^/]+)\/items\/([^/]+)\/([^/]+)$/u);
   if (pluginItemMatch && request.method === 'GET') {
