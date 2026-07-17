@@ -14,7 +14,8 @@ describe('RuntimePluginUses', () => {
     expect(html).toContain('正在使用插件');
     expect(html).toContain('Word 文档处理');
     expect(html).toContain('aria-live="polite"');
-    expect(html).toContain('chat-plugin-use__icon');
+    expect(html).toContain('desktop-plugin-icon--inline');
+    expect(html).toContain('data-plugin-icon="documents"');
   });
 
   it('uses completed wording for historical turns', () => {
@@ -23,6 +24,7 @@ describe('RuntimePluginUses', () => {
     );
 
     expect(html).toContain('已使用插件');
+    expect(html).toContain('data-plugin-icon="plugin"');
     expect(html).not.toContain('aria-live');
   });
 });

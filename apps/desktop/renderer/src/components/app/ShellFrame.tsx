@@ -249,7 +249,7 @@ function windowMenuDefinitions(actions: WindowMenuActions): Record<WindowMenuKey
     ],
     view: [
       menuItem('toggle-sidebar', '切换侧栏', actions.onToggleSidebar),
-      menuItem('capabilities', '能力', actions.onOpenCapabilities),
+      menuItem('capabilities', '插件', actions.onOpenCapabilities),
     ],
     help: [
       menuItem('about', '关于 Setsuna Desktop', () => {

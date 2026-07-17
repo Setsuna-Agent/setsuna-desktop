@@ -96,9 +96,9 @@ describe('capabilities plugin components', () => {
       />,
     );
 
-    expect(html).toContain('编辑推荐');
     expect(html).toContain('desktop-plugin-editorial__art');
     expect(html).toContain('获取');
+    expect(html).not.toContain('编辑推荐');
     expect(html).not.toContain('desktop-capability-card');
   });
 

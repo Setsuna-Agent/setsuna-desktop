@@ -495,6 +495,12 @@
   border-radius: 9px;
 }
 
+.desktop-plugin-icon--inline {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+}
+
 .desktop-plugin-icon--detail {
   width: 64px;
   height: 64px;
@@ -592,14 +598,6 @@
   color: inherit;
   background: transparent;
   text-align: left;
-}
-
-.desktop-plugin-editorial__eyebrow {
-  color: var(--app-primary);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.025em;
-  line-height: 17px;
 }
 
 .desktop-plugin-editorial__title,

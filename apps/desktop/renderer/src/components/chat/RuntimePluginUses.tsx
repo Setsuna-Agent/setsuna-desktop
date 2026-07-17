@@ -1,4 +1,4 @@
-import { Blocks } from 'lucide-react';
+import { CapabilitiesPluginIcon } from '../pages/CapabilitiesPluginIcon.js';
 import type { RuntimePluginUse } from './runtimePluginUsage.js';
 
 export function RuntimePluginUses({
@@ -20,9 +20,7 @@ export function RuntimePluginUses({
       <span className="chat-plugin-uses__list">
         {plugins.map((plugin) => (
           <span className="chat-plugin-use" key={plugin.id} title={`插件：${plugin.name}`}>
-            <span className="chat-plugin-use__icon" aria-hidden="true">
-              <Blocks size={11} strokeWidth={2} />
-            </span>
+            <CapabilitiesPluginIcon name={plugin.icon} variant="inline" />
             <span className="chat-plugin-use__name">{plugin.name}</span>
           </span>
         ))}

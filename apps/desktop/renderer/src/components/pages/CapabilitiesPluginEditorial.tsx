@@ -18,7 +18,6 @@ export function CapabilitiesPluginEditorial({
   return (
     <article className="desktop-plugin-editorial" data-plugin-id={plugin.id}>
       <button className="desktop-plugin-editorial__copy" type="button" onClick={() => onOpen(plugin)}>
-        <span className="desktop-plugin-editorial__eyebrow">{plugin.publisher || 'Setsuna'} 编辑推荐</span>
         <strong className="desktop-plugin-editorial__title">{plugin.name}</strong>
         <span className="desktop-plugin-editorial__description">{plugin.description || '为 Setsuna 加入一种新的工作方式。'}</span>
       </button>
