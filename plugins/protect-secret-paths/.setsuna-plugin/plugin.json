@@ -7,7 +7,7 @@
   "description": "读取、写入或修改参数中出现密钥与凭证文件路径时直接拦截。",
   "publisher": "Setsuna",
   "tags": ["安全", "密钥", "文件"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "protect-secret-paths",

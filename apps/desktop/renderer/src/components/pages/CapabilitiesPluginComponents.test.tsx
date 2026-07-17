@@ -1,14 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CapabilitiesPluginCard } from './CapabilitiesPluginCard.js';
+import { CapabilitiesInstalledPluginListItem } from './CapabilitiesInstalledPluginListItem.js';
 import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
+import { CapabilitiesPluginEditorial } from './CapabilitiesPluginEditorial.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
-import { CapabilitiesPluginMarketCard } from './CapabilitiesPluginMarketCard.js';
+import { CapabilitiesPluginListItem } from './CapabilitiesPluginListItem.js';
 
 describe('capabilities plugin components', () => {
-  it('renders installed capability ownership and a safe uninstall action', () => {
+  it('renders an installed local plugin as a lightweight list row', () => {
     const html = renderToStaticMarkup(
-      <CapabilitiesPluginCard
+      <CapabilitiesInstalledPluginListItem
         plugin={{
           id: 'demo',
           name: 'Demo Plugin',
@@ -24,22 +25,20 @@ describe('capabilities plugin components', () => {
           hookCount: 1,
           resources: [{ id: 'guide', label: 'Guide', path: 'resources/guide.md', size: 8 }],
         }}
-        removing={false}
         onOpen={() => undefined}
-        onRemove={async () => undefined}
       />,
     );
 
     expect(html).toContain('Demo Plugin');
-    expect(html).toContain('1 个技能');
-    expect(html).toContain('1 个服务连接');
-    expect(html).toContain('1 项自动化');
-    expect(html).toContain('卸载');
+    expect(html).toContain('已安装');
+    expect(html).toContain('查看');
+    expect(html).not.toContain('desktop-capability-card');
+    expect(html).not.toContain('卸载');
   });
 
-  it('renders a one-click marketplace card without asking for a local path', () => {
+  it('renders a one-click marketplace row without card chrome or local paths', () => {
     const html = renderToStaticMarkup(
-      <CapabilitiesPluginMarketCard
+      <CapabilitiesPluginListItem
         plugin={{
           id: 'openai-docs',
           name: 'OpenAI 官方文档',
@@ -63,10 +62,41 @@ describe('capabilities plugin components', () => {
 
     expect(html).toContain('OpenAI 官方文档');
     expect(html).toContain('1 个技能');
-    expect(html).toContain('1 个服务连接');
-    expect(html).toContain('安装');
+    expect(html).toContain('1 个服务');
+    expect(html).toContain('获取');
+    expect(html).not.toContain('desktop-capability-card');
     expect(html).not.toContain('目录');
     expect(html).not.toContain('plugin.json');
+  });
+
+  it('renders a featured plugin as editorial artwork instead of a card', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginEditorial
+        plugin={{
+          id: 'pdf',
+          name: 'PDF 文档处理',
+          icon: 'pdf',
+          version: '1.0.0',
+          description: '读取、创建和验证 PDF。',
+          publisher: 'Setsuna',
+          tags: ['PDF'],
+          featured: true,
+          skills: [{ id: 'pdf.pdf', name: 'PDF' }],
+          mcpServers: [],
+          hooks: [],
+          capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+          installed: false,
+        }}
+        installing={false}
+        onInstall={async () => undefined}
+        onOpen={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('编辑推荐');
+    expect(html).toContain('desktop-plugin-editorial__art');
+    expect(html).toContain('获取');
+    expect(html).not.toContain('desktop-capability-card');
   });
 
   it('shows the skills and MCP servers included in a marketplace plugin before installation', () => {

@@ -7,7 +7,7 @@
   "description": "查询第三方库和框架的最新、版本相关文档与代码示例。",
   "publisher": "Upstash",
   "tags": ["开发文档", "代码示例", "Context7"],
-  "featured": true,
+  "featured": false,
   "skills": ["skills/context7-docs"],
   "mcpServers": [
     {

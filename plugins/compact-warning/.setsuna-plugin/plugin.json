@@ -7,7 +7,7 @@
   "description": "上下文自动或手动压缩时，在 Hook 记录里标记触发来源。",
   "publisher": "Setsuna",
   "tags": ["上下文", "压缩", "调试"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "compact-warning",

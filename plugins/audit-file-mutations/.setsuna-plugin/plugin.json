@@ -7,7 +7,7 @@
   "description": "文件写入或修改完成后留下 review 提醒，不阻断后续流程。",
   "publisher": "Setsuna",
   "tags": ["审计", "Review", "文件"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "audit-file-mutations",

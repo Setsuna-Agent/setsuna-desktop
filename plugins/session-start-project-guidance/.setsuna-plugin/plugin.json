@@ -7,7 +7,7 @@
   "description": "会话启动、恢复、清空或压缩后，提醒模型优先遵守工作区约定。",
   "publisher": "Setsuna",
   "tags": ["上下文", "AGENTS.md", "项目规范"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "session-start-project-guidance",

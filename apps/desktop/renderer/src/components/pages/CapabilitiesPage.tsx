@@ -1,12 +1,11 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { BookOpen, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, Puzzle, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import { BookOpen, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, Puzzle, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
-import { CapabilitiesPluginCard } from './CapabilitiesPluginCard.js';
 import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
-import { CapabilitiesPluginMarketCard } from './CapabilitiesPluginMarketCard.js';
+import { CapabilitiesPluginMarket } from './CapabilitiesPluginMarket.js';
 import { pluginMatchesQuery } from './pluginDisplay.js';
 
 type McpDraft = {
@@ -683,15 +682,19 @@ export function CapabilitiesPage({
 
   return (
     <main className="capabilities-page desktop-capabilities-panel">
-      <section className="desktop-capabilities-panel__inner">
+      <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}`}>
         <header className="desktop-capabilities-header">
           <div className="desktop-capabilities-title">
-            <h2>能力</h2>
+            <h2>{capabilityFilter === 'plugins' ? '插件市场' : '能力'}</h2>
           </div>
           <div className="desktop-capabilities-actions">
             <div className="desktop-capabilities-search">
               <Search size={14} />
-              <input value={capabilityQuery} onChange={(event) => setCapabilityQuery(event.target.value)} placeholder="搜索能力..." />
+              <input
+                value={capabilityQuery}
+                onChange={(event) => setCapabilityQuery(event.target.value)}
+                placeholder={capabilityFilter === 'plugins' ? '搜索插件...' : '搜索能力...'}
+              />
             </div>
             <IconButton label="Refresh capabilities" onClick={() => void (capabilityFilter === 'hooks' ? onRefreshHooks() : onRefresh())}>
               <RefreshCw size={15} />
@@ -741,23 +744,14 @@ export function CapabilitiesPage({
           <button className={capabilityFilter === 'hooks' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('hooks')}>
             Hooks
           </button>
-          <span>{servers.length} MCP · {enabledSkillCount}/{skills.length} 技能启用 · {selectedSkillCount} 默认 · {executableHookCount}/{hooks.length} Hooks 可执行 · {plugins.length} 个插件</span>
+          <span>
+            {capabilityFilter === 'plugins'
+              ? `${pluginMarketplace.length} 个插件 · ${plugins.length} 个已安装`
+              : `${servers.length} MCP · ${enabledSkillCount}/${skills.length} 技能启用 · ${selectedSkillCount} 默认 · ${executableHookCount}/${hooks.length} Hooks 可执行`}
+          </span>
         </div>
 
-        {capabilityFilter === 'plugins' ? (
-          <div className="desktop-capabilities-plugin-market-hero">
-            <div className="desktop-capabilities-plugin-market-hero__copy">
-              <span><Sparkles size={13} /> Setsuna 精选</span>
-              <h3>把完整工作流装进 Setsuna</h3>
-              <p>安装前先看清每个插件包含的技能与 MCP。安装、更新本机配置或访问外部服务时，仍遵循原有校验和授权策略。</p>
-            </div>
-            <div className="desktop-capabilities-plugin-market-hero__metrics" aria-label="插件市场统计">
-              <span><strong>{pluginMarketplace.length}</strong> 个精选</span>
-              <span><strong>{plugins.length}</strong> 个已安装</span>
-              <Puzzle size={34} />
-            </div>
-          </div>
-        ) : (
+        {capabilityFilter !== 'plugins' ? (
           <div className="desktop-capabilities-usage-note">
             <Info size={14} />
             <span>
@@ -768,9 +762,9 @@ export function CapabilitiesPage({
                   : 'Hook 是本地命令触发器。这里仅展示已配置的 Hook；推荐自动化从插件市场按需安装，也可以手动创建。新命令需要信任当前 hash 才会执行。'}
             </span>
           </div>
-        )}
+        ) : null}
 
-        <div className="desktop-capabilities-grid">
+        <div className={`desktop-capabilities-grid${capabilityFilter === 'plugins' ? ' desktop-capabilities-grid--market' : ''}`}>
           {capabilityFilter === 'mcp'
             ? visibleServers.map((server) => {
                 const endpoint = server.transport === 'stdio' ? [server.command, ...server.args].filter(Boolean).join(' ') : server.url;
@@ -989,34 +983,17 @@ export function CapabilitiesPage({
                 );
               })
             : null}
-          {capabilityFilter === 'plugins'
-            ? visibleMarketplacePlugins.map((plugin) => (
-              <CapabilitiesPluginMarketCard
-                key={`marketplace:${plugin.id}`}
-                plugin={plugin}
-                installing={installingPluginIds.has(plugin.id)}
-                onInstall={installMarketplacePlugin}
-                onOpen={openPluginDetail}
-              />
-            ))
-            : null}
-          {capabilityFilter === 'plugins' && visibleLocalPlugins.length ? (
-            <div className="desktop-capabilities-plugin-local-heading">
-              <strong>本地已安装</strong>
-              <span>不属于当前精选市场的插件</span>
-            </div>
+          {capabilityFilter === 'plugins' && (visibleMarketplacePlugins.length || visibleLocalPlugins.length) ? (
+            <CapabilitiesPluginMarket
+              marketplacePlugins={visibleMarketplacePlugins}
+              localPlugins={visibleLocalPlugins}
+              installingPluginIds={installingPluginIds}
+              searching={Boolean(normalizedCapabilityQuery)}
+              onInstall={installMarketplacePlugin}
+              onOpenMarketplace={openPluginDetail}
+              onOpenLocal={openPluginDetail}
+            />
           ) : null}
-          {capabilityFilter === 'plugins'
-            ? visibleLocalPlugins.map((plugin) => (
-              <CapabilitiesPluginCard
-                key={`plugin:${plugin.id}`}
-                plugin={plugin}
-                removing={removingPluginIds.has(plugin.id)}
-                onOpen={openPluginDetail}
-                onRemove={removePlugin}
-              />
-            ))
-            : null}
           {((capabilityFilter === 'mcp' && visibleServers.length)
             || (capabilityFilter === 'skills' && visibleSkills.length)
             || (capabilityFilter === 'hooks' && visibleHooks.length)

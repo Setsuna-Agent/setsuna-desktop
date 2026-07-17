@@ -7,7 +7,7 @@
   "description": "阻止直接改动依赖目录和常见构建产物，降低误写文件的概率。",
   "publisher": "Setsuna",
   "tags": ["安全", "构建产物", "文件"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "protect-generated-folders",

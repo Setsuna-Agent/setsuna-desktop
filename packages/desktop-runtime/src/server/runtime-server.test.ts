@@ -357,6 +357,7 @@ describe('runtime server', () => {
           id: 'openai-docs',
           name: 'OpenAI 官方文档',
           icon: 'openai-docs',
+          featured: true,
           installed: false,
           skills: [expect.objectContaining({
             id: 'openai-docs.openai-docs',
@@ -374,12 +375,14 @@ describe('runtime server', () => {
           id: 'context7-docs',
           name: 'Context7 文档查询',
           icon: 'context7',
+          featured: false,
           installed: false,
         }),
         expect.objectContaining({
           id: 'pdf',
           name: 'PDF 文档处理',
           icon: 'pdf',
+          featured: true,
           installed: false,
           skills: [expect.objectContaining({ id: 'pdf.pdf', name: 'pdf' })],
           mcpServers: [],
@@ -389,6 +392,7 @@ describe('runtime server', () => {
           id: 'guard-dangerous-shell',
           name: '阻止危险 Shell 命令',
           icon: 'guard-dangerous-shell',
+          featured: false,
           installed: false,
           skills: [],
           mcpServers: [],
@@ -402,6 +406,10 @@ describe('runtime server', () => {
         }),
       ]),
     });
+    expect(marketplace.plugins.filter((plugin: { featured: boolean }) => plugin.featured).map((plugin: { id: string }) => plugin.id)).toEqual([
+      'openai-docs',
+      'pdf',
+    ]);
     expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
     expect(JSON.stringify(marketplace)).not.toContain('.mjs');
 

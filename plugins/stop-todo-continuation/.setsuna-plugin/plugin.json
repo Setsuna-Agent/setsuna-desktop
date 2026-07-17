@@ -7,7 +7,7 @@
   "description": "助手最后一条回复仍包含 TODO、FIXME 或 XXX 时要求继续处理。",
   "publisher": "Setsuna",
   "tags": ["流程", "TODO", "完成度"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "stop-todo-continuation",

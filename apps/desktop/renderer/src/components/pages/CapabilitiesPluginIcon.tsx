@@ -21,7 +21,7 @@ export function CapabilitiesPluginIcon({
   variant = 'card',
 }: {
   name?: string;
-  variant?: 'card' | 'detail';
+  variant?: 'card' | 'detail' | 'editorial' | 'list';
 }) {
   const icon = name && knownPluginIcons.has(name) ? name as PluginIconName : 'plugin';
 

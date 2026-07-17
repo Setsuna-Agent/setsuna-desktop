@@ -7,7 +7,7 @@
   "description": "提交消息里疑似包含 API key、token 或私钥片段时停止本轮并提醒脱敏。",
   "publisher": "Setsuna",
   "tags": ["安全", "密钥", "消息"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "prompt-secret-detector",

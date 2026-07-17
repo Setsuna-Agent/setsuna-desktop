@@ -7,7 +7,7 @@
   "description": "拦截删除根目录、格式化磁盘、强制清理 Git 工作区等高危命令。",
   "publisher": "Setsuna",
   "tags": ["安全", "Shell", "防护"],
-  "featured": true,
+  "featured": false,
   "hooks": [
     {
       "id": "guard-dangerous-shell",
