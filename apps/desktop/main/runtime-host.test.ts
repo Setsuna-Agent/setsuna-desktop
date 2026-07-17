@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { WebContents } from 'electron';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RuntimeHost,
   resolveBuiltinPluginsDir,
@@ -10,6 +10,10 @@ import {
 } from './runtime-host.js';
 
 describe('runtime host packaging paths', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('uses a real directory for the runtime child process cwd when packaged in asar', () => {
     const appRoot = path.join('/Applications/Setsuna Desktop.app/Contents/Resources', 'app.asar');
 
@@ -84,7 +88,33 @@ describe('runtime host packaging paths', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain('sinceSeq=1');
     expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq)).toEqual([1, 2]);
-    vi.unstubAllGlobals();
+  });
+
+  it('uploads attachment bytes directly to the authenticated runtime endpoint', async () => {
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(JSON.stringify({
+      id: 'attachment_1',
+      assetId: 'attachment_1',
+      source: 'runtime',
+      name: 'guide.pdf',
+      type: 'application/pdf',
+      size: 8,
+    }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+
+    await expect(host.uploadAttachment({
+      name: 'guide.pdf',
+      type: 'application/pdf',
+      data: new Uint8Array([1, 2, 3]),
+    })).resolves.toMatchObject({ assetId: 'attachment_1' });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/v1/attachments?name=guide.pdf&type=application%2Fpdf');
+    expect(init).toMatchObject({
+      method: 'POST',
+      headers: expect.objectContaining({ Authorization: expect.stringMatching(/^Bearer /u) }),
+    });
+    expect(Buffer.from(init?.body as Uint8Array)).toEqual(Buffer.from([1, 2, 3]));
   });
 });
 

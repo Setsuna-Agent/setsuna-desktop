@@ -1,5 +1,6 @@
 import type { RuntimeEvent } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
+import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
 import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
 import type {
   DesktopUpdateActionResult,
@@ -132,6 +133,7 @@ export type DesktopCommitMessageGenerationSource = {
 
 export type DesktopRuntimeBridge = {
   request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
+  uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   startSse(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void): () => void;
 };
 

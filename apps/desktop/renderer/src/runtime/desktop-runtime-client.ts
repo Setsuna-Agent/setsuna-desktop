@@ -81,6 +81,15 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
 
   return {
     request,
+    uploadAttachment(input) {
+      return bridge.uploadAttachment(input);
+    },
+    deleteAttachment(assetId) {
+      return request({
+        path: `/v1/attachments/${encodeURIComponent(assetId)}`,
+        method: 'DELETE',
+      });
+    },
     listThreads(query: ThreadQuery = {}) {
       const params = new URLSearchParams();
       if (query.search) params.set('search', query.search);

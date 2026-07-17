@@ -1,4 +1,4 @@
-import type { RuntimeConfigState, RuntimeContextCompactionNotice, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import { isRuntimeInlineMessageAttachment, type RuntimeConfigState, type RuntimeContextCompactionNotice, type RuntimeMessage, type RuntimeThread } from '@setsuna-desktop/contracts';
 
 const DEFAULT_CONTEXT_TOKENS_K = 256;
 const DEFAULT_CONTEXT_TOKENS = DEFAULT_CONTEXT_TOKENS_K * 1000;
@@ -72,7 +72,9 @@ function estimateRuntimeMessagesTokens(messages: RuntimeMessage[]): number {
         name: attachment.name,
         size: attachment.size,
         type: attachment.type,
-        url: attachment.url.startsWith('data:') ? '[image-data]' : attachment.url,
+        url: isRuntimeInlineMessageAttachment(attachment)
+          ? attachment.url.startsWith('data:') ? '[image-data]' : attachment.url
+          : `[runtime-asset:${attachment.assetId}]`,
       })),
       content: message.contextCompaction ? stripContextTags(message.content) : message.content,
       role: message.role,

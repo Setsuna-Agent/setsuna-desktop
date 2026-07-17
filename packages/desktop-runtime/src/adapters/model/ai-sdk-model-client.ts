@@ -11,7 +11,7 @@ import {
   type ToolSet,
   type UserContent,
 } from 'ai';
-import type { ModelRequest, ModelStreamEvent, RuntimeMessage, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { isRuntimeInlineMessageAttachment, type ModelRequest, type ModelStreamEvent, type RuntimeInlineMessageAttachment, type RuntimeMessage, type RuntimeToolCall, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
@@ -204,7 +204,7 @@ function toAiSdkMessages(messages: RuntimeMessage[]): ModelMessage[] {
           },
         ],
       });
-      if (message.attachments?.length) pendingToolVisuals.push(message);
+      if (inlineAttachments(message).length) pendingToolVisuals.push(message);
     }
   }
   flushToolVisuals();
@@ -220,10 +220,11 @@ function toAiSdkInstructions(messages: RuntimeMessage[]): string | undefined {
 }
 
 function toAiSdkUserContent(message: RuntimeMessage): UserContent {
-  if (!message.attachments?.length) return message.content;
+  const attachments = inlineAttachments(message);
+  if (!attachments.length) return message.content;
   return [
     ...(message.content.trim() ? [{ type: 'text' as const, text: message.content }] : []),
-    ...message.attachments.map((attachment) => {
+    ...attachments.map((attachment) => {
       const data = parseDataUrl(attachment.url);
       return {
         type: 'file' as const,
@@ -233,6 +234,13 @@ function toAiSdkUserContent(message: RuntimeMessage): UserContent {
       };
     }),
   ];
+}
+
+function inlineAttachments(message: RuntimeMessage) {
+  return (message.attachments ?? []).filter(
+    (attachment): attachment is RuntimeInlineMessageAttachment =>
+      isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/'),
+  );
 }
 
 function toolVisualMessage(message: RuntimeMessage): RuntimeMessage {

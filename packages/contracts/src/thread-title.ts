@@ -8,7 +8,7 @@ export const THREAD_TITLE_MAX_LENGTH = 48;
 export function fallbackThreadTitle(content: string, attachmentCount = 0): string {
   const normalized = content.replace(/\s+/g, ' ').trim();
   if (normalized) return normalized.slice(0, THREAD_TITLE_MAX_LENGTH);
-  if (attachmentCount === 1) return '图片附件';
-  if (attachmentCount > 1) return `${attachmentCount} 张图片`;
+  if (attachmentCount === 1) return '附件';
+  if (attachmentCount > 1) return `${attachmentCount} 个附件`;
   return DEFAULT_THREAD_TITLE;
 }

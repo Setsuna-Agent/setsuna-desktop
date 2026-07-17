@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { Bubble } from '@ant-design/x';
 import { ArrowDown, BookOpen, Bug, Copy, Hammer, Pencil, SearchCode, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react';
-import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimePluginSummary, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { AnswerRuntimeApprovalInput, DesktopRuntimeClient, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimePluginSummary, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
+import { ChatMessageAttachments } from './ChatMessageAttachments.js';
 import { ChatTimelineDivider } from './ChatTimelineDivider.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
@@ -81,6 +82,7 @@ export function ChatWorkspace({
   activeTurnId,
   activeProject,
   canClearContext,
+  client,
   config,
   conversationOverviewShowRequest = 0,
   conversationOverviewVisibility = 'auto',
@@ -126,6 +128,7 @@ export function ChatWorkspace({
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
   canClearContext: boolean;
+  client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
   conversationOverviewShowRequest?: number;
   conversationOverviewVisibility?: ConversationOverviewVisibility;
@@ -155,7 +158,7 @@ export function ChatWorkspace({
   onOpenFileReview?: (filePath?: string) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
@@ -291,7 +294,7 @@ export function ChatWorkspace({
     (value, options) => {
       // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
       scrollToBottom();
-      onSend(value, options);
+      return onSend(value, options);
     },
     [onSend, scrollToBottom],
   );
@@ -423,6 +426,7 @@ export function ChatWorkspace({
       activeTurnId={activeTurnId}
       activeProject={activeProject}
       canClearContext={canClearContext}
+      client={client}
       contextCompacting={contextCompactionRunning}
       contextUsage={contextUsage}
       config={config}
@@ -1156,11 +1160,7 @@ function UserMessageContent({ message, streaming }: { message: RuntimeMessage; s
   return (
     <div className="chat-user-message-content">
       {message.attachments?.length ? (
-        <div className="chat-user-message-attachments">
-          {message.attachments.map((attachment) => (
-            <img key={attachment.id} src={attachment.url} alt={attachment.name} title={attachment.name} />
-          ))}
-        </div>
+        <ChatMessageAttachments attachments={message.attachments} />
       ) : null}
       {message.content || streaming ? (
         <div className="chat-user-message-content__text">

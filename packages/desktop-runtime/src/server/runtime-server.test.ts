@@ -46,6 +46,73 @@ describe('runtime server', () => {
     await expect(response.json()).resolves.toMatchObject({ code: 'invalid_json' });
   });
 
+  it('uploads and deletes validated pending document attachments', async () => {
+    const query = new URLSearchParams({ name: 'guide.pdf', type: 'application/pdf' });
+    const upload = await fetch(`${baseUrl}/v1/attachments?${query}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+      body: Buffer.from('%PDF-1.7\nruntime attachment'),
+    });
+
+    expect(upload.status).toBe(201);
+    const attachment = await upload.json() as { assetId: string; name: string; source: string; type: string };
+    expect(attachment).toMatchObject({
+      assetId: expect.stringMatching(/^attachment_/u),
+      name: 'guide.pdf',
+      source: 'runtime',
+      type: 'application/pdf',
+    });
+
+    const deleted = await runtimeFetch(`/v1/attachments/${encodeURIComponent(attachment.assetId)}`, { method: 'DELETE' });
+    expect(deleted).toEqual({ deleted: true });
+
+    const invalid = await fetch(`${baseUrl}/v1/attachments?${query}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+      body: Buffer.from('not a PDF'),
+    });
+    expect(invalid.status).toBe(415);
+    await expect(invalid.json()).resolves.toMatchObject({ code: 'attachment_unsupported' });
+  });
+
+  it('claims stored documents for a turn and exposes only a read-only path to the model', async () => {
+    const capture = await createOpenAiCaptureServer();
+    try {
+      await configureOpenAiProvider('attachment-provider', capture.baseUrl);
+      const query = new URLSearchParams({ name: 'guide.pdf', type: 'application/pdf' });
+      const upload = await fetch(`${baseUrl}/v1/attachments?${query}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+        body: Buffer.from('%PDF-1.7\nplugin-readable attachment'),
+      });
+      const attachment = await upload.json();
+      const thread = await runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Attachment context' }),
+      });
+
+      const started = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+        method: 'POST',
+        body: JSON.stringify({ input: 'Summarize the attached document.', attachments: [attachment] }),
+      });
+      const request = await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for attachment model request');
+      const serializedMessages = JSON.stringify(request.messages ?? []);
+      const updated = await waitForThread(
+        thread.id,
+        (item) => item.messages.some((message) => message.turnId === started.turnId && message.role === 'user'),
+      );
+
+      expect(serializedMessages).toContain('Runtime-managed user attachments for this thread');
+      expect(serializedMessages).toContain('guide.pdf');
+      expect(serializedMessages).toContain('read-only');
+      expect(serializedMessages).not.toContain('plugin-readable attachment');
+      expect(updated.messages.find((message) => message.turnId === started.turnId && message.role === 'user'))
+        .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'guide.pdf' })] });
+    } finally {
+      await capture.close();
+    }
+  });
+
   it('creates and lists local and project threads', async () => {
     const created = await runtimeFetch('/v1/threads', {
       method: 'POST',

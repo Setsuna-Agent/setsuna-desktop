@@ -1,4 +1,9 @@
-import type { RuntimeCollaborationMode, RuntimeMessageAttachment, RuntimePlanDecision } from '@setsuna-desktop/contracts';
+import {
+  isRuntimeStoredMessageAttachment,
+  type RuntimeCollaborationMode,
+  type RuntimeMessageAttachment,
+  type RuntimePlanDecision,
+} from '@setsuna-desktop/contracts';
 
 export type ChatComposerSendOptions = {
   attachments?: RuntimeMessageAttachment[];
@@ -33,7 +38,8 @@ export function createChatComposerSendOptions({
 }): ChatComposerSendOptions {
   const thinking = thinkingSupported && thinkingEnabled;
   return {
-    attachments: supportsImageInput ? attachments : [],
+    // Document assets are read by runtime tools and do not require provider vision support.
+    attachments: attachments.filter((attachment) => supportsImageInput || isRuntimeStoredMessageAttachment(attachment)),
     skillIds: selectedSkillIds,
     thinking,
     ...(thinking && thinkingEffort ? { thinkingEffort } : {}),

@@ -7,6 +7,7 @@ import type {
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../ports/approval-gate.js';
+import type { AttachmentStore } from '../ports/attachment-store.js';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
 import type { McpStore } from '../ports/mcp-store.js';
@@ -30,6 +31,7 @@ import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.
 import { RuntimePromptContextAssembler } from './runtime-prompt-context-assembler.js';
 import { isReviewReadOnlyTool } from './runtime-review-profile.js';
 import { RuntimeToolRouter } from './tool-router.js';
+import { buildRuntimeAttachmentContext, messageForModel } from './runtime-attachment-context.js';
 
 const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
@@ -46,6 +48,7 @@ export type RuntimeSamplingStepContext = {
 
 type RuntimeSamplingContextBuilderOptions = {
   approvalGate?: ApprovalGate;
+  attachmentStore?: Pick<AttachmentStore, 'resolveForThread'>;
   clock: Clock;
   configStore?: ConfigStore;
   contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
@@ -110,6 +113,25 @@ export class RuntimeSamplingContextBuilder {
       projectId: thread.projectId,
       threadId,
     });
+    const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
+    const attachmentContext = await buildRuntimeAttachmentContext({
+      attachmentStore: this.options.attachmentStore,
+      messages: [...(snapshotThread?.messages ?? thread.messages), ...conversationMessages],
+      now: this.options.clock.now(),
+      threadId,
+      turnId,
+    });
+    const configuredSandbox = stepRuntimeConfig?.sandboxWorkspaceWrite ?? {};
+    const sandboxWorkspaceWrite = attachmentContext.readableRoots.length
+      ? {
+          ...configuredSandbox,
+          readableRoots: [...new Set([
+            environment.workspaceRoot,
+            ...(configuredSandbox.readableRoots ?? []),
+            ...attachmentContext.readableRoots,
+          ])],
+        }
+      : configuredSandbox;
     const toolContext: RuntimeToolExecutionContext = {
       environment,
       threadId,
@@ -119,7 +141,7 @@ export class RuntimeSamplingContextBuilder {
         supportsImages: activeModelForConfig(stepRuntimeConfig)?.supportsImages === true,
       },
       permissionProfile: stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
-      sandboxWorkspaceWrite: stepRuntimeConfig?.sandboxWorkspaceWrite ?? {},
+      sandboxWorkspaceWrite,
       features: stepRuntimeConfig?.features ?? {},
       signal,
     };
@@ -145,7 +167,10 @@ export class RuntimeSamplingContextBuilder {
     const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, threadHasGoal);
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
-      hookContextMessages,
+      hookContextMessages: [
+        ...hookContextMessages,
+        ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),
+      ],
       skillActivationText: currentTurnSkillActivationText(conversationMessages, turnId),
       skillIds,
       thread,
@@ -171,12 +196,11 @@ export class RuntimeSamplingContextBuilder {
     });
     const compiledPrompt = compileRuntimePrompt({
       fragments,
-      conversationMessages: compactedConversationMessages,
+      conversationMessages: compactedConversationMessages.map(messageForModel),
       createdAt: this.options.clock.now().toISOString(),
     });
     const messages = compiledPrompt.messages;
     const toolChoice = tools?.length ? (await toolRouter?.toolChoice(messages) ?? 'auto') : undefined;
-    const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
     const mcpServerKeys = await this.mcpServerKeysForSnapshot();
     const snapshot: RuntimeModelRequestStepSnapshot = {
       threadId,

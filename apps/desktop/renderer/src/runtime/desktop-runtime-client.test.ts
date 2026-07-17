@@ -18,6 +18,30 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('uses the binary bridge for uploads and the authenticated request bridge for pending deletes', async () => {
+    const uploadAttachment = vi.fn(async () => ({
+      id: 'attachment_1',
+      assetId: 'attachment_1',
+      source: 'runtime' as const,
+      name: 'guide.pdf',
+      type: 'application/pdf',
+      size: 3,
+    }));
+    const request = vi.fn(async () => ({ deleted: true }));
+    vi.stubGlobal('window', {
+      setsunaDesktop: {
+        runtime: { request, uploadAttachment, startSse: vi.fn(() => vi.fn()) },
+      },
+    });
+    const client = createDesktopRuntimeClient();
+    const input = { name: 'guide.pdf', type: 'application/pdf', data: new Uint8Array([1, 2, 3]) };
+
+    await expect(client.uploadAttachment(input)).resolves.toMatchObject({ assetId: 'attachment_1' });
+    await expect(client.deleteAttachment('attachment / 1')).resolves.toEqual({ deleted: true });
+    expect(uploadAttachment).toHaveBeenCalledWith(input);
+    expect(request).toHaveBeenCalledWith({ path: '/v1/attachments/attachment%20%2F%201', method: 'DELETE' });
+  });
+
   it('uses the app-server bridge for goals and returns the runtime goal', async () => {
     const request = installRuntimeBridge((input) => {
       const body = input.body as { method?: string } | undefined;

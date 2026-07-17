@@ -41,6 +41,20 @@ describe('createChatComposerSendOptions', () => {
       thinking: false,
     });
   });
+
+  it('keeps runtime documents while filtering inline images for a text-only model', () => {
+    expect(createChatComposerSendOptions({
+      attachments: [imageAttachment, documentAttachment],
+      goalModeEnabled: false,
+      planModeEnabled: false,
+      selectedSkillIds: [],
+      steering: false,
+      supportsImageInput: false,
+      thinkingEffort: '',
+      thinkingEnabled: false,
+      thinkingSupported: false,
+    }).attachments).toEqual([documentAttachment]);
+  });
 });
 
 const imageAttachment: RuntimeMessageAttachment = {
@@ -49,4 +63,13 @@ const imageAttachment: RuntimeMessageAttachment = {
   type: 'image/png',
   size: 128,
   url: 'data:image/png;base64,AA==',
+};
+
+const documentAttachment: RuntimeMessageAttachment = {
+  id: 'attachment_1',
+  assetId: 'attachment_1',
+  source: 'runtime',
+  name: 'guide.pdf',
+  type: 'application/pdf',
+  size: 512,
 };

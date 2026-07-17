@@ -421,6 +421,49 @@
   object-fit: contain;
 }
 
+.chat-user-message-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(240px, 62vw);
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 5%, transparent);
+}
+
+.chat-user-message-file > svg {
+  flex: 0 0 auto;
+  color: var(--app-primary);
+}
+
+.chat-user-message-file__copy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chat-user-message-file__name,
+.chat-user-message-file__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-user-message-file__name {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.chat-user-message-file__meta {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
 .chat-bubble-item--selecting .ant-bubble-footer,
 .chat-bubble-item--selecting .chat-message-footer {
   display: none;
@@ -939,7 +982,7 @@
   .chat-sender:not(.chat-sender--starter) > .chat-usage-panel,
   .chat-sender:not(.chat-sender--starter) .ant-sender,
   .chat-sender:not(.chat-sender--starter) > .chat-command-menu,
-  .chat-sender:not(.chat-sender--starter) .chat-image-attachments {
+  .chat-sender:not(.chat-sender--starter) .chat-attachments {
     transition: none;
   }
 

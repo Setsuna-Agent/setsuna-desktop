@@ -28,6 +28,22 @@ export async function readBody<T = unknown>(request: IncomingMessage, fallback?:
   }
 }
 
+export async function readBinaryBody(request: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const declaredLength = Number(request.headers['content-length']);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new RuntimeHttpError(413, 'Attachment is too large', 'attachment_too_large');
+  }
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.byteLength;
+    if (total > maxBytes) throw new RuntimeHttpError(413, 'Attachment is too large', 'attachment_too_large');
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 export function sendJson(response: ServerResponse, statusCode: number, value: unknown): void {
   if (response.headersSent) return;
   response.writeHead(statusCode, {
@@ -55,12 +71,14 @@ export function threadScope(value: string | null): ThreadQuery['scope'] {
 export function isRuntimeMessageAttachment(value: unknown): value is NonNullable<SendTurnInput['attachments']>[number] {
   if (!value || typeof value !== 'object') return false;
   const record = value as Record<string, unknown>;
-  return (
+  const baseValid = (
     typeof record.id === 'string' &&
     typeof record.name === 'string' &&
     typeof record.type === 'string' &&
     typeof record.size === 'number' &&
-    Number.isFinite(record.size) &&
-    typeof record.url === 'string'
+    Number.isFinite(record.size)
   );
+  if (!baseValid) return false;
+  if (record.source === 'runtime') return typeof record.assetId === 'string' && Boolean(record.assetId.trim());
+  return typeof record.url === 'string' && Boolean(record.url.trim());
 }

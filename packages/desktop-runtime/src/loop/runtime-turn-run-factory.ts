@@ -52,6 +52,7 @@ type RuntimeTurnRunFactoryOptions = {
   eventWriter: Pick<RuntimeEventWriter, 'flushThread'>;
   ids: IdGenerator;
   inputGuard: Pick<RuntimeModelInputGuard, 'assertAttachmentsSupported'>;
+  claimAttachments(threadId: string, attachments: NonNullable<RuntimeMessage['attachments']>): Promise<NonNullable<RuntimeMessage['attachments']>>;
   normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attachments']>;
   publishStoredEventsSince(threadId: string, sinceSeq: number): Promise<void>;
   runTurn(input: RuntimeTurnExecutionInput): Promise<void>;
@@ -66,13 +67,14 @@ export class RuntimeTurnRunFactory {
 
   async createRegular(threadId: string, input: SendTurnInput): Promise<{ turnId: string; done: Promise<void> }> {
     const text = input.input.trim();
-    const attachments = this.options.normalizeAttachments(input.attachments);
+    let attachments = this.options.normalizeAttachments(input.attachments);
     const planDecision = input.planDecision;
     if (!text && !attachments.length && !planDecision) throw new Error('Turn input is required.');
     await this.options.inputGuard.assertAttachmentsSupported(attachments);
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
 
     const thread = await this.requireThread(threadId);
+    attachments = await this.options.claimAttachments(threadId, attachments);
     const threadForRun = await this.applyPendingPlanDecision(threadId, thread, planDecisionForTurnInput(input));
     const turnId = this.options.ids.id('turn');
     // A decision-only turn uses a model-only execution prompt; dismissed decisions short-circuit in AgentLoop.
@@ -222,7 +224,10 @@ export class RuntimeTurnRunFactory {
     const thread = await this.requireThread(threadId);
     const userMessage = thread.messages.find((message) => message.id === messageId);
     if (!userMessage || userMessage.role !== 'user') throw new Error(`User message not found after regeneration setup: ${messageId}`);
-    const attachments = this.options.normalizeAttachments(userMessage.attachments);
+    const attachments = await this.options.claimAttachments(
+      threadId,
+      this.options.normalizeAttachments(userMessage.attachments),
+    );
     const turnId = this.options.ids.id('turn');
     const run = this.options.turnTasks.run({
       turnId,

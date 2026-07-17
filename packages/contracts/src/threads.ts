@@ -3,6 +3,7 @@ import type { RuntimeMemoryCitation } from './memory.js';
 import type { RuntimeHookSource } from './config.js';
 import type { RuntimeUsage } from './usage.js';
 import type { RuntimeApprovalAvailableDecision, RuntimeExecPolicyAmendment, RuntimeMcpElicitation, RuntimeNetworkApprovalContext, RuntimeNetworkPolicyAmendment, RuntimePermissionApprovalContext, RuntimeUserInputRequest } from './approvals.js';
+import type { RuntimeMessageAttachment } from './attachments.js';
 
 export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool';
 export type RuntimeMessagePromptSource = 'hook' | 'plan' | 'review' | 'goal' | 'runtime_context';
@@ -29,14 +30,6 @@ export type RuntimeMessage = {
   toolCalls?: RuntimeToolCall[];
   toolRuns?: RuntimeToolRun[];
   hookRuns?: RuntimeHookRun[];
-};
-
-export type RuntimeMessageAttachment = {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  url: string;
 };
 
 export type RuntimeContextCompactionNotice = {

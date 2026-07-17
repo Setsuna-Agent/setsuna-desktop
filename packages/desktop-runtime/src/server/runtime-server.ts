@@ -31,6 +31,8 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   });
   await runtime.mcpStore.migrateLegacySecrets();
   await runtime.threadStore.recover();
+  const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true });
+  await runtime.attachmentStore.recover(recoveredThreads.map((thread) => thread.id));
   // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
   await settleStaleRuntimeTurns(runtime);
   // Recovery 完成后再排队历史记忆抽取，避免读取尚未结算的 turn；shutdown 会取消该后台队列。

@@ -29,7 +29,7 @@
   pointer-events: none;
 }
 
-.chat-image-attachment-tray {
+.chat-attachment-tray {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
@@ -37,18 +37,18 @@
   transition: grid-template-rows 240ms cubic-bezier(0.2, 0.82, 0.2, 1), opacity 160ms ease, transform 240ms cubic-bezier(0.2, 0.82, 0.2, 1);
 }
 
-.chat-image-attachment-tray.is-open {
+.chat-attachment-tray.is-open {
   grid-template-rows: 1fr;
   opacity: 1;
   transform: translateY(0);
 }
 
-.chat-image-attachment-tray__clip {
+.chat-attachment-tray__clip {
   min-height: 0;
   overflow: hidden;
 }
 
-.chat-image-attachments {
+.chat-attachments {
   display: flex;
   gap: 10px;
   width: 100%;
@@ -60,27 +60,44 @@
   scrollbar-width: none;
 }
 
-.chat-image-attachments::-webkit-scrollbar {
+.chat-attachments::-webkit-scrollbar {
   display: none;
 }
 
-.chat-image-attachment {
+.chat-attachment {
   position: relative;
   flex: 0 0 auto;
-  width: 78px;
-  height: 78px;
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
   border-radius: 8px;
   background: var(--app-surface);
   color: var(--app-text);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 8%, transparent);
   transform-origin: center;
-  animation: chat-image-attachment-in 180ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+  animation: chat-attachment-in 180ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
   transition: opacity 150ms ease, transform 180ms cubic-bezier(0.2, 0.82, 0.2, 1), border-color 160ms ease, box-shadow 160ms ease;
   will-change: opacity, transform;
 }
 
-.chat-image-attachment.is-removing {
+.chat-attachment--image {
+  width: 78px;
+  height: 78px;
+}
+
+.chat-attachment--file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(220px, 62vw);
+  height: 64px;
+  padding: 9px 26px 9px 9px;
+}
+
+.chat-attachment.has-error {
+  border-color: color-mix(in srgb, var(--app-danger) 48%, var(--app-border));
+}
+
+.chat-attachment.is-removing {
   border-color: transparent;
   opacity: 0;
   transform: translateY(-4px) scale(0.94);
@@ -88,7 +105,7 @@
   pointer-events: none;
 }
 
-.chat-image-attachment .ant-image {
+.chat-attachment .ant-image {
   display: block;
   width: 100%;
   height: 100%;
@@ -96,8 +113,8 @@
   border-radius: 7px;
 }
 
-.chat-image-attachment .ant-image-img,
-.chat-image-attachment__image {
+.chat-attachment .ant-image-img,
+.chat-attachment__image {
   display: block;
   width: 100%;
   height: 100%;
@@ -107,11 +124,56 @@
   transition: transform 180ms ease;
 }
 
-.chat-image-attachment:not(.is-removing):hover .ant-image-img {
+.chat-attachment:not(.is-removing):hover .ant-image-img {
   transform: scale(1.025);
 }
 
-.chat-image-attachment__remove {
+.chat-attachment__file-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+}
+
+.chat-attachment.has-error .chat-attachment__file-icon {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 10%, transparent);
+}
+
+.chat-attachment__file-copy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chat-attachment__file-name,
+.chat-attachment__file-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-attachment__file-name {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.chat-attachment__file-meta {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.chat-attachment__file-icon .is-spinning {
+  animation: chat-attachment-spin 900ms linear infinite;
+}
+
+.chat-attachment__remove {
   position: absolute;
   top: -6px;
   right: -6px;
@@ -129,17 +191,17 @@
   box-shadow: 0 1px 4px color-mix(in srgb, #000 22%, transparent);
 }
 
-.chat-image-attachment__remove:hover {
+.chat-attachment__remove:hover {
   color: #fff;
   background: #111827;
 }
 
-.chat-image-attachment__remove:focus-visible {
+.chat-attachment__remove:focus-visible {
   outline: 2px solid var(--app-primary);
   outline-offset: 2px;
 }
 
-@keyframes chat-image-attachment-in {
+@keyframes chat-attachment-in {
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.96);
@@ -151,19 +213,29 @@
   }
 }
 
+@keyframes chat-attachment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .chat-image-attachment-tray {
+  .chat-attachment-tray {
     transition: none;
   }
 
-  .chat-image-attachment {
+  .chat-attachment {
     animation: none;
     transition: none;
   }
 
-  .chat-image-attachment .ant-image-img,
-  .chat-image-attachment__image {
+  .chat-attachment .ant-image-img,
+  .chat-attachment__image {
     transition: none;
+  }
+
+  .chat-attachment__file-icon .is-spinning {
+    animation: none;
   }
 }
 

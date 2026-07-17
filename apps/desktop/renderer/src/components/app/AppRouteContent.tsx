@@ -221,7 +221,7 @@ export function AppRouteContent({
       threads={runtime.threads}
       sideActivePanel={workspacePanels.sideActivePanel}
       sidePanelSlot={workspacePanels.sidePanelSlot}
-      sideChatClient={runtime.client}
+      runtimeClient={runtime.client}
       onReloadThreads={runtime.reloadThreads}
       onSideChatError={runtime.setError}
       sidePanelVisible={workspacePanels.sidePanelVisible}
@@ -271,7 +271,7 @@ export function AppRouteContent({
         },
       })}
       onStartThreadReview={() => runtime.startCurrentThreadReview({ type: 'uncommittedChanges' })}
-      onSend={(value, options) => void chatActions.sendInput(value, options)}
+      onSend={(value, options) => chatActions.sendInput(value, options)}
       onPlanDecision={(decision) => void chatActions.sendInput('', { planDecision: decision })}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}

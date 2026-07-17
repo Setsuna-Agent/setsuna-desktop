@@ -1,4 +1,4 @@
-import type { RuntimeContextCompactionNotice, RuntimeMessage, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { isRuntimeStoredMessageAttachment, type RuntimeContextCompactionNotice, type RuntimeMessage, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { neutralizePromptClosingTags } from './prompt-utils.js';
 
 export const CONTEXT_COMPACTION_MAX_TOKENS_K = 256;
@@ -316,6 +316,9 @@ export function reserveRuntimeContextCompactionBudget(
 function estimateMessageTokens(message: RuntimeMessage): number {
   if (message.visibility === 'transcript') return 0;
   const attachmentTokens = (message.attachments ?? []).reduce((total, attachment) => {
+    if (isRuntimeStoredMessageAttachment(attachment)) {
+      return total + estimateTextTokens(`${attachment.name} ${attachment.type} ${attachment.size}`);
+    }
     if (!attachment.url.startsWith('data:')) return total + estimateTextTokens(`${attachment.name} ${attachment.type}`);
     return total + estimateTextTokens(attachment.url);
   }, 0);

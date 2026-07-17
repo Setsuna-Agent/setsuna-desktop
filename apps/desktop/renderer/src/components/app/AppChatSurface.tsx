@@ -67,7 +67,7 @@ export function AppChatSurface({
   threads,
   sideActivePanel,
   sidePanelSlot,
-  sideChatClient,
+  runtimeClient,
   sidePanelVisible,
   terminalSessionsByPanelId,
   onActivateBottomPanel,
@@ -146,7 +146,7 @@ export function AppChatSurface({
   threads: RuntimeThreadSummary[];
   sideActivePanel?: DesktopPanelTab | null;
   sidePanelSlot: DesktopPanelSlotState;
-  sideChatClient: DesktopRuntimeClient;
+  runtimeClient: DesktopRuntimeClient;
   sidePanelVisible: boolean;
   terminalSessionsByPanelId: Record<string, DesktopTerminalSession>;
   onActivateBottomPanel: (panelId: string) => void;
@@ -184,7 +184,7 @@ export function AppChatSurface({
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: () => void | Promise<unknown>;
-  onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => void;
+  onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
@@ -230,6 +230,7 @@ export function AppChatSurface({
           activeTurnId={activeTurnId}
           activeProject={activeWorkspace}
           canClearContext={canClearContext}
+          client={runtimeClient}
           conversationOverviewShowRequest={conversationOverviewShowRequest}
           conversationOverviewVisibility={conversationOverviewVisibility}
           contextCompacting={contextCompacting}
@@ -276,7 +277,7 @@ export function AppChatSurface({
         <SideChatPanel
           activeProjectId={activeProject?.id ?? null}
           activeWorkspace={activeWorkspace}
-          client={sideChatClient}
+          client={runtimeClient}
           config={config}
           hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
           key={panel.id}

@@ -1,4 +1,4 @@
-import type { RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
+import { isRuntimeInlineMessageAttachment, type RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
 import type { ChatImageAttachmentOutcome } from '../../types/app.js';
 
 export const maxChatImageAttachments = 8;
@@ -10,7 +10,7 @@ export function rejectedChatImageAttachment(
   supportsImageInput: boolean,
 ): Exclude<ChatImageAttachmentOutcome, 'added'> | null {
   if (!supportsImageInput) return 'unsupported';
-  if (!attachment.type.startsWith('image/') || !attachment.url.startsWith('data:image/')) return 'unavailable';
+  if (!isRuntimeInlineMessageAttachment(attachment) || !attachment.type.startsWith('image/') || !attachment.url.startsWith('data:image/')) return 'unavailable';
   if (attachment.size > maxChatImageSize) return 'too-large';
   if (currentCount >= maxChatImageAttachments) return 'limit-reached';
   return null;

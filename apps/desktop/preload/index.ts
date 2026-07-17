@@ -12,6 +12,7 @@ type RuntimeEventPayload = { subscriptionId: string; event?: RuntimeEvent; error
 
 const runtime: DesktopRuntimeBridge = {
   request: <T = unknown>(input: RuntimeRequestInput): Promise<T> => ipcRenderer.invoke('runtime:request', input),
+  uploadAttachment: (input) => ipcRenderer.invoke('runtime:upload-attachment', input),
   startSse(threadId, sinceSeq, onEvent) {
     let cancelled = false;
     let subscriptionId: string | null = null;

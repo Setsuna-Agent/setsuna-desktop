@@ -381,7 +381,15 @@ export async function dispatchAppServerRpcRequest(
       projectId: source.projectId,
       forkedFromId: source.id,
     });
-    await copyRuntimeMessagesToThread(runtime, thread.id, messages);
+    const attachments = messages.flatMap((message) => message.attachments ?? []);
+    try {
+      await runtime.attachmentStore.retainForThread(thread.id, attachments);
+      await copyRuntimeMessagesToThread(runtime, thread.id, messages);
+    } catch (error) {
+      await runtime.attachmentStore.releaseThread(thread.id).catch(() => undefined);
+      await runtime.threadStore.deleteThread(thread.id).catch(() => undefined);
+      throw error;
+    }
     const forked = await runtime.threadStore.getThread(thread.id) ?? thread;
     const config = await runtime.configStore.getConfig();
     return sweThreadSessionResponse(forked, cwd, config, options, input.excludeTurns !== true);
@@ -550,6 +558,7 @@ export async function dispatchAppServerRpcRequest(
     runtime.agentLoop.clearAppServerDynamicTools(threadId);
     await runtime.mcpConnections.releaseThread(threadId);
     await runtime.threadStore.deleteThread(threadId);
+    await runtime.attachmentStore.releaseThread(threadId);
     return {};
   }
 

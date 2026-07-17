@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { FileConfigStore } from '../adapters/store/file-config-store.js';
+import { FileAttachmentStore } from '../adapters/store/file-attachment-store.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
@@ -64,6 +65,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const approvalGate = new InMemoryApprovalGate(clock, ids);
   // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
   const persistedThreadStore = new JsonThreadStore(runtimeDataDir, clock, ids);
+  const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
   const eventWriter = new RuntimeEventWriter(persistedThreadStore, eventBus);
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter);
   const configStore = new FileConfigStore(runtimeDataDir);
@@ -105,6 +107,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   ]);
   const modelClient = new ConfiguredModelClient(configStore);
   const agentLoop = new AgentLoop({
+    attachmentStore,
     threadStore,
     modelClient,
     eventBus,
@@ -127,6 +130,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   });
   return {
     agentLoop,
+    attachmentStore,
     approvalGate,
     appServerNotificationBus,
     configStore,

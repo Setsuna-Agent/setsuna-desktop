@@ -85,6 +85,7 @@ export function SideChatPanel({
           activeProject={activeWorkspace}
           activeTurnId={sideChat.activeTurnId}
           canClearContext={Boolean(sideChat.currentThread?.messages.length)}
+          client={client}
           config={config}
           contextCompacting={sideChat.contextCompacting}
           currentThread={sideChat.currentThread}
@@ -109,7 +110,7 @@ export function SideChatPanel({
           onPlanDecision={(decision) => void sideChat.actions.sendInput('', { planDecision: decision })}
           onSearchProjectEntries={onSearchProjectEntries}
           onSelectModel={onSelectModel}
-          onSend={(value, options) => void sideChat.actions.sendInput(value, options)}
+          onSend={(value, options) => sideChat.actions.sendInput(value, options)}
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
           onStartThreadReview={() => sideChat.startReview({ type: 'uncommittedChanges' })}
           onSkillSelectionRequestConsumed={() => undefined}

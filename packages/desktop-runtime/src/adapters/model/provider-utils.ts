@@ -1,4 +1,4 @@
-import type { ModelStreamEvent, RuntimeMessage, RuntimeToolDefinition, RuntimeUsage } from '@setsuna-desktop/contracts';
+import { isRuntimeInlineMessageAttachment, type ModelStreamEvent, type RuntimeInlineMessageAttachment, type RuntimeMessage, type RuntimeToolDefinition, type RuntimeUsage } from '@setsuna-desktop/contracts';
 
 export type FetchImpl = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -107,7 +107,7 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
     if (message.role === 'system' || message.role === 'developer' || message.role === 'user' || message.role === 'assistant') {
       output.push({
         role: message.role,
-        content: message.role === 'user' && message.attachments?.length
+        content: message.role === 'user' && inlineAttachments(message).length
           ? openAiChatContentParts(message)
           : message.content || (message.toolCalls?.length ? null : ''),
         ...(message.toolCalls?.length
@@ -130,7 +130,7 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
         name: message.toolName,
         content: message.content,
       });
-      if (message.attachments?.length) pendingToolVisuals.push(message);
+      if (inlineAttachments(message).length) pendingToolVisuals.push(message);
     }
   }
   flushToolVisuals();
@@ -184,7 +184,7 @@ export function toOpenAiResponsesInput(messages: RuntimeMessage[]): unknown[] {
         const toolOutput = toolOutputsByCallId.get(toolCall.id);
         if (toolOutput) output.push(toolOutput);
       }
-    } else if (message.role === 'tool' && message.attachments?.length) {
+    } else if (message.role === 'tool' && inlineAttachments(message).length) {
       output.push({ role: 'user', content: openAiResponsesContentParts(toolVisualMessage(message)) });
     }
   }
@@ -247,7 +247,7 @@ export function toAnthropicMessages(messages: RuntimeMessage[]): Array<Record<st
           {
             type: 'tool_result',
             tool_use_id: message.toolCallId,
-            content: message.attachments?.length
+            content: inlineAttachments(message).length
               ? anthropicUserContentParts(message)
               : message.content,
           },
@@ -304,7 +304,7 @@ function parseToolInput(argumentsText: string): unknown {
 function openAiChatContentParts(message: RuntimeMessage): unknown[] {
   return [
     ...(message.content.trim() ? [{ type: 'text', text: message.content }] : []),
-    ...(message.attachments ?? []).map((attachment) => ({
+    ...inlineAttachments(message).map((attachment) => ({
       type: 'image_url',
       image_url: { url: attachment.url },
     })),
@@ -320,10 +320,11 @@ function toolVisualMessage(message: RuntimeMessage): RuntimeMessage {
 }
 
 function openAiResponsesContentParts(message: RuntimeMessage): unknown {
-  if (!message.attachments?.length) return message.content;
+  const attachments = inlineAttachments(message);
+  if (!attachments.length) return message.content;
   return [
     ...(message.content.trim() ? [{ type: 'input_text', text: message.content }] : []),
-    ...message.attachments.map((attachment) => ({
+    ...attachments.map((attachment) => ({
       type: 'input_image',
       image_url: attachment.url,
     })),
@@ -331,10 +332,11 @@ function openAiResponsesContentParts(message: RuntimeMessage): unknown {
 }
 
 function anthropicUserContentParts(message: RuntimeMessage): unknown {
-  if (!message.attachments?.length) return message.content;
+  const attachments = inlineAttachments(message);
+  if (!attachments.length) return message.content;
   const blocks: unknown[] = [];
   if (message.content.trim()) blocks.push({ type: 'text', text: message.content });
-  for (const attachment of message.attachments) {
+  for (const attachment of attachments) {
     const data = parseDataUrl(attachment.url);
     if (data) {
       blocks.push({
@@ -350,6 +352,13 @@ function anthropicUserContentParts(message: RuntimeMessage): unknown {
     }
   }
   return blocks;
+}
+
+function inlineAttachments(message: RuntimeMessage) {
+  return (message.attachments ?? []).filter(
+    (attachment): attachment is RuntimeInlineMessageAttachment =>
+      isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/'),
+  );
 }
 
 function parseDataUrl(value: string): { mediaType: string; base64: string } | null {

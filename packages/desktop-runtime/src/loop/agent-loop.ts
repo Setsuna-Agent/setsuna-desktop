@@ -1,5 +1,6 @@
 import type { RuntimeDynamicToolDefinition, RuntimeMemoryCitation, RuntimeMessage, RuntimeThread, RuntimeThreadGoal, RuntimeThreadGoalPatch, RuntimeToolCall, RuntimeUsage, SendTurnInput, SendTurnResponse, SteerTurnInput } from '@setsuna-desktop/contracts';
 import type { AppServerNotificationBus } from '../ports/app-server-notification-bus.js';
+import type { AttachmentStore } from '../ports/attachment-store.js';
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
@@ -41,6 +42,7 @@ import { RuntimeGoalCoordinator } from './runtime-goal-coordinator.js';
 import { runtimeEnvironmentResolver } from './runtime-environment-resolver.js';
 
 export type AgentLoopOptions = {
+  attachmentStore?: AttachmentStore;
   threadStore: ThreadStore;
   modelClient: ModelClient;
   eventBus: EventBus;
@@ -146,6 +148,7 @@ export class AgentLoop {
     });
     this.samplingContexts = new RuntimeSamplingContextBuilder({
       approvalGate: options.approvalGate,
+      attachmentStore: options.attachmentStore,
       clock: options.clock,
       configStore: options.configStore,
       contextCompactor: this.contextCompactor,
@@ -207,6 +210,7 @@ export class AgentLoop {
       clock: options.clock,
       ids: options.ids,
       inputGuard: this.inputGuard,
+      claimAttachments: (threadId, attachments) => options.attachmentStore?.claimForThread(threadId, attachments) ?? Promise.resolve(attachments),
       normalizeAttachments,
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
@@ -240,6 +244,7 @@ export class AgentLoop {
       eventWriter: this.eventWriter,
       ids: options.ids,
       inputGuard: this.inputGuard,
+      claimAttachments: (threadId, attachments) => options.attachmentStore?.claimForThread(threadId, attachments) ?? Promise.resolve(attachments),
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
@@ -557,20 +562,25 @@ export class AgentLoop {
 }
 
 /**
- * 归一化外部输入附件，过滤缺少 id 或 url 的无效项。
+ * 归一化外部输入附件：内联附件必须有 URL，受管文件必须有 opaque asset id。
  *
  * @param value 外部传入的附件字段。
  */
 function normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attachments']> {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => {
+    .map((item): NonNullable<RuntimeMessage['attachments']>[number] | null => {
       if (!item || typeof item !== 'object') return null;
       const record = item as Record<string, unknown>;
       const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : '';
-      const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim() : 'image';
+      const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim() : 'attachment';
       const type = typeof record.type === 'string' && record.type.trim() ? record.type.trim() : 'application/octet-stream';
       const size = typeof record.size === 'number' && Number.isFinite(record.size) ? Math.max(0, Math.floor(record.size)) : 0;
+      if (record.source === 'runtime') {
+        const assetId = typeof record.assetId === 'string' && record.assetId.trim() ? record.assetId.trim() : '';
+        if (!id || !assetId) return null;
+        return { id, assetId, source: 'runtime' as const, name, type, size };
+      }
       const url = typeof record.url === 'string' && record.url.trim() ? record.url.trim() : '';
       if (!id || !url) return null;
       return { id, name, type, size, url };

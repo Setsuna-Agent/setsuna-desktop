@@ -97,7 +97,7 @@ function titlePromptMessages(userContent: string, attachmentCount: number): Runt
 }
 
 function clippedTitleSource(userContent: string, attachmentCount: number): string {
-  const attachmentNote = attachmentCount > 0 ? `\n[${attachmentCount} image attachment${attachmentCount === 1 ? '' : 's'}]` : '';
+  const attachmentNote = attachmentCount > 0 ? `\n[${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}]` : '';
   const source = `${userContent.trim()}${attachmentNote}`.trim() || '[empty message]';
   if (source.length <= TITLE_SOURCE_MAX_LENGTH) return source;
   const headLength = Math.floor(TITLE_SOURCE_MAX_LENGTH * 0.75);

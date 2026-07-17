@@ -1034,5 +1034,5 @@ function preview(value: string): string {
 function attachmentPreview(message: RuntimeMessage): string {
   const count = message.attachments?.length ?? 0;
   if (!count) return '';
-  return count === 1 ? '图片附件' : `${count} 张图片`;
+  return count === 1 ? '附件' : `${count} 个附件`;
 }

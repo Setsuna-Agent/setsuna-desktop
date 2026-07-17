@@ -5,7 +5,12 @@ import type { Readable } from 'node:stream';
 import net from 'node:net';
 import path from 'node:path';
 import type { WebContents } from 'electron';
-import type { RuntimeEvent, RuntimeRequestInput } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeAttachmentUploadInput,
+  RuntimeEvent,
+  RuntimeRequestInput,
+  RuntimeStoredMessageAttachment,
+} from '@setsuna-desktop/contracts';
 import { desktopProcessEnvironment } from './desktop-environment.js';
 
 type RuntimeHostOptions = {
@@ -109,13 +114,22 @@ export class RuntimeHost {
       },
       body: input.body === undefined ? undefined : JSON.stringify(input.body),
     });
-    const text = await response.text();
-    const body = text ? JSON.parse(text) : null;
-    if (!response.ok) {
-      const reason = body?.error ?? `Runtime request failed: ${response.status}`;
-      throw new Error(`${reason} (${input.method ?? 'GET'} ${safePath})`);
-    }
-    return body as T;
+    return runtimeJsonResponse<T>(response, `${input.method ?? 'GET'} ${safePath}`);
+  }
+
+  /** Uploads one renderer-selected file without exposing the runtime port or token. */
+  async uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
+    if (!(input.data instanceof Uint8Array)) throw new Error('Attachment bytes are invalid.');
+    const params = new URLSearchParams({ name: input.name, type: input.type });
+    const response = await fetch(`http://127.0.0.1:${this.port}/v1/attachments?${params}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        'Content-Type': 'application/octet-stream',
+      },
+      body: Buffer.from(input.data),
+    });
+    return runtimeJsonResponse<RuntimeStoredMessageAttachment>(response, 'POST /v1/attachments');
   }
 
   /**
@@ -277,6 +291,16 @@ export class RuntimeHost {
     }
     return lastSeq;
   }
+}
+
+async function runtimeJsonResponse<T>(response: Response, requestLabel: string): Promise<T> {
+  const text = await response.text();
+  const body = text ? JSON.parse(text) as { error?: string } : null;
+  if (!response.ok) {
+    const reason = body?.error ?? `Runtime request failed: ${response.status}`;
+    throw new Error(`${reason} (${requestLabel})`);
+  }
+  return body as T;
 }
 
 export function resolvePackagedRuntimeEntry(appRoot: string): string {

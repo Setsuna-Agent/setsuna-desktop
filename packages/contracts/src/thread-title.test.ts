@@ -8,9 +8,9 @@ describe('thread title fallback', () => {
     expect(fallbackThreadTitle(input)).toBe(input.trim().slice(0, THREAD_TITLE_MAX_LENGTH));
   });
 
-  it('describes image-only messages and otherwise preserves the placeholder', () => {
-    expect(fallbackThreadTitle('', 1)).toBe('图片附件');
-    expect(fallbackThreadTitle('', 3)).toBe('3 张图片');
+  it('describes attachment-only messages and otherwise preserves the placeholder', () => {
+    expect(fallbackThreadTitle('', 1)).toBe('附件');
+    expect(fallbackThreadTitle('', 3)).toBe('3 个附件');
     expect(fallbackThreadTitle('')).toBe(DEFAULT_THREAD_TITLE);
   });
 });

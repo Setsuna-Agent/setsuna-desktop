@@ -32,9 +32,9 @@ export function useChatTurnActions({
     async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
       const input = (value ?? draft).trim();
       const attachments = options.attachments ?? [];
-      if (!input && !attachments.length && !options.planDecision) return;
+      if (!input && !attachments.length && !options.planDecision) return false;
       // 计划决策只能针对已有线程里的 awaiting 计划，没有线程时无从裁决。
-      if (options.planDecision && !currentThread) return;
+      if (options.planDecision && !currentThread) return false;
       try {
         let thread = currentThread;
         if (!thread) {
@@ -59,7 +59,7 @@ export function useChatTurnActions({
           await reloadThreads();
           // Goal execution is runtime-owned: setting it schedules the first hidden goal turn,
           // and each idle completion schedules the next one until the goal reaches a terminal status.
-          return;
+          return true;
         }
         setDraft('');
         const startTurn = () => client.sendTurn(threadId, {
@@ -84,9 +84,11 @@ export function useChatTurnActions({
             })
           : await startTurn();
         if (!terminalTurnIdsRef.current.has(response.turnId)) setActiveTurnId(response.turnId);
+        return true;
       } catch (unknownError) {
         setDraft((current) => current || input);
         setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        return false;
       }
     },
     [activeProjectId, activeTurnId, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
