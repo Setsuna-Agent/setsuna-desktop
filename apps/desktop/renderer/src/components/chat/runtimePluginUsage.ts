@@ -92,9 +92,11 @@ function pluginIdsForToolRun(run: RuntimeToolRun, plugins: RuntimePluginSummary[
     }
   }
 
+  const dataPluginId = stringField(recordValue(run.data), 'pluginId', 'plugin_id');
+  if (dataPluginId) pluginIds.add(dataPluginId);
+
   if (!pluginResourceToolNames.has(run.name)) return [...pluginIds];
   const argumentsPluginId = stringField(parseJsonRecord(run.argumentsPreview), 'pluginId', 'plugin_id');
-  const dataPluginId = stringField(recordValue(run.data), 'pluginId', 'plugin_id');
   const pluginId = argumentsPluginId ?? dataPluginId;
   if (pluginId) pluginIds.add(pluginId);
   return [...pluginIds];

@@ -3,6 +3,7 @@ const pluginIconNames = [
   'openai-docs',
   'pdf',
   'documents',
+  'image-generation',
   'guard-dangerous-shell',
   'protect-secret-paths',
   'protect-generated-folders',
@@ -71,6 +72,15 @@ function pluginGlyph(icon: PluginIconName | 'plugin') {
           <path d="M5.5 3.5h8l4 4v13h-12v-17Z" />
           <path d="M13.5 3.5v4h4M8 11h7M8 14h7M8 17h4" />
           <path d="m16.2 16.1 2.3-2.3 1.2 1.2-2.3 2.3-1.7.5.5-1.7Z" />
+        </>
+      );
+    case 'image-generation':
+      return (
+        <>
+          <rect x="3.5" y="5" width="17" height="14" rx="2" />
+          <circle cx="8.5" cy="9.5" r="1.5" />
+          <path d="m5.5 17 4.2-4.2 2.7 2.7 2.1-2.1 4 3.6" />
+          <path d="m17.5 2.5.45 1.2 1.2.45-1.2.45-.45 1.2-.45-1.2-1.2-.45 1.2-.45.45-1.2Z" />
         </>
       );
     case 'guard-dangerous-shell':

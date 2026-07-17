@@ -169,20 +169,9 @@ export function SettingsPage({
   }, [activeSection]);
 
   return (
-    <main className="desktop-settings-panel">
-      <div className="chat-user-settings chat-user-settings--page">
-        <nav className="chat-user-settings__nav">
-          <PageBackButton block className="chat-user-settings__page-back" label="返回应用" onClick={onBack} />
-          <div className="chat-user-settings__title">设置</div>
-          <div className="chat-user-settings__tabs">
-            {settingsSections.map((section) => (
-              <button key={section.id} className={activeSection === section.id ? 'is-active' : ''} type="button" onClick={() => setActiveSection(section.id)}>
-                {section.icon}
-                <span>{section.label}</span>
-              </button>
-            ))}
-          </div>
-        </nav>
+    <>
+      <SettingsSidebar activeSection={activeSection} onBack={onBack} onSelectSection={setActiveSection} />
+      <main className="desktop-settings-panel">
         <section className={`chat-user-settings__content ${activeSection === 'localLlm' ? 'chat-user-settings__content--local-llm' : ''} ${activeSection === 'usage' ? 'chat-user-settings__content--usage' : ''}`}>
           <header className="chat-user-settings__page-heading">
             <h1>{settingsSectionLabels[activeSection]}</h1>
@@ -190,8 +179,33 @@ export function SettingsPage({
           </header>
           {content}
         </section>
+      </main>
+    </>
+  );
+}
+
+export function SettingsSidebar({
+  activeSection,
+  onBack,
+  onSelectSection,
+}: {
+  activeSection: SettingsSectionId;
+  onBack: () => void;
+  onSelectSection: (section: SettingsSectionId) => void;
+}) {
+  return (
+    <nav className="app-sidebar desktop-settings-sidebar chat-user-settings__nav">
+      <PageBackButton block className="chat-user-settings__page-back" label="返回应用" onClick={onBack} />
+      <div className="chat-user-settings__title">设置</div>
+      <div className="chat-user-settings__tabs">
+        {settingsSections.map((section) => (
+          <button key={section.id} className={activeSection === section.id ? 'is-active' : ''} type="button" onClick={() => onSelectSection(section.id)}>
+            {section.icon}
+            <span>{section.label}</span>
+          </button>
+        ))}
       </div>
-    </main>
+    </nav>
   );
 }
 

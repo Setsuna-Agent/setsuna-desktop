@@ -316,6 +316,52 @@ describe('runtime context compaction', () => {
     })).not.toBeNull();
   });
 
+  it('does not count display-only generated image data as model context', () => {
+    const baseMessages: RuntimeMessage[] = [
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Generate an apple.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_1',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_1', name: 'generate_image', arguments: '{"prompt":"an apple"}' }],
+      },
+      {
+        id: 'tool_1',
+        role: 'tool',
+        toolCallId: 'call_1',
+        toolName: 'generate_image',
+        content: 'Generated 1 image.',
+        attachments: [{
+          id: 'generated_1',
+          name: 'generated-image-1.png',
+          type: 'image/png',
+          size: 300_000,
+          url: `data:image/png;base64,${'A'.repeat(400_000)}`,
+          modelVisible: false,
+        }],
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+    const withoutDisplayAttachment = baseMessages.map((message) => (
+      message.id === 'tool_1' ? { ...message, attachments: undefined } : message
+    ));
+
+    expect(estimateRuntimeMessageTokens(baseMessages)).toBe(estimateRuntimeMessageTokens(withoutDisplayAttachment));
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages: baseMessages,
+    })).toBeNull();
+  });
+
   it('allows oversized latest user text to be summarized when it alone exceeds the budget', () => {
     const messages: RuntimeMessage[] = [
       {

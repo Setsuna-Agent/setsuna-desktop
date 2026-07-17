@@ -26,6 +26,7 @@ import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host.js';
 import { McpRuntimeToolHost } from '../adapters/tool/mcp-runtime-tool-host.js';
+import { OpenAiImageGenerationToolHost } from '../adapters/tool/openai-image-generation-tool-host.js';
 import { PcLocalToolHost } from '../adapters/tool/pc-local-tool-host.js';
 import { PluginBundleToolHost } from '../adapters/tool/plugin-bundle-tool-host.js';
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
@@ -99,6 +100,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpManagementToolHost(mcpStore, mcpConnections),
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore),
+    new OpenAiImageGenerationToolHost(configStore, pluginStore),
     new WorkspaceImageToolHost(workspaceProjects),
     new ArtifactToolHost(workspaceProjects),
     new PcLocalToolHost(workspaceProjects, policyAmendmentStore, workspaceDependencies),

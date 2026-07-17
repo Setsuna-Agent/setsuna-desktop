@@ -181,8 +181,9 @@ export function useDesktopAppController() {
     setSkillSelectionRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
 
+  const shellSidebarState = resolveShellSidebarState(activeView, sidebarCollapsed);
   const shellStyle = {
-    '--app-sidebar-width': sidebarReservesLayout ? `${sidebarWidth}px` : '0px',
+    '--app-sidebar-width': shellSidebarState.reservesLayout ? `${sidebarWidth}px` : '0px',
     '--app-topbar-sidebar-width': activeView === 'settings' ? 'var(--desktop-settings-nav-width)' : sidebarReservesLayout ? `${sidebarWidth}px` : 'var(--app-topbar-collapsed-sidebar-width)',
     '--desktop-agent-sidebar-visual-width': `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
@@ -193,7 +194,7 @@ export function useDesktopAppController() {
   const shellClassName = [
     activeView === 'settings' ? 'desktop-agent-page--settings-open' : '',
     activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
-    sidebarCollapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
+    shellSidebarState.collapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
   ].filter(Boolean).join(' ');
 
@@ -242,6 +243,15 @@ export function useDesktopAppController() {
     workspaceMinWidth,
     workspacePanels,
     workspaceWidth,
+  };
+}
+
+export function resolveShellSidebarState(activeView: MainView, sidebarCollapsed: boolean) {
+  // 设置导航是共享 workbench 的侧栏，但不继承聊天侧栏的折叠状态。
+  const settingsOpen = activeView === 'settings';
+  return {
+    collapsed: !settingsOpen && sidebarCollapsed,
+    reservesLayout: settingsOpen || !sidebarCollapsed,
   };
 }
 

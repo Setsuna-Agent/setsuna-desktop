@@ -32,6 +32,54 @@ describe('createChatDisplayItems', () => {
     expect(chatDisplayItemRenderKey(streamedItem!)).toBe('assistant:assistant_first');
   });
 
+  it('projects tool image attachments into the matching assistant run', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'assistant_generate',
+        turnId: 'turn_image',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-07-17T00:00:00.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_image', name: 'generate_image', arguments: '{"prompt":"moon"}' }],
+      },
+      {
+        id: 'tool_generate',
+        turnId: 'turn_image',
+        role: 'tool',
+        toolCallId: 'call_image',
+        toolName: 'generate_image',
+        content: 'Generated 1 image successfully.',
+        createdAt: '2026-07-17T00:00:01.000Z',
+        status: 'complete',
+        attachments: [{
+          id: 'generated_1',
+          name: 'generated-1.png',
+          type: 'image/png',
+          size: 12,
+          url: 'data:image/png;base64,aW1hZ2U=',
+          modelVisible: false,
+        }],
+      },
+      {
+        id: 'assistant_done',
+        turnId: 'turn_image',
+        role: 'assistant',
+        content: '图片已经生成。',
+        createdAt: '2026-07-17T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+
+    expect(createChatDisplayItems(messages)).toEqual([
+      expect.objectContaining({
+        type: 'assistant',
+        messageIds: ['assistant_generate', 'tool_generate', 'assistant_done'],
+        toolAttachments: [expect.objectContaining({ id: 'generated_1', modelVisible: false })],
+      }),
+    ]);
+  });
+
   it('keeps manually compacted context at its runtime position instead of appending it', () => {
     const messages: RuntimeMessage[] = [
       {

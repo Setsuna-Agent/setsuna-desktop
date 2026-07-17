@@ -357,7 +357,9 @@ function anthropicUserContentParts(message: RuntimeMessage): unknown {
 function inlineAttachments(message: RuntimeMessage) {
   return (message.attachments ?? []).filter(
     (attachment): attachment is RuntimeInlineMessageAttachment =>
-      isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/'),
+      isRuntimeInlineMessageAttachment(attachment)
+      && attachment.modelVisible !== false
+      && attachment.type.startsWith('image/'),
   );
 }
 

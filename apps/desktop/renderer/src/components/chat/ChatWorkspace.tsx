@@ -1348,8 +1348,9 @@ function AssistantRunContent({
     () => createAssistantRunTimeline(displaySegments, pluginUses),
     [displaySegments, pluginUses],
   );
+  const toolAttachments = item.toolAttachments ?? [];
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
-  const hasRenderableContent = timelineBlocks.length > 0;
+  const hasRenderableContent = timelineBlocks.length > 0 || toolAttachments.length > 0;
   const hasWorkBlock = timelineBlocks.some((block) => block.type === 'work');
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
@@ -1411,6 +1412,11 @@ function AssistantRunContent({
         plan: timelinePlan,
         workHistoryDefaultExpanded: workHistoryState.expanded,
       })}
+      {toolAttachments.length ? (
+        <div className="chat-assistant-run__segment chat-assistant-run__attachments">
+          <ChatMessageAttachments attachments={toolAttachments} variant="assistant" />
+        </div>
+      ) : null}
       {showTrailingLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">

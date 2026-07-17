@@ -1,6 +1,6 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
+import { normalizeImageGenerationServiceUrl, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
 import type {
   ProviderConfigInput,
   ProviderConfigState,
@@ -11,9 +11,15 @@ import type {
   RuntimeHookHandlerConfig,
   RuntimeHookMatcherGroup,
   RuntimeHooksConfig,
+  RuntimeImageGenerationConfigInput,
+  RuntimeImageGenerationConfigState,
   RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
-import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
+import type {
+  ConfigStore,
+  RuntimeImageGenerationProviderConfig,
+  RuntimeProviderConfig,
+} from '../../ports/config-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
@@ -34,15 +40,22 @@ const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'Stop',
 ];
 
-type StoredConfig = Omit<RuntimeConfigState, 'configPath' | 'dataPath' | 'providers' | 'memory' | 'memoryEnabled'> & {
+type StoredImageGenerationConfig = Omit<RuntimeImageGenerationConfigState, 'apiKeySet' | 'apiKeyPreview'>;
+
+type StoredConfig = Omit<
+  RuntimeConfigState,
+  'configPath' | 'dataPath' | 'providers' | 'memory' | 'memoryEnabled' | 'imageGeneration'
+> & {
   schemaVersion?: number;
   memory?: Partial<RuntimeMemorySettings>;
   memoryEnabled?: boolean;
+  imageGeneration?: StoredImageGenerationConfig;
   providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
 };
 
 type StoredSecrets = {
   providerApiKeys: Record<string, string>;
+  imageGenerationApiKey?: string;
 };
 
 export class FileConfigStore implements ConfigStore {
@@ -82,6 +95,17 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  async getImageGenerationConfig(): Promise<RuntimeImageGenerationProviderConfig> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const secrets = await this.readSecrets();
+      return {
+        ...normalizeStoredImageGeneration(stored.imageGeneration),
+        apiKey: secrets.imageGenerationApiKey ?? '',
+      };
+    });
+  }
+
   async saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState> {
     return withFileStateUpdate(this.configPath, async () => {
       await mkdir(this.dataDir, { recursive: true });
@@ -91,6 +115,7 @@ export class FileConfigStore implements ConfigStore {
       pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
       const memory = memorySettingsForSave(input, previous);
+      const imageGeneration = imageGenerationSettingsForSave(input.imageGeneration, previous.imageGeneration, secrets);
 
       const stored: StoredConfig = {
         schemaVersion: CONFIG_SCHEMA_VERSION,
@@ -110,6 +135,7 @@ export class FileConfigStore implements ConfigStore {
         bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
         features: normalizeFeatureFlags(input.features ?? previous.features),
         desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
+        imageGeneration,
         providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
       };
 
@@ -149,6 +175,7 @@ export class FileConfigStore implements ConfigStore {
       bypassHookTrust: stored.bypassHookTrust === true,
       features: normalizeFeatureFlags(stored.features),
       desktopSettings: normalizeDesktopSettings(stored.desktopSettings),
+      imageGeneration: imageGenerationState(stored.imageGeneration, secrets),
       providers: stored.providers.map((provider) => {
         const apiKey = secrets.providerApiKeys[provider.id] ?? '';
         return {
@@ -187,6 +214,7 @@ function defaultConfig(): StoredConfig {
     bypassHookTrust: false,
     features: { request_permissions_tool: true },
     desktopSettings: { workspaceDependenciesEnabled: true },
+    imageGeneration: defaultImageGenerationSettings(),
     providers: [
       {
         id: 'local-test',
@@ -265,12 +293,62 @@ function normalizeModels(models: ProviderConfigState['models']): ProviderConfigS
 
 function normalizeSecrets(value: unknown): StoredSecrets {
   if (!value || typeof value !== 'object') return { providerApiKeys: {} };
-  const providerApiKeys = (value as { providerApiKeys?: unknown }).providerApiKeys;
-  if (!providerApiKeys || typeof providerApiKeys !== 'object') return { providerApiKeys: {} };
+  const record = value as { providerApiKeys?: unknown; imageGenerationApiKey?: unknown };
+  const providerApiKeys = record.providerApiKeys;
   return {
-    providerApiKeys: Object.fromEntries(
-      Object.entries(providerApiKeys).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-    ),
+    providerApiKeys: providerApiKeys && typeof providerApiKeys === 'object'
+      ? Object.fromEntries(
+          Object.entries(providerApiKeys).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+        )
+      : {},
+    imageGenerationApiKey: typeof record.imageGenerationApiKey === 'string'
+      ? record.imageGenerationApiKey
+      : undefined,
+  };
+}
+
+function defaultImageGenerationSettings(): StoredImageGenerationConfig {
+  return {
+    baseUrl: '',
+    model: '',
+  };
+}
+
+function normalizeStoredImageGeneration(value: unknown): StoredImageGenerationConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaultImageGenerationSettings();
+  const record = value as Record<string, unknown>;
+  return {
+    baseUrl: normalizeImageGenerationServiceUrl(record.baseUrl) ?? '',
+    model: nonEmpty(record.model) ?? '',
+  };
+}
+
+function imageGenerationSettingsForSave(
+  input: RuntimeImageGenerationConfigInput | undefined,
+  previous: StoredImageGenerationConfig | undefined,
+  secrets: StoredSecrets,
+): StoredImageGenerationConfig {
+  const base = normalizeStoredImageGeneration(previous);
+  if (typeof input?.apiKey === 'string' && input.apiKey.trim()) {
+    secrets.imageGenerationApiKey = input.apiKey.trim();
+  }
+  if (input?.clearApiKey === true) delete secrets.imageGenerationApiKey;
+  return {
+    baseUrl: normalizeImageGenerationServiceUrl(input?.baseUrl ?? base.baseUrl) ?? '',
+    model: typeof input?.model === 'string' ? input.model.trim() : base.model,
+  };
+}
+
+function imageGenerationState(
+  value: StoredImageGenerationConfig | undefined,
+  secrets: StoredSecrets,
+): RuntimeImageGenerationConfigState {
+  const config = normalizeStoredImageGeneration(value);
+  const apiKey = secrets.imageGenerationApiKey ?? '';
+  return {
+    ...config,
+    apiKeySet: apiKey.length > 0,
+    apiKeyPreview: maskApiKey(apiKey),
   };
 }
 

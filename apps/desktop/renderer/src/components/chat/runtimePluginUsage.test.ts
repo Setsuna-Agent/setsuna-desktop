@@ -71,6 +71,26 @@ describe('runtimePluginUsesByTurn', () => {
       expect.objectContaining({ id: 'docs-mcp', name: '文档搜索' }),
     ]);
   });
+
+  it('attributes a native tool run through its persisted pluginId data', () => {
+    const thread = runtimeThread({ selectedSkills: [] });
+    thread.messages = [{
+      id: 'assistant_image',
+      turnId: 'turn_1',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-07-17T00:00:02.000Z',
+      toolRuns: [{
+        id: 'image_1',
+        name: 'generate_image',
+        status: 'success',
+        data: { pluginId: 'openai-image-generation', imageCount: 1 },
+      }],
+    }];
+
+    expect(runtimePluginUsesByTurn(thread, [], [plugin('openai-image-generation', '图片生成')]).get('turn_1'))
+      .toEqual([expect.objectContaining({ id: 'openai-image-generation', name: '图片生成' })]);
+  });
 });
 
 function runtimeThread(snapshot: Pick<RuntimeModelRequestStepSnapshot, 'selectedSkills'>): RuntimeThread {

@@ -274,7 +274,7 @@ function compactableTailScope(messages: RuntimeMessage[], eligibleIndexes: numbe
   // 如果最新纯文本用户输入单条就超过预算，继续保留原文会导致 steer/用户长输入无法恢复地爆窗。
   if (
     last?.role === 'user'
-    && !last.attachments?.length
+    && !modelVisibleAttachments(last).length
     && last.content.trim()
     && estimateMessageTokens(last) > autoCompactTokenLimit
   ) {
@@ -315,7 +315,10 @@ export function reserveRuntimeContextCompactionBudget(
 
 function estimateMessageTokens(message: RuntimeMessage): number {
   if (message.visibility === 'transcript') return 0;
-  const attachmentTokens = (message.attachments ?? []).reduce((total, attachment) => {
+  // Display-only artifacts (for example generated image data URLs) are persisted for
+  // the transcript, but model adapters deliberately omit them from requests. Counting
+  // their Base64 payload here would immediately trigger a false context compaction.
+  const attachmentTokens = modelVisibleAttachments(message).reduce((total, attachment) => {
     if (isRuntimeStoredMessageAttachment(attachment)) {
       return total + estimateTextTokens(`${attachment.name} ${attachment.type} ${attachment.size}`);
     }
@@ -346,11 +349,15 @@ function messageHasContextValue(message: RuntimeMessage): boolean {
   if (message.visibility === 'transcript') return false;
   return Boolean(
     message.content.trim()
-    || message.attachments?.length
+    || modelVisibleAttachments(message).length
     || message.contextCompaction
     || message.toolCalls?.length
     || (message.role === 'tool' && (message.toolCallId || message.toolName)),
   );
+}
+
+function modelVisibleAttachments(message: RuntimeMessage): NonNullable<RuntimeMessage['attachments']> {
+  return (message.attachments ?? []).filter((attachment) => attachment.modelVisible !== false);
 }
 
 function messageEligibleForCompaction(message: RuntimeMessage): boolean {

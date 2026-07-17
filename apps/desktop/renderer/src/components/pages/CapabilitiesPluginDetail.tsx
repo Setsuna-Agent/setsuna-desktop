@@ -2,21 +2,26 @@ import { useState } from 'react';
 import { BookOpen, Check, Download, FileText, Loader2, Plug, Trash2, Workflow } from 'lucide-react';
 import type {
   RuntimeHookMetadata,
+  RuntimeImageGenerationConfigInput,
+  RuntimeImageGenerationConfigState,
   RuntimeMcpServer,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
+import { OPENAI_IMAGE_GENERATION_PLUGIN_ID } from '@setsuna-desktop/contracts';
 import { Button, PageHeader } from '../primitives.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js';
 import { CapabilitiesPluginItemDialog, type CapabilitiesPluginItem } from './CapabilitiesPluginItemDialog.js';
+import { ImageGenerationPluginSettings } from './ImageGenerationPluginSettings.js';
 import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills } from './pluginDisplay.js';
 
 export function CapabilitiesPluginDetail({
   error,
+  imageGenerationConfig,
   installedPlugin,
   installing,
   marketplacePlugin,
@@ -25,10 +30,12 @@ export function CapabilitiesPluginDetail({
   onGetItemContent,
   onInstall,
   onRemove,
+  onSaveImageGenerationConfig,
   removing,
   runtimeHooks,
 }: {
   error: string | null;
+  imageGenerationConfig?: RuntimeImageGenerationConfigState;
   installedPlugin?: RuntimePluginSummary;
   installing: boolean;
   marketplacePlugin?: RuntimePluginMarketplaceItem;
@@ -37,6 +44,7 @@ export function CapabilitiesPluginDetail({
   onGetItemContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
+  onSaveImageGenerationConfig?: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   removing: boolean;
   runtimeHooks?: RuntimeHookMetadata[];
 }) {
@@ -107,6 +115,10 @@ export function CapabilitiesPluginDetail({
         <div><dt>自动化</dt><dd>{hookCount}</dd></div>
         <div><dt>资源</dt><dd>{resourceCount}</dd></div>
       </dl>
+
+      {installed && plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID && onSaveImageGenerationConfig ? (
+        <ImageGenerationPluginSettings config={imageGenerationConfig} onSave={onSaveImageGenerationConfig} />
+      ) : null}
 
       <CapabilitiesPluginDetailSection
         icon={<BookOpen size={15} />}

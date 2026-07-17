@@ -443,6 +443,19 @@
   z-index: 15;
 }
 
+:root[data-desktop-platform='win32'] .app-workbench__main-title,
+:root[data-desktop-platform='win32'] .app-workbench__main-actions {
+  height: var(--desktop-workspace-toolbar-height);
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-title {
+  padding-left: calc(var(--app-topbar-item-gap) + 4px);
+}
+
+:root[data-desktop-platform='win32'] .chat-main-conversation--with-bottom-sender {
+  padding-top: var(--desktop-workspace-toolbar-height);
+}
+
 :root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-workbench__main-title,
 :root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-workbench__main-title {
   display: none;
@@ -478,6 +491,42 @@
   transition:
     grid-template-columns 180ms ease,
     grid-template-rows 180ms ease;
+}
+
+/* Windows 主区使用同一条轮廓连接顶边与侧边，避免圆角处叠出直角边线。 */
+:root[data-desktop-platform='win32'] .app-workbench:has(> .app-sidebar)::before {
+  position: absolute;
+  z-index: 21;
+  inset: 0 0 0 var(--app-sidebar-width);
+  border-top: 1px solid var(--desktop-agent-sidebar-edge);
+  border-left: 1px solid var(--desktop-agent-sidebar-edge);
+  border-top-left-radius: var(--app-radius-lg);
+  content: '';
+  pointer-events: none;
+}
+
+:root[data-desktop-platform='win32'] .app-workbench__main-title,
+:root[data-desktop-platform='win32'] .desktop-chat-panel,
+:root[data-desktop-platform='win32'] .desktop-settings-panel,
+:root[data-desktop-platform='win32'] .capabilities-page {
+  border-top-left-radius: var(--app-radius-lg);
+}
+
+:root[data-desktop-platform='win32'] .app-sidebar {
+  border-right: 0;
+}
+
+:root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .app-workbench:has(> .app-sidebar)::before {
+  left: 0;
+  border-left: 0;
+  border-top-left-radius: 0;
+}
+
+:root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .app-workbench__main-title,
+:root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .desktop-chat-panel,
+:root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .desktop-settings-panel,
+:root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .capabilities-page {
+  border-top-left-radius: 0;
 }
 
 body.desktop-agent-sidebar-resizing .app-workbench,

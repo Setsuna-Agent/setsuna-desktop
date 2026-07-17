@@ -1,6 +1,6 @@
 import { useCallback, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { BookOpen, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, Puzzle, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
-import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginItemContent, RuntimePluginItemKind, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeImageGenerationConfigInput, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginItemContent, RuntimePluginItemKind, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
@@ -99,6 +99,7 @@ const chatCreateSkillIds = {
 } as const;
 
 export function CapabilitiesPage({
+  config,
   skills,
   selectedSkillCount,
   mcpState,
@@ -129,7 +130,9 @@ export function CapabilitiesPage({
   onLogoutMcpServer,
   onInstallMarketplacePlugin,
   onRemovePlugin,
+  onSaveImageGenerationConfig,
 }: {
+  config: RuntimeConfigState | null;
   skills: RuntimeSkillSummary[];
   selectedSkillCount: number;
   mcpState: RuntimeMcpServerList | null;
@@ -160,6 +163,7 @@ export function CapabilitiesPage({
   onLogoutMcpServer: (server: RuntimeMcpServer) => Promise<void>;
   onInstallMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onRemovePlugin: (pluginId: string) => Promise<void>;
+  onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
@@ -634,6 +638,7 @@ export function CapabilitiesPage({
         <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
           <CapabilitiesPluginDetail
             error={pluginError}
+            imageGenerationConfig={config?.imageGeneration}
             installedPlugin={selectedInstalledPlugin}
             installing={installingPluginIds.has(selectedPluginId)}
             marketplacePlugin={selectedMarketplacePlugin}
@@ -647,6 +652,7 @@ export function CapabilitiesPage({
             onInstall={installMarketplacePlugin}
             onGetItemContent={getSelectedPluginItemContent}
             onRemove={removePlugin}
+            onSaveImageGenerationConfig={onSaveImageGenerationConfig}
           />
         </section>
       </main>

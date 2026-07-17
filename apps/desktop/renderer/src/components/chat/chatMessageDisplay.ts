@@ -1,9 +1,10 @@
-import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import { OPENAI_IMAGE_GENERATION_TOOL_NAME } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
 import { visibleMarkdownContent } from './chatThinkingContent.js';
 
 export type ChatTranscriptItem =
   | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
-  | { type: 'assistant'; id: string; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; turnId?: string }
+  | { type: 'assistant'; id: string; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
@@ -46,6 +47,7 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   let assistantRunHandledSteerMessageIds: string[] = [];
   let assistantRunMessageIds: string[] = [];
   let assistantRunSteerMessages: RuntimeMessage[] = [];
+  let assistantRunToolAttachments: RuntimeMessageAttachment[] = [];
   let assistantRunTurnId: string | undefined;
   const pendingSteerMessageIdsByTurnId = new Map<string, string[]>();
   const userItemByTurnId = new Map<string, Extract<ChatTranscriptItem, { type: 'user' }>>();
@@ -62,12 +64,14 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       messageIds: assistantRunMessageIds,
       segments: assistantRun,
       steerMessages: assistantRunSteerMessages,
+      ...(assistantRunToolAttachments.length ? { toolAttachments: assistantRunToolAttachments } : {}),
       turnId: assistantRunTurnId,
     });
     assistantRun = [];
     assistantRunHandledSteerMessageIds = [];
     assistantRunMessageIds = [];
     assistantRunSteerMessages = [];
+    assistantRunToolAttachments = [];
     assistantRunTurnId = undefined;
   };
 
@@ -77,7 +81,12 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
     if (message.visibility === 'model') continue;
     if (message.role === 'tool') {
       // tool 消息本身不渲染成独立气泡，只并入同 turn 的 assistant run 复制/删除范围。
-      if (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId)) assistantRunMessageIds.push(message.id);
+      if (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId)) {
+        assistantRunMessageIds.push(message.id);
+        if (message.toolName === OPENAI_IMAGE_GENERATION_TOOL_NAME && message.attachments?.length) {
+          assistantRunToolAttachments.push(...message.attachments);
+        }
+      }
       continue;
     }
     if (message.contextCompaction) {
@@ -360,7 +369,7 @@ function transcriptItemMessageCount(item: ChatTranscriptItem): number {
 
 function transcriptItemScrollSignal(item: ChatTranscriptItem): string {
   if (item.type === 'assistant') {
-    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}`;
+    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:tool-attachments:${item.toolAttachments?.length ?? 0}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}`;
   }
   if (item.type === 'user') {
     return `user:${messageScrollSignal(item.message)}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:${item.handledSteerMessageIds.join(',')}`;

@@ -111,4 +111,35 @@ describe('file config store', () => {
     };
     expect(secrets.providerApiKeys).toEqual({ [baseProvider.id]: 'retained-secret' });
   });
+
+  it('stores the image generation API key only in secrets and supports clearing it', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+
+    await expect(store.saveConfig({
+      imageGeneration: {
+        baseUrl: '  http://127.0.0.1:8000  ',
+        model: ' image-model ',
+        apiKey: ' image-secret ',
+      },
+    })).resolves.toMatchObject({
+      imageGeneration: {
+        baseUrl: 'http://127.0.0.1:8000',
+        model: 'image-model',
+        apiKeySet: true,
+      },
+    });
+    await expect(store.getImageGenerationConfig()).resolves.toEqual({
+      baseUrl: 'http://127.0.0.1:8000',
+      model: 'image-model',
+      apiKey: 'image-secret',
+    });
+    expect(await readFile(path.join(dataDir, 'config.json'), 'utf8')).not.toContain('image-secret');
+    expect(await readFile(path.join(dataDir, 'secrets.json'), 'utf8')).toContain('image-secret');
+
+    await expect(store.saveConfig({ imageGeneration: { clearApiKey: true } })).resolves.toMatchObject({
+      imageGeneration: { apiKeySet: false },
+    });
+    await expect(store.getImageGenerationConfig()).resolves.toMatchObject({ apiKey: '' });
+  });
 });

@@ -2,9 +2,15 @@ import { isRuntimeInlineMessageAttachment, type RuntimeMessageAttachment } from 
 import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
 import { formatAttachmentTypeLabel } from './chatAttachments.js';
 
-export function ChatMessageAttachments({ attachments }: { attachments: RuntimeMessageAttachment[] }) {
+export function ChatMessageAttachments({
+  attachments,
+  variant = 'user',
+}: {
+  attachments: RuntimeMessageAttachment[];
+  variant?: 'user' | 'assistant';
+}) {
   return (
-    <div className="chat-user-message-attachments" aria-label="消息附件">
+    <div className={`chat-user-message-attachments chat-user-message-attachments--${variant}`} aria-label="消息附件">
       {attachments.map((attachment) => (
         isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/') ? (
           <img key={attachment.id} src={attachment.url} alt={attachment.name} title={attachment.name} />

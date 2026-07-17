@@ -91,6 +91,10 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 
 插件使用状态按能力来源统一归因，不局限于 Skill：Plugin Skill 写入采样快照，Plugin MCP 按工具命名空间归因，Plugin Hook 按 `pluginId` 归因，Plugin resource 按资源工具参数归因。renderer 在 turn 进行中显示“正在使用插件”，结束后显示“已使用插件”。
 
+### 随应用实现的原生能力
+
+普通 Bundle 仍不能注入任意 TypeScript/JavaScript 工具代码。需要凭据或本机能力的第一方插件可以由 Bundle Skill 与应用内置 ToolHost 配对，并以已安装插件 ID 作为能力开关。`openai-image-generation` 使用这一方式提供 `generate_image`：用户在插件详情页填写 OpenAI 兼容 Images API 的服务地址、默认模型和 API key；API key 只写入 runtime 的 `secrets.json`，renderer 仅接收脱敏状态。服务地址允许 HTTP 或 HTTPS，HTTP 配置会显示明文传输警告。卸载或停用插件后，工具不会再出现在模型能力列表中。
+
 ## 安装和卸载
 
 应用根目录的 `plugins/` 是默认精选市场源，打包时随应用发布。renderer 通过 `GET /v1/plugin-marketplace` 获取不含本地路径、命令或凭据的市场投影；投影包含用于详情页展示的 Skill、MCP 和 Hook 描述。点击安装后只向 `POST /v1/plugin-marketplace/:id/install` 提交插件 ID。runtime 根据可信目录找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
@@ -117,4 +121,4 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 
 Hooks 页只展示真实已配置的 Hook，新环境默认为空；原先的 8 个推荐模板已分别迁移为独立插件，用户可以从市场按需安装，也可以继续手动创建 Hook。
 
-当前默认市场是随应用发布的精选目录，已包含 OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力；LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。市场暂不包含远程源、自动更新、签名验证或自动执行安装脚本；这些能力加入前仍保持“可信应用目录 + 完整本地校验”的边界。
+当前默认市场是随应用发布的精选目录，已包含图片生成、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务，并兼容 `b64_json` 与 URL 图片响应；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。市场暂不包含远程源、自动更新、签名验证或自动执行安装脚本；这些能力加入前仍保持“可信应用目录 + 完整本地校验”的边界。

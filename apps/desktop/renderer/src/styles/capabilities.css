@@ -535,6 +535,10 @@
   --desktop-plugin-icon-color: #3376c5;
 }
 
+.desktop-plugin-icon[data-plugin-icon='image-generation'] {
+  --desktop-plugin-icon-color: #9a58d0;
+}
+
 .desktop-plugin-icon[data-plugin-icon='guard-dangerous-shell'] {
   --desktop-plugin-icon-color: #d94f55;
 }
@@ -999,6 +1003,102 @@
   font-family: var(--app-code-font-family);
   font-size: 14px;
   font-weight: 600;
+}
+
+.desktop-image-generation-settings {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
+  border-radius: var(--app-radius-md);
+  background: color-mix(in srgb, var(--app-surface) 95%, var(--app-primary) 3%);
+}
+
+.desktop-image-generation-settings > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.desktop-image-generation-settings__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 11%, transparent);
+}
+
+.desktop-image-generation-settings h3,
+.desktop-image-generation-settings p {
+  margin: 0;
+}
+
+.desktop-image-generation-settings h3 {
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.desktop-image-generation-settings header p,
+.desktop-image-generation-settings__field small {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-image-generation-settings__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.desktop-image-generation-settings__field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.desktop-image-generation-settings__field--wide {
+  grid-column: 1 / -1;
+}
+
+.desktop-image-generation-settings__warning {
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--app-warning) 34%, var(--app-border));
+  border-radius: var(--app-radius-sm);
+  color: var(--app-warning);
+  background: color-mix(in srgb, var(--app-warning) 7%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-image-generation-settings > footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.desktop-image-generation-settings__status {
+  min-width: 0;
+  margin-right: auto;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-image-generation-settings__status .is-error {
+  color: var(--app-danger);
+}
+
+.desktop-image-generation-settings__status .is-success {
+  color: var(--app-success);
 }
 
 .desktop-capabilities-plugin-detail__section {
@@ -2106,6 +2206,18 @@
 
   .desktop-capabilities-plugin-detail__stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .desktop-image-generation-settings__form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-image-generation-settings > footer {
+    flex-wrap: wrap;
+  }
+
+  .desktop-image-generation-settings__status {
+    flex-basis: 100%;
   }
 
   .desktop-plugin-item-dialog__metadata {

@@ -12,6 +12,7 @@ import type {
   RuntimeHookInput,
   RuntimeHookListResponse,
   RuntimeHookMetadata,
+  RuntimeImageGenerationConfigInput,
   RuntimeMemoryPreview,
   RuntimeMemoryRecord,
   RuntimeMcpServer,
@@ -419,6 +420,11 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     },
     [client, config?.activeProviderId],
   );
+
+  const saveImageGenerationConfig = useCallback(async (input: RuntimeImageGenerationConfigInput) => {
+    const next = await client.saveConfig({ imageGeneration: input });
+    setConfig(next);
+  }, [client]);
 
   const saveRuntimePreferences = useCallback(
     async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>) => {
@@ -891,6 +897,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     restoreArchivedThread,
     removePlugin,
     saveMcpServer,
+    saveImageGenerationConfig,
     saveProviders,
     saveRuntimePreferences,
     selectProviderModel,

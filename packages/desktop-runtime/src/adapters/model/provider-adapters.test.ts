@@ -287,6 +287,70 @@ describe('provider model adapters', () => {
     ]));
   });
 
+  it('keeps display-only tool images out of every model request', async () => {
+    const messages = [
+      request.messages[1],
+      {
+        id: 'assistant-image',
+        role: 'assistant' as const,
+        content: '',
+        createdAt: '2026-07-17T00:00:02.000Z',
+        toolCalls: [{ id: 'call_image', name: 'generate_image', arguments: '{"prompt":"moon"}' }],
+      },
+      {
+        id: 'tool-image',
+        role: 'tool' as const,
+        content: 'Generated 1 image successfully.',
+        createdAt: '2026-07-17T00:00:03.000Z',
+        toolCallId: 'call_image',
+        toolName: 'generate_image',
+        attachments: [{
+          id: 'generated-image',
+          name: 'generated.png',
+          type: 'image/png',
+          size: 5,
+          url: 'data:image/png;base64,aW1hZ2U=',
+          modelVisible: false,
+        }],
+      },
+    ];
+    const clients: Array<[ModelClient, CapturedRequest]> = [
+      (() => {
+        const captured: CapturedRequest = {};
+        return [new OpenAiChatModelClient(
+          provider('openai-compatible', 'https://llm.example/v1'),
+          fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', captured),
+        ), captured];
+      })(),
+      (() => {
+        const captured: CapturedRequest = {};
+        return [new OpenAiResponsesModelClient(
+          provider('openai-responses', 'https://api.openai.test/v1'),
+          fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
+        ), captured];
+      })(),
+      (() => {
+        const captured: CapturedRequest = {};
+        return [new AnthropicMessagesModelClient(
+          provider('anthropic', 'https://api.anthropic.test'),
+          fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+        ), captured];
+      })(),
+      (() => {
+        const captured: CapturedRequest = {};
+        return [new AiSdkOpenAiCompatibleModelClient(
+          provider('openai-compatible', 'https://llm.example/v1'),
+          fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', captured),
+        ), captured];
+      })(),
+    ];
+
+    for (const [client, captured] of clients) {
+      await collect(client, { messages });
+      expect(JSON.stringify(expectBody(captured))).not.toContain('data:image/png;base64');
+    }
+  });
+
   it('streams OpenAI Responses output text deltas', async () => {
     const captured: CapturedRequest = {};
     const client = new OpenAiResponsesModelClient(

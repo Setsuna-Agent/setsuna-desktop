@@ -221,6 +221,44 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('desktop-capabilities-plugin-detail__extras');
   });
 
+  it('renders private Images API settings only for the installed image plugin', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        imageGenerationConfig={{
+          baseUrl: 'http://127.0.0.1:8000',
+          model: 'gpt-image-1',
+          apiKeySet: true,
+          apiKeyPreview: 'ima••••cret',
+        }}
+        installing={false}
+        installedPlugin={{
+          id: 'openai-image-generation',
+          name: '图片生成',
+          icon: 'image-generation',
+          installedAt: '2026-07-17T00:00:00.000Z',
+          skills: [{ id: 'openai-image-generation.image-generation', name: '图片生成' }],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+        }}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSaveImageGenerationConfig={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain('desktop-image-generation-settings');
+    expect(html).toContain('http://127.0.0.1:8000');
+    expect(html).toContain('gpt-image-1');
+    expect(html).toContain('当前使用 HTTP');
+    expect(html).not.toContain('>启用<');
+    expect(html).not.toContain('image-secret');
+  });
+
   it('renders Markdown files by default while keeping a source view available', () => {
     const markdown = [
       '---',
@@ -275,6 +313,7 @@ describe('capabilities plugin components', () => {
       'openai-docs',
       'pdf',
       'documents',
+      'image-generation',
       'guard-dangerous-shell',
       'protect-secret-paths',
       'protect-generated-folders',

@@ -14,6 +14,8 @@ type RuntimeMessageAttachmentBase = {
   name: string;
   type: string;
   size: number;
+  /** false 表示仅用于对话展示，不再作为下一次模型输入发送。 */
+  modelVisible?: boolean;
 };
 
 /** 旧版及面向模型的附件，其字节数据由 URL 承载，通常为数据 URL。 */

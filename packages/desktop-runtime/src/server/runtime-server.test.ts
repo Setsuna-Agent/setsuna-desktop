@@ -504,6 +504,18 @@ describe('runtime server', () => {
           capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 7 },
         }),
         expect.objectContaining({
+          id: 'openai-image-generation',
+          name: '图片生成',
+          icon: 'image-generation',
+          featured: true,
+          installed: false,
+          skills: [expect.objectContaining({
+            id: 'openai-image-generation.image-generation',
+            name: '图片生成',
+          })],
+          capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+        }),
+        expect.objectContaining({
           id: 'guard-dangerous-shell',
           name: '阻止危险 Shell 命令',
           icon: 'guard-dangerous-shell',
@@ -524,6 +536,7 @@ describe('runtime server', () => {
     expect(marketplace.plugins.filter((plugin: { featured: boolean }) => plugin.featured).map((plugin: { id: string }) => plugin.id)).toEqual([
       'documents',
       'pdf',
+      'openai-image-generation',
     ]);
     expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
     expect(JSON.stringify(marketplace)).not.toContain('.mjs');

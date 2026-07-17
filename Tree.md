@@ -2930,6 +2930,17 @@ Word/DOCX 文档处理插件。
 - 使用 LibreOffice 转换 PDF，再通过 PyMuPDF 生成逐页 PNG 供 `view_image` 验证。
 - 通过 `publish_artifact` 发布最终 DOCX；LibreOffice 缺失时明确降级为结构检查。
 
+### `plugins/openai-image-generation`
+
+OpenAI 兼容图片生成插件。
+
+职责：
+
+- 通过 Skill 识别“生图/生成图片”等创建新图片的意图。
+- 由 runtime 原生 `generate_image` 工具调用用户配置的 Images API，而不是把凭据交给 renderer。
+- 接受 HTTP 或 HTTPS 服务根地址、`/v1` 地址或完整生成端点。
+- 兼容标准 `b64_json` 和 URL 响应，下载并校验 PNG、JPEG、GIF、WebP 后投影到聊天界面。
+
 ## 生成产物和缓存目录
 
 这些目录/文件可能出现在工作区，但不是源码主线，通常不应手写修改。

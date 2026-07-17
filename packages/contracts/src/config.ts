@@ -35,6 +35,36 @@ export type RuntimeDesktopSettings = {
   workspaceDependenciesEnabled?: boolean;
 };
 
+export type RuntimeImageGenerationConfigState = {
+  baseUrl: string;
+  model: string;
+  apiKeySet: boolean;
+  apiKeyPreview: string;
+};
+
+export type RuntimeImageGenerationConfigInput = {
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  clearApiKey?: boolean;
+};
+
+/** 接受用户自定义的 HTTP/HTTPS OpenAI Images 服务地址，不强制公网 HTTPS。 */
+export function normalizeImageGenerationServiceUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return '';
+  try {
+    const url = new URL(normalized);
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname || url.username || url.password) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
 /** 默认索引返回空字符串，无效 URL 返回 null。 */
 export function normalizePythonPackageIndexUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -185,6 +215,7 @@ export type RuntimeConfigState = {
   bypassHookTrust?: boolean;
   features?: Record<string, boolean>;
   desktopSettings?: RuntimeDesktopSettings;
+  imageGeneration?: RuntimeImageGenerationConfigState;
 };
 
 export type RuntimePermissionProfile = 'read-only' | 'workspace-write' | 'danger-full-access';
@@ -247,5 +278,6 @@ export type RuntimeConfigInput = {
   bypassHookTrust?: boolean;
   features?: Record<string, boolean>;
   desktopSettings?: RuntimeDesktopSettings;
+  imageGeneration?: RuntimeImageGenerationConfigInput;
   providers?: ProviderConfigInput[];
 };

@@ -159,6 +159,7 @@ export function AppRouteContent({
   if (activeView === 'capabilities') {
     return (
       <CapabilitiesPage
+        config={runtime.config}
         skills={runtime.skills}
         selectedSkillCount={selectedSkillCount}
         mcpState={runtime.mcpState}
@@ -189,6 +190,7 @@ export function AppRouteContent({
         onLogoutMcpServer={runtime.logoutMcpServer}
         onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
         onRemovePlugin={runtime.removePlugin}
+        onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
       />
     );
   }
