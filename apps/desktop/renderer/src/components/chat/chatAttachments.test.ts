@@ -3,7 +3,7 @@ import type { RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts'
 import {
   chatAttachmentValidationError,
   createChatMessageAttachment,
-  formatAttachmentSize,
+  formatAttachmentTypeLabel,
 } from './chatAttachments.js';
 
 describe('chat attachments', () => {
@@ -40,10 +40,10 @@ describe('chat attachments', () => {
     });
   });
 
-  it('formats attachment sizes for compact file cards', () => {
-    expect(formatAttachmentSize(32)).toBe('32 B');
-    expect(formatAttachmentSize(1_500)).toBe('2 KB');
-    expect(formatAttachmentSize(2 * 1024 * 1024)).toBe('2.0 MB');
+  it('formats compact file type labels from extension or MIME type', () => {
+    expect(formatAttachmentTypeLabel('guide.PDF', '')).toBe('PDF');
+    expect(formatAttachmentTypeLabel('notes', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe('DOCX');
+    expect(formatAttachmentTypeLabel('attachment', 'application/octet-stream')).toBe('文件');
   });
 });
 

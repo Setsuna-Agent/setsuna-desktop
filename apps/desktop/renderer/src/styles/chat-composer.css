@@ -87,10 +87,11 @@
 .chat-attachment--file {
   display: flex;
   align-items: center;
-  gap: 9px;
-  width: min(220px, 62vw);
-  height: 64px;
-  padding: 9px 26px 9px 9px;
+  gap: 10px;
+  width: min(232px, 62vw);
+  height: 56px;
+  padding: 7px 28px 7px 7px;
+  border-radius: 12px;
 }
 
 .chat-attachment.has-error {
@@ -133,11 +134,11 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   color: var(--app-primary);
-  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+  background: var(--app-surface-muted);
 }
 
 .chat-attachment.has-error .chat-attachment__file-icon {
@@ -145,10 +146,15 @@
   background: color-mix(in srgb, var(--app-danger) 10%, transparent);
 }
 
+.chat-attachment__file-type-icon {
+  width: 22px;
+  height: 22px;
+}
+
 .chat-attachment__file-copy {
   display: grid;
   flex: 1 1 auto;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
 }
 
@@ -160,13 +166,15 @@
 }
 
 .chat-attachment__file-name {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
+  line-height: 18px;
 }
 
 .chat-attachment__file-meta {
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 17px;
 }
 
 .chat-attachment__file-icon .is-spinning {
@@ -189,6 +197,20 @@
   color: #fff;
   background: color-mix(in srgb, #111827 88%, transparent);
   box-shadow: 0 1px 4px color-mix(in srgb, #000 22%, transparent);
+}
+
+.chat-attachment--file .chat-attachment__remove {
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  box-shadow: none;
+}
+
+.chat-attachment--file .chat-attachment__remove svg {
+  width: 10px;
+  height: 10px;
 }
 
 .chat-attachment__remove:hover {

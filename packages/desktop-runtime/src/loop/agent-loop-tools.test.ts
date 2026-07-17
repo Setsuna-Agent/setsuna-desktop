@@ -4761,6 +4761,37 @@ describe('agent loop tools', () => {
     expect(toolHost.attempts).toEqual(['bypass']);
   });
 
+  it('treats an empty additional-permissions override as the default sandbox under full policy', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Empty additional permissions exec loop' });
+    const toolHost = new AdditionalPermissionsExecToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new EmptyAdditionalPermissionsExecModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new FullApprovalConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run a command with an empty permission override' });
+
+    await expect(approvalGate.listApprovals()).resolves.toEqual({ approvals: [] });
+    expect(toolHost.contexts).toHaveLength(1);
+    expect(toolHost.contexts[0]?.sandbox?.mode).toBe('default');
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolName === 'exec_command'
+      && event.payload.status === 'success'
+    )).toBe(true);
+  });
+
   it('cancels active turns without publishing runtime errors', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -7544,6 +7575,31 @@ class RepeatedAdditionalPermissionsExecModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'The additional-permissions command ran.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class EmptyAdditionalPermissionsExecModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'call_exec_empty_additional',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'pwd',
+            sandbox_permissions: 'with_additional_permissions',
+          }),
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The command ran with the default sandbox.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

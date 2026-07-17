@@ -15,6 +15,11 @@ export const chatAttachmentAccept = [
   ...RUNTIME_FILE_ATTACHMENT_MIME_TYPES,
 ].join(',');
 
+const attachmentTypeLabelsByMime: Readonly<Record<string, string>> = {
+  'application/pdf': 'PDF',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+};
+
 export type ChatComposerAttachmentStatus = 'uploading' | 'ready' | 'error' | 'removing';
 
 export type ChatComposerAttachmentItem = {
@@ -55,10 +60,13 @@ export function isImageMessageAttachment(attachment: RuntimeMessageAttachment): 
   return isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/');
 }
 
-export function formatAttachmentSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
-  if (bytes >= 1024) return `${Math.ceil(bytes / 1024)} KB`;
-  return `${bytes} B`;
+export function formatAttachmentTypeLabel(name: string, mimeType: string): string {
+  const normalizedName = name.trim().toLowerCase();
+  const extension = RUNTIME_FILE_ATTACHMENT_EXTENSIONS.find((value) => normalizedName.endsWith(value));
+  if (extension) return extension.slice(1).toUpperCase();
+
+  const normalizedMimeType = mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  return attachmentTypeLabelsByMime[normalizedMimeType] ?? '文件';
 }
 
 function isSupportedDocumentName(name: string): boolean {

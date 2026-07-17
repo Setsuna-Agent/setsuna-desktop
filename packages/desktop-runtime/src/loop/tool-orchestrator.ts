@@ -1521,6 +1521,9 @@ function additionalSandboxPermissionsForTool(toolCall: RuntimeToolCall, parsedAr
       sandboxWorkspaceWrite,
     };
   }
+  // 模型偶尔会只发送 with_additional_permissions 而漏掉具体授权内容。
+  // 空授权不扩大沙箱边界，按 use_default 的安全语义继续执行即可。
+  if (isEmptySandboxWorkspaceWrite(sandboxWorkspaceWrite)) return null;
   return {
     approvalKeys: additionalSandboxApprovalKeys(toolCall, parsedArguments, context, sandboxWorkspaceWrite),
     reason: `Additional sandbox permissions requested for ${toolCall.name}: ${reasonParts.join('; ') || 'none'}.`,

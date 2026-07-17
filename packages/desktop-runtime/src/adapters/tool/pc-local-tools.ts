@@ -52,6 +52,7 @@ const SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS = new Set([
 ]);
 const SHELL_READ_COMMANDS_WITH_PATH_ARGS = new Set([
   'cat',
+  'cd',
   'find',
   'grep',
   'head',
@@ -4324,22 +4325,20 @@ function firstDeniedShellAccessPath(command, state) {
 function shellWritePathCandidates(command) {
   const candidates = [];
   const text = String(command || '');
-  const pathMatcher = /(?:^|[\s"'=])((?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/])[^\s"'`$<>|;&]+)/g;
-  for (const match of text.matchAll(pathMatcher)) candidates.push(match[1]);
-  const redirectMatcher = /(?:^|[^<=>])>{1,2}\s*(?:"([^"]+)"|'([^']+)'|([^\s"'`$<>|;&]+))/g;
-  for (const match of text.matchAll(redirectMatcher)) candidates.push(match[1] || match[2] || match[3]);
 
-  const words = parseShellWords(text);
-  const commandName = path.basename(words[0] || '');
-  if (SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
-    let seenDoubleDash = false;
-    for (const word of words.slice(1)) {
-      if (!seenDoubleDash && word === '--') {
-        seenDoubleDash = true;
-        continue;
-      }
-      if (!seenDoubleDash && word.startsWith('-')) continue;
-      candidates.push(word);
+  for (const segment of splitShellCommandSegments(text)) {
+    const parsed = parseShellCommandSegment(segment);
+    const words = parsed.words;
+    candidates.push(...parsed.outputRedirects);
+    const commandName = path.basename(words[0] || '');
+    if (SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
+      const pathArguments = shellPositionalPathArguments(words);
+      // cp 只写入最后一个目标参数；源路径只需要读取权限。
+      candidates.push(...(commandName === 'cp' ? shellCopyDestinationArguments(words, pathArguments) : pathArguments));
+      continue;
+    }
+    if (obviousHighRiskShellReason(segment)) {
+      candidates.push(...shellLiteralPathCandidates(words));
     }
   }
   return [...new Set(candidates.map((item) => String(item || '').trim()).filter((item) => item && !isShellNonPathToken(item)))];
@@ -4347,20 +4346,217 @@ function shellWritePathCandidates(command) {
 
 function shellPathCandidates(command) {
   const candidates = [...shellWritePathCandidates(command)];
-  const words = parseShellWords(command);
-  const commandName = path.basename(words[0] || '');
-  if (SHELL_READ_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
-    let seenDoubleDash = false;
-    for (const word of words.slice(1)) {
-      if (!seenDoubleDash && word === '--') {
-        seenDoubleDash = true;
-        continue;
-      }
-      if (!seenDoubleDash && word.startsWith('-')) continue;
-      candidates.push(word);
+  for (const segment of splitShellCommandSegments(command)) {
+    const parsed = parseShellCommandSegment(segment);
+    const words = parsed.words;
+    candidates.push(...parsed.inputRedirects);
+    const commandName = path.basename(words[0] || '');
+    if (SHELL_READ_COMMANDS_WITH_PATH_ARGS.has(commandName) || SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
+      candidates.push(...shellPositionalPathArguments(words));
+      continue;
+    }
+    if (obviousHighRiskShellReason(segment)) {
+      candidates.push(...shellLiteralPathCandidates(words));
     }
   }
   return [...new Set(candidates.map((item) => String(item || '').trim()).filter((item) => item && !isShellNonPathToken(item)))];
+}
+
+// 路径策略只需要识别简单命令边界；保留引号和转义，交给下面的词法扫描处理。
+function splitShellCommandSegments(command) {
+  const segments = [];
+  let current = '';
+  let quote = '';
+  let escaped = false;
+  for (const char of String(command || '')) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      current += char;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      current += char;
+      if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      current += char;
+      quote = char;
+      continue;
+    }
+    if (char === '&' && /[<>]\s*$/u.test(current)) {
+      current += char;
+      continue;
+    }
+    if (char === ';' || char === '&' || char === '|' || char === '\n') {
+      if (current.trim()) segments.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) segments.push(current.trim());
+  return segments;
+}
+
+// 避免用空白正则拆 shell：带空格路径、复合命令和 2>/dev/null 都会产生错误路径。
+function parseShellCommandSegment(command) {
+  const words = [];
+  const inputRedirects = [];
+  const outputRedirects = [];
+  let current = '';
+  let quote = '';
+  let escaped = false;
+  let skippingRedirectTarget = false;
+  let redirectTargetStarted = false;
+  let redirectQuote = '';
+  let redirectEscaped = false;
+  let redirectTarget = '';
+  let redirectType = '';
+
+  const pushCurrent = () => {
+    if (current) words.push(current);
+    current = '';
+  };
+  const pushRedirect = () => {
+    if (redirectTarget) {
+      (redirectType === 'input' ? inputRedirects : outputRedirects).push(redirectTarget);
+    }
+    redirectTarget = '';
+    redirectTargetStarted = false;
+    redirectType = '';
+  };
+
+  const text = String(command || '');
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (skippingRedirectTarget) {
+      if (redirectEscaped) {
+        redirectTarget += char;
+        redirectEscaped = false;
+        redirectTargetStarted = true;
+        continue;
+      }
+      if (char === '\\') {
+        redirectEscaped = true;
+        redirectTargetStarted = true;
+        continue;
+      }
+      if (redirectQuote) {
+        if (char === redirectQuote) redirectQuote = '';
+        else redirectTarget += char;
+        redirectTargetStarted = true;
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        redirectQuote = char;
+        redirectTargetStarted = true;
+        continue;
+      }
+      if (/\s/u.test(char)) {
+        if (redirectTargetStarted) {
+          pushRedirect();
+          skippingRedirectTarget = false;
+        }
+        continue;
+      }
+      redirectTarget += char;
+      redirectTargetStarted = true;
+      continue;
+    }
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = '';
+      else current += char;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/u.test(char)) {
+      pushCurrent();
+      continue;
+    }
+    if (char === '>' || char === '<') {
+      if (current && !/^\d+$/u.test(current)) words.push(current);
+      current = '';
+      while (text[index + 1] === '>' || text[index + 1] === '<') index += 1;
+      if (text[index + 1] === '&') index += 1;
+      redirectType = char === '<' ? 'input' : 'output';
+      skippingRedirectTarget = true;
+      continue;
+    }
+    current += char;
+  }
+  if (skippingRedirectTarget) pushRedirect();
+  else pushCurrent();
+  return { words, inputRedirects, outputRedirects };
+}
+
+function shellPositionalPathArguments(words) {
+  const candidates = [];
+  let seenDoubleDash = false;
+  for (const word of words.slice(1)) {
+    if (!seenDoubleDash && word === '--') {
+      seenDoubleDash = true;
+      continue;
+    }
+    if (!seenDoubleDash && word.startsWith('-')) continue;
+    candidates.push(word);
+  }
+  return candidates;
+}
+
+function shellCopyDestinationArguments(words, positionalArguments = shellPositionalPathArguments(words)) {
+  for (let index = 1; index < words.length; index += 1) {
+    const word = String(words[index] || '');
+    if (word === '--') break;
+    if (word === '-t' || word === '--target-directory') {
+      const targetDirectory = words[index + 1];
+      return targetDirectory ? [targetDirectory] : [];
+    }
+    if (word.startsWith('--target-directory=')) {
+      const targetDirectory = word.slice('--target-directory='.length);
+      return targetDirectory ? [targetDirectory] : [];
+    }
+    if (word.startsWith('-t') && word.length > 2) return [word.slice(2)];
+  }
+  return positionalArguments.slice(-1);
+}
+
+function shellLiteralPathCandidates(words) {
+  const candidates = [];
+  const pathPrefix = /^(?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/])/u;
+  const quotedPath = /(["'])((?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/]).*?)\1/gu;
+  const embeddedPath = /(?:^|[\s"'=(])((?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/])[^\s"'`$<>|;&),\]]+)/gu;
+  for (const rawWord of words) {
+    const word = String(rawWord || '');
+    if (pathPrefix.test(word)) {
+      candidates.push(word);
+      continue;
+    }
+    let unquoted = word;
+    for (const match of word.matchAll(quotedPath)) {
+      candidates.push(match[2]);
+      unquoted = unquoted.replace(match[0], '');
+    }
+    for (const match of unquoted.matchAll(embeddedPath)) candidates.push(match[1]);
+  }
+  return candidates;
 }
 
 function isShellNonPathToken(value) {

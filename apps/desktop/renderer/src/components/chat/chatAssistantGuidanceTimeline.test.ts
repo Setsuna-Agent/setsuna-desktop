@@ -81,6 +81,43 @@ describe('createAssistantGuidanceTimelinePlan', () => {
 
     expect(plan.placeholderGuidance).toEqual([expect.objectContaining({ id: 'user_steer' })]);
   });
+
+  it('keeps Plugin attribution active until the full turn completes', () => {
+    const message = assistantMessage('assistant_plugin', 'working');
+    const pluginBlock: Extract<AssistantRunTimelineBlock, { type: 'work' }> = {
+      ...workBlock('work_plugin', [message]),
+      active: false,
+      items: [{
+        type: 'pluginUses',
+        id: 'assistant_plugin:plugins',
+        plugins: [{ id: 'documents', name: 'Word 文档处理' }],
+      }],
+    };
+    const createPlan = (active: boolean) => createAssistantGuidanceTimelinePlan({
+      active,
+      blocks: [pluginBlock],
+      guidanceMessages: [],
+      messageOrderIds: [message.id],
+      workHistoryActive: active,
+    });
+
+    expect(createPlan(true).nodes[0]).toMatchObject({
+      type: 'workHistory',
+      entries: [{
+        type: 'workItem',
+        active: true,
+        item: { type: 'pluginUses' },
+      }],
+    });
+    expect(createPlan(false).nodes[0]).toMatchObject({
+      type: 'workHistory',
+      entries: [{
+        type: 'workItem',
+        active: false,
+        item: { type: 'pluginUses' },
+      }],
+    });
+  });
 });
 
 function workBlock(id: string, messages: RuntimeMessage[]): Extract<AssistantRunTimelineBlock, { type: 'work' }> {

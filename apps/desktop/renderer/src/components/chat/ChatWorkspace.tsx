@@ -1626,14 +1626,14 @@ function assistantWorkEntriesNodes(
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={entry.id} markerMode="handled" messages={entry.messages} />);
       return;
     }
-    nodes.push(...assistantWorkItemNodes(entry.item, entry.blockActive, toolRunSummaryMode, onAnswerApproval));
+    nodes.push(...assistantWorkItemNodes(entry.item, entry.active, toolRunSummaryMode, onAnswerApproval));
   });
   return nodes;
 }
 
 function assistantWorkItemNodes(
   item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
-  blockActive: boolean,
+  itemActive: boolean,
   toolRunSummaryMode: ToolRunSummaryMode,
   onAnswerApproval: AnswerApprovalHandler,
 ): ReactNode[] {
@@ -1641,10 +1641,10 @@ function assistantWorkItemNodes(
     return [<MarkdownRenderer key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />];
   }
   if (item.type === 'pluginUses') {
-    return [<RuntimePluginUses active={blockActive} key={item.id} plugins={item.plugins} />];
+    return [<RuntimePluginUses active={itemActive} key={item.id} plugins={item.plugins} />];
   }
   if (item.type === 'thinking') {
-    return blockActive && item.segment.content.trim()
+    return itemActive && item.segment.content.trim()
       ? [
           <ActiveThinkingBox
             key={item.segment.id}

@@ -1,7 +1,8 @@
 import { Image } from 'antd';
-import { FileText, LoaderCircle, TriangleAlert, X } from 'lucide-react';
+import { LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { isRuntimeInlineMessageAttachment } from '@setsuna-desktop/contracts';
-import { formatAttachmentSize, type ChatComposerAttachmentItem } from './chatAttachments.js';
+import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
+import { formatAttachmentTypeLabel, type ChatComposerAttachmentItem } from './chatAttachments.js';
 
 export function ChatAttachmentTray({
   items,
@@ -48,12 +49,18 @@ function ComposerAttachmentCard({
       ) : (
         <>
           <span className="chat-attachment__file-icon" aria-hidden="true">
-            {item.status === 'uploading' ? <LoaderCircle className="is-spinning" size={17} /> : item.status === 'error' ? <TriangleAlert size={17} /> : <FileText size={17} />}
+            {item.status === 'uploading' ? (
+              <LoaderCircle className="is-spinning" size={17} />
+            ) : item.status === 'error' ? (
+              <TriangleAlert size={17} />
+            ) : (
+              <WorkspaceFileIcon className="chat-attachment__file-type-icon" path={item.name} type="file" />
+            )}
           </span>
           <span className="chat-attachment__file-copy">
             <span className="chat-attachment__file-name">{item.name}</span>
             <span className="chat-attachment__file-meta">
-              {item.status === 'uploading' ? '上传中' : item.status === 'error' ? item.error : formatAttachmentSize(item.size)}
+              {item.status === 'uploading' ? '上传中' : item.status === 'error' ? item.error : formatAttachmentTypeLabel(item.name, item.type)}
             </span>
           </span>
         </>
@@ -70,4 +77,3 @@ function ComposerAttachmentCard({
     </div>
   );
 }
-

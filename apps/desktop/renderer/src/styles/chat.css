@@ -424,26 +424,31 @@
 .chat-user-message-file {
   display: flex;
   align-items: center;
-  gap: 9px;
-  width: min(240px, 62vw);
+  gap: 10px;
+  width: min(232px, 62vw);
   min-width: 0;
-  padding: 10px 12px;
+  min-height: 56px;
+  padding: 7px;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: 12px;
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 5%, transparent);
 }
 
-.chat-user-message-file > svg {
-  flex: 0 0 auto;
-  color: var(--app-primary);
+.chat-user-message-file__icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  padding: 9px;
+  border-radius: 10px;
+  background: var(--app-surface-muted);
 }
 
 .chat-user-message-file__copy {
   display: grid;
   flex: 1 1 auto;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
 }
 
@@ -455,13 +460,15 @@
 }
 
 .chat-user-message-file__name {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
+  line-height: 18px;
 }
 
 .chat-user-message-file__meta {
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 17px;
 }
 
 .chat-bubble-item--selecting .ant-bubble-footer,

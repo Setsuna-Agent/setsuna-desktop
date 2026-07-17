@@ -443,6 +443,81 @@ describe('pc local tool host', () => {
     await expect(readFile(target, 'utf8')).resolves.toBe('ok');
   });
 
+  it('copies quoted and escaped paths into a workspace whose path contains spaces', async () => {
+    const { host, projectDir } = await createHost({ projectDirName: 'temporary workspace' });
+    const workspaceRoot = await realpath(projectDir);
+    const readableRoot = path.join(path.dirname(workspaceRoot), 'attachment files');
+    const source = path.join(readableRoot, 'ticket source.pdf');
+    const targetDir = path.join(workspaceRoot, 'tmp', 'pdfs');
+    const target = path.join(targetDir, 'ticket.pdf');
+    const escapedTarget = target.replaceAll(' ', '\\ ');
+    await mkdir(readableRoot, { recursive: true });
+    await writeFile(source, 'pdf payload', 'utf8');
+
+    const result = await host.runTool('exec_command', {
+      cmd: `mkdir -p ${JSON.stringify(targetDir)} && cp ${JSON.stringify(source)} ${escapedTarget}`,
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: { readableRoots: [readableRoot] },
+    });
+
+    expect(result.content).toContain('Exit Code: 0');
+    await expect(readFile(target, 'utf8')).resolves.toBe('pdf payload');
+  });
+
+  it('still blocks cp target-directory options outside workspace-write roots', async () => {
+    const { host, projectDir } = await createHost();
+    const source = path.join(projectDir, 'source.txt');
+    const outsideTarget = await mkdtemp(path.join(tmpdir(), 'setsuna-cp-target-'));
+    await writeFile(source, 'payload', 'utf8');
+
+    await expect(host.runTool('run_shell_command', {
+      command: `cp --target-directory ${JSON.stringify(outsideTarget)} ${JSON.stringify(source)}`,
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write',
+    })).rejects.toThrow('未授权路径');
+  });
+
+  it('still blocks cp destinations outside workspace-write roots when stderr is redirected', async () => {
+    const { host, projectDir } = await createHost();
+    const source = path.join(projectDir, 'source.txt');
+    const outsideTarget = path.join(await mkdtemp(path.join(tmpdir(), 'setsuna-cp-redirect-target-')), 'copied.txt');
+    await writeFile(source, 'payload', 'utf8');
+
+    await expect(host.runTool('run_shell_command', {
+      command: `cp ${JSON.stringify(source)} ${JSON.stringify(outsideTarget)} 2>/dev/null`,
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write',
+    })).rejects.toThrow('未授权路径');
+  });
+
+  it('still blocks quoted outside paths embedded in inline scripts', async () => {
+    const { host } = await createHost();
+    const outsideTarget = path.join(await mkdtemp(path.join(tmpdir(), 'setsuna-inline-target-')), 'script output.txt');
+    const script = `from pathlib import Path; Path(${JSON.stringify(outsideTarget)}).write_text('payload')`;
+
+    await expect(host.runTool('run_shell_command', {
+      command: `python3 -c ${JSON.stringify(script)}`,
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write',
+    })).rejects.toThrow('未授权路径');
+  });
+
   it('allows reads under configured readable roots', async () => {
     const { host } = await createHost();
     const readableRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-readable-root-'));
@@ -1006,10 +1081,11 @@ describe('pc local tool host', () => {
 
 async function createHost(options: {
   policyAmendmentStore?: PolicyAmendmentStore;
+  projectDirName?: string;
   workspaceDependencies?: WorkspaceDependencyManager;
 } = {}): Promise<{ host: PcLocalToolHost; projectDir: string; projectId: string }> {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-toolhost-test-'));
-  const projectDir = path.join(root, 'project');
+  const projectDir = path.join(root, options.projectDirName ?? 'project');
   const dataDir = path.join(root, 'data');
   await mkdir(projectDir, { recursive: true });
   const store = new FileWorkspaceProjectStore(dataDir, systemClock, { temporaryWorkspacePath: projectDir });
