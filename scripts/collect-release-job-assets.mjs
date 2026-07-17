@@ -53,8 +53,7 @@ try {
   await access(logsDir, fsConstants.R_OK);
   await cp(logsDir, path.join(outputDir, 'logs'), { recursive: true });
 } catch {
-  // Logs are useful for release auditing, but artifact collection should still
-  // fail only when package outputs are missing.
+  // 日志有助于发布审计，但产物收集仍应只在缺少打包输出时失败。
 }
 
 console.log(`Collected ${artifactFiles.length} release artifact(s) for ${artifactId}.`);

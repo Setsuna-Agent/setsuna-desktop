@@ -38,7 +38,7 @@ const DEFAULT_PENDING_TTL_MS = 24 * 60 * 60 * 1_000;
 const PDF_MIME_TYPE: RuntimeFileAttachmentMimeType = 'application/pdf';
 const DOCX_MIME_TYPE: RuntimeFileAttachmentMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-/** Persists user-uploaded documents outside workspaces and grants access by opaque asset id. */
+/** 在工作区外持久化用户上传的文档，并通过不透明资源 ID 授予访问权限。 */
 export class FileAttachmentStore implements AttachmentStore {
   private readonly root: string;
   private readonly filesRoot: string;
@@ -110,7 +110,7 @@ export class FileAttachmentStore implements AttachmentStore {
       await mkdir(this.filesRoot, { recursive: true });
       await mkdir(assetDirectory, { recursive: false });
       try {
-        // Plugins only need source access; keeping the managed copy non-writable prevents accidental in-place edits.
+        // 插件只需读取源文件；将受管理副本保持为不可写，可防止意外原地修改。
         await writeFile(this.filePath(record), validated.data, { flag: 'wx', mode: 0o400 });
         await this.writeIndex({ version: 1, attachments: [...index.attachments, record] });
       } catch (error) {
@@ -237,7 +237,7 @@ export class FileAttachmentStore implements AttachmentStore {
   }
 
   private removeDiscoveredAssetDirectory(name: string): Promise<void> {
-    // `name` comes from readdir, but keep the containment check explicit before recursive removal.
+    // `name` 来自 readdir，但递归删除前仍需显式执行范围检查。
     const candidate = path.resolve(this.filesRoot, name);
     if (path.dirname(candidate) !== path.resolve(this.filesRoot)) return Promise.resolve();
     return rm(candidate, { recursive: true, force: true });

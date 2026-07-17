@@ -76,7 +76,7 @@ function looksLikeWorkspaceFile(filePath: string): boolean {
   const extension = fileName.slice(extensionStart + 1);
   if (commonWorkspaceFileExtensions.has(extension)) return true;
 
-  // A path segment makes a custom extension far less likely to be a domain or version literal.
+  // 存在路径片段时，自定义扩展名被误判为域名或版本字面量的可能性会大幅降低。
   return filePath.includes('/') && /^[a-z\d][a-z\d+_-]{0,15}$/i.test(extension);
 }
 

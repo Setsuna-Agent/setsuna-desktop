@@ -42,8 +42,7 @@ export function useSidebarBackgroundPreference() {
 
 export function initializeSidebarBackgroundPreference(): void {
   applySidebarBackgroundStyle(getInitialSidebarBackgroundStyle());
-  // Opacity is no longer part of the appearance model; remove it so old installs
-  // cannot accidentally reintroduce a translucent window substrate.
+  // 不透明度已不再属于外观模型；移除旧值，防止旧版安装意外恢复半透明窗口基底。
   window.localStorage.removeItem(legacySidebarOpacityStorageKey);
 }
 

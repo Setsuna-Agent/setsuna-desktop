@@ -11,7 +11,7 @@ export type RuntimeAttachmentContext = {
   readableRoots: string[];
 };
 
-/** Resolves opaque asset references into a transient, read-only tool context for one thread. */
+/** 将不透明资源引用解析为单个线程使用的临时只读工具上下文。 */
 export async function buildRuntimeAttachmentContext({
   attachmentStore,
   messages,
@@ -67,7 +67,7 @@ export async function buildRuntimeAttachmentContext({
   };
 }
 
-/** Runtime-owned files become text references plus the trusted path context above, never provider file/image parts. */
+/** runtime 管理的文件只会转换为文本引用及上述可信路径上下文，绝不会成为供应商文件或图像片段。 */
 export function messageForModel(message: RuntimeMessage): RuntimeMessage {
   if (!message.attachments?.some(isRuntimeStoredMessageAttachment)) return message;
   const storedAttachments = message.attachments.filter(isRuntimeStoredMessageAttachment);

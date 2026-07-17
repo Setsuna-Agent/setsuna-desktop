@@ -22,8 +22,8 @@ import {
 
 export { resolveBrowserFaviconUrl, resolveBrowserFaviconUrls };
 
-// Electron parses webview boolean attributes by presence, while React only emits
-// custom-element attributes reliably when their runtime value is a string.
+// Electron 根据属性是否存在来解析 webview 布尔属性，而 React 只有在运行时值为字符串时
+// 才能可靠地输出自定义元素属性。
 const enabledWebviewBooleanAttribute = 'true' as unknown as boolean;
 
 type BrowserTab = {
@@ -132,15 +132,15 @@ export function BrowserPanel({
     if (!webview) return;
     if (tab.loading) webview.stop();
     else {
-      // The UA/Client-Hints override is asynchronous. Apply it before navigation
-      // so a refresh immediately after selecting a device cannot use desktop headers.
+      // UA 和客户端提示覆盖是异步操作。导航前先应用覆盖，防止选择设备后立即刷新时
+      // 使用桌面端请求头。
       void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation)
         .catch(() => false)
         .then(() => {
           try {
             webview.reload();
           } catch {
-            // The guest may detach while the main-process override is being applied.
+            // 主进程应用覆盖配置期间，来宾页面可能会分离。
           }
         });
     }
@@ -152,7 +152,7 @@ export function BrowserPanel({
     try {
       void webview.print().catch(() => undefined);
     } catch {
-      // The guest may detach between opening the menu and choosing print.
+      // 从打开菜单到选择打印之间，来宾页面可能会分离。
     }
   };
 
@@ -160,7 +160,7 @@ export function BrowserPanel({
     try {
       webviewRef.current?.openDevTools();
     } catch {
-      // Ignore a guest that detached while its menu was open.
+      // 忽略菜单打开期间已经分离的来宾页面。
     }
   };
 
@@ -170,13 +170,13 @@ export function BrowserPanel({
     try {
       currentZoomFactor = webview?.getZoomFactor() ?? currentZoomFactor;
     } catch {
-      // Retain the tab's last known zoom if the guest is no longer attached.
+      // 来宾页面不再附加时，保留标签页最后已知的缩放比例。
     }
     const nextZoomFactor = nextBrowserZoomFactor(currentZoomFactor, direction);
     try {
       webview?.setZoomFactor(nextZoomFactor);
     } catch {
-      // State still tracks the requested value for the next attached guest.
+      // 状态仍会记录请求值，供下一个附加的来宾页面使用。
     }
     updateTab(tab.id, { zoomFactor: nextZoomFactor });
   };
@@ -333,7 +333,7 @@ function BrowserWebview({
           return applyBrowserDeviceEmulation(tab.id, deviceEmulationRef.current);
         }).catch(() => undefined);
       } catch {
-        // The webview may not have attached yet; dom-ready retries registration.
+        // webview 可能尚未附加；dom-ready 时会重试注册。
       }
     };
     node.addEventListener('dom-ready', register);

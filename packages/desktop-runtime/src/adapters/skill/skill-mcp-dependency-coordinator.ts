@@ -15,7 +15,7 @@ import type { SkillActivationContext, SkillInjection, SkillMcpDependencyManager,
 
 type SkillMcpClient = Pick<McpClientRuntime, 'authStatus' | 'invalidateServer' | 'login'>;
 
-/** Combines declarative Skill metadata with live MCP installation/auth state. */
+/** 将声明式 Skill 元数据与实时 MCP 安装及认证状态结合。 */
 export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDependencyManager {
   constructor(
     private readonly skills: SkillRegistry,
@@ -75,8 +75,7 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
     const enabled: string[] = [];
     let servers = await this.mcpStore.listServerInputs();
 
-    // Validate the complete dependency set before applying changes so a later
-    // key conflict cannot leave an earlier server partially installed.
+    // 应用变更前先校验完整依赖集合，防止后续键冲突导致先前服务器只完成部分安装。
     for (const dependency of dependencies) {
       const existing = servers.find((server) => server.key === dependency.value);
       if (existing && !compatibleDependency(existing, dependency)) {

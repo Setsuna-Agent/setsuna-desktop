@@ -77,7 +77,7 @@ export function useThemeTransition() {
 }
 
 export function initializeThemePreference(): void {
-  // Resolve the system mode before the first paint so CSS has one theme source of truth.
+  // 首次绘制前解析系统模式，使 CSS 只有一个主题真源。
   applyThemeModePreference(getInitialThemeMode());
 }
 

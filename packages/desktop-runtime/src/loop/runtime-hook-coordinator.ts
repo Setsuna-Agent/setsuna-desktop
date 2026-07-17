@@ -24,8 +24,8 @@ type RuntimeHookCoordinatorOptions = {
 };
 
 /**
- * Coordinates hook lifecycle and session-start state outside the turn loop.
- * Hook execution stays policy-driven while AgentLoop only reacts to outcomes.
+ * 在轮次循环外协调 Hook 生命周期和会话启动状态。
+ * Hook 执行始终由策略驱动，AgentLoop 只响应执行结果。
  */
 export class RuntimeHookCoordinator {
   private readonly initializedThreadIds = new Set<string>();

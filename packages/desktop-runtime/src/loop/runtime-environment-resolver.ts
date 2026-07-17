@@ -4,8 +4,8 @@ import type { RuntimeEnvironmentResolver } from '../ports/runtime-environment-re
 import type { ToolHost } from '../ports/tool-host.js';
 
 /**
- * Compatibility resolver for direct AgentLoop consumers that do not assemble
- * the production workspace resolver. Production wiring always injects one.
+ * 为未组装生产环境工作区解析器、直接使用 AgentLoop 的调用方提供兼容解析器。
+ * 生产环境接线始终会注入正式解析器。
  */
 export function runtimeEnvironmentResolver(
   explicit: RuntimeEnvironmentResolver | undefined,
@@ -34,4 +34,3 @@ export function localEnvironment(id: string, workspaceRoot: string): RuntimeEnvi
     shell: process.platform === 'win32' ? process.env.ComSpec || process.env.COMSPEC || 'cmd.exe' : '/bin/sh',
   };
 }
-

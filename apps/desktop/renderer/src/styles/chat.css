@@ -116,7 +116,7 @@
   -ms-overflow-style: none;
 }
 
-/* The transcript owns the scrollbar; nested message content should not draw secondary bars. */
+/* 对话记录负责滚动条，嵌套消息内容不应再绘制次级滚动条。 */
 .chat-messages * {
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
@@ -176,8 +176,8 @@
   transition: transform 260ms cubic-bezier(0.2, 0.82, 0.2, 1);
 }
 
-/* Shift only enough content to keep the floating overview in the available right gutter.
-   Command menus keep their own centering transform and receive the same offset through a variable. */
+/* 仅移动足够的内容，让浮动概览留在右侧可用留白中。
+   命令菜单保留自身的居中变换，并通过变量获得相同偏移。 */
 .chat-main-conversation--overview-shifted {
   --chat-overview-expanded-shift: 152px;
 }

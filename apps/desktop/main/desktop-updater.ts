@@ -304,7 +304,7 @@ export class DesktopUpdater {
 
     this.sourceRevision += 1;
     if (restartActiveTransfer && this.runningCheck) {
-      // A source switch must take effect immediately, including during an automatic startup download.
+      // 切换更新源必须立即生效，即使启动时的自动下载正在进行也一样。
       this.restartRequested = true;
       this.activeTransferController?.abort(new UpdateDownloadSourceChangedError());
     }

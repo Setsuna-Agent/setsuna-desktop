@@ -24,7 +24,7 @@ export function nextActiveOptionScrollTop(metrics: ActiveOptionScrollMetrics): n
   return metrics.scrollTop;
 }
 
-/** Keeps keyboard navigation inside the menu instead of scrolling the surrounding chat viewport. */
+/** 将键盘导航限制在菜单内，避免滚动外层聊天视口。 */
 export function useActiveOptionScroll<TContainer extends HTMLElement, TOption extends HTMLElement>(
   activeOptionKey: string | number | null | undefined,
   enabled = true,

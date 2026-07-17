@@ -68,10 +68,10 @@ type RuntimeSamplingContextBuilderOptions = {
 };
 
 /**
- * Builder for a single immutable model-sampling step.
+ * 单个不可变模型采样步骤的构建器。
  *
- * AgentLoop owns when a step is captured; this builder owns how provider
- * config, compaction, tools, memory, skills and world-state become one request.
+ * AgentLoop 决定何时捕获步骤；此构建器负责将供应商配置、压缩结果、工具、
+ * 记忆、Skill 和世界状态组合为一次请求。
  */
 export class RuntimeSamplingContextBuilder {
   private readonly promptContexts: RuntimePromptContextAssembler;

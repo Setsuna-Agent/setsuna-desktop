@@ -102,7 +102,7 @@ export function normalizeDownloadSourceTemplate(value: string): string {
   const unknownPlaceholders = template.match(/\{[^}]+\}/gu)?.filter((placeholder) => placeholder !== '{url}' && placeholder !== '{encodedUrl}') ?? [];
   if (unknownPlaceholders.length > 0) throw new Error(`不支持模板变量 ${unknownPlaceholders[0]}。`);
 
-  // Resolve a real URL during validation so malformed templates fail before they are persisted.
+  // 验证时解析出真实 URL，让格式错误的模板在持久化前就校验失败。
   resolveUpdateDownloadUrl({ ...GITHUB_DIRECT_DOWNLOAD_SOURCE, urlTemplate: template }, 'https://github.com/example/project/releases/download/v1/app.zip');
   return template;
 }

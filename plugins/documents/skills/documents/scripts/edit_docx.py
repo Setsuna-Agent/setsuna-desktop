@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply conservative text, metadata, and append operations to a DOCX copy."""
+"""对 DOCX 副本执行保守的文本、元数据及追加操作。"""
 
 from __future__ import annotations
 

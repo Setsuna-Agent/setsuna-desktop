@@ -4,8 +4,8 @@ const MAX_RUNTIME_ID_CHARS = 192;
 const SAFE_RUNTIME_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 
 /**
- * Runtime IDs are opaque storage keys, never filesystem paths. Keep validation at
- * the storage boundary even when callers also validate decoded route params.
+ * runtime ID 是不透明存储键，绝不是文件系统路径。即使调用方也会校验解码后的路由参数，
+ * 仍需在存储边界保留校验。
  */
 export function assertSafeRuntimeId(value: string, label = 'Runtime id'): string {
   if (
@@ -20,7 +20,7 @@ export function assertSafeRuntimeId(value: string, label = 'Runtime id'): string
   return value;
 }
 
-/** Resolve a generated storage filename and prove that it remains under root. */
+/** 解析生成的存储文件名，并验证其仍位于根目录之下。 */
 export function resolveRuntimeStoragePath(root: string, fileName: string): string {
   const resolvedRoot = path.resolve(root);
   const target = path.resolve(resolvedRoot, fileName);

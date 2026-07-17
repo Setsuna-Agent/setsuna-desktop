@@ -106,7 +106,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setLoadState('loading');
     setError(null);
     try {
-      // Only the state required to enter the workbench is fatal. Optional domains degrade independently.
+      // 只有进入工作台必需的状态失败才是致命错误；可选功能域各自独立降级。
       const bootstrap = await loadRuntimeBootstrap(client);
       const { nextConfig, threadList, allThreadList, projectList, workspaceStatus } = bootstrap.core;
       const { skillResult, mcpResult, pluginResult, pluginMarketplaceResult, usageResult } = bootstrap.optional;
@@ -1025,7 +1025,7 @@ function persistActiveThreadId(threadId: string): void {
   try {
     storage.setItem(lastActiveThreadStorageKey, threadId);
   } catch {
-    // localStorage can be unavailable in restricted renderer contexts; runtime fallback still works.
+    // 受限的渲染进程环境中可能无法使用 localStorage，此时 runtime 回退方案仍然有效。
   }
 }
 

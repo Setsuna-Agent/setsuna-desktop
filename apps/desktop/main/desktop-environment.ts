@@ -9,9 +9,9 @@ const LOGIN_SHELL_ENV_MARKER = '__SETSUNA_DESKTOP_LOGIN_SHELL_ENV__';
 const LOGIN_SHELL_ENV_TIMEOUT_MS = 5000;
 
 /**
- * macOS GUI apps launched from Finder/Dock inherit launchd's sparse environment, not the
- * user's terminal login shell. Hydrate once before starting the runtime so command tools,
- * MCP servers, and workspace app discovery see the same PATH/env users expect in Terminal.
+ * 从访达或程序坞启动的 macOS 图形应用继承的是 launchd 的精简环境，而不是
+ * 用户终端登录 Shell 的环境。启动 runtime 前补全一次环境，使命令工具、
+ * MCP 服务器和工作区应用发现使用与终端中一致的 PATH 和环境变量。
  */
 export async function hydrateDesktopProcessEnvironment(options: { loadLoginShell: boolean } = { loadLoginShell: true }): Promise<void> {
   let loginShellEnv: NodeJS.ProcessEnv = {};

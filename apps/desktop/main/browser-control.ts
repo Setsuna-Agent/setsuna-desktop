@@ -40,7 +40,7 @@ export type BrowserControlExecutor = {
   execute(command: DesktopBrowserControlCommand, signal?: AbortSignal): Promise<DesktopBrowserControlResult>;
 };
 
-/** Owns the trusted mapping from renderer tab IDs to Electron guest WebContents. */
+/** 维护渲染进程标签页 ID 到 Electron 来宾 WebContents 的可信映射。 */
 export class DesktopBrowserController implements BrowserControlExecutor {
   private activeTabId: string | null = null;
   private readonly createAutomation: (contents: WebContents) => BrowserAutomation;
@@ -148,7 +148,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
       await entry.deviceEmulator.apply({ touch: normalized.mobile, userAgent });
       return true;
     } catch {
-      // The guest may detach or its CDP session may be replaced while applying the override.
+      // 应用覆盖配置期间，来宾页面可能会分离，或其 CDP 会话可能会被替换。
       return false;
     }
   }
@@ -404,7 +404,7 @@ async function captureBrowserScreenshot(contents: WebContents): Promise<DesktopB
       width,
     };
   } catch {
-    // The guest may detach while Chromium is producing the bitmap.
+    // Chromium 生成位图期间，来宾页面可能会分离。
     return null;
   }
 }

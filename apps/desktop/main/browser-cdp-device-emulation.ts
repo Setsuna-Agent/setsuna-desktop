@@ -35,7 +35,7 @@ export type BrowserDeviceEmulator = {
 
 const protocolVersion = '1.3';
 
-/** Applies the parts of Chrome device mode that Electron's native metrics API omits. */
+/** 补齐 Electron 原生指标 API 未覆盖的 Chrome 设备模式能力。 */
 export class ElectronBrowserCdpDeviceEmulator implements BrowserDeviceEmulator {
   private appliedKey: string | null = null;
   private attachedByThisInstance = false;
@@ -54,8 +54,8 @@ export class ElectronBrowserCdpDeviceEmulator implements BrowserDeviceEmulator {
   }
 
   apply(overrides: BrowserDeviceCdpOverrides | null): Promise<void> {
-    // A fresh desktop tab has no CDP override to clear, so avoid attaching a
-    // debugger until device mode actually needs protocol-only capabilities.
+    // 新建的桌面标签页没有需要清除的 CDP 覆盖配置，因此在设备模式确实需要
+    // 协议专属能力之前，不要附加调试器。
     if (overrides === null && !this.overrideRequested && this.appliedKey === null) return this.operation;
     this.overrideRequested = overrides !== null;
     const key = overrides === null ? null : JSON.stringify(overrides);
@@ -72,8 +72,8 @@ export class ElectronBrowserCdpDeviceEmulator implements BrowserDeviceEmulator {
       });
       this.appliedKey = key;
     });
-    // Keep later updates usable after a transient protocol failure while still
-    // returning the original rejection to the caller that requested this update.
+    // 即使协议暂时失败，也要保证后续更新仍可使用，同时把原始拒绝结果
+    // 返回给发起本次更新的调用方。
     this.operation = operation.catch(() => undefined);
     return operation;
   }

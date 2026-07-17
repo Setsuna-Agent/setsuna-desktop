@@ -1,4 +1,4 @@
-"""Render the plugin's JSON content model into a python-docx document."""
+"""将插件的 JSON 内容模型渲染为 python-docx 文档。"""
 
 from __future__ import annotations
 

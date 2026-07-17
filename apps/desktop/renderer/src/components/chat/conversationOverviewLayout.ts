@@ -63,8 +63,7 @@ export function shouldAutoHideConversationOverview({
   explicitlyShown: boolean;
   overlapsContent: boolean;
 }): boolean {
-  // An explicit show request pins the compact entry in place, but must not force
-  // the full panel open when the available gutter is too narrow.
+  // 显式显示请求会固定紧凑入口，但可用留白过窄时不能强制打开完整面板。
   return compact && overlapsContent && !explicitlyShown;
 }
 

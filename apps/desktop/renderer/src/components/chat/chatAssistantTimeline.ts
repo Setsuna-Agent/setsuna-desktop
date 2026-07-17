@@ -100,8 +100,8 @@ export function createAssistantRunTimeline(
     workBlock = null;
   };
 
-  // Plugin-backed Skills are injected before the first model token. Seed the
-  // work block so the attribution stays in the same streamed timeline as tools.
+  // 插件提供的 Skill 会在首个模型令牌前注入。预先创建工作块，
+  // 使其归属信息与工具保持在同一条流式时间线中。
   if (pluginUses.length && segments[0]) {
     appendWork(segments[0], {
       items: [{ type: 'pluginUses', id: `${segments[0].id}:plugins`, plugins: pluginUses }],

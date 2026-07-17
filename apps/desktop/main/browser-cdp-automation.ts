@@ -85,8 +85,8 @@ const scrollProbeRatios: ReadonlyArray<readonly [number, number]> = [
 ];
 
 /**
- * Trusted Electron-main adapter for the narrow CDP surface used by browser tools.
- * No raw protocol method or page script is exposed across the runtime bridge.
+ * 为浏览器工具所需的有限 CDP 能力提供可信的 Electron 主进程适配器。
+ * runtime 桥接层不会暴露原始协议方法或页面脚本。
  */
 export class ElectronBrowserCdpAutomation implements BrowserAutomation {
   private attachedByThisInstance = false;
@@ -114,8 +114,8 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
         url: stringValue(targetInfo.url),
       });
       this.references.clear();
-      // The frame is already attached. Recursive auto-attach is best-effort and a
-      // protocol-version rejection must not remove this usable OOPIF session.
+      // 此框架已经附加。递归自动附加仅作尽力尝试，协议版本不兼容时
+      // 也不能移除这个仍可使用的 OOPIF 会话。
       void this.configureAutoAttach(sessionId).catch(() => undefined);
       return;
     }
@@ -289,7 +289,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
       try {
         this.transport.detach();
       } catch {
-        // The target may have disappeared between the attachment check and detach.
+        // 目标可能在检查附加状态后、执行分离前已经消失。
       }
     }
     this.attachedByThisInstance = false;
@@ -392,7 +392,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
       const points = quads.map((quad) => quadPoint(quad, viewport)).filter((point): point is CdpPoint => Boolean(point));
       if (points.length) return points[0];
     } catch {
-      // Some replaced or text-backed nodes do not expose content quads; the box model is the fallback.
+      // 某些替换元素或文本节点不会暴露内容四边形，此时回退到盒模型。
     }
     try {
       const response = objectRecord(await this.send('DOM.getBoxModel', {
@@ -402,7 +402,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
       const point = quadPoint(model.border, viewport);
       if (point) return point;
     } catch {
-      // Stored snapshot bounds are the final fallback for a node that still exists.
+      // 对于仍然存在的节点，已保存的快照边界是最后的回退方案。
     }
     if (reference.bounds) {
       return {
@@ -513,7 +513,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
       const data = stringValue(screenshot.data);
       if (data) hash.update(`screenshot:${data}`);
     } catch {
-      // DOM/layout hashing remains available when the surface cannot be captured.
+      // 无法捕获页面表面时，仍可使用 DOM 或布局哈希。
     }
     return hash.digest('hex');
   }

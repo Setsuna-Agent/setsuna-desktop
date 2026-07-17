@@ -23,7 +23,7 @@ type RuntimeModelStreamEventPublisherOptions = {
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
-/** Writes the transcript and item-stream projections emitted while sampling a model. */
+/** 写入模型采样期间产生的对话记录与条目流投影。 */
 export class RuntimeModelStreamEventPublisher {
   constructor(private readonly options: RuntimeModelStreamEventPublisherOptions) {}
 
@@ -69,7 +69,7 @@ export class RuntimeModelStreamEventPublisher {
   }
 
   /**
-   * 桥接更接近 Codex 的 item-based stream 事件。
+   * 桥接更接近基于条目的流式事件。
    * 旧 provider 仍走 message/tool 事件；新 provider 可以逐步双写 item lifecycle。
    */
   async publishModelStreamProtocolEvent(threadId: string, turnId: string, item: ModelStreamEvent): Promise<boolean> {

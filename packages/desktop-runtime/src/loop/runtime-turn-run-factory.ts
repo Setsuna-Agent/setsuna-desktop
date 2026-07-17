@@ -61,7 +61,7 @@ type RuntimeTurnRunFactoryOptions = {
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
-/** Factory for the supported turn entry points; execution remains in AgentLoop. */
+/** 为受支持的轮次入口提供工厂，具体执行仍由 AgentLoop 负责。 */
 export class RuntimeTurnRunFactory {
   constructor(private readonly options: RuntimeTurnRunFactoryOptions) {}
 
@@ -77,7 +77,7 @@ export class RuntimeTurnRunFactory {
     attachments = await this.options.claimAttachments(threadId, attachments);
     const threadForRun = await this.applyPendingPlanDecision(threadId, thread, planDecisionForTurnInput(input));
     const turnId = this.options.ids.id('turn');
-    // A decision-only turn uses a model-only execution prompt; dismissed decisions short-circuit in AgentLoop.
+    // 仅决策轮次使用只供模型执行的提示；被驳回的决策会在 AgentLoop 中直接结束。
     const planDecisionOnly = Boolean(planDecision) && !text && !attachments.length;
     const run = this.options.turnTasks.run({
       turnId,
@@ -189,8 +189,8 @@ export class RuntimeTurnRunFactory {
       threadId,
       turnId,
       options: {
-        // Keep the synthetic continuation out of the transcript, but include it as the
-        // user message required by OpenAI-compatible providers alongside runtime context.
+        // 不把合成的续写内容写入对话记录，但要与 runtime 上下文一起作为兼容 OpenAI 的
+        // 供应商所需用户消息发送。
         includeUserMessageInModel: true,
         publishUserMessage: false,
         runtimeContextMessages,

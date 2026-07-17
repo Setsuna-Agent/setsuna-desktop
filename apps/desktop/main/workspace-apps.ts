@@ -292,7 +292,7 @@ export function workspaceAppSpawnSpec(
 ): WorkspaceAppSpawnSpec {
   if (platform !== 'win32' || !isWindowsBatchCommand(spec.program)) return spec;
 
-  // Windows cannot CreateProcess a .cmd/.bat shim directly; cmd.exe needs verbatim quotes from Node.
+  // Windows 无法直接通过 CreateProcess 启动 .cmd 或 .bat 垫片；cmd.exe 需要 Node 原样传递引号。
   const command = ['call', windowsCmdQuoteArg(spec.program), ...spec.args.map(windowsCmdQuoteArg)].join(' ');
   return {
     program: 'cmd.exe',

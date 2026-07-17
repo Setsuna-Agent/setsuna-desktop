@@ -18,8 +18,8 @@ export type ZoomedPortalPositionInput = {
 };
 
 /**
- * Converts visual viewport coordinates into the pre-zoom CSS coordinate space
- * used by fixed portals mounted under the zoomed document body.
+ * 将视觉视口坐标转换到缩放前的 CSS 坐标空间，供挂载在缩放后文档 body 下的
+ * 固定定位门户使用。
  */
 export function zoomedPortalPosition({
   anchorX,

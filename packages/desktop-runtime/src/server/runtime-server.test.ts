@@ -2930,8 +2930,8 @@ describe('runtime server', () => {
       method: 'POST',
       body: JSON.stringify({ title: 'AppServer SWE context compaction' }),
     });
-    // Keep the setup turn below the initial auto-compact threshold, then lower the
-    // budget before the follow-up so the compaction event belongs to compactingTurn.
+    // 让准备轮次低于初始自动压缩阈值，再在后续轮次前降低预算，
+    // 使压缩事件归属于 compactingTurn。
     await configureSmokeProviderContextWindow(400_000);
     const oversizedHistory = 'older context '.repeat(90_000);
     const initialTurn = await runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
@@ -4208,7 +4208,7 @@ describe('runtime server', () => {
       token,
       version: 'test',
       nativeBridge: new InMemoryDesktopNativeBridge(),
-      // Windows CI can lack an attachable ConPTY console; keep these protocol tests off real node-pty there.
+      // Windows CI 可能没有可附加的 ConPTY 控制台，因此这些协议测试不使用真实 node-pty。
       commandExecPtyFactory: process.platform === 'win32' ? createTestAppServerPtyFactory() : undefined,
     });
     await server.listen(0);
@@ -4701,11 +4701,11 @@ class TestAppServerPtyProcess {
   }
 
   resize(_cols: number, _rows: number): void {
-    // The AppServer tests assert that resize reaches the PTY boundary without needing a real terminal.
+    // AppServer 测试只需断言调整尺寸到达 PTY 边界，无需真实终端。
   }
 
   write(_data: string): void {
-    // The fake PTY only needs to support lifecycle and output notifications for these protocol tests.
+    // 在这些协议测试中，模拟 PTY 只需支持生命周期及输出通知。
   }
 
   private emitData(text: string): void {

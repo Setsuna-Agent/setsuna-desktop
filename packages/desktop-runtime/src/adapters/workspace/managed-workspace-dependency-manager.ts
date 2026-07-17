@@ -55,9 +55,8 @@ type CommandResult = {
 };
 
 /**
- * Supplies deterministic workspace binaries without modifying the user's shell
- * profile. Healthy host installations are wrapped in a private PATH; only
- * missing/obsolete tools are provisioned under the runtime data directory.
+ * 在不修改用户 Shell 配置的前提下提供确定的工作区二进制文件。可用的主机安装会通过
+ * 私有 PATH 封装；只有缺失或过时的工具才会配置到 runtime 数据目录下。
  */
 export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyManager {
   private readonly cacheRoot: string;
@@ -80,8 +79,8 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   }
 
   async getStatus(): Promise<RuntimeWorkspaceDependenciesStatus> {
-    // Verify recorded tools so a stale manifest cannot appear healthy, but keep
-    // ordinary status reads from probing host tools before anything is installed.
+    // 验证已记录工具，防止过期清单看似正常；但在尚未安装任何内容前，
+    // 普通状态读取不应探测主机工具。
     return this.status(true, false);
   }
 
@@ -132,8 +131,8 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       mkdir(path.join(this.cacheRoot, 'npm'), { recursive: true }),
     ]);
     const existingManifest = await this.readManifest();
-    // The default-on setting must not turn an unrelated first shell command into
-    // a Python download. Provision lazily once a managed command is requested.
+    // 默认开启的设置不能让无关的首条 Shell 命令触发 Python 下载。
+    // 只有请求受管理命令时才延迟配置。
     const needsPython = usesPythonDependencyCommand(command);
     if (needsPython) await this.ensureInstalled(false);
     const manifest = needsPython ? await this.readManifest() : existingManifest;
@@ -299,8 +298,8 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     let installationMoved = false;
     try {
       const manifest = await this.buildInstallation(stagingRoot);
-      // uv creates absolute links inside its install root on Unix. Convert them
-      // before the atomic rename so they keep pointing inside the final tree.
+      // uv 在 Unix 安装根目录内创建绝对链接。原子重命名前先转换这些链接，
+      // 确保它们仍指向最终目录树内部。
       await rewriteInternalAbsoluteSymlinks(stagingRoot);
       await writeJsonFile(path.join(stagingRoot, MANIFEST_FILE_NAME), manifest);
       if (await pathExists(this.installRoot)) {
@@ -318,8 +317,8 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
         await rm(this.installRoot, { recursive: true, force: true }).catch(() => undefined);
       }
       if (previousMoved && await pathExists(backupRoot)) {
-        // Keep the backup on disk if restoration itself fails; deleting it in a
-        // finally block would turn a failed reinstall into data loss.
+        // 如果恢复操作本身失败，则把备份保留在磁盘上；若在 finally 块中删除备份，
+        // 会让重装失败进一步变成数据丢失。
         await rename(backupRoot, this.installRoot);
       }
       throw error;
@@ -556,9 +555,9 @@ async function findManagedPython(pythonBinDir: string, pythonInstallDir: string)
   const executableNames = new Set(process.platform === 'win32'
     ? ['python.exe', 'python3.exe']
     : [`python${MANAGED_PYTHON_VERSION}`, 'python3', 'python']);
-  // Prefer the versioned executable stored inside the installation tree. uv's
-  // convenience links can be absolute, and resolving them through realpath can
-  // also rewrite /var to /private/var on macOS, escaping the lexical staging root.
+  // 优先使用安装目录树内带版本的可执行文件。uv 的便捷链接可能是绝对路径，
+  // 通过 realpath 解析还可能在 macOS 上将 /var 改写为 /private/var，
+  // 从而跳出词法意义上的暂存根目录。
   const nested = await findFileRecursively(
     pythonInstallDir,
     executableNames,
@@ -573,8 +572,8 @@ async function findManagedPython(pythonBinDir: string, pythonInstallDir: string)
 }
 
 async function rewriteInternalAbsoluteSymlinks(root: string, current = root): Promise<void> {
-  // Windows uv installations use executable launchers rather than the Unix
-  // symlink layout. Recreating Windows junctions can require extra privileges.
+  // Windows 上的 uv 安装使用可执行启动器，而不是 Unix 符号链接布局。
+  // 重新创建 Windows 目录联接可能需要额外权限。
   if (process.platform === 'win32') return;
   const entries = await readdir(current, { withFileTypes: true });
   await Promise.all(entries.map(async (entry) => {

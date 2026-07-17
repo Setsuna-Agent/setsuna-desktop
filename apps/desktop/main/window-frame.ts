@@ -35,16 +35,16 @@ export function registerWindowsTitlebarDoubleClick(window: BrowserWindow, platfo
     const command = parameter & windowsSystemCommandMask;
     if (command !== windowsMaximizeCommand && command !== windowsRestoreCommand) return;
 
-    // Transparent frameless windows can emit SC_MAXIMIZE for both titlebar
-    // states. Treat a repeated maximize command as the native titlebar toggle.
+    // 透明无边框窗口在标题栏的两种状态下都可能发出 SC_MAXIMIZE。
+    // 将重复的最大化命令视为原生标题栏切换操作。
     scheduleMaximizedState(command === windowsMaximizeCommand ? !window.isMaximized() : false);
   });
 
   window.hookWindowMessage(windowsNonClientLeftButtonDoubleClick, (wParam) => {
     if (readWindowsMessageParameter(wParam) !== windowsCaptionHitTest || !window.isMaximized()) return;
 
-    // Some Windows/Chromium combinations omit SC_RESTORE but still expose the
-    // caption double-click. Coalescing above prevents duplicate state changes.
+    // 某些 Windows 与 Chromium 组合不会发出 SC_RESTORE，但仍会暴露标题栏双击。
+    // 上面的合并处理可避免重复变更状态。
     scheduleMaximizedState(false);
   });
 }

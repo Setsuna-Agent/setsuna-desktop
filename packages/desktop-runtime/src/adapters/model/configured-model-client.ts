@@ -42,8 +42,8 @@ export class ConfiguredModelClient implements ModelClient {
       }
     } catch (error) {
       if (emitted || request.signal?.aborted || !shouldRetryWithoutTemperature(configuredRequest, error)) throw error;
-      // Some compatible endpoints accept only their default sampling temperature.
-      // Retry before any output is visible so callers never observe duplicate content.
+      // 某些兼容端点只接受默认采样温度。在任何输出可见前重试，
+      // 确保调用方不会看到重复内容。
       yield* this.streamConfiguredRequest(client, { ...configuredRequest, temperature: undefined }, request.signal);
     }
   }

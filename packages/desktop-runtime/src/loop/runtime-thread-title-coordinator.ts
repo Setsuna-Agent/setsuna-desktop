@@ -30,7 +30,7 @@ type RuntimeThreadTitleCoordinatorOptions = {
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
-/** Owns the complete auto-title policy, including fallback and rename races. */
+/** 管理完整的自动标题策略，包括回退逻辑与重命名竞态。 */
 export class RuntimeThreadTitleCoordinator {
   constructor(private readonly options: RuntimeThreadTitleCoordinatorOptions) {}
 

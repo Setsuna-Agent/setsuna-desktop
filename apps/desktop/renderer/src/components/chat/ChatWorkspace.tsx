@@ -1655,8 +1655,8 @@ function assistantWorkItemNodes(
       : [];
   }
   const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
-  // Consecutive tool segments are merged into this item while streaming, but the
-  // first segment remains stable and preserves the uncontrolled <details> DOM node.
+  // 流式传输期间，连续工具片段会合并到此项目中，但首个片段保持稳定，
+  // 从而保留非受控的 <details> DOM 节点。
   return visibleToolRuns.length ? [
     <RuntimeToolRuns
       key={item.segment.id}
@@ -1782,7 +1782,7 @@ function WorkHistoryPanel({
   const wasActiveRef = useRef(active);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
-  // This prop seeds the panel once. Streaming updates never write expansion state.
+  // 此属性只用于初始化一次面板；流式更新绝不会写入展开状态。
   const [manualExpanded, setManualExpanded] = useState(() => hasDetails && defaultExpanded);
   const canToggle = hasDetails;
   const expanded = hasDetails && manualExpanded;

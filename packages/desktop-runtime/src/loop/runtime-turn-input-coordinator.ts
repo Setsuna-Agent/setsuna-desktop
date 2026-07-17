@@ -43,7 +43,7 @@ type RuntimeTurnInputCoordinatorOptions = {
   publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
 };
 
-/** Owns active-turn steer/mailbox queues and their persistence boundary. */
+/** 管理活动轮次的 steer 与邮箱队列及其持久化边界。 */
 export class RuntimeTurnInputCoordinator {
   private readonly idleMailboxByThread = new Map<string, RuntimeMailboxDelivery[]>();
 

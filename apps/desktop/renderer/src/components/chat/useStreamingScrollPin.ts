@@ -33,8 +33,8 @@ export function nextStreamingScrollPinned(_current: boolean, action: StreamingSc
 }
 
 /**
- * Keeps a streaming overflow panel at the bottom until the user takes control.
- * Scrolling all the way back down opts into automatic following again.
+ * 在用户主动控制滚动前，始终让流式溢出面板停留在底部。
+ * 完全滚回底部后会重新启用自动跟随。
  */
 export function useStreamingScrollPin(updateSignal: string, stateKey: string): {
   handlePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;

@@ -44,8 +44,7 @@ async function readFirstInstruction(
     const resolvedPath = await realpath(filePath).catch(() => null);
     if (!resolvedPath || !pathIsWithin(root, resolvedPath)) continue;
     const loaded = await readUtf8Prefix(resolvedPath, maxBytes);
-    // Empty higher-precedence candidates do not mask AGENTS.md or configured
-    // fallback names in the same directory.
+    // 内容为空的高优先级候选项不会遮蔽同目录下的 AGENTS.md 或已配置回退文件名。
     if (loaded?.content.trim()) return { ...loaded, path: resolvedPath };
   }
   return null;
@@ -57,7 +56,7 @@ async function readUtf8Prefix(filePath: string, maxBytes: number): Promise<{ con
   try {
     const stats = await handle.stat();
     if (!stats.isFile()) return null;
-    // Read a few extra bytes so truncateUtf8 can finish a code point at the budget boundary.
+    // 多读取几个字节，让 truncateUtf8 能在预算边界处完整保留一个码点。
     const readBytes = Math.min(stats.size, maxBytes + 4);
     const buffer = Buffer.alloc(readBytes);
     const result = await handle.read(buffer, 0, readBytes, 0);

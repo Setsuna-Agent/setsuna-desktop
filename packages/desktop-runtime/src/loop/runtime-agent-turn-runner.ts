@@ -165,8 +165,8 @@ export class RuntimeAgentTurnRunner {
     let cleanupEnvironment: RuntimeEnvironment | undefined;
     try {
       throwIfAborted(signal);
-      // SamplingContextBuilder owns the single request boundary so compaction can
-      // account for transient prompt fragments, tool schemas, and output reserve.
+      // SamplingContextBuilder 统一管理单次请求边界，使压缩逻辑能够计入临时提示片段、
+      // 工具模式和输出预留空间。
       let conversationMessages = [...thread.messages, ...(includeUserMessageInConversation ? [modelUserMessage] : [])];
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
@@ -174,7 +174,7 @@ export class RuntimeAgentTurnRunner {
       const appendSteersToConversation = (steers: RuntimeQueuedSteer[]) => {
         if (!steers.length) return false;
         const messages = steers.map((steer) => steer.message);
-        // 与 Codex turn/steer 对齐：steer 是同一 turn 的原始用户输入，
+        // 与现有 turn/steer 语义对齐：steer 是同一 turn 的原始用户输入，
         // 不在 runtime 侧改写成额外提示词，只在下一个 sampling step 并入上下文。
         conversationMessages.push(...messages);
         activeSkillIds = [...new Set([...activeSkillIds, ...steers.flatMap((steer) => steer.skillIds)])];
@@ -296,7 +296,7 @@ export class RuntimeAgentTurnRunner {
             memoryCitation: roundMemoryCitation,
             status: 'complete',
           });
-          // Runtime-enforced join: a parent collaboration turn cannot complete while spawned children are outstanding.
+          // 由 runtime 强制汇合：只要派生子任务尚未结束，父协作轮次就不能完成。
           conversationMessages.push(...await this.options.collaborationCoordinator.collectPendingChildren(threadId, turnId, signal));
           continue;
         }
@@ -406,7 +406,7 @@ export class RuntimeAgentTurnRunner {
           turnId,
         }, { status: cleanupStatus });
       } finally {
-        // Turn-scoped approvals are meaningful only while this turn is active.
+        // 轮次级审批只在当前轮次活动期间有效。
         this.options.toolExecutor.cleanupTurn(turnId);
       }
     }

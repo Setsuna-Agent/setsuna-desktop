@@ -5,7 +5,7 @@ export type ModelStreamTextCollector = {
   text(): string;
 };
 
-/** Collects visible agent text across both legacy delta and item-based model streams. */
+/** 从旧版增量流和基于条目的模型流中收集可见代理文本。 */
 export function createModelStreamTextCollector(): ModelStreamTextCollector {
   const itemKinds = new Map<string, RuntimeStreamItemKind>();
   const itemText = new Map<string, string>();
@@ -56,8 +56,8 @@ export function createModelStreamTextCollector(): ModelStreamTextCollector {
       else if (completedText.startsWith(streamedText)) appendAgentItemText(event.item.id, completedText.slice(streamedText.length));
     },
     text() {
-      // A malformed compatible provider may omit item lifecycle metadata. Its
-      // item_delta payload is still the only available visible model output.
+      // 实现不规范的兼容供应商可能省略项目生命周期元数据；其 item_delta 载荷
+      // 仍是唯一可用的可见模型输出。
       return output + [...pendingDeltas.values()].join('');
     },
   };

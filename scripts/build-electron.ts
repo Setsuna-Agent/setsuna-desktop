@@ -41,9 +41,8 @@ export async function buildElectron(): Promise<void> {
       target: 'node22',
       format: 'cjs',
       sourcemap: true,
-      // node-pty loads native prebuilds relative to its package directory. Bundling
-      // it into dist/runtime breaks packaged app startup because that directory
-      // does not contain the unpacked native module tree.
+      // node-pty 会相对于包目录加载原生预构建文件。将其打包进 dist/runtime 会导致
+      // 打包应用无法启动，因为该目录不包含解包后的原生模块树。
       external: runtimeExternals,
     }),
   ]);

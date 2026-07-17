@@ -20,7 +20,7 @@ const VIEW_IMAGE_TOOL: RuntimeToolDefinition = {
   },
 };
 
-/** Exposes local image perception without granting arbitrary filesystem reads. */
+/** 提供本地图像感知能力，同时不授予任意文件系统读取权限。 */
 export class WorkspaceImageToolHost implements ToolHost {
   constructor(private readonly projects: WorkspaceProjectStore) {}
 

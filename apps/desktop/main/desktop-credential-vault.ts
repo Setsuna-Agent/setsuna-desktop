@@ -31,8 +31,8 @@ export interface CredentialVault {
 }
 
 /**
- * Stores only OS-encrypted blobs on disk. Electron's safeStorage provider is
- * injected by main so the runtime child never receives the platform key.
+ * 磁盘上只保存经操作系统加密的数据块。Electron 的 safeStorage 提供方
+ * 由主进程注入，确保 runtime 子进程永远不会获得平台密钥。
  */
 export class DesktopCredentialVault implements CredentialVault {
   private updateQueue: Promise<void> = Promise.resolve();

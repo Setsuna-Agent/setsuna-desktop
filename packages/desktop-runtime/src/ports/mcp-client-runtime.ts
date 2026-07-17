@@ -15,11 +15,11 @@ export type McpProgress = {
 
 export type McpRequestContext = {
   /**
-   * Logical MCP session scope. Runtime tool calls use a thread-scoped value so
-   * stateful servers cannot leak session state between conversations.
+   * MCP 逻辑会话作用域。runtime 工具调用使用线程级值，防止有状态服务器在对话之间
+   * 泄露会话状态。
    */
   scopeId: string;
-  /** Active tool identity used to route server-initiated elicitation to UI. */
+  /** 当前活动工具标识，用于将服务器发起的信息征询路由到界面。 */
   threadId?: string;
   turnId?: string;
   toolCallId?: string;
@@ -64,7 +64,7 @@ export type McpSnapshotOptions = {
   includeResources?: boolean;
 };
 
-/** Runtime-facing MCP client port. Protocol details stay inside the SDK adapter. */
+/** 面向 runtime 的 MCP 客户端端口；协议细节保留在 SDK 适配器内部。 */
 export type McpClientRuntime = {
   discoverTools(server: RuntimeMcpServerInput, context?: Partial<McpRequestContext>): Promise<RuntimeMcpToolList>;
   listTools(server: RuntimeMcpServerInput, context: McpRequestContext): Promise<RuntimeMcpToolInfo[]>;

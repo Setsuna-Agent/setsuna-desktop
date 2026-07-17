@@ -546,8 +546,8 @@ export class FileMemoryStore implements MemoryStore {
       : await this.readMergedMemoryIndexWithoutLocations();
     const artifacts = renderMemoryArtifacts(mergedIndex);
     const root = await this.activeMemoryRoot();
-    // Read APIs render a merged in-memory view. Persisted artifacts are only
-    // refreshed by mutations so a stale reader cannot overwrite newer output.
+    // 读取 API 会呈现合并后的内存视图。只有修改操作才会刷新持久化产物，
+    // 防止过期读取方覆盖较新的输出。
     return overlayStoredMemoryArtifacts(artifacts, root);
   }
 
@@ -669,8 +669,8 @@ async function shouldPreserveExistingArtifact(root: string, relativePath: string
     if (isNodeErrorCode(error, 'ENOENT')) return false;
     throw error;
   }
-  // Phase-2 writes become the durable source of truth. Generated fallbacks keep the marker and
-  // may be refreshed from memories.json until the first real consolidation succeeds.
+  // 第二阶段写入会成为持久化真源。生成的回退内容保留标记，并可在首次真正整合成功前
+  // 从 memories.json 刷新。
   return !content.includes('Generated from memories.json.');
 }
 

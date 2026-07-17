@@ -619,7 +619,7 @@ function writeReviewSourcePreference(key: string, source: DesktopReviewSource): 
   try {
     window.localStorage.setItem(key, source);
   } catch {
-    // Preference persistence should never block the review panel itself.
+    // 偏好设置持久化绝不能阻塞审查面板本身。
   }
 }
 
@@ -628,7 +628,7 @@ function writeBranchBaseRefPreference(key: string, baseRef: string): void {
   try {
     window.localStorage.setItem(key, baseRef);
   } catch {
-    // Preference persistence should never block the review panel itself.
+    // 偏好设置持久化绝不能阻塞审查面板本身。
   }
 }
 
@@ -637,7 +637,7 @@ function writeReviewDiffLayoutPreference(key: string, layout: DesktopReviewDiffL
   try {
     window.localStorage.setItem(key, layout);
   } catch {
-    // Preference persistence should never block the review panel itself.
+    // 偏好设置持久化绝不能阻塞审查面板本身。
   }
 }
 
@@ -646,7 +646,7 @@ function writeReviewLineWrapPreference(key: string, lineWrap: boolean): void {
   try {
     window.localStorage.setItem(key, lineWrap ? 'wrap' : 'nowrap');
   } catch {
-    // Preference persistence should never block the review panel itself.
+    // 偏好设置持久化绝不能阻塞审查面板本身。
   }
 }
 
@@ -921,8 +921,7 @@ function ReviewFileCard({
   const splitWholeFileChange = diffLayout === 'split' ? wholeFileChange : null;
   const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
     () => {
-      // Collapsed files should stay cheap: highlighting every hidden file is a
-      // noticeable up-front cost on large reviews.
+      // 折叠文件应保持低开销：在大型审查中预先高亮每个隐藏文件会产生明显成本。
       if (!expanded) return [];
       const highlightedLines = highlightedReviewDiffLines(visibleLines, language);
       return visibleLines.map((line, index) => ({
@@ -1426,8 +1425,8 @@ function ReviewVirtualStackRow({
   useReviewLayoutEffect(() => {
     const row = rowRef.current;
     if (!row) return undefined;
-    // Measure intrinsic content instead of the wrapper's reserved min-height. Measuring
-    // the wrapper would feed a transient oversized value back into itself indefinitely.
+    // 测量内容的固有高度，而不是包装元素预留的最小高度。测量包装元素会把临时的
+    // 过大数值不断反馈给自身。
     const content = row.firstElementChild ?? row;
     const measure = () => onMeasure(index, content.getBoundingClientRect().height);
     measure();
@@ -1710,8 +1709,7 @@ function highlightReviewDiffSegment(
   const oldSourceLines: Array<{ content: string; index: number }> = [];
   const newSourceLines: Array<{ content: string; index: number }> = [];
 
-  // Parse the old and new sides as continuous source independently. This preserves
-  // multiline syntax context without mixing both versions of a changed block.
+  // 分别将新旧两侧解析为连续源码，既保留多行语法上下文，又不会混合变更块的两个版本。
   for (let index = start; index < end; index += 1) {
     const line = lines[index];
     if (!line || line.type === 'gap') continue;

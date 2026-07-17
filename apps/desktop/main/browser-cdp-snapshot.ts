@@ -103,9 +103,9 @@ const actionableRoles = new Set([
 const interactiveTags = new Set(['a', 'button', 'input', 'option', 'select', 'summary', 'textarea']);
 
 /**
- * Converts CDP's columnar DOM snapshot into a compact model-facing observation.
- * Text-bearing elements are kept even when they have no semantic role so SPA rows
- * implemented through delegated click handlers still receive actionable refs.
+ * 将 CDP 的列式 DOM 快照转换为面向模型的紧凑观察结果。
+ * 即使包含文本的元素没有语义角色也会保留，以便通过委托点击处理器实现的
+ * 单页应用行项目仍能获得可操作的引用。
  */
 export function extractCdpPageObservation(
   snapshot: CdpSnapshotResponse,

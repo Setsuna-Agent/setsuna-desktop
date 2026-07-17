@@ -29,7 +29,7 @@ export function MarkdownRenderer({ content, streaming }: { content: string; stre
           className={`chat-markdown${segment.activeStreaming ? ' is-streaming' : ''}`}
           key={segment.key}
         >
-          {/* Parser block positions are append-only; index keys keep the mutable tail mounted as its content grows. */}
+          {/* 解析器块位置仅会追加；使用索引键可在可变尾部内容增长时保持其挂载。 */}
           {segment.blocks.map((block, index) => (
             <MarkdownVirtualBlock
               content={block.content}

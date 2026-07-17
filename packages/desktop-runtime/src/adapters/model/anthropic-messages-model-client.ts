@@ -157,7 +157,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
   }
 }
 
-/** Anthropic reports input usage at message_start and output usage at message_delta. */
+/** Anthropic 在 message_start 报告输入用量，在 message_delta 报告输出用量。 */
 function mergeAnthropicUsage(
   previous: ReturnType<typeof normalizeAnthropicUsage>,
   next: ReturnType<typeof normalizeAnthropicUsage>,

@@ -3,10 +3,10 @@ import path from 'node:path';
 const fileStateQueues = new Map<string, Promise<void>>();
 
 /**
- * Serialize read-modify-write operations for one persisted state file.
+ * 串行处理单个持久化状态文件的读取、修改与写入操作。
  *
- * This is intentionally shared by store instances because tests and future
- * runtime composition may create more than one adapter for the same path.
+ * 此协调器有意在存储实例间共享，因为测试及未来的 runtime 组合可能会为同一路径
+ * 创建多个适配器。
  */
 export async function withFileStateUpdate<T>(filePath: string, operation: () => Promise<T>): Promise<T> {
   const key = path.resolve(filePath);

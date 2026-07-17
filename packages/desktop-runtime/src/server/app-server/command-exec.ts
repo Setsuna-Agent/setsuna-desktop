@@ -1039,7 +1039,7 @@ function terminateAppServerCommandExecSession(session: AppServerCommandExecSessi
     try {
       session.ptyProcess.kill();
     } catch {
-      // PTY processes can disappear between an exit notification and cancellation.
+      // PTY 进程可能在退出通知与取消操作之间消失。
     }
     return;
   }
@@ -1052,7 +1052,7 @@ function terminateAppServerProcessSession(session: AppServerProcessSession): voi
     try {
       session.ptyProcess.kill();
     } catch {
-      // PTY processes can already be gone when a timeout or shutdown races with exit.
+      // 超时或关闭与退出发生竞态时，PTY 进程可能已经不存在。
     }
     return;
   }

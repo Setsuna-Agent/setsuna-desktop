@@ -113,8 +113,7 @@ export class FileConfigStore implements ConfigStore {
         providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
       };
 
-      // Secrets first is fail-safe: a config commit can reference the new key only
-      // after the private file has been durably replaced.
+      // 先写入密钥可保证失败安全：只有私密文件完成持久替换后，配置提交才能引用新密钥。
       await this.writeSecrets(secrets);
       await writeJsonFile(this.configPath, stored);
       return this.toState(stored, secrets);
@@ -276,8 +275,8 @@ function normalizeSecrets(value: unknown): StoredSecrets {
 }
 
 function normalizeBaseUrl(value: string): string {
-  // Settings are auto-saved while typing; stripping a trailing slash here turns
-  // an in-progress `https:/` back into `https:` and makes `https://` impossible to enter.
+  // 设置会在输入时自动保存；如果在此移除末尾斜杠，输入中的 `https:/` 会退回 `https:`，
+  // 导致无法输入 `https://`。
   return value.trim();
 }
 
@@ -437,8 +436,7 @@ function normalizeSandboxWorkspaceWrite(
     globScanMaxDepth: typeof record.globScanMaxDepth === 'number' && Number.isFinite(record.globScanMaxDepth)
       ? Math.max(1, Math.floor(record.globScanMaxDepth))
       : undefined,
-    // A local workspace sandbox should be useful out of the box. Users can
-    // still explicitly disable network access from Advanced Settings.
+    // 本地工作区沙箱应当开箱即用；用户仍可在高级设置中显式禁用网络访问。
     networkAccess: options.migrateNetworkDefault === true || record.networkAccess !== false,
     excludeTmpdirEnvVar: record.excludeTmpdirEnvVar === true,
     excludeSlashTmp: record.excludeSlashTmp === true,

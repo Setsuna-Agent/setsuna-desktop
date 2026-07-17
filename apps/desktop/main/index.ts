@@ -113,8 +113,8 @@ async function createWindow(): Promise<void> {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
     trafficLightPosition: process.platform === 'darwin' ? getMacTrafficLightPosition(1) : undefined,
     autoHideMenuBar: usesCustomFrame,
-    // Keep the Windows HWND genuinely transparent: a DWM background material
-    // would also fill the CSS shadow gutter and turn it into a solid border.
+    // 保持 Windows HWND 真正透明：DWM 背景材质也会填充 CSS 阴影留白，
+    // 从而将其变成实心边框。
     transparent: process.platform !== 'darwin',
     backgroundColor: '#00000000',
     vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
@@ -166,7 +166,7 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
-    // Browser guests never inherit local preload or Node capabilities from the desktop renderer.
+    // 浏览器来宾页面绝不能继承桌面渲染进程的本地预加载脚本或 Node 能力。
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
@@ -293,8 +293,8 @@ function registerBrowserIpc(controller: DesktopBrowserController): void {
     if (!screenshot) return null;
     const image = nativeImage.createFromDataURL(screenshot.dataUrl);
     if (image.isEmpty()) return null;
-    // Clipboard is written before the renderer receives the screenshot, so every
-    // successful capture remains available even when it cannot become an attachment.
+    // 在渲染进程收到截图前先写入剪贴板，因此即使截图无法转换为附件，
+    // 每次成功捕获的结果仍然可用。
     clipboard.writeImage(image);
     return screenshot;
   });

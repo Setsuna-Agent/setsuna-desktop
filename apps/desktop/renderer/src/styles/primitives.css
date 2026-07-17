@@ -260,7 +260,6 @@
   font-size: 12px;
   font-weight: var(--app-font-weight);
   line-height: 18px;
-  opacity: 0;
   visibility: hidden;
   pointer-events: none;
   transform: translateY(-2px);
@@ -270,7 +269,6 @@
 
 .sd-action-tooltip:hover::after,
 .sd-action-tooltip:focus-within::after {
-  opacity: 1;
   visibility: visible;
   transform: translateY(0);
   transition-delay: 0s;

@@ -399,6 +399,12 @@
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
+/* 经过位移的操作槽会创建层叠上下文；提升整行层级，避免其提示框被后续会话行遮盖。 */
+.desktop-agent-session:hover,
+.desktop-agent-session:focus-within {
+  z-index: 1;
+}
+
 .desktop-agent-session.is-active {
   color: var(--app-text);
   border-color: transparent;

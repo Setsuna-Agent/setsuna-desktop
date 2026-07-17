@@ -131,7 +131,7 @@ export class FileSkillRegistry implements SkillRegistry {
         enabled: state.states[skillId]?.enabled,
         selected: state.states[skillId]?.selected,
       };
-      // Normalize and validate both files before changing either persisted file.
+      // 修改任一持久化文件前，先对两个文件完成规范化与校验。
       const preparedFiles = prepareUserSkillFiles(nextInput);
       await this.writeState(state);
       const skillPath = await this.writeUserSkill(skillId, preparedFiles);
@@ -288,7 +288,7 @@ export class FileSkillRegistry implements SkillRegistry {
         });
         this.watchers.set(directory, watcher);
       } catch {
-        // Missing or transiently inaccessible skill roots are accepted; the next explicit refresh can pick them up.
+        // 接受缺失或暂时无法访问的 Skill 根目录；下次显式刷新时可重新发现它们。
       }
     }
   }
@@ -372,7 +372,7 @@ function parseFrontmatter(rawContent: string): { name?: string; description?: st
       body: rawContent.slice(endIndex + 4),
     };
   } catch {
-    // A malformed optional frontmatter block must not make an otherwise readable Skill disappear.
+    // 可选的 frontmatter 块格式错误时，不能让其他内容仍可读取的 Skill 消失。
     return {
       autoActivate: [],
       body: rawContent.slice(endIndex + 4),
@@ -541,7 +541,7 @@ async function readSkillDependencyManifest(skillPath: string): Promise<SkillDepe
 
 type PreparedUserSkillFiles = {
   markdown: string;
-  /** Undefined preserves an existing manifest; null removes it. */
+  /** undefined 保留现有清单，null 则将其移除。 */
   dependencyManifest?: string | null;
 };
 

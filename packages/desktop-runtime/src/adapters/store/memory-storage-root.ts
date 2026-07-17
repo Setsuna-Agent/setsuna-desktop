@@ -24,8 +24,8 @@ type MemoryRootMarker = {
 type StorageRootResolver = () => Promise<string | null | undefined> | string | null | undefined;
 
 /**
- * Owns the mapping between a user-selected storage container and runtime-managed
- * memory roots. Destructive operations are only allowed below a validated marker.
+ * 管理用户所选存储容器与 runtime 管理的记忆根目录之间的映射。
+ * 破坏性操作只能在经过验证的标记目录之下执行。
  */
 export class MemoryStorageRootManager {
   constructor(
@@ -63,8 +63,8 @@ export class MemoryStorageRootManager {
 
   private async ensureDefaultRoot(): Promise<string> {
     const root = path.resolve(this.dataDir, 'memories');
-    // This path is below the runtime data directory and was owned by Setsuna before
-    // ownership markers were introduced, so existing contents are safe to adopt.
+    // 此路径位于 runtime 数据目录之下，并且在引入所有权标记前已由 Setsuna 管理，
+    // 因此可以安全接管现有内容。
     await ensureOwnedMemoryRoot({ root, trustExistingContents: true });
     return root;
   }

@@ -25,7 +25,7 @@ export async function openWorkspaceFileWithDefaultApp(
       return { ok: false, error: 'File path must stay inside the workspace.' };
     }
 
-    // Resolve symlinks before opening so a Markdown link cannot escape the selected workspace.
+    // 打开前解析符号链接，防止 Markdown 链接跳出所选工作区。
     const targetStats = await stat(canonicalTarget);
     if (!targetStats.isFile()) return { ok: false, error: 'Target is not a file.' };
 
@@ -43,4 +43,3 @@ function isPathInside(workspaceRoot: string, targetPath: string): boolean {
     && !relativePath.startsWith(`..${path.sep}`)
     && !path.isAbsolute(relativePath);
 }
-

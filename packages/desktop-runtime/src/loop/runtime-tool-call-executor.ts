@@ -80,7 +80,7 @@ type RuntimeToolCallExecutorOptions = {
   publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
 };
 
-/** Owns tool approvals, execution, and tool-related event projection. */
+/** 管理工具审批、执行及相关事件投影。 */
 export class RuntimeToolCallExecutor {
   private readonly toolApprovalStore = new ToolApprovalStore();
   private readonly appServerDynamicToolsByThread = new Map<string, AppServerDynamicToolRegistration>();
@@ -241,8 +241,8 @@ export class RuntimeToolCallExecutor {
     const registration = this.appServerDynamicToolsByThread.get(threadId);
     const tool = registration?.toolsByName.get(name);
     if (!registration || !tool) return null;
-    // If a local ToolHost tool with the same model-facing name exists, the local
-    // runtime owns execution; dynamic tools are appended only for free names.
+    // 如果本地 ToolHost 中存在同名的面向模型工具，则由本地 runtime 负责执行；
+    // 动态工具只会追加到尚未占用的名称上。
     if (toolRouter?.hasTool(name)) return null;
     return { registration, tool };
   }
@@ -452,9 +452,8 @@ export class RuntimeToolCallExecutor {
       && argumentsLength - previous.argumentsLength < TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD) return;
 
     const preview = await toolRouter.previewPartialToolCall(next.name, next.arguments);
-    // A lone opening brace has no useful target or progress information. Waiting for the first
-    // host preview lets a path such as file_path appear immediately instead of being hidden by
-    // the subsequent 1 KiB throttle window.
+    // 单独的左花括号不包含有用的目标或进度信息。等待首次主机预览，可以让 file_path
+    // 之类的路径立即显示，而不是被后续 1 KiB 的节流窗口遮蔽。
     if (!previous && !preview && argumentsLength < TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD) return;
     const argumentsPreview = preview?.argumentsPreview ?? previewPartialArguments(next.arguments);
     const resultPreview = preview?.resultPreview;
@@ -560,8 +559,8 @@ export class RuntimeToolCallExecutor {
         status,
         content: previewToolContent(content),
         argumentsPreview: previewArguments(parsedArguments),
-        // Structured previews must stay parseable. Text truncation can split JSON mid-token and
-        // silently remove the file path/change counts needed by chat and Review projections.
+        // 结构化预览必须保持可解析。文本截断可能从令牌中间切断 JSON，并静默移除
+        // 聊天区和审查投影所需的文件路径或变更计数。
         resultPreview: metadata.resultPreview,
         data: metadata.data,
         durationMs: metadata.startedAtMs === undefined ? undefined : Math.max(0, completedAt.getTime() - metadata.startedAtMs),

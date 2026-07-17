@@ -107,11 +107,10 @@ export type SdkMcpConnectionManagerOptions = {
 };
 
 /**
- * Owns persistent MCP clients and their negotiated state.
+ * 管理持久 MCP 客户端及其协商状态。
  *
- * The manager is runtime-scoped, while individual connections are scope- and
- * server-scoped. This keeps process/session reuse without sharing stateful MCP
- * sessions across unrelated desktop threads.
+ * 管理器以 runtime 为作用域，单个连接则以业务作用域和服务器为作用域。
+ * 这样既能复用进程及会话，又不会在无关桌面线程之间共享有状态 MCP 会话。
  */
 export class SdkMcpConnectionManager implements McpClientRuntime {
   private readonly connections = new Map<string, ManagedConnection>();
@@ -205,8 +204,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
           } catch (error) {
             if (!(error instanceof UrlElicitationRequiredError)) throw error;
             await this.handleRequiredUrlElicitations(connection, error.elicitations, context, toolName, server.toolTimeoutMs);
-            // URL-mode tool errors are retried once after the server confirms
-            // the out-of-band interaction completed.
+            // 服务器确认带外交互完成后，URL 模式的工具错误会重试一次。
             result = await this.performToolCall(connection, server, toolName, args, context);
           }
           this.touch(connection);
@@ -316,8 +314,8 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
       connection.updatedAt = new Date(this.now()).toISOString();
       if (!isExpiredHttpSession(error)) throw error;
 
-      // A 404 carrying a session ID means the server discarded the logical
-      // session. The rejected request was not accepted, so reconnect once.
+      // 携带会话 ID 的 404 表示服务器已丢弃逻辑会话。被拒请求尚未获接收，
+      // 因此重新连接一次。
       await this.closeConnection(connection, false);
       connection = await this.connectionFor(server, context);
       return operation(connection);
@@ -554,8 +552,8 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
         },
       });
     });
-    // The user may spend longer in the approval UI than the server timeout;
-    // attach a handler immediately so an early timeout is never unhandled.
+    // 用户可能在审批界面停留超过服务器超时时间；立即挂接处理器，
+    // 确保提前超时绝不会成为未处理异常。
     void promise.catch(() => undefined);
     const timer = setTimeout(() => {
       cleanup();

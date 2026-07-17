@@ -23,7 +23,7 @@ export function runtimeArtifactsFromToolRuns(runs: readonly RuntimeToolRun[]): R
     const artifact = runtimeArtifactFromData(run.data);
     if (!artifact) continue;
     const location = `${artifact.workspaceRoot}\u0000${artifact.path}`;
-    // Republished files keep their latest metadata and their latest position in the list.
+    // 重新发布的文件保留最新元数据及其在列表中的最新位置。
     artifactsByLocation.delete(location);
     artifactsByLocation.set(location, artifact);
   }

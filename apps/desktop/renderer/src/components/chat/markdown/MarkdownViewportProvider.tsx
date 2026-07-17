@@ -24,7 +24,7 @@ export function MarkdownViewportProvider({
     if (!viewport || !supported) return null;
 
     if (!observerRef.current) {
-      // A shared observer keeps long answers from allocating one observer per Markdown block.
+      // 共用一个观察器，避免长回答为每个 Markdown 块分别分配观察器。
       observerRef.current = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           callbacksRef.current.get(entry.target)?.(entry.isIntersecting);

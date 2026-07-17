@@ -51,8 +51,7 @@ export async function handleSse({
   });
 
   try {
-    // Subscribe before replay. Events published while the log is being read are
-    // buffered and de-duplicated by seq when replay reaches the live boundary.
+    // 重放前先订阅。读取日志期间发布的事件会被缓冲，并在重放到达实时边界时按 seq 去重。
     const existing = await runtime.threadStore.listEvents(threadId, format === 'swe' ? 0 : sinceSeq);
     if (closed) return;
     for (const event of existing) {

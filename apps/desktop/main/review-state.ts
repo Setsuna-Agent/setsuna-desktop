@@ -166,7 +166,7 @@ export async function commitReviewChanges(
       await pushCurrentBranch(gitRoot);
       pushed = true;
     } catch (error) {
-      // The commit is already durable at this point, so report push as a partial failure.
+      // 此时提交已经持久化，因此将推送失败报告为部分失败。
       pushError = error instanceof Error ? error.message : String(error);
     }
   }
@@ -419,7 +419,7 @@ function normalizeCommitMessage(value: string | null | undefined): string {
 }
 
 function stripInvisibleCommitMessageChars(value: string): string {
-  // eslint-disable-next-line no-control-regex -- Commit messages can include hidden control characters copied from model output.
+  // eslint-disable-next-line no-control-regex -- 提交消息可能包含从模型输出复制的隐藏控制字符。
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/gu, '');
 }
 

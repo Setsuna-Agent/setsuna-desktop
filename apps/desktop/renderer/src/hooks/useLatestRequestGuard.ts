@@ -18,7 +18,7 @@ export function createLatestRequestGuard(): LatestRequestGuard {
   };
 }
 
-/** Gives async UI actions a shared last-request-wins boundary. */
+/** 为异步界面操作提供共享的“最后一次请求生效”边界。 */
 export function useLatestRequestGuard(): LatestRequestGuard {
   const guardRef = useRef<LatestRequestGuard | null>(null);
   if (!guardRef.current) guardRef.current = createLatestRequestGuard();

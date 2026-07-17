@@ -670,8 +670,8 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
     mcpConfigPath: MCP_CONFIG_PATH,
     permissionProfile: 'workspace-write',
     sandboxWorkspaceWrite: {},
-    // Restricted shell profiles must fail closed when the host has no supported
-    // sandbox provider. An explicitly approved bypass temporarily disables this.
+    // 主机没有受支持的沙箱提供方时，受限 Shell 配置必须以拒绝方式失败。
+    // 只有显式获批的绕过操作才能暂时禁用此限制。
     osSandbox: true,
     shellPolicyRules: loadShellPolicyRules(workspaceRoot),
     networkPolicyAmendments: [],
@@ -759,7 +759,7 @@ export function parsePartialWriteFileArguments(rawArguments) {
       };
     }
   } catch {
-    // Tool arguments stream in as partial JSON; fall through to the scanner.
+    // 工具参数以不完整 JSON 流入，继续交由扫描器处理。
   }
 
   const filePath = findJsonFilePathValue(raw);
@@ -789,7 +789,7 @@ export function parsePartialApplyPatchArguments(rawArguments) {
       };
     }
   } catch {
-    // Tool arguments stream in as partial JSON; fall through to the scanner.
+    // 工具参数以不完整 JSON 流入，继续交由扫描器处理。
   }
 
   const patch = findJsonStringValue(raw, 'patch');
@@ -821,7 +821,7 @@ export function parsePartialDeleteFileArguments(rawArguments) {
       };
     }
   } catch {
-    // Tool arguments stream in as partial JSON; fall through to the scanner.
+    // 工具参数以不完整 JSON 流入，继续交由扫描器处理。
   }
 
   const filePath = findJsonFilePathValue(raw);
@@ -853,7 +853,7 @@ export function parsePartialEditFileArguments(rawArguments) {
       };
     }
   } catch {
-    // Tool arguments stream in as partial JSON; fall through to the scanner.
+    // 工具参数以不完整 JSON 流入，继续交由扫描器处理。
   }
 
   const filePath = findJsonFilePathValue(raw);
@@ -2661,8 +2661,8 @@ async function runShellCommand(args, state, options = {}) {
   const sandboxBlock = shellSandboxUnavailableReason(state);
   if (sandboxBlock) {
     return errorResult(sandboxBlock, {
-      // The orchestrator treats this like an OS-level denial and may offer an
-      // explicit unsandboxed retry. Never silently fall back to policy heuristics.
+      // 编排器会将其视为操作系统级拒绝，并可能提供显式的无沙箱重试。
+      // 绝不能静默回退到策略启发式判断。
       failure_kind: 'sandbox_denied',
       failure_stage: 'preflight',
     });
@@ -3232,7 +3232,7 @@ function flushShellProgress(session, root) {
       stderr_omitted_chars: session.stderrOmittedChars,
     });
   } catch {
-    // Progress is best-effort; the command result remains authoritative.
+    // 进度报告仅作尽力尝试，命令结果始终具有权威性。
   }
 }
 
@@ -3252,12 +3252,12 @@ function killChildProcess(child, childSignal) {
       return;
     }
   } catch {
-    // Fall back to killing the direct child below.
+    // 回退到下方逻辑，终止直接子进程。
   }
   try {
     child.kill(childSignal);
   } catch {
-    // The process may have already exited.
+    // 进程可能已经退出。
   }
 }
 
@@ -3698,7 +3698,7 @@ function resolveReadablePath(value, state) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('sandbox filesystem deny')) throw error;
-      // Try the next approved root. The final error below keeps the message deterministic.
+      // 尝试下一个已批准根目录；下方最终错误用于保持消息确定性。
     }
   }
   throw new Error('路径不在当前工作区或已批准 readable_roots 内。');
@@ -3796,7 +3796,7 @@ function deniedRootPathForFileMutationTool(name, args, state) {
         : resolveWorkspacePath(rawPath, state.root);
       if (deniedSandboxRuleForPath(filePath, state)) return formatPath(filePath, state.root);
     } catch {
-      // Let normal path validation report malformed or out-of-workspace paths.
+      // 由常规路径校验报告格式错误或超出工作区的路径。
     }
   }
   return '';
@@ -3818,7 +3818,7 @@ function globPatternRegExp(pattern) {
     globPatternRegExpCache.set(normalized, matcher);
     return matcher;
   } catch {
-    // Match Codex's fail-closed behavior for invalid deny glob patterns.
+    // 无效的拒绝 glob 模式采用失败即拒绝的处理方式。
     globPatternRegExpCache.set(normalized, null);
     return null;
   }
@@ -3867,7 +3867,7 @@ function pathCandidatesForGlob(filePath) {
     const real = normalizeGlobPath(realpathSync(path.resolve(filePath)));
     if (!candidates.includes(real)) candidates.push(real);
   } catch {
-    // Missing paths still need lexical matching so future-created denied paths stay blocked.
+    // 缺失路径仍需进行词法匹配，确保未来创建的被拒路径继续受到阻止。
   }
   return candidates;
 }
@@ -4413,8 +4413,8 @@ function policyPathVariants(filePath, workspaceRoot) {
     realPathIfExists(resolved),
     nativeRealPathIfExists(resolved),
   ];
-  // Windows temp paths can arrive as short names while the workspace store keeps
-  // the canonical root; map an existing configured path back through workspace root.
+  // Windows 临时路径可能以短名称传入，而工作区存储保留规范根目录；
+  // 将现有配置路径通过工作区根目录映射回来。
   const equivalent = workspaceEquivalentPath(resolved, workspaceRoot);
   if (equivalent) {
     variants.push(equivalent, realPathIfExists(equivalent), nativeRealPathIfExists(equivalent));
@@ -4631,8 +4631,8 @@ function shellSpawnSpec(command, state) {
   }
   return {
     command: '/usr/bin/sandbox-exec',
-    // The runtime already supplies a curated environment. A login shell invokes
-    // macOS path_helper and moves managed tool shims behind /usr/bin.
+    // runtime 已经提供筛选后的环境。登录 Shell 会调用 macOS path_helper，
+    // 并把受管理工具垫片移到 /usr/bin 之后。
     args: ['-p', sandboxProfile, '/bin/sh', '-c', guardedCommand],
     sandboxed: true,
     shell: false,
@@ -4641,9 +4641,8 @@ function shellSpawnSpec(command, state) {
 
 function shellCommandWithPipefail(command) {
   if (process.platform === 'win32') return command;
-  // POSIX does not standardize pipefail. Probe it in a subshell so shells that
-  // lack the option still execute the original command, while supported shells
-  // correctly surface failures hidden by a trailing `tail`/`tee` stage.
+  // POSIX 未标准化 pipefail。请在子 Shell 中探测，使不支持此选项的 Shell 仍可执行
+  // 原命令，而支持它的 Shell 能正确暴露被末尾 `tail` 或 `tee` 阶段掩盖的失败。
   return `(set -o pipefail) 2>/dev/null && set -o pipefail\n${command}`;
 }
 
@@ -4668,8 +4667,8 @@ export function shellSandboxProfile(state, capability = shellSandboxCapability()
   if (profile !== 'workspace-write') return '';
 
   const writableRoots = [...new Set(shellWorkspaceWriteRoots(state).map(realPathIfExists))];
-  // Seatbelt does not reopen a broad deny with later allow rules, so deny writes
-  // only when the target is outside every approved writable root.
+  // Seatbelt 无法用后续允许规则重新开放宽泛拒绝项，因此仅当目标位于所有已批准
+  // 可写根目录之外时才拒绝写入。
   lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
   for (const root of deniedRootsForState(state)) {
     lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
@@ -4681,8 +4680,8 @@ function seatbeltDenyWritesOutsideRoots(roots) {
   const filters = roots
     .filter(Boolean)
     .map((root) => `(require-not (subpath ${seatbeltString(root)}))`);
-  // Common shell redirections use /dev/null even in otherwise read-only
-  // commands. Keep that device writable without opening any regular path.
+  // 常见 Shell 重定向即使在其他方面只读的命令中也会使用 /dev/null。
+  // 保持该设备可写，同时不开放任何普通路径。
   filters.push(`(require-not (literal ${seatbeltString('/dev/null')}))`);
   if (filters.length === 1) return `(deny file-write* ${filters[0]})`;
   return `(deny file-write* (require-all ${filters.join(' ')}))`;

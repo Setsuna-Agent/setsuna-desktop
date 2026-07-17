@@ -101,9 +101,8 @@ function ToolRunDisplayPanel({
   group: ToolRunDisplayGroup;
   onAnswerApproval: AnswerApprovalHandler;
 }): JSX.Element {
-  // Keep this component and its root DOM node stable while streamed runs change
-  // from a single item into a group or a mixed group. Native <details> then owns
-  // its open state after the initial collapsed render.
+  // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
+  // 首次折叠渲染后，展开状态由原生 <details> 管理。
   if (group.type === 'mixed') {
     return mixedToolRunGroupPanelNode(group, onAnswerApproval);
   }

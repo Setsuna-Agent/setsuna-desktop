@@ -6,7 +6,7 @@ export const browserControlTokenEnvironmentKey = 'SETSUNA_DESKTOP_BROWSER_CONTRO
 
 type Fetch = typeof fetch;
 
-/** Runtime-side adapter for the authenticated browser controller owned by Electron main. */
+/** Electron 主进程所管理、已认证浏览器控制器的 runtime 侧适配器。 */
 export class HttpBrowserControlClient implements BrowserControlPort {
   private readonly baseUrl: string;
 

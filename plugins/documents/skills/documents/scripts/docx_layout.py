@@ -1,4 +1,4 @@
-"""Shared layout and OOXML helpers for the Setsuna Documents plugin."""
+"""Setsuna Documents 插件共用的布局及 OOXML 辅助函数。"""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def preset_by_name(value: Any) -> DocumentPreset:
 
 
 def configure_new_document(document: Any, preset: DocumentPreset, page_size: str | None = None) -> None:
-    """Apply page geometry and a deterministic style sheet to a new document."""
+    """为新文档应用页面几何参数及确定性样式表。"""
 
     configure_page(document.sections[0], page_size or preset.page_size, preset.margins_mm)
     normal = document.styles["Normal"]

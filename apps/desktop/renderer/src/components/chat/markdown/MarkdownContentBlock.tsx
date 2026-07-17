@@ -43,7 +43,7 @@ const markdownComponents = {
   table: MarkdownTable,
 } satisfies Components;
 
-// GFM emits checkbox inputs for task syntax; chat renders every Markdown list as a static list.
+// GFM 会为任务语法生成复选框输入元素；聊天区将所有 Markdown 列表渲染为静态列表。
 function MarkdownTaskInput() {
   return null;
 }

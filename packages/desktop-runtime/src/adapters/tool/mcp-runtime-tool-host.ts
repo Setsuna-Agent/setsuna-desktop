@@ -68,7 +68,7 @@ const readMcpResourceTool: RuntimeToolDefinition = {
   },
 };
 
-/** Maps live MCP inventory to model tools while retaining server policy metadata. */
+/** 将实时 MCP 清单映射为模型工具，同时保留服务器策略元数据。 */
 export class McpRuntimeToolHost implements ToolHost {
   private readonly mappingsByContext = new WeakMap<ToolExecutionContext, McpToolMapping[]>();
   private readonly externalContextByContext = new WeakMap<ToolExecutionContext, ToolExternalContext[]>();
@@ -316,9 +316,8 @@ function validInputSchema(value: Record<string, unknown> | undefined): Record<st
 function normalizeApprovalMode(value: RuntimeMcpRequireApproval | undefined): McpApprovalMode {
   if (value === 'approve' || value === 'never') return 'approve';
   if (value === 'prompt' || value === 'always') return 'prompt';
-  // MCP annotations are server-provided and therefore cannot lower approval on
-  // an untrusted connection. A remembered per-tool approval is represented by
-  // approvalMode='approve' above and remains an explicit user decision.
+  // MCP 注解由服务器提供，因此不能降低不受信任连接的审批要求。已记住的单工具审批
+  // 由上面的 approvalMode='approve' 表示，仍然属于用户的显式决定。
   return 'auto';
 }
 

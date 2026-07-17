@@ -43,8 +43,8 @@ export class FilePersistentToolApprovalStore implements PersistentToolApprovalSt
     await Promise.all(keys.map(async (key) => {
       const parsed = parseMcpApprovalKey(key);
       if (!parsed) return;
-      // The approval key file is still the durable fallback; MCP config write-back
-      // is best-effort so a stale/deleted server cannot fail the approved tool run.
+      // 审批键文件仍是持久化回退；MCP 配置回写仅作尽力尝试，避免过期或已删除的服务器
+      // 导致获批工具运行失败。
       await this.mcpStore?.setToolApprovalMode(parsed.serverKey, parsed.toolName, 'approve').catch(() => undefined);
     }));
   }

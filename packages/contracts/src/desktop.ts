@@ -137,7 +137,7 @@ export type DesktopRuntimeBridge = {
   startSse(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void): () => void;
 };
 
-/** Shared contract for the narrow preload API exposed to the renderer. */
+/** 向渲染进程暴露的有限预加载 API 所使用的共享契约。 */
 export type SetsunaDesktopBridge = {
   browser: {
     captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null>;

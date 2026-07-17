@@ -37,7 +37,7 @@ type RuntimeContextCompactorOptions = {
   }): Promise<{ shouldStop?: boolean; stopReason?: string }>;
 };
 
-/** Owns context-window policy, summary generation, and compaction event projection. */
+/** 管理上下文窗口策略、摘要生成及压缩事件投影。 */
 export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
 
@@ -334,8 +334,8 @@ function contextCompactionHash(messages: RuntimeMessage[]): string {
 
 function messagesAsCompactionSource(messages: RuntimeMessage[]): string {
   return messages
-    // Persisted policy messages remain pinned in the request and must not be
-    // copied into a lower-authority user summary, even as recent context.
+    // 持久化策略消息会固定保留在请求中，即使属于最近上下文，也不能复制到权限较低的
+    // 用户摘要中。
     .filter((message) => message.visibility !== 'transcript' && message.role !== 'system' && message.role !== 'developer')
     .map((message, index) => {
       const role = message.role === 'user'

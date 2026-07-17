@@ -716,8 +716,7 @@ async function appServerMcpStatusInventory(
   if (detail && detail !== 'full' && detail !== 'toolsAndAuthOnly') {
     throw new AppServerRpcError(-32602, `Invalid MCP server status detail: ${detail}`);
   }
-  // This lightweight status is polled by clients and must not open remote
-  // connections (or trigger an OAuth challenge) merely to render auth state.
+  // 客户端会轮询此轻量状态；不能仅为渲染认证状态就打开远程连接或触发 OAuth 质询。
   if (detail === 'toolsAndAuthOnly') return {};
 
   const servers = (await runtime.mcpStore.listServerInputs()).filter((server) => server.enabled !== false);

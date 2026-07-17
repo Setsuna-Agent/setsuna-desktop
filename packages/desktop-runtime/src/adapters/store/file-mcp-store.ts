@@ -199,7 +199,7 @@ export class FileMcpStore implements McpStore {
     });
   }
 
-  /** Moves legacy inline env/header values into the native credential vault. */
+  /** 将旧版内联环境变量及请求头值迁移到原生凭据保险库。 */
   async migrateLegacySecrets(): Promise<void> {
     const status = await this.secretStore.status().catch(() => ({ available: false, backend: 'unavailable' }));
     if (!status.available) return;

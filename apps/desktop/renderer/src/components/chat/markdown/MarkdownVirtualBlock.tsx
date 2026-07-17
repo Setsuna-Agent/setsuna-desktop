@@ -108,8 +108,8 @@ function measureMarkdownBlockHeight(block: HTMLDivElement): number {
   const lastChild = block.lastElementChild;
   if (!firstChild || !lastChild || typeof window === 'undefined') return Math.ceil(rectHeight);
 
-  // Markdown child margins can collapse through the wrapper. Include their outer
-  // footprint so replacing a measured block does not move the scroll anchor.
+  // Markdown 子元素的外边距可能穿透包装元素发生折叠。将其外部占用空间计入测量，
+  // 避免替换已测量块时移动滚动锚点。
   const firstStyle = window.getComputedStyle(firstChild);
   const lastStyle = firstChild === lastChild ? firstStyle : window.getComputedStyle(lastChild);
   const marginTop = Number.parseFloat(firstStyle.marginTop) || 0;

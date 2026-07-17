@@ -9,6 +9,6 @@ export type ConfigStore = {
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
   getActiveProviderConfig(): Promise<RuntimeProviderConfig | null>;
-  /** Optional for focused test stores that only model the active provider. */
+  /** 对只模拟当前供应商的聚焦测试存储而言，此项可选。 */
   getProviderConfig?(providerId: string): Promise<RuntimeProviderConfig | null>;
 };

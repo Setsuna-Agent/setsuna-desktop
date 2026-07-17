@@ -2,9 +2,9 @@ export type RuntimeUsage = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
-  /** Stable ID of the configured vendor entry that handled the request. */
+  /** 处理本次请求的已配置供应商条目的稳定 ID。 */
   providerId?: string;
-  /** Display name of the configured vendor, not its transport protocol. */
+  /** 已配置供应商的显示名称，而非其传输协议名称。 */
   provider?: string;
   model?: string;
 };

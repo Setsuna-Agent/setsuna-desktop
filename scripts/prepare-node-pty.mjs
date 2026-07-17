@@ -28,7 +28,7 @@ async function main() {
         try {
           await chmod(helperPath, 0o755);
         } catch {
-          // Non-darwin installs and partial package caches do not always include this helper.
+          // 非 Darwin 系统的安装及不完整包缓存不一定包含此辅助程序。
         }
       }),
   );

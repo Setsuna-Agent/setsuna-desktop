@@ -33,7 +33,7 @@ describe('window frame interactions', () => {
     registerWindowsTitlebarDoubleClick(window, 'win32');
     expect(window.hookWindowMessage).toHaveBeenCalledWith(0x0112, expect.any(Function));
 
-    // Windows reserves the low four bits of wParam, so they must be ignored.
+    // Windows 保留 wParam 的低四位，因此必须忽略这些位。
     callback?.(windowsParameter(0xf032), Buffer.alloc(8));
     await new Promise<void>((resolve) => setImmediate(resolve));
 

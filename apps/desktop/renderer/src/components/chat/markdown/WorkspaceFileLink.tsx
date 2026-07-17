@@ -19,7 +19,7 @@ type WorkspacePathLabelProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children'>
   type: WorkspaceEntry['type'];
 };
 
-/** Shared renderer for workspace file references in Markdown and runtime tool rows. */
+/** Markdown 和 runtime 工具行中的工作区文件引用所共用的渲染器。 */
 export function WorkspaceFileLink({
   children,
   className,
@@ -61,7 +61,7 @@ export function WorkspaceFileLink({
   );
 }
 
-/** Non-interactive companion for workspace paths, such as directories that cannot open as files. */
+/** 工作区路径的非交互式配套组件，用于无法作为文件打开的目录等情况。 */
 export function WorkspacePathLabel({ children, className, path, title, type, ...props }: WorkspacePathLabelProps) {
   const { workspaceRoot } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(path, workspaceRoot);

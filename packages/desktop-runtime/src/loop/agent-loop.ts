@@ -298,7 +298,7 @@ export class AgentLoop {
 
   /**
    * 启动时回扫近期 idle 线程，补抽历史对话的长期记忆候选。
-   * 这是本地 runtime 对 Codex memory startup phase-1 的轻量对应：负责候选选择和提取，
+   * 这是本地 runtime 对记忆启动第一阶段的轻量实现：负责候选选择和提取，
    * 真正的全局 stage1/phase2 状态机仍由后续 storage/consolidation 层承接。
    */
   async runMemoryStartupExtraction(): Promise<{ claimed: number; extracted: number }> {
@@ -358,8 +358,8 @@ export class AgentLoop {
     const run = await this.turnRuns.createRegular(threadId, input);
     this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
     await run.done;
-    // Command-style callers historically waited for passive memory as part of sendTurn.
-    // HTTP/UI callers use startTurn and are released as soon as turn.completed is durable.
+    // 传统命令式调用方会在 sendTurn 中等待被动记忆处理完成。
+    // HTTP 和界面调用方使用 startTurn，并在 turn.completed 持久化后立即返回。
     await this.memory.waitForPassiveMemoriesForTurn(threadId, run.turnId);
   }
 
@@ -399,7 +399,7 @@ export class AgentLoop {
    */
   async cancelTurn(threadId: string, turnId: string): Promise<boolean> {
     const task = this.turnTasks.taskFor(threadId, turnId);
-    // Pause before aborting so the task's finally/idle observer can never race into another goal turn.
+    // 中止前先暂停，防止任务的 finally 或空闲观察器竞态进入下一个目标轮次。
     if (task?.taskKind === 'goal') await this.goals.pauseForCancellation(threadId);
     const cancelled = this.turnTasks.cancel(threadId, turnId, new TurnCancelledError());
     if (!cancelled) return false;

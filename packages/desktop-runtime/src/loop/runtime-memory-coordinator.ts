@@ -165,7 +165,7 @@ export class RuntimeMemoryCoordinator {
     if (this.passiveTasks.has(key)) return;
     const task = this.backgroundTasks
       .enqueue((signal) => this.extractPassiveMemoriesForTurn(threadId, turnId, signal))
-      // Memory improves later turns, but must never fail an already completed turn.
+      // 记忆可以改善后续轮次，但绝不能让已经完成的轮次转为失败。
       .catch(() => undefined);
     this.passiveTasks.set(key, task);
     void task.finally(() => {
@@ -225,15 +225,15 @@ export class RuntimeMemoryCoordinator {
     if (!canUseMemories(config)) return [];
     const memories = await this.options.memoryStore?.listMemories(projectId ? { projectId, limit: 8 } : { scope: 'global', limit: 8 });
     if (!memories?.memories.length) return [];
-    // Phase-2 summary files merge every project. They stay behind an explicit debug flag;
-    // normal global and project threads only receive their structurally filtered records.
+    // 第二阶段摘要文件会合并所有项目，因此只能通过显式调试标志启用；普通全局线程和
+    // 项目线程只接收经过结构化过滤的记录。
     const allowSharedMemoryFiles = !projectId && config?.features?.[SHARED_MEMORY_FILES_FEATURE] === true;
     const memorySummary = allowSharedMemoryFiles
       ? await this.options.memoryStore?.readMemoryFile({ path: 'memory_summary.md' })
         .then((file) => truncateMemorySummary(file.content))
         .catch(() => '')
       : '';
-    // Memory is advisory user context: it may be stale and must not acquire runtime-policy authority.
+    // 记忆属于建议性用户上下文，可能已经过时，不能获得 runtime 策略级权限。
     return [{
       id: 'memory_context',
       role: 'user',

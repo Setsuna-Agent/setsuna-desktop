@@ -368,7 +368,7 @@ export async function handleRuntimeRestRequest(
   if (projectArchiveMatch && request.method === 'POST') {
     const projectId = decodeURIComponent(projectArchiveMatch[1]);
     const projectThreads = await runtime.threadStore.listThreads({ includeArchived: true, projectId });
-    // Archive every conversation before hiding the project so a partial failure never creates active orphan threads.
+    // 隐藏项目前先归档所有对话，避免部分失败产生仍处于活动状态的孤立线程。
     for (const thread of projectThreads) {
       if (!thread.archived) await runtime.threadStore.updateThread(thread.id, { archived: true });
     }
@@ -711,7 +711,7 @@ function normalizeGeneratedCommitMessage(value: string): string {
 }
 
 function stripInvisibleCommitMessageChars(value: string): string {
-  // eslint-disable-next-line no-control-regex -- Generated commit subjects can include hidden control characters.
+  // eslint-disable-next-line no-control-regex -- 生成的提交主题可能包含隐藏控制字符。
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/gu, '');
 }
 

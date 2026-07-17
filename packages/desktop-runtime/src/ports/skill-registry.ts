@@ -19,7 +19,7 @@ export type SkillInjection = {
 };
 
 export type SkillActivationContext = {
-  /** Current-turn user text plus attachment names/types used for declarative Plugin Skill routing. */
+  /** 当前轮次用户文本及附件名称和类型，用于声明式插件 Skill 路由。 */
   text: string;
 };
 

@@ -85,7 +85,7 @@ export function isGoalToolName(name: string): boolean {
   return GOAL_TOOL_NAMES.has(name);
 }
 
-/** Owns persistent goal state, accounting, model tools, and idle-turn continuation. */
+/** 管理持久化目标状态、计量、模型工具及空闲轮次续接。 */
 export class RuntimeGoalCoordinator {
   private readonly scheduling = new Set<string>();
   private readonly noProgressTurns = new Map<string, number>();

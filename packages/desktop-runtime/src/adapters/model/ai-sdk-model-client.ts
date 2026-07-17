@@ -69,8 +69,8 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
       ...(thinkingProviderOptions ? { providerOptions: thinkingProviderOptions } : {}),
       abortSignal: request.signal,
       maxRetries: 0,
-      // Errors are surfaced through fullStream below. Avoid the SDK's default
-      // console.error side effect, which otherwise duplicates runtime errors.
+      // 错误会通过下方的 fullStream 暴露。避免 SDK 默认的 console.error 副作用，
+      // 否则会重复输出 runtime 错误。
       onError: () => undefined,
     });
 

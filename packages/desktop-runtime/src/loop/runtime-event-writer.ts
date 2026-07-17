@@ -13,8 +13,8 @@ type PendingBatch = {
 const DEFAULT_DELTA_FLUSH_MS = 25;
 
 /**
- * Persists runtime events before broadcasting them and coalesces high-frequency
- * stream deltas without changing terminal/tool lifecycle ordering.
+ * 广播 runtime 事件前先将其持久化，并合并高频流式增量，且不改变终止事件与
+ * 工具生命周期事件的顺序。
  */
 export class RuntimeEventWriter {
   private readonly batches = new Map<string, PendingBatch>();

@@ -25,13 +25,13 @@ type RuntimeCompactionTurnCoordinatorOptions = {
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
-/** Orchestrates manual and explicit compaction turns outside the main agent loop. */
+/** 在主代理循环外编排手动及显式压缩轮次。 */
 export class RuntimeCompactionTurnCoordinator {
   constructor(private readonly options: RuntimeCompactionTurnCoordinatorOptions) {}
 
   compact(threadId: string, force = true): Promise<RuntimeThread> {
     const compacting = this.create(threadId, force);
-    // Mark early cancellation as observed while preserving rejection for the caller.
+    // 将提前取消标记为已观察，同时为调用方保留拒绝结果。
     void compacting.catch(() => undefined);
     return compacting;
   }

@@ -50,7 +50,7 @@ export function ConversationOverviewPanel({
   const hasFileChanges = changeStats.fileCount > 0;
   const usageSummary = threadUsage?.summary;
   const latestTurn = currentThread.turns?.at(-1);
-  // Forks are independent conversations; only spawned child agents belong in collaboration tasks.
+  // 分叉是独立对话；只有派生的子代理属于协作任务。
   const childThreads = threads.filter((thread) => thread.parentThreadId === currentThread.id);
   const diagnosticLabel = turnDiagnosticLabel(latestTurn);
   const usageDiagnosticLabel = `${formatUsageTokens(usageSummary?.totalTokens ?? 0)} · ${usageSummary?.recordCount ?? 0} 次 · ${diagnosticLabel}`;

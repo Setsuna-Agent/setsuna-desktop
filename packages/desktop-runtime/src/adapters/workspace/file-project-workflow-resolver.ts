@@ -82,8 +82,8 @@ type CandidateScan = {
 };
 
 /**
- * Resolves bounded Node.js workflow facts from the workspace ancestry. Other
- * ecosystems can be added behind the same port without growing prompt assembly.
+ * 从工作区祖先目录解析受限的 Node.js 工作流事实。其他生态可在同一端口后接入，
+ * 无需扩大提示组装逻辑。
  */
 export class FileProjectWorkflowResolver implements ProjectWorkflowResolver {
   private readonly cache = new Map<string, CacheEntry>();
@@ -279,8 +279,8 @@ function workflowScripts(
   let truncatedScriptCount = 0;
   for (const manifest of manifests) {
     if (!manifest.value) continue;
-    // A nested package may intentionally select a different manager. Generate
-    // each invocation from evidence visible at that manifest's own scope.
+    // 嵌套包可能有意选择不同的包管理器。每次调用都依据对应清单自身作用域内
+    // 可见的信息生成。
     const manager = selectPackageManager(
       evidence.filter((entry) => entry.depth <= manifest.depth),
       [],

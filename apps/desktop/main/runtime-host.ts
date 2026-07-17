@@ -117,7 +117,7 @@ export class RuntimeHost {
     return runtimeJsonResponse<T>(response, `${input.method ?? 'GET'} ${safePath}`);
   }
 
-  /** Uploads one renderer-selected file without exposing the runtime port or token. */
+  /** 上传一个由渲染进程选择的文件，同时不暴露 runtime 端口或令牌。 */
   async uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
     if (!(input.data instanceof Uint8Array)) throw new Error('Attachment bytes are invalid.');
     const params = new URLSearchParams({ name: input.name, type: input.type });

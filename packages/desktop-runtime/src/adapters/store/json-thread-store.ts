@@ -74,7 +74,7 @@ export class JsonThreadStore implements ThreadStore {
     return cloneThread(recovered);
   }
 
-  /** Replay uncheckpointed events and rebuild the summary index at startup. */
+  /** 启动时重放尚未建立检查点的事件，并重建摘要索引。 */
   async recover(): Promise<void> {
     await mkdir(this.threadsDir, { recursive: true });
     const entries = await readdir(this.threadsDir, { withFileTypes: true });
@@ -104,7 +104,7 @@ export class JsonThreadStore implements ThreadStore {
     }));
   }
 
-  /** Flush delayed streaming checkpoints before runtime shutdown or tests inspect disk state. */
+  /** runtime 关闭或测试检查磁盘状态前，刷新延迟写入的流式检查点。 */
   async flush(): Promise<void> {
     const pendingThreadIds = [...this.checkpointTimers.keys()];
     for (const timer of this.checkpointTimers.values()) clearTimeout(timer);
@@ -536,8 +536,8 @@ function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boolean; thr
     memoryMode,
   } : thread;
   if (normalized.contextCompaction?.status === 'running') {
-    // A model request cannot survive reconstruction of the store. Persistently
-    // running compaction state is therefore from an interrupted older process.
+    // 模型请求无法跨越存储重建继续存在，因此持久显示为运行中的压缩状态
+    // 必然来自被中断的旧进程。
     normalized = { ...normalized, contextCompaction: undefined };
     changed = true;
   }

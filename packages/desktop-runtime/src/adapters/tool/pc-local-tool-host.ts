@@ -337,9 +337,8 @@ export class PcLocalToolHost implements ToolHost {
         : undefined,
     }) as Record<string, unknown>;
     if (!result?.ok) {
-      // The display string is intentionally terse for the UI. Models need the
-      // formatted command output so they can react to the real stderr instead
-      // of guessing from an exit code.
+      // 面向界面的显示字符串有意保持简短。模型需要格式化后的命令输出，
+      // 才能根据真实标准错误作出响应，而不是仅凭退出码猜测。
       throw new ToolExecutionError(stringArg(result?.content || result?.display || `Local tool failed: ${normalized.name}`), {
         data: result,
         failureKind: stringArg(result.failure_kind),
@@ -396,9 +395,8 @@ export class PcLocalToolHost implements ToolHost {
   }
 
   /**
-   * Permission and sandbox fields are request-scoped. The maps and process store
-   * remain shared, but concurrent threads can no longer overwrite each other's
-   * effective permissions while an async tool call is running.
+   * 权限与沙箱字段以请求为作用域。映射和进程存储仍然共享，但异步工具调用运行期间，
+   * 并发线程无法再相互覆盖实际生效的权限。
    */
   private toolStateForContext(projectState: ProjectToolState, context: ToolExecutionContext): PcToolState {
     return {

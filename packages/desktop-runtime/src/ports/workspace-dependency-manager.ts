@@ -14,8 +14,8 @@ export type WorkspaceDependencyPromptContext = {
 };
 
 /**
- * Manages the optional Node/Python toolchain exposed to workspace shell calls.
- * Implementations may reuse healthy host tools or provision isolated fallbacks.
+ * 管理暴露给工作区 Shell 调用的可选 Node 和 Python 工具链。
+ * 实现可以复用可用的主机工具，也可以配置隔离的回退工具。
  */
 export type WorkspaceDependencyManager = {
   getStatus(): Promise<RuntimeWorkspaceDependenciesStatus>;

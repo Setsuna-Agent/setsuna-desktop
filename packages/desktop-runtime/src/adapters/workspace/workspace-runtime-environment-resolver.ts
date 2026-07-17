@@ -4,7 +4,7 @@ import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 
-/** Resolves one normalized environment descriptor from the selected workspace. */
+/** 根据所选工作区解析一个规范化环境描述。 */
 export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentResolver {
   constructor(private readonly projects: Pick<WorkspaceProjectStore, 'getStatus'>) {}
 

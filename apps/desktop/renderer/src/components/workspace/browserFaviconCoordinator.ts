@@ -113,7 +113,7 @@ export function resolveBrowserFaviconUrls(favicons: readonly string[]): string[]
         const url = new URL(candidate);
         if (url.protocol === 'https:' || url.protocol === 'http:') normalized = url.href;
       } catch {
-        // Ignore malformed and unsupported favicon URLs from untrusted pages.
+        // 忽略不受信任页面提供的格式错误或不受支持的网站图标 URL。
       }
     }
     if (!normalized || seen.has(normalized)) continue;

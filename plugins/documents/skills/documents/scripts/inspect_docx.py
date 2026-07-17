@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect DOCX structure and emit a bounded JSON report without modifying it."""
+"""检查 DOCX 结构并输出受限的 JSON 报告，不修改原文件。"""
 
 from __future__ import annotations
 

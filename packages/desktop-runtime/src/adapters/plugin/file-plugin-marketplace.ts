@@ -15,7 +15,7 @@ type MarketplaceBundleStore = Pick<
   'inspectPlugin' | 'installPlugin' | 'listPlugins' | 'readBundleItemContent'
 >;
 
-/** Exposes app-bundled, curated plugins without leaking their filesystem location to the renderer. */
+/** 暴露应用内置的精选插件，同时不向渲染进程泄露其文件系统位置。 */
 export class FilePluginMarketplace implements PluginMarketplace {
   constructor(
     private readonly catalogRoot: string,

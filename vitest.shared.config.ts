@@ -21,7 +21,7 @@ export const baseExcludeGlobs = [
   'release-logs/**',
 ];
 
-// Release jobs exclude these high-variance integration suites; diagnostics run them separately.
+// 发布任务排除这些波动较大的集成测试套件；诊断任务会单独运行它们。
 export const integrationTestFiles = [
   'apps/desktop/main/review-state.test.ts',
   'apps/desktop/main/terminal-sessions.test.ts',

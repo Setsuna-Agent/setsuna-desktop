@@ -10,9 +10,8 @@ export type ChatTranscriptItem =
 export type ChatDisplayItem = ChatTranscriptItem;
 
 /**
- * React identity must not change when more assistant segments stream into the same
- * visible run. The item id intentionally tracks the complete delete/copy range and
- * therefore grows as segments are appended.
+ * 更多助手片段流入同一个可见运行项时，React 标识不能改变。项目 ID 会特意跟踪
+ * 完整的删除与复制范围，因此会随片段追加而扩展。
  */
 export function chatDisplayItemRenderKey(item: ChatDisplayItem): string {
   if (item.type === 'assistant') return `assistant:${item.segments[0]?.id ?? item.id}`;

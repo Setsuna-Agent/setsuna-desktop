@@ -13,7 +13,7 @@ describe('model request timeout', () => {
           }),
         };
       }, undefined, { idleTimeoutMs: 10, totalTimeoutMs: 100 })) {
-        // The source deliberately never yields.
+        // 此数据源有意永不产生结果。
       }
     };
 

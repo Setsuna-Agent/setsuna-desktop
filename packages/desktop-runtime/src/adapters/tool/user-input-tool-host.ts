@@ -90,7 +90,7 @@ type WaitOutcome =
   | { type: 'answer'; answer: AnswerRuntimeApprovalInput }
   | { type: 'timeout' };
 
-/** Owns the audited pause/resume lifecycle for model-requested structured user input. */
+/** 管理由模型请求的结构化用户输入所对应、可审计的暂停与恢复生命周期。 */
 export class UserInputToolHost implements ToolHost {
   constructor(
     private readonly approvals: ApprovalGate,
@@ -167,8 +167,8 @@ export class UserInputToolHost implements ToolHost {
           message: 'User input timed out and was resolved automatically.',
         };
         await this.approvals.answerApproval(approval.id, timeoutAnswer);
-        // A user answer can race the deadline by a few milliseconds. Reading
-        // back the gate's winner keeps the first resolution authoritative.
+        // 用户回答可能与截止时间相差几毫秒而产生竞态。回读门控的胜出结果，
+        // 确保首次完成仍具有权威性。
         answer = await this.approvals.waitForDecision(approval.id);
       } else {
         answer = outcome.answer;
@@ -189,8 +189,7 @@ export class UserInputToolHost implements ToolHost {
       await this.publishResolved(context.threadId, turnId, approval.id, answer.decision, answer.message);
       return userInputResult(answer.userInputResponse);
     } finally {
-      // Answers are copied only into the normal tool result; the in-memory
-      // approval record no longer needs to retain potentially personal values.
+      // 回答只复制到常规工具结果中；内存审批记录无需继续保留可能涉及个人信息的值。
       this.approvals.forgetApproval(approval.id);
     }
   }

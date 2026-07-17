@@ -14,8 +14,8 @@ type NormalizedFaviconCandidate =
   | { kind: 'network'; value: string };
 
 /**
- * Fetches page-provided favicon candidates through the guest session so cookies,
- * proxy settings, certificates, and the browser cache match the embedded page.
+ * 通过来宾会话获取页面提供的网站图标候选项，确保 Cookie、代理设置、
+ * 证书和浏览器缓存与嵌入页面保持一致。
  */
 export async function loadBrowserFavicon(
   browserSession: FaviconSession,
@@ -34,9 +34,9 @@ export async function loadBrowserFavicon(
   const inlineCandidate = candidates.find((candidate) => candidate.kind === 'data');
   if (inlineCandidate?.kind === 'data') return inlineCandidate.value;
 
-  // A broken first candidate should not serialize several timeout windows before
-  // a later icon can win. The browser cache keeps this fan-out inexpensive in the
-  // common case where Chromium already fetched the page's declared icons.
+  // 首个候选项失效时，不应在后续图标可用前依次等待多个超时窗口。
+  // 常见情况下 Chromium 已经获取了页面声明的图标，浏览器缓存可让这种
+  // 并行请求保持较低开销。
   const attempts = candidates
     .filter((candidate): candidate is Extract<NormalizedFaviconCandidate, { kind: 'network' }> => candidate.kind === 'network')
     .map(async (candidate) => {

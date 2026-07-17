@@ -323,7 +323,7 @@
   --code-highlight-deletion: #dc322f;
 }
 
-/* Syntax palettes override semantic token colors without changing the selected surface theme. */
+/* 语法配色会覆盖语义令牌颜色，但不会改变已选的界面主题。 */
 :root[data-code-color-scheme]:not([data-code-color-scheme='theme']) {
   --code-scheme-comment: var(--code-palette-light-comment);
   --code-scheme-keyword: var(--code-palette-light-keyword);

@@ -103,7 +103,7 @@ export function dragResizeBrowserDevice(
   const widthDirection = handle.endsWith('left') || handle === 'left' ? -1 : 1;
   return resizeBrowserDeviceViewport(current, {
     height: changesHeight ? current.height + verticalDelta : current.height,
-    // The responsive viewport stays centered, so each horizontal edge moves by half the logical width delta.
+    // 响应式视口始终居中，因此左右边缘各移动逻辑宽度变化量的一半。
     width: changesWidth ? current.width + horizontalDelta * widthDirection * 2 : current.width,
   });
 }

@@ -151,9 +151,8 @@ export type ToolOrchestratorRunResult = {
 };
 
 /**
- * Centralizes the runtime side of tool execution: preview, approval, execution,
- * output streaming, and completion events. This mirrors Codex's orchestrator
- * boundary while keeping Setsuna's current event protocol stable.
+ * 集中处理工具执行的 runtime 侧流程：预览、审批、执行、输出流和完成事件。
+ * 保持现有编排边界，同时确保 Setsuna 当前事件协议稳定。
  */
 export class ToolOrchestrator {
   constructor(private readonly options: ToolOrchestratorOptions) {}
@@ -799,8 +798,7 @@ export class ToolOrchestrator {
     const requestsSandboxBypass = requestedSandboxBypass(toolCall.name, parsedArguments);
     const runtimeProfile = await this.options.toolHost.toolRuntimeProfile?.(toolCall.name, context);
     if (runtimeProfile?.approvalMode === 'selfManaged' && !requestsSandboxBypass) return { action: 'skip' };
-    // Permission profiles still define the effective filesystem boundary, but
-    // the full approval policy itself must never create an interactive prompt.
+    // 权限配置仍用于定义实际生效的文件系统边界，但完整审批策略本身绝不能触发交互提示。
     if (approvalPolicy === 'full' && !strictAutoReview) return { action: 'skip' };
     if (!this.options.approvalGate) {
       return requestsSandboxBypass
@@ -1719,8 +1717,8 @@ function appendHookAdditionalContexts(content: string, contexts: string[]): stri
 
 function toolRunWithCancellationProfile<T>(promise: Promise<T>, signal: AbortSignal, waitsForRuntimeCancellation: boolean): Promise<T> {
   if (waitsForRuntimeCancellation) return promise;
-  // Some runtimes manage their own background process lifecycle. Do not let a
-  // non-settling tool promise keep the agent turn alive after the turn is cancelled.
+  // 某些 runtime 会自行管理后台进程生命周期。轮次取消后，不能让一直未完成的工具
+  // Promise 继续维持代理轮次活动。
   void promise.catch(() => undefined);
   return abortable(promise, signal);
 }

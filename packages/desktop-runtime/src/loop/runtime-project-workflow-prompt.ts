@@ -1,6 +1,6 @@
 import type { ProjectWorkflow } from '../ports/project-workflow-resolver.js';
 
-/** Renders bounded repository-derived facts separately from trusted runtime policy. */
+/** 将受限的仓库派生事实与可信 runtime 策略分开渲染。 */
 export function runtimeProjectWorkflowPrompt(workflow: ProjectWorkflow): string {
   return [
     '<project_workflow>',

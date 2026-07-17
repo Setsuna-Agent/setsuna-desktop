@@ -41,9 +41,9 @@ export type RuntimeToolCallDelta = {
 };
 
 /**
- * Persisted snapshots created before RuntimeEnvironment may only contain id and
- * cwd. Keep the optional fields here so old event logs remain readable while
- * live runtime execution uses the complete RuntimeEnvironment contract.
+ * RuntimeEnvironment 引入前创建的持久化快照可能只包含 id 和 cwd。
+ * 此处保留可选字段，使旧事件日志仍可读取；实时 runtime 执行则使用完整的
+ * RuntimeEnvironment 契约。
  */
 export type RuntimeModelRequestToolEnvironment = Pick<RuntimeEnvironment, 'id' | 'cwd'>
   & Partial<Omit<RuntimeEnvironment, 'id' | 'cwd'>>;
@@ -52,7 +52,7 @@ export type RuntimeModelRequestStepSkill = {
   id: string;
   name: string;
   path?: string;
-  /** Present when the injected Skill came from an installed Plugin bundle. */
+  /** 注入的 Skill 来自已安装插件包时存在。 */
   plugin?: RuntimePluginReference;
 };
 
@@ -109,8 +109,8 @@ export type RuntimeModelRequestStepSnapshot = {
   inputMessageIds?: string[];
   toolNames: string[];
   /**
-   * Explicit alias for the tools advertised to the model in this sampling step.
-   * Older snapshots only have toolNames; new snapshots write both for debuggability.
+   * 本次采样中向模型声明的工具列表所对应的显式别名。
+   * 旧快照只有 toolNames；新快照同时写入两者，便于调试。
    */
   advertisedToolNames?: string[];
   toolRuntimes?: RuntimeModelRequestToolRuntime[];

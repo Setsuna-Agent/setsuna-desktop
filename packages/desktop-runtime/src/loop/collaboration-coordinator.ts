@@ -108,7 +108,7 @@ export function isCollaborationToolName(name: string): boolean {
   return COLLABORATION_TOOL_NAMES.has(name);
 }
 
-/** Owns collaboration tool semantics while AgentLoop retains event rendering. */
+/** 管理协作工具语义，事件渲染仍由 AgentLoop 负责。 */
 export class RuntimeCollaborationCoordinator {
   private readonly childrenByParentThread = new Map<string, Set<string>>();
 
@@ -124,7 +124,7 @@ export class RuntimeCollaborationCoordinator {
     return { active, total: children.size };
   }
 
-  /** Waits without a runtime timeout, then returns complete child outputs to the parent model. */
+  /** 不设置 runtime 超时地等待，随后将完整的子任务输出返回父模型。 */
   async collectPendingChildren(parentThreadId: string, parentTurnId: string, signal: AbortSignal): Promise<RuntimeMessage[]> {
     const childIds = [...(this.childrenByParentThread.get(parentThreadId) ?? [])];
     if (!childIds.length) return [];

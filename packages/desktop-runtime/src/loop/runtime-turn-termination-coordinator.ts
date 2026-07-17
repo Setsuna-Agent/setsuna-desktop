@@ -18,7 +18,7 @@ type RuntimeTurnTerminationCoordinatorOptions = {
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
-/** Serializes terminal cancellation writes so each turn gets at most one terminal event. */
+/** 串行写入终止取消状态，确保每个轮次最多产生一个终止事件。 */
 export class RuntimeTurnTerminationCoordinator {
   private readonly pendingTerminalWrites = new Set<string>();
 

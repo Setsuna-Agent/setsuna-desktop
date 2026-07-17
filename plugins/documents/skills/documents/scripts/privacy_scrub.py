@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove common personal metadata from a DOCX copy while preserving content."""
+"""在保留内容的同时，从 DOCX 副本中移除常见个人元数据。"""
 
 from __future__ import annotations
 

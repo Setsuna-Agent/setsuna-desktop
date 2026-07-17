@@ -226,7 +226,7 @@ export function selectMenuPosition(
   viewport: SelectMenuViewport,
 ): SelectMenuPosition {
   const scaleInverse = viewport.scaleInverse && viewport.scaleInverse > 0 ? viewport.scaleInverse : 1;
-  // getBoundingClientRect returns visual pixels, while a fixed portal inside a zoomed body uses pre-zoom CSS pixels.
+  // getBoundingClientRect 返回视觉像素，而缩放 body 内的固定定位门户使用缩放前的 CSS 像素。
   const viewportWidth = viewport.width * scaleInverse;
   const viewportHeight = viewport.height * scaleInverse;
   const rectLeft = rect.left * scaleInverse;

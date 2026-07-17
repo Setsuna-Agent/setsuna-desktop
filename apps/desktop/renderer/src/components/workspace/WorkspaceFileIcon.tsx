@@ -24,7 +24,7 @@ export const WorkspaceFileIcon = memo(function WorkspaceFileIcon({
       data-file-icon-theme="seti"
       data-file-icon-color={icon.color}
       aria-hidden="true"
-      // The filename only selects a bundled Seti asset; user-controlled text is never inserted into the SVG.
+      // 文件名只用于选择内置 Seti 资源，用户可控文本绝不会插入 SVG。
       dangerouslySetInnerHTML={svgMarkup}
     />
   );

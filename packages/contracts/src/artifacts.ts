@@ -1,6 +1,6 @@
 export const PUBLISH_ARTIFACT_TOOL_NAME = 'publish_artifact';
 
-/** A user-facing file produced by a runtime turn and kept inside its workspace. */
+/** runtime 轮次生成并保存在其工作区内、面向用户的文件。 */
 export type RuntimeArtifact = {
   id: string;
   kind: 'file';

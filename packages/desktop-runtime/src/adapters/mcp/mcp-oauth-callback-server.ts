@@ -10,7 +10,7 @@ export type McpOAuthCallback = {
   state: string;
 };
 
-/** One-shot loopback callback listener with state validation and bounded lifetime. */
+/** 带状态校验及有限生命周期的一次性回环回调监听器。 */
 export class McpOAuthCallbackServer {
   readonly state = randomBytes(32).toString('base64url');
   private readonly server = http.createServer((request, response) => this.handleRequest(request, response));

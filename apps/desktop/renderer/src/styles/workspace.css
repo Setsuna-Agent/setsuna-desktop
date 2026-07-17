@@ -730,7 +730,7 @@
   height: 14px;
 }
 
-/* Keep titlebar actions usable when the workspace leaves only a narrow main header. */
+/* 工作区只给主标题栏留下狭窄空间时，仍要保证标题栏操作可用。 */
 @container app-main-header (max-width: 300px) {
   .desktop-workspace-launcher {
     margin-left: 4px;
@@ -748,7 +748,7 @@
   }
 }
 
-/* Invert downloaded monochrome marks without altering colored application icons. */
+/* 反转下载的单色标记，同时不改变彩色应用图标。 */
 :root[data-theme='dark'] .desktop-workspace-launcher__glyph--monochrome img {
   filter: invert(1);
 }
@@ -1599,7 +1599,7 @@
   --desktop-review-diff-line-height: 20px;
   --desktop-review-diff-gap-height: 30px;
   --desktop-review-diff-number-width: 5ch;
-  /* Review chrome follows the resolved code theme; syntax colors remain independently configurable. */
+  /* 审查界面框架跟随最终代码主题，语法颜色仍可独立配置。 */
   --desktop-review-diff-background: var(--code-highlight-background);
   display: grid;
   align-content: start;
@@ -1612,8 +1612,7 @@
 }
 
 .desktop-review-diff:not(.desktop-review-diff--virtual) {
-  /* Large reviews keep their full scroll flow while Chromium skips layout and
-     paint work for diff bodies that are far outside the viewport. */
+  /* 大型审查保留完整滚动流，同时让 Chromium 跳过远离视口的差异内容布局与绘制。 */
   content-visibility: auto;
   contain-intrinsic-block-size: auto var(--desktop-review-diff-intrinsic-block-size, 480px);
 }

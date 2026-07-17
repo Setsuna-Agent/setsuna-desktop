@@ -26,9 +26,8 @@ export type McpElicitationExecutionContext = {
 export type McpElicitationHandler = Pick<McpElicitationCoordinator, 'request'>;
 
 /**
- * Bridges protocol-level MCP elicitation into the runtime's audited approval
- * lifecycle. Form answers remain in the in-memory gate and are never copied
- * into append-only events.
+ * 将协议级 MCP 信息征询桥接到 runtime 的可审计审批生命周期。
+ * 表单回答保留在内存门控中，绝不会复制到仅追加事件里。
  */
 export class McpElicitationCoordinator {
   constructor(
@@ -82,8 +81,7 @@ export class McpElicitationCoordinator {
       await this.publishResolved(context, approval.id, answer.decision, answer.message);
       return elicitationResult(answer.elicitationResponse);
     } finally {
-      // Form values may contain credentials or personal data. Once the waiting
-      // protocol request consumes them there is no reason to retain them.
+      // 表单值可能包含凭据或个人数据。等待中的协议请求消费后便无需继续保留。
       this.approvalGate.forgetApproval(approval.id);
     }
   }

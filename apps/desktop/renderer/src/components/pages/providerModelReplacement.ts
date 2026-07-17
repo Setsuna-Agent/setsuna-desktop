@@ -2,7 +2,7 @@ import type { ProviderModelConfig } from '@setsuna-desktop/contracts';
 
 export type ProviderModelReplacementDecision = 'apply' | 'confirm' | 'unchanged';
 
-/** Keeps placeholder-only providers frictionless while protecting real model configurations. */
+/** 在保护真实模型配置的同时，让只有占位项的供应商保持顺畅操作。 */
 export function providerModelReplacementDecision(
   currentModels: ProviderModelConfig[],
   nextModels: ProviderModelConfig[],

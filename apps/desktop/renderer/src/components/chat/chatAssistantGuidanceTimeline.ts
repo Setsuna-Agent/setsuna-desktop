@@ -116,8 +116,8 @@ function createWorkHistoryPlan({
 
   const beforeFirstGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(-1) ?? [], consumedGuidanceIds) : [];
   if (beforeFirstGuidanceMessages.length) {
-    // Steer messages can arrive before the next assistant segment is created.
-    // Keep them inside the active work panel instead of lifting them above the turn header.
+    // steer 消息可能在下一个助手片段创建前到达。将它们保留在当前工作面板内，
+    // 不要提升到轮次标题上方。
     entries.push(guidancePlanEntry('active-guidance-before-first-inline', beforeFirstGuidanceMessages));
   }
   if (!active && collapsedGuidanceMessages.length) {

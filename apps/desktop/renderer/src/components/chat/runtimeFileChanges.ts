@@ -107,8 +107,8 @@ export function fileChangesFromToolRun(run: RuntimeToolRun): RuntimeFileChange[]
   if (run.status === 'error' || run.status === 'rejected' || run.status === 'cancelled') return [];
   const previewChanges = extractFileChanges(parseJson(run.resultPreview));
   if (previewChanges.length) return previewChanges;
-  // Older snapshots may contain a text-truncated resultPreview. The tool data still owns the
-  // complete structured diff, so use it to repair file rows, Review, and the final change card.
+  // 旧快照中的 resultPreview 可能被按文本截断。工具数据仍保留完整的结构化差异，
+  // 因此用它修复文件行、审查视图和最终变更卡片。
   return extractFileChanges(run.data);
 }
 

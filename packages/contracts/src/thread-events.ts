@@ -389,8 +389,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         status: event.payload.status,
         phase: 'executing',
         argumentsPreview: event.payload.argumentsPreview,
-        // resultPreview carries structured UI data (for example file diffs), while content is
-        // the model-facing tool result. Falling back keeps shell tools without a preview working.
+        // resultPreview 承载结构化界面数据（例如文件差异），content 则是面向模型的
+        // 工具结果。保留回退逻辑，可让没有预览信息的 Shell 工具继续工作。
         resultPreview: event.payload.resultPreview ?? event.payload.content,
         data: event.payload.data,
         durationMs: event.payload.durationMs,
@@ -437,7 +437,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'runtime.warning') {
-    // Warnings stay in the append-only event log without rewriting a terminal turn.
+    // 警告保留在仅追加事件日志中，不重写已经结束的轮次。
     return next;
   }
 

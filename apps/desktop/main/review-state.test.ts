@@ -15,7 +15,7 @@ import {
 } from './review-state.js';
 
 const execFileAsync = promisify(execFile);
-// These tests spawn real git processes, so CI runners can exceed Vitest's 5s default.
+// 这些测试会启动真实的 Git 进程，因此 CI 运行器可能超过 Vitest 默认的 5 秒超时。
 const GIT_INTEGRATION_TEST_TIMEOUT_MS = 50_000;
 
 describe('desktop review state actions', () => {

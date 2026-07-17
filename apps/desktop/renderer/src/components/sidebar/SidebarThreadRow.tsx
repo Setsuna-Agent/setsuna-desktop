@@ -25,8 +25,8 @@ export function SidebarThreadRow({
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
 }) {
-  // Thread-list snapshots carry runtime-wide activity; the explicit prop remains a fallback
-  // for the currently open thread while its debounced sidebar snapshot is catching up.
+  // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
+  // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
   const rowRef = useRef<HTMLDivElement | null>(null);
   const [menuAnchorPoint, setMenuAnchorPoint] = useState<{ x: number; y: number }>();
@@ -97,7 +97,7 @@ export function SidebarThreadRow({
       onContextMenu={handleContextMenu}
       onKeyDown={handleSelectKeyDown}
     >
-      {/* Scope the native title to the text so it cannot overlap the archive action tooltip. */}
+      {/* 将原生标题限制在文本范围内，避免与归档操作提示框重叠。 */}
       <span className="desktop-agent-session__title" title={thread.title}>{thread.title}</span>
       {meta}
       {menu}

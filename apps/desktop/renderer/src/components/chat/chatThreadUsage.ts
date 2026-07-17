@@ -20,9 +20,8 @@ type LiveUsageBucket = UsageAggregate & {
 };
 
 /**
- * Projects provider-reported token counts into the usage response while a turn
- * is still running or did not reach the successful usage settlement path.
- * Persisted usage remains the baseline; only its missing live delta is added.
+ * 当轮次仍在运行，或未进入成功的用量结算路径时，将供应商报告的令牌数投影到
+ * 用量响应中。持久化用量仍作为基线，只补充其中缺失的实时增量。
  */
 export function chatThreadUsageForDisplay(
   storedUsage: RuntimeUsageResponse | null,
@@ -38,8 +37,8 @@ export function chatThreadUsageForDisplay(
   const liveByKey = new Map<string, LiveUsageBucket>();
 
   for (const turn of thread.turns) {
-    // Completed turns are already represented by the persistent summary. Keep
-    // the latest one live only during the short SSE -> usage refresh handoff.
+    // 已完成轮次已经包含在持久化摘要中。仅在 SSE 向用量刷新短暂交接期间，
+    // 保留最新轮次的实时数据。
     if (turn.status === 'completed' && (turn.id !== latestTurnId || storedTurnIds.has(turn.id))) continue;
     for (const count of turn.tokenCounts ?? []) {
       const key = usageIdentity(turn.id, count.usage);
@@ -90,8 +89,7 @@ export function chatThreadUsageForDisplay(
 
   if (!liveRecords.length) return withRequestCount(storedUsage, requestCount);
   const summary = addRecordsToSummary(storedUsage?.summary ?? emptyUsageSummary(), liveRecords);
-  // A step snapshot is written immediately before every model sampling request,
-  // including requests that later fail or are cancelled without reporting usage.
+  // 每次模型采样请求前都会立即写入步骤快照，包括后来失败或被取消且未报告用量的请求。
   summary.recordCount = requestCount;
   return {
     records: [...liveRecords.map(({ record }) => record), ...storedRecords],
@@ -102,8 +100,8 @@ export function chatThreadUsageForDisplay(
 function latestTurnModelRequestCount(thread: RuntimeThread): number {
   const turn = thread.turns?.at(-1);
   if (!turn) return 0;
-  // Older event logs predate step snapshots; their usage events are the best
-  // available fallback even though failed legacy requests cannot be recovered.
+  // 旧事件日志早于步骤快照功能；即使无法恢复失败的旧版请求，其中的用量事件仍是
+  // 当前最佳回退数据。
   return turn.stepSnapshots === undefined
     ? (turn.tokenCounts?.length ?? 0)
     : turn.stepSnapshots.length;

@@ -4,7 +4,7 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  /* The shell substrate stays opaque so sidebar and titlebar content never blend with the desktop. */
+  /* 外壳基底保持不透明，避免侧边栏和标题栏内容与桌面背景混合。 */
   background: var(--app-sidebar-bg);
   font-weight: var(--app-font-weight);
 }
@@ -24,7 +24,7 @@
   display: grid;
   position: relative;
   z-index: 40;
-  /* The native controls stay visible when the sidebar collapses, so only the header's main track may shrink. */
+  /* 侧边栏折叠时原生控件仍然可见，因此只有标题栏主轨道可以收缩。 */
   grid-template-columns: var(--app-topbar-sidebar-width, var(--app-sidebar-width)) minmax(0, 1fr) var(--desktop-agent-workspace-width);
   min-width: 0;
   height: var(--app-topbar-height);
@@ -42,12 +42,12 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 8px;
+  gap: var(--app-topbar-item-gap);
   font-size: 13px;
 }
 
 .app-topbar__brand {
-  padding: 0 10px 0 82px;
+  padding: 0 var(--app-topbar-item-gap) 0 var(--app-topbar-native-controls-inset);
   border-right: 1px solid var(--desktop-agent-sidebar-edge);
   color: var(--app-sidebar-text);
   background: transparent;
@@ -65,16 +65,16 @@
   stroke-width: 2;
 }
 
-/* Shell icon controls keep one geometry and interaction model across toolbars and panels. */
+/* 外壳图标控件在各工具栏和面板中保持统一的几何尺寸与交互模型。 */
 .app-shell-icon-control,
 .sd-icon-button.app-shell-icon-control {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: var(--app-topbar-navigation-control-size);
+  min-width: var(--app-topbar-navigation-control-size);
+  height: var(--app-topbar-navigation-control-size);
   padding: 0;
   border: 0;
   border-radius: var(--app-radius-sm);
@@ -190,7 +190,7 @@
 
 .app-topbar__right {
   justify-content: flex-end;
-  padding: 0 10px;
+  padding: 0 var(--app-topbar-item-gap);
   border-radius: 0;
   background: var(--app-bg);
   overflow: hidden;
@@ -247,7 +247,8 @@
 }
 
 .desktop-agent-page--sidebar-collapsed .app-topbar__brand {
-  gap: 4px;
+  gap: var(--app-topbar-item-gap);
+  padding-right: 0;
   border-right: 0;
   background: var(--app-bg);
 }
@@ -288,8 +289,8 @@
 
 :root[data-desktop-platform='win32'] .app-topbar__brand,
 :root[data-desktop-platform='linux'] .app-topbar__brand {
-  gap: 10px;
-  padding: 0 8px 0 4px;
+  gap: var(--app-topbar-item-gap);
+  padding: 0 var(--app-topbar-item-gap) 0 4px;
   border-right: 0;
   color: var(--app-titlebar-text);
   background: var(--app-titlebar-bg);
@@ -309,7 +310,7 @@
 
 :root[data-desktop-platform='win32'] .app-topbar__nav,
 :root[data-desktop-platform='linux'] .app-topbar__nav {
-  gap: 2px;
+  gap: var(--app-topbar-item-gap);
 }
 
 :root[data-desktop-platform='win32'] .app-topbar__menu,
@@ -398,10 +399,10 @@
   align-items: center;
   align-self: start;
   justify-self: end;
-  gap: 4px;
+  gap: var(--app-topbar-item-gap);
   min-width: 0;
   height: var(--app-topbar-height);
-  padding: 5px 10px 0 0;
+  padding: 5px var(--app-topbar-item-gap) 0 0;
   z-index: 20;
 }
 
@@ -435,7 +436,7 @@
   align-self: start;
   min-width: 0;
   height: var(--app-topbar-height);
-  padding: 0 10px;
+  padding: 0 var(--app-topbar-item-gap);
   color: var(--app-text);
   background: var(--desktop-agent-main-bg);
   pointer-events: none;
@@ -502,7 +503,7 @@ body.desktop-terminal-resizing .app-workbench {
   background: transparent;
   color: var(--app-sidebar-text);
   opacity: 1;
-  /* A persistent transform layer makes Chromium re-rasterize text over macOS vibrancy. */
+  /* 持久变换层会让 Chromium 在 macOS 毛玻璃效果上重新栅格化文本。 */
   transform: none;
   transition:
     transform 180ms ease,

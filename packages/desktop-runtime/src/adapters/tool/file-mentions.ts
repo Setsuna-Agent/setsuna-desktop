@@ -81,7 +81,7 @@ export async function createWorkspaceIgnoreMatcher(root) {
       const content = await readFile(path.join(root, fileName), 'utf8');
       rules.push(...content.split(/\r?\n/).map(parseIgnoreLine).filter(Boolean));
     } catch {
-      // Ignore files are optional; absence should not affect workspace indexing.
+      // 忽略规则文件是可选的，缺失时不应影响工作区索引。
     }
   }
   return new WorkspaceIgnoreMatcher(rules);

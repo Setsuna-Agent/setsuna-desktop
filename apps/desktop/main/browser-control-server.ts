@@ -11,7 +11,7 @@ export type BrowserControlConnection = {
   url: string;
 };
 
-/** Authenticated loopback bridge from the runtime child to Electron main. */
+/** 从 runtime 子进程连接到 Electron 主进程的已认证回环桥接。 */
 export class BrowserControlServer {
   private readonly server = http.createServer((request, response) => {
     void this.handleRequest(request, response);

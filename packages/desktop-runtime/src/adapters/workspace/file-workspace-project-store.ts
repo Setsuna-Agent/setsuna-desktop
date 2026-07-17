@@ -428,7 +428,7 @@ async function findGitRoot(startPath: string): Promise<string | undefined> {
       const gitStat = await stat(path.join(current, '.git'));
       if (gitStat.isDirectory() || gitStat.isFile()) return current;
     } catch {
-      // Keep walking upward until the filesystem root.
+      // 持续向上查找，直到文件系统根目录。
     }
     const parent = path.dirname(current);
     if (parent === current) return undefined;

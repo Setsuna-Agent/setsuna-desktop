@@ -313,8 +313,8 @@ export function workspaceMaxWidthForLayout({
 }): number {
   const expandedLayoutMaxWidth = availableViewportWidth - sidebarWidth - WORKBENCH_MAIN_MIN_WIDTH;
   const collapsedLayoutMaxWidth = availableViewportWidth - WORKBENCH_MAIN_MIN_WIDTH;
-  // The left sidebar can auto-collapse, so the workspace drag range should be
-  // allowed to cross the expanded-layout limit and settle in the collapsed layout.
+  // 左侧边栏可以自动折叠，因此工作区拖动范围应允许越过展开布局的限制，
+  // 并最终停在折叠布局中。
   const layoutMaxWidth = Math.max(expandedLayoutMaxWidth, collapsedLayoutMaxWidth);
   return Math.max(WORKSPACE_MIN_WIDTH, Math.floor(layoutMaxWidth));
 }

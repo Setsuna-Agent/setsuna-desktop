@@ -59,7 +59,7 @@ const artifactMimeTypes: Readonly<Record<string, string>> = {
   '.zip': 'application/zip',
 };
 
-/** Registers final workspace deliverables without exposing arbitrary filesystem paths. */
+/** 注册工作区最终交付物，同时不暴露任意文件系统路径。 */
 export class ArtifactToolHost implements ToolHost {
   constructor(private readonly projects: WorkspaceProjectStore) {}
 

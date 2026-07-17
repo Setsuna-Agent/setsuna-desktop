@@ -1,4 +1,4 @@
-/** Serial, abortable queue for auxiliary work that must not hold an active turn open. */
+/** 用于辅助工作的串行可中止队列，这些工作不能让活动轮次一直保持开启。 */
 export class RuntimeBackgroundTaskQueue {
   private readonly controller = new AbortController();
   private tail: Promise<void> = Promise.resolve();

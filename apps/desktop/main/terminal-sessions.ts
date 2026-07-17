@@ -110,7 +110,7 @@ export class DesktopTerminalStore {
     try {
       session.ptyProcess?.kill();
     } catch {
-      // The PTY can already be gone when the renderer closes a restored panel.
+      // 渲染进程关闭恢复的面板时，对应的 PTY 可能已经不存在。
     }
     this.publish({ sessionId, seq: session.seq + 1, event: 'closed', data: {} });
     return true;

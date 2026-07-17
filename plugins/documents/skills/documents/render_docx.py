@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a DOCX through LibreOffice and rasterize every PDF page to PNG."""
+"""通过 LibreOffice 渲染 DOCX，并将每个 PDF 页面栅格化为 PNG。"""
 
 from __future__ import annotations
 

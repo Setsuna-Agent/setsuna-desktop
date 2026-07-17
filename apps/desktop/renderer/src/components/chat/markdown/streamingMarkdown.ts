@@ -9,9 +9,8 @@ export type MarkdownRenderBlock = {
 const documentScopedMarkdownPattern = /(?:\[\^[\w-]{1,200}\](?!:)|^\s{0,3}\[\^[\w-]{1,200}\]:|\[[^\]\n]+\]\[[^\]\n]*\]|^\s{0,3}\[[^\]\n]+\]:\s*\S)/m;
 
 /**
- * Split a Markdown document on parser-owned block boundaries. Reference-style
- * links and footnotes stay in one tree because their definitions may live far
- * away from the node that consumes them.
+ * 按解析器确定的块边界拆分 Markdown 文档。引用式链接和脚注保留在同一棵树中，
+ * 因为它们的定义可能远离使用它们的节点。
  */
 export function parseMarkdownBlocks(markdown: string): string[] {
   if (!markdown.trim()) return [];
@@ -22,8 +21,7 @@ export function parseMarkdownBlocks(markdown: string): string[] {
       .map((token) => token.raw)
       .filter((block) => block.trim().length > 0);
   } catch {
-    // A partial stream should remain readable even if the boundary lexer cannot
-    // classify the newest fragment yet.
+    // 即使边界词法分析器暂时无法分类最新片段，不完整的流式内容也应保持可读。
     return [markdown];
   }
 }

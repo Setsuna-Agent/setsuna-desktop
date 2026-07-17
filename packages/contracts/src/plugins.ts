@@ -1,7 +1,7 @@
 import type { RuntimeMcpTransport } from './mcp.js';
 import type { RuntimeHookEventName } from './config.js';
 
-/** Stable, renderer-safe attribution stored with runtime activity. */
+/** 与 runtime 活动一同存储、可安全提供给渲染进程的稳定归属信息。 */
 export type RuntimePluginReference = {
   id: string;
   name: string;
@@ -25,7 +25,7 @@ export type RuntimePluginMcpServer = RuntimePluginMcpServerDescriptor & {
   owned: boolean;
 };
 
-/** Safe marketplace projection of a plugin Hook. Executable commands stay inside the runtime. */
+/** 插件 Hook 在市场中的安全投影；可执行命令始终留在 runtime 内部。 */
 export type RuntimePluginHook = {
   id: string;
   name: string;
@@ -44,7 +44,7 @@ export type RuntimePluginResource = {
 
 export type RuntimePluginItemKind = 'skill' | 'mcp' | 'hook' | 'resource';
 
-/** Bounded, renderer-safe projection of a regular file inside a plugin bundle. */
+/** 插件包内普通文件的受限投影，可安全提供给渲染进程。 */
 export type RuntimePluginFilePreview = {
   path: string;
   size: number;
@@ -63,7 +63,7 @@ export type RuntimePluginItemContent = {
 export type RuntimePluginSummary = {
   id: string;
   name: string;
-  /** Renderer-owned icon token. Plugin bundles cannot provide markup or filesystem paths. */
+  /** 由渲染进程管理的图标令牌；插件包不能提供标记或文件系统路径。 */
   icon?: string;
   version?: string;
   description?: string;
@@ -110,7 +110,7 @@ export type RuntimePluginMarketplaceList = {
 };
 
 export type RuntimePluginInstallInput = {
-  /** Absolute path to a local bundle containing .setsuna-plugin/plugin.json. */
+  /** 包含 .setsuna-plugin/plugin.json 的本地插件包绝对路径。 */
   path: string;
 };
 

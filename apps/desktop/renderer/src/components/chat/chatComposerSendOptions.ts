@@ -38,7 +38,7 @@ export function createChatComposerSendOptions({
 }): ChatComposerSendOptions {
   const thinking = thinkingSupported && thinkingEnabled;
   return {
-    // Document assets are read by runtime tools and do not require provider vision support.
+    // 文档资源由 runtime 工具读取，不需要供应商提供视觉能力。
     attachments: attachments.filter((attachment) => supportsImageInput || isRuntimeStoredMessageAttachment(attachment)),
     skillIds: selectedSkillIds,
     thinking,

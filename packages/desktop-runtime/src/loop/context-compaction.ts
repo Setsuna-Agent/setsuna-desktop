@@ -252,7 +252,7 @@ function recentStartForKeepCount(eligibleIndexes: number[], keepCount: number, m
   return toolExchangeStartAtOrBefore(messages, requestedStart);
 }
 
-/** Keep assistant tool calls and their following results on the same side of a compaction boundary. */
+/** 确保助手工具调用及其后续结果位于压缩边界的同一侧。 */
 function toolExchangeStartAtOrBefore(messages: RuntimeMessage[], requestedStart: number): number {
   const firstRecent = messages[requestedStart];
   if (firstRecent?.role !== 'tool') return requestedStart;
@@ -354,7 +354,7 @@ function messageHasContextValue(message: RuntimeMessage): boolean {
 }
 
 function messageEligibleForCompaction(message: RuntimeMessage): boolean {
-  // system/developer policy is rebuilt for every request and must never be folded into a conversational summary.
+  // 每次请求都会重新构建系统及开发者策略，绝不能将其折叠进对话摘要。
   return message.visibility !== 'transcript'
     && ((message.role !== 'system' && message.role !== 'developer') || Boolean(message.contextCompaction));
 }

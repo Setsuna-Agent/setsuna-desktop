@@ -2,9 +2,8 @@ import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * Resolve a path below an already-authorized root while refusing every symbolic
- * link component. This is used for stores where following a user-created link
- * would silently expand the runtime's filesystem capability.
+ * 在已授权根目录下解析路径，同时拒绝路径中的所有符号链接组件。
+ * 适用于跟随用户创建的链接会静默扩大 runtime 文件系统能力的存储场景。
  */
 export async function resolveConfinedPathWithoutSymlinks(
   root: string,

@@ -1,7 +1,7 @@
 import { isRuntimeInlineMessageAttachment, type RuntimeMessage } from '@setsuna-desktop/contracts';
 import type { ConfigStore } from '../ports/config-store.js';
 
-/** Centralizes model capability checks shared by turn entry points. */
+/** 集中处理各轮次入口共用的模型能力检查。 */
 export class RuntimeModelInputGuard {
   constructor(private readonly configStore?: ConfigStore) {}
 

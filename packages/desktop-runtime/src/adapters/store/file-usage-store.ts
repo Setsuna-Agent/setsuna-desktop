@@ -69,8 +69,8 @@ export class FileUsageStore implements UsageStore {
 }
 
 /**
- * Early usage records stored the transport protocol in `provider`. Recover the
- * configured vendor when the model makes that mapping unambiguous.
+ * 早期用量记录会把传输协议保存在 `provider` 中。当模型能够明确对应关系时，
+ * 恢复实际配置的供应商。
  */
 function resolveLegacyProviders(records: RuntimeUsageRecord[], providers: UsageProvider[]): RuntimeUsageRecord[] {
   return records.map((record) => {

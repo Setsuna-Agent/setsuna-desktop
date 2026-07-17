@@ -15,7 +15,7 @@ type DesktopNativeBridgeOptions = {
   openExternal(url: string): Promise<void>;
 };
 
-/** Authenticated loopback bridge for runtime-only native capabilities. */
+/** 为仅供 runtime 使用的原生能力提供已认证的回环桥接。 */
 export class DesktopNativeBridgeServer {
   private readonly server = http.createServer((request, response) => {
     void this.handleRequest(request, response);

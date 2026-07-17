@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  /* Pre-render default mirrors the System Default option in appearance settings. */
+  /* 渲染前默认值与外观设置中的“跟随系统”选项保持一致。 */
   --app-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
   --app-font-weight: 500;
   --app-code-font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -57,9 +57,17 @@
   --app-radius-md: 8px;
   --app-radius-lg: 10px;
   --app-topbar-height: 42px;
-  --app-topbar-collapsed-sidebar-width: 164px;
+  --app-topbar-item-gap: 8px;
+  --app-topbar-navigation-control-size: 28px;
+  --app-topbar-native-controls-inset: 82px;
+  --app-topbar-collapsed-sidebar-width: calc(
+    var(--app-topbar-native-controls-inset)
+    + var(--app-topbar-navigation-control-size)
+    + var(--app-topbar-item-gap)
+    + var(--app-topbar-navigation-control-size)
+  );
   --desktop-workspace-toolbar-height: 42px;
-  /* Reuse the solid shell substrate so the titlebar and sidebar stay visually continuous. */
+  /* 复用实色外壳基底，让标题栏与侧边栏在视觉上保持连续。 */
   --app-titlebar-bg: transparent;
   --app-titlebar-text: var(--app-sidebar-text-secondary);
   --app-titlebar-control-width: 140px;
@@ -75,8 +83,9 @@
   --desktop-agent-divider: #eaeaea;
   --desktop-agent-subtle-divider: #f0f0f0;
   --desktop-agent-panel-border: color-mix(in srgb, var(--app-border) 72%, transparent);
-  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 9%, transparent);
-  /* Neutral controls keep hover and selected states visually consistent across accent themes. */
+  /* 控件可能与标签重叠，因此其悬停填充必须保持完全不透明。 */
+  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 9%, var(--app-surface));
+  /* 中性控件让悬停与选中状态在不同强调色主题下保持视觉一致。 */
   --desktop-agent-control-active-bg: var(--desktop-agent-control-hover-bg);
   --desktop-agent-input-shadow: 0 14px 32px rgba(0, 0, 0, 0.045);
   --desktop-agent-sidebar-hover-bg: #f2f2f2;
@@ -181,7 +190,7 @@
   --desktop-agent-main-surface: var(--app-surface);
   --desktop-agent-divider: #34383b;
   --desktop-agent-subtle-divider: #2d3033;
-  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, transparent);
+  --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
   --desktop-agent-input-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
   --desktop-agent-sidebar-hover-bg: #34383b;
   --desktop-agent-sidebar-active-bg: #383c40;
@@ -227,7 +236,7 @@
   --desktop-agent-sidebar-edge: #484e56;
 }
 
-/* Accent presets are reserved for primary actions, links, focus rings, and explicit emphasis. */
+/* 强调色预设仅用于主要操作、链接、焦点环和显式强调。 */
 :root[data-accent-color='blue'] {
   --app-primary: #2563eb;
   --app-primary-hover: #1d4ed8;

@@ -32,7 +32,7 @@ type RuntimeTurnFinalizerOptions = {
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
-/** Applies the fixed, ordered side effects that close a successful assistant turn. */
+/** 按固定顺序应用结束成功助手轮次所需的副作用。 */
 export class RuntimeTurnFinalizer {
   constructor(private readonly options: RuntimeTurnFinalizerOptions) {}
 
@@ -78,7 +78,7 @@ export class RuntimeTurnFinalizer {
       createdAt: this.options.clock.now().toISOString(),
       payload: { usage, taskKind: finalization.taskKind },
     });
-    // Passive memory is auxiliary: enqueue it only after the turn is durably complete.
+    // 被动记忆属于辅助工作，只能在轮次持久化完成后入队。
     this.options.memory.schedulePassiveMemoriesForTurn(threadId, turnId);
   }
 

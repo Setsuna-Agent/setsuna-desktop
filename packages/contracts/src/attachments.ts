@@ -16,14 +16,14 @@ type RuntimeMessageAttachmentBase = {
   size: number;
 };
 
-/** Legacy/model-facing attachment whose bytes are carried by a URL, usually a data URL. */
+/** 旧版及面向模型的附件，其字节数据由 URL 承载，通常为数据 URL。 */
 export type RuntimeInlineMessageAttachment = RuntimeMessageAttachmentBase & {
   source?: 'inline';
   url: string;
   assetId?: never;
 };
 
-/** Runtime-owned file reference. The renderer and persisted thread never receive its local path. */
+/** 由 runtime 管理的文件引用；渲染进程和持久化线程都不会获得其本地路径。 */
 export type RuntimeStoredMessageAttachment = RuntimeMessageAttachmentBase & {
   source: 'runtime';
   assetId: string;

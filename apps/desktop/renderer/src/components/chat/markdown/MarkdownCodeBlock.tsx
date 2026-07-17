@@ -60,8 +60,8 @@ const codeLanguageAliases: Record<string, string> = {
 export function MarkdownCodeBlock({ code, language = '' }: MarkdownCodeBlockProps) {
   const copiedCode = code.replace(/\n$/, '');
   const normalizedLanguage = normalizeMarkdownCodeLanguage(language);
-  // CodeHighlighter returns a bare inline <code> when lang is empty, so unlabelled
-  // fences must stay on our contained plain-code path to preserve their line breaks.
+  // lang 为空时，CodeHighlighter 会返回裸内联 <code>；因此没有语言标签的围栏代码块
+  // 必须走受控的纯代码路径，以保留换行。
   const shouldHighlight = normalizedLanguage.length > 0 && shouldSyntaxHighlightMarkdownCode(copiedCode);
   if (!shouldHighlight) {
     return (

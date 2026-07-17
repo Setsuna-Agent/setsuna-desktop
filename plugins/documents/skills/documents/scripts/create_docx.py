@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a DOCX file from the Setsuna Documents JSON content model."""
+"""根据 Setsuna Documents 的 JSON 内容模型创建 DOCX 文件。"""
 
 from __future__ import annotations
 

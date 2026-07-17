@@ -49,16 +49,16 @@ export function useChatTurnActions({
         const threadId = thread.id;
         if (options.goalMode && input) {
           const goal = await client.setThreadGoal(threadId, { objective: input, status: 'active' });
-          // Goal turns are started inside setThreadGoal. Read back the runtime task registry snapshot
-          // so a missed/overlapped SSE turn.started cannot leave the composer without its stop action.
+          // 目标轮次由 setThreadGoal 内部启动。重新读取 runtime 任务注册表快照，避免遗漏或重叠的
+          // SSE turn.started 事件导致输入框缺少停止操作。
           const goalThread = await client.getThread(threadId);
           terminalTurnIdsRef.current.delete(goalThread.activeTurnId ?? '');
           setCurrentThread((current) => mergeGoalThreadSnapshot(current, goalThread, goal));
           if (goalThread.activeTurnId) setActiveTurnId(goalThread.activeTurnId);
           setDraft('');
           await reloadThreads();
-          // Goal execution is runtime-owned: setting it schedules the first hidden goal turn,
-          // and each idle completion schedules the next one until the goal reaches a terminal status.
+          // 目标执行由 runtime 管理：设置目标会调度首个隐藏目标轮次，之后每次空闲完成都会调度
+          // 下一个轮次，直到目标进入终止状态。
           return true;
         }
         setDraft('');

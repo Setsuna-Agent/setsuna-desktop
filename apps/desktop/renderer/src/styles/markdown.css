@@ -442,7 +442,7 @@ a.chat-markdown__file-link:focus-visible {
   padding: 6px 8px 14px !important;
 }
 
-/* Code-block chrome follows the app theme even when a light syntax palette is selected. */
+/* 即使选择浅色语法配色，代码块界面框架也跟随应用主题。 */
 :root[data-theme='dark'] .chat-code-highlighter {
   border: 1px solid color-mix(in srgb, var(--app-text) 12%, var(--chat-code-highlighter-bg));
 }

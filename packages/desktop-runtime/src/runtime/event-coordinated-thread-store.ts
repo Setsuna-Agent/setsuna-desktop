@@ -16,9 +16,8 @@ export type RecoverableThreadStore = ThreadStore & {
 };
 
 /**
- * Coordinates direct thread mutations with the event writer's short delta
- * batching window. This keeps seq assignment in call order without coupling
- * persistence adapters to the event bus.
+ * 协调直接线程修改与事件写入器的短增量批处理窗口。这样既能让 seq 按调用顺序分配，
+ * 又不会让持久化适配器与事件总线耦合。
  */
 export class EventCoordinatedThreadStore implements ThreadStore {
   constructor(

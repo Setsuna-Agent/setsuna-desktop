@@ -35,7 +35,7 @@ export type RuntimeDesktopSettings = {
   workspaceDependenciesEnabled?: boolean;
 };
 
-/** Returns an empty string for the default index and null for an invalid URL. */
+/** 默认索引返回空字符串，无效 URL 返回 null。 */
 export function normalizePythonPackageIndexUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
@@ -84,7 +84,7 @@ export type RuntimeHookHandlerConfig = {
   timeoutSec?: number;
   async?: boolean;
   statusMessage?: string;
-  /** Set by the local plugin runtime; plugin hooks remain untrusted until approved. */
+  /** 由本地插件 runtime 设置；插件 Hook 在获批前始终不受信任。 */
   pluginId?: string;
   sourcePath?: string;
 };

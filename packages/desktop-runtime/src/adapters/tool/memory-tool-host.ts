@@ -70,8 +70,8 @@ export class MemoryToolHost implements ToolHost {
           },
         },
       });
-      // Raw memory files merge all projects. Keep them behind an explicit debug flag so
-      // normal global and project threads cannot bypass structured scope filtering.
+      // 原始记忆文件会合并所有项目，因此只能通过显式调试标志启用，防止普通全局线程和
+      // 项目线程绕过结构化作用域过滤。
       if (canUseSharedMemoryFiles(context)) tools.push(
         {
           name: 'list_memory_files',

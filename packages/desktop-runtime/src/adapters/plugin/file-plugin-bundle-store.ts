@@ -76,7 +76,7 @@ const HOOK_EVENTS = new Set<RuntimeHookEventName>([
 
 type PluginMcpClient = Pick<McpClientRuntime, 'invalidateServer'>;
 
-/** Installs self-contained local bundles and owns their reversible integrations. */
+/** 安装自包含的本地插件包，并管理其可逆集成。 */
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
   private readonly pluginsDir: string;
@@ -813,7 +813,7 @@ function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePluginSummar
       name: skill.name,
       ...(skill.description ? { description: skill.description } : {}),
     })),
-    // Older plugin indexes only stored ownership. Rehydrate display metadata from the saved MCP input.
+    // 旧版插件索引只存储归属信息；从已保存的 MCP 输入恢复显示元数据。
     mcpServers: summary.mcpServers.map((server) => {
       const input = mcpServerInputs.find((candidate) => candidate.key === server.key);
       const descriptor = input

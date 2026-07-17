@@ -24,7 +24,7 @@ const ALL_TOOL_NAMES = [
   ...COMPAT_TOOL_NAMES,
 ] as const;
 
-/** Builds policy text only for PC-local tools advertised in the current sampling step. */
+/** 仅为当前采样步骤中声明的电脑本地工具构建策略文本。 */
 export function pcLocalToolPrompt(
   tools?: RuntimeToolDefinition[],
   options: PcLocalToolPromptOptions = {},

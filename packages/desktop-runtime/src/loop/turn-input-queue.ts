@@ -12,10 +12,10 @@ export type RuntimeQueuedTurnInput =
   | { type: 'mailbox'; input: RuntimeMailboxDelivery };
 
 /**
- * Turn-local input queue for model-visible input that arrives after a task starts.
+ * 用于任务启动后到达、且模型可见输入的轮次本地队列。
  *
- * Today the loop consumes steer messages; mailbox entries use the same ordering
- * boundary so multi-agent delivery can plug in without adding more ActiveTurn fields.
+ * 当前循环会消费 steer 消息；邮箱条目复用同一顺序边界，使多代理投递无需增加
+ * 更多 ActiveTurn 字段即可接入。
  */
 export class RuntimeTurnInputQueue {
   private readonly pending: RuntimeQueuedTurnInput[] = [];

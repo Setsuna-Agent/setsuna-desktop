@@ -1,6 +1,6 @@
 import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
 
-/** Renders location and path semantics without mixing in effective permissions. */
+/** 渲染位置与路径语义，不混入实际生效的权限。 */
 export function runtimeEnvironmentPrompt(environment: RuntimeEnvironment): string {
   const roots = environment.workspaceRoots.length ? environment.workspaceRoots : [environment.workspaceRoot];
   const repository = environment.repository;

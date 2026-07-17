@@ -32,7 +32,7 @@ export class McpOAuthLoginRequiredError extends Error {
   }
 }
 
-/** Owns secure OAuth state, interactive login, and refresh coalescing per server. */
+/** 按服务器管理安全 OAuth 状态、交互式登录及合并刷新。 */
 export class McpOAuthCoordinator {
   private readonly logins = new Map<string, Promise<void>>();
   private readonly loginControllers = new Map<string, AbortController>();

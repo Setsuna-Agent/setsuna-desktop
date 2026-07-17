@@ -112,9 +112,8 @@ export type RuntimeUserInputResponse = {
 };
 
 /**
- * Safe, persistable projection of an MCP elicitation. URL query/fragment data
- * is intentionally omitted; the connection manager retains the actionable URL
- * only for the lifetime of the pending request.
+ * MCP 信息征询的安全可持久化投影。有意省略 URL 的查询参数和片段数据；
+ * 连接管理器只会在请求等待期间保留可操作的 URL。
  */
 export type RuntimeMcpElicitation =
   | {

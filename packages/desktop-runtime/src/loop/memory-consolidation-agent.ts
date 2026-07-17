@@ -17,9 +17,9 @@ export type RunMemoryConsolidationAgentInput = {
   now(): Date;
   signal?: AbortSignal;
   heartbeat?(): Promise<boolean>;
-  /** Cumulative provider-reported tokens allowed for one Phase 2 rollout. */
+  /** 单次第二阶段执行允许供应商累计报告的令牌数。 */
   rolloutTokenBudget?: number;
-  /** Wall-clock deadline for the complete rollout, including tool execution. */
+  /** 完整执行过程的实际时间期限，包括工具执行时间。 */
   deadlineMs?: number;
 };
 

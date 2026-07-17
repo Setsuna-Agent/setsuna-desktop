@@ -1,6 +1,6 @@
 import type { RuntimeUsage } from '@setsuna-desktop/contracts';
 
-/** Add provider-reported usage from multiple sampling requests in one logical task. */
+/** 汇总单个逻辑任务内多次采样请求由供应商报告的用量。 */
 export function addRuntimeUsage(previous: RuntimeUsage | undefined, next: RuntimeUsage | undefined): RuntimeUsage | undefined {
   if (!next) return previous ? { ...previous } : undefined;
   const inputTokens = sumTokenCounts(previous?.inputTokens, next.inputTokens);

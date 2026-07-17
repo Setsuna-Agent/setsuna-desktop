@@ -11,11 +11,10 @@ export type RuntimePluginUse = RuntimePluginReference;
 const pluginResourceToolNames = new Set(['list_plugin_resources', 'read_plugin_resource']);
 
 /**
- * Collects durable and live Plugin attribution for every turn.
+ * 收集每个轮次的持久化及实时插件归属信息。
  *
- * New turns persist Plugin-backed Skill attribution in sampling snapshots. The
- * installed Skill/Plugin lists remain as a compatibility fallback for older
- * snapshots and are also needed to attribute Plugin Hooks and MCP calls.
+ * 新轮次会在采样快照中持久化由插件提供的 Skill 归属信息。已安装的 Skill 和插件列表
+ * 继续作为旧快照的兼容回退，同时也用于确定插件 Hook 和 MCP 调用的归属。
  */
 export function runtimePluginUsesByTurn(
   thread: RuntimeThread | null,
@@ -42,7 +41,7 @@ export function runtimePluginUsesByTurn(
     };
     const turnPlugins = collected.get(turnId) ?? new Map<string, RuntimePluginUse>();
     const current = turnPlugins.get(pluginId);
-    // Prefer richer metadata if a later source resolves the display name/icon.
+    // 如果后续来源解析出显示名称或图标，则优先采用更丰富的元数据。
     turnPlugins.set(pluginId, current ? mergePluginReference(current, plugin) : plugin);
     collected.set(turnId, turnPlugins);
   };

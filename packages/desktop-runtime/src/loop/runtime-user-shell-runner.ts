@@ -22,7 +22,7 @@ type RuntimeUserShellRunnerOptions = {
   ): Promise<boolean>;
 };
 
-/** Executes user-originated shell commands while projecting the standard tool lifecycle. */
+/** 执行用户发起的 Shell 命令，同时投影标准工具生命周期。 */
 export class RuntimeUserShellRunner {
   constructor(private readonly options: RuntimeUserShellRunnerOptions) {}
 

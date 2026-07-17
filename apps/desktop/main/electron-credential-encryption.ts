@@ -3,7 +3,7 @@ import type { CredentialEncryptionProvider } from './desktop-credential-vault.js
 type SafeStorageLike = Pick<Electron.SafeStorage,
   'decryptStringAsync' | 'encryptStringAsync' | 'getSelectedStorageBackend' | 'isAsyncEncryptionAvailable'>;
 
-/** Adapts Electron safeStorage while refusing Linux's unprotected basic_text backend. */
+/** 适配 Electron safeStorage，同时拒绝 Linux 上未受保护的 basic_text 后端。 */
 export function electronCredentialEncryption(
   safeStorage: SafeStorageLike,
   platform: NodeJS.Platform = process.platform,

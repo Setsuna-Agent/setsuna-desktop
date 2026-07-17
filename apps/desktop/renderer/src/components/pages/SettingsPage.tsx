@@ -1704,7 +1704,7 @@ function ProviderSettings({
       }
       const revision = latestDirtyRevisionRef.current;
       if (revision <= lastStartedRevisionRef.current) return;
-      // Leaving Settings must flush the latest draft instead of cancelling its debounce window.
+      // 离开设置页时必须立即保存最新草稿，而不是取消其防抖等待窗口。
       lastStartedRevisionRef.current = revision;
       void onSaveRef.current(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
         .catch((error) => console.error('[settings] failed to flush provider settings during unmount', error));

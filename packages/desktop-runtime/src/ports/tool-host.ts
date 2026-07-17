@@ -86,7 +86,7 @@ export type ToolRuntimeProfile = {
   supportsParallel?: boolean;
   waitsForRuntimeCancellation?: boolean;
   visibleToModel?: boolean;
-  /** The tool owns an audited interaction lifecycle and must not receive a second generic approval. */
+  /** 工具自行管理可审计交互生命周期，不能再接受第二次通用审批。 */
   approvalMode?: 'orchestrated' | 'selfManaged';
 };
 

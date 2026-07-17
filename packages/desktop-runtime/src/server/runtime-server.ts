@@ -93,7 +93,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         trackSseResponse(response, sseResponses);
       }
 
-      // app-server RPC 承载 Codex/SWE bridge 命令，和普通 runtime REST 路由分开处理。
+      // app-server RPC 承载 SWE 桥接命令，与普通 runtime REST 路由分开处理。
       if (request.method === 'POST' && url.pathname === '/v1/swe/app-server') {
         const message = await readBody<AppServerRpcRequest>(request);
         const responseMessage = await handleAppServerRpcRequest(
@@ -131,8 +131,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
       if (closingPromise) return closingPromise;
       shuttingDown = true;
       closingPromise = (async () => {
-        // Stop accepting requests first, then close long-lived streams so the
-        // server callback can complete while background turns are draining.
+        // 先停止接收请求，再关闭长连接流，让服务器回调能在后台轮次逐步结束时完成。
         const serverClosed = server.listening
           ? new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
           : Promise.resolve();

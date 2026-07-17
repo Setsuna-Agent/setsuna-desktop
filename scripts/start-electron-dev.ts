@@ -8,7 +8,7 @@ const rootDir = resolve(import.meta.dirname, '..');
 function runPnpm(args: string[]): void {
   const npmExecPath = process.env.npm_execpath;
 
-  // Reuse the package manager entrypoint from the parent pnpm script when available.
+  // 如果可用，则复用父级 pnpm 脚本中的包管理器入口。
   if (npmExecPath) {
     execFileSync(process.execPath, [npmExecPath, ...args], { cwd: rootDir, stdio: 'inherit' });
     return;

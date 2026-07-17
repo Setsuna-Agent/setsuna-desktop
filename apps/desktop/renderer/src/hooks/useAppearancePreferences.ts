@@ -350,7 +350,7 @@ function syncNativeTitlebarScale(pageScale: number): void {
   if (typeof window === 'undefined') return;
   const bridge = window.setsunaDesktop;
   if (!bridge || bridge.desktop.platform !== 'darwin') return;
-  // Native macOS traffic lights do not participate in CSS zoom, so main keeps them aligned with the scaled titlebar.
+  // macOS 原生红绿灯按钮不参与 CSS 缩放，因此由主进程保持其与缩放后标题栏对齐。
   void bridge.windowControls.setTitlebarScale(pageScale).catch(() => undefined);
 }
 

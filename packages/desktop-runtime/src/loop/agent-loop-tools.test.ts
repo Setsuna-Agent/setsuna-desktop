@@ -69,8 +69,7 @@ describe('agent loop tools', () => {
     await loop.setThreadGoal(thread.id, { objective: 'Inspect the project and finish the requested change', status: 'active' });
     const completedGoal = await waitForTestState(
       async () => (await threadStore.getThread(thread.id))?.goal,
-      // update_goal publishes the terminal status before the final assistant
-      // segment settles; wait for that segment's usage to be accounted too.
+      // update_goal 会在最终助手片段稳定前发布终止状态；还需等待该片段的用量完成计入。
       (goal) => goal?.status === 'complete' && goal.tokensUsed === 15,
       (goal) => `Timed out waiting for goal completion; goal=${JSON.stringify(goal ?? null)}`,
     );

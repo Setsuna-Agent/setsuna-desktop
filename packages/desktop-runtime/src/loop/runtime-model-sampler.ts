@@ -43,7 +43,7 @@ type RuntimeModelSamplerOptions = {
   toolExecutor: RuntimeToolCallExecutor;
 };
 
-/** Runs one model sampling step and normalizes legacy and item-based stream protocols. */
+/** 执行一次模型采样步骤，并统一旧版与基于条目的流式协议。 */
 export class RuntimeModelSampler {
   constructor(private readonly options: RuntimeModelSamplerOptions) {}
 

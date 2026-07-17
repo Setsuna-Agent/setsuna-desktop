@@ -16,8 +16,8 @@ type StartThreadReviewOptions = {
 };
 
 /**
- * Review is a valid first turn. Create and select its project thread before starting so
- * the caller can subscribe from sequence zero and receive every persisted review event.
+ * 审查可以作为首个轮次。启动前先创建并选中对应项目线程，让调用方可从序号零开始订阅，
+ * 并接收每一条已持久化的审查事件。
  */
 export async function startThreadReview({
   activeProjectId,

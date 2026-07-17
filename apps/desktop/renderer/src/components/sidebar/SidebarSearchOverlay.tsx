@@ -76,8 +76,8 @@ export function SidebarSearchOverlay({
   }, [query]);
 
   useEffect(() => {
-    // Recent conversations only need summary data. Loading full transcripts is reserved
-    // for an actual keyword search so opening the popover stays lightweight.
+    // 最近对话只需要摘要数据。仅在实际执行关键词搜索时加载完整记录，
+    // 让弹出层保持轻量。
     if (!hasKeyword) {
       setDetailsLoading(false);
       return undefined;

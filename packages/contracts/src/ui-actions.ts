@@ -5,7 +5,7 @@ export type RuntimeBrowserOpenAction = {
   url: string;
 };
 
-/** Validate UI action data before the renderer performs a browser navigation. */
+/** 渲染进程执行浏览器导航前，校验界面操作数据。 */
 export function parseRuntimeBrowserOpenAction(value: unknown): RuntimeBrowserOpenAction | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as { kind?: unknown; url?: unknown };

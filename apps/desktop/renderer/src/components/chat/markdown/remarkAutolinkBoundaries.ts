@@ -29,10 +29,9 @@ const pairedInlineMarkers = [
 ] as const;
 
 /**
- * GFM bare autolinks do not treat Chinese punctuation as a URL boundary. That can
- * make one URL consume the rest of a Chinese paragraph, including closing
- * emphasis markers. Repair only parser-created literal links; explicit Markdown
- * links and angle-bracket autolinks keep their author-defined boundaries.
+ * GFM 裸自动链接不会把中文标点视为 URL 边界，这可能导致一个 URL 吞掉中文段落的
+ * 剩余内容，包括闭合的强调标记。只修复解析器创建的字面链接；显式 Markdown 链接和
+ * 尖括号自动链接保留作者定义的边界。
  */
 export function remarkAutolinkBoundaries() {
   return (tree: unknown, file: MarkdownFile): void => {
@@ -101,8 +100,8 @@ function literalAutolinkText(node: MarkdownNode, source: string): string | null 
   const end = node.position?.end.offset;
   if (typeof start !== 'number' || typeof end !== 'number') return null;
 
-  // `[label](url)` and `<url>` include delimiters in the source slice; a GFM
-  // literal autolink does not. This keeps explicit author intent untouched.
+  // `[label](url)` 和 `<url>` 的源码切片包含分隔符，而 GFM 字面自动链接不包含。
+  // 据此可避免改动作者的显式意图。
   return source.slice(start, end) === textNode.value ? textNode.value : null;
 }
 

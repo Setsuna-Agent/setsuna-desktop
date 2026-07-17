@@ -32,8 +32,7 @@ const ROLE_ORDER: Record<RuntimePromptFragment['role'], number> = {
 };
 
 /**
- * Compiles transient runtime context before conversation history while preserving
- * the authority boundary carried by each fragment's message role.
+ * 在对话历史之前编译临时 runtime 上下文，同时保留每个片段消息角色所携带的权限边界。
  */
 export function compileRuntimePrompt({ fragments, conversationMessages, createdAt }: CompileRuntimePromptInput): CompiledRuntimePrompt {
   const normalized = fragments

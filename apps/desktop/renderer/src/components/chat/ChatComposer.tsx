@@ -443,7 +443,7 @@ export function ChatComposer({
 
     if (syncPlan.type === 'replace') editor.clear();
     if (syncPlan.value) {
-      // Focus first so Ant Design X can create a valid selection for slot insertion.
+      // 先聚焦，让 Ant Design X 能够创建用于插入槽位的有效选区。
       editor.focus({ cursor: 'end', preventScroll: true });
       editor.insert([createTextSlot(syncPlan.value)], 'end', undefined, true);
     }
@@ -609,7 +609,7 @@ export function ChatComposer({
 
   const addFiles = (files: File[]) => {
     if (!files.length || submitting) return;
-    // Goal creation currently stores only its objective. Turn it off before accepting files so assets are never dropped silently.
+    // 目前创建目标时只保存目标描述。接收文件前先关闭目标模式，避免资源被静默丢弃。
     setGoalModeEnabled(false);
     void addAttachmentFiles(files);
   };
@@ -902,7 +902,7 @@ function ChatThinkingMenu({
       rootClassName="chat-thinking-menu-root"
       trigger={['click']}
       placement="topLeft"
-      // Keep this usable when Windows "best performance" disables UI transition events.
+      // Windows“最佳性能”模式禁用界面过渡事件时，此功能也要保持可用。
       transitionName=""
       disabled={disabled}
       open={menuOpen}
@@ -971,7 +971,7 @@ function readComposerCursorOffset(inputElement?: HTMLElement | null): number | n
   range.selectNodeContents(inputElement);
   range.setEnd(selection.focusNode, selection.focusOffset);
   const visibleOffset = range.toString().length;
-  // Mention labels omit markers and parent paths that remain in the submitted value.
+  // 提及标签会省略仍保留在提交值中的标记和父路径。
   const offsetAdjustments = Array.from(
     range.cloneContents().querySelectorAll<HTMLElement>(`[${composerCursorOffsetAdjustmentAttribute}]`),
     (element) => element.getAttribute(composerCursorOffsetAdjustmentAttribute),

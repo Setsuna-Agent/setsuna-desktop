@@ -114,7 +114,7 @@ export function useChatAttachments({
   const clearAfterSend = useCallback((sentAttachments: RuntimeMessageAttachment[]) => {
     const sentIds = new Set(sentAttachments.map((attachment) => attachment.id));
     if (!sentIds.size) return;
-    // Keep uploads/errors that arrived while the request was in flight; remove only the accepted snapshot.
+    // 保留请求进行期间新增的上传项或错误，只移除已经接收的快照。
     commitItems(itemsRef.current.filter((item) => !item.attachment || !sentIds.has(item.attachment.id)));
   }, [commitItems]);
 

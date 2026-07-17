@@ -4,7 +4,7 @@ export type RuntimeSkillKind = 'builtin' | 'plugin' | 'user';
 
 export type RuntimeSkillMcpDependencyInput = {
   type: 'mcp';
-  /** Stable MCP server key referenced by model-facing tool names. */
+  /** 面向模型的工具名称所引用的稳定 MCP 服务器键。 */
   value: string;
   transport: RuntimeMcpTransport;
   label?: string;

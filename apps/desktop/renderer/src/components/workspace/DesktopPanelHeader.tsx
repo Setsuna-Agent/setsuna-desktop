@@ -217,8 +217,8 @@ export function DesktopPanelHeader({
     }
     if (suppressClick) event.preventDefault();
     if (shouldActivateTab) {
-      // The tab wrapper owns pointer capture for drag-to-reorder. Activate on
-      // pointer-up so a normal click is not lost when the browser skips click.
+      // 标签页包装元素负责捕获用于拖动排序的指针。在指针抬起时激活，避免浏览器
+      // 跳过 click 事件时丢失普通点击。
       onSelectPanel?.(drag.panel.id);
       suppressFollowingClick();
     }

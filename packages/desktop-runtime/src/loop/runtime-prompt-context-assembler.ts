@@ -34,7 +34,7 @@ export type RuntimePromptContext = {
   selectedSkills: RuntimeModelRequestStepSnapshot['selectedSkills'];
 };
 
-/** Builds typed transient prompt fragments without owning sampling or compaction. */
+/** 构建带类型的临时提示片段，但不负责采样或压缩。 */
 export class RuntimePromptContextAssembler {
   constructor(private readonly options: RuntimePromptContextAssemblerOptions) {}
 
@@ -83,8 +83,8 @@ export class RuntimePromptContextAssembler {
         ...memoryMessages.map(memoryFragment),
         ...toolExternalContextFragments(toolExternalContext, config),
         ...skillContext.fragments,
-        // Goal/mailbox-style turn context is closest to the current request and
-        // therefore follows reusable user-context such as project rules or skills.
+        // 目标或邮箱式轮次上下文与当前请求最接近，因此应排在项目规则或 Skill 等
+        // 可复用用户上下文之后。
         ...runtimeContextFragments(hookContextMessages),
       ],
       selectedSkills: skillContext.selectedSkills,

@@ -4,7 +4,7 @@ import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest } from '../
 
 type AttachmentRequestResolver = (outcome: ChatImageAttachmentOutcome) => void;
 
-/** Bridges image producers outside ChatComposer to its private attachment tray. */
+/** 将 ChatComposer 外部的图像来源桥接到其私有附件托盘。 */
 export function useChatImageAttachmentRequest() {
   const [imageAttachmentRequest, setImageAttachmentRequest] = useState<ChatImageAttachmentRequest | null>(null);
   const requestIdRef = useRef(0);
