@@ -285,7 +285,7 @@
 :root[data-desktop-platform='win32'] .app-topbar__brand,
 :root[data-desktop-platform='linux'] .app-topbar__brand {
   gap: var(--app-topbar-item-gap);
-  padding: 0 var(--app-topbar-item-gap) 0 4px;
+  padding: 0 var(--app-topbar-item-gap) 0 12px;
   border-right: 0;
   color: var(--app-titlebar-text);
   background: var(--app-titlebar-bg);
