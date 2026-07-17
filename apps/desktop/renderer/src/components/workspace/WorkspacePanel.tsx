@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Code2, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
-import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceEntrySearchResponse, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import { isTemporaryWorkspaceProjectId, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceEntrySearchResponse, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
@@ -434,7 +434,7 @@ export function WorkspaceOverviewPanel({
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
 }) {
-  const temporaryWorkspace = activeProject?.id === TEMPORARY_WORKSPACE_PROJECT_ID;
+  const temporaryWorkspace = activeProject ? isTemporaryWorkspaceProjectId(activeProject.id) : false;
   const reviewMeta = latestReviewSummary?.files.length
     ? `${latestReviewSummary.files.length} 个文件`
     : '查看代码变更';

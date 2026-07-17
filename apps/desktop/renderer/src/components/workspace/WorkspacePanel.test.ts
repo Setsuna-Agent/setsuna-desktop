@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TEMPORARY_WORKSPACE_PROJECT_ID, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import { temporaryWorkspaceProjectId, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { WorkspaceOverviewPanel } from './WorkspacePanel.js';
 
 describe('WorkspaceOverviewPanel', () => {
@@ -59,7 +59,11 @@ describe('WorkspaceOverviewPanel', () => {
 
   it('在普通对话的临时目录中开放工作区操作', () => {
     const panel = WorkspaceOverviewPanel({
-      activeProject: { ...project, id: TEMPORARY_WORKSPACE_PROJECT_ID, name: '临时目录' },
+      activeProject: {
+        ...project,
+        id: temporaryWorkspaceProjectId({ date: '2026-07-18', threadId: 'thread_1' }),
+        name: '临时目录',
+      },
       latestReviewSummary: null,
       onOpenBrowser: () => undefined,
       onOpenFilesPanel: () => undefined,

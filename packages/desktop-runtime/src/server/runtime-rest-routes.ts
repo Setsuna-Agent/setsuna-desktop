@@ -245,6 +245,19 @@ export async function handleRuntimeRestRequest(
   }
 
   if (request.method === 'GET' && url.pathname === '/v1/workspace/status') {
+    const threadIdValue = url.searchParams.get('threadId');
+    if (url.searchParams.has('threadId')) {
+      const threadId = runtimeQueryId(threadIdValue, 'Thread id');
+      const thread = await runtime.threadStore.getThread(threadId);
+      if (!thread) {
+        sendJson(response, 404, { error: 'Thread not found' });
+        return true;
+      }
+      const projectId = thread.projectId
+        ?? (await runtime.workspaceProjects.ensureTemporaryWorkspace({ threadId, createdAt: thread.createdAt })).id;
+      sendJson(response, 200, await runtime.workspaceProjects.getStatus(projectId));
+      return true;
+    }
     sendJson(response, 200, await runtime.workspaceProjects.getStatus(url.searchParams.get('projectId') ?? undefined));
     return true;
   }
@@ -777,6 +790,14 @@ function withActiveTurn<TThread extends RuntimeThread | RuntimeThreadSummary>(
 function decodeRuntimeId(value: string, label: string): string {
   try {
     return assertSafeRuntimeId(decodeURIComponent(value), label);
+  } catch {
+    throw new RuntimeHttpError(400, `${label} is invalid.`, 'invalid_runtime_id');
+  }
+}
+
+function runtimeQueryId(value: string | null, label: string): string {
+  try {
+    return assertSafeRuntimeId(value ?? '', label);
   } catch {
     throw new RuntimeHttpError(400, `${label} is invalid.`, 'invalid_runtime_id');
   }

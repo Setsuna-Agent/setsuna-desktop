@@ -108,7 +108,8 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
   }, [filePreviewRequests]);
 
   return {
-    filePreview,
+    // Effects clear project-bound state after commit; derive visibility now so a switch never renders the previous file.
+    filePreview: visibleWorkspaceFilePreview(filePreview, activeProjectId),
     openEntry,
     openProjectFile,
     resetProjectWorkspacePanels,
@@ -120,6 +121,13 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
     setFilePreview: updateFilePreview,
     setSearchQuery,
   };
+}
+
+export function visibleWorkspaceFilePreview(
+  filePreview: WorkspaceFileRead | null,
+  activeProjectId: string | null,
+): WorkspaceFileRead | null {
+  return filePreview?.projectId === activeProjectId ? filePreview : null;
 }
 
 export type ProjectWorkspaceState = ReturnType<typeof useProjectWorkspace>;

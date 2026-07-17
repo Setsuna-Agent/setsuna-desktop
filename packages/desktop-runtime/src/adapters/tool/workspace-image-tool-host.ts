@@ -3,6 +3,7 @@ import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/c
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { objectInput, requiredStringArg } from './tool-input.js';
+import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
 export const VIEW_IMAGE_TOOL_NAME = 'view_image';
 
@@ -44,7 +45,7 @@ export class WorkspaceImageToolHost implements ToolHost {
       throw new Error('The active model does not support image input.');
     }
     const args = objectInput(input);
-    const project = await this.projectFor(optionalProjectId(args.projectId) ?? context.projectId);
+    const project = await this.projectFor(workspaceProjectIdForToolContext(optionalProjectId(args.projectId), context));
     const relativePath = requiredStringArg(args.path, 'path');
     const image = await this.projects.readImage(project.id, relativePath);
     const namePart = path.basename(image.path) || 'workspace-image';

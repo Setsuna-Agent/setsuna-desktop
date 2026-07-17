@@ -143,6 +143,17 @@ describe('desktop runtime client advanced thread methods', () => {
       { path: '/v1/workspace-dependencies/reinstall', method: 'POST' },
     ]);
   });
+
+  it('requests the workspace scoped to a conversation thread', async () => {
+    const request = installRuntimeBridge(() => ({ exists: true, readable: true }));
+    const client = createDesktopRuntimeClient();
+
+    await client.getWorkspaceStatus({ threadId: 'thread / 1' });
+
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/workspace/status?threadId=thread+%2F+1',
+    });
+  });
 });
 
 function installRuntimeBridge(handler: (input: RuntimeRequestInput) => unknown) {

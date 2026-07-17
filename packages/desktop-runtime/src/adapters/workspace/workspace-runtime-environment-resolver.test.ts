@@ -60,6 +60,27 @@ describe('WorkspaceRuntimeEnvironmentResolver', () => {
       workspacePrefix: '.',
     });
   });
+
+  it('resolves an unbound thread to its own date-grouped temporary workspace', async () => {
+    const root = await temporaryDirectory();
+    const dataDir = path.join(root, 'data');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+    const createdAt = new Date(2026, 6, 18, 12, 0, 0).toISOString();
+
+    const environment = await new WorkspaceRuntimeEnvironmentResolver(store).resolve({
+      threadId: 'thread_global',
+      threadCreatedAt: createdAt,
+    });
+
+    expect(environment.id).toBe('temporary_workspace.2026-07-18.thread_global');
+    expect(environment.cwd).toBe(await realpath(path.join(
+      dataDir,
+      'temporary-workspace',
+      '2026-07-18',
+      'thread_global',
+    )));
+    expect(environment.workspaceRoot).toBe(environment.cwd);
+  });
 });
 
 async function temporaryDirectory(): Promise<string> {

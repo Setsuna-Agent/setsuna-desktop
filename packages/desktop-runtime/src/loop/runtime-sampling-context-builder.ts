@@ -112,6 +112,7 @@ export class RuntimeSamplingContextBuilder {
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
       threadId,
+      threadCreatedAt: thread.createdAt,
     });
     const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
     const attachmentContext = await buildRuntimeAttachmentContext({

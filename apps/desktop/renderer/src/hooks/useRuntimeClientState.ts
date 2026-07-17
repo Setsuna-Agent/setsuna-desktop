@@ -78,7 +78,6 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [pluginMarketplace, setPluginMarketplace] = useState<RuntimePluginMarketplaceItem[]>([]);
   const [pluginMarketplaceErrors, setPluginMarketplaceErrors] = useState<string[]>([]);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
-  const [temporaryWorkspace, setTemporaryWorkspace] = useState<WorkspaceProject | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const initializedSelectionRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -109,13 +108,12 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     try {
       // 只有进入工作台必需的状态失败才是致命错误；可选功能域各自独立降级。
       const bootstrap = await loadRuntimeBootstrap(client);
-      const { nextConfig, threadList, allThreadList, projectList, workspaceStatus } = bootstrap.core;
+      const { nextConfig, threadList, allThreadList, projectList } = bootstrap.core;
       const { skillResult, mcpResult, pluginResult, pluginMarketplaceResult, usageResult } = bootstrap.optional;
       setConfig(nextConfig);
       setThreads(threadList.threads);
       setArchivedThreads(allThreadList.threads.filter((thread) => thread.archived));
       setProjects(projectList.projects);
-      setTemporaryWorkspace(workspaceStatus.project ?? null);
       if (skillResult.status === 'fulfilled') setSkills(skillResult.value.skills);
       if (mcpResult.status === 'fulfilled') setMcpState(mcpResult.value);
       if (pluginResult.status === 'fulfilled') setPlugins(pluginResult.value.plugins);
@@ -915,7 +913,6 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setSkillExtraRoots,
     skillExtraRoots,
     skills,
-    temporaryWorkspace,
     terminalTurnIdsRef,
     threadUsage,
     threads,
@@ -976,7 +973,7 @@ export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
 
 type RuntimeBootstrapClient = Pick<
   DesktopRuntimeClient,
-  'getConfig' | 'getUsage' | 'getWorkspaceStatus' | 'listMcpServers' | 'listPluginMarketplace' | 'listPlugins' | 'listProjects' | 'listSkills' | 'listThreads'
+  'getConfig' | 'getUsage' | 'listMcpServers' | 'listPluginMarketplace' | 'listPlugins' | 'listProjects' | 'listSkills' | 'listThreads'
 >;
 
 export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
@@ -986,7 +983,6 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
       client.listThreads(),
       client.listThreads({ includeArchived: true }),
       client.listProjects(),
-      client.getWorkspaceStatus(),
     ]),
     Promise.allSettled([
       client.listSkills(),
@@ -996,10 +992,10 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
       client.getUsage(),
     ]),
   ]);
-  const [nextConfig, threadList, allThreadList, projectList, workspaceStatus] = core;
+  const [nextConfig, threadList, allThreadList, projectList] = core;
   const [skillResult, mcpResult, pluginResult, pluginMarketplaceResult, usageResult] = optional;
   return {
-    core: { nextConfig, threadList, allThreadList, projectList, workspaceStatus },
+    core: { nextConfig, threadList, allThreadList, projectList },
     optional: { skillResult, mcpResult, pluginResult, pluginMarketplaceResult, usageResult },
   };
 }

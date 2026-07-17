@@ -47,6 +47,7 @@ import type {
   WorkspaceProjectList,
   WorkspaceSearchResponse,
   WorkspaceStatus,
+  WorkspaceStatusQuery,
 } from './workspace.js';
 import type { RuntimeWorkspaceDependenciesStatus, RuntimeWorkspaceDependenciesToggleInput } from './workspace-dependencies.js';
 import type { RuntimeAttachmentDeleteResponse, RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
@@ -116,7 +117,7 @@ export type DesktopRuntimeClient = {
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
-  getWorkspaceStatus(projectId?: string): Promise<WorkspaceStatus>;
+  getWorkspaceStatus(query?: WorkspaceStatusQuery): Promise<WorkspaceStatus>;
   listProjectEntries(projectId: string, path?: string): Promise<WorkspaceEntryList>;
   searchProjectEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   readProjectFile(projectId: string, path: string): Promise<WorkspaceFileRead>;

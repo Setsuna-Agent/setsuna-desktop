@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -951,6 +951,27 @@ describe('runtime server', () => {
     expect(rootEntries.entries).toMatchObject([{ kind: 'directory', name: 'src', parent: '', path: 'src' }]);
     expect(file.content).toContain('local search target');
     expect(search.results).toMatchObject([{ path: 'src/note.txt', line: 1 }]);
+  });
+
+  it('returns an isolated temporary workspace for a global thread', async () => {
+    const thread = await runtimeFetch('/v1/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Temporary workspace thread' }),
+    });
+
+    const status = await runtimeFetch(`/v1/workspace/status?threadId=${encodeURIComponent(thread.id)}`);
+
+    expect(status).toMatchObject({
+      exists: true,
+      readable: true,
+      project: {
+        id: expect.stringMatching(new RegExp(`^temporary_workspace\\.\\d{4}-\\d{2}-\\d{2}\\.${thread.id}$`, 'u')),
+        name: '临时目录',
+        path: expect.stringContaining(path.join('temporary-workspace', '')),
+      },
+    });
+    expect(status.project.path).toMatch(new RegExp(`${thread.id.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}$`, 'u'));
+    expect((await stat(status.project.path)).isDirectory()).toBe(true);
   });
 
   it('exposes local usage summaries', async () => {

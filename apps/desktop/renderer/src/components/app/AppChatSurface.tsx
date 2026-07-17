@@ -261,8 +261,8 @@ export function AppChatSurface({
           onOpenSideChat={onOpenSideChat}
           onOpenThread={onOpenThread}
           onOpenFileReview={onOpenFileReviewPanel}
-          onSelectModel={onSelectModel}
           onSearchProjectEntries={onSearchProjectEntries}
+          onSelectModel={onSelectModel}
           onSend={onSend}
           onPlanDecision={onPlanDecision}
           onReviewRefresh={onReviewRefresh}
@@ -282,6 +282,7 @@ export function AppChatSurface({
           hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
           key={panel.id}
           plugins={plugins}
+          selectedWorkspaceApp={selectedWorkspaceApp}
           skills={skills}
           threads={threads}
           onApprovalPolicyChange={onApprovalPolicyChange}
@@ -290,7 +291,6 @@ export function AppChatSurface({
           onOpenMarkdownWebLink={onOpenMarkdownWebLink}
           onOpenSideChat={onOpenSideChat}
           onReloadThreads={onReloadThreads}
-          onSearchProjectEntries={onSearchProjectEntries}
           onSelectModel={onSelectModel}
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
           onWorkspaceResizeStep={onWorkspaceResizeStep}

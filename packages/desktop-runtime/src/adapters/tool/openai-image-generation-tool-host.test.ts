@@ -54,6 +54,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       });
     }) as typeof fetch;
     let storedImage: { name: string; type: string; data: Uint8Array } | null = null;
+    let workspaceImage: { projectId: string; path: string; data: Uint8Array } | null = null;
     const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
       async clone() { return { assetId: 'unused_clone' }; },
       async create(input) {
@@ -62,7 +63,16 @@ describe('OpenAiImageGenerationToolHost', () => {
       },
       async delete() {},
       async recover() {},
-    }, { fetchImpl });
+    }, {
+      fetchImpl,
+      workspaceProjects: {
+        async writeBinaryFile(projectId, filePath, data) {
+          workspaceImage = { projectId, path: filePath, data };
+          return { projectId, path: filePath, size: data.byteLength, created: true };
+        },
+        async deleteFile() {},
+      },
+    });
 
     const result = await host.runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, {
       prompt: 'a small moon over the sea',
@@ -71,7 +81,16 @@ describe('OpenAiImageGenerationToolHost', () => {
       quality: 'high',
       output_format: 'png',
       output_compression: 80,
-    }, { threadId: 'thread_1', toolCallId: 'call/1' });
+    }, {
+      threadId: 'thread_1',
+      toolCallId: 'call/1',
+      environment: {
+        id: 'temporary_workspace.2026-07-18.thread_1',
+        cwd: '/workspace',
+        workspaceRoot: '/workspace',
+        workspaceRoots: ['/workspace'],
+      },
+    });
 
     expect(requestUrl).toBe('http://images.example.test:8000/v1/images/generations');
     expect(requestInit?.headers).toMatchObject({
@@ -102,13 +121,70 @@ describe('OpenAiImageGenerationToolHost', () => {
         imageCount: 1,
         model: 'gpt-image-1',
         size: '1024x1024',
+        workspaceFiles: [{
+          projectId: 'temporary_workspace.2026-07-18.thread_1',
+          path: 'generated-images/call_1-1.png',
+        }],
       },
     });
     expect(storedImage).toMatchObject({ name: 'generated-1.png', type: 'image/png' });
     expect(Buffer.from(storedImage!.data)).toEqual(ONE_PIXEL_PNG);
+    expect(workspaceImage).toMatchObject({
+      projectId: 'temporary_workspace.2026-07-18.thread_1',
+      path: 'generated-images/call_1-1.png',
+    });
+    expect(Buffer.from(workspaceImage!.data)).toEqual(ONE_PIXEL_PNG);
     expect(JSON.stringify(result.attachments)).not.toContain('data:image');
     expect(JSON.stringify(result.attachments)).not.toContain(ONE_PIXEL_PNG.toString('base64'));
     expect(JSON.stringify(result.data)).not.toContain('image-secret');
+  });
+
+  it('keeps the managed preview asset without mirroring it into a read-only workspace', async () => {
+    let storedImage: { name: string; type: string; data: Uint8Array } | null = null;
+    let workspaceWriteCount = 0;
+    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+      async clone() { return { assetId: 'unused_clone' }; },
+      async create(input) {
+        storedImage = input;
+        return { assetId: 'generated_image_asset_read_only' };
+      },
+      async delete() {},
+      async recover() {},
+    }, {
+      fetchImpl: (async () => Response.json({
+        data: [{ b64_json: ONE_PIXEL_PNG.toString('base64') }],
+      })) as typeof fetch,
+      workspaceProjects: {
+        async writeBinaryFile(projectId, filePath, data) {
+          workspaceWriteCount += 1;
+          return { projectId, path: filePath, size: data.byteLength, created: true };
+        },
+        async deleteFile() {},
+      },
+    });
+
+    const result = await host.runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, { prompt: 'read-only preview' }, {
+      threadId: 'thread_1',
+      toolCallId: 'call_read_only',
+      permissionProfile: 'read-only',
+      environment: {
+        id: 'temporary_workspace.2026-07-18.thread_1',
+        cwd: '/workspace',
+        workspaceRoot: '/workspace',
+        workspaceRoots: ['/workspace'],
+      },
+    });
+
+    expect(result).toMatchObject({
+      attachments: [{ assetId: 'generated_image_asset_read_only', source: 'generated' }],
+      data: {
+        pluginId: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
+        imageCount: 1,
+      },
+    });
+    expect(result.data).not.toHaveProperty('workspaceFiles');
+    expect(storedImage).toMatchObject({ name: 'generated-1.png', type: 'image/png' });
+    expect(workspaceWriteCount).toBe(0);
   });
 
   it('rolls back already stored images when a later response item is invalid', async () => {

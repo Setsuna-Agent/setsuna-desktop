@@ -48,6 +48,7 @@ export class RuntimeUserShellRunner {
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
       threadId,
+      threadCreatedAt: thread.createdAt,
     });
     const toolCallId = this.options.ids.id('call_shell');
     const startedAtDate = this.options.clock.now();

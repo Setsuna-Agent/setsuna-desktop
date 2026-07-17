@@ -6,10 +6,12 @@ import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.
 
 /** 根据所选工作区解析一个规范化环境描述。 */
 export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentResolver {
-  constructor(private readonly projects: Pick<WorkspaceProjectStore, 'getStatus'>) {}
+  constructor(private readonly projects: Pick<WorkspaceProjectStore, 'ensureTemporaryWorkspace' | 'getStatus'>) {}
 
-  async resolve({ projectId }: Parameters<RuntimeEnvironmentResolver['resolve']>[0]): Promise<RuntimeEnvironment> {
-    const status = await this.projects.getStatus(projectId);
+  async resolve({ projectId, threadCreatedAt, threadId }: Parameters<RuntimeEnvironmentResolver['resolve']>[0]): Promise<RuntimeEnvironment> {
+    const resolvedProjectId = projectId
+      ?? (await this.projects.ensureTemporaryWorkspace({ threadId, createdAt: threadCreatedAt })).id;
+    const status = await this.projects.getStatus(resolvedProjectId);
     if (!status.project || !status.exists || !status.readable) {
       throw new Error(projectId ? `Workspace is unavailable: ${projectId}` : 'Temporary workspace is unavailable.');
     }

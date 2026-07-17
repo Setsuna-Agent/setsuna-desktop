@@ -144,6 +144,8 @@ REST 路由覆盖：
 
 `RuntimeEnvironment` 是 prompt、工具、sandbox、project workflow、project instructions 和 step snapshot 共享的位置 contract：
 
+- 未绑定项目的对话使用独立工作区：`runtime/temporary-workspace/YYYY-MM-DD/<threadId>`。日期取对话创建时的本地日期，同一对话跨天继续时仍复用原目录；绑定项目的对话继续使用项目目录。
+- workspace、shell、artifact 和内置图片生成都使用同一个对话环境。图片仍保留受管预览资产，同时在当前工作区的 `generated-images/` 下写入可见文件。
 - `cwd` 是 shell 默认目录，`workspaceRoot` 是文件工具相对路径的基准；两者语义独立，即使当前通常相同也不要互相推断。
 - `workspaceRoots` 描述工作区层级；`repository.root` 和 `repository.workspacePrefix` 只描述 Git worktree 与所选 workspace 的路径关系，不扩大访问权限。
 - `environment_context` 只告诉模型“在哪里”；`runtimePermissionsPrompt` 单独描述“能访问哪里”。

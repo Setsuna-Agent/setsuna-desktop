@@ -62,4 +62,48 @@ describe('workspace tool host', () => {
 
     expect(read.content).toContain('second project');
   });
+
+  it('rejects another conversation workspace id while preserving explicit registered project access', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-toolhost-isolation-test-'));
+    const dataDir = path.join(root, 'data');
+    const projectDir = path.join(root, 'registered-project');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'README.md'), 'registered project\n');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+    const activeWorkspace = await store.ensureTemporaryWorkspace({
+      threadId: 'thread_active',
+      createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
+    });
+    const otherWorkspace = await store.ensureTemporaryWorkspace({
+      threadId: 'thread_other',
+      createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
+    });
+    await writeFile(path.join(otherWorkspace.path, 'secret.txt'), 'other conversation\n');
+    const registeredProject = await store.addProject({ path: projectDir });
+    const host = new WorkspaceToolHost(store);
+    const context = {
+      threadId: 'thread_active',
+      environment: {
+        id: activeWorkspace.id,
+        cwd: activeWorkspace.path,
+        workspaceRoot: activeWorkspace.path,
+        workspaceRoots: [activeWorkspace.path],
+      },
+    };
+
+    await expect(host.runTool('workspace_read_file', {
+      projectId: otherWorkspace.id,
+      path: 'secret.txt',
+    }, context)).rejects.toThrow('active thread');
+
+    await expect(host.runTool('workspace_read_file', {
+      projectId: 'temporary_workspace',
+      path: '2026-07-18/thread_other/secret.txt',
+    }, context)).rejects.toThrow('active thread');
+
+    await expect(host.runTool('workspace_read_file', {
+      projectId: registeredProject.id,
+      path: 'README.md',
+    }, context)).resolves.toMatchObject({ content: 'registered project\n' });
+  });
 });

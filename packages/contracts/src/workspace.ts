@@ -1,4 +1,29 @@
 export const TEMPORARY_WORKSPACE_PROJECT_ID = 'temporary_workspace';
+export const TEMPORARY_WORKSPACE_PROJECT_ID_PREFIX = `${TEMPORARY_WORKSPACE_PROJECT_ID}.`;
+
+export type TemporaryWorkspaceProjectReference = {
+  date: string;
+  threadId: string;
+};
+
+/** Build the opaque workspace id used for one conversation's date-grouped temporary directory. */
+export function temporaryWorkspaceProjectId({ date, threadId }: TemporaryWorkspaceProjectReference): string {
+  return `${TEMPORARY_WORKSPACE_PROJECT_ID_PREFIX}${date}.${threadId}`;
+}
+
+export function parseTemporaryWorkspaceProjectId(projectId: string): TemporaryWorkspaceProjectReference | null {
+  if (!projectId.startsWith(TEMPORARY_WORKSPACE_PROJECT_ID_PREFIX)) return null;
+  const value = projectId.slice(TEMPORARY_WORKSPACE_PROJECT_ID_PREFIX.length);
+  const separator = value.indexOf('.');
+  if (separator <= 0 || separator === value.length - 1) return null;
+  const date = value.slice(0, separator);
+  const threadId = value.slice(separator + 1);
+  return /^\d{4}-\d{2}-\d{2}$/u.test(date) ? { date, threadId } : null;
+}
+
+export function isTemporaryWorkspaceProjectId(projectId: string): boolean {
+  return projectId === TEMPORARY_WORKSPACE_PROJECT_ID || parseTemporaryWorkspaceProjectId(projectId) !== null;
+}
 
 export type WorkspaceProject = {
   id: string;
@@ -25,6 +50,11 @@ export type WorkspaceStatus = {
   readable: boolean;
   fileCount?: number;
   gitRoot?: string;
+};
+
+export type WorkspaceStatusQuery = {
+  projectId?: string;
+  threadId?: string;
 };
 
 export type WorkspaceEntry = {

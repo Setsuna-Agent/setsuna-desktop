@@ -16,6 +16,7 @@ import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 import { useProjectWorkspace } from './useProjectWorkspace.js';
 import { useRuntimeClientState } from './useRuntimeClientState.js';
 import { useThreadGroups } from './useThreadGroups.js';
+import { useThreadWorkspace } from './useThreadWorkspace.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types/app.js';
 
 export function useDesktopAppController() {
@@ -49,9 +50,15 @@ export function useDesktopAppController() {
 
   const effectiveProjectId = currentThread ? currentThread.projectId ?? null : activeProjectId;
   const effectiveProject = effectiveProjectId ? projects.find((project) => project.id === effectiveProjectId) : undefined;
-  const activeWorkspace = effectiveProject ?? runtime.temporaryWorkspace ?? undefined;
+  const activeWorkspaceState = useThreadWorkspace({ client, projectWorkspace: effectiveProject, setError, thread: currentThread });
+  const activeWorkspace = activeWorkspaceState.workspace;
 
-  const workspacePanels = useDesktopWorkspacePanels({ activeProject: activeWorkspace, activeView, setError });
+  const workspacePanels = useDesktopWorkspacePanels({
+    activeProject: activeWorkspace,
+    activeView,
+    setError,
+    workspaceStatus: activeWorkspaceState.status,
+  });
   const {
     bottomActivePanel,
     bottomPanelVisible,

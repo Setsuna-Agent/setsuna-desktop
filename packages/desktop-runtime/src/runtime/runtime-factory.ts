@@ -102,7 +102,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpManagementToolHost(mcpStore, mcpConnections),
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore),
-    new OpenAiImageGenerationToolHost(configStore, pluginStore, generatedImageStore, { threadStore }),
+    new OpenAiImageGenerationToolHost(configStore, pluginStore, generatedImageStore, { threadStore, workspaceProjects }),
     new WorkspaceImageToolHost(workspaceProjects),
     new ArtifactToolHost(workspaceProjects),
     new PcLocalToolHost(workspaceProjects, policyAmendmentStore, workspaceDependencies),

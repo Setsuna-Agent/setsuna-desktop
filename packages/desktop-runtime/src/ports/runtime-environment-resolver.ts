@@ -3,6 +3,7 @@ import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
 export type RuntimeEnvironmentResolveInput = {
   projectId?: string;
   threadId: string;
+  threadCreatedAt?: string;
 };
 
 export type RuntimeEnvironmentResolver = {

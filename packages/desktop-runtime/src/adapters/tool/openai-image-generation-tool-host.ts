@@ -8,6 +8,7 @@ import {
 import type { RuntimeImageGenerationProviderConfig } from '../../ports/config-store.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
+import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import type {
   ToolExecutionContext,
   ToolExecutionPreview,
@@ -18,6 +19,7 @@ import type {
 import { managedGeneratedImageAssetIdsFromStore } from '../../utils/generated-image-assets.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import { boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
+import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 50 * 1024 * 1024;
@@ -39,6 +41,12 @@ type GeneratedImageReferenceStore = {
 type OpenAiImageGenerationToolHostOptions = {
   fetchImpl?: typeof fetch;
   threadStore?: GeneratedImageReferenceStore;
+  workspaceProjects?: Pick<WorkspaceProjectStore, 'deleteFile' | 'writeBinaryFile'>;
+};
+
+type GeneratedWorkspaceFile = {
+  path: string;
+  projectId: string;
 };
 
 type OpenAiImageResponseItem = {
@@ -78,6 +86,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
   private readonly pendingAssetIdsByTurn = new Map<string, Set<string>>();
   private readonly fetchImpl: typeof fetch;
   private readonly threadStore?: GeneratedImageReferenceStore;
+  private readonly workspaceProjects?: Pick<WorkspaceProjectStore, 'deleteFile' | 'writeBinaryFile'>;
 
   constructor(
     private readonly configStore: ImageGenerationConfigStore,
@@ -87,6 +96,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
   ) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.threadStore = options.threadStore;
+    this.workspaceProjects = options.workspaceProjects;
   }
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
@@ -175,16 +185,21 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     if (!items.length) throw new Error('图片生成服务返回成功，但响应中没有 data 图片。');
     const attachments: RuntimeMessageAttachment[] = [];
     const storedAssetIds: string[] = [];
+    const workspaceFiles: GeneratedWorkspaceFile[] = [];
     let totalBytes = 0;
     try {
       for (const [index, item] of items.entries()) {
-        const converted = await this.toAttachment(item, index, endpoint, context.toolCallId, signal, totalBytes);
+        const converted = await this.toAttachment(item, index, endpoint, context, signal, totalBytes);
         totalBytes += converted.attachment.size;
         storedAssetIds.push(converted.assetId);
         attachments.push(converted.attachment);
+        if (converted.workspaceFile) workspaceFiles.push(converted.workspaceFile);
       }
     } catch (error) {
-      await Promise.allSettled(storedAssetIds.map((assetId) => this.generatedImageStore.delete(assetId)));
+      await Promise.allSettled([
+        ...storedAssetIds.map((assetId) => this.generatedImageStore.delete(assetId)),
+        ...workspaceFiles.map((file) => this.workspaceProjects?.deleteFile(file.projectId, file.path)),
+      ]);
       throw error;
     }
     const revisedPrompts = items
@@ -201,6 +216,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
       data: {
         pluginId: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
         imageCount: attachments.length,
+        ...(workspaceFiles.length ? { workspaceFiles } : {}),
         ...(model ? { model } : {}),
         ...(typeof body.size === 'string' ? { size: body.size } : {}),
       },
@@ -250,10 +266,10 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     item: OpenAiImageResponseItem,
     index: number,
     endpoint: string,
-    toolCallId: string | undefined,
+    context: ToolExecutionContext,
     signal: AbortSignal,
     currentTotalBytes: number,
-  ): Promise<{ assetId: string; attachment: RuntimeMessageAttachment }> {
+  ): Promise<{ assetId: string; attachment: RuntimeMessageAttachment; workspaceFile?: GeneratedWorkspaceFile }> {
     const buffer = typeof item.b64_json === 'string' && item.b64_json.trim()
       ? decodeBase64Image(item.b64_json)
       : typeof item.url === 'string' && item.url.trim()
@@ -273,8 +289,15 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
       type: mimeType,
       data: buffer,
     });
+    let workspaceFile: GeneratedWorkspaceFile | undefined;
+    try {
+      workspaceFile = await this.writeWorkspaceImage(context, index, suffix, buffer);
+    } catch (error) {
+      await this.generatedImageStore.delete(storedImage.assetId).catch(() => undefined);
+      throw error;
+    }
     const baseAttachment = {
-      id: `generated_image_${safeIdPart(toolCallId ?? String(Date.now()))}_${index + 1}`,
+      id: `generated_image_${safeIdPart(context.toolCallId ?? String(Date.now()))}_${index + 1}`,
       name,
       type: mimeType,
       size: buffer.byteLength,
@@ -283,7 +306,28 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     return {
       assetId: storedImage.assetId,
       attachment: { ...baseAttachment, source: 'generated', assetId: storedImage.assetId },
+      ...(workspaceFile ? { workspaceFile } : {}),
     };
+  }
+
+  private async writeWorkspaceImage(
+    context: ToolExecutionContext,
+    index: number,
+    suffix: string,
+    buffer: Uint8Array,
+  ): Promise<GeneratedWorkspaceFile | undefined> {
+    const projects = this.workspaceProjects;
+    const projectId = workspaceProjectIdForToolContext(undefined, context);
+    // The managed image asset remains available for chat preview, but read-only turns
+    // must not gain an implicit workspace write through image generation.
+    if (!projects || !projectId || context.permissionProfile === 'read-only') return undefined;
+    const callId = safeIdPart(context.toolCallId ?? `image_${Date.now()}`);
+    const file = await projects.writeBinaryFile(
+      projectId,
+      `generated-images/${callId}-${index + 1}.${suffix}`,
+      buffer,
+    );
+    return { projectId, path: file.path.replace(/\\/gu, '/') };
   }
 }
 

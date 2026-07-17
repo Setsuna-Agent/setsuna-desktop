@@ -2,6 +2,7 @@ import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/c
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { objectInput, requiredContentArg, requiredStringArg, stringArg } from './tool-input.js';
+import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
 type WorkspaceFileDiffLine = {
   type: 'added' | 'removed' | 'context' | 'gap';
@@ -92,7 +93,7 @@ export class WorkspaceToolHost implements ToolHost {
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     const args = objectInput(input);
-    const project = await this.projectFor(this.resolveProjectId(args.projectId, context));
+    const project = await this.projectFor(workspaceProjectIdForToolContext(args.projectId, context));
 
     if (name === 'workspace_list_directory') {
       const result = await this.projects.listEntries(project.id, stringArg(args.path, '.'));
@@ -145,10 +146,6 @@ export class WorkspaceToolHost implements ToolHost {
     }
 
     throw new Error(`Unknown workspace tool: ${name}`);
-  }
-
-  private resolveProjectId(projectId: unknown, context: ToolExecutionContext): string | undefined {
-    return typeof projectId === 'string' && projectId ? projectId : context.projectId;
   }
 
   private async projectFor(projectId: unknown): Promise<WorkspaceProject> {

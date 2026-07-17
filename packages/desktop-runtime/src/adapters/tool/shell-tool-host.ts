@@ -8,6 +8,7 @@ import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { powershellCommand } from '../../utils/windows-shell.js';
 import { booleanArg, boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
+import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
 const DEFAULT_SHELL_TIMEOUT_MS = 120_000;
 const MAX_SHELL_TIMEOUT_MS = 600_000;
@@ -206,7 +207,7 @@ export class ShellToolHost implements ToolHost {
     throwIfAborted(signal);
     this.pruneSessions();
     const command = requiredStringArg(args.command, 'command');
-    const project = await this.projectFor(this.resolveProjectId(args.projectId, context));
+    const project = await this.projectFor(workspaceProjectIdForToolContext(args.projectId, context));
     const root = await realpath(project.path);
     if (context.permissionProfile === 'read-only' && (shellRiskLevel(args) === 'high' || looksHighRisk(command))) {
       throw new Error('当前权限配置为 read-only，不能执行会修改本地环境的命令。');
@@ -295,10 +296,6 @@ export class ShellToolHost implements ToolHost {
     const status = await this.projects.getStatus(typeof projectId === 'string' && projectId ? projectId : undefined);
     if (!status.project) throw new Error('No workspace is available for shell tools.');
     return status.project;
-  }
-
-  private resolveProjectId(projectId: unknown, context: ToolExecutionContext): string | undefined {
-    return typeof projectId === 'string' && projectId ? projectId : context.projectId;
   }
 
   private async resolveCwd(projectRoot: string, directory: unknown, permissionProfile: ToolExecutionContext['permissionProfile']): Promise<string> {

@@ -60,6 +60,7 @@ export class RuntimeHookCoordinator {
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
       threadId: thread.id,
+      threadCreatedAt: thread.createdAt,
     });
     const context: ToolExecutionContext & { turnId: string } = {
       environment,
@@ -163,6 +164,7 @@ export class RuntimeHookCoordinator {
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
       threadId: thread.id,
+      threadCreatedAt: thread.createdAt,
     });
     const context: ToolExecutionContext & { turnId: string } = {
       environment,

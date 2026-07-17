@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, realpath, stat, writeFile as writeFileFs } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, rm, stat, writeFile as writeFileFs } from 'node:fs/promises';
 import path from 'node:path';
 import {
   TEMPORARY_WORKSPACE_PROJECT_ID,
+  parseTemporaryWorkspaceProjectId,
+  temporaryWorkspaceProjectId,
   type AddWorkspaceProjectInput,
   type WorkspaceEntry,
   type WorkspaceEntrySearchResponse,
@@ -16,7 +18,8 @@ import {
   type WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
-import type { WorkspaceFileMetadata, WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import type { TemporaryWorkspaceInput, WorkspaceFileMetadata, WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
@@ -29,6 +32,7 @@ const MAX_ENTRY_SEARCH_SCAN = 12000;
 const MAX_SEARCH_RESULTS = 100;
 const MAX_SEARCH_FILE_BYTES = 1024 * 1024;
 const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', 'target', 'release-artifacts']);
+const TEMPORARY_WORKSPACE_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 
 type ProjectIndex = {
   version: 1;
@@ -42,6 +46,7 @@ type FileWorkspaceProjectStoreOptions = {
 export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   private readonly indexPath: string;
   private readonly temporaryWorkspacePath: string;
+  private readonly temporaryWorkspaceDates = new Map<string, string>();
 
   constructor(
     dataDir: string,
@@ -106,6 +111,18 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         projects: index.projects.filter((project) => project.id !== projectId),
       });
     });
+  }
+
+  async ensureTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<WorkspaceProject> {
+    const threadId = assertSafeRuntimeId(input.threadId, 'Thread id');
+    const cachedDate = this.temporaryWorkspaceDates.get(threadId);
+    if (cachedDate) return this.threadTemporaryWorkspace(cachedDate, threadId);
+
+    const requestedDate = localDateSegment(input.createdAt, this.clock.now());
+    const existingDate = await this.findTemporaryWorkspaceDate(threadId, requestedDate);
+    const date = existingDate ?? requestedDate;
+    this.temporaryWorkspaceDates.set(threadId, date);
+    return this.threadTemporaryWorkspace(date, threadId);
   }
 
   async getStatus(projectId?: string): Promise<WorkspaceStatus> {
@@ -270,11 +287,32 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite> {
+    return this.writeWorkspaceFile(projectId, relativePath, content);
+  }
+
+  async writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite> {
+    return this.writeWorkspaceFile(projectId, relativePath, content);
+  }
+
+  async deleteFile(projectId: string, relativePath: string): Promise<void> {
+    const project = await this.requireProject(projectId);
+    const target = await safeResolve(project.path, relativePath);
+    const targetStat = await stat(target);
+    if (!targetStat.isFile()) throw new Error('Path is not a file.');
+    await rm(target, { force: true });
+  }
+
+  private async writeWorkspaceFile(
+    projectId: string,
+    relativePath: string,
+    content: string | Uint8Array,
+  ): Promise<WorkspaceFileWrite> {
     const project = await this.requireProject(projectId);
     const target = await safeResolveForWrite(project.path, relativePath);
     const existed = await stat(target).then((value) => value.isFile()).catch(() => false);
     await mkdir(path.dirname(target), { recursive: true });
-    await writeFileFs(target, content, 'utf8');
+    if (typeof content === 'string') await writeFileFs(target, content, 'utf8');
+    else await writeFileFs(target, content);
     const targetStat = await stat(target);
     return {
       projectId,
@@ -320,23 +358,55 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   private async findProject(projectId?: string): Promise<WorkspaceProject | undefined> {
-    if (!projectId || projectId === TEMPORARY_WORKSPACE_PROJECT_ID) return this.temporaryWorkspace();
+    if (!projectId || projectId === TEMPORARY_WORKSPACE_PROJECT_ID) return this.legacyTemporaryWorkspace();
+    const temporaryReference = parseTemporaryWorkspaceProjectId(projectId);
+    if (temporaryReference) {
+      const threadId = assertSafeRuntimeId(temporaryReference.threadId, 'Thread id');
+      const workspaceDirectory = path.join(this.temporaryWorkspacePath, temporaryReference.date, threadId);
+      // Scoped ids are references, not authority to create a conversation workspace.
+      // Only ensureTemporaryWorkspace may materialize one and bind its creation date.
+      if (!(await directoryExists(workspaceDirectory))) return undefined;
+      return this.threadTemporaryWorkspace(temporaryReference.date, threadId);
+    }
     const index = await this.readIndex();
     return index.projects.find((project) => project.id === projectId);
   }
 
-  private async temporaryWorkspace(): Promise<WorkspaceProject> {
-    await mkdir(this.temporaryWorkspacePath, { recursive: true });
-    const workspacePath = await realpath(this.temporaryWorkspacePath);
+  private async legacyTemporaryWorkspace(): Promise<WorkspaceProject> {
+    return this.temporaryWorkspaceProject(TEMPORARY_WORKSPACE_PROJECT_ID, this.temporaryWorkspacePath);
+  }
+
+  private async threadTemporaryWorkspace(date: string, threadId: string): Promise<WorkspaceProject> {
+    if (!TEMPORARY_WORKSPACE_DATE.test(date)) throw new Error('Temporary workspace date is invalid.');
+    const projectId = temporaryWorkspaceProjectId({ date, threadId });
+    return this.temporaryWorkspaceProject(projectId, path.join(this.temporaryWorkspacePath, date, threadId));
+  }
+
+  private async temporaryWorkspaceProject(projectId: string, workspaceDirectory: string): Promise<WorkspaceProject> {
+    await mkdir(workspaceDirectory, { recursive: true });
+    const temporaryWorkspaceRoot = await realpath(this.temporaryWorkspacePath);
+    const workspacePath = await realpath(workspaceDirectory);
+    assertPathWithin(temporaryWorkspaceRoot, workspacePath);
     const workspaceStat = await stat(workspacePath);
     return {
-      id: TEMPORARY_WORKSPACE_PROJECT_ID,
+      id: projectId,
       name: '临时目录',
       path: workspacePath,
       gitRoot: await findGitRoot(workspacePath),
       createdAt: workspaceStat.birthtime.toISOString(),
       updatedAt: workspaceStat.mtime.toISOString(),
     };
+  }
+
+  private async findTemporaryWorkspaceDate(threadId: string, requestedDate: string): Promise<string | null> {
+    await mkdir(this.temporaryWorkspacePath, { recursive: true });
+    if (await directoryExists(path.join(this.temporaryWorkspacePath, requestedDate, threadId))) return requestedDate;
+    const entries = await readdir(this.temporaryWorkspacePath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !TEMPORARY_WORKSPACE_DATE.test(entry.name) || entry.name === requestedDate) continue;
+      if (await directoryExists(path.join(this.temporaryWorkspacePath, entry.name, threadId))) return entry.name;
+    }
+    return null;
   }
 
   private async requireProject(projectId: string): Promise<WorkspaceProject> {
@@ -359,6 +429,26 @@ async function normalizeProjectPath(inputPath: string): Promise<string> {
   if (!trimmed) throw new Error('Project path is required.');
   const expanded = trimmed.startsWith('~/') ? path.join(process.env.HOME ?? '', trimmed.slice(2)) : trimmed;
   return realpath(path.resolve(expanded));
+}
+
+function localDateSegment(createdAt: string | undefined, fallback: Date): string {
+  const parsed = createdAt ? new Date(createdAt) : fallback;
+  const date = Number.isNaN(parsed.getTime()) ? fallback : parsed;
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+async function directoryExists(directory: string): Promise<boolean> {
+  return stat(directory).then((value) => value.isDirectory()).catch(() => false);
+}
+
+function assertPathWithin(root: string, target: string): void {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error('Temporary workspace escapes its storage root.');
+  }
 }
 
 async function safeResolve(projectRoot: string, relativePath: string): Promise<string> {

@@ -296,8 +296,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     removeProject(projectId: string) {
       return request<void>({ path: `/v1/projects/${encodeURIComponent(projectId)}`, method: 'DELETE' });
     },
-    getWorkspaceStatus(projectId?: string) {
-      const suffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+    getWorkspaceStatus(query = {}) {
+      const params = new URLSearchParams();
+      if (query.projectId) params.set('projectId', query.projectId);
+      if (query.threadId) params.set('threadId', query.threadId);
+      const suffix = params.size ? `?${params}` : '';
       return request<WorkspaceStatus>({ path: `/v1/workspace/status${suffix}` });
     },
     listProjectEntries(projectId: string, path = '.') {

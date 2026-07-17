@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, symlink, truncate, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -94,6 +94,46 @@ describe('file workspace project store', () => {
     });
     expect((await store.listProjects()).projects).toEqual([]);
     expect(await store.readFile(status.project!.id, written.path)).toMatchObject({ content: 'temporary\n' });
+  });
+
+  it('isolates conversation workspaces under their local creation date', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const dataDir = path.join(root, 'data');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+    const createdAt = new Date(2026, 6, 18, 12, 0, 0).toISOString();
+
+    const first = await store.ensureTemporaryWorkspace({ threadId: 'thread_first', createdAt });
+    const second = await store.ensureTemporaryWorkspace({ threadId: 'thread_second', createdAt });
+    await store.writeFile(first.id, 'src/example.ts', 'export const value = 1;\n');
+    await store.writeBinaryFile(first.id, 'generated-images/example.png', ONE_PIXEL_PNG);
+
+    expect(first.id).toBe('temporary_workspace.2026-07-18.thread_first');
+    expect(first.path).toBe(await realpath(path.join(dataDir, 'temporary-workspace', '2026-07-18', 'thread_first')));
+    expect(second.path).toBe(await realpath(path.join(dataDir, 'temporary-workspace', '2026-07-18', 'thread_second')));
+    expect(await store.readFile(first.id, 'src/example.ts')).toMatchObject({ content: 'export const value = 1;\n' });
+    expect(await store.readImage(first.id, 'generated-images/example.png')).toMatchObject({
+      mimeType: 'image/png',
+      size: ONE_PIXEL_PNG.byteLength,
+    });
+    await expect(store.readFile(second.id, 'src/example.ts')).rejects.toThrow();
+    expect((await store.listProjects()).projects).toEqual([]);
+  });
+
+  it('does not materialize or cache an untrusted scoped temporary workspace id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const dataDir = path.join(root, 'data');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+    const untrustedId = 'temporary_workspace.2026-07-17.thread_target';
+
+    await expect(store.getStatus(untrustedId)).resolves.toEqual({ exists: false, readable: false });
+    await expect(realpath(path.join(dataDir, 'temporary-workspace', '2026-07-17', 'thread_target')))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+
+    const workspace = await store.ensureTemporaryWorkspace({
+      threadId: 'thread_target',
+      createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
+    });
+    expect(workspace.id).toBe('temporary_workspace.2026-07-18.thread_target');
   });
 
   it('rejects paths outside the project root', async () => {

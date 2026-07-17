@@ -11,16 +11,25 @@ const PDF_CONTENT = Buffer.from('%PDF-1.4\nfixture\n', 'utf8');
 describe('artifact tool host', () => {
   it('publishes a verified file from the temporary workspace', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-artifact-test-'));
-    const workspacePath = path.join(root, 'temporary-workspace');
-    await mkdir(workspacePath, { recursive: true });
-    await writeFile(path.join(workspacePath, 'AI 趋势报告.pdf'), PDF_CONTENT);
-    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock, {
-      temporaryWorkspacePath: workspacePath,
+    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
+    const workspace = await store.ensureTemporaryWorkspace({
+      threadId: 'thread_1',
+      createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
     });
+    await writeFile(path.join(workspace.path, 'AI 趋势报告.pdf'), PDF_CONTENT);
     const host = new ArtifactToolHost(store);
-    const context = { threadId: 'thread_1', turnId: 'turn_1', toolCallId: 'call/1' };
+    const context = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      toolCallId: 'call/1',
+      environment: {
+        id: workspace.id,
+        cwd: workspace.path,
+        workspaceRoot: workspace.path,
+        workspaceRoots: [workspace.path],
+      },
+    };
     const tools = await host.listTools(context);
-    const workspace = await store.getStatus();
 
     expect(tools).toEqual([expect.objectContaining({ name: PUBLISH_ARTIFACT_TOOL_NAME })]);
     expect(host.systemPrompt(context, { tools })).toContain('call publish_artifact once');
@@ -32,8 +41,8 @@ describe('artifact tool host', () => {
           id: 'artifact_call_1',
           kind: 'file',
           name: 'AI 趋势报告.pdf',
-          projectId: 'temporary_workspace',
-          workspaceRoot: workspace.project?.path,
+          projectId: 'temporary_workspace.2026-07-18.thread_1',
+          workspaceRoot: workspace.path,
           path: 'AI 趋势报告.pdf',
           mimeType: 'application/pdf',
           size: PDF_CONTENT.byteLength,

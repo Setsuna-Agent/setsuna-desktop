@@ -27,11 +27,17 @@ export type WorkspaceFileMetadata = {
   modifiedAt?: string;
 };
 
+export type TemporaryWorkspaceInput = {
+  threadId: string;
+  createdAt?: string;
+};
+
 export type WorkspaceProjectStore = {
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
+  ensureTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<WorkspaceProject>;
   getStatus(projectId?: string): Promise<WorkspaceStatus>;
   listEntries(projectId: string, relativePath?: string): Promise<WorkspaceEntryList>;
   searchEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
@@ -39,5 +45,7 @@ export type WorkspaceProjectStore = {
   readFile(projectId: string, relativePath: string): Promise<WorkspaceFileRead>;
   readImage(projectId: string, relativePath: string): Promise<WorkspaceImageRead>;
   writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite>;
+  writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite>;
+  deleteFile(projectId: string, relativePath: string): Promise<void>;
   search(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
 };

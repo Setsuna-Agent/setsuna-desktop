@@ -1110,7 +1110,7 @@ function assessFileMutationApproval(toolCall: RuntimeToolCall, parsedArguments: 
     args: parsedArguments,
     approvalPolicy,
     permissionProfile: context.permissionProfile,
-    projectId: context.projectId,
+    projectId: context.projectId ?? context.environment.id,
     toolName: toolCall.name,
   });
   if (!assessment) return null;

@@ -9,6 +9,7 @@ import {
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
+import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
 export { PUBLISH_ARTIFACT_TOOL_NAME };
 
@@ -85,7 +86,7 @@ export class ArtifactToolHost implements ToolHost {
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
     if (name !== PUBLISH_ARTIFACT_TOOL_NAME) throw new Error(`Unknown tool: ${name}`);
     const args = objectInput(input);
-    const project = await this.projectFor(optionalStringArg(args.projectId) ?? context.projectId);
+    const project = await this.projectFor(workspaceProjectIdForToolContext(optionalStringArg(args.projectId), context));
     const requestedPath = requiredStringArg(args.path, 'path');
     const relativePath = path.isAbsolute(requestedPath)
       ? path.relative(project.path, requestedPath)
