@@ -12,6 +12,8 @@ import type {
   RuntimeMcpToolList,
 } from './mcp.js';
 import type {
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginInstallResult,
   RuntimePluginList,
   RuntimePluginMarketplaceList,
@@ -102,6 +104,8 @@ export type DesktopRuntimeClient = {
   authenticateSkillMcpDependency(skillId: string, serverKey: string): Promise<RuntimeSkillDetail>;
   listPlugins(): Promise<RuntimePluginList>;
   listPluginMarketplace(): Promise<RuntimePluginMarketplaceList>;
+  getPluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
+  getMarketplacePluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
   installMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   listProjects(): Promise<WorkspaceProjectList>;

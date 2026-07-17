@@ -101,6 +101,7 @@ function pluginStoreFixture(): PluginBundleStore {
       skills: [],
       mcpServers: [],
       hooks: [],
+      resources: [],
       capabilities: { skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
       sourcePath: '/tmp/demo',
     })),
@@ -120,6 +121,8 @@ function pluginStoreFixture(): PluginBundleStore {
     })),
     removePlugin: vi.fn(async () => ({ pluginId: 'demo', removedMcpServers: [], preservedMcpServers: [] })),
     listInstalledRecords: vi.fn(async () => []),
+    readItemContent: vi.fn(async (pluginId, kind, itemId) => ({ pluginId, kind, itemId, files: [] })),
+    readBundleItemContent: vi.fn(async (_input, kind, itemId) => ({ pluginId: 'demo', kind, itemId, files: [] })),
     readResource: vi.fn(async (_pluginId, resourceId) => resourceId === 'logo'
       ? {
           pluginId: 'demo',

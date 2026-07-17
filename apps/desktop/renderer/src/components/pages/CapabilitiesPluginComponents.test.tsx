@@ -51,6 +51,7 @@ describe('capabilities plugin components', () => {
           skills: [{ id: 'openai-docs.openai-docs', name: 'OpenAI 官方文档', description: '查询 OpenAI 官方文档。' }],
           mcpServers: [{ key: 'openai_docs', label: 'OpenAI Developer Docs', description: '官方文档服务', transport: 'streamableHttp' }],
           hooks: [],
+          resources: [],
           capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
           installed: false,
         }}
@@ -84,6 +85,7 @@ describe('capabilities plugin components', () => {
           skills: [{ id: 'pdf.pdf', name: 'PDF' }],
           mcpServers: [],
           hooks: [],
+          resources: [],
           capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
           installed: false,
         }}
@@ -116,6 +118,7 @@ describe('capabilities plugin components', () => {
           skills: [{ id: 'openai-docs.openai-docs', name: 'OpenAI 官方文档', description: '查询 OpenAI API 与 Codex 文档。' }],
           mcpServers: [{ key: 'openai_docs', label: 'OpenAI Developer Docs', description: 'OpenAI 官方文档服务', transport: 'streamableHttp' }],
           hooks: [],
+          resources: [],
           capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
           installed: false,
         }}
@@ -130,6 +133,8 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('OpenAI API 与 Codex 文档');
     expect(html).toContain('OpenAI Developer Docs');
     expect(html).toContain('远程 MCP');
+    expect(html).toContain('查看 OpenAI 官方文档 详情');
+    expect(html).toContain('查看 OpenAI Developer Docs 详情');
     expect(html).toContain('安装插件');
   });
 
@@ -155,6 +160,7 @@ describe('capabilities plugin components', () => {
             eventName: 'PreToolUse',
             matcher: 'run_shell_command|exec_command',
           }],
+          resources: [],
           capabilities: { skills: 0, mcpServers: 0, hooks: 1, resources: 0 },
           installed: false,
         }}
@@ -170,6 +176,38 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('run_shell_command|exec_command');
     expect(html).not.toContain('{{pluginRoot}}');
     expect(html).not.toContain('.mjs');
+  });
+
+  it('aligns declared resources with the other detail sections and makes each resource inspectable', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        installing={false}
+        installedPlugin={{
+          id: 'documents',
+          name: 'Word 文档处理',
+          installedAt: '2026-07-15T00:00:00.000Z',
+          skills: [{ id: 'documents.documents', name: 'Word 文档处理' }],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [
+            { id: 'content-spec', label: 'DOCX 内容模型', path: 'skills/documents/references/content-spec.md', size: 2048 },
+            { id: 'sample-document-spec', label: '示例文档内容', path: 'skills/documents/examples/sample-document.json', size: 512 },
+          ],
+        }}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain('<h3>资源</h3>');
+    expect(html).toContain('查看 DOCX 内容模型 详情');
+    expect(html).toContain('查看 示例文档内容 详情');
+    expect(html).toContain('2.0 KB');
+    expect(html).not.toContain('desktop-capabilities-plugin-detail__extras');
   });
 
   it('renders a distinct glyph and tone for every bundled plugin icon', () => {

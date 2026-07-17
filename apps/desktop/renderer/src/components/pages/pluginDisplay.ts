@@ -2,6 +2,7 @@ import type {
   RuntimePluginMcpServerDescriptor,
   RuntimePluginHook,
   RuntimePluginMarketplaceItem,
+  RuntimePluginResource,
   RuntimePluginSkill,
   RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
@@ -14,6 +15,7 @@ type SearchablePlugin = {
   skills: Array<Pick<RuntimePluginSkill, 'name' | 'description'>>;
   mcpServers: Array<Pick<RuntimePluginMcpServerDescriptor, 'label' | 'description'>>;
   hooks?: Array<Pick<RuntimePluginHook, 'name' | 'description' | 'eventName' | 'matcher'>>;
+  resources?: Array<Pick<RuntimePluginResource, 'label' | 'path'>>;
 };
 
 export type PluginMcpDetail = RuntimePluginMcpServerDescriptor & { owned?: boolean };
@@ -86,8 +88,15 @@ export function pluginMatchesQuery(plugin: SearchablePlugin, normalizedQuery: st
     ...plugin.skills.flatMap((skill) => [skill.name, skill.description]),
     ...plugin.mcpServers.flatMap((server) => [server.label, server.description]),
     ...(plugin.hooks ?? []).flatMap((hook) => [hook.name, hook.description, hook.eventName, hook.matcher]),
+    ...(plugin.resources ?? []).flatMap((resource) => [resource.label, resource.path]),
   ].filter(Boolean).join(' ').toLowerCase();
   return searchText.includes(normalizedQuery);
+}
+
+export function formatPluginFileSize(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function mergePluginHooks(

@@ -6,6 +6,9 @@ import type {
   RuntimeHookInput,
   RuntimeHooksConfig,
   RuntimeMcpServerInput,
+  RuntimePluginFilePreview,
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginInstallInput,
   RuntimePluginInstallResult,
   RuntimePluginHook,
@@ -125,6 +128,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       })),
       mcpServers: manifest.mcpServers.map(pluginMcpServerDescriptor),
       hooks: manifest.hooks.map(pluginHookDescriptor),
+      resources: manifest.resources.map((resource) => ({ ...resource })),
       sourcePath,
     };
   }
@@ -283,45 +287,130 @@ export class FilePluginBundleStore implements PluginBundleStore {
     if (!plugin) throw new Error(`Plugin not found: ${pluginId}`);
     const resource = plugin.resources.find((item) => item.id === normalizeResourceId(resourceId));
     if (!resource) throw new Error(`Plugin resource not found: ${plugin.id}/${resourceId}`);
-    const pluginRoot = await realpath(plugin.installPath);
-    const resourcePath = await realpath(path.resolve(pluginRoot, resource.path));
-    if (!pathIsInside(pluginRoot, resourcePath)) throw new Error('Plugin resource path escapes the installed bundle.');
-    const resourceStat = await stat(resourcePath);
-    if (!resourceStat.isFile()) throw new Error('Plugin resource path is not a file.');
-    if (!resourceStat.size || resourceStat.size > MAX_PLUGIN_RESOURCE_BYTES) {
-      throw new Error(`Plugin resource must be between 1 and ${MAX_PLUGIN_RESOURCE_BYTES} bytes.`);
-    }
-    const buffer = await readFile(resourcePath);
-    const imageMimeType = detectSafeImageMimeType(buffer);
-    if (imageMimeType) {
-      return {
-        pluginId: plugin.id,
-        resourceId: resource.id,
-        label: resource.label,
-        path: resource.path,
-        size: buffer.byteLength,
-        mimeType: imageMimeType,
-        base64: buffer.toString('base64'),
-      };
-    }
-    if (buffer.byteLength > MAX_PLUGIN_TEXT_RESOURCE_BYTES || buffer.includes(0)) {
-      throw new Error('Plugin resource is not a supported image or bounded UTF-8 text file.');
-    }
+    const file = await readPluginFilePreview(plugin.installPath, resource.path);
     return {
       pluginId: plugin.id,
       resourceId: resource.id,
       label: resource.label,
-      path: resource.path,
-      size: buffer.byteLength,
-      mimeType: textMimeType(resource.path),
-      text: buffer.toString('utf8'),
+      ...file,
     };
+  }
+
+  async readItemContent(
+    pluginId: string,
+    kind: RuntimePluginItemKind,
+    itemId: string,
+  ): Promise<RuntimePluginItemContent> {
+    const plugin = (await this.readIndex()).plugins.find((item) => item.id === normalizePluginId(pluginId));
+    if (!plugin) throw new Error(`Plugin not found: ${pluginId}`);
+    const manifest = await readPluginManifest(await realpath(plugin.installPath));
+    if (manifest.id !== plugin.id) throw new Error('Installed plugin manifest id does not match its index.');
+    return readManifestItemContent(manifest, kind, itemId);
+  }
+
+  async readBundleItemContent(
+    input: RuntimePluginInstallInput,
+    kind: RuntimePluginItemKind,
+    itemId: string,
+  ): Promise<RuntimePluginItemContent> {
+    const sourcePath = await requiredBundleDirectory(input.path);
+    const manifest = await readPluginManifest(sourcePath);
+    await inspectBundleTree(sourcePath);
+    return readManifestItemContent(manifest, kind, itemId);
   }
 
   private async readIndex(): Promise<PluginIndexFile> {
     const index = await readJsonFile<PluginIndexFile>(this.indexPath, { version: 1, plugins: [] });
     return { version: 1, plugins: Array.isArray(index.plugins) ? index.plugins : [] };
   }
+}
+
+async function readManifestItemContent(
+  manifest: ParsedPluginManifest,
+  kind: RuntimePluginItemKind,
+  itemId: string,
+): Promise<RuntimePluginItemContent> {
+  const files = await Promise.all(
+    pluginItemFilePaths(manifest, kind, itemId).map((filePath) => readPluginFilePreview(manifest.sourcePath, filePath, true)),
+  );
+  return { pluginId: manifest.id, itemId, kind, files };
+}
+
+function pluginItemFilePaths(
+  manifest: ParsedPluginManifest,
+  kind: RuntimePluginItemKind,
+  itemId: string,
+): string[] {
+  if (kind === 'skill') {
+    const skill = manifest.skillEntries.find((item) => item.id === itemId);
+    if (!skill) throw new Error(`Plugin Skill not found: ${manifest.id}/${itemId}`);
+    return [path.join(skill.relativePath, 'SKILL.md')];
+  }
+  if (kind === 'mcp') {
+    const server = manifest.mcpServers.find((item) => item.key === itemId);
+    if (!server) throw new Error(`Plugin MCP server not found: ${manifest.id}/${itemId}`);
+    return pluginRootFileReferences([server.command, ...(server.args ?? [])]);
+  }
+  if (kind === 'hook') {
+    const hook = manifest.hooks.find((item) => item.id === itemId);
+    if (!hook) throw new Error(`Plugin Hook not found: ${manifest.id}/${itemId}`);
+    return pluginRootFileReferences([hook.command, hook.commandWindows]);
+  }
+  const resource = manifest.resources.find((item) => item.id === itemId);
+  if (!resource) throw new Error(`Plugin resource not found: ${manifest.id}/${itemId}`);
+  return [resource.path];
+}
+
+function pluginRootFileReferences(values: Array<string | undefined>): string[] {
+  const references = new Set<string>();
+  for (const value of values) {
+    if (!value) continue;
+    for (const match of value.matchAll(/\{\{pluginRoot\}\}[\\/]+([^\s'"`]+)/gu)) {
+      references.add(safeRelativePath(match[1].replace(/[\\/]+/gu, path.sep), 'Plugin item file path'));
+    }
+  }
+  return [...references];
+}
+
+async function readPluginFilePreview(
+  pluginRootInput: string,
+  relativePath: string,
+  allowUnsupported = false,
+): Promise<RuntimePluginFilePreview> {
+  const pluginRoot = await realpath(pluginRootInput);
+  const filePath = await realpath(path.resolve(pluginRoot, relativePath));
+  if (!pathIsInside(pluginRoot, filePath)) throw new Error('Plugin item path escapes the bundle.');
+  const fileStat = await stat(filePath);
+  if (!fileStat.isFile()) throw new Error('Plugin item path is not a file.');
+  if (fileStat.size > MAX_PLUGIN_RESOURCE_BYTES) {
+    throw new Error(`Plugin preview file must not exceed ${MAX_PLUGIN_RESOURCE_BYTES} bytes.`);
+  }
+  const buffer = await readFile(filePath);
+  const imageMimeType = detectSafeImageMimeType(buffer);
+  if (imageMimeType) {
+    return {
+      path: relativePath,
+      size: buffer.byteLength,
+      mimeType: imageMimeType,
+      base64: buffer.toString('base64'),
+    };
+  }
+  if (buffer.byteLength > MAX_PLUGIN_TEXT_RESOURCE_BYTES || buffer.includes(0)) {
+    if (allowUnsupported) {
+      return {
+        path: relativePath,
+        size: buffer.byteLength,
+        mimeType: binaryMimeType(relativePath),
+      };
+    }
+    throw new Error('Plugin item is not a supported image or bounded UTF-8 text file.');
+  }
+  return {
+    path: relativePath,
+    size: buffer.byteLength,
+    mimeType: textMimeType(relativePath),
+    text: buffer.toString('utf8'),
+  };
 }
 
 async function readPluginManifest(sourcePath: string): Promise<ParsedPluginManifest> {
@@ -822,6 +911,17 @@ function textMimeType(filePath: string): string {
     case '.mjs':
     case '.ts': return 'text/javascript';
     default: return 'text/plain';
+  }
+}
+
+function binaryMimeType(filePath: string): string {
+  switch (path.extname(filePath).toLowerCase()) {
+    case '.pdf': return 'application/pdf';
+    case '.docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case '.xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case '.pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    case '.zip': return 'application/zip';
+    default: return 'application/octet-stream';
   }
 }
 

@@ -1,40 +1,55 @@
+import { useState } from 'react';
 import { BookOpen, Check, Download, FileText, Loader2, Plug, Trash2, Workflow } from 'lucide-react';
 import type {
+  RuntimeHookMetadata,
+  RuntimeMcpServer,
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
 import { Button, PageHeader } from '../primitives.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
-import { mergePluginHooks, mergePluginMcpServers, mergePluginSkills } from './pluginDisplay.js';
+import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js';
+import { CapabilitiesPluginItemDialog, type CapabilitiesPluginItem } from './CapabilitiesPluginItemDialog.js';
+import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills } from './pluginDisplay.js';
 
 export function CapabilitiesPluginDetail({
   error,
   installedPlugin,
   installing,
   marketplacePlugin,
+  runtimeMcpServers,
   onBack,
+  onGetItemContent,
   onInstall,
   onRemove,
   removing,
+  runtimeHooks,
 }: {
   error: string | null;
   installedPlugin?: RuntimePluginSummary;
   installing: boolean;
   marketplacePlugin?: RuntimePluginMarketplaceItem;
+  runtimeMcpServers?: RuntimeMcpServer[];
   onBack: () => void;
+  onGetItemContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
   removing: boolean;
+  runtimeHooks?: RuntimeHookMetadata[];
 }) {
+  const [selectedItem, setSelectedItem] = useState<CapabilitiesPluginItem | null>(null);
   const plugin = installedPlugin ?? marketplacePlugin;
   if (!plugin) return null;
 
   const skills = mergePluginSkills(marketplacePlugin?.skills ?? [], installedPlugin?.skills ?? []);
   const mcpServers = mergePluginMcpServers(marketplacePlugin?.mcpServers ?? [], installedPlugin?.mcpServers ?? []);
   const hooks = mergePluginHooks(marketplacePlugin?.hooks ?? [], installedPlugin?.hooks ?? []);
+  const resources = installedPlugin?.resources.length ? installedPlugin.resources : marketplacePlugin?.resources ?? [];
   const hookCount = Math.max(hooks.length, installedPlugin?.hookCount ?? marketplacePlugin?.capabilities.hooks ?? 0);
-  const resourceCount = installedPlugin?.resources.length ?? marketplacePlugin?.capabilities.resources ?? 0;
+  const resourceCount = Math.max(resources.length, marketplacePlugin?.capabilities.resources ?? 0);
   const installed = Boolean(installedPlugin ?? marketplacePlugin?.installed);
   const subtitle = [plugin.publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || 'Setsuna 插件';
   const tags = plugin.tags ?? [];
@@ -100,14 +115,14 @@ export function CapabilitiesPluginDetail({
         empty="这个插件不包含技能。"
       >
         {skills.map((skill) => (
-          <article className="desktop-capabilities-plugin-detail__item" key={skill.id}>
-            <span className="desktop-capabilities-plugin-detail__item-icon"><BookOpen size={16} /></span>
-            <div className="desktop-capabilities-plugin-detail__item-body">
-              <h4>{skill.name}</h4>
-              <p>{skill.description || '插件提供的只读 Skill，安装后可在技能页启用或选择。'}</p>
-            </div>
-            <code>{skill.id}</code>
-          </article>
+          <CapabilitiesPluginItemButton
+            key={skill.id}
+            title={skill.name}
+            description={skill.description || '插件提供的只读 Skill，安装后可在技能页启用或选择。'}
+            icon={<BookOpen size={16} />}
+            meta={<code>{skill.id}</code>}
+            onClick={() => setSelectedItem({ kind: 'skill', value: skill })}
+          />
         ))}
       </CapabilitiesPluginDetailSection>
 
@@ -118,61 +133,89 @@ export function CapabilitiesPluginDetail({
         empty="这个插件不包含 MCP 服务。"
       >
         {mcpServers.map((server) => (
-          <article className="desktop-capabilities-plugin-detail__item" key={server.key}>
-            <span className="desktop-capabilities-plugin-detail__item-icon"><Plug size={16} /></span>
-            <div className="desktop-capabilities-plugin-detail__item-body">
-              <h4>{server.label}</h4>
-              <p>{server.description || '插件声明的 MCP 服务，安装后仍遵循 Setsuna 的授权与信任策略。'}</p>
-            </div>
-            <div className="desktop-capabilities-plugin-detail__item-meta">
-              <span>{server.transport === 'streamableHttp' ? '远程 MCP' : '本地 MCP'}</span>
-              {server.owned === false ? <span>复用现有配置</span> : null}
-              <code>{server.key}</code>
-            </div>
-          </article>
+          <CapabilitiesPluginItemButton
+            key={server.key}
+            title={server.label}
+            description={server.description || '插件声明的 MCP 服务，安装后仍遵循 Setsuna 的授权与信任策略。'}
+            icon={<Plug size={16} />}
+            meta={(
+              <span className="desktop-capabilities-plugin-detail__item-meta">
+                <span>{server.transport === 'streamableHttp' ? '远程 MCP' : '本地 MCP'}</span>
+                {server.owned === false ? <span>复用现有配置</span> : null}
+                <code>{server.key}</code>
+              </span>
+            )}
+            onClick={() => setSelectedItem({ kind: 'mcp', value: server })}
+          />
         ))}
       </CapabilitiesPluginDetailSection>
 
       <CapabilitiesPluginDetailSection
         icon={<Workflow size={15} />}
         title="Hooks"
-        count={hooks.length}
+        count={hookCount}
         empty="这个插件不包含 Hook。"
       >
         {hooks.map((hook) => (
-          <article className="desktop-capabilities-plugin-detail__item" key={hook.id}>
-            <span className="desktop-capabilities-plugin-detail__item-icon"><Workflow size={16} /></span>
-            <div className="desktop-capabilities-plugin-detail__item-body">
-              <h4>{hook.name}</h4>
-              <p>{hook.description || hook.statusMessage || '插件提供的本地自动化，安装后仍需信任当前命令 hash 才会执行。'}</p>
-            </div>
-            <div className="desktop-capabilities-plugin-detail__item-meta">
-              <span>{hook.eventName}</span>
-              {hook.matcher ? <span>{hook.matcher}</span> : null}
-              <code>{hook.id}</code>
-            </div>
-          </article>
+          <CapabilitiesPluginItemButton
+            key={hook.id}
+            title={hook.name}
+            description={hook.description || hook.statusMessage || '插件提供的本地自动化，安装后仍需信任当前命令 hash 才会执行。'}
+            icon={<Workflow size={16} />}
+            meta={(
+              <span className="desktop-capabilities-plugin-detail__item-meta">
+                <span>{hook.eventName}</span>
+                {hook.matcher ? <span>{hook.matcher}</span> : null}
+                <code>{hook.id}</code>
+              </span>
+            )}
+            onClick={() => setSelectedItem({ kind: 'hook', value: hook })}
+          />
         ))}
+        {hookCount > hooks.length ? (
+          <p className="desktop-capabilities-plugin-detail__empty">另有 {hookCount - hooks.length} 项旧版自动化未保存展示详情，可在 Hooks 分区查看。</p>
+        ) : null}
       </CapabilitiesPluginDetailSection>
 
-      {(hookCount > hooks.length || resourceCount) ? (
-        <section className="desktop-capabilities-plugin-detail__extras" aria-label="其他插件内容">
-          {hookCount > hooks.length ? (
-            <div>
-              <Workflow size={16} />
-              <span><strong>{hookCount} 项自动化</strong><small>旧版安装记录未保存详情，可在 Hooks 分区查看。</small></span>
-            </div>
-          ) : null}
-          {resourceCount ? (
-            <div>
-              <FileText size={16} />
-              <span><strong>{resourceCount} 个资源</strong><small>供插件技能在执行任务时按需读取。</small></span>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+      <CapabilitiesPluginDetailSection
+        icon={<FileText size={15} />}
+        title="资源"
+        count={resourceCount}
+        empty="这个插件不包含资源。"
+      >
+        {resources.map((resource) => (
+          <CapabilitiesPluginItemButton
+            key={resource.id}
+            title={resource.label}
+            description={resource.path}
+            icon={<FileText size={16} />}
+            meta={(
+              <span className="desktop-capabilities-plugin-detail__item-meta">
+                <span>{formatPluginFileSize(resource.size)}</span>
+                <code>{resource.id}</code>
+              </span>
+            )}
+            onClick={() => setSelectedItem({ kind: 'resource', value: resource })}
+          />
+        ))}
+        {resourceCount > resources.length ? (
+          <p className="desktop-capabilities-plugin-detail__empty">安装插件后可查看 {resourceCount} 个资源的文件详情。</p>
+        ) : null}
+      </CapabilitiesPluginDetailSection>
 
       {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
+
+      {selectedItem ? (
+        <CapabilitiesPluginItemDialog
+          key={`${selectedItem.kind}:${selectedItem.kind === 'mcp' ? selectedItem.value.key : selectedItem.value.id}`}
+          item={selectedItem}
+          mcpServers={runtimeMcpServers ?? []}
+          pluginId={plugin.id}
+          runtimeHooks={runtimeHooks ?? []}
+          onClose={() => setSelectedItem(null)}
+          onGetContent={onGetItemContent}
+        />
+      ) : null}
     </section>
   );
 }

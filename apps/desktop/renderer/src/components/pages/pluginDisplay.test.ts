@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
-import { mergePluginHooks, mergePluginMcpServers, mergePluginSkills, pluginCapabilitySummary, pluginMarketplacePresentation, pluginMatchesQuery } from './pluginDisplay.js';
+import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills, pluginCapabilitySummary, pluginMarketplacePresentation, pluginMatchesQuery } from './pluginDisplay.js';
 
 describe('plugin display helpers', () => {
   it('matches plugin searches against included skill and MCP details', () => {
@@ -46,6 +46,12 @@ describe('plugin display helpers', () => {
     }]);
   });
 
+  it('formats plugin file sizes for compact detail metadata', () => {
+    expect(formatPluginFileSize(512)).toBe('512 B');
+    expect(formatPluginFileSize(2048)).toBe('2.0 KB');
+    expect(formatPluginFileSize(2 * 1024 * 1024)).toBe('2.0 MB');
+  });
+
   it('builds editorial and App Store-style list sections without hiding featured plugins', () => {
     const openAi = marketplacePlugin({ id: 'openai-docs', name: 'OpenAI Docs', featured: true });
     const pdf = marketplacePlugin({ id: 'pdf', name: 'PDF', featured: true });
@@ -89,6 +95,7 @@ function marketplacePlugin(
     skills: [],
     mcpServers: [],
     hooks: [],
+    resources: [],
     capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
     installed: false,
     ...input,

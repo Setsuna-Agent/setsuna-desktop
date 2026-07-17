@@ -1,5 +1,7 @@
 import type {
   RuntimeMcpServerInput,
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginInstallInput,
   RuntimePluginInstallResult,
   RuntimePluginList,
@@ -41,4 +43,6 @@ export type PluginBundleStore = {
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   listInstalledRecords(): Promise<InstalledPluginRecord[]>;
   readResource(pluginId: string, resourceId: string): Promise<PluginResourceRead>;
+  readItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
+  readBundleItemContent(input: RuntimePluginInstallInput, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
 };

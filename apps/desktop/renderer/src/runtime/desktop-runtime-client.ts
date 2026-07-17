@@ -17,6 +17,8 @@ import type {
   RuntimeMcpResourceReadResult,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolList,
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginInstallResult,
   RuntimePluginList,
   RuntimePluginMarketplaceList,
@@ -244,6 +246,16 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     listPluginMarketplace() {
       return request<RuntimePluginMarketplaceList>({ path: '/v1/plugin-marketplace' });
+    },
+    getPluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string) {
+      return request<RuntimePluginItemContent>({
+        path: `/v1/plugins/${encodeURIComponent(pluginId)}/items/${kind}/${encodeURIComponent(itemId)}`,
+      });
+    },
+    getMarketplacePluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string) {
+      return request<RuntimePluginItemContent>({
+        path: `/v1/plugin-marketplace/${encodeURIComponent(pluginId)}/items/${kind}/${encodeURIComponent(itemId)}`,
+      });
     },
     installMarketplacePlugin(pluginId: string) {
       return request<RuntimePluginInstallResult>({

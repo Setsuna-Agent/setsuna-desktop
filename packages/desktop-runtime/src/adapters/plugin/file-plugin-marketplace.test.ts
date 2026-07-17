@@ -41,9 +41,18 @@ describe('file plugin marketplace', () => {
           transport: 'streamableHttp',
         }],
         hooks: [],
+        resources: [],
         capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
         installed: false,
       }],
+    });
+    await expect(marketplace.readItemContent('docs', 'skill', 'docs.docs')).resolves.toMatchObject({
+      pluginId: 'docs',
+      kind: 'skill',
+      files: [expect.objectContaining({
+        path: path.join('skills', 'docs', 'SKILL.md'),
+        text: expect.stringContaining('# Docs Skill'),
+      })],
     });
 
     const installed = await marketplace.installPlugin('docs');

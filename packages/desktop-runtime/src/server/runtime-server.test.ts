@@ -430,6 +430,10 @@ describe('runtime server', () => {
             description: expect.stringContaining('DOCX'),
           })],
           mcpServers: [],
+          resources: expect.arrayContaining([
+            expect.objectContaining({ id: 'content-spec', path: 'skills/documents/references/content-spec.md' }),
+            expect.objectContaining({ id: 'sample-document-spec', path: 'skills/documents/examples/sample-document.json' }),
+          ]),
           capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 7 },
         }),
         expect.objectContaining({
@@ -458,6 +462,33 @@ describe('runtime server', () => {
     expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
     expect(JSON.stringify(marketplace)).not.toContain('.mjs');
 
+    await expect(runtimeFetch('/v1/plugin-marketplace/documents/items/skill/documents.documents')).resolves.toMatchObject({
+      pluginId: 'documents',
+      kind: 'skill',
+      files: [expect.objectContaining({
+        path: 'skills/documents/SKILL.md',
+        mimeType: 'text/markdown',
+        text: expect.stringContaining('Word'),
+      })],
+    });
+    await expect(runtimeFetch('/v1/plugin-marketplace/documents/items/resource/sample-document-spec')).resolves.toMatchObject({
+      pluginId: 'documents',
+      kind: 'resource',
+      files: [expect.objectContaining({
+        path: 'skills/documents/examples/sample-document.json',
+        mimeType: 'application/json',
+      })],
+    });
+    await expect(runtimeFetch('/v1/plugin-marketplace/guard-dangerous-shell/items/hook/guard-dangerous-shell')).resolves.toMatchObject({
+      pluginId: 'guard-dangerous-shell',
+      kind: 'hook',
+      files: [expect.objectContaining({
+        path: 'hooks/guard-dangerous-shell.mjs',
+        mimeType: 'text/javascript',
+        text: expect.stringContaining('process'),
+      })],
+    });
+
     const installed = await runtimeFetch('/v1/plugin-marketplace/context7-docs/install', {
       method: 'POST',
     });
@@ -481,6 +512,11 @@ describe('runtime server', () => {
     });
     await expect(runtimeFetch('/v1/plugins')).resolves.toMatchObject({
       plugins: [expect.objectContaining({ id: 'context7-docs' })],
+    });
+    await expect(runtimeFetch('/v1/plugins/context7-docs/items/skill/context7-docs.context7-docs')).resolves.toMatchObject({
+      pluginId: 'context7-docs',
+      kind: 'skill',
+      files: [expect.objectContaining({ mimeType: 'text/markdown', text: expect.stringContaining('Context7') })],
     });
     await expect(runtimeFetch('/v1/skills')).resolves.toMatchObject({
       skills: expect.arrayContaining([

@@ -1,6 +1,8 @@
 import { readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type {
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginInstallResult,
   RuntimePluginMarketplaceItem,
   RuntimePluginMarketplaceList,
@@ -10,7 +12,7 @@ import type { PluginMarketplace } from '../../ports/plugin-marketplace.js';
 
 type MarketplaceBundleStore = Pick<
   PluginBundleStore,
-  'inspectPlugin' | 'installPlugin' | 'listPlugins'
+  'inspectPlugin' | 'installPlugin' | 'listPlugins' | 'readBundleItemContent'
 >;
 
 /** Exposes app-bundled, curated plugins without leaking their filesystem location to the renderer. */
@@ -41,6 +43,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
           skills: plugin.skills.map((skill) => ({ ...skill })),
           mcpServers: plugin.mcpServers.map((server) => ({ ...server })),
           hooks: plugin.hooks.map((hook) => ({ ...hook })),
+          resources: plugin.resources.map((resource) => ({ ...resource })),
           capabilities: { ...plugin.capabilities },
           installed: Boolean(installed),
           ...(installed?.version ? { installedVersion: installed.version } : {}),
@@ -48,6 +51,18 @@ export class FilePluginMarketplace implements PluginMarketplace {
       })
       .sort((left, right) => Number(right.featured) - Number(left.featured) || left.name.localeCompare(right.name, 'zh-CN'));
     return { plugins, errors: catalog.errors };
+  }
+
+  async readItemContent(
+    pluginId: string,
+    kind: RuntimePluginItemKind,
+    itemId: string,
+  ): Promise<RuntimePluginItemContent> {
+    const id = pluginId.trim().toLowerCase();
+    const catalog = await this.readCatalog();
+    const plugin = catalog.plugins.find((item) => item.id === id);
+    if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
+    return this.bundles.readBundleItemContent({ path: plugin.sourcePath }, kind, itemId);
   }
 
   async installPlugin(pluginId: string): Promise<RuntimePluginInstallResult> {

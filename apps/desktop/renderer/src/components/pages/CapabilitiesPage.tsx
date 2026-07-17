@@ -1,6 +1,6 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useCallback, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { BookOpen, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, Puzzle, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
-import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginItemContent, RuntimePluginItemKind, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
@@ -109,6 +109,7 @@ export function CapabilitiesPage({
   onCreateHook,
   onCreateSkill,
   onDeleteSkill,
+  onGetPluginItemContent,
   onGetSkillDetail,
   onInstallSkillMcpDependencies,
   onAuthenticateSkillMcpDependency,
@@ -139,6 +140,7 @@ export function CapabilitiesPage({
   onCreateHook: (input: RuntimeHookInput) => Promise<void>;
   onCreateSkill: (input: RuntimeSkillInput) => Promise<RuntimeSkillDetail>;
   onDeleteSkill: (skill: RuntimeSkillSummary) => Promise<void>;
+  onGetPluginItemContent: (pluginId: string, kind: RuntimePluginItemKind, itemId: string, source: 'installed' | 'marketplace') => Promise<RuntimePluginItemContent>;
   onGetSkillDetail: (skillId: string) => Promise<RuntimeSkillDetail>;
   onInstallSkillMcpDependencies: (skill: RuntimeSkillSummary) => Promise<RuntimeSkillDetail>;
   onAuthenticateSkillMcpDependency: (skill: RuntimeSkillSummary, serverKey: string) => Promise<RuntimeSkillDetail>;
@@ -213,7 +215,12 @@ export function CapabilitiesPage({
   const selectedInstalledPlugin = selectedPluginId
     ? plugins.find((plugin) => plugin.id === selectedPluginId)
     : undefined;
+  const selectedPluginItemSource = selectedInstalledPlugin ? 'installed' : 'marketplace';
   const createCapabilityKind: 'mcp' | 'skills' = capabilityFilter === 'skills' ? 'skills' : 'mcp';
+  const getSelectedPluginItemContent = useCallback((kind: RuntimePluginItemKind, itemId: string) => {
+    if (!selectedPluginId) return Promise.reject(new Error('Plugin detail is no longer selected.'));
+    return onGetPluginItemContent(selectedPluginId, kind, itemId, selectedPluginItemSource);
+  }, [onGetPluginItemContent, selectedPluginId, selectedPluginItemSource]);
 
   function resetMcpDraft() {
     setEditingMcpServer(null);
@@ -630,12 +637,15 @@ export function CapabilitiesPage({
             installedPlugin={selectedInstalledPlugin}
             installing={installingPluginIds.has(selectedPluginId)}
             marketplacePlugin={selectedMarketplacePlugin}
+            runtimeMcpServers={servers}
             removing={removingPluginIds.has(selectedPluginId)}
+            runtimeHooks={hooks}
             onBack={() => {
               setSelectedPluginId(null);
               setPluginError(null);
             }}
             onInstall={installMarketplacePlugin}
+            onGetItemContent={getSelectedPluginItemContent}
             onRemove={removePlugin}
           />
         </section>

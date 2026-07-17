@@ -84,6 +84,31 @@ describe('file plugin bundle store', () => {
       mimeType: 'image/png',
       base64: ONE_PIXEL_PNG.toString('base64'),
     });
+    await expect(runtime.plugins.readItemContent('demo', 'skill', 'demo.docs-helper')).resolves.toMatchObject({
+      pluginId: 'demo',
+      kind: 'skill',
+      files: [expect.objectContaining({
+        path: path.join('skills', 'docs-helper', 'SKILL.md'),
+        mimeType: 'text/markdown',
+        text: expect.stringContaining('Use the bundled docs'),
+      })],
+    });
+    await expect(runtime.plugins.readBundleItemContent(
+      { path: fixture.bundleDir },
+      'hook',
+      'audit-read',
+    )).resolves.toMatchObject({
+      pluginId: 'demo',
+      kind: 'hook',
+      files: [expect.objectContaining({
+        path: path.join('hooks', 'post.mjs'),
+        mimeType: 'text/javascript',
+        text: 'process.exit(0);\n',
+      })],
+    });
+    await expect(runtime.plugins.readItemContent('demo', 'mcp', 'plugin_docs')).resolves.toMatchObject({
+      files: [],
+    });
     expect(runtime.invalidateServer).toHaveBeenCalledWith('plugin_docs');
     const installPath = (await runtime.plugins.listInstalledRecords())[0].installPath;
 

@@ -18,6 +18,8 @@ import type {
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpToolList,
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginInstallResult,
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
@@ -764,6 +766,17 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     setHookState(nextHookState);
   }, [activeHookCwds, client]);
 
+  const getPluginItemContent = useCallback((
+    pluginId: string,
+    kind: RuntimePluginItemKind,
+    itemId: string,
+    source: 'installed' | 'marketplace',
+  ): Promise<RuntimePluginItemContent> => (
+    source === 'installed'
+      ? client.getPluginItemContent(pluginId, kind, itemId)
+      : client.getMarketplacePluginItemContent(pluginId, kind, itemId)
+  ), [client]);
+
   const installMarketplacePlugin = useCallback(async (pluginId: string): Promise<RuntimePluginInstallResult> => {
     const result = await client.installMarketplacePlugin(pluginId);
     await refreshPluginCapabilities();
@@ -852,6 +865,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     error,
     fetchProviderModels,
     fetchMcpServerTools,
+    getPluginItemContent,
     getSkillDetail,
     hookState,
     loadState,

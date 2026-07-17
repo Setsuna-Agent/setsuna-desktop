@@ -35,6 +35,24 @@ export type RuntimePluginResource = {
   size: number;
 };
 
+export type RuntimePluginItemKind = 'skill' | 'mcp' | 'hook' | 'resource';
+
+/** Bounded, renderer-safe projection of a regular file inside a plugin bundle. */
+export type RuntimePluginFilePreview = {
+  path: string;
+  size: number;
+  mimeType: string;
+  text?: string;
+  base64?: string;
+};
+
+export type RuntimePluginItemContent = {
+  pluginId: string;
+  itemId: string;
+  kind: RuntimePluginItemKind;
+  files: RuntimePluginFilePreview[];
+};
+
 export type RuntimePluginSummary = {
   id: string;
   name: string;
@@ -68,6 +86,7 @@ export type RuntimePluginMarketplaceItem = {
   skills: RuntimePluginSkill[];
   mcpServers: RuntimePluginMcpServerDescriptor[];
   hooks: RuntimePluginHook[];
+  resources: RuntimePluginResource[];
   capabilities: {
     skills: number;
     mcpServers: number;

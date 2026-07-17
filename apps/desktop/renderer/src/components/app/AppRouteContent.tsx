@@ -169,6 +169,7 @@ export function AppRouteContent({
         onCreateHook={runtime.createHook}
         onCreateSkill={runtime.createSkill}
         onDeleteSkill={runtime.deleteSkill}
+        onGetPluginItemContent={runtime.getPluginItemContent}
         onGetSkillDetail={runtime.getSkillDetail}
         onInstallSkillMcpDependencies={runtime.installSkillMcpDependencies}
         onAuthenticateSkillMcpDependency={runtime.authenticateSkillMcpDependency}

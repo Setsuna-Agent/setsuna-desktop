@@ -78,6 +78,19 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('routes installed and marketplace plugin item previews through encoded, read-only paths', async () => {
+    const request = installRuntimeBridge(() => ({ pluginId: 'documents', itemId: 'documents.documents', kind: 'skill', files: [] }));
+    const client = createDesktopRuntimeClient();
+
+    await client.getPluginItemContent('documents', 'skill', 'documents.documents');
+    await client.getMarketplacePluginItemContent('documents', 'resource', 'sample document');
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      { path: '/v1/plugins/documents/items/skill/documents.documents' },
+      { path: '/v1/plugin-marketplace/documents/items/resource/sample%20document' },
+    ]);
+  });
+
   it('routes workspace dependency status, toggle, diagnosis, and reinstall requests', async () => {
     const request = installRuntimeBridge(() => ({ enabled: false, state: 'disabled' }));
     const client = createDesktopRuntimeClient();
