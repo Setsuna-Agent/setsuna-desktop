@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 export function CapabilitiesPluginDetailSection({
   children,
@@ -13,16 +14,32 @@ export function CapabilitiesPluginDetailSection({
   icon: ReactNode;
   title: string;
 }) {
+  const [expanded, setExpanded] = useState(true);
+  const contentId = useId();
+
   return (
-    <section className="desktop-capabilities-plugin-detail__section">
+    <section className={`desktop-capabilities-plugin-detail__section${expanded ? ' is-expanded' : ''}`}>
       <header>
-        <span>{icon}</span>
-        <h3>{title}</h3>
-        <small>{count}</small>
+        <h3>
+          <button
+            type="button"
+            className="desktop-capabilities-plugin-detail__section-toggle"
+            aria-controls={contentId}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <span className="desktop-capabilities-plugin-detail__section-icon" aria-hidden="true">{icon}</span>
+            <span className="desktop-capabilities-plugin-detail__section-title">{title}</span>
+            <small>{count}</small>
+            <ChevronDown className="desktop-capabilities-plugin-detail__section-chevron" size={15} aria-hidden="true" />
+          </button>
+        </h3>
       </header>
-      {count ? <div className="desktop-capabilities-plugin-detail__list">{children}</div> : (
-        <p className="desktop-capabilities-plugin-detail__empty">{empty}</p>
-      )}
+      <div className="desktop-capabilities-plugin-detail__section-content" id={contentId} hidden={!expanded}>
+        {count ? <div className="desktop-capabilities-plugin-detail__list">{children}</div> : (
+          <p className="desktop-capabilities-plugin-detail__empty">{empty}</p>
+        )}
+      </div>
     </section>
   );
 }

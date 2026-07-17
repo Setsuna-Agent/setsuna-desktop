@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CapabilitiesInstalledPluginListItem } from './CapabilitiesInstalledPluginListItem.js';
 import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
 import { CapabilitiesPluginEditorial } from './CapabilitiesPluginEditorial.js';
+import { CapabilitiesPluginFilePreview, markdownPreviewBody } from './CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 import { CapabilitiesPluginListItem } from './CapabilitiesPluginListItem.js';
 
@@ -203,11 +204,65 @@ describe('capabilities plugin components', () => {
       />,
     );
 
-    expect(html).toContain('<h3>资源</h3>');
+    expect(html).toContain('desktop-capabilities-plugin-detail__section-title">资源</span>');
     expect(html).toContain('查看 DOCX 内容模型 详情');
     expect(html).toContain('查看 示例文档内容 详情');
     expect(html).toContain('2.0 KB');
+    expect(html.match(/aria-expanded="true"/gu)).toHaveLength(4);
+    expect(html.match(/desktop-capabilities-plugin-detail__section-content/gu)).toHaveLength(4);
+    expect(html).toContain('这个插件不包含 MCP 服务。');
+    expect(html).toContain('这个插件不包含 Hook。');
+    expect(html).not.toContain(' hidden=""');
+    expect(html).not.toContain('<details');
     expect(html).not.toContain('desktop-capabilities-plugin-detail__extras');
+  });
+
+  it('renders Markdown files by default while keeping a source view available', () => {
+    const markdown = [
+      '---',
+      'name: Demo Skill',
+      'description: Markdown preview fixture',
+      '---',
+      '# 使用说明',
+      '',
+      '| 能力 | 状态 |',
+      '| --- | --- |',
+      '| 预览 | 支持 |',
+    ].join('\n');
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginFilePreview
+        file={{
+          path: 'skills/demo/SKILL.md',
+          mimeType: 'text/markdown',
+          size: markdown.length,
+          text: markdown,
+        }}
+      />,
+    );
+
+    expect(html).toContain('<h1>使用说明</h1>');
+    expect(html).toContain('<table>');
+    expect(html).toContain('预览');
+    expect(html).toContain('源码');
+    expect(html).not.toContain('name: Demo Skill');
+    expect(markdownPreviewBody('普通 Markdown')).toBe('普通 Markdown');
+    expect(markdownPreviewBody('---\n分隔内容\n---\n正文')).toBe('---\n分隔内容\n---\n正文');
+  });
+
+  it('keeps plain-text file content in a keyboard-scrollable preview region', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginFilePreview
+        file={{
+          path: 'hooks/protect-secret-paths.mjs',
+          mimeType: 'text/javascript',
+          size: 180,
+          text: `const matcher = /${'sensitive-path|'.repeat(24)}/;`,
+        }}
+      />,
+    );
+
+    expect(html).toContain('<pre aria-label="protect-secret-paths.mjs 文件内容" tabindex="0">');
+    expect(html).toContain('sensitive-path|sensitive-path');
   });
 
   it('renders a distinct glyph and tone for every bundled plugin icon', () => {

@@ -4,6 +4,7 @@ import { BookOpen, FileText, Loader2, Plug, Workflow, X } from 'lucide-react';
 import type {
   RuntimeHookMetadata,
   RuntimeMcpServer,
+  RuntimePluginFilePreview,
   RuntimePluginHook,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
@@ -11,6 +12,7 @@ import type {
   RuntimePluginResource,
   RuntimePluginSkill,
 } from '@setsuna-desktop/contracts';
+import { MarkdownContentBlock } from '../chat/markdown/MarkdownContentBlock.js';
 import { Button, IconButton } from '../primitives.js';
 import { formatPluginFileSize } from './pluginDisplay.js';
 
@@ -131,21 +133,7 @@ export function CapabilitiesPluginItemDialog({
             ) : content?.files.length ? (
               <div className="desktop-plugin-item-dialog__files">
                 {content.files.map((file) => (
-                  <article className="desktop-plugin-item-dialog__file" key={file.path}>
-                    <header>
-                      <span>{fileName(file.path)}</span>
-                      <small>{file.mimeType} · {formatPluginFileSize(file.size)}</small>
-                    </header>
-                    {file.base64 && file.mimeType.startsWith('image/') ? (
-                      <div className="desktop-plugin-item-dialog__image-wrap">
-                        <img src={`data:${file.mimeType};base64,${file.base64}`} alt={fileName(file.path)} />
-                      </div>
-                    ) : file.text !== undefined ? (
-                      file.text ? <pre>{file.text}</pre> : <div className="desktop-plugin-item-dialog__status">这是一个空文件。</div>
-                    ) : (
-                      <div className="desktop-plugin-item-dialog__status">这个文件格式暂不支持内嵌预览。</div>
-                    )}
-                  </article>
+                  <CapabilitiesPluginFilePreview file={file} key={file.path} />
                 ))}
               </div>
             ) : (
@@ -160,6 +148,78 @@ export function CapabilitiesPluginItemDialog({
   );
 
   return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
+}
+
+export function CapabilitiesPluginFilePreview({ file }: { file: RuntimePluginFilePreview }) {
+  const [markdownView, setMarkdownView] = useState<'preview' | 'source'>('preview');
+  const markdown = file.text !== undefined && isMarkdownFile(file);
+  const markdownBody = markdown ? markdownPreviewBody(file.text ?? '') : '';
+  const name = fileName(file.path);
+
+  return (
+    <article className="desktop-plugin-item-dialog__file">
+      <header>
+        <span className="desktop-plugin-item-dialog__file-heading">
+          <span className="desktop-plugin-item-dialog__file-name">{name}</span>
+          <small>{file.mimeType} · {formatPluginFileSize(file.size)}</small>
+        </span>
+        {markdown ? (
+          <span className="desktop-plugin-item-dialog__view-switch" role="group" aria-label={`${name} 显示方式`}>
+            <button
+              className={markdownView === 'preview' ? 'is-active' : undefined}
+              type="button"
+              aria-pressed={markdownView === 'preview'}
+              onClick={() => setMarkdownView('preview')}
+            >
+              预览
+            </button>
+            <button
+              className={markdownView === 'source' ? 'is-active' : undefined}
+              type="button"
+              aria-pressed={markdownView === 'source'}
+              onClick={() => setMarkdownView('source')}
+            >
+              源码
+            </button>
+          </span>
+        ) : null}
+      </header>
+      {file.base64 && file.mimeType.startsWith('image/') ? (
+        <div className="desktop-plugin-item-dialog__image-wrap">
+          <img src={`data:${file.mimeType};base64,${file.base64}`} alt={name} />
+        </div>
+      ) : markdown && markdownView === 'preview' ? (
+        markdownBody.trim() ? (
+          <div className="chat-markdown desktop-plugin-item-dialog__markdown">
+            <div className="chat-markdown__block">
+              <MarkdownContentBlock content={markdownBody} />
+            </div>
+          </div>
+        ) : (
+          <div className="desktop-plugin-item-dialog__status">Markdown 正文为空。</div>
+        )
+      ) : file.text !== undefined ? (
+        file.text ? (
+          <pre aria-label={`${name} 文件内容`} tabIndex={0}>{file.text}</pre>
+        ) : <div className="desktop-plugin-item-dialog__status">这是一个空文件。</div>
+      ) : (
+        <div className="desktop-plugin-item-dialog__status">这个文件格式暂不支持内嵌预览。</div>
+      )}
+    </article>
+  );
+}
+
+export function markdownPreviewBody(content: string): string {
+  const frontmatter = content.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
+  const looksLikeYaml = frontmatter?.[1] && /^(?:[A-Za-z_][\w.-]*):(?:[\t ]|$)/mu.test(frontmatter[1]);
+  return frontmatter && looksLikeYaml ? content.slice(frontmatter[0].length) : content;
+}
+
+function isMarkdownFile(file: RuntimePluginFilePreview): boolean {
+  const mimeType = file.mimeType.split(';', 1)[0].trim().toLowerCase();
+  return mimeType === 'text/markdown'
+    || mimeType === 'text/x-markdown'
+    || /\.(?:md|markdown|mdown|mkd|mdx)$/iu.test(file.path);
 }
 
 function pluginItemId(item: CapabilitiesPluginItem): string {
