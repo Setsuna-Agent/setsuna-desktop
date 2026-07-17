@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
+import type { RuntimeInlineMessageAttachment, RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
 import { ChatAttachmentTray } from './ChatAttachmentTray.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
+import { chatImageGalleryColumns } from './ChatMessageImageGallery.js';
 
 const pdfAttachment: RuntimeStoredMessageAttachment = {
   id: 'attachment_pdf',
@@ -42,5 +43,25 @@ describe('chat attachment cards', () => {
     expect(html).toContain('class="chat-user-message-file__icon"');
     expect(html).toContain('data-file-icon-theme="seti"');
     expect(html).toContain('class="chat-user-message-file__meta">PDF</span>');
+  });
+
+  it('renders multiple sent images as one Ant Design preview gallery', () => {
+    const images: RuntimeInlineMessageAttachment[] = [1, 2].map((index) => ({
+      id: `generated_${index}`,
+      name: `generated-${index}.png`,
+      type: 'image/png',
+      size: 4,
+      url: 'data:image/png;base64,AA==',
+      localAssetId: `generated_image_asset_${index}`,
+    }));
+    const html = renderToStaticMarkup(<ChatMessageAttachments attachments={images} variant="assistant" />);
+
+    expect(html).toContain('chat-image-gallery--multiple');
+    expect(html).toContain('--chat-image-gallery-columns:2');
+    expect(html.match(/class="ant-image-img/g)).toHaveLength(2);
+  });
+
+  it('uses balanced gallery columns for common image counts', () => {
+    expect([1, 2, 3, 4, 5, 6].map(chatImageGalleryColumns)).toEqual([1, 2, 3, 2, 3, 3]);
   });
 });

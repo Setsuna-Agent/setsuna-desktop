@@ -25,6 +25,7 @@ import { DesktopUpdater } from './desktop-updater.js';
 import { DesktopCredentialVault } from './desktop-credential-vault.js';
 import { DesktopNativeBridgeServer } from './desktop-native-bridge-server.js';
 import { electronCredentialEncryption } from './electron-credential-encryption.js';
+import { copyImageDataUrlToClipboard, revealChatImage } from './generated-image-actions.js';
 import {
   checkoutReviewBranch,
   commitReviewChanges,
@@ -352,6 +353,8 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('desktop:select-directory');
   ipcMain.removeHandler('desktop:get-user-profile');
   ipcMain.removeHandler('desktop:open-external');
+  ipcMain.removeHandler('desktop:copy-image-to-clipboard');
+  ipcMain.removeHandler('desktop:reveal-image-in-folder');
   ipcMain.removeHandler('desktop:open-path');
   ipcMain.removeHandler('desktop:open-workspace-file');
   ipcMain.removeHandler('desktop-updater:get-state');
@@ -397,6 +400,22 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.handle('desktop:open-external', async (_event, url) => {
     await shell.openExternal(String(url ?? ''));
     return true;
+  });
+  ipcMain.handle('desktop:copy-image-to-clipboard', (event, dataUrl) => {
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return copyImageDataUrlToClipboard(
+      dataUrl,
+      (value) => nativeImage.createFromDataURL(value),
+      (image) => clipboard.writeImage(image),
+    );
+  });
+  ipcMain.handle('desktop:reveal-image-in-folder', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return revealChatImage(
+      app.getPath('userData'),
+      input,
+      (targetPath) => shell.showItemInFolder(targetPath),
+    );
   });
   ipcMain.handle('desktop:open-path', async (_event, targetPath) => {
     const localPath = String(targetPath ?? '').trim();

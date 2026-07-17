@@ -1,4 +1,4 @@
-import type { RuntimeEnvironment, RuntimeMessage, RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeEnvironment, RuntimeMessage, RuntimePermissionProfile, RuntimePluginReference, RuntimeSandboxWorkspaceWrite, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
 export type ToolExecutionEnvironment = RuntimeEnvironment;
 
@@ -83,6 +83,8 @@ export type ToolExternalContext = {
 
 export type ToolRuntimeProfile = {
   exposure?: 'direct' | 'hidden';
+  /** 插件提供的原生工具必须在执行开始前声明归属，供事件持久化和 UI 实时展示。 */
+  plugin?: RuntimePluginReference;
   supportsParallel?: boolean;
   waitsForRuntimeCancellation?: boolean;
   visibleToModel?: boolean;

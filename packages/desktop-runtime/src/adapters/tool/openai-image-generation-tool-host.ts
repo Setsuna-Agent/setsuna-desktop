@@ -5,6 +5,7 @@ import {
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeImageGenerationProviderConfig } from '../../ports/config-store.js';
+import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
@@ -57,6 +58,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
   constructor(
     private readonly configStore: ImageGenerationConfigStore,
     private readonly pluginStore: ImageGenerationPluginStore,
+    private readonly generatedImageStore: GeneratedImageStore | null = null,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
@@ -65,10 +67,21 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     return await this.isAvailable() ? [IMAGE_GENERATION_TOOL] : [];
   }
 
-  toolRuntimeProfile(name: string) {
-    return name === OPENAI_IMAGE_GENERATION_TOOL_NAME
-      ? { exposure: 'direct' as const, supportsParallel: false }
-      : null;
+  async toolRuntimeProfile(name: string) {
+    if (name !== OPENAI_IMAGE_GENERATION_TOOL_NAME) return null;
+    const plugin = (await this.pluginStore.listPlugins()).plugins
+      .find((item) => item.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID);
+    return {
+      exposure: 'direct' as const,
+      supportsParallel: false,
+      ...(plugin ? {
+        plugin: {
+          id: plugin.id,
+          name: plugin.name,
+          ...(plugin.icon ? { icon: plugin.icon } : {}),
+        },
+      } : {}),
+    };
   }
 
   async systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
@@ -189,12 +202,19 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     const mimeType = detectSafeImageMimeType(buffer);
     if (!mimeType) throw new Error(`第 ${index + 1} 张图片不是受支持的 PNG、JPEG、GIF 或 WebP。`);
     const suffix = imageExtension(mimeType);
+    const name = `generated-${index + 1}.${suffix}`;
+    const storedImage = await this.generatedImageStore?.create({
+      name,
+      type: mimeType,
+      data: buffer,
+    });
     return {
       id: `generated_image_${safeIdPart(toolCallId ?? String(Date.now()))}_${index + 1}`,
-      name: `generated-${index + 1}.${suffix}`,
+      name,
       type: mimeType,
       size: buffer.byteLength,
       url: `data:${mimeType};base64,${buffer.toString('base64')}`,
+      ...(storedImage ? { localAssetId: storedImage.assetId } : {}),
       modelVisible: false,
     };
   }

@@ -65,6 +65,7 @@ export function runtimePluginUsesByTurn(
     for (const run of message.hookRuns ?? []) addHookPlugin(message.turnId ?? run.turnId, run.pluginId);
     for (const toolRun of message.toolRuns ?? []) {
       for (const run of toolRun.hookRuns ?? []) addHookPlugin(message.turnId ?? run.turnId, run.pluginId);
+      if (toolRun.plugin) addPlugin(message.turnId, toolRun.plugin.id, toolRun.plugin);
       for (const pluginId of pluginIdsForToolRun(toolRun, plugins)) {
         addPlugin(message.turnId, pluginId);
       }

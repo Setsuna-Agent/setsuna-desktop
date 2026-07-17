@@ -1,6 +1,6 @@
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import type { AnswerRuntimeApprovalInput, RuntimeApprovalAvailableDecision, RuntimeApprovalDecision, RuntimeHookRun, RuntimePermissionGrantResponse, RuntimeApprovalRequest, RuntimeConfigState, RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment, RuntimeSandboxWorkspaceWrite, RuntimeToolCall } from '@setsuna-desktop/contracts';
+import type { AnswerRuntimeApprovalInput, RuntimeApprovalAvailableDecision, RuntimeApprovalDecision, RuntimeHookRun, RuntimePermissionGrantResponse, RuntimeApprovalRequest, RuntimeConfigState, RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment, RuntimePluginReference, RuntimeSandboxWorkspaceWrite, RuntimeToolCall } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
 import type { PolicyAmendmentStore } from '../ports/policy-amendment-store.js';
@@ -112,7 +112,7 @@ type NetworkRetryApprovalAnswer = AnswerRuntimeApprovalInput;
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 
 export type ToolOrchestratorEvents = {
-  publishToolStarted(toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string): Promise<void>;
+  publishToolStarted(toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string, plugin?: RuntimePluginReference): Promise<void>;
   publishToolCompleted(
     toolCall: RuntimeToolCall,
     parsedArguments: unknown,
@@ -140,6 +140,7 @@ export type ToolOrchestratorOptions = {
 
 export type ToolOrchestratorRunOptions = {
   checkApproval?: boolean;
+  plugin?: RuntimePluginReference;
   waitsForRuntimeCancellation?: boolean;
 };
 
@@ -213,7 +214,7 @@ export class ToolOrchestrator {
         : await this.options.toolHost.previewToolCall?.(runToolCall.name, runArguments, stepContext).catch(() => null);
       startResultPreview = startPreview?.resultPreview;
       startedAtMs = this.options.clock.now().getTime();
-      await this.options.events.publishToolStarted(runToolCall, runArguments, startResultPreview);
+      await this.options.events.publishToolStarted(runToolCall, runArguments, startResultPreview, runOptions.plugin);
 
       if (effective.rejectionReason) {
         throw new ToolPolicyRejectedError(effective.rejectionReason);

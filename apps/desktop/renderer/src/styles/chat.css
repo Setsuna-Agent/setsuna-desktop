@@ -403,32 +403,78 @@
 .chat-user-message-attachments {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: flex-end;
   gap: 6px;
   max-width: 100%;
 }
 
-.chat-user-message-attachments img {
-  display: block;
-  width: auto;
-  max-width: min(220px, 52vw);
-  height: auto;
-  max-height: 240px;
+.chat-image-gallery-shell {
+  max-width: 100%;
+}
+
+.chat-image-gallery {
+  display: grid;
+  grid-template-columns: repeat(var(--chat-image-gallery-columns), minmax(0, 1fr));
+  gap: 8px;
+  width: min(var(--chat-image-gallery-width), 100%);
+  max-width: 100%;
+}
+
+.chat-image-gallery--single {
+  width: min(360px, 100%);
+}
+
+.chat-image-gallery--user.chat-image-gallery--single {
+  width: min(220px, 52vw);
+}
+
+.chat-message-image {
+  min-width: 0;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: 10px;
+  overflow: hidden;
   background: var(--app-surface);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 5%, transparent);
+}
+
+.chat-message-image .ant-image {
+  display: block;
+  width: 100%;
+}
+
+.chat-message-image .ant-image-img {
+  display: block;
+  width: 100%;
+  max-height: 360px;
   object-fit: contain;
+}
+
+.chat-image-gallery--user .chat-message-image .ant-image-img {
+  max-height: 240px;
+}
+
+.chat-image-gallery--multiple .chat-message-image,
+.chat-image-gallery--multiple .ant-image {
+  aspect-ratio: 1;
+}
+
+.chat-image-gallery--multiple .chat-message-image .ant-image-img {
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+}
+
+.chat-image-gallery__status {
+  margin-top: 5px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .chat-user-message-attachments--assistant {
   justify-content: flex-start;
   gap: 10px;
-}
-
-.chat-user-message-attachments--assistant img {
-  max-width: min(560px, 100%);
-  max-height: 640px;
 }
 
 .chat-assistant-run__attachments {

@@ -353,6 +353,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       upsertToolRun(message, {
         id: event.payload.toolCallId,
         name: event.payload.toolName,
+        ...(event.payload.plugin ? { plugin: { ...event.payload.plugin } } : {}),
         source: event.payload.source,
         status: 'running',
         phase: 'executing',
@@ -622,6 +623,7 @@ function appendThreadTurnItemDelta(turn: RuntimeThreadTurn, itemId: string, delt
 function cloneToolRun(toolRun: RuntimeToolRun): RuntimeToolRun {
   return {
     ...toolRun,
+    plugin: toolRun.plugin ? { ...toolRun.plugin } : undefined,
     hookRuns: toolRun.hookRuns?.map(cloneHookRun),
   };
 }

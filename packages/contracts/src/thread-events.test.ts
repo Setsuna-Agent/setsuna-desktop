@@ -48,6 +48,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
         toolCallId: 'call_1',
         toolName: 'write_file',
         argumentsPreview: '{"file_path":"src/generated.ts","content":"export {};"}',
+        plugin: { id: 'demo-plugin', name: 'Demo Plugin', icon: 'demo' },
       },
     };
 
@@ -65,6 +66,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
       id: 'call_1',
       status: 'running',
       phase: 'executing',
+      plugin: { id: 'demo-plugin', name: 'Demo Plugin', icon: 'demo' },
       preparedAt: '2026-06-26T00:00:01.000Z',
       startedAt: '2026-06-26T00:00:02.000Z',
     });

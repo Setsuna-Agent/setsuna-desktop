@@ -12,14 +12,22 @@ describe('OpenAiImageGenerationToolHost', () => {
   it('advertises the tool only when the plugin is installed and its private config is complete', async () => {
     const configured = config();
     const installed = pluginStore(true);
-    const host = new OpenAiImageGenerationToolHost(configStore(configured), installed, unusedFetch);
+    const host = new OpenAiImageGenerationToolHost(configStore(configured), installed, null, unusedFetch);
 
     await expect(host.listTools({ threadId: 'thread_1' })).resolves.toEqual([
       expect.objectContaining({ name: OPENAI_IMAGE_GENERATION_TOOL_NAME }),
     ]);
-    await expect(new OpenAiImageGenerationToolHost(configStore({ ...configured, apiKey: '' }), installed, unusedFetch)
+    await expect(host.toolRuntimeProfile(OPENAI_IMAGE_GENERATION_TOOL_NAME)).resolves.toEqual({
+      exposure: 'direct',
+      supportsParallel: false,
+      plugin: {
+        id: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
+        name: '图片生成',
+      },
+    });
+    await expect(new OpenAiImageGenerationToolHost(configStore({ ...configured, apiKey: '' }), installed, null, unusedFetch)
       .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
-    await expect(new OpenAiImageGenerationToolHost(configStore(configured), pluginStore(false), unusedFetch)
+    await expect(new OpenAiImageGenerationToolHost(configStore(configured), pluginStore(false), null, unusedFetch)
       .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
   });
 
@@ -34,7 +42,13 @@ describe('OpenAiImageGenerationToolHost', () => {
         data: [{ b64_json: ONE_PIXEL_PNG.toString('base64'), revised_prompt: 'a revised prompt' }],
       });
     }) as typeof fetch;
-    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), fetchImpl);
+    let storedImage: { name: string; type: string; data: Uint8Array } | null = null;
+    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+      async create(input) {
+        storedImage = input;
+        return { assetId: 'generated_image_asset_1' };
+      },
+    }, fetchImpl);
 
     const result = await host.runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, {
       prompt: 'a small moon over the sea',
@@ -66,6 +80,7 @@ describe('OpenAiImageGenerationToolHost', () => {
         type: 'image/png',
         size: ONE_PIXEL_PNG.byteLength,
         modelVisible: false,
+        localAssetId: 'generated_image_asset_1',
         url: `data:image/png;base64,${ONE_PIXEL_PNG.toString('base64')}`,
       }],
       data: {
@@ -75,6 +90,8 @@ describe('OpenAiImageGenerationToolHost', () => {
         size: '1024x1024',
       },
     });
+    expect(storedImage).toMatchObject({ name: 'generated-1.png', type: 'image/png' });
+    expect(Buffer.from(storedImage!.data)).toEqual(ONE_PIXEL_PNG);
     expect(JSON.stringify(result.data)).not.toContain('image-secret');
   });
 
@@ -90,6 +107,7 @@ describe('OpenAiImageGenerationToolHost', () => {
     const host = new OpenAiImageGenerationToolHost(
       configStore(config({ baseUrl: 'https://images.example.test/v1' })),
       pluginStore(true),
+      null,
       fetchImpl,
     );
     await expect(host.runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, { prompt: 'test' }, { threadId: 'thread_1' }))
@@ -99,7 +117,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       { error: { message: 'model is unavailable for image-secret' } },
       { status: 400 },
     )) as typeof fetch;
-    const failingHost = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), failingFetch);
+    const failingHost = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), null, failingFetch);
     const failure = await failingHost
       .runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, { prompt: 'test' }, { threadId: 'thread_1' })
       .catch((error: unknown) => error);

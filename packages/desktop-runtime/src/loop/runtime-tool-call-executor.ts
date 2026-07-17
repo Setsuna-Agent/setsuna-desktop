@@ -7,6 +7,7 @@ import type {
   RuntimeDynamicToolDefinition,
   RuntimeHookRun,
   RuntimeMessage,
+  RuntimePluginReference,
   RuntimeStreamItem,
   RuntimeToolCall,
   RuntimeToolCallDelta,
@@ -405,7 +406,7 @@ export class RuntimeToolCallExecutor {
    * @param parsedArguments 已解析的工具参数。
    * @param resultPreview 工具执行前可展示的结果预览。
    */
-  private async publishToolStarted(threadId: string, turnId: string, toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string): Promise<void> {
+  private async publishToolStarted(threadId: string, turnId: string, toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string, plugin?: RuntimePluginReference): Promise<void> {
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -417,6 +418,7 @@ export class RuntimeToolCallExecutor {
         toolName: toolCall.name,
         argumentsPreview: previewArguments(parsedArguments),
         resultPreview,
+        ...(plugin ? { plugin: { ...plugin } } : {}),
       },
     });
   }
@@ -594,7 +596,7 @@ export class RuntimeToolCallExecutor {
       hookRunner: createRuntimeToolHookRunner(runtimeConfig),
       clock: this.options.clock,
       events: {
-        publishToolStarted: (toolCall, parsedArguments, resultPreview) => this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, resultPreview),
+        publishToolStarted: (toolCall, parsedArguments, resultPreview, plugin) => this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments, resultPreview, plugin),
         publishToolCompleted: (toolCall, parsedArguments, status, content, metadata = {}) => this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, status, content, metadata),
         publishToolOutputDelta: (toolCall, delta) => this.publishToolOutputDelta(context.threadId, context.turnId, toolCall, delta),
         publishHookStarted: (run) => this.publishHookStarted(context.threadId, context.turnId, run),

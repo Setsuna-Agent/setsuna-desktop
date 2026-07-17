@@ -12,6 +12,16 @@ export type DesktopOpenPathResult =
   | { ok: true }
   | { ok: false; error: string };
 
+export type DesktopImageActionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export type DesktopRevealImageInput = {
+  assetId?: string;
+  dataUrl: string;
+  name: string;
+};
+
 export type DesktopTerminalSession = {
   sessionId: string;
   workspaceRoot: string;
@@ -152,6 +162,8 @@ export type SetsunaDesktopBridge = {
     platform: string;
     selectDirectory(options?: { title?: string }): Promise<string | null>;
     getUserProfile(): Promise<DesktopUserProfile>;
+    copyImageToClipboard(dataUrl: string): Promise<DesktopImageActionResult>;
+    revealImageInFolder(input: DesktopRevealImageInput): Promise<DesktopImageActionResult>;
     openPath(targetPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
   };

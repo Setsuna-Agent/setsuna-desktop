@@ -91,6 +91,29 @@ describe('runtimePluginUsesByTurn', () => {
     expect(runtimePluginUsesByTurn(thread, [], [plugin('openai-image-generation', '图片生成')]).get('turn_1'))
       .toEqual([expect.objectContaining({ id: 'openai-image-generation', name: '图片生成' })]);
   });
+
+  it('attributes a running native tool from its start-time Plugin reference', () => {
+    const thread = runtimeThread({ selectedSkills: [] });
+    thread.messages = [{
+      id: 'assistant_image',
+      turnId: 'turn_1',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-07-17T00:00:02.000Z',
+      toolRuns: [{
+        id: 'image_1',
+        name: 'generate_image',
+        status: 'running',
+        plugin: { id: 'openai-image-generation', name: '图片生成', icon: 'image-generation' },
+      }],
+    }];
+
+    expect(runtimePluginUsesByTurn(thread, [], []).get('turn_1')).toEqual([{
+      id: 'openai-image-generation',
+      name: '图片生成',
+      icon: 'image-generation',
+    }]);
+  });
 });
 
 function runtimeThread(snapshot: Pick<RuntimeModelRequestStepSnapshot, 'selectedSkills'>): RuntimeThread {

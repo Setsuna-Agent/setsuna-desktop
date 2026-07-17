@@ -22,6 +22,8 @@ type RuntimeMessageAttachmentBase = {
 export type RuntimeInlineMessageAttachment = RuntimeMessageAttachmentBase & {
   source?: 'inline';
   url: string;
+  /** 本地持久化副本的不透明 ID；渲染进程不会获得真实文件路径。 */
+  localAssetId?: string;
   assetId?: never;
 };
 

@@ -144,6 +144,7 @@ export class RuntimeToolRouter {
       this.options.approvalPolicy,
       {
         ...options,
+        ...(profile.plugin ? { plugin: profile.plugin } : {}),
         waitsForRuntimeCancellation: profile.waitsForRuntimeCancellation !== false,
       },
     );

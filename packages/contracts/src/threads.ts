@@ -4,6 +4,7 @@ import type { RuntimeHookSource } from './config.js';
 import type { RuntimeUsage } from './usage.js';
 import type { RuntimeApprovalAvailableDecision, RuntimeExecPolicyAmendment, RuntimeMcpElicitation, RuntimeNetworkApprovalContext, RuntimeNetworkPolicyAmendment, RuntimePermissionApprovalContext, RuntimeUserInputRequest } from './approvals.js';
 import type { RuntimeMessageAttachment } from './attachments.js';
+import type { RuntimePluginReference } from './plugins.js';
 
 export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool';
 export type RuntimeMessagePromptSource = 'hook' | 'plan' | 'review' | 'goal' | 'runtime_context';
@@ -196,6 +197,7 @@ export type RuntimeHookRun = {
 export type RuntimeToolRun = {
   id: string;
   name: string;
+  plugin?: RuntimePluginReference;
   source?: 'agent' | 'userShell';
   status: RuntimeToolRunStatus;
   phase?: RuntimeToolRunPhase;
