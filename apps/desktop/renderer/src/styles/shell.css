@@ -10,14 +10,9 @@
 }
 
 :root[data-desktop-platform='win32'] .app-shell:not(.app-shell--window-maximized) {
-  --app-window-frame-inset: 14px;
-
-  width: calc(100% - var(--app-window-frame-inset) - var(--app-window-frame-inset));
-  height: calc(100% - var(--app-window-frame-inset) - var(--app-window-frame-inset));
-  margin: var(--app-window-frame-inset);
+  /* Windows 的原生缩放命中区位于 HWND 外沿；可见边框必须与它重合。 */
   border: 1px solid color-mix(in srgb, var(--app-text) 28%, transparent);
   border-radius: var(--app-radius-lg);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 14%);
 }
 
 .app-topbar {
