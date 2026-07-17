@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -291,7 +291,7 @@ describe('runtime server', () => {
     expect(config.providers[0].apiKeySet).toBe(true);
   });
 
-  it('enables workspace dependencies by default without provisioning during startup', async () => {
+  it('returns real host dependency status without provisioning during startup', async () => {
     const status = await runtimeFetch('/v1/workspace-dependencies');
     const disabled = await runtimeFetch('/v1/workspace-dependencies', {
       method: 'PUT',
@@ -300,14 +300,19 @@ describe('runtime server', () => {
 
     expect(status).toMatchObject({
       enabled: true,
-      state: 'not-installed',
-      node: { available: false },
-      python: { available: false },
-      uv: { available: false },
       checks: expect.arrayContaining([
         expect.objectContaining({ id: 'sandbox', status: 'ok' }),
       ]),
     });
+    const hostReady = status.node.available && status.python.available && status.uv.available;
+    expect(status.state).toBe(hostReady ? 'ready' : 'not-installed');
+    await expect(access(path.join(
+      runtimeDataDir,
+      'runtime',
+      'workspace-dependencies',
+      'toolchain',
+      'manifest.json',
+    ))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(disabled).toMatchObject({ enabled: false, state: 'disabled' });
 
     const invalidResponse = await fetch(`${baseUrl}/v1/workspace-dependencies`, {

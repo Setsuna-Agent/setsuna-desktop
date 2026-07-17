@@ -79,9 +79,9 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   }
 
   async getStatus(): Promise<RuntimeWorkspaceDependenciesStatus> {
-    // 验证已记录工具，防止过期清单看似正常；但在尚未安装任何内容前，
-    // 普通状态读取不应探测主机工具。
-    return this.status(true, false);
+    // 设置页每次进入都应反映真实可用性；这里只执行本机版本检查，
+    // 不会触发下载或创建托管 Python 工具链。
+    return this.status(true);
   }
 
   async getPromptContext(): Promise<WorkspaceDependencyPromptContext> {
@@ -188,7 +188,9 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
         status: config.sandboxWorkspaceWrite?.networkAccess === true ? 'ok' as const : 'warning' as const,
       },
     ];
-    const ready = manifest?.bundleVersion === BUNDLE_VERSION
+    // 诊断可以在懒初始化清单落盘前确认本机工具链可用；只有已存在的清单
+    // 才需要继续校验当前 bundle 版本。
+    const ready = (!manifest || manifest.bundleVersion === BUNDLE_VERSION)
       && tools.node.available
       && tools.python.available
       && tools.uv.available;

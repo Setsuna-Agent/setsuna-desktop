@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readlink, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, link, mkdir, mkdtemp, readlink, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -10,6 +10,39 @@ import { ManagedWorkspaceDependencyManager } from './managed-workspace-dependenc
 const execFileAsync = promisify(execFile);
 
 describe('managed workspace dependency manager', () => {
+  it('keeps healthy host tools ready across ordinary status reads before lazy installation', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-dependencies-diagnose-'));
+    const fakeBin = path.join(dataDir, 'fake-bin');
+    const previousPath = process.env.PATH;
+    await mkdir(fakeBin, { recursive: true });
+    await writeFakeHostTools(fakeBin);
+    process.env.PATH = fakeBin;
+
+    try {
+      const configStore = new FileConfigStore(dataDir);
+      const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
+
+      await expect(manager.getStatus()).resolves.toMatchObject({
+        enabled: true,
+        state: 'ready',
+        node: { available: true, source: 'bundled' },
+        python: { available: true, source: 'system' },
+        uv: { available: true, source: 'system' },
+      });
+      await expect(manager.diagnose()).resolves.toMatchObject({
+        enabled: true,
+        state: 'ready',
+        node: { available: true, source: 'bundled' },
+        python: { available: true, source: 'system' },
+        uv: { available: true, source: 'system' },
+      });
+      await expect(manager.getStatus()).resolves.toMatchObject({ state: 'ready' });
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform === 'win32')('wraps the app Node runtime and reuses healthy host Python and uv tools', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-dependencies-'));
     const fakeBin = path.join(dataDir, 'fake-bin');
@@ -143,12 +176,11 @@ describe('managed workspace dependency manager', () => {
       );
       expect(shell?.environment).not.toHaveProperty('PIP_INDEX_URL');
       expect(shell?.environment).not.toHaveProperty('UV_DEFAULT_INDEX');
-      await expect(execFileAsync(path.join(dataDir, 'workspace-dependencies', 'bin', 'node'), ['--version']))
+      await expect(runNodeShim(path.join(dataDir, 'workspace-dependencies', 'bin')))
         .resolves.toMatchObject({ stdout: expect.stringMatching(/^v\d+/u) });
-      await expect(manager.getStatus()).resolves.toMatchObject({
-        enabled: true,
-        state: 'not-installed',
-      });
+      await expect(manager.getStatus()).resolves.toMatchObject({ enabled: true });
+      await expect(access(path.join(dataDir, 'workspace-dependencies', 'toolchain', 'manifest.json')))
+        .rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -158,4 +190,29 @@ describe('managed workspace dependency manager', () => {
 async function writeExecutable(filePath: string, content: string): Promise<void> {
   await writeFile(filePath, content, 'utf8');
   await chmod(filePath, 0o755);
+}
+
+async function writeFakeHostTools(fakeBin: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await Promise.all([
+      linkOrCopyExecutable(process.execPath, path.join(fakeBin, 'python.exe')),
+      linkOrCopyExecutable(process.execPath, path.join(fakeBin, 'uv.exe')),
+    ]);
+    return;
+  }
+  await Promise.all([
+    writeExecutable(path.join(fakeBin, 'python3'), '#!/bin/sh\necho "Python 3.12.9"\n'),
+    writeExecutable(path.join(fakeBin, 'uv'), '#!/bin/sh\necho "uv 0.11.28"\n'),
+  ]);
+}
+
+async function linkOrCopyExecutable(source: string, destination: string): Promise<void> {
+  await link(source, destination).catch(() => copyFile(source, destination));
+}
+
+function runNodeShim(binDir: string) {
+  const shimPath = path.join(binDir, process.platform === 'win32' ? 'node.cmd' : 'node');
+  return process.platform === 'win32'
+    ? execFileAsync(shimPath, ['--version'], { shell: true, windowsHide: true })
+    : execFileAsync(shimPath, ['--version']);
 }
