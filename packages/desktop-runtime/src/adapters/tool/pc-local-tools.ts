@@ -4631,7 +4631,9 @@ function shellSpawnSpec(command, state) {
   }
   return {
     command: '/usr/bin/sandbox-exec',
-    args: ['-p', sandboxProfile, '/bin/sh', '-lc', guardedCommand],
+    // The runtime already supplies a curated environment. A login shell invokes
+    // macOS path_helper and moves managed tool shims behind /usr/bin.
+    args: ['-p', sandboxProfile, '/bin/sh', '-c', guardedCommand],
     sandboxed: true,
     shell: false,
   };

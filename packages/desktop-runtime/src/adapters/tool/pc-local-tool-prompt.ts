@@ -1,5 +1,12 @@
 import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 
+export type PcLocalToolPromptOptions = {
+  workspaceDependencies?: {
+    enabled: boolean;
+    packageIndexConfigured: boolean;
+  };
+};
+
 const WORKTREE_GIT_TOOL_NAMES = ['git_status', 'read_diff'] as const;
 const HISTORY_GIT_TOOL_NAMES = ['git_log', 'git_show'] as const;
 const GIT_TOOL_NAMES = [...WORKTREE_GIT_TOOL_NAMES, ...HISTORY_GIT_TOOL_NAMES] as const;
@@ -18,7 +25,10 @@ const ALL_TOOL_NAMES = [
 ] as const;
 
 /** Builds policy text only for PC-local tools advertised in the current sampling step. */
-export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | null {
+export function pcLocalToolPrompt(
+  tools?: RuntimeToolDefinition[],
+  options: PcLocalToolPromptOptions = {},
+): string | null {
   const advertised = new Set(tools ? tools.map((tool) => tool.name) : ALL_TOOL_NAMES);
   const localToolNames = ALL_TOOL_NAMES.filter((name) => advertised.has(name));
   if (!localToolNames.length) return null;
@@ -87,8 +97,19 @@ export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | nul
       '- Before the first build, test, lint, or typecheck command, use the injected project workflow. If it is unavailable or insufficient, inspect project instructions, the nearest relevant manifest, lockfile, and workspace configuration with read-only tools first.',
       '- Never use npm, npx, or another package-manager command as a probe when repository evidence selects a different manager. Prefer declared scripts; invoke a runner directly only when no declared script covers the check.',
       '- When deriving a narrower validation command from a declared script, preserve its package manager, working directory, runner flags, and configuration.',
-      '- Before installing Python dependencies, inspect the project files and probe command -v uv. Prefer the project-declared uv workflow when available; never install into the system Python or user site. Use a workspace .venv or an ephemeral uv run --with environment.',
     );
+    if (options.workspaceDependencies?.enabled) {
+      lines.push(
+        '- The desktop runtime manages and prepends Node.js, Python 3, pip, and uv for shell commands. Use python3 or uv directly; do not run which, command -v, or version probes first unless a command actually fails and you are diagnosing it.',
+        options.workspaceDependencies.packageIndexConfigured
+          ? '- The configured Python package index is already applied to both pip and uv. Do not add a different --index-url or bypass it.'
+          : '- Python package commands use their default package index because no custom Python package index is configured.',
+        '- The managed pip and pip3 commands are uv-backed compatibility shims and require an active virtual environment. Do not run a bare pip install for one-off work.',
+        '- Never install into the system Python or user site. For one-off dependencies, run the complete task in an isolated command such as uv run --with <package> -- python <script>; for a declared Python project, follow its existing uv or virtual-environment workflow.',
+      );
+    } else {
+      lines.push('- Before installing Python dependencies, inspect the project files and use command -v uv only when availability is genuinely unknown. Prefer the project-declared uv workflow when available; never install into the system Python or user site. Use a workspace .venv or an ephemeral uv run --with environment.');
+    }
   }
 
   if (hasAny(advertised, SHELL_PROCESS_TOOL_NAMES)) {

@@ -16,7 +16,9 @@ describe('runtime factory tool wiring', () => {
     expect(tools.filter((tool) => tool.name === 'open_browser')).toHaveLength(1);
     expect(tools.filter((tool) => tool.name === 'request_user_input')).toHaveLength(1);
     expect(tools.filter((tool) => tool.name === PUBLISH_ARTIFACT_TOOL_NAME)).toHaveLength(1);
-    await expect(runtime.toolHost.systemPrompt?.(context, { tools })).resolves.toContain('call publish_artifact once');
+    const systemPrompt = await runtime.toolHost.systemPrompt?.(context, { tools });
+    expect(systemPrompt).toContain('call publish_artifact once');
+    expect(systemPrompt).toContain('Use python3 or uv directly');
     await expect(runtime.toolHost.toolRuntimeProfile?.('request_user_input', context)).resolves.toMatchObject({
       approvalMode: 'selfManaged',
       supportsParallel: false,

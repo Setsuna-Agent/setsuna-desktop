@@ -23,10 +23,25 @@ describe('pcLocalToolPrompt', () => {
     expect(prompt).toContain('use the injected project workflow');
     expect(prompt).toContain('Never use npm, npx');
     expect(prompt).toContain('preserve its package manager');
-    expect(prompt).toContain('probe command -v uv');
+    expect(prompt).toContain('command -v uv only when availability is genuinely unknown');
     expect(prompt).toContain('never install into the system Python');
     expect(prompt).toContain('Reserve write_file for new files or genuine full-file rewrites');
     expect(prompt).toContain('delay visible progress');
+  });
+
+  it('tells the model to use runtime-managed Python directly with the configured index', () => {
+    const prompt = pcLocalToolPrompt(
+      [tool('run_shell_command')],
+      { workspaceDependencies: { enabled: true, packageIndexConfigured: true } },
+    );
+
+    expect(prompt).toContain('manages and prepends Node.js, Python 3, pip, and uv');
+    expect(prompt).toContain('Use python3 or uv directly');
+    expect(prompt).toContain('do not run which, command -v, or version probes first');
+    expect(prompt).toContain('configured Python package index is already applied');
+    expect(prompt).toContain('Do not run a bare pip install');
+    expect(prompt).toContain('uv run --with <package>');
+    expect(prompt).not.toContain('availability is genuinely unknown');
   });
 
   it('applies repository command selection rules to the compatibility shell surface', () => {

@@ -4,9 +4,11 @@ import { constants as fsConstants } from 'node:fs';
 import {
   access,
   mkdir,
+  readlink,
   readdir,
   rename,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
@@ -19,11 +21,12 @@ import type {
 import type { ConfigStore } from '../../ports/config-store.js';
 import type {
   WorkspaceDependencyManager,
+  WorkspaceDependencyPromptContext,
   WorkspaceDependencyShellEnvironment,
 } from '../../ports/workspace-dependency-manager.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
-const BUNDLE_VERSION = '2026.07.2';
+const BUNDLE_VERSION = '2026.07.3';
 const MANIFEST_FILE_NAME = 'manifest.json';
 const MANAGED_PYTHON_VERSION = '3.12';
 const MINIMUM_PYTHON_VERSION = [3, 10] as const;
@@ -77,7 +80,17 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   }
 
   async getStatus(): Promise<RuntimeWorkspaceDependenciesStatus> {
-    return this.status(false);
+    // Verify recorded tools so a stale manifest cannot appear healthy, but keep
+    // ordinary status reads from probing host tools before anything is installed.
+    return this.status(true, false);
+  }
+
+  async getPromptContext(): Promise<WorkspaceDependencyPromptContext> {
+    const config = await this.configStore.getConfig();
+    return {
+      enabled: config.desktopSettings?.workspaceDependenciesEnabled === true,
+      packageIndexConfigured: Boolean(config.desktopSettings?.pythonPackageIndexUrl?.trim()),
+    };
   }
 
   async diagnose(): Promise<RuntimeWorkspaceDependenciesStatus> {
@@ -150,14 +163,17 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     };
   }
 
-  private async status(runChecks: boolean): Promise<RuntimeWorkspaceDependenciesStatus> {
+  private async status(
+    verifyManifest: boolean,
+    inspectHostWhenMissing = verifyManifest,
+  ): Promise<RuntimeWorkspaceDependenciesStatus> {
     const config = await this.configStore.getConfig();
     const enabled = config.desktopSettings?.workspaceDependenciesEnabled === true;
     const manifest = await this.readManifest();
     const installing = Boolean(this.installPromise);
     const tools = manifest
-      ? await this.toolStatuses(manifest, runChecks)
-      : runChecks
+      ? await this.toolStatuses(manifest, verifyManifest)
+      : inspectHostWhenMissing
         ? await this.availableHostTools()
         : { node: unavailableTool(), python: unavailableTool(), uv: unavailableTool() };
     const checks = [
@@ -280,23 +296,35 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     await mkdir(parentDir, { recursive: true });
     await rm(stagingRoot, { recursive: true, force: true });
     let previousMoved = false;
+    let installationMoved = false;
     try {
       const manifest = await this.buildInstallation(stagingRoot);
+      // uv creates absolute links inside its install root on Unix. Convert them
+      // before the atomic rename so they keep pointing inside the final tree.
+      await rewriteInternalAbsoluteSymlinks(stagingRoot);
       await writeJsonFile(path.join(stagingRoot, MANIFEST_FILE_NAME), manifest);
       if (await pathExists(this.installRoot)) {
         await rename(this.installRoot, backupRoot);
         previousMoved = true;
       }
       await rename(stagingRoot, this.installRoot);
+      installationMoved = true;
+      if (!await manifestIsUsable(manifest)) {
+        throw new Error('工作空间依赖项安装后的健康检查失败。');
+      }
       if (previousMoved) await rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);
     } catch (error) {
-      if (previousMoved && !await pathExists(this.installRoot) && await pathExists(backupRoot)) {
-        await rename(backupRoot, this.installRoot).catch(() => undefined);
+      if (installationMoved) {
+        await rm(this.installRoot, { recursive: true, force: true }).catch(() => undefined);
+      }
+      if (previousMoved && await pathExists(backupRoot)) {
+        // Keep the backup on disk if restoration itself fails; deleting it in a
+        // finally block would turn a failed reinstall into data loss.
+        await rename(backupRoot, this.installRoot);
       }
       throw error;
     } finally {
       await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
-      await rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);
     }
   }
 
@@ -525,11 +553,48 @@ async function executableExists(filePath: string): Promise<boolean> {
 }
 
 async function findManagedPython(pythonBinDir: string, pythonInstallDir: string): Promise<string | null> {
-  for (const fileName of process.platform === 'win32' ? ['python.exe', 'python3.exe'] : ['python3', 'python']) {
+  const executableNames = new Set(process.platform === 'win32'
+    ? ['python.exe', 'python3.exe']
+    : [`python${MANAGED_PYTHON_VERSION}`, 'python3', 'python']);
+  // Prefer the versioned executable stored inside the installation tree. uv's
+  // convenience links can be absolute, and resolving them through realpath can
+  // also rewrite /var to /private/var on macOS, escaping the lexical staging root.
+  const nested = await findFileRecursively(
+    pythonInstallDir,
+    executableNames,
+    4,
+  );
+  if (nested) return nested;
+  for (const fileName of executableNames) {
     const direct = path.join(pythonBinDir, fileName);
     if (await executableExists(direct)) return direct;
   }
-  return findFileRecursively(pythonInstallDir, new Set(process.platform === 'win32' ? ['python.exe'] : ['python3', 'python']), 4);
+  return null;
+}
+
+async function rewriteInternalAbsoluteSymlinks(root: string, current = root): Promise<void> {
+  // Windows uv installations use executable launchers rather than the Unix
+  // symlink layout. Recreating Windows junctions can require extra privileges.
+  if (process.platform === 'win32') return;
+  const entries = await readdir(current, { withFileTypes: true });
+  await Promise.all(entries.map(async (entry) => {
+    const candidate = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      await rewriteInternalAbsoluteSymlinks(root, candidate);
+      return;
+    }
+    if (!entry.isSymbolicLink()) return;
+    const target = await readlink(candidate);
+    if (!path.isAbsolute(target) || !pathIsInsideRoot(target, root)) return;
+    const relativeTarget = path.relative(path.dirname(candidate), target) || '.';
+    await rm(candidate, { force: true });
+    await symlink(relativeTarget, candidate);
+  }));
+}
+
+function pathIsInsideRoot(candidate: string, root: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 async function findFileRecursively(root: string, names: ReadonlySet<string>, depth: number): Promise<string | null> {

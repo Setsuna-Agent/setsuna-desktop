@@ -207,8 +207,9 @@ export class PcLocalToolHost implements ToolHost {
   /**
    * 返回 PC local tools 的系统提示规则。
    */
-  systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
-    return pcLocalToolPrompt(request?.tools);
+  async systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
+    const workspaceDependencies = await this.workspaceDependencies?.getPromptContext();
+    return pcLocalToolPrompt(request?.tools, { workspaceDependencies });
   }
 
   /**
@@ -336,7 +337,10 @@ export class PcLocalToolHost implements ToolHost {
         : undefined,
     }) as Record<string, unknown>;
     if (!result?.ok) {
-      throw new ToolExecutionError(stringArg(result?.display || result?.content || `Local tool failed: ${normalized.name}`), {
+      // The display string is intentionally terse for the UI. Models need the
+      // formatted command output so they can react to the real stderr instead
+      // of guessing from an exit code.
+      throw new ToolExecutionError(stringArg(result?.content || result?.display || `Local tool failed: ${normalized.name}`), {
         data: result,
         failureKind: stringArg(result.failure_kind),
         failureStage: stringArg(result.failure_stage),

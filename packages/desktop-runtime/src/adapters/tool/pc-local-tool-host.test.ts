@@ -1,13 +1,15 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { chmod, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import type { RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment } from '@setsuna-desktop/contracts';
+import type { RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment, RuntimeWorkspaceDependenciesStatus } from '@setsuna-desktop/contracts';
 import { systemClock } from '../../ports/clock.js';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../ports/policy-amendment-store.js';
 import { ToolExecutionError } from '../../ports/tool-host.js';
+import type { WorkspaceDependencyManager } from '../../ports/workspace-dependency-manager.js';
 import { FileWorkspaceProjectStore } from '../workspace/file-workspace-project-store.js';
 import { PcLocalToolHost } from './pc-local-tool-host.js';
 import { shellSandboxProfile, shellSandboxUnavailableReason } from './pc-local-tools.js';
@@ -845,6 +847,55 @@ describe('pc local tool host', () => {
     ]));
   });
 
+  it('returns complete shell output when a command fails', async () => {
+    const { host } = await createHost();
+
+    await expect(host.runTool(
+      'run_shell_command',
+      {
+        command: `${nodeCommand()} -e "process.stderr.write('precise shell failure\\n'); process.exit(7)"`,
+        risk_level: 'low',
+        yield_time_ms: 0,
+      },
+      {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        sandbox: { mode: 'bypass' },
+      },
+    )).rejects.toThrow('precise shell failure');
+  });
+
+  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('preserves the managed PATH inside the macOS shell sandbox', async () => {
+    let managedBin = '';
+    const workspaceDependencies = stubWorkspaceDependencyManager({
+      prepareShellEnvironment: async () => ({
+        environment: { PATH: [managedBin, process.env.PATH ?? ''].filter(Boolean).join(path.delimiter) },
+        writableRoots: [],
+      }),
+    });
+    const { host, projectDir } = await createHost({ workspaceDependencies });
+    managedBin = path.join(projectDir, '.managed-bin');
+    const managedPython = path.join(managedBin, 'python3');
+    await mkdir(managedBin, { recursive: true });
+    await writeFile(managedPython, '#!/bin/sh\necho "Python 3.12.99 managed"\n', 'utf8');
+    await chmod(managedPython, 0o755);
+
+    const result = await host.runTool('run_shell_command', {
+      command: 'command -v python3 && python3 --version',
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: { networkAccess: false },
+    });
+
+    expect(result.content).toContain(managedPython);
+    expect(result.content).toContain('Python 3.12.99 managed');
+    expect(result.content).not.toContain('/usr/bin/python3');
+  });
+
   it('supports Codex-compatible exec_command and write_stdin tool names', async () => {
     const { host } = await createHost();
     const execResult = await host.runTool(
@@ -953,14 +1004,45 @@ describe('pc local tool host', () => {
   });
 });
 
-async function createHost(options: { policyAmendmentStore?: PolicyAmendmentStore } = {}): Promise<{ host: PcLocalToolHost; projectDir: string; projectId: string }> {
+async function createHost(options: {
+  policyAmendmentStore?: PolicyAmendmentStore;
+  workspaceDependencies?: WorkspaceDependencyManager;
+} = {}): Promise<{ host: PcLocalToolHost; projectDir: string; projectId: string }> {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-toolhost-test-'));
   const projectDir = path.join(root, 'project');
   const dataDir = path.join(root, 'data');
   await mkdir(projectDir, { recursive: true });
   const store = new FileWorkspaceProjectStore(dataDir, systemClock, { temporaryWorkspacePath: projectDir });
   const project = await store.addProject({ path: projectDir });
-  return { host: new PcLocalToolHost(store, options.policyAmendmentStore), projectDir, projectId: project.id };
+  return {
+    host: new PcLocalToolHost(store, options.policyAmendmentStore, options.workspaceDependencies),
+    projectDir,
+    projectId: project.id,
+  };
+}
+
+function stubWorkspaceDependencyManager(
+  overrides: Partial<WorkspaceDependencyManager> = {},
+): WorkspaceDependencyManager {
+  const status: RuntimeWorkspaceDependenciesStatus = {
+    bundleVersion: 'test',
+    checks: [],
+    enabled: true,
+    installPath: '/managed',
+    node: { available: true },
+    python: { available: true },
+    state: 'ready',
+    uv: { available: true },
+  };
+  return {
+    diagnose: async () => status,
+    getPromptContext: async () => ({ enabled: true, packageIndexConfigured: true }),
+    getStatus: async () => status,
+    prepareShellEnvironment: async () => null,
+    reinstall: async () => status,
+    setEnabled: async () => status,
+    ...overrides,
+  };
 }
 
 class StaticPolicyAmendmentStore implements PolicyAmendmentStore {

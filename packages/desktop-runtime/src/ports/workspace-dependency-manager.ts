@@ -8,12 +8,18 @@ export type WorkspaceDependencyShellEnvironment = {
   writableRoots: string[];
 };
 
+export type WorkspaceDependencyPromptContext = {
+  enabled: boolean;
+  packageIndexConfigured: boolean;
+};
+
 /**
  * Manages the optional Node/Python toolchain exposed to workspace shell calls.
  * Implementations may reuse healthy host tools or provision isolated fallbacks.
  */
 export type WorkspaceDependencyManager = {
   getStatus(): Promise<RuntimeWorkspaceDependenciesStatus>;
+  getPromptContext(): Promise<WorkspaceDependencyPromptContext>;
   setEnabled(input: RuntimeWorkspaceDependenciesToggleInput): Promise<RuntimeWorkspaceDependenciesStatus>;
   diagnose(): Promise<RuntimeWorkspaceDependenciesStatus>;
   reinstall(): Promise<RuntimeWorkspaceDependenciesStatus>;
