@@ -2,6 +2,7 @@ import type { Dispatch, PointerEvent as ReactPointerEvent, SetStateAction } from
 import type {
   DesktopRuntimeClient,
   RuntimeConfigState,
+  RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThreadSummary,
   WorkspaceEntrySearchResponse,
@@ -18,6 +19,7 @@ export function SideChatPanel({
   client,
   config,
   hidden,
+  plugins,
   skills,
   threads,
   onApprovalPolicyChange,
@@ -40,6 +42,7 @@ export function SideChatPanel({
   client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
   hidden: boolean;
+  plugins: RuntimePluginSummary[];
   skills: RuntimeSkillSummary[];
   threads: RuntimeThreadSummary[];
   onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
@@ -86,6 +89,7 @@ export function SideChatPanel({
           contextCompacting={sideChat.contextCompacting}
           currentThread={sideChat.currentThread}
           draft={sideChat.draft}
+          plugins={plugins}
           skillSelectionRequest={null}
           skills={skills}
           threadUsage={sideChat.threadUsage}

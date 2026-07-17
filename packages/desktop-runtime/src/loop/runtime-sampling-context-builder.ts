@@ -146,6 +146,7 @@ export class RuntimeSamplingContextBuilder {
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
       hookContextMessages,
+      skillActivationText: currentTurnSkillActivationText(conversationMessages, turnId),
       skillIds,
       thread,
       toolContext,
@@ -234,6 +235,16 @@ export class RuntimeSamplingContextBuilder {
       .filter(Boolean)
       .sort();
   }
+}
+
+function currentTurnSkillActivationText(messages: RuntimeMessage[], turnId: string): string {
+  const currentTurnMessages = messages.filter((message) => message.role === 'user' && message.turnId === turnId);
+  const fallbackMessage = [...messages].reverse().find((message) => message.role === 'user');
+  const activationMessages = currentTurnMessages.length ? currentTurnMessages : fallbackMessage ? [fallbackMessage] : [];
+  return activationMessages.flatMap((message) => [
+    message.content,
+    ...(message.attachments ?? []).flatMap((attachment) => [attachment.name, attachment.type]),
+  ]).map((value) => value.trim()).filter(Boolean).join('\n');
 }
 
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {

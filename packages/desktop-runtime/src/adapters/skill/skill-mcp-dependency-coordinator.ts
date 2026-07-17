@@ -11,7 +11,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
-import type { SkillInjection, SkillMcpDependencyManager, SkillRegistry } from '../../ports/skill-registry.js';
+import type { SkillActivationContext, SkillInjection, SkillMcpDependencyManager, SkillRegistry } from '../../ports/skill-registry.js';
 
 type SkillMcpClient = Pick<McpClientRuntime, 'authStatus' | 'invalidateServer' | 'login'>;
 
@@ -45,9 +45,9 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
     return this.skills.deleteSkill(skillId);
   }
 
-  async selectedSkillInjections(skillIds?: string[]): Promise<SkillInjection[]> {
+  async selectedSkillInjections(skillIds?: string[], activation?: SkillActivationContext): Promise<SkillInjection[]> {
     const [injections, servers] = await Promise.all([
-      this.skills.selectedSkillInjections(skillIds),
+      this.skills.selectedSkillInjections(skillIds, activation),
       this.mcpStore.listServerInputs(),
     ]);
     return Promise.all(injections.map(async (skill) => ({

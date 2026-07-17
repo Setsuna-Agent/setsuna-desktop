@@ -21,6 +21,7 @@ describe('RuntimePromptContextAssembler', () => {
             name: 'Explicit Skill',
             content: 'abcde',
             path: '/skills/explicit/SKILL.md',
+            plugin: { id: 'documents', name: 'Documents', icon: 'documents' },
             mcpDependencies: [{
               type: 'mcp',
               value: 'docs',
@@ -64,6 +65,7 @@ describe('RuntimePromptContextAssembler', () => {
     expect(explicit?.content).toContain('- docs: missing');
     expect(defaultSkill?.content).toContain('budget was exhausted');
     expect(result.selectedSkills.map((skill) => skill.id)).toEqual(['explicit', 'default']);
+    expect(result.selectedSkills[0]?.plugin).toEqual({ id: 'documents', name: 'Documents', icon: 'documents' });
     expect(instructionEnvironment).toBe(environment);
     expect(result.fragments.find((fragment) => fragment.id === 'desktop_runtime_environment')).toMatchObject({
       role: 'developer',

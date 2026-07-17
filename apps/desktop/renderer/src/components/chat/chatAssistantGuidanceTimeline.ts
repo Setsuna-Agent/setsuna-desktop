@@ -184,7 +184,8 @@ function blockOrderIds(block: AssistantRunTimelineBlock): string[] {
 function assistantWorkItemMessageId(item: AssistantWorkItem): string | undefined {
   if (item.type === 'content') return item.segment.segment.id;
   if (item.type === 'thinking') return item.segment.segment.id;
-  return item.segment.id;
+  if (item.type === 'toolRuns') return item.segment.id;
+  return undefined;
 }
 
 function withoutConsumedGuidance(messages: RuntimeMessage[], consumedIds: Set<string>): RuntimeMessage[] {

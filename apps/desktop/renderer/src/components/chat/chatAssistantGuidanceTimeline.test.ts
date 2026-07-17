@@ -22,7 +22,9 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     expect(plan.nodes[0].entries.map((entry) =>
       entry.type === 'guidance'
         ? entry.messages.map((message) => message.id).join(',')
-        : entry.item.segment.id,
+        : entry.item.type === 'pluginUses'
+          ? entry.item.id
+          : entry.item.segment.id,
     )).toEqual(['assistant_before:content', 'user_steer', 'assistant_after:content']);
   });
 

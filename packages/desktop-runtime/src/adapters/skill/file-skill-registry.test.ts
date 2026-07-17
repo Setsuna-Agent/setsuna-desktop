@@ -52,6 +52,51 @@ describe('file skill registry', () => {
     ]);
   });
 
+  it('keeps installed Plugin metadata with injected Plugin Skills', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    await installDocumentsPluginFixture(dataDir);
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await expect(registry.selectedSkillInjections(['documents.documents'])).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'documents.documents',
+          plugin: { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
+        }),
+      ]),
+    );
+    await expect(registry.selectedSkillInjections([], { text: '请生成一个 DOCX 给我' })).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'documents.documents' })]),
+    );
+    await expect(registry.selectedSkillInjections([], { text: '你好，介绍一下自己' })).resolves.toEqual([]);
+    await expect(registry.selectedSkillInjections(['builtin-demo'], { text: '请生成一个 DOCX 给我' })).resolves.toEqual([
+      expect.objectContaining({ id: 'builtin-demo' }),
+    ]);
+  });
+
+  it('routes arbitrary Plugin Skills through declared activation phrases and Plugin tags', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    await installPluginSkillFixture(dataDir, {
+      pluginId: 'analytics-toolkit',
+      pluginName: 'Analytics Toolkit',
+      pluginTags: ['数据分析'],
+      skillDirectory: 'metrics-helper',
+      skillName: 'Metrics Helper',
+      skillDescription: 'Build and inspect business dashboards.',
+      autoActivate: ['经营驾驶舱'],
+    });
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await expect(registry.selectedSkillInjections([], { text: '请生成一份经营驾驶舱' })).resolves.toEqual([
+      expect.objectContaining({ id: 'analytics-toolkit.metrics-helper' }),
+    ]);
+    await expect(registry.selectedSkillInjections([], { text: '帮我做一次数据分析' })).resolves.toEqual([
+      expect.objectContaining({ id: 'analytics-toolkit.metrics-helper' }),
+    ]);
+    await expect(registry.selectedSkillInjections([], { text: '请编译当前项目' })).resolves.toEqual([]);
+    await expect(registry.selectedSkillInjections([], { text: 'Please use another helper' })).resolves.toEqual([]);
+  });
+
   it('creates, updates, injects, and deletes local user skills', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
@@ -313,6 +358,35 @@ describe('file skill registry', () => {
       .toContain('<skill name="builtin-demo" id="builtin-demo" path="');
     expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'builtin-demo', selected: false });
   });
+
+  it('automatically injects a matching Plugin Skill from the current turn input', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    await installDocumentsPluginFixture(dataDir);
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+    const threadStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await threadStore.createThread({ title: 'Automatic Plugin Skill routing' });
+    const modelClient = new CapturingModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids: new RandomIdGenerator(),
+      skillRegistry: registry,
+    });
+
+    await loop.sendTurn(thread.id, { input: '生成一个 docx 报告给我' });
+
+    expect(modelClient.messages.find((message) => message.id === 'skill_documents.documents')?.content)
+      .toContain('<skill name="Word 文档处理" id="documents.documents" path="');
+    const updated = await threadStore.getThread(thread.id);
+    expect(updated?.turns?.at(-1)?.stepSnapshots?.[0]?.snapshot.selectedSkills).toEqual([
+      expect.objectContaining({
+        id: 'documents.documents',
+        plugin: { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
+      }),
+    ]);
+  });
 });
 
 function skillChangeQueue(registry: FileSkillRegistry): { next(): Promise<boolean>; close(): void } {
@@ -378,4 +452,65 @@ async function createSkillFixture(): Promise<{ builtinDir: string; dataDir: stri
     ].join('\n'),
   );
   return { builtinDir, dataDir };
+}
+
+async function installDocumentsPluginFixture(dataDir: string): Promise<void> {
+  await installPluginSkillFixture(dataDir, {
+    pluginId: 'documents',
+    pluginName: 'Word 文档处理',
+    pluginIcon: 'documents',
+    skillDirectory: 'documents',
+    skillName: 'Word 文档处理',
+    skillDescription: 'Create and verify DOCX files.',
+  });
+}
+
+async function installPluginSkillFixture(dataDir: string, input: {
+  pluginId: string;
+  pluginName: string;
+  pluginIcon?: string;
+  pluginDescription?: string;
+  pluginTags?: string[];
+  skillDirectory: string;
+  skillName: string;
+  skillDescription: string;
+  autoActivate?: string[];
+}): Promise<void> {
+  const pluginRoot = path.join(dataDir, 'plugins', input.pluginId);
+  const pluginSkillDir = path.join(pluginRoot, 'skills', input.skillDirectory);
+  const skillId = `${input.pluginId}.${input.skillDirectory}`;
+  await mkdir(pluginSkillDir, { recursive: true });
+  await writeFile(path.join(pluginSkillDir, 'SKILL.md'), [
+    '---',
+    `name: ${JSON.stringify(input.skillName)}`,
+    `description: ${JSON.stringify(input.skillDescription)}`,
+    ...(input.autoActivate?.length
+      ? ['auto-activate:', ...input.autoActivate.map((keyword) => `  - ${JSON.stringify(keyword)}`)]
+      : []),
+    '---',
+    '',
+    input.skillDescription,
+  ].join('\n'));
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(path.join(dataDir, 'plugins.json'), JSON.stringify({
+    version: 1,
+    plugins: [{
+      id: input.pluginId,
+      name: input.pluginName,
+      ...(input.pluginIcon ? { icon: input.pluginIcon } : {}),
+      ...(input.pluginDescription ? { description: input.pluginDescription } : {}),
+      ...(input.pluginTags?.length ? { tags: input.pluginTags } : {}),
+      installedAt: '2026-07-17T00:00:00.000Z',
+      skills: [{ id: skillId, name: input.skillName, description: input.skillDescription }],
+      mcpServers: [],
+      hooks: [],
+      hookCount: 0,
+      resources: [],
+      sourcePath: pluginRoot,
+      installPath: pluginRoot,
+      manifestPath: path.join(pluginRoot, '.setsuna-plugin', 'plugin.json'),
+      skillEntries: [{ id: skillId, relativePath: `skills/${input.skillDirectory}` }],
+      mcpServerInputs: [],
+    }],
+  }));
 }

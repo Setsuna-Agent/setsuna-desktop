@@ -1,6 +1,7 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
 import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
+import type { RuntimePluginUse } from './runtimePluginUsage.js';
 
 export type AssistantRunTimelineBlock =
   | {
@@ -32,9 +33,13 @@ export type AssistantWorkThinkingSegment = {
 export type AssistantWorkItem =
   | { type: 'content'; segment: AssistantWorkContentSegment }
   | { type: 'thinking'; segment: AssistantWorkThinkingSegment }
+  | { type: 'pluginUses'; id: string; plugins: RuntimePluginUse[] }
   | { type: 'toolRuns'; id: string; segment: RuntimeMessage; toolRuns: NonNullable<RuntimeMessage['toolRuns']> };
 
-export function createAssistantRunTimeline(segments: RuntimeMessage[]): AssistantRunTimelineBlock[] {
+export function createAssistantRunTimeline(
+  segments: RuntimeMessage[],
+  pluginUses: RuntimePluginUse[] = [],
+): AssistantRunTimelineBlock[] {
   const parsedSegments = segments.map(parseAssistantSegment);
   const lastProcessIndex = parsedSegments.reduce((lastIndex, parsed, index) => (hasProcessEvidence(parsed) ? index : lastIndex), -1);
   const finalStartIndex = parsedSegments.findIndex(
@@ -94,6 +99,14 @@ export function createAssistantRunTimeline(segments: RuntimeMessage[]): Assistan
     });
     workBlock = null;
   };
+
+  // Plugin-backed Skills are injected before the first model token. Seed the
+  // work block so the attribution stays in the same streamed timeline as tools.
+  if (pluginUses.length && segments[0]) {
+    appendWork(segments[0], {
+      items: [{ type: 'pluginUses', id: `${segments[0].id}:plugins`, plugins: pluginUses }],
+    });
+  }
 
   parsedSegments.forEach((parsed, index) => {
     const inFinalAnswer = finalStarted && index >= finalStartIndex;

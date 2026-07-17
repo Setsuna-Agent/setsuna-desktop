@@ -1,6 +1,13 @@
 ---
 name: "Word 文档处理"
 description: "Create, edit, inspect, sanitize, render, and verify DOCX files. Use for Word documents, reports, proposals, memos, handbooks, templates, comments, tracked changes, and layout-sensitive document work."
+auto-activate:
+  - docx
+  - Microsoft Word
+  - Word 文档
+  - Word 文件
+  - Word document
+  - Word file
 ---
 
 # Word Documents

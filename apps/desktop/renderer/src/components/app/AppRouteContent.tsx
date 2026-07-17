@@ -209,6 +209,7 @@ export function AppRouteContent({
       currentThread={runtime.currentThread}
       draft={draft}
       filePreview={projectWorkspace.filePreview}
+      plugins={runtime.plugins}
       skillSelectionRequest={skillSelectionRequest}
       reviewError={workspacePanels.reviewError}
       reviewFocusRequest={reviewFocusRequest}

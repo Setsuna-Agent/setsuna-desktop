@@ -1,6 +1,12 @@
 ---
 name: "OpenAI 官方文档"
 description: 查询 OpenAI 平台、API、模型与 Codex 的最新官方开发文档。
+auto-activate:
+  - OpenAI API
+  - OpenAI SDK
+  - OpenAI 文档
+  - Codex
+  - Codex 文档
 metadata:
   short-description: 通过官方 MCP 查询 OpenAI 文档
 ---

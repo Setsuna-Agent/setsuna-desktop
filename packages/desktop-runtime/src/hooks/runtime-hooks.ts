@@ -753,6 +753,7 @@ function hookRunFromDiscoveredHook({
     statusMessage: hook.statusMessage,
     sourcePath: hook.sourcePath,
     source: hook.source,
+    ...(hook.pluginId ? { pluginId: hook.pluginId } : {}),
     ...('prompt' in input ? { promptPreview: previewHookPrompt(input.prompt) } : {}),
     ...('lastAssistantMessage' in input && input.lastAssistantMessage ? { lastAssistantMessagePreview: previewHookPrompt(input.lastAssistantMessage) } : {}),
     startedAt,

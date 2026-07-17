@@ -5,6 +5,7 @@ import type {
   RuntimeSkillMcpDependency,
   RuntimeSkillMcpDependencyInstallResult,
   RuntimeSkillPatch,
+  RuntimePluginReference,
 } from '@setsuna-desktop/contracts';
 
 export type SkillInjection = {
@@ -12,8 +13,14 @@ export type SkillInjection = {
   name: string;
   content: string;
   path?: string;
+  plugin?: RuntimePluginReference;
   mcpDependencies?: RuntimeSkillMcpDependency[];
   dependencyErrors?: string[];
+};
+
+export type SkillActivationContext = {
+  /** Current-turn user text plus attachment names/types used for declarative Plugin Skill routing. */
+  text: string;
 };
 
 export type SkillMcpDependencyManager = {
@@ -27,7 +34,7 @@ export type SkillRegistry = {
   getSkill(skillId: string): Promise<RuntimeSkillDetail | null>;
   updateSkill(skillId: string, patch: RuntimeSkillPatch): Promise<RuntimeSkillDetail>;
   deleteSkill(skillId: string): Promise<void>;
-  selectedSkillInjections(skillIds?: string[]): Promise<SkillInjection[]>;
+  selectedSkillInjections(skillIds?: string[], activation?: SkillActivationContext): Promise<SkillInjection[]>;
   setExtraRoots(extraRoots: string[]): Promise<void>;
   subscribeChanges(listener: () => void): () => void;
 };

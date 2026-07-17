@@ -41,6 +41,7 @@ export class RuntimePromptContextAssembler {
   async build({
     config,
     hookContextMessages,
+    skillActivationText = '',
     skillIds,
     thread,
     toolContext,
@@ -49,6 +50,7 @@ export class RuntimePromptContextAssembler {
   }: {
     config: RuntimeConfigState | null | undefined;
     hookContextMessages: RuntimeMessage[];
+    skillActivationText?: string;
     skillIds: string[];
     thread: RuntimeThread;
     toolContext: RuntimeToolExecutionContext;
@@ -57,7 +59,7 @@ export class RuntimePromptContextAssembler {
   }): Promise<RuntimePromptContext> {
     const environment = toolContext.environment;
     const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext] = await Promise.all([
-      this.skillContext(skillIds, config),
+      this.skillContext(skillIds, config, skillActivationText),
       this.options.memory.contextMessages(thread.projectId, config),
       this.options.projectInstructions?.load({
         environment,
@@ -89,8 +91,12 @@ export class RuntimePromptContextAssembler {
     };
   }
 
-  private async skillContext(skillIds: string[], config: RuntimeConfigState | null | undefined): Promise<RuntimePromptContext> {
-    const injections = await this.options.skillRegistry?.selectedSkillInjections(skillIds);
+  private async skillContext(
+    skillIds: string[],
+    config: RuntimeConfigState | null | undefined,
+    skillActivationText: string,
+  ): Promise<RuntimePromptContext> {
+    const injections = await this.options.skillRegistry?.selectedSkillInjections(skillIds, { text: skillActivationText });
     if (!injections?.length) return { fragments: [], selectedSkills: [] };
     const explicitSkillIds = new Set(skillIds);
     const orderedInjections = injections
@@ -126,7 +132,12 @@ export class RuntimePromptContextAssembler {
     });
     return {
       fragments,
-      selectedSkills: orderedInjections.map((skill) => ({ id: skill.id, name: skill.name, ...(skill.path ? { path: skill.path } : {}) })),
+      selectedSkills: orderedInjections.map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        ...(skill.path ? { path: skill.path } : {}),
+        ...(skill.plugin ? { plugin: { ...skill.plugin } } : {}),
+      })),
     };
   }
 

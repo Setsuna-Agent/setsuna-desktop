@@ -6,6 +6,7 @@ import type {
   RuntimeThread,
   RuntimeConfigState,
   RuntimePlanDecision,
+  RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
@@ -54,6 +55,7 @@ export function AppChatSurface({
   currentThread,
   draft,
   filePreview,
+  plugins,
   skillSelectionRequest,
   reviewError,
   reviewFocusRequest,
@@ -132,6 +134,7 @@ export function AppChatSurface({
   currentThread: RuntimeThread | null;
   draft: string;
   filePreview: WorkspaceFileRead | null;
+  plugins: RuntimePluginSummary[];
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   reviewError: string | null;
   reviewFocusRequest: DesktopReviewFocusRequest | null;
@@ -234,6 +237,7 @@ export function AppChatSurface({
           currentThread={currentThread}
           draft={draft}
           imageAttachmentRequest={imageAttachmentRequest}
+          plugins={plugins}
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           skillSelectionRequest={skillSelectionRequest}
@@ -276,6 +280,7 @@ export function AppChatSurface({
           config={config}
           hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
           key={panel.id}
+          plugins={plugins}
           skills={skills}
           threads={threads}
           onApprovalPolicyChange={onApprovalPolicyChange}

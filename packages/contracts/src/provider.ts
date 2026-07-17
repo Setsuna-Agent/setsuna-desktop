@@ -2,6 +2,7 @@ import type { RuntimeMessage, RuntimeMessagePromptSource } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './config.js';
 import type { RuntimeEnvironment } from './environment.js';
+import type { RuntimePluginReference } from './plugins.js';
 
 export type ModelProviderKind = 'openai-compatible' | 'openai-responses' | 'anthropic';
 
@@ -51,6 +52,8 @@ export type RuntimeModelRequestStepSkill = {
   id: string;
   name: string;
   path?: string;
+  /** Present when the injected Skill came from an installed Plugin bundle. */
+  plugin?: RuntimePluginReference;
 };
 
 export type RuntimePromptManifestEntry = {

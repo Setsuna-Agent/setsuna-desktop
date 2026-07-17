@@ -190,6 +190,7 @@ export type RuntimeHookRun = {
   statusMessage?: string | null;
   sourcePath?: string;
   source?: RuntimeHookSource;
+  pluginId?: string;
   message?: string;
   entries?: RuntimeHookOutputEntry[];
   stdoutPreview?: string;

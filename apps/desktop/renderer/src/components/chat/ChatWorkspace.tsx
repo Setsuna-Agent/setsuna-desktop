@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { Bubble } from '@ant-design/x';
 import { ArrowDown, BookOpen, Bug, Copy, Hammer, Pencil, SearchCode, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react';
-import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { AnswerRuntimeApprovalInput, RuntimeCollaborationMode, RuntimeConfigState, RuntimeMessage, RuntimePlanDecision, RuntimePluginSummary, RuntimeSkillSummary, RuntimeThread, RuntimeThreadMemoryMode, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceEntrySearchResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatTimelineDivider } from './ChatTimelineDivider.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
@@ -11,6 +11,7 @@ import { MarkdownRenderer } from './markdown/MarkdownRenderer.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
 import { RuntimeArtifactList } from './RuntimeArtifactList.js';
+import { RuntimePluginUses } from './RuntimePluginUses.js';
 import { StreamingScrollPinProvider } from './StreamingScrollPinProvider.js';
 import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
@@ -24,6 +25,7 @@ import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { chatThreadUsageForDisplay } from './chatThreadUsage.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 import { runtimeArtifactsFromToolRuns } from './runtimeArtifacts.js';
+import { runtimePluginUsesByTurn, type RuntimePluginUse } from './runtimePluginUsage.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
 import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ChatWorkspaceMentionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
@@ -118,6 +120,7 @@ export function ChatWorkspace({
   onWorkspaceMentionRequestConsumed,
   reviewLoading = false,
   reviewState = null,
+  plugins = [],
   variant = 'main',
 }: {
   activeTurnId: string | null;
@@ -162,6 +165,7 @@ export function ChatWorkspace({
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
   reviewLoading?: boolean;
   reviewState?: DesktopReviewState | null;
+  plugins?: RuntimePluginSummary[];
   variant?: 'main' | 'side';
 }) {
   const messages = currentThread?.messages ?? [];
@@ -172,6 +176,10 @@ export function ChatWorkspace({
   const requestedReviewProjectRef = useRef<string | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread, activeModelContextWindowTokens(config)), [config, currentThread]);
   const displayedThreadUsage = useMemo(() => chatThreadUsageForDisplay(threadUsage, currentThread), [currentThread, threadUsage]);
+  const pluginUsesByTurnId = useMemo(
+    () => runtimePluginUsesByTurn(currentThread, skills, plugins),
+    [currentThread, plugins, skills],
+  );
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);
   const overviewLayout = useConversationOverviewAutoExpand(conversationRef, contentRef);
@@ -265,7 +273,14 @@ export function ChatWorkspace({
     if (!showActiveTurnPlaceholder || !activeTurnId) return null;
     return [...renderedDisplayItems].reverse().find((item) => item.type === 'user' && item.message.turnId === activeTurnId)?.id ?? null;
   }, [activeTurnId, renderedDisplayItems, showActiveTurnPlaceholder]);
-  const scrollSignal = useMemo(() => createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id }), [activeTurnId, contextCompactionRunning, currentThread?.id, renderWindow]);
+  const pluginUseScrollSignal = useMemo(
+    () => [...pluginUsesByTurnId].map(([turnId, uses]) => `${turnId}:${uses.map((use) => use.id).join(',')}`).join('|'),
+    [pluginUsesByTurnId],
+  );
+  const scrollSignal = useMemo(
+    () => `${createChatScrollSignal(renderWindow, { activeTurnId, contextCompactionRunning, threadId: currentThread?.id })}:plugins:${pluginUseScrollSignal}`,
+    [activeTurnId, contextCompactionRunning, currentThread?.id, pluginUseScrollSignal, renderWindow],
+  );
   const { handleScroll, handleScrollKeyDown, handleScrollTouchMove, handleScrollWheel, listRef, markScrollbarDragIntent, scrollRef, scrollToBottom, showScrollBottom } = usePinnedChatScroll({
     contentRef,
     scrollSignal,
@@ -506,12 +521,23 @@ export function ChatWorkspace({
                             onSubmitEdit={submitEditingMessage}
                             onToggleDelete={toggleDeleteSelection}
                             onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
+                            pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? []) : []}
                             selectedForDelete={selectedDeleteItemIds.has(item.id)}
                           />
-                          {item.type === 'user' && item.id === activePlaceholderUserItemId ? <ActiveWorkPlaceholder segments={[item.message]} /> : null}
+                          {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
+                            <ActiveWorkPlaceholder
+                              pluginUses={activeTurnId ? (pluginUsesByTurnId.get(activeTurnId) ?? []) : []}
+                              segments={[item.message]}
+                            />
+                          ) : null}
                         </Fragment>
                       ))}
-                      {showActiveTurnPlaceholder && !activeUserVisible ? <ActiveWorkPlaceholder segments={[]} /> : null}
+                      {showActiveTurnPlaceholder && !activeUserVisible ? (
+                        <ActiveWorkPlaceholder
+                          pluginUses={activeTurnId ? (pluginUsesByTurnId.get(activeTurnId) ?? []) : []}
+                          segments={[]}
+                        />
+                      ) : null}
                       {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
                       <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
                     </div>
@@ -1046,6 +1072,7 @@ function MessageItem({
   onSubmitEdit,
   onToggleDelete,
   onWorkHistoryExpandedChange,
+  pluginUses,
   selectedForDelete,
 }: {
   activeAssistantItemId: string | null;
@@ -1068,6 +1095,7 @@ function MessageItem({
   onSubmitEdit: (messageId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
+  pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
 }) {
   if (item.type === 'assistant') {
@@ -1084,6 +1112,7 @@ function MessageItem({
         onStartDelete={onStartDelete}
         onToggleDelete={onToggleDelete}
         onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
+        pluginUses={pluginUses}
         selectedForDelete={selectedForDelete}
       />
     );
@@ -1154,6 +1183,7 @@ function AssistantRunItem({
   onStartDelete,
   onToggleDelete,
   onWorkHistoryExpandedChange,
+  pluginUses,
   selectedForDelete,
 }: {
   activeAssistantItemId: string | null;
@@ -1167,6 +1197,7 @@ function AssistantRunItem({
   onStartDelete: (itemId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
+  pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
 }) {
   const status = assistantRunStatus(item);
@@ -1183,7 +1214,7 @@ function AssistantRunItem({
       {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label="选择这条回复" onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onPlanDecision={onPlanDecision} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} />}
+        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onPlanDecision={onPlanDecision} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} />}
         footer={belongsToActiveTurn ? undefined : <MessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={() => onStartDelete(item.id)} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
@@ -1298,6 +1329,7 @@ function AssistantRunContent({
   onOpenFileReview,
   onPlanDecision,
   onWorkHistoryExpandedChange,
+  pluginUses,
 }: {
   active: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
@@ -1306,12 +1338,16 @@ function AssistantRunContent({
   onOpenFileReview?: (filePath?: string) => void;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
+  pluginUses: RuntimePluginUse[];
 }) {
   const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
   const planSegment = useMemo(() => [...displaySegments].reverse().find((segment) => segment.planMode), [displaySegments]);
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
-  const timelineBlocks = useMemo(() => createAssistantRunTimeline(displaySegments), [displaySegments]);
+  const timelineBlocks = useMemo(
+    () => createAssistantRunTimeline(displaySegments, pluginUses),
+    [displaySegments, pluginUses],
+  );
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
   const hasRenderableContent = timelineBlocks.length > 0;
   const hasWorkBlock = timelineBlocks.some((block) => block.type === 'work');
@@ -1354,6 +1390,7 @@ function AssistantRunContent({
   if (planSegment) {
     return (
       <div className="chat-assistant-run">
+        <RuntimePluginUses active={active} plugins={pluginUses} />
         <PlanCard message={planSegment} active={active} onPlanDecision={onPlanDecision} />
       </div>
     );
@@ -1603,6 +1640,9 @@ function assistantWorkItemNodes(
   if (item.type === 'content') {
     return [<MarkdownRenderer key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />];
   }
+  if (item.type === 'pluginUses') {
+    return [<RuntimePluginUses active={blockActive} key={item.id} plugins={item.plugins} />];
+  }
   if (item.type === 'thinking') {
     return blockActive && item.segment.content.trim()
       ? [
@@ -1627,9 +1667,20 @@ function assistantWorkItemNodes(
   ] : [];
 }
 
-function ActiveWorkPlaceholder({ children, segments, showLoading = true }: { children?: ReactNode; segments: RuntimeMessage[]; showLoading?: boolean }) {
+function ActiveWorkPlaceholder({
+  children,
+  pluginUses = [],
+  segments,
+  showLoading = true,
+}: {
+  children?: ReactNode;
+  pluginUses?: RuntimePluginUse[];
+  segments: RuntimeMessage[];
+  showLoading?: boolean;
+}) {
   return (
-    <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
+    <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || pluginUses.length > 0 || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
+      <RuntimePluginUses active plugins={pluginUses} />
       {children}
       {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
       {showLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}

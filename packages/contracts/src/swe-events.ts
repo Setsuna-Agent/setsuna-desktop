@@ -1283,7 +1283,10 @@ function cloneRuntimeModelRequestStepSnapshot(snapshot: RuntimeModelRequestStepS
           writableRoots: snapshot.sandboxWorkspaceWrite.writableRoots ? [...snapshot.sandboxWorkspaceWrite.writableRoots] : undefined,
         }
       : undefined,
-    selectedSkills: snapshot.selectedSkills.map((skill) => ({ ...skill })),
+    selectedSkills: snapshot.selectedSkills.map((skill) => ({
+      ...skill,
+      plugin: skill.plugin ? { ...skill.plugin } : undefined,
+    })),
     toolEnvironment: snapshot.toolEnvironment
       ? {
           ...snapshot.toolEnvironment,

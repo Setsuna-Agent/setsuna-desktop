@@ -1,6 +1,13 @@
 import type { RuntimeMcpTransport } from './mcp.js';
 import type { RuntimeHookEventName } from './config.js';
 
+/** Stable, renderer-safe attribution stored with runtime activity. */
+export type RuntimePluginReference = {
+  id: string;
+  name: string;
+  icon?: string;
+};
+
 export type RuntimePluginSkill = {
   id: string;
   name: string;

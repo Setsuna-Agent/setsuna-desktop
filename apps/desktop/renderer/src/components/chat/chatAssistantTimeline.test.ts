@@ -3,6 +3,32 @@ import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { createAssistantRunTimeline } from './chatAssistantTimeline.js';
 
 describe('createAssistantRunTimeline', () => {
+  it('places Plugin attribution in work before a final answer', () => {
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_final',
+      role: 'assistant',
+      content: '文档已经生成。',
+      createdAt: '2026-07-17T00:00:00.000Z',
+      status: 'streaming',
+    }];
+    const timeline = createAssistantRunTimeline(segments, [
+      { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
+    ]);
+
+    expect(timeline.map((block) => block.id)).toEqual([
+      'assistant_final:work',
+      'assistant_final:content',
+    ]);
+    expect(timeline[0]).toMatchObject({
+      type: 'work',
+      active: true,
+      items: [{
+        type: 'pluginUses',
+        plugins: [{ id: 'documents', name: 'Word 文档处理', icon: 'documents' }],
+      }],
+    });
+  });
+
   it('folds pre-final text and work into one top block', () => {
     const segments: RuntimeMessage[] = [
       {
@@ -211,6 +237,7 @@ describe('createAssistantRunTimeline', () => {
     if (work?.type !== 'work') throw new Error('expected a top work block');
     expect(work.items.map((item) => {
       if (item.type === 'toolRuns') return `tool:${item.toolRuns[0]?.id}`;
+      if (item.type === 'pluginUses') return `plugins:${item.plugins.map((plugin) => plugin.id).join(',')}`;
       return `${item.type}:${item.segment.id}`;
     })).toEqual([
       'content:assistant_read:content',

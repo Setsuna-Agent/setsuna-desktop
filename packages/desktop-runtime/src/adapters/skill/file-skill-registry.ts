@@ -11,8 +11,9 @@ import type {
   RuntimeSkillMcpDependencyInput,
   RuntimeSkillPatch,
   RuntimeSkillSummary,
+  RuntimePluginReference,
 } from '@setsuna-desktop/contracts';
-import type { SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
+import type { SkillActivationContext, SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
 import type { InstalledPluginRecord } from '../../ports/plugin-bundle-store.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
@@ -32,7 +33,14 @@ type ParsedSkill = {
   references: string[];
   mcpDependencies: RuntimeSkillMcpDependency[];
   dependencyErrors: string[];
-  pluginId?: string;
+  autoActivate: string[];
+  plugin?: RuntimePluginReference;
+};
+
+type PluginSkillOrigin = {
+  reference: RuntimePluginReference;
+  description?: string;
+  tags: string[];
 };
 
 type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
@@ -148,19 +156,25 @@ export class FileSkillRegistry implements SkillRegistry {
     });
   }
 
-  async selectedSkillInjections(skillIds: string[] = []): Promise<SkillInjection[]> {
+  async selectedSkillInjections(skillIds: string[] = [], activation?: SkillActivationContext): Promise<SkillInjection[]> {
     const [skills, state] = await Promise.all([this.readSkills(), this.readState()]);
     const explicitSkillIds = new Set(skillIds.filter(Boolean));
+    const allowAutomaticPluginActivation = explicitSkillIds.size === 0 && Boolean(activation?.text.trim());
     return skills
-      .map((skill) => toDetail(skill, state))
-      .filter((skill) => skill.enabled && (skill.selected || explicitSkillIds.has(skill.id)))
-      .map((skill) => ({
-        id: skill.id,
-        name: skill.name,
-        content: skill.content,
-        path: skill.path,
-        mcpDependencies: skill.mcpDependencies,
-        dependencyErrors: skill.dependencyErrors,
+      .map((parsed) => ({ parsed, detail: toDetail(parsed, state) }))
+      .filter(({ parsed, detail }) => detail.enabled && (
+        detail.selected
+        || explicitSkillIds.has(detail.id)
+        || (allowAutomaticPluginActivation && pluginSkillMatchesActivation(parsed, activation?.text ?? ''))
+      ))
+      .map(({ parsed, detail }) => ({
+        id: detail.id,
+        name: detail.name,
+        content: detail.content,
+        path: detail.path,
+        ...(parsed.plugin ? { plugin: { ...parsed.plugin } } : {}),
+        mcpDependencies: detail.mcpDependencies,
+        dependencyErrors: detail.dependencyErrors,
       }));
   }
 
@@ -198,7 +212,15 @@ export class FileSkillRegistry implements SkillRegistry {
       const content = await readFile(skillPath, 'utf8').catch(() => '');
       if (!content) return null;
       const dependencyManifest = await readSkillDependencyManifest(skillPath);
-      return parseSkill(entry.id, 'plugin', skillPath, content, dependencyManifest, plugin.id);
+      return parseSkill(entry.id, 'plugin', skillPath, content, dependencyManifest, {
+        reference: {
+          id: plugin.id,
+          name: plugin.name,
+          ...(plugin.icon ? { icon: plugin.icon } : {}),
+        },
+        description: plugin.description,
+        tags: plugin.tags ?? [],
+      });
     })));
     return skills.filter((skill): skill is ParsedSkill => Boolean(skill));
   }
@@ -310,38 +332,132 @@ function parseSkill(
   skillPath: string,
   rawContent: string,
   dependencyManifest: SkillDependencyManifest,
-  pluginId?: string,
+  pluginOrigin?: PluginSkillOrigin,
 ): ParsedSkill {
   const frontmatter = parseFrontmatter(rawContent);
   const content = frontmatter.body.trim();
+  const name = frontmatter.name ?? id;
+  const description = frontmatter.description;
   return {
     id,
-    name: frontmatter.fields.name ?? id,
+    name,
     kind,
-    description: frontmatter.fields.description,
+    description,
     content,
     path: skillPath,
     references: referencePaths(content),
     mcpDependencies: dependencyManifest.mcpDependencies,
     dependencyErrors: dependencyManifest.errors,
-    ...(pluginId ? { pluginId } : {}),
+    autoActivate: pluginOrigin
+      ? uniqueStrings([
+          ...frontmatter.autoActivate,
+          ...inferredPluginActivationKeywords(id, name, description, pluginOrigin),
+        ])
+      : [],
+    ...(pluginOrigin ? { plugin: { ...pluginOrigin.reference } } : {}),
   };
 }
 
-function parseFrontmatter(rawContent: string): { fields: Record<string, string>; body: string } {
-  if (!rawContent.startsWith('---\n')) return { fields: {}, body: rawContent };
+function parseFrontmatter(rawContent: string): { name?: string; description?: string; autoActivate: string[]; body: string } {
+  if (!rawContent.startsWith('---\n')) return { autoActivate: [], body: rawContent };
   const endIndex = rawContent.indexOf('\n---', 4);
-  if (endIndex === -1) return { fields: {}, body: rawContent };
+  if (endIndex === -1) return { autoActivate: [], body: rawContent };
   const block = rawContent.slice(4, endIndex);
-  const fields: Record<string, string> = {};
-  for (const line of block.split('\n')) {
-    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (match) fields[match[1]] = match[2].trim().replace(/^["']|["']$/g, '');
+  try {
+    const fields = recordValue(parseYaml(block, { maxAliasCount: 0, uniqueKeys: true }));
+    return {
+      name: optionalString(fields.name),
+      description: optionalString(fields.description),
+      autoActivate: frontmatterStringArray(fields.autoActivate ?? fields.auto_activate ?? fields['auto-activate']),
+      body: rawContent.slice(endIndex + 4),
+    };
+  } catch {
+    // A malformed optional frontmatter block must not make an otherwise readable Skill disappear.
+    return {
+      autoActivate: [],
+      body: rawContent.slice(endIndex + 4),
+    };
   }
-  return {
-    fields,
-    body: rawContent.slice(endIndex + 4),
-  };
+}
+
+function frontmatterStringArray(value: unknown): string[] {
+  if (typeof value === 'string') return value.trim() ? [value.trim()] : [];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
+}
+
+function inferredPluginActivationKeywords(
+  skillId: string,
+  skillName: string,
+  description: string | undefined,
+  pluginOrigin: PluginSkillOrigin,
+): string[] {
+  const plugin = pluginOrigin.reference;
+  const metadataPhrases = [skillName, plugin.name, ...pluginOrigin.tags]
+    .filter(meaningfulActivationPhrase);
+  const identityPhrases = [skillId.split('.').at(-1), plugin.id];
+  const highSignalNameTerms = latinTerms(`${skillName} ${plugin.name}`).filter((term) =>
+    highSignalLatinTerm(term, 3),
+  );
+  const highSignalDescriptionTerms = latinTerms(
+    [description, pluginOrigin.description].filter(Boolean).join(' '),
+  ).filter((term) => highSignalLatinTerm(term, 4));
+  return uniqueStrings([
+    ...metadataPhrases,
+    ...identityPhrases,
+    ...highSignalNameTerms,
+    ...highSignalDescriptionTerms,
+  ]);
+}
+
+function highSignalLatinTerm(term: string, acronymMinLength: number): boolean {
+  return /\d/u.test(term)
+    || (term.length >= acronymMinLength && term === term.toUpperCase())
+    || (term.length >= 4 && /[A-Z].*[A-Z]/u.test(term));
+}
+
+function meaningfulActivationPhrase(value: string | undefined): value is string {
+  const normalized = value?.normalize('NFKC').trim();
+  if (!normalized) return false;
+  const cjkLength = [...normalized].filter((character) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(character)).length;
+  return cjkLength === 0 ? normalized.replace(/\s+/gu, '').length >= 3 : cjkLength >= 3;
+}
+
+function latinTerms(value: string): string[] {
+  return value.match(/[A-Za-z][A-Za-z0-9.+#_-]{1,}/g) ?? [];
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const normalized = value?.normalize('NFKC').trim();
+    const key = normalized?.toLocaleLowerCase('en-US');
+    if (!normalized || !key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function pluginSkillMatchesActivation(skill: ParsedSkill, activationText: string): boolean {
+  if (skill.kind !== 'plugin' || !skill.autoActivate.length) return false;
+  const text = activationText.normalize('NFKC').toLocaleLowerCase('en-US');
+  return skill.autoActivate.some((keyword) => activationKeywordMatches(text, keyword));
+}
+
+function activationKeywordMatches(normalizedText: string, keyword: string): boolean {
+  const normalizedKeyword = keyword.normalize('NFKC').trim().toLocaleLowerCase('en-US');
+  if (!normalizedKeyword) return false;
+  if (!/^[a-z0-9][a-z0-9.+#_-]*$/u.test(normalizedKeyword)) return normalizedText.includes(normalizedKeyword);
+  let index = normalizedText.indexOf(normalizedKeyword);
+  while (index !== -1) {
+    const before = normalizedText[index - 1] ?? '';
+    const after = normalizedText[index + normalizedKeyword.length] ?? '';
+    if (!/[a-z0-9]/u.test(before) && !/[a-z0-9]/u.test(after)) return true;
+    index = normalizedText.indexOf(normalizedKeyword, index + normalizedKeyword.length);
+  }
+  return false;
 }
 
 function referencePaths(content: string): string[] {
@@ -383,7 +499,7 @@ function toSummary(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillSumma
     path: skill.path,
     mcpDependencies: skill.mcpDependencies,
     dependencyErrors: skill.dependencyErrors,
-    ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
+    ...(skill.plugin ? { pluginId: skill.plugin.id } : {}),
   };
 }
 
