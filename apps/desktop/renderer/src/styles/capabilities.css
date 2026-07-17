@@ -937,7 +937,7 @@
 }
 
 .desktop-capabilities-plugin-detail__badges span,
-.desktop-capabilities-plugin-detail__item-meta span {
+.desktop-capabilities-plugin-detail__item-badges span {
   display: inline-flex;
   align-items: center;
   min-height: 22px;
@@ -1027,7 +1027,7 @@
 .desktop-capabilities-plugin-detail__section-toggle {
   appearance: none;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -1067,12 +1067,25 @@
 }
 
 .desktop-capabilities-plugin-detail__section-toggle small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
   color: var(--app-text-subtle);
   font-family: var(--app-code-font-family);
   font-size: 12px;
+  line-height: 16px;
+}
+
+.desktop-capabilities-plugin-detail__section-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 16px;
 }
 
 .desktop-capabilities-plugin-detail__section-chevron {
+  display: block;
   flex: 0 0 auto;
   color: var(--app-text-subtle);
   transform: rotate(-90deg);
@@ -1106,7 +1119,7 @@
 
 .desktop-capabilities-plugin-detail__list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 10px;
   min-width: 0;
@@ -1118,12 +1131,13 @@
   appearance: none;
   position: relative;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px 10px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   width: 100%;
+  height: 72px;
   min-width: 0;
-  min-height: 88px;
+  overflow: hidden;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
   border-radius: var(--app-radius-sm);
@@ -1156,7 +1170,6 @@
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding-right: 18px;
 }
 
 .desktop-capabilities-plugin-detail__item-body strong,
@@ -1168,52 +1181,39 @@
 }
 
 .desktop-capabilities-plugin-detail__item-body strong {
+  overflow: hidden;
   color: var(--app-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 19px;
-}
-
-.desktop-capabilities-plugin-detail__item-body small {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.desktop-capabilities-plugin-detail__item > code,
-.desktop-capabilities-plugin-detail__item-trailing > code,
-.desktop-capabilities-plugin-detail__item-meta code {
-  max-width: 260px;
-  padding: 3px 7px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
-  border-radius: var(--app-radius-xs);
-  color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-bg) 88%, var(--app-text) 3%);
-  font-family: var(--app-code-font-family);
-  font-size: 11px;
-  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.desktop-capabilities-plugin-detail__item-meta {
+.desktop-capabilities-plugin-detail__item-body small {
+  display: block;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-capabilities-plugin-detail__item-badges {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 5px;
-  width: 100%;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
 }
 
-.desktop-capabilities-plugin-detail__item-meta span,
-.desktop-capabilities-plugin-detail__item-meta code,
-.desktop-capabilities-plugin-detail__item-trailing > code {
+.desktop-capabilities-plugin-detail__item-badges span {
   min-width: 0;
-  max-width: 100%;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1221,19 +1221,14 @@
 
 .desktop-capabilities-plugin-detail__item-trailing {
   display: flex;
-  grid-column: 2;
   align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 7px;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 10px;
   min-width: 0;
-  padding-right: 18px;
 }
 
 .desktop-capabilities-plugin-detail__item-chevron {
-  position: absolute;
-  top: 16px;
-  right: 12px;
   flex: 0 0 auto;
   color: var(--app-text-subtle);
   transition: color 140ms ease, transform 140ms ease;
@@ -2113,26 +2108,6 @@
 
   .desktop-capabilities-plugin-detail__stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .desktop-capabilities-plugin-detail__list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-capabilities-plugin-detail__item {
-    grid-template-columns: 34px minmax(0, 1fr);
-  }
-
-  .desktop-capabilities-plugin-detail__item-trailing {
-    grid-column: 2;
-    justify-content: flex-start;
-    justify-self: start;
-    max-width: 100%;
-  }
-
-  .desktop-capabilities-plugin-detail__item-meta {
-    justify-content: flex-start;
-    max-width: 100%;
   }
 
   .desktop-plugin-item-dialog__metadata {

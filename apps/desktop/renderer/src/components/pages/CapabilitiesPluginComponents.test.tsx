@@ -137,9 +137,11 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('查看 OpenAI 官方文档 详情');
     expect(html).toContain('查看 OpenAI Developer Docs 详情');
     expect(html).toContain('安装插件');
+    expect(html).not.toContain('openai-docs.openai-docs');
+    expect(html).not.toContain('openai_docs');
   });
 
-  it('shows Hook details without exposing the executable command', () => {
+  it('keeps Hook cards user-facing without exposing runtime identifiers', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginDetail
         error={null}
@@ -173,8 +175,8 @@ describe('capabilities plugin components', () => {
     );
 
     expect(html).toContain('在工具执行前识别破坏性命令');
-    expect(html).toContain('PreToolUse');
-    expect(html).toContain('run_shell_command|exec_command');
+    expect(html).not.toContain('PreToolUse');
+    expect(html).not.toContain('run_shell_command|exec_command');
     expect(html).not.toContain('{{pluginRoot}}');
     expect(html).not.toContain('.mjs');
   });
@@ -208,6 +210,8 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('查看 DOCX 内容模型 详情');
     expect(html).toContain('查看 示例文档内容 详情');
     expect(html).toContain('2.0 KB');
+    expect(html).not.toContain('documents.documents');
+    expect(html).not.toContain('<code>');
     expect(html.match(/aria-expanded="true"/gu)).toHaveLength(4);
     expect(html.match(/desktop-capabilities-plugin-detail__section-content/gu)).toHaveLength(4);
     expect(html).toContain('这个插件不包含 MCP 服务。');

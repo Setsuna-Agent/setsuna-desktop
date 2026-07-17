@@ -2,15 +2,15 @@ import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 export function CapabilitiesPluginItemButton({
+  badges,
   description,
   icon,
-  meta,
   onClick,
   title,
 }: {
+  badges?: string[];
   description: string;
   icon: ReactNode;
-  meta?: ReactNode;
   onClick: () => void;
   title: string;
 }) {
@@ -27,7 +27,11 @@ export function CapabilitiesPluginItemButton({
         <small>{description}</small>
       </span>
       <span className="desktop-capabilities-plugin-detail__item-trailing">
-        {meta}
+        {badges?.length ? (
+          <span className="desktop-capabilities-plugin-detail__item-badges">
+            {badges.map((badge) => <span key={badge}>{badge}</span>)}
+          </span>
+        ) : null}
         <ChevronRight className="desktop-capabilities-plugin-detail__item-chevron" size={15} />
       </span>
     </button>

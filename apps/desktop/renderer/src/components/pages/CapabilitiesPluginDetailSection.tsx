@@ -30,8 +30,10 @@ export function CapabilitiesPluginDetailSection({
           >
             <span className="desktop-capabilities-plugin-detail__section-icon" aria-hidden="true">{icon}</span>
             <span className="desktop-capabilities-plugin-detail__section-title">{title}</span>
-            <small>{count}</small>
-            <ChevronDown className="desktop-capabilities-plugin-detail__section-chevron" size={15} aria-hidden="true" />
+            <span className="desktop-capabilities-plugin-detail__section-trailing">
+              <small>{count}</small>
+              <ChevronDown className="desktop-capabilities-plugin-detail__section-chevron" size={15} aria-hidden="true" />
+            </span>
           </button>
         </h3>
       </header>

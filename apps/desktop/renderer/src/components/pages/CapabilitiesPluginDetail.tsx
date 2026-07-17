@@ -120,7 +120,6 @@ export function CapabilitiesPluginDetail({
             title={skill.name}
             description={skill.description || '插件提供的只读 Skill，安装后可在技能页启用或选择。'}
             icon={<BookOpen size={16} />}
-            meta={<code>{skill.id}</code>}
             onClick={() => setSelectedItem({ kind: 'skill', value: skill })}
           />
         ))}
@@ -138,13 +137,10 @@ export function CapabilitiesPluginDetail({
             title={server.label}
             description={server.description || '插件声明的 MCP 服务，安装后仍遵循 Setsuna 的授权与信任策略。'}
             icon={<Plug size={16} />}
-            meta={(
-              <span className="desktop-capabilities-plugin-detail__item-meta">
-                <span>{server.transport === 'streamableHttp' ? '远程 MCP' : '本地 MCP'}</span>
-                {server.owned === false ? <span>复用现有配置</span> : null}
-                <code>{server.key}</code>
-              </span>
-            )}
+            badges={[
+              server.transport === 'streamableHttp' ? '远程 MCP' : '本地 MCP',
+              ...(server.owned === false ? ['复用现有配置'] : []),
+            ]}
             onClick={() => setSelectedItem({ kind: 'mcp', value: server })}
           />
         ))}
@@ -162,13 +158,6 @@ export function CapabilitiesPluginDetail({
             title={hook.name}
             description={hook.description || hook.statusMessage || '插件提供的本地自动化，安装后仍需信任当前命令 hash 才会执行。'}
             icon={<Workflow size={16} />}
-            meta={(
-              <span className="desktop-capabilities-plugin-detail__item-meta">
-                <span>{hook.eventName}</span>
-                {hook.matcher ? <span>{hook.matcher}</span> : null}
-                <code>{hook.id}</code>
-              </span>
-            )}
             onClick={() => setSelectedItem({ kind: 'hook', value: hook })}
           />
         ))}
@@ -189,12 +178,7 @@ export function CapabilitiesPluginDetail({
             title={resource.label}
             description={resource.path}
             icon={<FileText size={16} />}
-            meta={(
-              <span className="desktop-capabilities-plugin-detail__item-meta">
-                <span>{formatPluginFileSize(resource.size)}</span>
-                <code>{resource.id}</code>
-              </span>
-            )}
+            badges={[formatPluginFileSize(resource.size)]}
             onClick={() => setSelectedItem({ kind: 'resource', value: resource })}
           />
         ))}
