@@ -31,6 +31,7 @@ export type RuntimeMarkdownLinkOpenMode = 'in-app' | 'external';
 export type RuntimeDesktopSettings = {
   [key: string]: unknown;
   markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
+  workspaceDependenciesEnabled?: boolean;
 };
 
 export type RuntimeMemorySettings = {

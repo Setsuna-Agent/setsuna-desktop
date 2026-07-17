@@ -17,6 +17,7 @@ import type {
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeUsageQuery,
+  RuntimeWorkspaceDependenciesToggleInput,
   SendTurnInput,
   SteerTurnInput,
   ThreadMemoryModePatch,
@@ -47,6 +48,30 @@ export async function handleRuntimeRestRequest(
 
   if (request.method === 'PUT' && url.pathname === '/v1/config') {
     sendJson(response, 200, await runtime.configStore.saveConfig(await readBody(request)));
+    return true;
+  }
+
+  if (request.method === 'GET' && url.pathname === '/v1/workspace-dependencies') {
+    sendJson(response, 200, await runtime.workspaceDependencies.getStatus());
+    return true;
+  }
+
+  if (request.method === 'PUT' && url.pathname === '/v1/workspace-dependencies') {
+    const input = await readBody<RuntimeWorkspaceDependenciesToggleInput | null>(request);
+    if (!input || typeof input !== 'object' || typeof input.enabled !== 'boolean') {
+      throw new RuntimeHttpError(400, 'enabled must be a boolean.');
+    }
+    sendJson(response, 200, await runtime.workspaceDependencies.setEnabled({ enabled: input.enabled }));
+    return true;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/v1/workspace-dependencies/diagnose') {
+    sendJson(response, 200, await runtime.workspaceDependencies.diagnose());
+    return true;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/v1/workspace-dependencies/reinstall') {
+    sendJson(response, 200, await runtime.workspaceDependencies.reinstall());
     return true;
   }
 

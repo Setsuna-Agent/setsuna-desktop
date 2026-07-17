@@ -77,6 +77,23 @@ describe('desktop runtime client advanced thread methods', () => {
       method: 'POST',
     });
   });
+
+  it('routes workspace dependency status, toggle, diagnosis, and reinstall requests', async () => {
+    const request = installRuntimeBridge(() => ({ enabled: false, state: 'disabled' }));
+    const client = createDesktopRuntimeClient();
+
+    await client.getWorkspaceDependencies();
+    await client.setWorkspaceDependencies({ enabled: false });
+    await client.diagnoseWorkspaceDependencies();
+    await client.reinstallWorkspaceDependencies();
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      { path: '/v1/workspace-dependencies' },
+      { path: '/v1/workspace-dependencies', method: 'PUT', body: { enabled: false } },
+      { path: '/v1/workspace-dependencies/diagnose', method: 'POST' },
+      { path: '/v1/workspace-dependencies/reinstall', method: 'POST' },
+    ]);
+  });
 });
 
 function installRuntimeBridge(handler: (input: RuntimeRequestInput) => unknown) {

@@ -23,6 +23,8 @@ describe('pcLocalToolPrompt', () => {
     expect(prompt).toContain('use the injected project workflow');
     expect(prompt).toContain('Never use npm, npx');
     expect(prompt).toContain('preserve its package manager');
+    expect(prompt).toContain('probe command -v uv');
+    expect(prompt).toContain('never install into the system Python');
     expect(prompt).toContain('Reserve write_file for new files or genuine full-file rewrites');
     expect(prompt).toContain('delay visible progress');
   });

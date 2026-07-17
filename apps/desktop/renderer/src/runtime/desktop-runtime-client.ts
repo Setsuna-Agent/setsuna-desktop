@@ -39,6 +39,8 @@ import type {
   RuntimeThreadGoalPatch,
   RuntimeUsageQuery,
   RuntimeUsageResponse,
+  RuntimeWorkspaceDependenciesStatus,
+  RuntimeWorkspaceDependenciesToggleInput,
   SendTurnInput,
   SendTurnResponse,
   SteerTurnInput,
@@ -184,6 +186,18 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     saveConfig(input: RuntimeConfigInput) {
       return request<RuntimeConfigState>({ path: '/v1/config', method: 'PUT', body: input });
+    },
+    getWorkspaceDependencies() {
+      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies' });
+    },
+    setWorkspaceDependencies(input: RuntimeWorkspaceDependenciesToggleInput) {
+      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies', method: 'PUT', body: input });
+    },
+    diagnoseWorkspaceDependencies() {
+      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies/diagnose', method: 'POST' });
+    },
+    reinstallWorkspaceDependencies() {
+      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies/reinstall', method: 'POST' });
     },
     fetchProviderModels(input: RuntimeFetchModelsInput) {
       return request<RuntimeAvailableModelsResponse>({ path: '/v1/config/models', method: 'POST', body: input });

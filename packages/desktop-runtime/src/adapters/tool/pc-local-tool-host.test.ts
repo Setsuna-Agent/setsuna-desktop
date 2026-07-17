@@ -254,6 +254,38 @@ describe('pc local tool host', () => {
       .resolves.toMatchObject({ reason: expect.stringContaining('删除') });
     await expect(host.approvalForTool('run_shell_command', { command: shellApplyPatchCommand('src/generated.txt'), risk_level: 'low' }, context))
       .resolves.toMatchObject({ reason: expect.stringContaining('apply_patch') });
+    await expect(host.approvalForTool('run_shell_command', { command: 'uv pip install fpdf2', risk_level: 'low' }, context))
+      .resolves.toMatchObject({ reason: expect.stringContaining('依赖') });
+    await expect(host.approvalForTool('run_shell_command', { command: 'pip3 install markdown', risk_level: 'low' }, context))
+      .resolves.toMatchObject({ reason: expect.stringContaining('依赖') });
+  });
+
+  it('surfaces a failed pipeline stage instead of reporting the trailing command as success', async () => {
+    const { host } = await createHost();
+
+    await expect(host.runTool('run_shell_command', {
+      command: `${nodeCommand()} -e "process.exit(9)" 2>&1 | tail -5`,
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'danger-full-access',
+    })).rejects.toThrow(/(?:Exit Code:\s*9|command exited 9)/u);
+  });
+
+  it('allows harmless output redirection to /dev/null under workspace-write', async () => {
+    const { host } = await createHost();
+
+    await expect(host.runTool('run_shell_command', {
+      command: 'printf ok > /dev/null',
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write',
+    })).resolves.toMatchObject({ content: expect.stringContaining('Exit Code: 0') });
   });
 
   it('blocks shell apply_patch commands that were not intercepted by the runtime orchestrator', async () => {
@@ -580,7 +612,8 @@ describe('pc local tool host', () => {
     const capability = { supported: true, provider: 'macos-seatbelt', reason: '' };
     const workspaceFilter = `(require-not (subpath ${JSON.stringify(path.resolve(root))}))`;
     const writableRootFilter = `(require-not (subpath ${JSON.stringify(path.resolve(writableRoot))}))`;
-    const denyOutsideWritableRoots = `(deny file-write* (require-all ${workspaceFilter} ${writableRootFilter}))`;
+    const devNullFilter = `(require-not (literal ${JSON.stringify('/dev/null')}))`;
+    const denyOutsideWritableRoots = `(deny file-write* (require-all ${workspaceFilter} ${writableRootFilter} ${devNullFilter}))`;
 
     const profile = shellSandboxProfile({
       root,

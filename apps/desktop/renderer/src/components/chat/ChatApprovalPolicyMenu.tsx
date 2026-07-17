@@ -26,7 +26,7 @@ const approvalPolicyItems: Array<{
   {
     value: 'full',
     label: '完全授权',
-    description: '工具执行不再弹出确认',
+    description: '工具授权不再弹窗；文件访问范围由独立策略控制',
     icon: UnlockKeyhole,
   },
 ];

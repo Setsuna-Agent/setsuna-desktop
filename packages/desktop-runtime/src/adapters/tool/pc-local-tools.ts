@@ -579,7 +579,7 @@ export const LOCAL_TOOL_DEFINITIONS = [
       risk_level: {
         type: 'string',
         enum: ['low', 'high'],
-        description: 'Your risk decision for this command. Use low for ordinary read/build/test/install commands. Use high for destructive or high-impact commands such as deletion, Git state reset/clean, permission changes, sudo, remote script execution, publish/deploy, or shell redirection writes.',
+        description: 'Your risk decision for this command. Use low for ordinary read/build/test commands. Use high for package installation, destructive or high-impact commands such as deletion, Git state reset/clean, permission changes, sudo, remote script execution, publish/deploy, or shell redirection writes.',
       },
       risk_reason: {
         type: 'string',
@@ -3009,7 +3009,7 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
     cwd,
     shell: spawnSpec.shell,
     detached,
-    env: shellEnvironment(),
+    env: shellEnvironment(state?.shellEnvironment),
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -4009,6 +4009,14 @@ function obviousHighRiskShellReason(command) {
   if (text.includes('git reset --hard') || text.includes('git clean')) return '命令可能丢弃 Git 改动。';
   if (/\bgit\s+(?:checkout|switch|restore|rebase|merge|commit|push|pull|stash|tag)\b/.test(text)) return '命令可能改变 Git 状态或远端仓库。';
   if (hasWord('sudo')) return '命令会提升权限。';
+  if (
+    /\b(?:pip3?|python(?:3(?:\.\d+)?)?\s+-m\s+pip)\s+install\b/.test(text)
+    || /\buv\s+(?:add|sync|lock|tool\s+install|python\s+install|pip\s+install)\b/.test(text)
+    || /\b(?:npm|pnpm|yarn|bun)\s+(?:install|i|add|update|upgrade|remove|uninstall)\b/.test(text)
+    || /\b(?:cargo|gem|brew|apt(?:-get)?|dnf|yum|pacman)\s+install\b/.test(text)
+  ) {
+    return '命令会安装或修改本地依赖。';
+  }
   if (/\b(?:npm|pnpm|yarn|bun|cargo|twine)\s+(?:publish|release)\b/.test(text)) return '命令可能发布包或版本。';
   if (/\b(?:vercel|netlify|firebase|wrangler)\s+(?:deploy|publish)\b/.test(text)) return '命令可能部署到线上环境。';
   if (/\b(?:docker|podman)\s+(?:rm|rmi|prune|system\s+prune|compose\s+down)\b/.test(text)) return '命令可能删除容器、镜像或卷。';
@@ -4357,6 +4365,7 @@ function shellPathCandidates(command) {
 
 function isShellNonPathToken(value) {
   if (!value || value === '.' || value === '..') return true;
+  if (/^\/dev\/(?:null|stdout|stderr)$/u.test(value) || /^nul:?$/iu.test(value)) return true;
   if (/^\d+$/.test(value)) return true;
   if (/^https?:\/\//i.test(value)) return true;
   return false;
@@ -4610,10 +4619,11 @@ function truncateMiddle(value, maxChars = MAX_TEXT_BYTES) {
 }
 
 function shellSpawnSpec(command, state) {
+  const guardedCommand = shellCommandWithPipefail(command);
   const sandboxProfile = shellSandboxProfile(state);
   if (!sandboxProfile) {
     return {
-      command,
+      command: guardedCommand,
       args: [],
       sandboxed: false,
       shell: true,
@@ -4621,10 +4631,18 @@ function shellSpawnSpec(command, state) {
   }
   return {
     command: '/usr/bin/sandbox-exec',
-    args: ['-p', sandboxProfile, '/bin/sh', '-lc', command],
+    args: ['-p', sandboxProfile, '/bin/sh', '-lc', guardedCommand],
     sandboxed: true,
     shell: false,
   };
+}
+
+function shellCommandWithPipefail(command) {
+  if (process.platform === 'win32') return command;
+  // POSIX does not standardize pipefail. Probe it in a subshell so shells that
+  // lack the option still execute the original command, while supported shells
+  // correctly surface failures hidden by a trailing `tail`/`tee` stage.
+  return `(set -o pipefail) 2>/dev/null && set -o pipefail\n${command}`;
 }
 
 export function shellSandboxProfile(state, capability = shellSandboxCapability()) {
@@ -4639,7 +4657,7 @@ export function shellSandboxProfile(state, capability = shellSandboxCapability()
   if (state?.sandboxWorkspaceWrite?.networkAccess !== true) lines.push('(deny network*)');
   if (profile === 'read-only') {
     const writableRoots = [...new Set(shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false }).map(realPathIfExists))];
-    lines.push(writableRoots.length ? seatbeltDenyWritesOutsideRoots(writableRoots) : '(deny file-write*)');
+    lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
     for (const root of deniedRootsForState(state)) {
       lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
     }
@@ -4661,7 +4679,9 @@ function seatbeltDenyWritesOutsideRoots(roots) {
   const filters = roots
     .filter(Boolean)
     .map((root) => `(require-not (subpath ${seatbeltString(root)}))`);
-  if (!filters.length) return '(deny file-write*)';
+  // Common shell redirections use /dev/null even in otherwise read-only
+  // commands. Keep that device writable without opening any regular path.
+  filters.push(`(require-not (literal ${seatbeltString('/dev/null')}))`);
   if (filters.length === 1) return `(deny file-write* ${filters[0]})`;
   return `(deny file-write* (require-all ${filters.join(' ')}))`;
 }
@@ -4670,14 +4690,14 @@ function seatbeltString(value) {
   return JSON.stringify(String(value || ''));
 }
 
-function shellEnvironment() {
+function shellEnvironment(overrides = {}) {
   const safeEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
     const safeKey = safeShellEnvKey(key);
     if (!safeKey || SENSITIVE_SHELL_ENV_KEY.test(key)) continue;
     safeEnv[safeKey] = value;
   }
-  return {
+  const defaults = {
     ...safeEnv,
     PATH: desktopShellPath(safeEnv.PATH),
     NO_COLOR: '1',
@@ -4688,6 +4708,14 @@ function shellEnvironment() {
     LESS: '-FRX',
     npm_config_color: 'false',
     CI: process.env.CI || '1',
+  };
+  const safeOverrides = Object.fromEntries(
+    Object.entries(overrides).filter(([key, value]) => key && typeof value === 'string'),
+  );
+  return {
+    ...defaults,
+    ...safeOverrides,
+    PATH: desktopShellPath(safeOverrides.PATH || safeEnv.PATH),
   };
 }
 

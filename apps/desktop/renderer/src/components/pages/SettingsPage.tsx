@@ -14,6 +14,7 @@ import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransiti
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
 import { ProviderModelReplacementDialog } from './ProviderModelReplacementDialog.js';
 import { providerModelReplacementDecision } from './providerModelReplacement.js';
+import { WorkspaceDependenciesSettings } from './WorkspaceDependenciesSettings.js';
 
 type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'archives' | 'runtime' | 'about';
 type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>;
@@ -829,6 +830,12 @@ function RuntimePolicySettings({
   const isOpeningConfig = openingPath === config.configPath;
   const isOpeningData = openingPath === config.dataPath;
   const pathActionDisabled = Boolean(openingPath);
+  const persistWorkspaceDependenciesEnabled = (enabled: boolean) => onSave({
+    desktopSettings: {
+      ...(config.desktopSettings ?? {}),
+      workspaceDependenciesEnabled: enabled,
+    },
+  });
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__runtime-section">
@@ -840,7 +847,7 @@ function RuntimePolicySettings({
               <BadgeCheck size={14} />
               <span>
                 <strong>审批策略</strong>
-                <small>控制工具执行操作前何时需要向你确认</small>
+                <small>{config.approvalPolicy === 'full' ? '不再弹出工具授权确认；实际文件范围仍由下方策略独立控制' : '控制工具执行操作前何时需要向你确认'}</small>
               </span>
             </span>
             <SelectField aria-label="审批策略" className="settings-local-control chat-user-settings__runtime-policy-control" value={config.approvalPolicy} onValueChange={(nextValue) => void onSave({ approvalPolicy: nextValue as RuntimeConfigState['approvalPolicy'] })}>
@@ -865,6 +872,8 @@ function RuntimePolicySettings({
           </label>
         </div>
       </div>
+
+      <WorkspaceDependenciesSettings onEnabledPersist={persistWorkspaceDependenciesEnabled} />
 
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">本地存储</div>

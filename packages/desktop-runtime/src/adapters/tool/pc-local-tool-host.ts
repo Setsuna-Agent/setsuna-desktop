@@ -1,13 +1,17 @@
 import path from 'node:path';
-import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeSandboxWorkspaceWrite, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost, type ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
+import type { WorkspaceDependencyManager } from '../../ports/workspace-dependency-manager.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../workspace/workspace-runtime-environment-resolver.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
 import * as pcTools from './pc-local-tools.js';
 
-type PcToolState = ReturnType<typeof pcTools.createLocalToolState>;
+type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandboxWorkspaceWrite'> & {
+  sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite;
+  shellEnvironment?: Record<string, string>;
+};
 
 type ProjectToolState = {
   toolState: PcToolState;
@@ -171,6 +175,7 @@ export class PcLocalToolHost implements ToolHost {
   constructor(
     projects: WorkspaceProjectStore,
     private readonly policyAmendmentStore?: PolicyAmendmentStore,
+    private readonly workspaceDependencies?: WorkspaceDependencyManager,
   ) {
     this.environmentResolver = new WorkspaceRuntimeEnvironmentResolver(projects);
   }
@@ -293,6 +298,21 @@ export class PcLocalToolHost implements ToolHost {
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
+    const dependencyEnvironment = normalized.name === 'run_shell_command'
+      ? await this.workspaceDependencies?.prepareShellEnvironment(stringArg(normalized.args.command))
+      : null;
+    if (dependencyEnvironment) {
+      toolState.shellEnvironment = dependencyEnvironment.environment;
+      toolState.sandboxWorkspaceWrite = {
+        ...toolState.sandboxWorkspaceWrite,
+        writableRoots: [
+          ...new Set([
+            ...(toolState.sandboxWorkspaceWrite?.writableRoots ?? []),
+            ...dependencyEnvironment.writableRoots,
+          ]),
+        ],
+      };
+    }
     const preview = await previewForTool(normalized.name, normalized.args, toolState);
     if (context.sandbox?.networkAccess === 'enabled') {
       toolState.sandboxWorkspaceWrite = {
@@ -361,7 +381,7 @@ export class PcLocalToolHost implements ToolHost {
       await this.refreshPolicyAmendments(existing);
       return existing;
     }
-    const toolState = pcTools.createLocalToolState(root, { environmentId: environment.id, shellProcessStore: this.shellProcessStore });
+    const toolState = pcTools.createLocalToolState(root, { environmentId: environment.id, shellProcessStore: this.shellProcessStore }) as PcToolState;
     const created = {
       toolState,
       baseShellPolicyRules: [...(Array.isArray(toolState.shellPolicyRules) ? toolState.shellPolicyRules : [])],

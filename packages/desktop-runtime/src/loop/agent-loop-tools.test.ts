@@ -3919,6 +3919,31 @@ describe('agent loop tools', () => {
     )).toBe(true);
   });
 
+  it('retries a sandbox-denied tool without prompting under full policy', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Full-policy sandbox retry loop' });
+    const toolHost = new SandboxRetryToolHost();
+    const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new SandboxDeniedModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      approvalGate,
+      configStore: new FullApprovalConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run sandboxed tool with full approval' });
+
+    expect(toolHost.attempts).toEqual(['default', 'bypass']);
+    await expect(approvalGate.listApprovals()).resolves.toEqual({ approvals: [] });
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
+  });
+
   it('caches sandbox retry approvals when approved for session', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -4714,7 +4739,7 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
   });
 
-  it('still requires explicit approval for unsandboxed exec under full policy', async () => {
+  it('runs unsandboxed exec without prompting under full policy', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Full approval escalated exec loop' });
@@ -4732,13 +4757,8 @@ describe('agent loop tools', () => {
       configStore: new FullApprovalConfigStore(),
     });
 
-    const pendingTurn = loop.sendTurn(thread.id, { input: 'run escalated command under full policy' });
-    const pendingApproval = await waitForPendingApproval(approvalGate);
-    expect(pendingApproval.reason).toContain('needs unsandboxed access');
-    expect(toolHost.attempts).toEqual([]);
-
-    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
-    await pendingTurn;
+    await loop.sendTurn(thread.id, { input: 'run escalated command under full policy' });
+    await expect(approvalGate.listApprovals()).resolves.toEqual({ approvals: [] });
     expect(toolHost.attempts).toEqual(['bypass']);
   });
 

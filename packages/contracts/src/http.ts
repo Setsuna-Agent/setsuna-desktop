@@ -46,6 +46,7 @@ import type {
   WorkspaceSearchResponse,
   WorkspaceStatus,
 } from './workspace.js';
+import type { RuntimeWorkspaceDependenciesStatus, RuntimeWorkspaceDependenciesToggleInput } from './workspace-dependencies.js';
 
 export type RuntimeHealth = {
   ok: true;
@@ -86,6 +87,10 @@ export type DesktopRuntimeClient = {
   ): () => void;
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
+  getWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
+  setWorkspaceDependencies(input: RuntimeWorkspaceDependenciesToggleInput): Promise<RuntimeWorkspaceDependenciesStatus>;
+  diagnoseWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
+  reinstallWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
   fetchProviderModels(input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse>;
   listHooks(cwds?: string[]): Promise<RuntimeHookListResponse>;
   listSkills(): Promise<RuntimeSkillList>;

@@ -682,7 +682,8 @@ export class ToolOrchestrator {
     return answer;
   }
 
-  private async approveSandboxBypassRetry(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, _approvalPolicy: RuntimeConfigState['approvalPolicy'], reason: string, environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
+  private async approveSandboxBypassRetry(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], reason: string, environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
+    if (approvalPolicy === 'full') return 'approve';
     const approvalKeys = sandboxRetryApprovalKeys(toolCall, parsedArguments, context);
     if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
     if (!this.options.approvalGate) return 'reject';
@@ -798,14 +799,14 @@ export class ToolOrchestrator {
     const requestsSandboxBypass = requestedSandboxBypass(toolCall.name, parsedArguments);
     const runtimeProfile = await this.options.toolHost.toolRuntimeProfile?.(toolCall.name, context);
     if (runtimeProfile?.approvalMode === 'selfManaged' && !requestsSandboxBypass) return { action: 'skip' };
+    // Permission profiles still define the effective filesystem boundary, but
+    // the full approval policy itself must never create an interactive prompt.
+    if (approvalPolicy === 'full' && !strictAutoReview) return { action: 'skip' };
     if (!this.options.approvalGate) {
       return requestsSandboxBypass
         ? { action: 'reject', reason: 'Unsandboxed shell execution requires an interactive approval gate.' }
         : { action: 'skip' };
     }
-    // full auto-approval must not silently remove the filesystem and network
-    // boundary. An explicit unsandboxed request always remains user-confirmed.
-    if (approvalPolicy === 'full' && !strictAutoReview && !requestsSandboxBypass) return { action: 'skip' };
     const execApprovalLookupKeys = execApprovalSessionLookupKeys(toolCall, parsedArguments, context);
     if (!strictAutoReview && this.options.approvalStore?.hasAny(execApprovalLookupKeys, context.turnId)) return { action: 'skip' };
 

@@ -223,6 +223,36 @@ describe('runtime server', () => {
     expect(config.providers[0].apiKeySet).toBe(true);
   });
 
+  it('enables workspace dependencies by default without provisioning during startup', async () => {
+    const status = await runtimeFetch('/v1/workspace-dependencies');
+    const disabled = await runtimeFetch('/v1/workspace-dependencies', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: false }),
+    });
+
+    expect(status).toMatchObject({
+      enabled: true,
+      state: 'not-installed',
+      node: { available: false },
+      python: { available: false },
+      uv: { available: false },
+      checks: expect.arrayContaining([
+        expect.objectContaining({ id: 'sandbox', status: 'ok' }),
+      ]),
+    });
+    expect(disabled).toMatchObject({ enabled: false, state: 'disabled' });
+
+    const invalidResponse = await fetch(`${baseUrl}/v1/workspace-dependencies`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ enabled: 'yes' }),
+    });
+    expect(invalidResponse.status).toBe(400);
+  });
+
   it('fetches models with the selected provider saved API key', async () => {
     const modelServer = await createModelListCaptureServer();
     try {
@@ -1362,7 +1392,7 @@ describe('runtime server', () => {
     });
     expect(response.config.sandbox_workspace_write).toMatchObject({
       writable_roots: [process.cwd()],
-      network_access: false,
+      network_access: true,
       exclude_tmpdir_env_var: false,
       exclude_slash_tmp: false,
     });

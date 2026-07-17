@@ -18,6 +18,7 @@ import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 68000;
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
+const CONFIG_SCHEMA_VERSION = 2;
 
 const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'PreToolUse',
@@ -33,6 +34,7 @@ const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
 ];
 
 type StoredConfig = Omit<RuntimeConfigState, 'configPath' | 'dataPath' | 'providers' | 'memory' | 'memoryEnabled'> & {
+  schemaVersion?: number;
   memory?: Partial<RuntimeMemorySettings>;
   memoryEnabled?: boolean;
   providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
@@ -90,6 +92,7 @@ export class FileConfigStore implements ConfigStore {
       const memory = memorySettingsForSave(input, previous);
 
       const stored: StoredConfig = {
+        schemaVersion: CONFIG_SCHEMA_VERSION,
         activeProviderId,
         globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
         storagePath: normalizeStoragePath(input.storagePath ?? previous.storagePath),
@@ -98,7 +101,10 @@ export class FileConfigStore implements ConfigStore {
         setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
         approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
         permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
-        sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite),
+        sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(
+          input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite,
+          { migrateNetworkDefault: input.sandboxWorkspaceWrite === undefined && (previous.schemaVersion ?? 0) < CONFIG_SCHEMA_VERSION },
+        ),
         hooks: normalizeHooksConfig(input.hooks ?? previous.hooks),
         bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
         features: normalizeFeatureFlags(input.features ?? previous.features),
@@ -136,7 +142,9 @@ export class FileConfigStore implements ConfigStore {
       setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
-      sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite),
+      sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite, {
+        migrateNetworkDefault: (stored.schemaVersion ?? 0) < CONFIG_SCHEMA_VERSION,
+      }),
       hooks: normalizeHooksConfig(stored.hooks),
       bypassHookTrust: stored.bypassHookTrust === true,
       features: normalizeFeatureFlags(stored.features),
@@ -165,6 +173,7 @@ function pruneRemovedProviderSecrets(
 
 function defaultConfig(): StoredConfig {
   return {
+    schemaVersion: CONFIG_SCHEMA_VERSION,
     activeProviderId: 'local-test',
     globalPrompt: '',
     storagePath: '',
@@ -173,11 +182,11 @@ function defaultConfig(): StoredConfig {
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',
-    sandboxWorkspaceWrite: {},
+    sandboxWorkspaceWrite: { networkAccess: true },
     hooks: {},
     bypassHookTrust: false,
     features: { request_permissions_tool: true },
-    desktopSettings: {},
+    desktopSettings: { workspaceDependenciesEnabled: true },
     providers: [
       {
         id: 'local-test',
@@ -405,8 +414,11 @@ function normalizeFeatureFlags(value: unknown): Record<string, boolean> {
   );
 }
 
-function normalizeSandboxWorkspaceWrite(value: unknown): RuntimeConfigState['sandboxWorkspaceWrite'] {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+function normalizeSandboxWorkspaceWrite(
+  value: unknown,
+  options: { migrateNetworkDefault?: boolean } = {},
+): RuntimeConfigState['sandboxWorkspaceWrite'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { networkAccess: true };
   const record = value as Record<string, unknown>;
   return {
     readableRoots: Array.isArray(record.readableRoots)
@@ -424,7 +436,9 @@ function normalizeSandboxWorkspaceWrite(value: unknown): RuntimeConfigState['san
     globScanMaxDepth: typeof record.globScanMaxDepth === 'number' && Number.isFinite(record.globScanMaxDepth)
       ? Math.max(1, Math.floor(record.globScanMaxDepth))
       : undefined,
-    networkAccess: record.networkAccess === true,
+    // A local workspace sandbox should be useful out of the box. Users can
+    // still explicitly disable network access from Advanced Settings.
+    networkAccess: options.migrateNetworkDefault === true || record.networkAccess !== false,
     excludeTmpdirEnvVar: record.excludeTmpdirEnvVar === true,
     excludeSlashTmp: record.excludeSlashTmp === true,
   };
@@ -503,7 +517,7 @@ function normalizeHookState(value: unknown): NonNullable<RuntimeHooksConfig['sta
 }
 
 function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { workspaceDependenciesEnabled: true };
   const settings = Object.fromEntries(
     Object.entries(value).filter(([key, setting]) => (
       typeof key === 'string' &&
@@ -514,6 +528,9 @@ function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   );
   if (settings.markdownLinkOpenMode !== 'in-app' && settings.markdownLinkOpenMode !== 'external') {
     delete settings.markdownLinkOpenMode;
+  }
+  if (typeof settings.workspaceDependenciesEnabled !== 'boolean') {
+    settings.workspaceDependenciesEnabled = true;
   }
   return settings;
 }

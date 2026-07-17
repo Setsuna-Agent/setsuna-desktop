@@ -87,6 +87,7 @@ export function pcLocalToolPrompt(tools?: RuntimeToolDefinition[]): string | nul
       '- Before the first build, test, lint, or typecheck command, use the injected project workflow. If it is unavailable or insufficient, inspect project instructions, the nearest relevant manifest, lockfile, and workspace configuration with read-only tools first.',
       '- Never use npm, npx, or another package-manager command as a probe when repository evidence selects a different manager. Prefer declared scripts; invoke a runner directly only when no declared script covers the check.',
       '- When deriving a narrower validation command from a declared script, preserve its package manager, working directory, runner flags, and configuration.',
+      '- Before installing Python dependencies, inspect the project files and probe command -v uv. Prefer the project-declared uv workflow when available; never install into the system Python or user site. Use a workspace .venv or an ephemeral uv run --with environment.',
     );
   }
 

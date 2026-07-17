@@ -2754,3 +2754,131 @@
     grid-template-columns: 1fr;
   }
 }
+
+.desktop-settings-panel .workspace-dependencies-settings__card {
+  display: grid;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__primary,
+.desktop-settings-panel .workspace-dependencies-settings__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__primary {
+  justify-content: space-between;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__copy strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__copy small,
+.desktop-settings-panel .workspace-dependencies-settings__state small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__actions,
+.desktop-settings-panel .workspace-dependencies-settings__checks,
+.desktop-settings-panel .workspace-dependencies-settings__path,
+.desktop-settings-panel .workspace-dependencies-settings__card > .chat-user-settings__runtime-error {
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__actions {
+  justify-content: flex-end;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__actions .sd-button {
+  min-height: 30px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__checks {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__check {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__check > span:last-child {
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__path {
+  display: block;
+  overflow: hidden;
+  padding: 9px 12px;
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-surface-muted) 58%, transparent);
+  font: 10px/15px var(--app-code-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__card > .chat-user-settings__runtime-error {
+  margin: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings .is-spinning {
+  animation: workspace-dependencies-spin 0.9s linear infinite;
+}
+
+@keyframes workspace-dependencies-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 780px) {
+  .desktop-settings-panel .workspace-dependencies-settings__primary,
+  .desktop-settings-panel .workspace-dependencies-settings__actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .desktop-settings-panel .workspace-dependencies-settings__state {
+    width: 100%;
+  }
+
+  .desktop-settings-panel .workspace-dependencies-settings__check {
+    grid-template-columns: 1fr;
+  }
+}

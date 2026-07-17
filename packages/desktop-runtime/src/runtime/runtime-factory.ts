@@ -33,6 +33,7 @@ import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
+import { ManagedWorkspaceDependencyManager } from '../adapters/workspace/managed-workspace-dependency-manager.js';
 import { AgentLoop } from '../loop/agent-loop.js';
 import { RuntimeEventWriter } from '../loop/runtime-event-writer.js';
 import { systemClock } from '../ports/clock.js';
@@ -83,6 +84,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
   const pluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
+  const workspaceDependencies = new ManagedWorkspaceDependencyManager(runtimeDataDir, configStore);
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
@@ -95,7 +97,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore),
     new WorkspaceImageToolHost(workspaceProjects),
-    new PcLocalToolHost(workspaceProjects, policyAmendmentStore),
+    new PcLocalToolHost(workspaceProjects, policyAmendmentStore, workspaceDependencies),
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     new MemoryToolHost(memoryStore, configStore),
   ]);
@@ -144,6 +146,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     toolHost,
     threadStore,
     usageStore,
+    workspaceDependencies,
     workspaceProjects,
   };
 }
