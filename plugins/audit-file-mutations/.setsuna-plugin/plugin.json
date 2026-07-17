@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "audit-file-mutations",
+  "name": "文件改动审计提示",
+  "icon": "audit-file-mutations",
+  "version": "1.0.0",
+  "description": "文件写入或修改完成后留下 review 提醒，不阻断后续流程。",
+  "publisher": "Setsuna",
+  "tags": ["审计", "Review", "文件"],
+  "featured": false,
+  "hooks": [
+    {
+      "id": "audit-file-mutations",
+      "name": "文件改动审计提示",
+      "description": "在每次文件改动工具成功后提醒 review diff 并运行必要验证。",
+      "eventName": "PostToolUse",
+      "matcher": "workspace_write_file|write_file|edit|edit_file|append_file|delete_file|apply_patch",
+      "command": "node {{pluginRoot}}/hooks/audit-file-mutations.mjs",
+      "commandWindows": "node {{pluginRoot}}/hooks/audit-file-mutations.mjs",
+      "timeoutSec": 10,
+      "statusMessage": "记录文件改动"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "pdf",
+  "name": "PDF 文档处理",
+  "icon": "pdf",
+  "version": "1.0.0",
+  "description": "读取、创建、检查、渲染并验证 PDF 文件，适用于版式和视觉质量重要的文档任务。",
+  "publisher": "Setsuna",
+  "tags": ["PDF", "文档", "文件处理"],
+  "featured": true,
+  "skills": ["skills/pdf"]
+}

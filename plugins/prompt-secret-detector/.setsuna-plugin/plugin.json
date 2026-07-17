@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "prompt-secret-detector",
+  "name": "用户消息密钥提醒",
+  "icon": "prompt-secret-detector",
+  "version": "1.0.0",
+  "description": "提交消息里疑似包含 API key、token 或私钥片段时停止本轮并提醒脱敏。",
+  "publisher": "Setsuna",
+  "tags": ["安全", "密钥", "消息"],
+  "featured": false,
+  "hooks": [
+    {
+      "id": "prompt-secret-detector",
+      "name": "用户消息密钥提醒",
+      "description": "检查常见 OpenAI、GitHub、AWS 密钥格式和私钥头部。",
+      "eventName": "UserPromptSubmit",
+      "command": "node {{pluginRoot}}/hooks/prompt-secret-detector.mjs",
+      "commandWindows": "node {{pluginRoot}}/hooks/prompt-secret-detector.mjs",
+      "timeoutSec": 10,
+      "statusMessage": "检查消息密钥"
+    }
+  ]
+}

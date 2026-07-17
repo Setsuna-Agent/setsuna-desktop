@@ -1,4 +1,4 @@
-import { Archive, ChevronDown, Boxes, Folder, FolderOpen, FolderPlus, Plus, RefreshCw, Search, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, Folder, FolderOpen, FolderPlus, MoreHorizontal, Plus, Puzzle, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
@@ -103,7 +103,7 @@ export function AgentSidebar({
           <span className="desktop-agent-command__label">搜索</span>
         </button>
         <button className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
-          <Boxes className="desktop-agent-command__icon" size={15} />
+          <Puzzle className="desktop-agent-command__icon" size={15} />
           <span className="desktop-agent-command__label">能力</span>
         </button>
       </div>

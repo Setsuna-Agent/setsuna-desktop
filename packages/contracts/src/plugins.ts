@@ -1,11 +1,31 @@
+import type { RuntimeMcpTransport } from './mcp.js';
+import type { RuntimeHookEventName } from './config.js';
+
 export type RuntimePluginSkill = {
   id: string;
   name: string;
+  description?: string;
 };
 
-export type RuntimePluginMcpServer = {
+export type RuntimePluginMcpServerDescriptor = {
   key: string;
+  label: string;
+  description?: string;
+  transport: RuntimeMcpTransport;
+};
+
+export type RuntimePluginMcpServer = RuntimePluginMcpServerDescriptor & {
   owned: boolean;
+};
+
+/** Safe marketplace projection of a plugin Hook. Executable commands stay inside the runtime. */
+export type RuntimePluginHook = {
+  id: string;
+  name: string;
+  description?: string;
+  eventName: RuntimeHookEventName;
+  matcher?: string;
+  statusMessage?: string;
 };
 
 export type RuntimePluginResource = {
@@ -18,6 +38,8 @@ export type RuntimePluginResource = {
 export type RuntimePluginSummary = {
   id: string;
   name: string;
+  /** Renderer-owned icon token. Plugin bundles cannot provide markup or filesystem paths. */
+  icon?: string;
   version?: string;
   description?: string;
   publisher?: string;
@@ -25,6 +47,7 @@ export type RuntimePluginSummary = {
   installedAt: string;
   skills: RuntimePluginSkill[];
   mcpServers: RuntimePluginMcpServer[];
+  hooks: RuntimePluginHook[];
   hookCount: number;
   resources: RuntimePluginResource[];
 };
@@ -36,11 +59,15 @@ export type RuntimePluginList = {
 export type RuntimePluginMarketplaceItem = {
   id: string;
   name: string;
+  icon?: string;
   version?: string;
   description?: string;
   publisher?: string;
   tags: string[];
   featured: boolean;
+  skills: RuntimePluginSkill[];
+  mcpServers: RuntimePluginMcpServerDescriptor[];
+  hooks: RuntimePluginHook[];
   capabilities: {
     skills: number;
     mcpServers: number;

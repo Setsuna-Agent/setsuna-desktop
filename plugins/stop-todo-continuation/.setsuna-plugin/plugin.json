@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "stop-todo-continuation",
+  "name": "结束前检查未完成 TODO",
+  "icon": "stop-todo-continuation",
+  "version": "1.0.0",
+  "description": "助手最后一条回复仍包含 TODO、FIXME 或 XXX 时要求继续处理。",
+  "publisher": "Setsuna",
+  "tags": ["流程", "TODO", "完成度"],
+  "featured": false,
+  "hooks": [
+    {
+      "id": "stop-todo-continuation",
+      "name": "结束前检查未完成 TODO",
+      "description": "防止代理带着显眼的 TODO、FIXME 或 XXX 标记直接结束回合。",
+      "eventName": "Stop",
+      "command": "node {{pluginRoot}}/hooks/stop-todo-continuation.mjs",
+      "commandWindows": "node {{pluginRoot}}/hooks/stop-todo-continuation.mjs",
+      "timeoutSec": 10,
+      "statusMessage": "检查未完成事项"
+    }
+  ]
+}

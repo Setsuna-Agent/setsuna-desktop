@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "compact-warning",
+  "name": "压缩前状态提示",
+  "icon": "compact-warning",
+  "version": "1.0.0",
+  "description": "上下文自动或手动压缩时，在 Hook 记录里标记触发来源。",
+  "publisher": "Setsuna",
+  "tags": ["上下文", "压缩", "调试"],
+  "featured": false,
+  "hooks": [
+    {
+      "id": "compact-warning",
+      "name": "压缩前状态提示",
+      "description": "在执行 context compaction 前显示 manual 或 auto 触发来源。",
+      "eventName": "PreCompact",
+      "matcher": "*",
+      "command": "node {{pluginRoot}}/hooks/compact-warning.mjs",
+      "commandWindows": "node {{pluginRoot}}/hooks/compact-warning.mjs",
+      "timeoutSec": 10,
+      "statusMessage": "记录压缩触发"
+    }
+  ]
+}

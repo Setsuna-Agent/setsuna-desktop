@@ -26,8 +26,22 @@ describe('file plugin bundle store', () => {
       plugin: {
         id: 'demo',
         name: 'Demo Plugin',
-        skills: [{ id: 'demo.docs-helper', name: 'Plugin Docs Helper' }],
-        mcpServers: [{ key: 'plugin_docs', owned: true }],
+        icon: 'context7',
+        skills: [{ id: 'demo.docs-helper', name: 'Plugin Docs Helper', description: 'Reads bundled documentation.' }],
+        mcpServers: [{
+          key: 'plugin_docs',
+          label: 'Plugin Docs',
+          description: 'Search bundled documentation.',
+          transport: 'streamableHttp',
+          owned: true,
+        }],
+        hooks: [{
+          id: 'audit-read',
+          name: 'Audit reads',
+          description: 'Records documentation reads.',
+          eventName: 'PostToolUse',
+          matcher: 'read_file',
+        }],
         hookCount: 1,
         resources: expect.arrayContaining([
           expect.objectContaining({ id: 'guide', path: path.join('resources', 'guide.md') }),
@@ -128,6 +142,18 @@ describe('file plugin bundle store', () => {
     expect(discoverRuntimeHooks(await runtime.config.getConfig()).hooks).toEqual([]);
   });
 
+  it('accepts only renderer-owned icon tokens, never bundle paths or markup', async () => {
+    const fixture = await createPluginFixture();
+    const manifestPath = path.join(fixture.bundleDir, '.setsuna-plugin', 'plugin.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+    manifest.icon = '../assets/plugin.svg';
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+    const runtime = await createPluginRuntime(fixture.root);
+
+    await expect(runtime.plugins.installPlugin({ path: fixture.bundleDir })).rejects.toThrow('renderer icon token');
+    await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
+  });
+
   it('rejects symbolic links anywhere in a bundle before installation', async () => {
     const fixture = await createPluginFixture();
     const linkedDirectory = path.join(fixture.root, 'linked-content');
@@ -180,16 +206,21 @@ async function createPluginFixture(parent?: string): Promise<{ root: string; bun
       schemaVersion: 1,
       id: 'demo',
       name: 'Demo Plugin',
+      icon: 'context7',
       version: '1.0.0',
       description: 'Plugin fixture',
       skills: ['skills/docs-helper'],
       mcpServers: [{
         key: 'plugin_docs',
         label: 'Plugin Docs',
+        description: 'Search bundled documentation.',
         transport: 'streamable_http',
         url: 'https://docs.example/mcp',
       }],
       hooks: [{
+        id: 'audit-read',
+        name: 'Audit reads',
+        description: 'Records documentation reads.',
         eventName: 'PostToolUse',
         matcher: 'read_file',
         command: 'node {{pluginRoot}}/hooks/post.mjs',
