@@ -45,6 +45,7 @@ type ParsedPluginManifest = {
   publisher?: string;
   tags: string[];
   featured: boolean;
+  featuredOrder?: number;
   sourcePath: string;
   manifestPath: string;
   skillEntries: Array<{ id: string; name: string; description?: string; relativePath: string }>;
@@ -115,6 +116,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       ...(manifest.publisher ? { publisher: manifest.publisher } : {}),
       tags: [...manifest.tags],
       featured: manifest.featured,
+      ...(manifest.featuredOrder !== undefined ? { featuredOrder: manifest.featuredOrder } : {}),
       capabilities: {
         skills: manifest.skillEntries.length,
         mcpServers: manifest.mcpServers.length,
@@ -936,15 +938,30 @@ function optionalMarketplaceFields(record: Record<string, unknown>): {
   publisher?: string;
   tags: string[];
   featured: boolean;
+  featuredOrder?: number;
 } {
   const icon = normalizePluginIcon(record.icon);
   const publisher = optionalString(record.publisher);
+  const featured = record.featured === true;
+  const featuredOrder = optionalFeaturedOrder(record.featuredOrder ?? record.featured_order);
+  if (!featured && featuredOrder !== undefined) {
+    throw new Error('Plugin featuredOrder requires featured: true.');
+  }
   return {
     ...(icon ? { icon } : {}),
     ...(publisher ? { publisher } : {}),
     tags: stringArray(record.tags, 'Plugin tags'),
-    featured: record.featured === true,
+    featured,
+    ...(featuredOrder !== undefined ? { featuredOrder } : {}),
   };
+}
+
+function optionalFeaturedOrder(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error('Plugin featuredOrder must be a positive integer.');
+  }
+  return value;
 }
 
 function normalizePluginIcon(value: unknown): string | undefined {

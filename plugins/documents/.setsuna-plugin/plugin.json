@@ -8,6 +8,7 @@
   "publisher": "Setsuna",
   "tags": ["Word", "DOCX", "文档", "文件处理"],
   "featured": true,
+  "featuredOrder": 1,
   "skills": ["skills/documents"],
   "resources": [
     {

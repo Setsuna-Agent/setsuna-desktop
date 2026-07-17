@@ -8,5 +8,6 @@
   "publisher": "Setsuna",
   "tags": ["PDF", "文档", "文件处理"],
   "featured": true,
+  "featuredOrder": 2,
   "skills": ["skills/pdf"]
 }

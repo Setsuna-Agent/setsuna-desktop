@@ -7,7 +7,7 @@
   "description": "查询 OpenAI API、模型、SDK 和 Codex 的最新官方开发文档。",
   "publisher": "OpenAI",
   "tags": ["官方", "开发文档", "OpenAI"],
-  "featured": true,
+  "featured": false,
   "skills": ["skills/openai-docs"],
   "mcpServers": [
     {

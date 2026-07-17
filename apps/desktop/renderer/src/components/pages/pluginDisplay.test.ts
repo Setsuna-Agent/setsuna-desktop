@@ -53,8 +53,9 @@ describe('plugin display helpers', () => {
   });
 
   it('builds editorial and App Store-style list sections without hiding featured plugins', () => {
-    const openAi = marketplacePlugin({ id: 'openai-docs', name: 'OpenAI Docs', featured: true });
+    const documents = marketplacePlugin({ id: 'documents', name: 'Word', featured: true });
     const pdf = marketplacePlugin({ id: 'pdf', name: 'PDF', featured: true });
+    const openAi = marketplacePlugin({ id: 'openai-docs', name: 'OpenAI Docs' });
     const context = marketplacePlugin({ id: 'context7', name: 'Context7' });
     const guard = marketplacePlugin({
       id: 'guard',
@@ -62,11 +63,11 @@ describe('plugin display helpers', () => {
       capabilities: { skills: 0, mcpServers: 0, hooks: 1, resources: 0 },
     });
 
-    const presentation = pluginMarketplacePresentation([openAi, pdf, context, guard], false);
+    const presentation = pluginMarketplacePresentation([documents, pdf, openAi, context, guard], false);
 
-    expect(presentation.editorials.map((plugin) => plugin.id)).toEqual(['openai-docs', 'pdf']);
+    expect(presentation.editorials.map((plugin) => plugin.id)).toEqual(['documents', 'pdf']);
     expect(presentation.sections).toMatchObject([
-      { id: 'creation', plugins: [{ id: 'openai-docs' }, { id: 'pdf' }, { id: 'context7' }] },
+      { id: 'creation', plugins: [{ id: 'documents' }, { id: 'pdf' }, { id: 'openai-docs' }, { id: 'context7' }] },
       { id: 'automation', plugins: [{ id: 'guard' }] },
     ]);
     expect(pluginCapabilitySummary(guard)).toBe('1 项自动化');

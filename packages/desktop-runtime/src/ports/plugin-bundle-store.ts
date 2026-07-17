@@ -33,6 +33,8 @@ export type PluginBundleInspection = Omit<
   RuntimePluginMarketplaceItem,
   'installed' | 'installedVersion'
 > & {
+  /** 仅供内置市场排序使用，不投影给 renderer。 */
+  featuredOrder?: number;
   sourcePath: string;
 };
 

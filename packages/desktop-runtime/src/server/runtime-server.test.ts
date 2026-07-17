@@ -454,7 +454,7 @@ describe('runtime server', () => {
           id: 'openai-docs',
           name: 'OpenAI 官方文档',
           icon: 'openai-docs',
-          featured: true,
+          featured: false,
           installed: false,
           skills: [expect.objectContaining({
             id: 'openai-docs.openai-docs',
@@ -522,9 +522,8 @@ describe('runtime server', () => {
       ]),
     });
     expect(marketplace.plugins.filter((plugin: { featured: boolean }) => plugin.featured).map((plugin: { id: string }) => plugin.id)).toEqual([
-      'openai-docs',
-      'pdf',
       'documents',
+      'pdf',
     ]);
     expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
     expect(JSON.stringify(marketplace)).not.toContain('.mjs');

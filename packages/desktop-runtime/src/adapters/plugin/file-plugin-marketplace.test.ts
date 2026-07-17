@@ -75,6 +75,21 @@ describe('file plugin marketplace', () => {
     expect(catalog.errors).toEqual([expect.stringContaining('broken: Plugin manifest not found')]);
     await expect(marketplace.installPlugin('missing')).rejects.toThrow('Marketplace plugin not found');
   });
+
+  it('uses the manifest order for featured editorials', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-order-'));
+    const catalogDir = path.join(root, 'catalog');
+    await Promise.all([
+      createCatalogPlugin(catalogDir, 'openai-docs', { name: 'OpenAI 官方文档' }),
+      createCatalogPlugin(catalogDir, 'pdf', { name: 'PDF 文档处理', featured: true, featuredOrder: 2 }),
+      createCatalogPlugin(catalogDir, 'documents', { name: 'Word 文档处理', featured: true, featuredOrder: 1 }),
+    ]);
+    const runtime = await createPluginRuntime(root);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+
+    const catalog = await marketplace.listPlugins();
+    expect(catalog.plugins.map((plugin) => plugin.id)).toEqual(['documents', 'pdf', 'openai-docs']);
+  });
 });
 
 async function createPluginRuntime(root: string) {
@@ -98,7 +113,7 @@ async function createPluginRuntime(root: string) {
 async function createCatalogPlugin(
   catalogDir: string,
   id: string,
-  metadata: { name: string; publisher?: string; tags?: string[]; featured?: boolean },
+  metadata: { name: string; publisher?: string; tags?: string[]; featured?: boolean; featuredOrder?: number },
 ): Promise<void> {
   const manifestDir = path.join(catalogDir, id, '.setsuna-plugin');
   const skillDir = path.join(catalogDir, id, 'skills', 'docs');
@@ -123,6 +138,7 @@ async function createCatalogPlugin(
     publisher: metadata.publisher,
     tags: metadata.tags,
     featured: metadata.featured,
+    featuredOrder: metadata.featuredOrder,
     skills: ['skills/docs'],
     mcpServers: [{
       key: 'docs_mcp',

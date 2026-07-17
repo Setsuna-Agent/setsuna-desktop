@@ -29,6 +29,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
     ]);
     const installedById = new Map(installedPlugins.map((plugin) => [plugin.id, plugin]));
     const plugins = catalog.plugins
+      .sort(compareMarketplacePlugins)
       .map((plugin): RuntimePluginMarketplaceItem => {
         const installed = installedById.get(plugin.id);
         return {
@@ -48,8 +49,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
           installed: Boolean(installed),
           ...(installed?.version ? { installedVersion: installed.version } : {}),
         };
-      })
-      .sort((left, right) => Number(right.featured) - Number(left.featured) || left.name.localeCompare(right.name, 'zh-CN'));
+      });
     return { plugins, errors: catalog.errors };
   }
 
@@ -94,6 +94,12 @@ export class FilePluginMarketplace implements PluginMarketplace {
     }
     return { plugins, errors };
   }
+}
+
+function compareMarketplacePlugins(left: PluginBundleInspection, right: PluginBundleInspection): number {
+  return Number(right.featured) - Number(left.featured)
+    || (left.featuredOrder ?? Number.MAX_SAFE_INTEGER) - (right.featuredOrder ?? Number.MAX_SAFE_INTEGER)
+    || left.name.localeCompare(right.name, 'zh-CN');
 }
 
 function pathIsInside(root: string, target: string): boolean {
