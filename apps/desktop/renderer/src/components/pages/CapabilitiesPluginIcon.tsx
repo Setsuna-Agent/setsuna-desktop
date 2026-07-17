@@ -2,6 +2,7 @@ const pluginIconNames = [
   'context7',
   'openai-docs',
   'pdf',
+  'documents',
   'guard-dangerous-shell',
   'protect-secret-paths',
   'protect-generated-folders',
@@ -62,6 +63,14 @@ function pluginGlyph(icon: PluginIconName | 'plugin') {
           <path d="M6 3.5h8l4 4v13H6v-17Z" />
           <path d="M14 3.5v4h4" />
           <path d="M8.7 12h6.6M8.7 15h5.1M8.7 18h3.2" />
+        </>
+      );
+    case 'documents':
+      return (
+        <>
+          <path d="M5.5 3.5h8l4 4v13h-12v-17Z" />
+          <path d="M13.5 3.5v4h4M8 11h7M8 14h7M8 17h4" />
+          <path d="m16.2 16.1 2.3-2.3 1.2 1.2-2.3 2.3-1.7.5.5-1.7Z" />
         </>
       );
     case 'guard-dangerous-shell':

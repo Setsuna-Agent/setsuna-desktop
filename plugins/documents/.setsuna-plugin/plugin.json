@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "documents",
+  "name": "Word 文档处理",
+  "icon": "documents",
+  "version": "1.0.0",
+  "description": "创建、编辑、检查并通过页面渲染验证 DOCX 文档，适用于报告、方案、备忘录和操作手册。",
+  "publisher": "Setsuna",
+  "tags": ["Word", "DOCX", "文档", "文件处理"],
+  "featured": true,
+  "skills": ["skills/documents"],
+  "resources": [
+    {
+      "id": "content-spec",
+      "label": "DOCX 内容模型",
+      "path": "skills/documents/references/content-spec.md"
+    },
+    {
+      "id": "design-presets",
+      "label": "文档设计预设",
+      "path": "skills/documents/references/design-presets.md"
+    },
+    {
+      "id": "create-edit-workflow",
+      "label": "创建与编辑工作流",
+      "path": "skills/documents/tasks/create-edit.md"
+    },
+    {
+      "id": "read-review-workflow",
+      "label": "读取与审阅工作流",
+      "path": "skills/documents/tasks/read-review.md"
+    },
+    {
+      "id": "render-workflow",
+      "label": "渲染验证工作流",
+      "path": "skills/documents/tasks/verify-render.md"
+    },
+    {
+      "id": "sample-document-spec",
+      "label": "示例文档内容",
+      "path": "skills/documents/examples/sample-document.json"
+    },
+    {
+      "id": "sample-edit-spec",
+      "label": "示例编辑操作",
+      "path": "skills/documents/examples/sample-edit.json"
+    }
+  ]
+}

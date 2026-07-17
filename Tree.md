@@ -2914,6 +2914,22 @@ node-pty postinstall 修复脚本。
 - 说明内置 Skill 只读。
 - 规定生成 Skill 正文的质量要求。
 
+## `plugins`
+
+应用随包发布的 Setsuna Plugin Bundle 精选目录。每个子目录包含 `.setsuna-plugin/plugin.json`，可携带只读 Skill、MCP、Hook 和显式资源；`FilePluginMarketplace` 扫描此目录并向 renderer 投影安全摘要，打包配置会包含 `plugins/**/*`。
+
+### `plugins/documents`
+
+Word/DOCX 文档处理插件。
+
+职责：
+
+- 用 JSON 内容模型确定性创建带样式、列表、表格、图片和版式控制的 DOCX。
+- 对现有文档执行保留源文件的精确替换、元数据更新和结构化追加。
+- 检查 OOXML 结构、批注、修订、字段、外部关系和个人元数据。
+- 使用 LibreOffice 转换 PDF，再通过 PyMuPDF 生成逐页 PNG 供 `view_image` 验证。
+- 通过 `publish_artifact` 发布最终 DOCX；LibreOffice 缺失时明确降级为结构检查。
+
 ## 生成产物和缓存目录
 
 这些目录/文件可能出现在工作区，但不是源码主线，通常不应手写修改。

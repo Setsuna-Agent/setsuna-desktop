@@ -525,6 +525,10 @@
   --desktop-plugin-icon-color: #dc4c58;
 }
 
+.desktop-plugin-icon[data-plugin-icon='documents'] {
+  --desktop-plugin-icon-color: #3376c5;
+}
+
 .desktop-plugin-icon[data-plugin-icon='guard-dangerous-shell'] {
   --desktop-plugin-icon-color: #d94f55;
 }

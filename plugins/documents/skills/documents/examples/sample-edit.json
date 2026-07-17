@@ -1,0 +1,31 @@
+{
+  "replacements": [
+    {
+      "find": "Draft",
+      "replace": "Ready for review",
+      "required": true
+    },
+    {
+      "find": "待确认",
+      "replace": "通过",
+      "count": 1,
+      "required": true
+    }
+  ],
+  "properties": {
+    "title": "文档工作流上线简报（审阅版）",
+    "subject": "Setsuna Documents Plugin edit smoke test"
+  },
+  "preset": "business",
+  "appendBlocks": [
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "验证记录"
+    },
+    {
+      "type": "paragraph",
+      "text": "已完成结构检查、保守文本替换和副本输出。"
+    }
+  ]
+}

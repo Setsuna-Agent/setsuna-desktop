@@ -419,6 +419,20 @@ describe('runtime server', () => {
           capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
         }),
         expect.objectContaining({
+          id: 'documents',
+          name: 'Word 文档处理',
+          icon: 'documents',
+          featured: true,
+          installed: false,
+          skills: [expect.objectContaining({
+            id: 'documents.documents',
+            name: 'Word 文档处理',
+            description: expect.stringContaining('DOCX'),
+          })],
+          mcpServers: [],
+          capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 7 },
+        }),
+        expect.objectContaining({
           id: 'guard-dangerous-shell',
           name: '阻止危险 Shell 命令',
           icon: 'guard-dangerous-shell',
@@ -439,6 +453,7 @@ describe('runtime server', () => {
     expect(marketplace.plugins.filter((plugin: { featured: boolean }) => plugin.featured).map((plugin: { id: string }) => plugin.id)).toEqual([
       'openai-docs',
       'pdf',
+      'documents',
     ]);
     expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
     expect(JSON.stringify(marketplace)).not.toContain('.mjs');

@@ -1,0 +1,54 @@
+{
+  "title": "文档工作流上线简报",
+  "subtitle": "面向本地 DOCX 创建、检查与交付的第一阶段方案",
+  "preset": "business",
+  "pageSize": "a4",
+  "properties": {
+    "subject": "Setsuna Documents Plugin smoke test",
+    "keywords": ["DOCX", "Setsuna", "文档工作流"]
+  },
+  "metadata": [
+    { "label": "状态", "value": "Draft" },
+    { "label": "范围", "value": "本地 Word 文档" }
+  ],
+  "blocks": [
+    {
+      "type": "callout",
+      "label": "结论",
+      "text": "先交付可验证的本地 DOCX 能力，再扩展通用附件和云端文档。",
+      "tone": "info"
+    },
+    { "type": "heading", "level": 1, "text": "目标" },
+    {
+      "type": "paragraph",
+      "text": "插件把内容建模、结构检查、页面渲染和最终交付串成一个可复用流程。"
+    },
+    {
+      "type": "bullets",
+      "items": [
+        "使用确定性的 JSON 内容模型创建文档",
+        "保留原文件并执行局部编辑",
+        "在交付前检查 OOXML 结构和页面渲染"
+      ]
+    },
+    { "type": "heading", "level": 1, "text": "交付检查" },
+    {
+      "type": "table",
+      "columns": ["检查项", "负责人", "结果"],
+      "widths": [5, 2, 2],
+      "alignments": ["left", "left", "center"],
+      "rows": [
+        ["DOCX 可重新打开", "Runtime", "通过"],
+        ["页面渲染无错误", "Agent", "待确认"],
+        ["最终产物已发布", "Agent", "待确认"]
+      ]
+    },
+    {
+      "type": "checklist",
+      "items": [
+        { "text": "结构检查", "checked": true },
+        { "text": "逐页视觉检查", "checked": false }
+      ]
+    }
+  ]
+}

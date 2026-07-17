@@ -177,6 +177,7 @@ describe('capabilities plugin components', () => {
       'context7',
       'openai-docs',
       'pdf',
+      'documents',
       'guard-dangerous-shell',
       'protect-secret-paths',
       'protect-generated-folders',
