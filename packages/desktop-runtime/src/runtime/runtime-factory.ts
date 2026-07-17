@@ -20,6 +20,7 @@ import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { SkillMcpDependencyCoordinator } from '../adapters/skill/skill-mcp-dependency-coordinator.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
+import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host.js';
@@ -97,6 +98,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore),
     new WorkspaceImageToolHost(workspaceProjects),
+    new ArtifactToolHost(workspaceProjects),
     new PcLocalToolHost(workspaceProjects, policyAmendmentStore, workspaceDependencies),
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     new MemoryToolHost(memoryStore, configStore),

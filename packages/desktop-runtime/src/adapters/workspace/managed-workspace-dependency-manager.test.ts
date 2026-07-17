@@ -27,6 +27,12 @@ describe('managed workspace dependency manager', () => {
 
     try {
       const configStore = new FileConfigStore(dataDir);
+      await configStore.saveConfig({
+        desktopSettings: {
+          pythonPackageIndexUrl: 'https://mirror.example/simple',
+          workspaceDependenciesEnabled: true,
+        },
+      });
       const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
       const status = await manager.setEnabled({ enabled: true });
 
@@ -42,7 +48,9 @@ describe('managed workspace dependency manager', () => {
       const installBin = path.join(dependencyRoot, 'toolchain', 'bin');
       expect(shell).toMatchObject({
         environment: {
+          PIP_INDEX_URL: 'https://mirror.example/simple',
           PIP_REQUIRE_VIRTUALENV: '1',
+          UV_DEFAULT_INDEX: 'https://mirror.example/simple',
           UV_PYTHON: path.join(fakeBin, 'python3'),
         },
         writableRoots: [path.join(dependencyRoot, 'cache')],
@@ -73,6 +81,8 @@ describe('managed workspace dependency manager', () => {
       expect(shell?.environment.PATH.split(path.delimiter)[0]).toBe(
         path.join(dataDir, 'workspace-dependencies', 'bin'),
       );
+      expect(shell?.environment).not.toHaveProperty('PIP_INDEX_URL');
+      expect(shell?.environment).not.toHaveProperty('UV_DEFAULT_INDEX');
       await expect(execFileAsync(path.join(dataDir, 'workspace-dependencies', 'bin', 'node'), ['--version']))
         .resolves.toMatchObject({ stdout: expect.stringMatching(/^v\d+/u) });
       await expect(manager.getStatus()).resolves.toMatchObject({

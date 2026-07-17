@@ -20,6 +20,13 @@ export type WorkspaceImageRead = {
   base64: string;
 };
 
+export type WorkspaceFileMetadata = {
+  projectId: string;
+  path: string;
+  size: number;
+  modifiedAt?: string;
+};
+
 export type WorkspaceProjectStore = {
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
@@ -28,6 +35,7 @@ export type WorkspaceProjectStore = {
   getStatus(projectId?: string): Promise<WorkspaceStatus>;
   listEntries(projectId: string, relativePath?: string): Promise<WorkspaceEntryList>;
   searchEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
+  inspectFile(projectId: string, relativePath: string): Promise<WorkspaceFileMetadata>;
   readFile(projectId: string, relativePath: string): Promise<WorkspaceFileRead>;
   readImage(projectId: string, relativePath: string): Promise<WorkspaceImageRead>;
   writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite>;

@@ -1,4 +1,5 @@
 export * from './approvals.js';
+export * from './artifacts.js';
 export * from './browser-control.js';
 export * from './config.js';
 export * from './desktop.js';

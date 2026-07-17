@@ -31,6 +31,7 @@ describe('file workspace project store', () => {
     const project = await store.addProject({ path: fixture.projectDir });
     const status = await store.getStatus(project.id);
     const entries = await store.listEntries(project.id);
+    const metadata = await store.inspectFile(project.id, 'README.md');
     const readme = await store.readFile(project.id, 'README.md');
     const search = await store.search(project.id, 'needle');
     const written = await store.writeFile(project.id, 'src/generated.txt', 'generated\n');
@@ -38,6 +39,7 @@ describe('file workspace project store', () => {
     expect(project.name).toBe('project');
     expect(status).toMatchObject({ exists: true, readable: true });
     expect(entries.entries.map((entry) => entry.path)).toContain('README.md');
+    expect(metadata).toMatchObject({ projectId: project.id, path: 'README.md', size: 21, modifiedAt: expect.any(String) });
     expect(readme.content).toContain('needle');
     expect(search.results).toMatchObject([{ path: 'README.md', line: 1 }]);
     expect(written).toMatchObject({ path: 'src/generated.txt', created: true });
@@ -100,6 +102,7 @@ describe('file workspace project store', () => {
     const project = await store.addProject({ path: fixture.projectDir });
 
     await expect(store.readFile(project.id, '../outside.txt')).rejects.toThrow('escapes');
+    await expect(store.inspectFile(project.id, '../outside.txt')).rejects.toThrow('escapes');
     await expect(store.writeFile(project.id, '../outside.txt', 'outside')).rejects.toThrow('escapes');
   });
 
@@ -112,6 +115,7 @@ describe('file workspace project store', () => {
     const project = await store.addProject({ path: fixture.projectDir });
 
     await expect(store.search(project.id, 'SYMLINK_SECRET_NEEDLE')).resolves.toMatchObject({ results: [] });
+    await expect(store.inspectFile(project.id, 'linked-secret.txt')).rejects.toThrow('escapes');
     await expect(store.readFile(project.id, 'linked-secret.txt')).rejects.toThrow('escapes');
     await expect(store.readImage(project.id, 'linked-secret.txt')).rejects.toThrow('escapes');
   });

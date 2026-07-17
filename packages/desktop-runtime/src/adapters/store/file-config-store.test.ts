@@ -73,6 +73,24 @@ describe('file config store', () => {
     });
   });
 
+  it('persists only valid HTTP package index URLs', async () => {
+    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
+
+    await expect(store.saveConfig({
+      desktopSettings: { pythonPackageIndexUrl: '  https://mirror.example/simple  ' },
+    })).resolves.toMatchObject({
+      desktopSettings: {
+        pythonPackageIndexUrl: 'https://mirror.example/simple',
+        workspaceDependenciesEnabled: true,
+      },
+    });
+    await expect(store.saveConfig({
+      desktopSettings: { pythonPackageIndexUrl: 'file:///tmp/simple' },
+    })).resolves.toMatchObject({
+      desktopSettings: { workspaceDependenciesEnabled: true },
+    });
+  });
+
   it('removes API keys for providers deleted from config', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);

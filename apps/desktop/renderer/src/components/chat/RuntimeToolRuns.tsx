@@ -14,12 +14,13 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import type {
-  AnswerRuntimeApprovalInput,
-  RuntimeApprovalAvailableDecision,
-  RuntimeHookRun,
-  RuntimeStructuredInputValue,
-  RuntimeToolRun,
+import {
+  PUBLISH_ARTIFACT_TOOL_NAME,
+  type AnswerRuntimeApprovalInput,
+  type RuntimeApprovalAvailableDecision,
+  type RuntimeHookRun,
+  type RuntimeStructuredInputValue,
+  type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
 import { RuntimeUserInputActions } from './RuntimeUserInputActions.js';
@@ -1847,6 +1848,7 @@ function toolRunSummary(run: RuntimeToolRun): { title: string; target?: string }
   if (name === 'read_shell_process') return { title: runningAware(run, '读取命令输出', '已读取命令输出'), target: stringField(args.process_id ?? args.processId) };
   if (name === 'remember_memory') return { title: runningAware(run, '保存记忆', '已保存记忆') };
   if (name === 'recall_memory') return { title: runningAware(run, '检索记忆', '已检索记忆'), target: query };
+  if (name === PUBLISH_ARTIFACT_TOOL_NAME) return { title: runningAware(run, '发布产物', '已发布产物'), target: path };
   return { title: runningAware(run, toolDisplayName(name), `已使用 ${toolDisplayName(name)}`) };
 }
 

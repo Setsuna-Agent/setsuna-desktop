@@ -16,7 +16,7 @@ import {
   type WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
-import type { WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import type { WorkspaceFileMetadata, WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
@@ -214,6 +214,19 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       scanned,
       truncated,
       workspaceRoot: project.path,
+    };
+  }
+
+  async inspectFile(projectId: string, relativePath: string): Promise<WorkspaceFileMetadata> {
+    const project = await this.requireProject(projectId);
+    const target = await safeResolve(project.path, relativePath);
+    const targetStat = await stat(target);
+    if (!targetStat.isFile()) throw new Error('Path is not a file.');
+    return {
+      projectId,
+      path: toProjectRelative(project.path, target),
+      size: targetStat.size,
+      modifiedAt: targetStat.mtime.toISOString(),
     };
   }
 

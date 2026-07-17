@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Form
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
 import { Archive, ArchiveRestore, BadgeCheck, Bold, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
-import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeDesktopSettings, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
@@ -830,10 +830,12 @@ function RuntimePolicySettings({
   const isOpeningConfig = openingPath === config.configPath;
   const isOpeningData = openingPath === config.dataPath;
   const pathActionDisabled = Boolean(openingPath);
-  const persistWorkspaceDependenciesEnabled = (enabled: boolean) => onSave({
+  const persistWorkspaceDependencySettings = (
+    settings: Partial<Pick<RuntimeDesktopSettings, 'pythonPackageIndexUrl' | 'workspaceDependenciesEnabled'>>,
+  ) => onSave({
     desktopSettings: {
       ...(config.desktopSettings ?? {}),
-      workspaceDependenciesEnabled: enabled,
+      ...settings,
     },
   });
 
@@ -873,7 +875,11 @@ function RuntimePolicySettings({
         </div>
       </div>
 
-      <WorkspaceDependenciesSettings onEnabledPersist={persistWorkspaceDependenciesEnabled} />
+      <WorkspaceDependenciesSettings
+        packageIndexUrl={typeof config.desktopSettings?.pythonPackageIndexUrl === 'string' ? config.desktopSettings.pythonPackageIndexUrl : ''}
+        onEnabledPersist={(enabled) => persistWorkspaceDependencySettings({ workspaceDependenciesEnabled: enabled })}
+        onPackageIndexUrlPersist={(pythonPackageIndexUrl) => persistWorkspaceDependencySettings({ pythonPackageIndexUrl })}
+      />
 
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">本地存储</div>

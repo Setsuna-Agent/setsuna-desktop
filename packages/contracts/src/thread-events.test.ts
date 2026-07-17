@@ -192,6 +192,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
         toolName: 'run_shell_command',
         status: 'success',
         content: '$ pnpm test\nstdout: done\nexit: 0',
+        data: { artifact: { id: 'artifact_call_1', kind: 'file', path: 'report.pdf' } },
         durationMs: 42,
       },
     };
@@ -202,6 +203,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
       id: 'call_1',
       status: 'success',
       resultPreview: '$ pnpm test\nstdout: done\nexit: 0',
+      data: { artifact: { id: 'artifact_call_1', kind: 'file', path: 'report.pdf' } },
       durationMs: 42,
     });
   });

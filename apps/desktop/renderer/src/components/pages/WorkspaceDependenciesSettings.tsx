@@ -1,19 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Activity, Download, RefreshCw } from 'lucide-react';
+import { normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
 import type {
   RuntimeWorkspaceDependenciesStatus,
   RuntimeWorkspaceDependencyCheck,
 } from '@setsuna-desktop/contracts';
 import { useWorkspaceDependencies } from '../../hooks/useWorkspaceDependencies.js';
-import { Button, StatusBadge } from '../primitives.js';
+import { Button, StatusBadge, TextField } from '../primitives.js';
+
+type WorkspaceDependenciesSettingsProps = {
+  packageIndexUrl: string;
+  onEnabledPersist: (enabled: boolean) => Promise<void>;
+  onPackageIndexUrlPersist: (packageIndexUrl: string | undefined) => Promise<void>;
+};
 
 export function WorkspaceDependenciesSettings({
+  packageIndexUrl,
   onEnabledPersist,
-}: {
-  onEnabledPersist: (enabled: boolean) => Promise<void>;
-}) {
+  onPackageIndexUrlPersist,
+}: WorkspaceDependenciesSettingsProps) {
   const dependencies = useWorkspaceDependencies();
   const [persistError, setPersistError] = useState<string | null>(null);
+  const [packageIndexDraft, setPackageIndexDraft] = useState(packageIndexUrl);
+  const [packageIndexError, setPackageIndexError] = useState<string | null>(null);
+  const [packageIndexSaving, setPackageIndexSaving] = useState(false);
   const busy = dependencies.busyAction !== null;
   const status = dependencies.status;
   const showChecks = Boolean(
@@ -22,6 +32,10 @@ export function WorkspaceDependenciesSettings({
     || status?.state === 'ready'
     || dependencies.hasDiagnosed,
   );
+
+  useEffect(() => {
+    setPackageIndexDraft(packageIndexUrl);
+  }, [packageIndexUrl]);
 
   const setEnabled = async (enabled: boolean) => {
     setPersistError(null);
@@ -32,6 +46,29 @@ export function WorkspaceDependenciesSettings({
     } catch (unknownError) {
       setPersistError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     }
+  };
+
+  const savePackageIndex = async (value: string) => {
+    const normalized = normalizePythonPackageIndexUrl(value);
+    if (normalized === null) {
+      setPackageIndexError('请输入有效的 HTTP 或 HTTPS 包源地址。');
+      return;
+    }
+    setPackageIndexSaving(true);
+    setPackageIndexError(null);
+    try {
+      await onPackageIndexUrlPersist(normalized || undefined);
+      setPackageIndexDraft(normalized);
+    } catch (unknownError) {
+      setPackageIndexError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    } finally {
+      setPackageIndexSaving(false);
+    }
+  };
+
+  const submitPackageIndex = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void savePackageIndex(packageIndexDraft);
   };
 
   return (
@@ -53,6 +90,39 @@ export function WorkspaceDependenciesSettings({
             />
           </label>
         </div>
+
+        <form className="workspace-dependencies-settings__index" noValidate onSubmit={submitPackageIndex}>
+          <label className="workspace-dependencies-settings__copy" htmlFor="workspace-python-package-index">
+            <strong>Python 包源</strong>
+            <small id="workspace-python-package-index-help">同时用于 pip 和 uv；留空则使用 PyPI 官方源。</small>
+          </label>
+          <div className="workspace-dependencies-settings__index-controls">
+            <TextField
+              id="workspace-python-package-index"
+              aria-describedby="workspace-python-package-index-help"
+              aria-invalid={packageIndexError ? 'true' : undefined}
+              disabled={packageIndexSaving}
+              inputMode="url"
+              placeholder="https://pypi.org/simple"
+              spellCheck={false}
+              value={packageIndexDraft}
+              onChange={(event) => {
+                setPackageIndexDraft(event.currentTarget.value);
+                setPackageIndexError(null);
+              }}
+            />
+            <Button
+              variant="primary"
+              disabled={packageIndexSaving || packageIndexDraft.trim() === packageIndexUrl}
+              type="submit"
+            >
+              {packageIndexSaving ? '保存中' : '保存'}
+            </Button>
+            {packageIndexUrl ? (
+              <Button disabled={packageIndexSaving} onClick={() => void savePackageIndex('')}>恢复默认</Button>
+            ) : null}
+          </div>
+        </form>
 
         <div className="workspace-dependencies-settings__actions">
           <span className="workspace-dependencies-settings__state">
@@ -87,8 +157,8 @@ export function WorkspaceDependenciesSettings({
           </div>
         ) : null}
         {status?.installPath ? <code className="workspace-dependencies-settings__path" title={status.installPath}>{status.installPath}</code> : null}
-        {dependencies.error || persistError ? (
-          <div className="chat-user-settings__runtime-error" role="alert">{dependencies.error ?? persistError}</div>
+        {dependencies.error || persistError || packageIndexError ? (
+          <div className="chat-user-settings__runtime-error" role="alert">{dependencies.error ?? persistError ?? packageIndexError}</div>
         ) : null}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
 import type {
   ProviderConfigInput,
   ProviderConfigState,
@@ -529,6 +530,9 @@ function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   if (settings.markdownLinkOpenMode !== 'in-app' && settings.markdownLinkOpenMode !== 'external') {
     delete settings.markdownLinkOpenMode;
   }
+  const pythonPackageIndexUrl = normalizePythonPackageIndexUrl(settings.pythonPackageIndexUrl);
+  if (pythonPackageIndexUrl) settings.pythonPackageIndexUrl = pythonPackageIndexUrl;
+  else delete settings.pythonPackageIndexUrl;
   if (typeof settings.workspaceDependenciesEnabled !== 'boolean') {
     settings.workspaceDependenciesEnabled = true;
   }

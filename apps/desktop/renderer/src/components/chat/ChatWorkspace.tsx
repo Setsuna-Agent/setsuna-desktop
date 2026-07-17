@@ -10,6 +10,7 @@ import { WorkspaceMentionText } from './WorkspaceMentionText.js';
 import { MarkdownRenderer } from './markdown/MarkdownRenderer.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 import { FileChangesSummaryCard, RuntimeHookRuns, RuntimeToolRuns, isDisplayableRuntimeToolRun, type ToolRunSummaryMode } from './RuntimeToolRuns.js';
+import { RuntimeArtifactList } from './RuntimeArtifactList.js';
 import { StreamingScrollPinProvider } from './StreamingScrollPinProvider.js';
 import { createAssistantGuidanceTimelinePlan, type AssistantGuidanceTimelinePlan, type AssistantWorkHistoryPlanEntry } from './chatAssistantGuidanceTimeline.js';
 import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
@@ -22,6 +23,7 @@ import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { chatThreadUsageForDisplay } from './chatThreadUsage.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
+import { runtimeArtifactsFromToolRuns } from './runtimeArtifacts.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
 import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ChatWorkspaceMentionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
@@ -1339,6 +1341,7 @@ function AssistantRunContent({
     return fileChangeSummaryFromRuns(toolRuns);
   }, [active, hasFinalAnswerContent, toolRuns]);
   const memoryCitations = useMemo(() => memoryCitationEntriesFromMessages(displaySegments), [displaySegments]);
+  const artifacts = useMemo(() => runtimeArtifactsFromToolRuns(toolRuns), [toolRuns]);
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
     return active ? (
       <div className="chat-assistant-run">
@@ -1375,6 +1378,11 @@ function AssistantRunContent({
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
           <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
+        </div>
+      ) : null}
+      {!active && artifacts.length ? (
+        <div className="chat-assistant-run__segment">
+          <RuntimeArtifactList artifacts={artifacts} />
         </div>
       ) : null}
       {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}

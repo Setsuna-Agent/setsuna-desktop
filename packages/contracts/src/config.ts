@@ -31,8 +31,24 @@ export type RuntimeMarkdownLinkOpenMode = 'in-app' | 'external';
 export type RuntimeDesktopSettings = {
   [key: string]: unknown;
   markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
+  pythonPackageIndexUrl?: string;
   workspaceDependenciesEnabled?: boolean;
 };
+
+/** Returns an empty string for the default index and null for an invalid URL. */
+export function normalizePythonPackageIndexUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return '';
+  try {
+    const url = new URL(normalized);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname)
+      ? normalized
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export type RuntimeMemorySettings = {
   useMemories: boolean;

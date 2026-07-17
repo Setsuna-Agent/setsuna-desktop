@@ -2,6 +2,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PUBLISH_ARTIFACT_TOOL_NAME } from '@setsuna-desktop/contracts';
 import { createRuntimeFactory } from './runtime-factory.js';
 
 describe('runtime factory tool wiring', () => {
@@ -14,6 +15,8 @@ describe('runtime factory tool wiring', () => {
     expect(tools.filter((tool) => tool.name === 'configure_skill')).toHaveLength(1);
     expect(tools.filter((tool) => tool.name === 'open_browser')).toHaveLength(1);
     expect(tools.filter((tool) => tool.name === 'request_user_input')).toHaveLength(1);
+    expect(tools.filter((tool) => tool.name === PUBLISH_ARTIFACT_TOOL_NAME)).toHaveLength(1);
+    await expect(runtime.toolHost.systemPrompt?.(context, { tools })).resolves.toContain('call publish_artifact once');
     await expect(runtime.toolHost.toolRuntimeProfile?.('request_user_input', context)).resolves.toMatchObject({
       approvalMode: 'selfManaged',
       supportsParallel: false,

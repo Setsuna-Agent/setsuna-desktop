@@ -2793,10 +2793,36 @@
 }
 
 .desktop-settings-panel .workspace-dependencies-settings__actions,
+.desktop-settings-panel .workspace-dependencies-settings__index,
 .desktop-settings-panel .workspace-dependencies-settings__checks,
 .desktop-settings-panel .workspace-dependencies-settings__path,
 .desktop-settings-panel .workspace-dependencies-settings__card > .chat-user-settings__runtime-error {
   border-top: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__index {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(280px, 1.3fr);
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__index-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__index-controls .sd-field {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--app-code-font-family);
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__index-controls .sd-button {
+  flex: 0 0 auto;
 }
 
 .desktop-settings-panel .workspace-dependencies-settings__actions {
@@ -2880,5 +2906,19 @@
 
   .desktop-settings-panel .workspace-dependencies-settings__check {
     grid-template-columns: 1fr;
+  }
+
+  .desktop-settings-panel .workspace-dependencies-settings__index {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .desktop-settings-panel .workspace-dependencies-settings__index-controls {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .desktop-settings-panel .workspace-dependencies-settings__index-controls .sd-field {
+    flex-basis: 100%;
   }
 }

@@ -109,6 +109,9 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   async prepareShellEnvironment(command: string): Promise<WorkspaceDependencyShellEnvironment | null> {
     const config = await this.configStore.getConfig();
     if (config.desktopSettings?.workspaceDependenciesEnabled !== true) return null;
+    const packageIndexUrl = typeof config.desktopSettings.pythonPackageIndexUrl === 'string'
+      ? config.desktopSettings.pythonPackageIndexUrl
+      : '';
     await Promise.all([
       this.ensureNodeShim(),
       mkdir(path.join(this.cacheRoot, 'uv'), { recursive: true }),
@@ -132,6 +135,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
         PYTHONDONTWRITEBYTECODE: '1',
         UV_CACHE_DIR: path.join(this.cacheRoot, 'uv'),
         UV_NO_MODIFY_PATH: '1',
+        ...(packageIndexUrl ? {
+          PIP_INDEX_URL: packageIndexUrl,
+          UV_DEFAULT_INDEX: packageIndexUrl,
+        } : {}),
         ...(manifest ? {
           UV_PYTHON: manifest.python.path,
           UV_PYTHON_BIN_DIR: path.join(this.installRoot, 'python-bin'),
