@@ -23,6 +23,7 @@ export function ConversationOverviewPanel({
   onOpenReview,
   onOpenThread,
   onReviewRefresh,
+  reviewError,
 }: {
   activeProject?: WorkspaceProject;
   compact: boolean;
@@ -39,6 +40,7 @@ export function ConversationOverviewPanel({
   onOpenReview?: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  reviewError: string | null;
 }) {
   const changeStats = reviewState?.isGitRepository
     ? localReviewChangeStats(reviewState)
@@ -48,6 +50,9 @@ export function ConversationOverviewPanel({
         fileCount: overview.fileChangeSummary?.files.length ?? 0,
       };
   const hasFileChanges = changeStats.fileCount > 0;
+  // The first status read is pending before its effect has flipped reviewLoading on.
+  const reviewPending = Boolean(activeProject && !reviewState && !reviewError);
+  const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
   const usageSummary = threadUsage?.summary;
   const latestTurn = currentThread.turns?.at(-1);
   // 分叉是独立对话；只有派生的子代理属于协作任务。
@@ -88,14 +93,15 @@ export function ConversationOverviewPanel({
             <FileText size={14} />
           </span>
           <span className="chat-conversation-overview-panel__label">变更</span>
-          <span className="chat-conversation-overview-panel__meta">
+          <span className="chat-conversation-overview-panel__meta" title={reviewFailed ? reviewError ?? undefined : undefined}>
             {hasFileChanges ? (
               <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
-            ) : '无变更'}
+            ) : reviewPending ? '加载中' : reviewFailed ? '加载失败' : '无变更'}
           </span>
         </button>
         <ConversationGitControls
           activeProject={activeProject}
+          reviewError={reviewError}
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           onReviewRefresh={onReviewRefresh}

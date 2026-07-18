@@ -120,6 +120,7 @@ export function ChatWorkspace({
   onImageAttachmentRequestConsumed,
   onSkillSelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
+  reviewError = null,
   reviewLoading = false,
   reviewState = null,
   plugins = [],
@@ -166,6 +167,7 @@ export function ChatWorkspace({
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
+  reviewError?: string | null;
   reviewLoading?: boolean;
   reviewState?: DesktopReviewState | null;
   plugins?: RuntimePluginSummary[];
@@ -176,7 +178,6 @@ export function ChatWorkspace({
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const overviewRef = useRef<HTMLDivElement | null>(null);
-  const requestedReviewProjectRef = useRef<string | null>(null);
   const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread, activeModelContextWindowTokens(config)), [config, currentThread]);
   const displayedThreadUsage = useMemo(() => chatThreadUsageForDisplay(threadUsage, currentThread), [currentThread, threadUsage]);
   const pluginUsesByTurnId = useMemo(
@@ -239,13 +240,6 @@ export function ChatWorkspace({
   useEffect(() => {
     onConversationOverviewRenderedChange?.(Boolean(conversationOverview && currentThread && overviewVisible));
   }, [conversationOverview, currentThread, onConversationOverviewRenderedChange, overviewVisible]);
-  useEffect(() => {
-    const workspaceRoot = activeProject?.path ?? null;
-    if (requestedReviewProjectRef.current !== workspaceRoot) requestedReviewProjectRef.current = null;
-    if (!workspaceRoot || !conversationOverview || reviewState || reviewLoading || requestedReviewProjectRef.current === workspaceRoot) return;
-    requestedReviewProjectRef.current = workspaceRoot;
-    void onReviewRefresh?.();
-  }, [activeProject?.path, conversationOverview, onReviewRefresh, reviewLoading, reviewState]);
   const assistantItemIdByTurnId = useMemo(() => {
     const itemIdByTurnId = new Map<string, string>();
     for (const item of displayItems) {
@@ -563,6 +557,7 @@ export function ChatWorkspace({
                 contextLabel={overviewContextLabel}
                 contextPercent={contextUsage.visiblePercent || contextUsage.percent}
                 overview={conversationOverview}
+                reviewError={reviewError}
                 reviewLoading={reviewLoading}
                 reviewState={reviewState}
                 onCollapse={() => {

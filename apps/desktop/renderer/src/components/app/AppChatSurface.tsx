@@ -239,6 +239,7 @@ export function AppChatSurface({
           draft={draft}
           imageAttachmentRequest={imageAttachmentRequest}
           plugins={plugins}
+          reviewError={reviewError}
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           skillSelectionRequest={skillSelectionRequest}

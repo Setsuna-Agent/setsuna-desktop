@@ -3,6 +3,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { clearTerminalRestoreBuffer } from '../components/workspace/TerminalPane.js';
 import { readPreferredWorkspaceAppId, writePreferredWorkspaceAppId } from '../utils/workspaceAppPreference.js';
 import { useLatestRequestGuard } from './useLatestRequestGuard.js';
+import { shouldLoadDesktopReviewState } from './desktopReviewAutoLoad.js';
 import { readyThreadWorkspacePath, type ThreadWorkspaceStatus } from './useThreadWorkspace.js';
 import {
   activePanelInSlot,
@@ -35,6 +36,7 @@ import {
 type WorkspacePanelsOptions = {
   activeProject: WorkspaceProject | null | undefined;
   activeView: string;
+  autoLoadReview: boolean;
   setError: (message: string | null) => void;
   workspaceStatus: ThreadWorkspaceStatus;
 };
@@ -44,7 +46,7 @@ type OpenableDesktopPanelType = Exclude<DesktopPanelType, 'browser' | 'file'>;
 
 const GLOBAL_TERMINAL_PROJECT_KEY = '__global__';
 
-export function useDesktopWorkspacePanels({ activeProject, activeView, setError, workspaceStatus }: WorkspacePanelsOptions) {
+export function useDesktopWorkspacePanels({ activeProject, activeView, autoLoadReview, setError, workspaceStatus }: WorkspacePanelsOptions) {
   const [sidePanelSlot, setSidePanelSlot] = useState<DesktopPanelSlotState>(() => createEmptyPanelSlot());
   const [sidePanelExpanded, setSidePanelExpanded] = useState(false);
   const [bottomPanelSlot, setBottomPanelSlot] = useState<DesktopPanelSlotState>(() => createEmptyPanelSlot());
@@ -136,12 +138,12 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError,
 
   useEffect(() => {
     reviewRequests.invalidate();
+    setReviewState(null);
+    setReviewError(null);
+    setReviewLoading(false);
     if (!activeProject?.path) {
       setWorkspaceApps([]);
       setSelectedWorkspaceAppId(null);
-      setReviewState(null);
-      setReviewError(null);
-      setReviewLoading(false);
       return undefined;
     }
     let cancelled = false;
@@ -172,6 +174,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError,
       reviewRequests.invalidate();
       setReviewState(null);
       setReviewError(null);
+      setReviewLoading(false);
       return;
     }
     const api = window.setsunaDesktop?.desktopReview;
@@ -197,10 +200,17 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, setError,
   }, [activeProject?.path, reviewRequests]);
 
   useEffect(() => {
-    if (activeView !== 'chat') return;
-    if (!sideReviewPanelOpen && !bottomReviewPanelOpen) return;
+    if (!shouldLoadDesktopReviewState({
+      activeView,
+      autoLoad: autoLoadReview,
+      error: reviewError,
+      hasState: Boolean(reviewState),
+      hasWorkspace: Boolean(activeProject?.path),
+      loading: reviewLoading,
+      panelOpen: sideReviewPanelOpen || bottomReviewPanelOpen,
+    })) return;
     void loadReviewState();
-  }, [activeView, bottomReviewPanelOpen, loadReviewState, sideReviewPanelOpen]);
+  }, [activeProject?.path, activeView, autoLoadReview, bottomReviewPanelOpen, loadReviewState, reviewError, reviewLoading, reviewState, sideReviewPanelOpen]);
 
   const createTerminalPanel = useCallback((): DesktopPanelTab => {
     terminalPanelSeqRef.current += 1;

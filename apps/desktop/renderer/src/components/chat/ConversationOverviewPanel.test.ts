@@ -63,6 +63,32 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('无变更');
   });
 
+  it('does not report a clean worktree or HEAD while git status is still loading', () => {
+    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+      ...baseProps,
+      compact: false,
+      reviewLoading: true,
+      reviewState: null,
+    }));
+
+    expect(html.match(/加载中/g)).toHaveLength(2);
+    expect(html).not.toContain('无变更');
+    expect(html).not.toContain('>HEAD<');
+  });
+
+  it('shows the review failure instead of reporting no changes', () => {
+    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+      ...baseProps,
+      compact: false,
+      reviewError: 'git status failed',
+      reviewState: null,
+    }));
+
+    expect(html.match(/加载失败/g)).toHaveLength(2);
+    expect(html).toContain('title="git status failed"');
+    expect(html).not.toContain('无变更');
+  });
+
   it('does not forward the React click event to the review callback', () => {
     const onOpenReview = vi.fn();
     const panel = ConversationOverviewPanel({
@@ -219,6 +245,7 @@ const baseProps = {
     lastSeq: 0,
   } satisfies RuntimeThread,
   overview,
+  reviewError: null,
   reviewLoading: false,
   reviewState,
   onCollapse: () => undefined,

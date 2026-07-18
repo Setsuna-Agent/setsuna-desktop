@@ -56,6 +56,7 @@ export function useDesktopAppController() {
   const workspacePanels = useDesktopWorkspacePanels({
     activeProject: activeWorkspace,
     activeView,
+    autoLoadReview: Boolean(currentThread),
     setError,
     workspaceStatus: activeWorkspaceState.status,
   });

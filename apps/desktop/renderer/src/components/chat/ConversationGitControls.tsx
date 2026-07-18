@@ -10,11 +10,13 @@ type GitBusyAction = 'checkout' | 'commit' | 'create' | 'generate' | 'push' | nu
 
 export function ConversationGitControls({
   activeProject,
+  reviewError,
   reviewLoading,
   reviewState,
   onReviewRefresh,
 }: {
   activeProject?: WorkspaceProject;
+  reviewError: string | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
@@ -35,6 +37,13 @@ export function ConversationGitControls({
   const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
   const hasGit = Boolean(reviewState?.isGitRepository);
   const currentBranch = reviewState?.currentBranch || 'HEAD';
+  const currentBranchLabel = reviewLoading
+    ? '加载中'
+    : reviewState
+      ? currentBranch
+      : reviewError
+        ? '加载失败'
+        : '加载中';
   const changeStats = useMemo(() => localReviewChangeStats(reviewState), [reviewState]);
   const unstagedFileCount = fileCount(reviewState?.unstagedSummary);
   const createBranchDisabledReason = unstagedFileCount > 0 ? '请先暂存或丢弃当前工作区的未暂存更改。' : null;
@@ -288,8 +297,8 @@ export function ConversationGitControls({
           <GitBranch size={14} />
         </span>
         <span className="chat-conversation-overview-panel__label">分支</span>
-        <span className="chat-conversation-overview-panel__meta">
-          {reviewLoading ? '加载中' : currentBranch}
+        <span className="chat-conversation-overview-panel__meta" title={!reviewState && reviewError ? reviewError : undefined}>
+          {currentBranchLabel}
           <ChevronDown size={12} />
         </span>
       </button>
