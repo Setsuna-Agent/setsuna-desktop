@@ -15,6 +15,10 @@ import { PcLocalToolHost } from './pc-local-tool-host.js';
 import { shellSandboxProfile, shellSandboxUnavailableReason } from './pc-local-tools.js';
 
 const execFileAsync = promisify(execFile);
+const restrictedShellExecutionUnavailable = Boolean(shellSandboxUnavailableReason({
+  osSandbox: true,
+  permissionProfile: 'workspace-write',
+}));
 
 describe('pc local tool host', () => {
   it('exposes the pc SWE tool contract and writes files directly', async () => {
@@ -262,7 +266,7 @@ describe('pc local tool host', () => {
       .resolves.toMatchObject({ reason: expect.stringContaining('依赖') });
   });
 
-  it('surfaces a failed pipeline stage instead of reporting the trailing command as success', async () => {
+  it.skipIf(process.platform === 'win32')('surfaces a failed pipeline stage instead of reporting the trailing command as success', async () => {
     const { host } = await createHost();
 
     await expect(host.runTool('run_shell_command', {
@@ -279,7 +283,7 @@ describe('pc local tool host', () => {
   it('allows harmless output redirection to /dev/null under workspace-write', async () => {
     const { host } = await createHost();
 
-    await expect(host.runTool('run_shell_command', {
+    const execution = host.runTool('run_shell_command', {
       command: 'printf ok > /dev/null',
       risk_level: 'low',
       yield_time_ms: 0,
@@ -287,7 +291,12 @@ describe('pc local tool host', () => {
       threadId: 'thread_1',
       turnId: 'turn_1',
       permissionProfile: 'workspace-write',
-    })).resolves.toMatchObject({ content: expect.stringContaining('Exit Code: 0') });
+    });
+    if (restrictedShellExecutionUnavailable) {
+      await expectRestrictedShellUnavailable(execution);
+      return;
+    }
+    await expect(execution).resolves.toMatchObject({ content: expect.stringContaining('Exit Code: 0') });
   });
 
   it('blocks shell apply_patch commands that were not intercepted by the runtime orchestrator', async () => {
@@ -428,7 +437,7 @@ describe('pc local tool host', () => {
       yield_time_ms: 0,
     }, { threadId: 'thread_1', turnId: 'turn_1' })).rejects.toThrow('未授权路径');
 
-    const result = await host.runTool('run_shell_command', {
+    const execution = host.runTool('run_shell_command', {
       command,
       directory: writableRoot,
       risk_level: 'low',
@@ -438,7 +447,13 @@ describe('pc local tool host', () => {
       turnId: 'turn_1',
       sandboxWorkspaceWrite: { writableRoots: [writableRoot] },
     });
+    if (restrictedShellExecutionUnavailable) {
+      await expectRestrictedShellUnavailable(execution);
+      await expect(readFile(target, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      return;
+    }
 
+    const result = await execution;
     expect(result.content).toContain('Exit Code: 0');
     await expect(readFile(target, 'utf8')).resolves.toBe('ok');
   });
@@ -454,7 +469,7 @@ describe('pc local tool host', () => {
     await mkdir(readableRoot, { recursive: true });
     await writeFile(source, 'pdf payload', 'utf8');
 
-    const result = await host.runTool('exec_command', {
+    const execution = host.runTool('exec_command', {
       cmd: `mkdir -p ${JSON.stringify(targetDir)} && cp ${JSON.stringify(source)} ${escapedTarget}`,
       yield_time_ms: 0,
     }, {
@@ -463,7 +478,13 @@ describe('pc local tool host', () => {
       permissionProfile: 'workspace-write',
       sandboxWorkspaceWrite: { readableRoots: [readableRoot] },
     });
+    if (restrictedShellExecutionUnavailable) {
+      await expectRestrictedShellUnavailable(execution);
+      await expect(readFile(target, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      return;
+    }
 
+    const result = await execution;
     expect(result.content).toContain('Exit Code: 0');
     await expect(readFile(target, 'utf8')).resolves.toBe('pdf payload');
   });
@@ -736,7 +757,7 @@ describe('pc local tool host', () => {
     const grantedDir = path.join(projectDir, 'granted');
     await mkdir(grantedDir, { recursive: true });
 
-    const result = await host.runTool('run_shell_command', {
+    const execution = host.runTool('run_shell_command', {
       command: 'touch granted/ok.txt',
       risk_level: 'low',
       yield_time_ms: 0,
@@ -747,8 +768,14 @@ describe('pc local tool host', () => {
       sandboxWorkspaceWrite: { writableRoots: ['granted'] },
     });
 
-    expect(result.content).toContain('Exit Code: 0');
-    await expect(readFile(path.join(grantedDir, 'ok.txt'), 'utf8')).resolves.toBe('');
+    if (restrictedShellExecutionUnavailable) {
+      await expectRestrictedShellUnavailable(execution);
+      await expect(readFile(path.join(grantedDir, 'ok.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    } else {
+      const result = await execution;
+      expect(result.content).toContain('Exit Code: 0');
+      await expect(readFile(path.join(grantedDir, 'ok.txt'), 'utf8')).resolves.toBe('');
+    }
     await expect(host.runTool('run_shell_command', {
       command: 'touch denied.txt',
       risk_level: 'low',
@@ -835,7 +862,7 @@ describe('pc local tool host', () => {
   });
 
   it('fails closed for opaque scripts under restricted shell profiles', async () => {
-    const { host, projectDir } = await createHost();
+    const { host, projectDir, projectId } = await createHost();
     const outsideDir = await mkdtemp(path.join(tmpdir(), 'setsuna-shell-escape-test-'));
     const outsideTarget = path.join(outsideDir, 'escaped.txt');
     await writeFile(path.join(projectDir, 'escape.cjs'), [
@@ -851,6 +878,7 @@ describe('pc local tool host', () => {
     }, {
       threadId: 'thread_restricted',
       turnId: 'turn_restricted',
+      projectId,
       permissionProfile: 'workspace-write',
     })).rejects.toThrow();
     await expect(readFile(outsideTarget, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
@@ -862,22 +890,25 @@ describe('pc local tool host', () => {
     }, {
       threadId: 'thread_unrestricted',
       turnId: 'turn_unrestricted',
+      projectId,
       permissionProfile: 'danger-full-access',
     })).resolves.toMatchObject({ content: expect.stringContaining('Exit Code: 0') });
     await expect(readFile(outsideTarget, 'utf8')).resolves.toBe('escaped');
   });
 
   it('keeps concurrent tool permissions isolated per invocation', async () => {
-    const { host, projectDir } = await createHost();
+    const { host, projectDir, projectId } = await createHost();
     const [readOnlyWrite, workspaceWrite] = await Promise.allSettled([
       host.runTool('write_file', { file_path: 'read-only.txt', content: 'must not exist\n' }, {
         threadId: 'thread_read_only',
         turnId: 'turn_read_only',
+        projectId,
         permissionProfile: 'read-only',
       }),
       host.runTool('write_file', { file_path: 'workspace.txt', content: 'allowed\n' }, {
         threadId: 'thread_workspace',
         turnId: 'turn_workspace',
+        projectId,
         permissionProfile: 'workspace-write',
       }),
     ]);
@@ -912,6 +943,7 @@ describe('pc local tool host', () => {
       {
         threadId: 'thread_1',
         turnId: 'turn_1',
+        permissionProfile: 'danger-full-access',
         onToolOutputDelta: (delta) => deltas.push(delta),
       },
     );
@@ -973,13 +1005,18 @@ describe('pc local tool host', () => {
 
   it('supports Codex-compatible exec_command and write_stdin tool names', async () => {
     const { host } = await createHost();
+    const context = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'danger-full-access' as const,
+    };
     const execResult = await host.runTool(
       'exec_command',
       {
         cmd: `${nodeCommand()} -e "process.stdout.write('exec compat\\n')"`,
         yield_time_ms: 0,
       },
-      { threadId: 'thread_1', turnId: 'turn_1' },
+      context,
     );
 
     expect(execResult.content).toContain('exec compat');
@@ -987,14 +1024,14 @@ describe('pc local tool host', () => {
       cmd: 'printf risky',
       sandbox_permissions: 'require_escalated',
       justification: 'needs unsandboxed access',
-    }, { threadId: 'thread_1', turnId: 'turn_1' })).resolves.toMatchObject({
+    }, context)).resolves.toMatchObject({
       reason: expect.stringContaining('needs unsandboxed access'),
     });
     await expect(host.approvalForTool('exec_command', {
       cmd: 'printf extra',
       sandbox_permissions: 'with_additional_permissions',
       additional_permissions: { network: { enabled: true } },
-    }, { threadId: 'thread_1', turnId: 'turn_1' })).resolves.toMatchObject({
+    }, context)).resolves.toMatchObject({
       reason: expect.stringContaining('高风险'),
     });
 
@@ -1004,7 +1041,7 @@ describe('pc local tool host', () => {
         cmd: `${nodeCommand()} -e "process.stdin.once('data', d => { process.stdout.write('stdin:' + d.toString()); process.exit(0); }); setInterval(() => {}, 1000)"`,
         yield_time_ms: 1,
       },
-      { threadId: 'thread_1', turnId: 'turn_1' },
+      context,
     );
     const processId = String((interactive.data as Record<string, unknown>).process_id || '');
     expect(processId).toBeTruthy();
@@ -1012,20 +1049,26 @@ describe('pc local tool host', () => {
     await expect(host.runTool('write_stdin', {
       session_id: processId,
       chars: 'hello\n',
-    }, { threadId: 'thread_1', turnId: 'turn_1' })).resolves.toMatchObject({
+    }, context)).resolves.toMatchObject({
       content: expect.stringContaining('Wrote'),
     });
     const polled = await host.runTool('write_stdin', {
       session_id: processId,
       chars: '',
       yield_time_ms: 500,
-    }, { threadId: 'thread_1', turnId: 'turn_1' });
+    }, context);
     expect(polled.content).toContain('stdin:hello');
   });
 
   it('cleans non-persisted shell processes for a turn', async () => {
     const { host, projectId } = await createHost();
-    const context = { threadId: 'thread_1', turnId: 'turn_1', projectId, toolCallId: 'call_temp' };
+    const context = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      projectId,
+      toolCallId: 'call_temp',
+      permissionProfile: 'danger-full-access' as const,
+    };
     const running = await host.runTool(
       'run_shell_command',
       {
@@ -1046,7 +1089,13 @@ describe('pc local tool host', () => {
 
   it('preserves explicitly persisted shell processes across turn cleanup', async () => {
     const { host, projectId } = await createHost();
-    const context = { threadId: 'thread_1', turnId: 'turn_1', projectId, toolCallId: 'call_persist' };
+    const context = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      projectId,
+      toolCallId: 'call_persist',
+      permissionProfile: 'danger-full-access' as const,
+    };
     const running = await host.runTool(
       'run_shell_command',
       {
@@ -1079,16 +1128,28 @@ describe('pc local tool host', () => {
   });
 });
 
+async function expectRestrictedShellUnavailable(execution: Promise<unknown>): Promise<void> {
+  await expect(execution).rejects.toMatchObject({
+    failureKind: 'sandbox_denied',
+    failureStage: 'preflight',
+  });
+}
+
 async function createHost(options: {
   policyAmendmentStore?: PolicyAmendmentStore;
   projectDirName?: string;
   workspaceDependencies?: WorkspaceDependencyManager;
 } = {}): Promise<{ host: PcLocalToolHost; projectDir: string; projectId: string }> {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-toolhost-test-'));
-  const projectDir = path.join(root, options.projectDirName ?? 'project');
+  const temporaryWorkspaceRoot = path.join(root, options.projectDirName ?? 'project');
   const dataDir = path.join(root, 'data');
-  await mkdir(projectDir, { recursive: true });
-  const store = new FileWorkspaceProjectStore(dataDir, systemClock, { temporaryWorkspacePath: projectDir });
+  await mkdir(temporaryWorkspaceRoot, { recursive: true });
+  const store = new FileWorkspaceProjectStore(dataDir, systemClock, {
+    temporaryWorkspacePath: temporaryWorkspaceRoot,
+  });
+  // Most cases intentionally omit projectId, so fixture files must live in the same
+  // per-thread workspace that the runtime resolver selects for thread_1.
+  const projectDir = (await store.ensureTemporaryWorkspace({ threadId: 'thread_1' })).path;
   const project = await store.addProject({ path: projectDir });
   return {
     host: new PcLocalToolHost(store, options.policyAmendmentStore, options.workspaceDependencies),

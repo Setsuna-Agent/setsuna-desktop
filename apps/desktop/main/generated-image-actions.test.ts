@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -42,8 +42,9 @@ describe('generated image desktop actions', () => {
     await mkdir(assetDirectory, { recursive: true });
     await writeFile(imagePath, ONE_PIXEL_PNG);
     await writeFile(path.join(assetDirectory, '.DS_Store'), Buffer.from('finder metadata'));
+    const canonicalImagePath = await realpath(imagePath);
 
-    await expect(resolveGeneratedImageAssetPath(userDataDir, 'generated_image_1')).resolves.toBe(imagePath);
+    await expect(resolveGeneratedImageAssetPath(userDataDir, 'generated_image_1')).resolves.toBe(canonicalImagePath);
     await expect(resolveGeneratedImageAssetPath(userDataDir, '../outside')).rejects.toThrow('invalid');
     const showItemInFolder = vi.fn();
     await expect(revealChatImage(userDataDir, {
@@ -51,7 +52,7 @@ describe('generated image desktop actions', () => {
       dataUrl: `data:image/png;base64,${ONE_PIXEL_PNG.toString('base64')}`,
       name: 'generated-1.png',
     }, showItemInFolder)).resolves.toEqual({ ok: true });
-    expect(showItemInFolder).toHaveBeenCalledWith(imagePath);
+    expect(showItemInFolder).toHaveBeenCalledWith(canonicalImagePath);
   });
 
   it('reads and copies a managed generated image without exposing its path to the renderer', async () => {
@@ -61,6 +62,7 @@ describe('generated image desktop actions', () => {
     const imagePath = path.join(assetDirectory, 'generated-1.png');
     await mkdir(assetDirectory, { recursive: true });
     await writeFile(imagePath, ONE_PIXEL_PNG);
+    const canonicalImagePath = await realpath(imagePath);
 
     await expect(readGeneratedImageAsset(userDataDir, 'generated_image_1')).resolves.toEqual({
       ok: true,
@@ -79,7 +81,7 @@ describe('generated image desktop actions', () => {
       writeImage,
     )).resolves.toEqual({ ok: true });
     expect(createFromDataUrl).not.toHaveBeenCalled();
-    expect(createFromPath).toHaveBeenCalledWith(imagePath);
+    expect(createFromPath).toHaveBeenCalledWith(canonicalImagePath);
     expect(writeImage).toHaveBeenCalledWith(image);
   });
 
