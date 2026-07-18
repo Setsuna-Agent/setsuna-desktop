@@ -290,7 +290,11 @@ export function WorkspacePanel({
           </IconButton>
         </div>
         {filePreview ? (
-          <CodeEditorPreview file={filePreview} onOpenLine={selectedWorkspaceApp ? (line) => onExternalOpenFile(filePreview.path, line) : undefined} openApp={selectedWorkspaceApp} />
+          <WorkspaceFilePreviewContent
+            file={filePreview}
+            onOpenLine={selectedWorkspaceApp ? (line) => onExternalOpenFile(filePreview.path, line) : undefined}
+            openApp={selectedWorkspaceApp}
+          />
         ) : (
           <EmptyState title="未打开文件" body="从右侧文件树选择文件后会在这里预览。" />
         )}
@@ -502,6 +506,41 @@ export function WorkspaceOverviewPanel({
       </div>
     </section>
   );
+}
+
+export function WorkspaceFilePreviewContent({
+  file,
+  onOpenLine,
+  openApp,
+}: {
+  file: WorkspaceFileRead;
+  onOpenLine?: (line: number) => void;
+  openApp?: DesktopWorkspaceApp | null;
+}) {
+  if (file.preview?.kind === 'image') {
+    return (
+      <div className="desktop-file-preview desktop-file-preview--image">
+        <img
+          className="desktop-file-preview__image"
+          src={`data:${file.preview.mimeType};base64,${file.preview.base64}`}
+          alt={`预览 ${file.path}`}
+          draggable={false}
+        />
+      </div>
+    );
+  }
+  if (file.preview?.kind === 'unsupported') {
+    const imageTooLarge = file.preview.reason === 'image-too-large';
+    return (
+      <div className="desktop-file-preview desktop-file-preview--unsupported">
+        <EmptyState
+          title={imageTooLarge ? '图片过大，暂时无法预览' : '暂不支持预览二进制文件'}
+          body="请使用其他应用打开此文件查看。"
+        />
+      </div>
+    );
+  }
+  return <CodeEditorPreview file={file} onOpenLine={onOpenLine} openApp={openApp} />;
 }
 
 function CodeEditorPreview({

@@ -41,6 +41,7 @@ describe('file workspace project store', () => {
     expect(entries.entries.map((entry) => entry.path)).toContain('README.md');
     expect(metadata).toMatchObject({ projectId: project.id, path: 'README.md', size: 21, modifiedAt: expect.any(String) });
     expect(readme.content).toContain('needle');
+    expect(readme.preview).toEqual({ kind: 'text' });
     expect(search.results).toMatchObject([{ path: 'README.md', line: 1 }]);
     expect(written).toMatchObject({ path: 'src/generated.txt', created: true });
   });
@@ -49,6 +50,7 @@ describe('file workspace project store', () => {
     const fixture = await createWorkspaceFixture();
     await writeFile(path.join(fixture.projectDir, 'preview.bin'), ONE_PIXEL_PNG);
     await writeFile(path.join(fixture.projectDir, 'spoofed.png'), 'not an image');
+    await writeFile(path.join(fixture.projectDir, 'program.exe'), Buffer.from([0x4d, 0x5a, 0x00, 0x00, 0x01, 0x02]));
     const oversizedPath = path.join(fixture.projectDir, 'oversized.png');
     await writeFile(oversizedPath, ONE_PIXEL_PNG);
     await truncate(oversizedPath, MAX_WORKSPACE_IMAGE_BYTES + 1);
@@ -64,6 +66,21 @@ describe('file workspace project store', () => {
     await expect(store.readImage(project.id, 'spoofed.png')).rejects.toThrow('Unsupported image format');
     await expect(store.readImage(project.id, 'oversized.png')).rejects.toThrow('workspace limit');
     await expect(store.readImage(project.id, '../outside.txt')).rejects.toThrow('escapes');
+    await expect(store.readFile(project.id, 'preview.bin')).resolves.toMatchObject({
+      content: '',
+      preview: { kind: 'image', mimeType: 'image/png', base64: ONE_PIXEL_PNG.toString('base64') },
+      truncated: false,
+    });
+    await expect(store.readFile(project.id, 'program.exe')).resolves.toMatchObject({
+      content: '',
+      preview: { kind: 'unsupported', reason: 'binary' },
+      truncated: false,
+    });
+    await expect(store.readFile(project.id, 'oversized.png')).resolves.toMatchObject({
+      content: '',
+      preview: { kind: 'unsupported', reason: 'image-too-large' },
+      truncated: false,
+    });
   });
 
   it('archives a project without losing its identity when the same path is added again', async () => {

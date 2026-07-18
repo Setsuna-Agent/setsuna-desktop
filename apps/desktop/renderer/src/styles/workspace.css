@@ -976,6 +976,39 @@
   height: 16px;
 }
 
+.desktop-file-preview {
+  min-width: 0;
+  min-height: 0;
+  background: var(--code-highlight-background);
+}
+
+.desktop-file-preview--image {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+}
+
+.desktop-file-preview__image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.desktop-file-preview--unsupported {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+}
+
+.desktop-file-preview--unsupported .sd-empty-state {
+  align-items: center;
+  max-width: 360px;
+  text-align: center;
+}
+
 .desktop-code-editor {
   min-width: 0;
   min-height: 0;
@@ -990,7 +1023,9 @@
 .desktop-code-line {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
-  min-width: max-content;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
   padding-right: 16px;
   border: 0;
   color: inherit;

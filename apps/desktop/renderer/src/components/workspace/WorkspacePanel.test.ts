@@ -1,6 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
-import { temporaryWorkspaceProjectId, type WorkspaceProject } from '@setsuna-desktop/contracts';
-import { WorkspaceOverviewPanel } from './WorkspacePanel.js';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { temporaryWorkspaceProjectId, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
+import { WorkspaceFilePreviewContent, WorkspaceOverviewPanel } from './WorkspacePanel.js';
+
+describe('WorkspaceFilePreviewContent', () => {
+  it('renders image previews from runtime-classified data', () => {
+    const html = renderToStaticMarkup(WorkspaceFilePreviewContent({
+      file: workspaceFile({ kind: 'image', mimeType: 'image/webp', base64: 'UklGRg==' }),
+    }));
+
+    expect(html).toContain('desktop-file-preview--image');
+    expect(html).toContain('src="data:image/webp;base64,UklGRg=="');
+    expect(html).not.toContain('desktop-code-line');
+  });
+
+  it('shows a clear notice instead of decoding unsupported binary files as text', () => {
+    const html = renderToStaticMarkup(WorkspaceFilePreviewContent({
+      file: workspaceFile({ kind: 'unsupported', reason: 'binary' }),
+    }));
+
+    expect(html).toContain('暂不支持预览二进制文件');
+    expect(html).toContain('请使用其他应用打开此文件查看');
+    expect(html).not.toContain('desktop-code-line');
+  });
+});
 
 describe('WorkspaceOverviewPanel', () => {
   it('does not forward the React click event to the review callback', () => {
@@ -85,3 +108,14 @@ const project: WorkspaceProject = {
   createdAt: '2026-07-01T00:00:00.000Z',
   updatedAt: '2026-07-01T00:00:00.000Z',
 };
+
+function workspaceFile(preview: NonNullable<WorkspaceFileRead['preview']>): WorkspaceFileRead {
+  return {
+    projectId: project.id,
+    path: 'fixture.bin',
+    content: '',
+    size: 8,
+    preview,
+    truncated: false,
+  };
+}

@@ -21,6 +21,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { TemporaryWorkspaceInput, WorkspaceFileMetadata, WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
+import { detectWorkspacePreviewImageMimeType, isProbablyBinaryWorkspaceFile } from '../../utils/workspace-file-preview.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
@@ -315,13 +316,50 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const targetStat = await stat(target);
     if (!targetStat.isFile()) throw new Error('Path is not a file.');
     const buffer = await readFile(target);
+    const path = toProjectRelative(project.path, target);
+    const modifiedAt = targetStat.mtime.toISOString();
+    const imageMimeType = detectWorkspacePreviewImageMimeType(buffer);
+    if (imageMimeType) {
+      if (buffer.byteLength > MAX_WORKSPACE_IMAGE_BYTES) {
+        return {
+          projectId,
+          path,
+          content: '',
+          size: buffer.byteLength,
+          modifiedAt,
+          preview: { kind: 'unsupported', reason: 'image-too-large' },
+          truncated: false,
+        };
+      }
+      return {
+        projectId,
+        path,
+        content: '',
+        size: buffer.byteLength,
+        modifiedAt,
+        preview: { kind: 'image', base64: buffer.toString('base64'), mimeType: imageMimeType },
+        truncated: false,
+      };
+    }
+    if (isProbablyBinaryWorkspaceFile(buffer)) {
+      return {
+        projectId,
+        path,
+        content: '',
+        size: buffer.byteLength,
+        modifiedAt,
+        preview: { kind: 'unsupported', reason: 'binary' },
+        truncated: false,
+      };
+    }
     const truncated = buffer.byteLength > MAX_READ_BYTES;
     return {
       projectId,
-      path: toProjectRelative(project.path, target),
+      path,
       content: buffer.subarray(0, MAX_READ_BYTES).toString('utf8'),
       size: buffer.byteLength,
-      modifiedAt: targetStat.mtime.toISOString(),
+      modifiedAt,
+      preview: { kind: 'text' },
       truncated,
     };
   }

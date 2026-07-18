@@ -85,12 +85,28 @@ export type WorkspaceEntrySearchResponse = {
   workspaceRoot: string;
 };
 
+export type WorkspaceFilePreviewImageMimeType =
+  | 'image/bmp'
+  | 'image/gif'
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/svg+xml'
+  | 'image/webp'
+  | 'image/x-icon';
+
+export type WorkspaceFilePreview =
+  | { kind: 'text' }
+  | { kind: 'image'; base64: string; mimeType: WorkspaceFilePreviewImageMimeType }
+  | { kind: 'unsupported'; reason: 'binary' | 'image-too-large' };
+
 export type WorkspaceFileRead = {
   projectId: string;
   path: string;
   content: string;
   size: number;
   modifiedAt?: string;
+  /** Optional for compatibility with runtimes that predate typed file previews. */
+  preview?: WorkspaceFilePreview;
   truncated: boolean;
 };
 
