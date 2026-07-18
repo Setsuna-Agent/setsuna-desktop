@@ -1,16 +1,33 @@
 import {
   PUBLISH_ARTIFACT_TOOL_NAME,
   type DesktopOpenPathResult,
+  type DesktopWorkspaceFilePreviewResult,
   type RuntimeArtifact,
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 
 type WorkspaceArtifactOpener = (workspaceRoot: string, filePath: string) => Promise<DesktopOpenPathResult>;
+type WorkspaceArtifactPreviewCreator = (
+  workspaceRoot: string,
+  filePath: string,
+) => Promise<DesktopWorkspaceFilePreviewResult>;
 
 const documentExtensions = new Set(['doc', 'docx', 'md', 'odt', 'pdf', 'rtf', 'txt']);
 const spreadsheetExtensions = new Set(['csv', 'ods', 'xls', 'xlsx']);
 const presentationExtensions = new Set(['key', 'ppt', 'pptx']);
-const imageExtensions = new Set(['gif', 'jpeg', 'jpg', 'png', 'svg', 'webp']);
+const imageExtensions = new Set([
+  'avif',
+  'bmp',
+  'gif',
+  'ico',
+  'jpeg',
+  'jpg',
+  'png',
+  'svg',
+  'tif',
+  'tiff',
+  'webp',
+]);
 const archiveExtensions = new Set(['7z', 'gz', 'rar', 'tar', 'zip']);
 const audioExtensions = new Set(['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav']);
 const videoExtensions = new Set(['avi', 'mkv', 'mov', 'mp4', 'webm']);
@@ -52,6 +69,26 @@ export async function openRuntimeArtifactWithDefaultApp(
 ): Promise<string | null> {
   const result = await openWorkspaceFile(artifact.workspaceRoot, artifact.path);
   return result.ok ? null : result.error ?? '无法打开文件。';
+}
+
+export function runtimeArtifactSupportsBrowserPreview(artifact: RuntimeArtifact): boolean {
+  const mimeType = artifact.mimeType.trim().toLowerCase();
+  const extension = fileExtension(artifact.name || artifact.path);
+  return mimeType === 'application/pdf'
+    || mimeType.startsWith('image/')
+    || extension === 'pdf'
+    || imageExtensions.has(extension);
+}
+
+export async function openRuntimeArtifactInBrowser(
+  artifact: RuntimeArtifact,
+  createPreview: WorkspaceArtifactPreviewCreator,
+  openBrowser: (url: string) => void,
+): Promise<string | null> {
+  const result = await createPreview(artifact.workspaceRoot, artifact.path);
+  if (!result.ok) return result.error;
+  openBrowser(result.url);
+  return null;
 }
 
 function runtimeArtifactFromData(data: unknown): RuntimeArtifact | null {

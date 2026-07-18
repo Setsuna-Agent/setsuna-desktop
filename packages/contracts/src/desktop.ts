@@ -12,6 +12,10 @@ export type DesktopOpenPathResult =
   | { ok: true }
   | { ok: false; error: string };
 
+export type DesktopWorkspaceFilePreviewResult =
+  | { ok: true; url: string }
+  | { ok: false; error: string };
+
 export type DesktopImageActionResult =
   | { ok: true }
   | { ok: false; error: string };
@@ -171,6 +175,7 @@ export type SetsunaDesktopBridge = {
     revealImageInFolder(input: DesktopImageInput): Promise<DesktopImageActionResult>;
     openPath(targetPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
+    createWorkspaceFilePreview(workspaceRoot: string, filePath: string): Promise<DesktopWorkspaceFilePreviewResult>;
   };
   desktopReview: {
     getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;

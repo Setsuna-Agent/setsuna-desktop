@@ -171,7 +171,7 @@ export function AppChatSurface({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
-  onOpenBrowser: () => void;
+  onOpenBrowser: (url?: string) => void;
   onOpenMarkdownWebLink: (url: string) => void;
   onOpenFilesPanel: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
@@ -233,6 +233,7 @@ export function AppChatSurface({
   return (
     <>
       <MarkdownNavigationProvider
+        onOpenInAppBrowser={onOpenBrowser}
         onOpenWebLink={onOpenMarkdownWebLink}
         workspaceRoot={activeWorkspace?.path}
         onOpenWorkspaceFile={openChatWorkspaceFile}
@@ -302,6 +303,7 @@ export function AppChatSurface({
           onError={onSideChatError}
           onOpenWorkspaceFile={openChatWorkspaceFile}
           onOpenMarkdownWebLink={onOpenMarkdownWebLink}
+          onOpenInAppBrowser={onOpenBrowser}
           onOpenSideChat={onOpenSideChat}
           onReloadThreads={onReloadThreads}
           onSelectModel={onSelectModel}

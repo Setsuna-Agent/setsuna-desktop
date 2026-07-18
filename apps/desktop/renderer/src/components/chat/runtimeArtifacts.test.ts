@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PUBLISH_ARTIFACT_TOOL_NAME, type RuntimeArtifact, type RuntimeToolRun } from '@setsuna-desktop/contracts';
 import {
+  openRuntimeArtifactInBrowser,
   openRuntimeArtifactWithDefaultApp,
   runtimeArtifactsFromToolRuns,
+  runtimeArtifactSupportsBrowserPreview,
   runtimeArtifactTypeLabel,
 } from './runtimeArtifacts.js';
 
@@ -54,6 +56,22 @@ describe('runtime artifacts', () => {
 
     openWorkspaceFile.mockResolvedValueOnce({ ok: false, error: 'missing' });
     await expect(openRuntimeArtifactWithDefaultApp(pdfArtifact, openWorkspaceFile)).resolves.toBe('missing');
+  });
+
+  it('opens PDF and image artifacts through a built-in browser preview URL', async () => {
+    const createPreview = vi.fn().mockResolvedValue({ ok: true, url: 'http://127.0.0.1:4321/preview/report.pdf' });
+    const openBrowser = vi.fn();
+
+    expect(runtimeArtifactSupportsBrowserPreview(pdfArtifact)).toBe(true);
+    expect(runtimeArtifactSupportsBrowserPreview({ ...pdfArtifact, name: 'preview.png', mimeType: 'image/png' })).toBe(true);
+    expect(runtimeArtifactSupportsBrowserPreview({ ...pdfArtifact, name: 'preview.avif', mimeType: 'application/octet-stream' })).toBe(true);
+    expect(runtimeArtifactSupportsBrowserPreview({ ...pdfArtifact, name: 'report.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })).toBe(false);
+    await expect(openRuntimeArtifactInBrowser(pdfArtifact, createPreview, openBrowser)).resolves.toBeNull();
+    expect(createPreview).toHaveBeenCalledWith('/workspace', 'output/AI 趋势报告.pdf');
+    expect(openBrowser).toHaveBeenCalledWith('http://127.0.0.1:4321/preview/report.pdf');
+
+    createPreview.mockResolvedValueOnce({ ok: false, error: 'preview unavailable' });
+    await expect(openRuntimeArtifactInBrowser(pdfArtifact, createPreview, openBrowser)).resolves.toBe('preview unavailable');
   });
 });
 

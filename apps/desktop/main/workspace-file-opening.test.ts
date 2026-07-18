@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { openWorkspaceFileWithDefaultApp } from './workspace-file-opening.js';
+import {
+  createWorkspaceFilePreviewUrl,
+  openWorkspaceFileWithDefaultApp,
+  workspaceFilePreviewMimeType,
+} from './workspace-file-opening.js';
 
 describe('openWorkspaceFileWithDefaultApp', () => {
   it('opens an existing workspace file through the supplied platform adapter', async () => {
@@ -30,5 +34,29 @@ describe('openWorkspaceFileWithDefaultApp', () => {
       error: 'File path must stay inside the workspace.',
     });
     expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it('creates previews only for PDF and image files inside the workspace', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-preview-workspace-file-'));
+    const pdfPath = path.join(workspaceRoot, 'report.pdf');
+    const documentPath = path.join(workspaceRoot, 'notes.docx');
+    await writeFile(pdfPath, '%PDF-test');
+    await writeFile(documentPath, 'document');
+    const registerPreview = vi.fn(() => 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf');
+
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'report.pdf', registerPreview)).resolves.toEqual({
+      ok: true,
+      url: 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf',
+    });
+    expect(registerPreview).toHaveBeenCalledWith({
+      mimeType: 'application/pdf',
+      name: 'report.pdf',
+      targetPath: await realpath(pdfPath),
+    });
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'notes.docx', registerPreview)).resolves.toEqual({
+      ok: false,
+      error: 'Only PDF and image files can be opened in the built-in browser.',
+    });
+    expect(workspaceFilePreviewMimeType(path.join('images', 'preview.WEBP'))).toBe('image/webp');
   });
 });

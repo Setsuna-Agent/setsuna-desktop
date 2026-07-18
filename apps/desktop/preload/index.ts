@@ -59,6 +59,8 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
   openPath: (targetPath) => ipcRenderer.invoke('desktop:open-path', targetPath),
   openWorkspaceFile: (workspaceRoot, filePath) =>
     ipcRenderer.invoke('desktop:open-workspace-file', { workspaceRoot, filePath }),
+  createWorkspaceFilePreview: (workspaceRoot, filePath) =>
+    ipcRenderer.invoke('desktop:create-workspace-file-preview', { workspaceRoot, filePath }),
 };
 
 const windowControls: SetsunaDesktopBridge['windowControls'] = {

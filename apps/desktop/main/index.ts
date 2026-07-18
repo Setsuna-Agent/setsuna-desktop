@@ -41,7 +41,7 @@ import { RuntimeHost } from './runtime-host.js';
 import { DesktopTerminalStore } from './terminal-sessions.js';
 import { registerWindowsTitlebarDoubleClick, toggleWindowMaximized } from './window-frame.js';
 import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
-import { openWorkspaceFileWithDefaultApp } from './workspace-file-opening.js';
+import { createWorkspaceFilePreviewUrl, openWorkspaceFileWithDefaultApp } from './workspace-file-opening.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
@@ -143,7 +143,7 @@ async function createWindow(): Promise<void> {
   terminalStore = new DesktopTerminalStore((payload) => {
     mainWindow?.webContents.send('terminal:event', payload);
   });
-  registerDesktopIpc(terminalStore, desktopUpdater);
+  registerDesktopIpc(terminalStore, desktopUpdater, currentDesktopNativeBridgeServer);
   registerBrowserIpc(currentBrowserController);
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
@@ -172,6 +172,8 @@ async function createWindow(): Promise<void> {
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
+    // Chromium's built-in PDF viewer is exposed as a plugin inside webview guests.
+    webPreferences.plugins = true;
     if (!isAllowedEmbeddedBrowserUrl(params.src)) event.preventDefault();
   });
   mainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
@@ -349,7 +351,11 @@ function resolveEmbeddedBrowserGuest(
   return guest;
 }
 
-function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpdater): void {
+function registerDesktopIpc(
+  terminal: DesktopTerminalStore,
+  updater: DesktopUpdater,
+  nativeBridge: DesktopNativeBridgeServer,
+): void {
   ipcMain.removeHandler('desktop:select-directory');
   ipcMain.removeHandler('desktop:get-user-profile');
   ipcMain.removeHandler('desktop:open-external');
@@ -358,6 +364,7 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
   ipcMain.removeHandler('desktop:reveal-image-in-folder');
   ipcMain.removeHandler('desktop:open-path');
   ipcMain.removeHandler('desktop:open-workspace-file');
+  ipcMain.removeHandler('desktop:create-workspace-file-preview');
   ipcMain.removeHandler('desktop-updater:get-state');
   ipcMain.removeHandler('desktop-updater:check');
   ipcMain.removeHandler('desktop-updater:download');
@@ -440,6 +447,14 @@ function registerDesktopIpc(terminal: DesktopTerminalStore, updater: DesktopUpda
     input?.filePath,
     (targetPath) => shell.openPath(targetPath),
   ));
+  ipcMain.handle('desktop:create-workspace-file-preview', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return createWorkspaceFilePreviewUrl(
+      input?.workspaceRoot,
+      input?.filePath,
+      (preview) => nativeBridge.registerFilePreview(preview),
+    );
+  });
   ipcMain.handle('desktop-updater:get-state', async () => updater.getState());
   ipcMain.handle('desktop-updater:check', async () => updater.checkAndDownload());
   ipcMain.handle('desktop-updater:download', async () => updater.checkAndDownload());
