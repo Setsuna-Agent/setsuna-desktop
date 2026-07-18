@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+  type SyntheticEvent,
+} from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -51,6 +59,10 @@ export type ToolRunSummaryMode = 'aggregate' | 'latest';
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 const fileChangePreviewLimit = 3;
 
+export function shouldAutoOpenToolRunDisclosure(previousAutoOpenKey: string | undefined, autoOpenKey: string | undefined): boolean {
+  return Boolean(autoOpenKey && autoOpenKey !== previousAutoOpenKey);
+}
+
 export function toolRunGroupKindClassName(kind: ToolRunGroupKind): string {
   const modifier = kind === 'fileMutation' ? 'file-mutation' : kind;
   return `chat-tool-run--${modifier}`;
@@ -94,6 +106,47 @@ function hasHookRuns(run: RuntimeToolRun): boolean {
   return Boolean(run.hookRuns?.length);
 }
 
+function ToolRunDisclosure({
+  autoOpenKey,
+  children,
+  className,
+  summary,
+}: {
+  autoOpenKey?: string;
+  children: ReactNode;
+  className: string;
+  summary: ReactNode;
+}) {
+  const [open, setOpen] = useState(() => Boolean(autoOpenKey));
+  const previousAutoOpenKeyRef = useRef(autoOpenKey);
+
+  useEffect(() => {
+    if (shouldAutoOpenToolRunDisclosure(previousAutoOpenKeyRef.current, autoOpenKey)) {
+      setOpen(true);
+    }
+    previousAutoOpenKeyRef.current = autoOpenKey;
+  }, [autoOpenKey]);
+
+  const handleSummaryClick = (event: MouseEvent<HTMLElement>) => {
+    // 先记录用户选择，避免流式更新在原生 <details> 完成 toggle 前恢复旧状态。
+    event.preventDefault();
+    setOpen((value) => !value);
+  };
+  const handleToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    const nextOpen = event.currentTarget.open;
+    setOpen((value) => (value === nextOpen ? value : nextOpen));
+  };
+
+  return (
+    <details className={className} open={open} onToggle={handleToggle}>
+      <summary className="chat-tool-run__summary" onClick={handleSummaryClick}>
+        {summary}
+      </summary>
+      {children}
+    </details>
+  );
+}
+
 function ToolRunDisplayPanel({
   group,
   onAnswerApproval,
@@ -102,7 +155,7 @@ function ToolRunDisplayPanel({
   onAnswerApproval: AnswerApprovalHandler;
 }): JSX.Element {
   // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
-  // 首次折叠渲染后，展开状态由原生 <details> 管理。
+  // 展开状态只在本地保存；新的待授权请求会自动展开，普通流式更新不会覆盖用户选择。
   if (group.type === 'mixed') {
     return mixedToolRunGroupPanelNode(group, onAnswerApproval);
   }
@@ -130,8 +183,10 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
   if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
   return (
-    <details className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}>
-      <summary className="chat-tool-run__summary">
+    <ToolRunDisclosure
+      autoOpenKey={pendingApprovalDisclosureKey([run])}
+      className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}
+      summary={(
         <>
           <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
           <span className="chat-tool-run__summary-text">
@@ -140,11 +195,12 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
           </span>
           <ToolRunStatus status={run.status} />
         </>
-      </summary>
+      )}
+    >
       <div className="chat-tool-run__body">
         <ToolRunDetails run={run} onAnswerApproval={onAnswerApproval} pendingApprovalId={pendingApprovalId} />
       </div>
-    </details>
+    </ToolRunDisclosure>
   );
 }
 
@@ -166,8 +222,10 @@ function toolRunGroupPanelNode(
     ? fileOperationSummary.changeCounts
     : undefined;
   return (
-    <details className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}>
-      <summary className="chat-tool-run__summary">
+    <ToolRunDisclosure
+      autoOpenKey={pendingApprovalDisclosureKey(group.runs)}
+      className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}
+      summary={(
         <>
           <span className="chat-tool-run__icon">{toolRunGroupIcon(group)}</span>
           <span className="chat-tool-run__summary-text">
@@ -183,7 +241,8 @@ function toolRunGroupPanelNode(
           </span>
           <ToolRunStatus status={status} />
         </>
-      </summary>
+      )}
+    >
       <div
         className={`chat-tool-run__body ${
           shellGroup
@@ -230,7 +289,7 @@ function toolRunGroupPanelNode(
           })
         )}
       </div>
-    </details>
+    </ToolRunDisclosure>
   );
 }
 
@@ -247,8 +306,10 @@ function mixedToolRunGroupPanelNode(
     ? compactSummary.changeCounts
     : undefined;
   return (
-    <details className={`chat-tool-run chat-tool-run--group chat-tool-run--mixed chat-tool-run--${status}`}>
-      <summary className="chat-tool-run__summary">
+    <ToolRunDisclosure
+      autoOpenKey={pendingApprovalDisclosureKey(runs)}
+      className={`chat-tool-run chat-tool-run--group chat-tool-run--mixed chat-tool-run--${status}`}
+      summary={(
         <>
           <span className="chat-tool-run__icon">{mixedToolRunGroupIcon(status)}</span>
           <span className="chat-tool-run__summary-text">
@@ -268,11 +329,12 @@ function mixedToolRunGroupPanelNode(
           </span>
           <ToolRunStatus status={status} />
         </>
-      </summary>
+      )}
+    >
       <div className="chat-tool-run__body chat-tool-run__body--mixed-list">
         {visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))}
       </div>
-    </details>
+    </ToolRunDisclosure>
   );
 }
 
@@ -1239,6 +1301,13 @@ function isPendingApprovalRun(run: RuntimeToolRun): boolean {
     && run.approvalStatus !== 'approved'
     && run.approvalStatus !== 'rejected'
     && run.approvalStatus !== 'cancelled';
+}
+
+function pendingApprovalDisclosureKey(runs: RuntimeToolRun[]): string | undefined {
+  const pendingApprovalIds = runs
+    .filter(isPendingApprovalRun)
+    .map((run) => run.approvalId ?? run.id);
+  return pendingApprovalIds.length ? pendingApprovalIds.join(':') : undefined;
 }
 
 function isFlatInspectionRun(run: RuntimeToolRun): boolean {

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
-import { FileChangesSummaryCard, RuntimeToolRuns, groupToolRuns, toolRunDisplayStableKey, toolRunGroupKindClassName } from './RuntimeToolRuns.js';
+import {
+  FileChangesSummaryCard,
+  RuntimeToolRuns,
+  groupToolRuns,
+  shouldAutoOpenToolRunDisclosure,
+  toolRunDisplayStableKey,
+  toolRunGroupKindClassName,
+} from './RuntimeToolRuns.js';
 import { MarkdownNavigationProvider } from './markdown/MarkdownNavigationProvider.js';
 import { fileChangeSummaryFromRuns } from './runtimeFileChanges.js';
 
@@ -17,21 +24,29 @@ describe('RuntimeToolRuns kind class names', () => {
 });
 
 describe('RuntimeToolRuns disclosure behavior', () => {
-  it('renders tool details collapsed without controlling their open state', () => {
+  it('keeps ordinary tool details collapsed and opens pending user authorization', () => {
     const pendingApprovalRun: RuntimeToolRun = {
-      ...shellRun('pending_approval'),
-      approvalId: 'approval_shell',
+      ...toolRun('user_input_1', 'request_user_input', { message: '请选择配置方式' }, 'pending_approval'),
+      approvalId: 'approval_user_input',
     };
 
     for (const html of [
       renderedHtml([shellRun('running')]),
       renderedHtml([shellRun('success')]),
-      renderedHtml([pendingApprovalRun]),
       renderedHtml([shellRun('running'), toolRun('generic_1', 'some_tool', { input: 'streaming' }, 'running')]),
     ]) {
       expect(html).toContain('<details');
       expect(html).not.toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
     }
+
+    expect(renderedHtml([pendingApprovalRun])).toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
+  });
+
+  it('auto-opens each new approval once without overriding a manual collapse during the same request', () => {
+    expect(shouldAutoOpenToolRunDisclosure(undefined, 'approval_1')).toBe(true);
+    expect(shouldAutoOpenToolRunDisclosure('approval_1', 'approval_1')).toBe(false);
+    expect(shouldAutoOpenToolRunDisclosure('approval_1', undefined)).toBe(false);
+    expect(shouldAutoOpenToolRunDisclosure('approval_1', 'approval_2')).toBe(true);
   });
 
   it('keeps the same disclosure identity when a streamed single run becomes a group', () => {

@@ -379,6 +379,12 @@ function parseSkill(
   const content = frontmatter.body.trim();
   const name = frontmatter.name ?? id;
   const description = frontmatter.description;
+  // 显式短语是 Skill 作者声明的路由边界；元数据推导只兼容尚未声明该字段的旧 Bundle。
+  const autoActivate = pluginOrigin
+    ? frontmatter.autoActivate.length
+      ? frontmatter.autoActivate
+      : inferredPluginActivationKeywords(id, name, description, pluginOrigin)
+    : [];
   return {
     id,
     name,
@@ -389,12 +395,7 @@ function parseSkill(
     references: referencePaths(content),
     mcpDependencies: dependencyManifest.mcpDependencies,
     dependencyErrors: dependencyManifest.errors,
-    autoActivate: pluginOrigin
-      ? uniqueStrings([
-          ...frontmatter.autoActivate,
-          ...inferredPluginActivationKeywords(id, name, description, pluginOrigin),
-        ])
-      : [],
+    autoActivate: uniqueStrings(autoActivate),
     ...(pluginOrigin ? { plugin: { ...pluginOrigin.reference } } : {}),
   };
 }

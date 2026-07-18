@@ -95,7 +95,28 @@ describe('file skill registry', () => {
     ]);
   });
 
-  it('routes arbitrary Plugin Skills through declared activation phrases and Plugin tags', async () => {
+  it('uses declared activation phrases without mixing in incidental Plugin metadata', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    await installPluginSkillFixture(dataDir, {
+      pluginId: 'image-generation',
+      pluginName: '图片生成',
+      pluginDescription: 'Generate images through an OpenAI-compatible HTTPS API.',
+      pluginTags: ['图片', 'OpenAI'],
+      skillDirectory: 'image-generation',
+      skillName: '图片生成',
+      skillDescription: 'Generate images through an HTTPS API; do not use for HTML pages.',
+      autoActivate: ['生成图片'],
+    });
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+
+    await expect(registry.selectedSkillInjections([], { text: '请生成图片' })).resolves.toEqual([
+      expect.objectContaining({ id: 'image-generation.image-generation' }),
+    ]);
+    await expect(registry.selectedSkillInjections([], { text: '帮我安装这个 mcp https://search-mcp.example.com/mcp' })).resolves.toEqual([]);
+    await expect(registry.selectedSkillInjections([], { text: '请创建一个 HTML 页面' })).resolves.toEqual([]);
+  });
+
+  it('falls back to Plugin tags when no activation phrases are declared', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installPluginSkillFixture(dataDir, {
       pluginId: 'analytics-toolkit',
@@ -104,13 +125,9 @@ describe('file skill registry', () => {
       skillDirectory: 'metrics-helper',
       skillName: 'Metrics Helper',
       skillDescription: 'Build and inspect business dashboards.',
-      autoActivate: ['经营驾驶舱'],
     });
     const registry = new FileSkillRegistry(builtinDir, dataDir);
 
-    await expect(registry.selectedSkillInjections([], { text: '请生成一份经营驾驶舱' })).resolves.toEqual([
-      expect.objectContaining({ id: 'analytics-toolkit.metrics-helper' }),
-    ]);
     await expect(registry.selectedSkillInjections([], { text: '帮我做一次数据分析' })).resolves.toEqual([
       expect.objectContaining({ id: 'analytics-toolkit.metrics-helper' }),
     ]);
