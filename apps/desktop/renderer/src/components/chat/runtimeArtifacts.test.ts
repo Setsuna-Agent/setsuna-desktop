@@ -19,15 +19,24 @@ const pdfArtifact: RuntimeArtifact = {
 
 describe('runtime artifacts', () => {
   it('extracts successful published artifacts and keeps the latest metadata per file', () => {
+    const imageArtifact: RuntimeArtifact = {
+      ...pdfArtifact,
+      id: 'artifact_image',
+      name: 'preview.png',
+      path: 'generated-images/preview.png',
+      mimeType: 'image/png',
+      size: 2048,
+    };
     const runs: RuntimeToolRun[] = [
       artifactRun({ ...pdfArtifact, id: 'artifact_old', size: 512 }),
       { ...artifactRun(pdfArtifact), id: 'call_latest' },
+      artifactRun(imageArtifact),
       { ...artifactRun({ ...pdfArtifact, path: '../secret.pdf' }), id: 'call_invalid' },
       { ...artifactRun({ ...pdfArtifact, path: 'failed.pdf' }), id: 'call_failed', status: 'error' },
       { id: 'call_shell', name: 'run_shell_command', status: 'success', data: { artifact: pdfArtifact } },
     ];
 
-    expect(runtimeArtifactsFromToolRuns(runs)).toEqual([pdfArtifact]);
+    expect(runtimeArtifactsFromToolRuns(runs)).toEqual([pdfArtifact, imageArtifact]);
   });
 
   it('creates concise localized type labels', () => {

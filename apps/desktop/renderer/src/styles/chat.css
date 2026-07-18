@@ -2313,8 +2313,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   justify-content: center;
   flex: 0 0 auto;
   vertical-align: 0;
-  position: relative;
-  top: 0.2em;
 }
 
 .chat-workspace-path-label {
@@ -2333,8 +2331,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  position: relative;
-  top: 0.2em;
 }
 
 .chat-tool-run__file-list-target {

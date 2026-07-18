@@ -137,6 +137,8 @@ describe('OpenAiImageGenerationToolHost', () => {
     expect(JSON.stringify(result.attachments)).not.toContain('data:image');
     expect(JSON.stringify(result.attachments)).not.toContain(ONE_PIXEL_PNG.toString('base64'));
     expect(JSON.stringify(result.data)).not.toContain('image-secret');
+    expect(result.content).toContain('Workspace files ready for publish_artifact (use these exact paths):');
+    expect(result.content).toContain('- generated-images/call_1-1.png');
   });
 
   it('keeps the managed preview asset without mirroring it into a read-only workspace', async () => {
@@ -183,6 +185,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       },
     });
     expect(result.data).not.toHaveProperty('workspaceFiles');
+    expect(result.content).not.toContain('publish_artifact');
     expect(storedImage).toMatchObject({ name: 'generated-1.png', type: 'image/png' });
     expect(workspaceWriteCount).toBe(0);
   });

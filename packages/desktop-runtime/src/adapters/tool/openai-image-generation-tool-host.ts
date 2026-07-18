@@ -128,6 +128,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
           'Use generate_image only when the user explicitly asks to create a new image; it does not edit existing images.',
           'Put the intended use, subject, scene, style, composition, lighting, exact requested text, and constraints into one concise prompt.',
           'Use n only for variants of the same prompt. Generate distinct assets with separate calls.',
+          'When the result lists workspace files, use those exact paths for publish_artifact; never guess a generated filename or search for it.',
           'Omit optional provider parameters unless the user requested them or support is known. Never ask for or reveal API keys.',
         ].join(' ')
       : null;
@@ -209,6 +210,12 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     const result: ToolExecutionResult = {
       content: [
         `Generated ${attachments.length} image${attachments.length === 1 ? '' : 's'} successfully.`,
+        ...(workspaceFiles.length
+          ? [
+              'Workspace files ready for publish_artifact (use these exact paths):',
+              ...workspaceFiles.map((file) => `- ${file.path}`),
+            ]
+          : []),
         ...(revisedPrompts.length ? [`Revised prompt: ${revisedPrompts.join('\n')}`] : []),
       ].join('\n'),
       attachments,
