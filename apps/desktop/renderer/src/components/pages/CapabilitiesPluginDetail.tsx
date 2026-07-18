@@ -109,6 +109,8 @@ export function CapabilitiesPluginDetail({
         )}
       />
 
+      {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
+
       <div className="desktop-capabilities-plugin-detail__hero">
         <CapabilitiesPluginIcon name={marketplacePlugin?.icon ?? installedPlugin?.icon} variant="detail" />
         <div className="desktop-capabilities-plugin-detail__intro">
@@ -181,7 +183,9 @@ export function CapabilitiesPluginDetail({
           <CapabilitiesPluginItemButton
             key={hook.id}
             title={hook.name}
-            description={hook.description || hook.statusMessage || '插件提供的本地自动化，安装后仍需信任当前命令 hash 才会执行。'}
+            description={hook.description || hook.statusMessage || (marketplacePlugin
+              ? '应用内置自动化，安装插件时会自动信任当前命令 hash。'
+              : '本地插件自动化，安装后仍需信任当前命令 hash 才会执行。')}
             icon={<Workflow size={16} />}
             onClick={() => setSelectedItem({ kind: 'hook', value: hook })}
           />
@@ -212,8 +216,6 @@ export function CapabilitiesPluginDetail({
         ) : null}
       </CapabilitiesPluginDetailSection>
 
-      {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
-
       {selectedItem ? (
         <CapabilitiesPluginItemDialog
           key={`${selectedItem.kind}:${selectedItem.kind === 'mcp' ? selectedItem.value.key : selectedItem.value.id}`}
@@ -221,6 +223,7 @@ export function CapabilitiesPluginDetail({
           mcpServers={runtimeMcpServers ?? []}
           pluginId={plugin.id}
           runtimeHooks={runtimeHooks ?? []}
+          trustHooksOnInstall={Boolean(marketplacePlugin)}
           onClose={() => setSelectedItem(null)}
           onGetContent={onGetItemContent}
         />

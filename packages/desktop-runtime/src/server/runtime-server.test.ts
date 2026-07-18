@@ -640,7 +640,7 @@ describe('runtime server', () => {
           pluginId: 'guard-dangerous-shell',
           source: 'plugin',
           eventName: 'preToolUse',
-          trustStatus: 'untrusted',
+          trustStatus: 'trusted',
         })],
       }],
     });

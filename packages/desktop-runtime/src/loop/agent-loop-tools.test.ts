@@ -1339,6 +1339,47 @@ describe('agent loop tools', () => {
     ]);
   });
 
+  it('adds non-blocking PostToolUse context to the model while retaining the UI warning', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Hook post context', projectId: 'project_1' });
+    const modelClient = new ToolCallingModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new CapturingToolHost(),
+      configStore: new HooksConfigStore({
+        PostToolUse: [{
+          matcher: 'workspace_read_file',
+          hooks: [{
+            type: 'command',
+            command: nodeEvalHook("process.stdout.write(JSON.stringify({ systemMessage: 'review warning', hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'ask the user to review the diff' } }));"),
+            timeoutSec: 5,
+          }],
+        }],
+      }),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read README' });
+    const saved = await threadStore.getThread(thread.id);
+    const toolMessage = modelClient.requests[1].messages.find((message) => message.role === 'tool');
+
+    expect(toolMessage?.content).toContain('<hook_additional_context>');
+    expect(toolMessage?.content).toContain('ask the user to review the diff');
+    expect(saved?.messages.flatMap((message) => message.toolRuns ?? []).find((run) => run.name === 'workspace_read_file')?.hookRuns).toMatchObject([{
+      eventName: 'PostToolUse',
+      status: 'completed',
+      message: 'Added context.',
+      entries: [
+        { kind: 'warning', text: 'review warning' },
+        { kind: 'context', text: 'ask the user to review the diff' },
+      ],
+    }]);
+  });
+
   it('marks PostToolUse continue false hooks as stopped and returns feedback', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { chmod, copyFile, mkdir, readFile, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type {
+  RuntimeConfigState,
   RuntimeHookEventName,
   RuntimeHookInput,
   RuntimeHooksConfig,
@@ -19,12 +20,14 @@ import type {
   RuntimePluginSkill,
   RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
+import { discoverRuntimeHooks } from '../../hooks/runtime-hooks.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
 import type {
   InstalledPluginRecord,
+  PluginBundleMutationOptions,
   PluginBundleInspection,
   PluginBundleStore,
   PluginResourceRead,
@@ -32,7 +35,7 @@ import type {
 import type { SkillRegistry } from '../../ports/skill-registry.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
-import { readJsonFile, writeJsonFile } from '../store/json-file.js';
+import { readJsonFile, renameWithRetry, writeJsonFile } from '../store/json-file.js';
 
 type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
 
@@ -140,7 +143,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
     };
   }
 
-  async installPlugin(input: RuntimePluginInstallInput): Promise<RuntimePluginInstallResult> {
+  async installPlugin(
+    input: RuntimePluginInstallInput,
+    options: PluginBundleMutationOptions = {},
+  ): Promise<RuntimePluginInstallResult> {
     return withFileStateUpdate(this.indexPath, async () => {
       const sourcePath = await requiredBundleDirectory(input.path);
       if (pathsOverlap(sourcePath, this.pluginsDir)) {
@@ -203,7 +209,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       try {
         await mkdir(this.pluginsDir, { recursive: true });
         await copyBundleTree(sourcePath, stagingPath);
-        await rename(stagingPath, installPath);
+        await renameWithRetry(stagingPath, installPath);
         for (const ownership of mcpOwnership) {
           if (!ownership.owned) continue;
           const server = mcpInputs.find((candidate) => candidate.key === ownership.key);
@@ -212,7 +218,12 @@ export class FilePluginBundleStore implements PluginBundleStore {
           installedMcpServers.push(server.key);
         }
         if (hooks.length) {
-          await this.configStore.saveConfig({ hooks: addPluginHooks(configBefore.hooks ?? {}, hooks) });
+          const nextHooks = addPluginHooks(configBefore.hooks ?? {}, hooks);
+          await this.configStore.saveConfig({
+            hooks: options.trustHooks
+              ? trustPluginHooks(configBefore, nextHooks, manifest.id)
+              : nextHooks,
+          });
           hooksSaved = true;
         }
         await writeJsonFile(this.indexPath, { version: 1, plugins: [...index.plugins, record] } satisfies PluginIndexFile);
@@ -231,7 +242,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
     });
   }
 
-  async updatePlugin(input: RuntimePluginInstallInput): Promise<RuntimePluginInstallResult> {
+  async updatePlugin(
+    input: RuntimePluginInstallInput,
+    options: PluginBundleMutationOptions = {},
+  ): Promise<RuntimePluginInstallResult> {
     return withFileStateUpdate(this.indexPath, async () => {
       const sourcePath = await requiredBundleDirectory(input.path);
       if (pathsOverlap(sourcePath, this.pluginsDir)) {
@@ -342,6 +356,9 @@ export class FilePluginBundleStore implements PluginBundleStore {
             hooks,
           )
           : configBefore.hooks ?? {};
+        const savedHooks = options.trustHooks
+          ? trustPluginHooks(configBefore, nextHooks, manifest.id)
+          : nextHooks;
         const record: InstalledPluginRecord = {
           id: manifest.id,
           name: manifest.name,
@@ -376,9 +393,9 @@ export class FilePluginBundleStore implements PluginBundleStore {
         let indexSaveStarted = false;
         const mcpActionsStarted: PluginMcpUpdateAction[] = [];
         try {
-          await rename(installPath, backupPath);
+          await renameWithRetry(installPath, backupPath);
           oldDirectoryMoved = true;
-          await rename(stagingPath, installPath);
+          await renameWithRetry(stagingPath, installPath);
           staged = false;
           newDirectoryActivated = true;
 
@@ -395,9 +412,9 @@ export class FilePluginBundleStore implements PluginBundleStore {
           }
           if (shouldSaveHooks) {
             hookSaveStarted = true;
-            // Removing first clears prior trust state. Hook script contents can
-            // change while the command stays identical, so trust must be re-granted.
-            await this.configStore.saveConfig({ hooks: nextHooks });
+            // Generic local updates clear trust because scripts may change while
+            // commands stay identical. The bundled marketplace opts back into trust.
+            await this.configStore.saveConfig({ hooks: savedHooks });
           }
           indexSaveStarted = true;
           await writeJsonFile(this.indexPath, {
@@ -419,7 +436,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             await rollback.catch((rollbackError) => rollbackErrors.push(rollbackError));
           }
           if (newDirectoryActivated) {
-            await rename(installPath, failedPath).catch(async (renameError) => {
+            await renameWithRetry(installPath, failedPath).catch(async (renameError) => {
               await rm(installPath, { recursive: true, force: true })
                 .catch((removeError) => rollbackErrors.push(new AggregateError(
                   [renameError, removeError],
@@ -428,7 +445,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             });
           }
           if (oldDirectoryMoved) {
-            await rename(backupPath, installPath)
+            await renameWithRetry(backupPath, installPath)
               .catch((rollbackError) => rollbackErrors.push(rollbackError));
           }
           if (indexSaveStarted) {
@@ -488,7 +505,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const configBefore = await this.configStore.getConfig();
       const removalPath = path.join(this.pluginsDir, `.${plugin.id}.${randomUUID()}.remove`);
       const installExists = await stat(plugin.installPath).then(() => true).catch(() => false);
-      if (installExists) await rename(plugin.installPath, removalPath);
+      if (installExists) await renameWithRetry(plugin.installPath, removalPath);
       const removedMcpServers: string[] = [];
       try {
         for (const server of serversToRemove) {
@@ -513,7 +530,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             .filter((server) => removedMcpServers.includes(server.key))
             .map((server) => this.mcpStore.upsertServer(server)),
         );
-        if (installExists) await rename(removalPath, plugin.installPath).catch(() => undefined);
+        if (installExists) await renameWithRetry(removalPath, plugin.installPath).catch(() => undefined);
         await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
         throw error;
       }
@@ -866,6 +883,25 @@ function addPluginHooks(
       }],
     });
     next[hook.eventName] = groups;
+  }
+  return next;
+}
+
+function trustPluginHooks(
+  config: RuntimeConfigState,
+  hooks: RuntimeHooksConfig,
+  pluginId: string,
+): RuntimeHooksConfig {
+  const discovered = discoverRuntimeHooks({ ...config, hooks }).hooks.filter((hook) => hook.pluginId === pluginId);
+  if (!discovered.length) return hooks;
+
+  const next = cloneHooks(hooks);
+  next.state = { ...(next.state ?? {}) };
+  for (const hook of discovered) {
+    next.state[hook.key] = {
+      ...(next.state[hook.key] ?? {}),
+      trustedHash: hook.currentHash,
+    };
   }
   return next;
 }

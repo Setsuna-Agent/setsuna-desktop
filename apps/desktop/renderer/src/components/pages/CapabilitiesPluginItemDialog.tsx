@@ -31,6 +31,7 @@ export function CapabilitiesPluginItemDialog({
   onGetContent,
   pluginId,
   runtimeHooks,
+  trustHooksOnInstall,
 }: {
   item: CapabilitiesPluginItem;
   mcpServers: RuntimeMcpServer[];
@@ -38,6 +39,7 @@ export function CapabilitiesPluginItemDialog({
   onGetContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
   pluginId: string;
   runtimeHooks: RuntimeHookMetadata[];
+  trustHooksOnInstall: boolean;
 }) {
   const [content, setContent] = useState<RuntimePluginItemContent | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +111,7 @@ export function CapabilitiesPluginItemDialog({
         <div className="desktop-plugin-item-dialog__body">
           {description ? <p className="desktop-plugin-item-dialog__description">{description}</p> : null}
           <dl className="desktop-plugin-item-dialog__metadata">
-            {pluginItemMetadata(item, activeMcpServer, activeHook).map(([label, value]) => (
+            {pluginItemMetadata(item, activeMcpServer, activeHook, trustHooksOnInstall).map(([label, value]) => (
               <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
             ))}
           </dl>
@@ -254,6 +256,7 @@ function pluginItemMetadata(
   item: CapabilitiesPluginItem,
   activeMcpServer: RuntimeMcpServer | undefined,
   activeHook: RuntimeHookMetadata | undefined,
+  trustHooksOnInstall: boolean,
 ): Array<[string, string]> {
   if (item.kind === 'skill') return [['ID', item.value.id], ['文件', 'SKILL.md']];
   if (item.kind === 'mcp') {
@@ -269,7 +272,9 @@ function pluginItemMetadata(
       ['ID', item.value.id],
       ['事件', item.value.eventName],
       ['Matcher', item.value.matcher || '全部'],
-      ['状态', activeHook ? (activeHook.enabled ? hookTrustLabel(activeHook.trustStatus) : '已停用') : '安装后需信任'],
+      ['状态', activeHook
+        ? (activeHook.enabled ? hookTrustLabel(activeHook.trustStatus) : '已停用')
+        : trustHooksOnInstall ? '安装时自动信任' : '安装后需信任'],
     ];
   }
   return [['ID', item.value.id], ['路径', item.value.path], ['大小', formatPluginFileSize(item.value.size)]];

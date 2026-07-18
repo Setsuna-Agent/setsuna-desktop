@@ -71,7 +71,8 @@ export class FilePluginMarketplace implements PluginMarketplace {
     const catalog = await this.readCatalog();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
-    return this.bundles.installPlugin({ path: plugin.sourcePath });
+    // readCatalog 已把来源限制在应用内置目录；用户点击安装就是对这份随包插件的授权。
+    return this.bundles.installPlugin({ path: plugin.sourcePath }, { trustHooks: true });
   }
 
   async updatePlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
@@ -87,7 +88,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
     if (!isVersionGreater(plugin.version, installed.version)) {
       throw new Error(`Marketplace plugin update is not available: ${pluginId}`);
     }
-    return this.bundles.updatePlugin({ path: plugin.sourcePath });
+    return this.bundles.updatePlugin({ path: plugin.sourcePath }, { trustHooks: true });
   }
 
   private async readCatalog(): Promise<{ plugins: PluginBundleInspection[]; errors: string[] }> {

@@ -21,7 +21,8 @@ process.stdin.on('end', () => {
     /\bdel\s+\/s\s+\/q\s+[a-z]:\\/i,
     /\bgit\s+(?:reset\s+--hard|clean\s+-fdx?)\b/i,
   ];
-  const patterns = process.platform === 'win32' ? windowsPatterns : posixPatterns;
+  // 命令可以显式进入 Git Bash、WSL、PowerShell 或其他 shell，不能只按宿主系统检查一种语法。
+  const patterns = [...posixPatterns, ...windowsPatterns];
   if (patterns.some((pattern) => pattern.test(command))) {
     process.stderr.write('危险 Shell 命令已被防护插件阻止，请调整命令或停用该 Hook。');
     process.exitCode = 2;

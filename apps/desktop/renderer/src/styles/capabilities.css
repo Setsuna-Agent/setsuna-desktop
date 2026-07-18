@@ -35,9 +35,13 @@
 }
 
 .desktop-capabilities-panel__inner--market {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   padding: var(--desktop-capabilities-page-padding-top) 0 0 20px;
+}
+
+.desktop-capabilities-panel__inner--market-notice {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .desktop-capabilities-panel__inner--market .desktop-capabilities-header,
@@ -294,6 +298,18 @@
 
 .desktop-capabilities-panel__inner--market .desktop-capabilities-grid {
   grid-row: 3;
+}
+
+.desktop-capabilities-panel__inner--market-notice .desktop-capabilities-grid {
+  grid-row: 4;
+}
+
+.desktop-capabilities-market-notices {
+  display: grid;
+  grid-row: 3;
+  gap: 6px;
+  min-width: 0;
+  padding-right: 20px;
 }
 
 .desktop-capabilities-grid--market {

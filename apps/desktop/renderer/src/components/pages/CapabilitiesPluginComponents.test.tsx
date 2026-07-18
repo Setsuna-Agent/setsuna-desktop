@@ -110,7 +110,7 @@ describe('capabilities plugin components', () => {
     );
     const detailHtml = renderToStaticMarkup(
       <CapabilitiesPluginDetail
-        error={null}
+        error="更新插件失败：EPERM"
         installedPlugin={{
           id: marketplacePlugin.id,
           name: marketplacePlugin.name,
@@ -138,6 +138,8 @@ describe('capabilities plugin components', () => {
     expect(loadingRowHtml).toContain('disabled=""');
     expect(detailHtml).toContain('更新到 v1.0.1');
     expect(detailHtml).toContain('卸载');
+    expect(detailHtml).toContain('role="alert">更新插件失败：EPERM');
+    expect(detailHtml.indexOf('更新插件失败：EPERM')).toBeLessThan(detailHtml.indexOf('desktop-capabilities-plugin-detail__hero'));
   });
 
   it('renders a featured plugin as editorial artwork instead of a card', () => {

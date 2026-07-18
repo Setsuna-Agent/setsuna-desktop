@@ -673,6 +673,7 @@ export function CapabilitiesPage({
     : '直接填写名称、简介和 SKILL.md。';
   const createFormIcon = createCapabilityKind === 'mcp' ? <Plug size={14} /> : <FilePlus2 size={14} />;
   const openFormCreate = createCapabilityKind === 'mcp' ? openMcpFormCreate : openSkillFormCreate;
+  const marketplaceNoticeVisible = capabilityFilter === 'plugins' && Boolean(pluginError || pluginMarketplaceErrors.length);
 
   async function updateHook(hook: RuntimeHookMetadata, action: () => Promise<void>) {
     setUpdatingHookKeys((items) => new Set([...items, hook.key]));
@@ -702,7 +703,7 @@ export function CapabilitiesPage({
 
   return (
     <main className="capabilities-page desktop-capabilities-panel">
-      <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}`}>
+      <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}`}>
         <header className="desktop-capabilities-header">
           <div className="desktop-capabilities-title">
             <h2>{capabilityFilter === 'plugins' ? '插件市场' : '能力'}</h2>
@@ -770,6 +771,21 @@ export function CapabilitiesPage({
               : `${servers.length} MCP · ${enabledSkillCount}/${skills.length} 技能启用 · ${selectedSkillCount} 默认 · ${executableHookCount}/${hooks.length} Hooks 可执行`}
           </span>
         </div>
+
+        {marketplaceNoticeVisible ? (
+          <div className="desktop-capabilities-market-notices">
+            {pluginError ? <div className="desktop-capabilities-errors" role="alert">{pluginError}</div> : null}
+            {pluginMarketplaceErrors.length ? (
+              <div
+                className="desktop-capabilities-errors"
+                role="status"
+                title={pluginMarketplaceErrors.join('\n')}
+              >
+                部分插件暂时无法显示，请稍后重试。
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {capabilityFilter !== 'plugins' ? (
           <div className="desktop-capabilities-usage-note">
@@ -1051,20 +1067,6 @@ export function CapabilitiesPage({
           </div>
         ) : null}
 
-        {capabilityFilter === 'plugins' && pluginError ? (
-          <div className="desktop-capabilities-errors" role="alert">{pluginError}</div>
-        ) : null}
-
-        {capabilityFilter === 'plugins' && pluginMarketplaceErrors.length ? (
-          <div
-            className="desktop-capabilities-errors"
-            role="status"
-            title={pluginMarketplaceErrors.join('\n')}
-          >
-            部分插件暂时无法显示，请稍后重试。
-          </div>
-        ) : null}
-
       </section>
     </main>
   );
@@ -1084,13 +1086,15 @@ function trustStatusLabel(status: RuntimeHookMetadata['trustStatus']): string {
   }
 }
 
-function pluginActionError(error: unknown, fallback: string): string {
+export function pluginActionError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : String(error);
   console.error('[plugins] action failed', error);
   if (/already installed/iu.test(message)) return '这个插件已经安装。';
   if (/conflict/iu.test(message)) return '这个插件与现有能力冲突，暂时无法安装。';
   if (/not found/iu.test(message)) return '这个插件已不在当前市场中，请刷新后重试。';
-  return fallback;
+  const detail = message.replace(/\s+\((?:DELETE|GET|PATCH|POST|PUT)\s+\/[^)]+\)$/u, '').trim();
+  if (!detail || detail === '[object Object]') return fallback;
+  return `${fallback.replace(/，?请重试。$/u, '')}：${detail}`;
 }
 
 function CapabilitiesMcpEditor({

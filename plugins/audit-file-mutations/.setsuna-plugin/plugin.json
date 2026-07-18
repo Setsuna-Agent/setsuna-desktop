@@ -3,7 +3,7 @@
   "id": "audit-file-mutations",
   "name": "文件改动审计提示",
   "icon": "audit-file-mutations",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "文件写入或修改完成后留下 review 提醒，不阻断后续流程。",
   "publisher": "Setsuna",
   "tags": ["审计", "Review", "文件"],

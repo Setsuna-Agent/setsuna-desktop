@@ -38,11 +38,19 @@ export type PluginBundleInspection = Omit<
   sourcePath: string;
 };
 
+export type PluginBundleMutationOptions = {
+  /**
+   * 仅供已经校验过应用内置目录的调用方使用。普通本地插件必须保留手动信任，
+   * 避免把“选择一个目录安装”隐式升级为执行其中任意 Hook 命令的授权。
+   */
+  trustHooks?: boolean;
+};
+
 export type PluginBundleStore = {
   listPlugins(): Promise<RuntimePluginList>;
   inspectPlugin(input: RuntimePluginInstallInput): Promise<PluginBundleInspection>;
-  installPlugin(input: RuntimePluginInstallInput): Promise<RuntimePluginInstallResult>;
-  updatePlugin(input: RuntimePluginInstallInput): Promise<RuntimePluginInstallResult>;
+  installPlugin(input: RuntimePluginInstallInput, options?: PluginBundleMutationOptions): Promise<RuntimePluginInstallResult>;
+  updatePlugin(input: RuntimePluginInstallInput, options?: PluginBundleMutationOptions): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   listInstalledRecords(): Promise<InstalledPluginRecord[]>;
   readResource(pluginId: string, resourceId: string): Promise<PluginResourceRead>;

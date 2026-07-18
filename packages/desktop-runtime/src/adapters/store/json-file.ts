@@ -4,7 +4,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const WINDOWS_RENAME_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
-const WINDOWS_RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400];
+const WINDOWS_RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400, 800, 1_600];
 
 export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
   try {
@@ -44,20 +44,29 @@ export function parseJsonLine<T>(line: string): T | null {
   }
 }
 
-async function renameWithRetry(sourcePath: string, destinationPath: string): Promise<void> {
+/**
+ * Windows virus scanners and short-lived child processes can temporarily retain a
+ * handle after a file has been read. Retry atomic moves without weakening rollback.
+ */
+export async function renameWithRetry(
+  sourcePath: string,
+  destinationPath: string,
+  options: { platform?: NodeJS.Platform } = {},
+): Promise<void> {
+  const platform = options.platform ?? process.platform;
   for (let attempt = 0; ; attempt += 1) {
     try {
       await rename(sourcePath, destinationPath);
       return;
     } catch (error) {
-      if (!shouldRetryRename(error, attempt)) throw error;
+      if (!shouldRetryRename(error, attempt, platform)) throw error;
       await delay(WINDOWS_RENAME_RETRY_DELAYS_MS[attempt]);
     }
   }
 }
 
-function shouldRetryRename(error: unknown, attempt: number): boolean {
-  if (process.platform !== 'win32' || attempt >= WINDOWS_RENAME_RETRY_DELAYS_MS.length) return false;
+function shouldRetryRename(error: unknown, attempt: number, platform: NodeJS.Platform): boolean {
+  if (platform !== 'win32' || attempt >= WINDOWS_RENAME_RETRY_DELAYS_MS.length) return false;
   const code = errorCode(error);
   return Boolean(code && WINDOWS_RENAME_RETRY_CODES.has(code));
 }

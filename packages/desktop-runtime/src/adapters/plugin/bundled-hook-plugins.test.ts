@@ -29,6 +29,10 @@ describe('bundled Hook plugins', () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       systemMessage: expect.stringContaining('apply_patch'),
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: expect.stringContaining('审查/Review'),
+      },
     });
   });
 

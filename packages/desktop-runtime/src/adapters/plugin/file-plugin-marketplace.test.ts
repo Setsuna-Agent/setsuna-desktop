@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { discoverRuntimeHooks } from '../../hooks/runtime-hooks.js';
 import { systemClock } from '../../ports/clock.js';
 import { FileSkillRegistry } from '../skill/file-skill-registry.js';
 import { FileConfigStore } from '../store/file-config-store.js';
@@ -125,6 +126,34 @@ describe('file plugin marketplace', () => {
     });
   });
 
+  it('trusts bundled Hook commands on install and update', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-hooks-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'audit', {
+      name: 'Audit Plugin',
+      version: '1.0.0',
+      hookScript: 'process.exit(0);\n',
+    });
+    const runtime = await createPluginRuntime(root);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+
+    await marketplace.installPlugin('audit');
+
+    const installedHook = discoverRuntimeHooks(await runtime.config.getConfig()).hooks[0];
+    expect(installedHook).toMatchObject({ pluginId: 'audit', trustStatus: 'trusted' });
+
+    await createCatalogPlugin(catalogDir, 'audit', {
+      name: 'Audit Plugin',
+      version: '1.1.0',
+      hookScript: 'process.stdout.write("updated");\n',
+    });
+    await marketplace.updatePlugin('audit');
+
+    const updatedHook = discoverRuntimeHooks(await runtime.config.getConfig()).hooks[0];
+    expect(updatedHook).toMatchObject({ pluginId: 'audit', trustStatus: 'trusted' });
+    expect(updatedHook.currentHash).toBe(installedHook.currentHash);
+  });
+
   it('rejects updates for unknown or uninstalled marketplace plugins', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-update-errors-'));
     const catalogDir = path.join(root, 'catalog');
@@ -152,7 +181,7 @@ async function createPluginRuntime(root: string) {
     config,
     systemClock,
   );
-  return { plugins };
+  return { config, plugins };
 }
 
 async function createCatalogPlugin(
@@ -165,14 +194,19 @@ async function createCatalogPlugin(
     tags?: string[];
     featured?: boolean;
     featuredOrder?: number;
+    hookScript?: string;
   },
 ): Promise<void> {
   const manifestDir = path.join(catalogDir, id, '.setsuna-plugin');
   const skillDir = path.join(catalogDir, id, 'skills', 'docs');
-  await Promise.all([
+  const directories = [
     mkdir(manifestDir, { recursive: true }),
     mkdir(skillDir, { recursive: true }),
-  ]);
+  ];
+  if (metadata.hookScript !== undefined) {
+    directories.push(mkdir(path.join(catalogDir, id, 'hooks'), { recursive: true }));
+  }
+  await Promise.all(directories);
   await writeFile(path.join(skillDir, 'SKILL.md'), [
     '---',
     'name: Docs Skill',
@@ -181,6 +215,9 @@ async function createCatalogPlugin(
     '',
     '# Docs Skill',
   ].join('\n'));
+  if (metadata.hookScript !== undefined) {
+    await writeFile(path.join(catalogDir, id, 'hooks', 'post.mjs'), metadata.hookScript);
+  }
   await writeFile(path.join(manifestDir, 'plugin.json'), JSON.stringify({
     schemaVersion: 1,
     id,
@@ -198,6 +235,14 @@ async function createCatalogPlugin(
       description: 'Current documentation service.',
       transport: 'streamable_http',
       url: 'https://docs.example/mcp',
+    }],
+    hooks: metadata.hookScript === undefined ? undefined : [{
+      id: 'audit',
+      name: 'Audit changes',
+      eventName: 'PostToolUse',
+      matcher: 'write_file',
+      command: 'node {{pluginRoot}}/hooks/post.mjs',
+      commandWindows: 'node {{pluginRoot}}/hooks/post.mjs',
     }],
   }, null, 2));
 }
