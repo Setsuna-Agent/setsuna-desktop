@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeThread, RuntimeThreadGoal } from '@setsuna-desktop/contracts';
-import { mergeGoalThreadSnapshot } from './useChatTurnActions.js';
+import { claimCreatedChatThreadForSend, mergeGoalThreadSnapshot } from './useChatTurnActions.js';
+import { createIdentityRequestGuard } from './useIdentityRequestGuard.js';
 
 describe('mergeGoalThreadSnapshot', () => {
   it('uses the runtime goal snapshot so the active turn keeps the stop action available', () => {
@@ -32,6 +33,50 @@ describe('mergeGoalThreadSnapshot', () => {
   });
 });
 
+describe('first-turn composer claim', () => {
+  it('claims the created thread before publishing it to React', () => {
+    const events: string[] = [];
+    const created = thread({ id: 'thread_created' });
+
+    expect(claimCreatedChatThreadForSend({
+      activeProjectId: 'project_1',
+      claimComposerForThread: () => events.push('claim'),
+      expandProject: () => events.push('expand'),
+      isCurrentRequest: () => true,
+      setCurrentThread: () => events.push('set-current'),
+      thread: created,
+    })).toBe(true);
+    events.push('send-turn');
+
+    expect(events).toEqual(['claim', 'expand', 'set-current', 'send-turn']);
+  });
+
+  it('does not publish a delayed create response after navigating to another composer', async () => {
+    const guard = createIdentityRequestGuard('new-thread-slot:project_1');
+    const isCurrentRequest = guard.begin();
+    const created = deferred<RuntimeThread>();
+    const events: string[] = [];
+    const task = created.promise.then((createdThread) => {
+      claimCreatedChatThreadForSend({
+        activeProjectId: 'project_1',
+        claimComposerForThread: () => events.push('claim-A'),
+        isCurrentRequest,
+        setCurrentThread: () => events.push('set-A'),
+        thread: createdThread,
+      });
+      // The accepted operation may continue in the background, but it cannot
+      // retarget the newly selected composer.
+      events.push('send-A');
+    });
+
+    guard.updateIdentity('thread:B');
+    created.resolve(thread({ id: 'thread_A' }));
+    await task;
+
+    expect(events).toEqual(['send-A']);
+  });
+});
+
 const goal: RuntimeThreadGoal = {
   threadId: 'thread_1',
   objective: 'Finish the goal',
@@ -56,4 +101,12 @@ function thread(overrides: Partial<RuntimeThread>): RuntimeThread {
     lastSeq: 0,
     ...overrides,
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
 }

@@ -5,9 +5,11 @@ import { WorkspaceFileIcon } from '../workspace/WorkspaceFileIcon.js';
 import { formatAttachmentTypeLabel, type ChatComposerAttachmentItem } from './chatAttachments.js';
 
 export function ChatAttachmentTray({
+  disabled = false,
   items,
   onRemove,
 }: {
+  disabled?: boolean;
   items: ChatComposerAttachmentItem[];
   onRemove: (key: string) => void;
 }) {
@@ -17,7 +19,7 @@ export function ChatAttachmentTray({
         <Image.PreviewGroup>
           <div className="chat-attachments" aria-label="附件">
             {items.map((item) => (
-              <ComposerAttachmentCard item={item} key={item.key} onRemove={onRemove} />
+              <ComposerAttachmentCard disabled={disabled} item={item} key={item.key} onRemove={onRemove} />
             ))}
           </div>
         </Image.PreviewGroup>
@@ -27,9 +29,11 @@ export function ChatAttachmentTray({
 }
 
 function ComposerAttachmentCard({
+  disabled,
   item,
   onRemove,
 }: {
+  disabled: boolean;
   item: ChatComposerAttachmentItem;
   onRemove: (key: string) => void;
 }) {
@@ -69,7 +73,7 @@ function ComposerAttachmentCard({
         className="chat-attachment__remove"
         type="button"
         aria-label={`移除 ${item.name}`}
-        disabled={removing}
+        disabled={disabled || removing}
         onClick={() => onRemove(item.key)}
       >
         <X size={12} />

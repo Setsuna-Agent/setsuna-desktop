@@ -391,7 +391,12 @@ export async function handleRuntimeRestRequest(
     const projectThreads = await runtime.threadStore.listThreads({ includeArchived: true, projectId });
     // 隐藏项目前先归档所有对话，避免部分失败产生仍处于活动状态的孤立线程。
     for (const thread of projectThreads) {
-      if (!thread.archived) await runtime.threadStore.updateThread(thread.id, { archived: true });
+      if (!thread.archived) {
+        await runtime.agentLoop.withThreadMutation(
+          thread.id,
+          () => runtime.threadStore.updateThread(thread.id, { archived: true }),
+        );
+      }
     }
     await runtime.workspaceProjects.archiveProject(projectId);
     sendJson(response, 200, { ok: true });
@@ -481,9 +486,11 @@ export async function handleRuntimeRestRequest(
   }
 
   if (threadMatch && request.method === 'PATCH') {
-    const thread = await runtime.threadStore.updateThread(
-      decodeRuntimeId(threadMatch[1], 'Thread id'),
-      await readBody<ThreadPatch>(request),
+    const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
+    const patch = await readBody<ThreadPatch>(request);
+    const thread = await runtime.agentLoop.withThreadMutation(
+      threadId,
+      () => runtime.threadStore.updateThread(threadId, patch),
     );
     sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
@@ -491,11 +498,15 @@ export async function handleRuntimeRestRequest(
 
   const threadMemoryModeMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/memory-mode$/);
   if (threadMemoryModeMatch && request.method === 'PATCH') {
+    const threadId = decodeRuntimeId(threadMemoryModeMatch[1], 'Thread id');
     const input = await readBody<ThreadMemoryModePatch>(request);
-    const thread = await runtime.threadStore.updateThreadMemoryMode(
-      decodeRuntimeId(threadMemoryModeMatch[1], 'Thread id'),
-      threadMemoryModeFromInput(input.mode),
-      'user_request',
+    const thread = await runtime.agentLoop.withThreadMutation(
+      threadId,
+      () => runtime.threadStore.updateThreadMemoryMode(
+        threadId,
+        threadMemoryModeFromInput(input.mode),
+        'user_request',
+      ),
     );
     sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
@@ -504,13 +515,14 @@ export async function handleRuntimeRestRequest(
   const messageMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/messages\/([^/]+)$/);
   if (messageMatch && request.method === 'PATCH') {
     const threadId = decodeRuntimeId(messageMatch[1], 'Thread id');
-    const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
-    const thread = await runtime.threadStore.updateMessage(
-      threadId,
-      decodeURIComponent(messageMatch[2]),
-      await readBody<MessagePatch>(request),
-    );
-    await publishThreadEventsSince(runtime, threadId, beforeSeq);
+    const messageId = decodeURIComponent(messageMatch[2]);
+    const patch = await readBody<MessagePatch>(request);
+    const thread = await runtime.agentLoop.withThreadMutation(threadId, async () => {
+      const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
+      const updated = await runtime.threadStore.updateMessage(threadId, messageId, patch);
+      await publishThreadEventsSince(runtime, threadId, beforeSeq);
+      return updated;
+    });
     sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }
@@ -518,9 +530,13 @@ export async function handleRuntimeRestRequest(
   const messagesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/messages$/);
   if (messagesMatch && request.method === 'DELETE') {
     const threadId = decodeRuntimeId(messagesMatch[1], 'Thread id');
-    const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
-    const thread = await runtime.threadStore.deleteMessages(threadId, await readBody<MessageDeleteInput>(request));
-    await publishThreadEventsSince(runtime, threadId, beforeSeq);
+    const input = await readBody<MessageDeleteInput>(request);
+    const thread = await runtime.agentLoop.withThreadMutation(threadId, async () => {
+      const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
+      const updated = await runtime.threadStore.deleteMessages(threadId, input);
+      await publishThreadEventsSince(runtime, threadId, beforeSeq);
+      return updated;
+    });
     sendJson(response, 200, withActiveTurn(runtime, thread));
     return true;
   }

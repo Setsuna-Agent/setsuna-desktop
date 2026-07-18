@@ -17,6 +17,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     activeView,
     chatActions,
     clearSkillSelectionRequest,
+    composerKey,
     draft,
     globalThreads,
     handleSidebarResizeStep,
@@ -27,6 +28,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     handleWorkspaceResizeStart,
     navigation,
     projectWorkspace,
+    resetComposer,
     runtime,
     searchTriggerRef,
     selectSkillForChat,
@@ -41,6 +43,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     sidebarMinWidth,
     sidebarWidth,
     skillSelectionRequest,
+    startCurrentThreadReview,
     terminalMaxHeight,
     terminalHeight,
     terminalMinHeight,
@@ -67,13 +70,13 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const windowMenuActions = useMemo(
     () => ({
       onNewChat: () => {
-        setDraft('');
+        resetComposer();
         navigation.startCurrentThread();
       },
       onOpenCapabilities: () => setActiveView('capabilities'),
       onOpenSettings: () => setActiveView('settings'),
     }),
-    [navigation, setActiveView, setDraft],
+    [navigation, resetComposer, setActiveView],
   );
 
   return (
@@ -135,7 +138,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         minWidth={sidebarMinWidth}
         onOpenCapabilities={() => setActiveView('capabilities')}
         onOpenSettings={() => setActiveView('settings')}
-        onResetDraft={() => setDraft('')}
+        onResetDraft={resetComposer}
         onResizeStep={handleSidebarResizeStep}
         onResizeStart={handleSidebarResizeStart}
       />
@@ -145,6 +148,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         activeWorkspace={activeWorkspace}
         activeView={activeView}
         chatActions={chatActions}
+        composerKey={composerKey}
         conversationOverviewShowRequest={conversationOverviewShowRequest}
         conversationOverviewVisibility={conversationOverviewVisibility}
         draft={draft}
@@ -153,6 +157,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         setActiveView={setActiveView}
         setDraft={setDraft}
         skillSelectionRequest={skillSelectionRequest}
+        startCurrentThreadReview={startCurrentThreadReview}
         updater={controller.updater}
         workspacePanels={workspacePanels}
         onSelectSkillForChat={selectSkillForChat}

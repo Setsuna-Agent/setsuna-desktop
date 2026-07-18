@@ -28,7 +28,9 @@ import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from '.
 import { runtimeArtifactsFromToolRuns } from './runtimeArtifacts.js';
 import { runtimePluginUsesByTurn, type RuntimePluginUse } from './runtimePluginUsage.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
+import { commitChatWorkspaceOperation } from './chatWorkspaceOperationScope.js';
 import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ChatWorkspaceMentionRequest, ConversationOverviewVisibility } from '../../types/app.js';
+import { useIdentityRequestGuard } from '../../hooks/useIdentityRequestGuard.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
 import { ActionTooltip } from '../primitives.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
@@ -83,6 +85,7 @@ export function ChatWorkspace({
   activeProject,
   canClearContext,
   client,
+  composerKey,
   config,
   conversationOverviewShowRequest = 0,
   conversationOverviewVisibility = 'auto',
@@ -130,6 +133,7 @@ export function ChatWorkspace({
   activeProject?: WorkspaceProject;
   canClearContext: boolean;
   client: DesktopRuntimeClient;
+  composerKey: string;
   config: RuntimeConfigState | null;
   conversationOverviewShowRequest?: number;
   conversationOverviewVisibility?: ConversationOverviewVisibility;
@@ -223,6 +227,7 @@ export function ChatWorkspace({
   const [deletingMessages, setDeletingMessages] = useState(false);
   const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
+  const localOperationRequests = useIdentityRequestGuard(composerKey);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
@@ -362,6 +367,7 @@ export function ChatWorkspace({
       setActionError(null);
       setEditingMessageId(null);
       setEditingDraft('');
+      setEditingSubmitting(false);
       setDeleteMode(true);
       setSelectedDeleteItemIds(new Set(deleteGroupItemIds(itemId)));
     },
@@ -398,6 +404,7 @@ export function ChatWorkspace({
   }, []);
 
   const confirmDeleteSelection = useCallback(async () => {
+    const isCurrentOperation = localOperationRequests.begin();
     if (!selectedDeleteMessageIds.length) {
       setActionError('请选择要删除的消息');
       return;
@@ -407,16 +414,19 @@ export function ChatWorkspace({
     try {
       // 删除时传 messageIds 而不是 display item ids，因为一个 assistant item 可能包含多段消息和工具消息。
       await onDeleteMessages(selectedDeleteMessageIds);
-      cancelDeleteSelection();
+      commitChatWorkspaceOperation(isCurrentOperation, cancelDeleteSelection);
     } catch (unknownError) {
-      setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      commitChatWorkspaceOperation(isCurrentOperation, () => {
+        setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      });
     } finally {
-      setDeletingMessages(false);
+      commitChatWorkspaceOperation(isCurrentOperation, () => setDeletingMessages(false));
     }
-  }, [cancelDeleteSelection, onDeleteMessages, selectedDeleteMessageIds]);
+  }, [cancelDeleteSelection, localOperationRequests, onDeleteMessages, selectedDeleteMessageIds]);
 
   const composer = (starter = false) => (
     <ChatComposer
+      key={composerKey}
       activeTurnId={activeTurnId}
       activeProject={activeProject}
       canClearContext={canClearContext}
@@ -427,7 +437,7 @@ export function ChatWorkspace({
       currentThread={currentThread}
       draft={draft}
       imageAttachmentRequest={imageAttachmentRequest}
-      skillSelectionRequest={skillSelectionRequest}
+      skillSelectionRequest={skillSelectionRequest?.composerKey === composerKey ? skillSelectionRequest : null}
       workspaceMentionRequest={workspaceMentionRequest}
       skills={skills}
       threadUsage={displayedThreadUsage}
@@ -456,6 +466,7 @@ export function ChatWorkspace({
   const startEditingMessage = useCallback((message: RuntimeMessage) => {
     setActionError(null);
     setDeleteMode(false);
+    setDeletingMessages(false);
     setSelectedDeleteItemIds(new Set());
     setEditingMessageId(message.id);
     setEditingDraft(message.content);
@@ -469,18 +480,21 @@ export function ChatWorkspace({
     async (messageId: string) => {
       const content = editingDraft.trim();
       if (!content) return;
+      const isCurrentOperation = localOperationRequests.begin();
       setEditingSubmitting(true);
       setActionError(null);
       try {
         await onEditUserMessage(messageId, content);
-        cancelEditingMessage();
+        commitChatWorkspaceOperation(isCurrentOperation, cancelEditingMessage);
       } catch (unknownError) {
-        setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        commitChatWorkspaceOperation(isCurrentOperation, () => {
+          setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        });
       } finally {
-        setEditingSubmitting(false);
+        commitChatWorkspaceOperation(isCurrentOperation, () => setEditingSubmitting(false));
       }
     },
-    [cancelEditingMessage, editingDraft, onEditUserMessage],
+    [cancelEditingMessage, editingDraft, localOperationRequests, onEditUserMessage],
   );
 
   return (

@@ -5,6 +5,7 @@ export type MainView = 'chat' | 'capabilities' | 'settings';
 export type ConversationOverviewVisibility = 'auto' | 'hidden' | 'shown';
 
 export type ChatSkillSelectionRequest = {
+  composerKey: string;
   skillId: string;
   requestId: number;
 };

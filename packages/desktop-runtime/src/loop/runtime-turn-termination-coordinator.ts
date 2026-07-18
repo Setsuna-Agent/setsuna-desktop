@@ -20,7 +20,7 @@ type RuntimeTurnTerminationCoordinatorOptions = {
 
 /** 串行写入终止取消状态，确保每个轮次最多产生一个终止事件。 */
 export class RuntimeTurnTerminationCoordinator {
-  private readonly pendingTerminalWrites = new Set<string>();
+  private readonly pendingTerminalWrites = new Map<string, { promise: Promise<boolean>; threadId: string }>();
 
   constructor(private readonly options: RuntimeTurnTerminationCoordinatorOptions) {}
 
@@ -32,25 +32,51 @@ export class RuntimeTurnTerminationCoordinator {
     options: { marker?: boolean } = {},
   ): Promise<boolean> {
     const key = `${threadId}:${turnId}`;
-    if (this.pendingTerminalWrites.has(key)) return false;
-    this.pendingTerminalWrites.add(key);
-    try {
-      await this.options.eventWriter.flushThread(threadId);
-      if (await this.hasTerminalEvent(threadId, turnId)) return false;
-      if (options.marker) await this.publishAbortedMarker(threadId, turnId);
-      if (await this.hasTerminalEvent(threadId, turnId)) return false;
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'turn.cancelled',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: { reason, taskKind },
-      });
-      return true;
-    } finally {
-      this.pendingTerminalWrites.delete(key);
+    const existing = this.pendingTerminalWrites.get(key);
+    if (existing) {
+      await existing.promise;
+      return false;
     }
+    const promise = this.publishCancellation(threadId, turnId, taskKind, reason, options);
+    this.pendingTerminalWrites.set(key, { promise, threadId });
+    try {
+      return await promise;
+    } finally {
+      if (this.pendingTerminalWrites.get(key)?.promise === promise) this.pendingTerminalWrites.delete(key);
+    }
+  }
+
+  /** Waits for cancellation writes that may outlive the caller that first aborted the task. */
+  async waitForThread(threadId: string): Promise<void> {
+    for (;;) {
+      const pending = [...this.pendingTerminalWrites.values()]
+        .filter((entry) => entry.threadId === threadId)
+        .map((entry) => entry.promise);
+      if (!pending.length) return;
+      await Promise.all(pending);
+    }
+  }
+
+  private async publishCancellation(
+    threadId: string,
+    turnId: string,
+    taskKind: RuntimeTaskKind,
+    reason: string,
+    options: { marker?: boolean },
+  ): Promise<boolean> {
+    await this.options.eventWriter.flushThread(threadId);
+    if (await this.hasTerminalEvent(threadId, turnId)) return false;
+    if (options.marker) await this.publishAbortedMarker(threadId, turnId);
+    if (await this.hasTerminalEvent(threadId, turnId)) return false;
+    await this.options.appendEvent(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'turn.cancelled',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { reason, taskKind },
+    });
+    return true;
   }
 
   private async publishAbortedMarker(threadId: string, turnId: string): Promise<void> {

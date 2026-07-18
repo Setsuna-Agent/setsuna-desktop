@@ -424,18 +424,20 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/inject_items') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    await requireRuntimeThread(runtime, threadId);
     const messages = sweInjectedResponseItemsToRuntimeMessages(requiredArray(input.items, 'items'));
-    for (const message of messages) {
-      await appendAndPublishRuntimeEvent(runtime, threadId, {
-        id: randomRuntimeId('event_inject'),
-        threadId,
-        type: 'message.created',
-        createdAt: message.createdAt,
-        payload: { message },
-      });
-    }
-    return {};
+    return runtime.agentLoop.withThreadMutation(threadId, async () => {
+      await requireRuntimeThread(runtime, threadId);
+      for (const message of messages) {
+        await appendAndPublishRuntimeEvent(runtime, threadId, {
+          id: randomRuntimeId('event_inject'),
+          threadId,
+          type: 'message.created',
+          createdAt: message.createdAt,
+          payload: { message },
+        });
+      }
+      return {};
+    });
   }
 
   if (method === 'thread/list') {
@@ -468,9 +470,11 @@ export async function dispatchAppServerRpcRequest(
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
     const name = requiredString(input.name, 'name');
-    await requireRuntimeThread(runtime, threadId);
-    await runtime.threadStore.updateThread(threadId, { title: name });
-    return {};
+    return runtime.agentLoop.withThreadMutation(threadId, async () => {
+      await requireRuntimeThread(runtime, threadId);
+      await runtime.threadStore.updateThread(threadId, { title: name });
+      return {};
+    });
   }
 
   if (method === 'thread/goal/set') {
@@ -495,9 +499,11 @@ export async function dispatchAppServerRpcRequest(
 
   if (method === 'thread/memoryMode/set') {
     const input = sweThreadMemoryModeSetInput(params);
-    await requireRuntimeThread(runtime, input.threadId);
-    await runtime.threadStore.updateThreadMemoryMode(input.threadId, input.mode, 'user_request');
-    return {};
+    return runtime.agentLoop.withThreadMutation(input.threadId, async () => {
+      await requireRuntimeThread(runtime, input.threadId);
+      await runtime.threadStore.updateThreadMemoryMode(input.threadId, input.mode, 'user_request');
+      return {};
+    });
   }
 
   if (method === 'memory/reset') {
@@ -518,56 +524,86 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/metadata/update') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    const thread = await requireRuntimeThread(runtime, threadId);
-    const gitInfo = swePatchThreadGitInfo(thread, input);
-    await appendAndPublishRuntimeEvent(runtime, threadId, {
-      id: randomRuntimeId('event_metadata'),
-      threadId,
-      type: 'thread.metadata_updated',
-      createdAt: new Date().toISOString(),
-      payload: { gitInfo },
+    return runtime.agentLoop.withThreadMutation(threadId, async () => {
+      const thread = await requireRuntimeThread(runtime, threadId);
+      const gitInfo = swePatchThreadGitInfo(thread, input);
+      await appendAndPublishRuntimeEvent(runtime, threadId, {
+        id: randomRuntimeId('event_metadata'),
+        threadId,
+        type: 'thread.metadata_updated',
+        createdAt: new Date().toISOString(),
+        payload: { gitInfo },
+      });
+      const updated = await runtime.threadStore.getThread(threadId);
+      return {
+        thread: sweThreadFromRuntimeThread(updated ?? thread, process.cwd(), options),
+      };
     });
-    const updated = await runtime.threadStore.getThread(threadId);
-    return {
-      thread: sweThreadFromRuntimeThread(updated ?? thread, process.cwd(), options),
-    };
   }
 
   if (method === 'thread/archive') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    await requireRuntimeThread(runtime, threadId);
-    await runtime.threadStore.updateThread(threadId, { archived: true });
-    return {};
+    return runtime.agentLoop.withThreadMutation(threadId, async () => {
+      await requireRuntimeThread(runtime, threadId);
+      await runtime.threadStore.updateThread(threadId, { archived: true });
+      return {};
+    });
   }
 
   if (method === 'thread/delete') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    const thread = await requireRuntimeThread(runtime, threadId);
-    const activeTurnId = runtime.agentLoop.activeTurnId(threadId);
-    if (activeTurnId) await runtime.agentLoop.cancelTurn(threadId, activeTurnId);
-    runtime.eventBus.publish({
-      id: randomRuntimeId('event_deleted'),
-      seq: thread.lastSeq + 1,
-      threadId,
-      type: 'thread.deleted',
-      createdAt: new Date().toISOString(),
-      payload: {},
+    return runtime.agentLoop.withThreadDeletionBarrier(threadId, async () => {
+      // Re-read after the barrier: cancellation and final cleanup may have advanced lastSeq.
+      const thread = await requireRuntimeThread(runtime, threadId);
+      await runtime.threadStore.deleteThread(threadId);
+
+      // Deletion is an ephemeral lifecycle notification because its persisted stream no longer
+      // exists. Publish only after the store commit, using the final drained sequence boundary.
+      runtime.eventBus.publish({
+        id: randomRuntimeId('event_deleted'),
+        seq: thread.lastSeq + 1,
+        threadId,
+        type: 'thread.deleted',
+        createdAt: new Date().toISOString(),
+        payload: {},
+      });
+
+      // The destructive commit already succeeded. Every teardown is now best-effort so a cleanup
+      // failure cannot make callers retry a deletion that has actually completed.
+      const cleanupTasks = [
+        { label: 'dynamic tools', run: () => runtime.agentLoop.clearAppServerDynamicTools(threadId) },
+        { label: 'MCP connections', run: () => runtime.mcpConnections.releaseThread(threadId) },
+        { label: 'attachments', run: () => runtime.attachmentStore.releaseThread(threadId) },
+        ...(!thread.projectId
+          ? [{
+            label: 'temporary workspace',
+            run: () => runtime.workspaceProjects.removeTemporaryWorkspace({ threadId, createdAt: thread.createdAt }),
+          }]
+          : []),
+      ];
+      const cleanupResults = await Promise.allSettled(cleanupTasks.map((task) => Promise.resolve().then(task.run)));
+      cleanupResults.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.warn(
+            `[desktop-runtime] Thread ${threadId} was deleted, but ${cleanupTasks[index].label} cleanup failed.`,
+            result.reason,
+          );
+        }
+      });
+      return {};
     });
-    runtime.agentLoop.clearAppServerDynamicTools(threadId);
-    await runtime.mcpConnections.releaseThread(threadId);
-    await runtime.threadStore.deleteThread(threadId);
-    await runtime.attachmentStore.releaseThread(threadId);
-    return {};
   }
 
   if (method === 'thread/unarchive') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    await requireRuntimeThread(runtime, threadId);
-    const thread = await runtime.threadStore.updateThread(threadId, { archived: false });
-    return { thread: sweThreadFromRuntimeThread(thread, process.cwd(), options) };
+    return runtime.agentLoop.withThreadMutation(threadId, async () => {
+      await requireRuntimeThread(runtime, threadId);
+      const thread = await runtime.threadStore.updateThread(threadId, { archived: false });
+      return { thread: sweThreadFromRuntimeThread(thread, process.cwd(), options) };
+    });
   }
 
   if (method === 'thread/compact/start') {
@@ -597,16 +633,18 @@ export async function dispatchAppServerRpcRequest(
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
     const numTurns = requiredPositiveInteger(input.numTurns, 'numTurns');
-    const thread = await runtime.threadStore.getThread(threadId);
-    if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
-    const activeTurnId = runtime.agentLoop.activeTurnId(threadId);
-    if (activeTurnId) await runtime.agentLoop.cancelTurn(threadId, activeTurnId);
-    const currentThread = await runtime.threadStore.getThread(threadId) ?? thread;
-    const rollbackMessageId = rollbackStartMessageId(currentThread.messages, numTurns);
-    const rolledBack = rollbackMessageId
-      ? await runtime.threadStore.truncateMessagesAfter(threadId, rollbackMessageId, true)
-      : currentThread;
-    return { thread: sweThreadFromRuntimeThread(rolledBack, process.cwd(), options, true) };
+    return runtime.agentLoop.withThreadMutation(threadId, async () => {
+      const thread = await runtime.threadStore.getThread(threadId);
+      if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
+      const activeTurnId = runtime.agentLoop.activeTurnId(threadId);
+      if (activeTurnId) await runtime.agentLoop.cancelTurn(threadId, activeTurnId);
+      const currentThread = await runtime.threadStore.getThread(threadId) ?? thread;
+      const rollbackMessageId = rollbackStartMessageId(currentThread.messages, numTurns);
+      const rolledBack = rollbackMessageId
+        ? await runtime.threadStore.truncateMessagesAfter(threadId, rollbackMessageId, true)
+        : currentThread;
+      return { thread: sweThreadFromRuntimeThread(rolledBack, process.cwd(), options, true) };
+    });
   }
 
   if (method === 'review/start') {

@@ -8,10 +8,12 @@ import type {
   RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
 import { useChatTurnActions } from './useChatTurnActions.js';
-import { activeTurnIdFromThreadSnapshot } from './useRuntimeClientState.js';
+import { activeTurnIdFromThreadSnapshot, isThreadContextCompacting } from './useRuntimeClientState.js';
 import { applyRuntimeEvent } from '../utils/runtimeEvents.js';
 import { startThreadReview } from './startThreadReview.js';
 import { useLatestRequestGuard } from './useLatestRequestGuard.js';
+import { chatComposerTargetIdentity, useChatComposerSession } from './useChatComposerSession.js';
+import { useIdentityRequestGuard } from './useIdentityRequestGuard.js';
 
 type SideChatOptions = {
   activeProjectId: string | null;
@@ -30,28 +32,40 @@ export function useSideChat({
   setError,
 }: SideChatOptions) {
   const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
-  const [draft, setDraft] = useState('');
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
-  const [contextCompacting, setContextCompacting] = useState(false);
+  const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadLastSeqRef = useRef(0);
   const memoryModeRequests = useLatestRequestGuard();
   const threadId = currentThread?.id ?? null;
+  const {
+    claimForThread: claimComposerForThread,
+    composerKey,
+    draft,
+    reset: resetComposer,
+    setDraft,
+  } = useChatComposerSession(chatComposerTargetIdentity(
+    threadId,
+    threadId ? null : activeProjectId,
+  ));
+  const contextRequests = useIdentityRequestGuard(threadId ?? `new-side-thread:${activeProjectId ?? 'global'}`);
+  const reviewRequests = useIdentityRequestGuard(composerKey);
   const threadIdRef = useRef(threadId);
   threadIdRef.current = threadId;
+  const contextCompacting = isThreadContextCompacting(contextCompactingThreadId, threadId);
   const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
   currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
 
   useEffect(() => {
     // 侧边任务沿用打开时的项目上下文；主区切换项目后从空白侧边任务重新开始。
     setCurrentThread(null);
-    setDraft('');
+    resetComposer();
     setActiveTurnId(null);
     setThreadUsage(null);
     memoryModeRequests.invalidate();
     terminalTurnIdsRef.current.clear();
-  }, [activeProjectId, memoryModeRequests]);
+  }, [activeProjectId, memoryModeRequests, resetComposer]);
 
   useEffect(() => {
     if (!threadId) return undefined;
@@ -131,7 +145,9 @@ export function useSideChat({
   const actions = useChatTurnActions({
     activeProjectId,
     activeTurnId: effectiveActiveTurnId,
+    claimComposerForThread,
     client,
+    composerKey,
     currentThread,
     draft,
     reloadThreads,
@@ -144,24 +160,31 @@ export function useSideChat({
 
   const clearContext = useCallback(async () => {
     if (!currentThread) return null;
+    const isCurrentRequest = contextRequests.begin();
     const updated = await client.clearThreadContext(currentThread.id);
-    setCurrentThread(updated);
+    if (isCurrentRequest()) setCurrentThread(updated);
     await reloadThreads();
     return updated;
-  }, [client, currentThread, reloadThreads]);
+  }, [client, contextRequests, currentThread, reloadThreads]);
 
   const compactContext = useCallback(async () => {
     if (!currentThread || contextCompacting) return null;
-    setContextCompacting(true);
+    const requestedThreadId = currentThread.id;
+    const isCurrentRequest = contextRequests.begin();
+    setContextCompactingThreadId(requestedThreadId);
     try {
-      const updated = await client.compactThreadContext(currentThread.id);
-      setCurrentThread((current) => (!current || updated.lastSeq >= current.lastSeq ? updated : current));
+      const updated = await client.compactThreadContext(requestedThreadId);
+      if (isCurrentRequest()) {
+        setCurrentThread((current) => (
+          current?.id === requestedThreadId && updated.lastSeq >= current.lastSeq ? updated : current
+        ));
+      }
       await reloadThreads();
       return updated;
     } finally {
-      setContextCompacting(false);
+      setContextCompactingThreadId((current) => current === requestedThreadId ? null : current);
     }
-  }, [client, contextCompacting, currentThread, reloadThreads]);
+  }, [client, contextCompacting, contextRequests, currentThread, reloadThreads]);
 
   const updateMemoryMode = useCallback(async (mode: RuntimeThreadMemoryMode) => {
     if (!currentThread) return null;
@@ -203,19 +226,23 @@ export function useSideChat({
   }, [client, threadId]);
 
   const startReview = useCallback(async (target: RuntimeReviewTarget) => {
+    const isCurrentRequest = reviewRequests.begin();
     const started = await startThreadReview({
       activeProjectId,
       client,
       currentThread,
       onThreadCreated: async (thread) => {
-        setCurrentThread(thread);
+        if (isCurrentRequest()) {
+          claimComposerForThread(thread.id);
+          setCurrentThread(thread);
+        }
         await reloadThreads();
       },
       target,
     });
-    setActiveTurnId(started.turnId);
+    if (isCurrentRequest()) setActiveTurnId(started.turnId);
     return started;
-  }, [activeProjectId, client, currentThread, reloadThreads]);
+  }, [activeProjectId, claimComposerForThread, client, currentThread, reloadThreads, reviewRequests]);
 
   return useMemo(() => ({
     actions,
@@ -223,6 +250,7 @@ export function useSideChat({
     answerApproval,
     clearContext,
     clearGoal,
+    composerKey,
     compactContext,
     contextCompacting,
     currentThread,
@@ -236,11 +264,13 @@ export function useSideChat({
     answerApproval,
     clearContext,
     clearGoal,
+    composerKey,
     compactContext,
     contextCompacting,
     currentThread,
     draft,
     effectiveActiveTurnId,
+    setDraft,
     startReview,
     threadUsage,
     updateMemoryMode,

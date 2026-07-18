@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import type { DesktopRuntimeClient, RuntimeThread, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { activeTurnIdFromThreadSnapshot, inferActiveTurnIdFromThread, loadRuntimeBootstrap, selectInitialThreadSummary } from './useRuntimeClientState.js';
+import {
+  activeTurnIdFromThreadSnapshot,
+  inferActiveTurnIdFromThread,
+  isThreadContextCompacting,
+  loadRuntimeBootstrap,
+  selectInitialThreadSummary,
+} from './useRuntimeClientState.js';
+
+describe('isThreadContextCompacting', () => {
+  it('does not treat an empty thread selection as an active compaction', () => {
+    expect(isThreadContextCompacting(null, null)).toBe(false);
+  });
+
+  it('only reports compaction for the matching concrete thread', () => {
+    expect(isThreadContextCompacting('thread_active', 'thread_active')).toBe(true);
+    expect(isThreadContextCompacting('thread_active', 'thread_other')).toBe(false);
+    expect(isThreadContextCompacting('thread_active', null)).toBe(false);
+  });
+});
 
 describe('inferActiveTurnIdFromThread', () => {
   it('prefers the runtime snapshot active turn id even without streaming evidence', () => {

@@ -48,6 +48,7 @@ export function AppChatSurface({
   bottomPanelSlot,
   bottomPanelVisible,
   canClearContext,
+  composerKey,
   config,
   conversationOverviewShowRequest,
   conversationOverviewVisibility,
@@ -127,6 +128,7 @@ export function AppChatSurface({
   bottomPanelSlot: DesktopPanelSlotState;
   bottomPanelVisible: boolean;
   canClearContext: boolean;
+  composerKey: string;
   config: RuntimeConfigState | null;
   conversationOverviewShowRequest: number;
   conversationOverviewVisibility: ConversationOverviewVisibility;
@@ -203,15 +205,24 @@ export function AppChatSurface({
     imageAttachmentRequest,
     requestImageAttachment,
     resolveImageAttachmentRequest,
-  } = useChatImageAttachmentRequest();
-  const [workspaceMentionRequest, setWorkspaceMentionRequest] = useState<ChatWorkspaceMentionRequest | null>(null);
+  } = useChatImageAttachmentRequest(composerKey);
+  const [scopedWorkspaceMentionRequest, setScopedWorkspaceMentionRequest] = useState<{
+    composerKey: string;
+    request: ChatWorkspaceMentionRequest;
+  } | null>(null);
   const workspaceMentionRequestIdRef = useRef(0);
+  const workspaceMentionRequest = scopedWorkspaceMentionRequest?.composerKey === composerKey
+    ? scopedWorkspaceMentionRequest.request
+    : null;
   const requestWorkspaceMention = useCallback((entry: WorkspaceEntrySearchItem) => {
     workspaceMentionRequestIdRef.current += 1;
-    setWorkspaceMentionRequest({ entry, requestId: workspaceMentionRequestIdRef.current });
-  }, []);
+    setScopedWorkspaceMentionRequest({
+      composerKey,
+      request: { entry, requestId: workspaceMentionRequestIdRef.current },
+    });
+  }, [composerKey]);
   const consumeWorkspaceMentionRequest = useCallback((requestId: number) => {
-    setWorkspaceMentionRequest((current) => current?.requestId === requestId ? null : current);
+    setScopedWorkspaceMentionRequest((current) => current?.request.requestId === requestId ? null : current);
   }, []);
   const latestReviewSummary = useMemo(
     () => latestDesktopReviewSummaryFromMessages(currentThread?.messages ?? []),
@@ -231,6 +242,7 @@ export function AppChatSurface({
           activeProject={activeWorkspace}
           canClearContext={canClearContext}
           client={runtimeClient}
+          composerKey={composerKey}
           conversationOverviewShowRequest={conversationOverviewShowRequest}
           conversationOverviewVisibility={conversationOverviewVisibility}
           contextCompacting={contextCompacting}

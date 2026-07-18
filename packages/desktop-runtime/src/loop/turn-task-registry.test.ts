@@ -81,6 +81,45 @@ describe('RuntimeTurnTaskRegistry', () => {
     await run.done;
   });
 
+  it('retains an aborted task for deletion draining and rejects starts while blocked', async () => {
+    const registry = new RuntimeTurnTaskRegistry();
+    const deferred = createDeferred<void>();
+    const run = registry.run({
+      acceptingSteers: true,
+      taskKind: 'goal',
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+    }, async () => {
+      await deferred.promise;
+    });
+
+    registry.cancel('thread_1', 'turn_1', new Error('cancel before delete'));
+    registry.blockThread('thread_1');
+
+    expect(registry.activeForThread('thread_1')).toBeNull();
+    expect(registry.registeredForThread('thread_1')).toBe(run.task);
+    expect(() => registry.start({
+      acceptingSteers: false,
+      taskKind: 'regular',
+      threadId: 'thread_1',
+      turnId: 'turn_2',
+    })).toThrow('being deleted');
+
+    deferred.resolve(undefined);
+    await run.done;
+    expect(registry.registeredForThread('thread_1')).toBeNull();
+
+    registry.unblockThread('thread_1');
+    const next = registry.start({
+      acceptingSteers: false,
+      taskKind: 'regular',
+      threadId: 'thread_1',
+      turnId: 'turn_2',
+    });
+    expect(next.turnId).toBe('turn_2');
+    registry.finish(next);
+  });
+
   it('does not overwrite an active task for the same thread', async () => {
     const registry = new RuntimeTurnTaskRegistry();
     const deferred = createDeferred<void>();

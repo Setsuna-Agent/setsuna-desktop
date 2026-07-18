@@ -124,6 +124,7 @@ export function SideChatPanel({
           activeTurnId={sideChat.activeTurnId}
           canClearContext={Boolean(sideChat.currentThread?.messages.length)}
           client={client}
+          composerKey={sideChat.composerKey}
           config={config}
           contextCompacting={sideChat.contextCompacting}
           currentThread={sideChat.currentThread}

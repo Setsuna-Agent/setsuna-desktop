@@ -86,6 +86,8 @@ export class AgentLoop {
   private readonly turnTermination: RuntimeTurnTerminationCoordinator;
   private readonly modelSampler: RuntimeModelSampler;
   private readonly userShellRunner: RuntimeUserShellRunner;
+  private readonly deletingThreads = new Set<string>();
+  private readonly threadMutationAdmissions = new Map<string, Set<Promise<void>>>();
   private shuttingDown = false;
 
   constructor(private readonly options: AgentLoopOptions) {
@@ -258,7 +260,10 @@ export class AgentLoop {
       threadStore: options.threadStore,
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
-      createContinuation: (threadId, goal, contextMessages) => this.turnRuns.createGoalContinuation(threadId, goal, contextMessages),
+      createContinuation: (threadId, goal, contextMessages) => this.withThreadMutation(
+        threadId,
+        () => this.turnRuns.createGoalContinuation(threadId, goal, contextMessages),
+      ),
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
     this.userShellRunner = new RuntimeUserShellRunner({
@@ -312,24 +317,25 @@ export class AgentLoop {
    * @param input 用户输入、附件、skill 选择和客户端消息 ID。
    */
   async startTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse> {
-    this.assertAcceptingWork();
-    const active = this.turnTasks.activeForThread(threadId);
-    if ((active?.taskKind === 'regular' || active?.taskKind === 'goal') && active.acceptingSteers && !active.controller.signal.aborted) {
-      // 防御 renderer/SSE 短暂不同步：active 期间的普通发送必须落回当前 turn 的 steer。
-      return this.steerTurn(threadId, {
-        attachments: input.attachments,
-        clientId: input.clientId,
-        expectedTurnId: active.turnId,
-        input: input.input,
-        skillIds: input.skillIds,
-        thinking: input.thinking,
-        thinkingEffort: input.thinkingEffort,
-      });
-    }
-    const run = await this.turnRuns.createRegular(threadId, input);
-    this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
-    void run.done.catch(() => undefined);
-    return { accepted: true, turnId: run.turnId };
+    return this.withThreadMutation(threadId, async () => {
+      const active = this.turnTasks.activeForThread(threadId);
+      if ((active?.taskKind === 'regular' || active?.taskKind === 'goal') && active.acceptingSteers && !active.controller.signal.aborted) {
+        // 防御 renderer/SSE 短暂不同步：active 期间的普通发送必须落回当前 turn 的 steer。
+        return this.turnInputs.steer(threadId, {
+          attachments: input.attachments,
+          clientId: input.clientId,
+          expectedTurnId: active.turnId,
+          input: input.input,
+          skillIds: input.skillIds,
+          thinking: input.thinking,
+          thinkingEffort: input.thinkingEffort,
+        });
+      }
+      const run = await this.turnRuns.createRegular(threadId, input);
+      this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
+      void run.done.catch(() => undefined);
+      return { accepted: true, turnId: run.turnId };
+    });
   }
 
   /**
@@ -340,11 +346,12 @@ export class AgentLoop {
    * @param input 可选的新内容、skill 选择和思考参数。
    */
   async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}): Promise<SendTurnResponse> {
-    this.assertAcceptingWork();
-    const run = await this.turnRuns.createRegenerate(threadId, messageId, input);
-    this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
-    void run.done.catch(() => undefined);
-    return { accepted: true, turnId: run.turnId };
+    return this.withThreadMutation(threadId, async () => {
+      const run = await this.turnRuns.createRegenerate(threadId, messageId, input);
+      this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
+      void run.done.catch(() => undefined);
+      return { accepted: true, turnId: run.turnId };
+    });
   }
 
   /**
@@ -354,9 +361,11 @@ export class AgentLoop {
    * @param input 用户输入、附件和 skill 选择。
    */
   async sendTurn(threadId: string, input: SendTurnInput): Promise<void> {
-    this.assertAcceptingWork();
-    const run = await this.turnRuns.createRegular(threadId, input);
-    this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
+    const run = await this.withThreadMutation(threadId, async () => {
+      const prepared = await this.turnRuns.createRegular(threadId, input);
+      this.goals.observeRun(threadId, prepared.turnId, 'regular', prepared.done);
+      return prepared;
+    });
     await run.done;
     // 传统命令式调用方会在 sendTurn 中等待被动记忆处理完成。
     // HTTP 和界面调用方使用 startTurn，并在 turn.completed 持久化后立即返回。
@@ -369,12 +378,14 @@ export class AgentLoop {
    * @param threadId 需要清空上下文的线程 ID。
    */
   async clearThreadContext(threadId: string): Promise<RuntimeThread> {
-    await this.eventWriter.flushThread(threadId);
-    const beforeSeq = (await this.options.threadStore.getThread(threadId))?.lastSeq ?? 0;
-    const thread = await this.options.threadStore.clearThreadMessages(threadId);
-    this.hooks.queueSessionStartSource(threadId, 'clear');
-    await this.publishStoredEventsSince(threadId, beforeSeq);
-    return thread;
+    return this.withThreadMutation(threadId, async () => {
+      await this.eventWriter.flushThread(threadId);
+      const beforeSeq = (await this.options.threadStore.getThread(threadId))?.lastSeq ?? 0;
+      const thread = await this.options.threadStore.clearThreadMessages(threadId);
+      this.hooks.queueSessionStartSource(threadId, 'clear');
+      await this.publishStoredEventsSince(threadId, beforeSeq);
+      return thread;
+    });
   }
 
   /**
@@ -384,11 +395,12 @@ export class AgentLoop {
    * @param input review 的用户可见文本和模型实际 prompt。
    */
   async startReview(threadId: string, input: RuntimeReviewTurnInput): Promise<SendTurnResponse> {
-    this.assertAcceptingWork();
-    const run = await this.turnRuns.createReview(threadId, input);
-    this.goals.observeRun(threadId, run.turnId, 'review', run.done);
-    void run.done.catch(() => undefined);
-    return { accepted: true, turnId: run.turnId };
+    return this.withThreadMutation(threadId, async () => {
+      const run = await this.turnRuns.createReview(threadId, input);
+      this.goals.observeRun(threadId, run.turnId, 'review', run.done);
+      void run.done.catch(() => undefined);
+      return { accepted: true, turnId: run.turnId };
+    });
   }
 
   /**
@@ -409,6 +421,42 @@ export class AgentLoop {
   }
 
   /**
+   * Prevents new turns, drains even an already-aborted registered task, then runs the destructive
+   * thread operation. The operation is never reached while task or cancellation writes can arrive.
+   */
+  async withThreadDeletionBarrier<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+    if (this.deletingThreads.has(threadId)) throw new Error(`thread ${threadId} is already being deleted`);
+    this.deletingThreads.add(threadId);
+    try {
+      this.turnTasks.blockThread(threadId);
+    } catch (error) {
+      this.deletingThreads.delete(threadId);
+      throw error;
+    }
+    this.goals.beginThreadDeletion(threadId);
+    let deleted = false;
+    try {
+      // Drain tasks first so an admitted synchronous caller waiting on task.done can observe abort.
+      // Then wait all older mutations (attachment claims, regeneration, shell, compact, goal and
+      // context writes) before the final task check and destructive commit.
+      await this.drainRegisteredTasksForDeletion(threadId);
+      await this.waitForThreadMutationAdmissions(threadId);
+      await this.drainRegisteredTasksForDeletion(threadId);
+      // A concurrent user cancel can hide the task from activeTurnId before its terminal writes settle.
+      await this.turnTermination.waitForThread(threadId);
+      await this.goals.waitForThreadDeletionPause(threadId);
+      await this.eventWriter.flushThread(threadId);
+      const result = await operation();
+      deleted = true;
+      return result;
+    } finally {
+      this.goals.finishThreadDeletion(threadId, deleted);
+      this.turnTasks.unblockThread(threadId);
+      this.deletingThreads.delete(threadId);
+    }
+  }
+
+  /**
    * 查询线程当前运行中的 turnId，供 renderer 恢复 active 状态。
    *
    * @param threadId 要查询的线程 ID。
@@ -422,20 +470,19 @@ export class AgentLoop {
   }
 
   setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoal> {
-    this.assertAcceptingWork();
-    return this.goals.setGoal(threadId, patch);
+    return this.withThreadMutation(threadId, () => this.goals.setGoal(threadId, patch));
   }
 
   clearThreadGoal(threadId: string): Promise<void> {
-    return this.goals.clearGoal(threadId);
+    return this.withThreadMutation(threadId, () => this.goals.clearGoal(threadId));
   }
 
   resumeThreadGoal(threadId: string): Promise<void> {
-    this.assertAcceptingWork();
-    return this.goals.resumeIfActive(threadId);
+    return this.withThreadMutation(threadId, () => this.goals.resumeIfActive(threadId));
   }
 
   registerAppServerDynamicTools(threadId: string, tools: RuntimeDynamicToolDefinition[], connectionId: string): void {
+    this.assertThreadAcceptingWork(threadId);
     this.toolExecutor.registerDynamicTools(threadId, tools, connectionId);
   }
 
@@ -454,7 +501,7 @@ export class AgentLoop {
    * @param input 用户补充输入；expectedTurnId 用来防止补充写入过期 turn。
    */
   async steerTurn(threadId: string, input: SteerTurnInput): Promise<SendTurnResponse> {
-    return this.turnInputs.steer(threadId, input);
+    return this.withThreadMutation(threadId, () => this.turnInputs.steer(threadId, input));
   }
 
   /**
@@ -464,12 +511,17 @@ export class AgentLoop {
    * @param input mailbox 内容和可选来源。
    */
   async deliverMailboxInput(threadId: string, input: DeliverMailboxInput): Promise<DeliverMailboxResponse> {
-    this.assertAcceptingWork();
-    return this.turnInputs.deliverMailbox(threadId, input);
+    return this.withThreadMutation(threadId, () => this.turnInputs.deliverMailbox(threadId, input));
   }
 
   async runUserShellCommand(threadId: string, command: string, activeTurnId: string | null = null): Promise<void> {
-    this.assertAcceptingWork();
+    return this.withThreadMutation(
+      threadId,
+      () => this.runAdmittedUserShellCommand(threadId, command, activeTurnId),
+    );
+  }
+
+  private async runAdmittedUserShellCommand(threadId: string, command: string, activeTurnId: string | null): Promise<void> {
     const text = command.trim();
     if (!text) throw new Error('command must not be empty');
     const thread = await this.options.threadStore.getThread(threadId);
@@ -513,7 +565,7 @@ export class AgentLoop {
    * @param force 是否忽略 token 阈值强制压缩。
    */
   compactThreadContext(threadId: string, force = true): Promise<RuntimeThread> {
-    return this.compactionTurns.compact(threadId, force);
+    return this.withThreadMutation(threadId, () => this.compactionTurns.compact(threadId, force));
   }
   /**
    * 以 message.created 事件写入并广播一条完整消息。
@@ -546,6 +598,52 @@ export class AgentLoop {
 
   private assertAcceptingWork(): void {
     if (this.shuttingDown) throw new Error('Desktop runtime is shutting down and cannot accept new work.');
+  }
+
+  private assertThreadAcceptingWork(threadId: string): void {
+    this.assertAcceptingWork();
+    if (this.deletingThreads.has(threadId)) {
+      throw new Error(`thread ${threadId} is being deleted and cannot accept new work`);
+    }
+  }
+
+  /** Runs a per-thread mutation under the same admission boundary used by destructive deletion. */
+  async withThreadMutation<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+    this.assertThreadAcceptingWork(threadId);
+    let resolveAdmission: () => void = () => undefined;
+    const admission = new Promise<void>((resolve) => {
+      resolveAdmission = resolve;
+    });
+    const pending = this.threadMutationAdmissions.get(threadId) ?? new Set<Promise<void>>();
+    pending.add(admission);
+    this.threadMutationAdmissions.set(threadId, pending);
+    try {
+      return await operation();
+    } finally {
+      pending.delete(admission);
+      if (!pending.size && this.threadMutationAdmissions.get(threadId) === pending) {
+        this.threadMutationAdmissions.delete(threadId);
+      }
+      resolveAdmission();
+    }
+  }
+
+  private async waitForThreadMutationAdmissions(threadId: string): Promise<void> {
+    for (;;) {
+      const pending = [...(this.threadMutationAdmissions.get(threadId) ?? [])];
+      if (!pending.length) return;
+      await Promise.all(pending);
+    }
+  }
+
+  private async drainRegisteredTasksForDeletion(threadId: string): Promise<void> {
+    for (;;) {
+      const task = this.turnTasks.registeredForThread(threadId);
+      if (!task) return;
+      if (!task.controller.signal.aborted) await this.cancelTurn(threadId, task.turnId);
+      if (!task.done) throw new Error(`thread ${threadId} has a registered turn without a completion promise`);
+      await task.done.catch(() => undefined);
+    }
   }
 
   /**

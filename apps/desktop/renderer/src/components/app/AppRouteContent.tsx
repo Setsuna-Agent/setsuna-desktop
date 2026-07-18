@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeReviewTarget, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { CapabilitiesPage } from '../pages/CapabilitiesPage.js';
 import { SettingsPage } from '../pages/SettingsPage.js';
 import { AppChatSurface } from './AppChatSurface.js';
@@ -18,6 +18,7 @@ export function AppRouteContent({
   activeWorkspace,
   activeView,
   chatActions,
+  composerKey,
   conversationOverviewShowRequest,
   conversationOverviewVisibility,
   draft,
@@ -26,6 +27,7 @@ export function AppRouteContent({
   setActiveView,
   setDraft,
   skillSelectionRequest,
+  startCurrentThreadReview,
   updater,
   workspacePanels,
   onSelectSkillForChat,
@@ -47,6 +49,7 @@ export function AppRouteContent({
   activeWorkspace?: WorkspaceProject;
   activeView: MainView;
   chatActions: ChatTurnActions;
+  composerKey: string;
   conversationOverviewShowRequest: number;
   conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
@@ -55,6 +58,7 @@ export function AppRouteContent({
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
+  startCurrentThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
   updater: DesktopUpdaterStateView;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
@@ -205,6 +209,7 @@ export function AppRouteContent({
       bottomPanelSlot={workspacePanels.bottomPanelSlot}
       bottomPanelVisible={workspacePanels.bottomPanelVisible}
       canClearContext={Boolean(runtime.currentThread?.messages.length)}
+      composerKey={composerKey}
       config={runtime.config}
       conversationOverviewShowRequest={conversationOverviewShowRequest}
       conversationOverviewVisibility={conversationOverviewVisibility}
@@ -273,7 +278,7 @@ export function AppRouteContent({
           multi_agent_v2: enabled,
         },
       })}
-      onStartThreadReview={() => runtime.startCurrentThreadReview({ type: 'uncommittedChanges' })}
+      onStartThreadReview={() => startCurrentThreadReview({ type: 'uncommittedChanges' })}
       onSend={(value, options) => chatActions.sendInput(value, options)}
       onPlanDecision={(decision) => void chatActions.sendInput('', { planDecision: decision })}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}

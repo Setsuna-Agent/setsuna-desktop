@@ -1906,6 +1906,53 @@ describe('runtime server', () => {
     expect(loaded.data).not.toContain(startedThread.thread.id);
   });
 
+  it('drains an active AppServer turn before deletion and removes its scoped temporary workspace', async () => {
+    const capture = await createDelayedOpenAiCaptureServer();
+    let stream: RuntimeEventStream | undefined;
+    try {
+      await configureOpenAiProvider('delete-active-provider', capture.baseUrl);
+      const startedThread = await appServerRpc('thread/start', { name: 'Delete active AppServer thread' });
+      const threadId = startedThread.thread.id as string;
+      const workspaceStatus = await runtimeFetch(`/v1/workspace/status?threadId=${encodeURIComponent(threadId)}`);
+      const workspacePath = workspaceStatus.project.path as string;
+      await writeFile(path.join(workspacePath, 'delete-marker.txt'), 'delete with thread\n');
+      stream = await openRuntimeEventStream(threadId, 0);
+
+      await appServerRpc('turn/start', {
+        threadId,
+        input: [{ type: 'text', text: 'Remain active until deletion.' }],
+      });
+      await withTimeout(capture.nextBody, providerCaptureTimeoutMs, 'Timed out waiting for active deletion provider request');
+
+      await expect(appServerRpc('thread/delete', { threadId })).resolves.toEqual({});
+      await expect(stream.readContains('"type":"thread.deleted"')).resolves.toBe(true);
+      await expect(access(workspacePath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(appServerRpcEnvelope({
+        id: 'read_active_deleted',
+        method: 'thread/read',
+        params: { threadId },
+      })).resolves.toMatchObject({
+        id: 'read_active_deleted',
+        error: { code: -32004, message: 'Thread not found' },
+      });
+
+      // A late write from the deleted task would poison the shared RuntimeEventWriter. Prove a
+      // subsequent thread can still persist through that same writer instance.
+      const surviving = await appServerRpc('thread/start', { name: 'Surviving thread' });
+      await expect(appServerRpc('thread/name/set', {
+        threadId: surviving.thread.id,
+        name: 'Writer remains healthy',
+      })).resolves.toEqual({});
+      await expect(appServerRpc('thread/read', { threadId: surviving.thread.id })).resolves.toMatchObject({
+        thread: { name: 'Writer remains healthy' },
+      });
+    } finally {
+      await stream?.close();
+      capture.release();
+      await capture.close();
+    }
+  }, mediumIntegrationTestTimeoutMs);
+
   it('injects AppServer response items as hidden model-visible history', async () => {
     const startedThread = await appServerRpc('thread/start', { name: 'Injected AppServer RPC thread', cwd: process.cwd() });
 

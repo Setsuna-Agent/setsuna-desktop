@@ -40,9 +40,14 @@ import { deleteHookFromConfig, hookConfigLocation, hookInputToMatcherGroup, upda
 import { applyRuntimeEvent, isActivityEvent } from '../utils/runtimeEvents.js';
 import { startThreadReview } from './startThreadReview.js';
 import { useLatestRequestGuard } from './useLatestRequestGuard.js';
+import { useIdentityRequestGuard } from './useIdentityRequestGuard.js';
 
 export type LoadState = 'loading' | 'ready' | 'error';
 const lastActiveThreadStorageKey = 'setsuna-desktop:last-active-thread-id';
+
+export function isThreadContextCompacting(compactingThreadId: string | null, threadId: string | null): boolean {
+  return compactingThreadId !== null && compactingThreadId === threadId;
+}
 
 type RuntimeClientStateOptions = {
   activeProjectId: string | null;
@@ -63,7 +68,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
   const [config, setConfig] = useState<RuntimeConfigState | null>(null);
-  const [contextCompacting, setContextCompacting] = useState(false);
+  const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
   const [activityEvents, setActivityEvents] = useState<RuntimeEvent[]>([]);
   const [usage, setUsage] = useState<RuntimeUsageResponse | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
@@ -91,10 +96,12 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const memoryPreviewRequests = useLatestRequestGuard();
   const threadMemoryModeRequests = useLatestRequestGuard();
   const currentThreadId = currentThread?.id ?? null;
+  const contextRequests = useIdentityRequestGuard(currentThreadId ?? 'no-current-thread');
   const currentThreadIdRef = useRef(currentThreadId);
   const activeProjectIdRef = useRef(activeProjectId);
   currentThreadIdRef.current = currentThreadId;
   activeProjectIdRef.current = activeProjectId;
+  const contextCompacting = isThreadContextCompacting(contextCompactingThreadId, currentThreadId);
   const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
   const hasRunningThreadSummary = threads.some((thread) => Boolean(thread.activeTurnId))
     || archivedThreads.some((thread) => Boolean(thread.activeTurnId));
@@ -449,37 +456,44 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
 
   const clearCurrentThreadContext = useCallback(async () => {
     if (!currentThread) return null;
+    const isCurrentRequest = contextRequests.begin();
     const cleared = await client.clearThreadContext(currentThread.id);
-    setCurrentThread(cleared);
+    if (isCurrentRequest()) setCurrentThread(cleared);
     await reloadThreads();
     return cleared;
-  }, [client, currentThread, reloadThreads]);
+  }, [client, contextRequests, currentThread, reloadThreads]);
 
   const compactCurrentThreadContext = useCallback(async () => {
     if (!currentThread || contextCompacting) return null;
-    setContextCompacting(true);
+    const requestedThreadId = currentThread.id;
+    const isCurrentRequest = contextRequests.begin();
+    setContextCompactingThreadId(requestedThreadId);
     try {
       // 手动压缩会立刻置本地 loading，最终状态仍以 runtime 返回的 thread 为准。
-      const compacted = await client.compactThreadContext(currentThread.id);
-      setCurrentThread((thread) => (
-        !thread || thread.id !== compacted.id || compacted.lastSeq >= thread.lastSeq
-          ? compacted
-          : thread
-      ));
+      const compacted = await client.compactThreadContext(requestedThreadId);
+      if (isCurrentRequest()) {
+        setCurrentThread((thread) => (
+          thread?.id === compacted.id && compacted.lastSeq >= thread.lastSeq
+            ? compacted
+            : thread
+        ));
+      }
       await reloadThreads();
       return compacted;
     } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-      setCurrentThread((thread) => (
-        thread?.contextCompaction?.status === 'running'
-          ? { ...thread, contextCompaction: undefined }
-          : thread
-      ));
+      if (isCurrentRequest()) {
+        setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        setCurrentThread((thread) => (
+          thread?.id === requestedThreadId && thread.contextCompaction?.status === 'running'
+            ? { ...thread, contextCompaction: undefined }
+            : thread
+        ));
+      }
       return null;
     } finally {
-      setContextCompacting(false);
+      setContextCompactingThreadId((current) => current === requestedThreadId ? null : current);
     }
-  }, [client, contextCompacting, currentThread, reloadThreads]);
+  }, [client, contextCompacting, contextRequests, currentThread, reloadThreads]);
 
   const updateCurrentThreadMemoryMode = useCallback(
     async (mode: RuntimeThreadMemoryMode) => {
@@ -533,18 +547,28 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     if (failureCount) throw new Error(`${failureCount} 个归档对话删除失败，请重试。`);
   }, [client, reloadThreads]);
 
-  const startCurrentThreadReview = useCallback(async (target: RuntimeReviewTarget) => {
+  const startCurrentThreadReview = useCallback(async (
+    target: RuntimeReviewTarget,
+    scope?: {
+      claimComposerForThread: (threadId: string) => void;
+      isCurrentRequest: () => boolean;
+    },
+  ) => {
+    const isCurrentRequest = scope?.isCurrentRequest ?? (() => true);
     const started = await startThreadReview({
       activeProjectId,
       client,
       currentThread,
       onThreadCreated: async (thread) => {
-        setCurrentThread(thread);
+        if (isCurrentRequest()) {
+          scope?.claimComposerForThread(thread.id);
+          setCurrentThread(thread);
+        }
         await reloadThreads();
       },
       target,
     });
-    setActiveTurnId(started.turnId);
+    if (isCurrentRequest()) setActiveTurnId(started.turnId);
     return started;
   }, [activeProjectId, client, currentThread, reloadThreads]);
 

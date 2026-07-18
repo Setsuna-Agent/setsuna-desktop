@@ -89,6 +89,8 @@ export function isGoalToolName(name: string): boolean {
 export class RuntimeGoalCoordinator {
   private readonly scheduling = new Set<string>();
   private readonly noProgressTurns = new Map<string, number>();
+  private readonly deletionPausedThreads = new Set<string>();
+  private readonly pendingSettlements = new Map<string, Set<Promise<void>>>();
   private stopped = false;
 
   constructor(private readonly options: RuntimeGoalCoordinatorOptions) {}
@@ -164,10 +166,39 @@ export class RuntimeGoalCoordinator {
   }
 
   observeRun(threadId: string, turnId: string, taskKind: RuntimeTaskKind, done: Promise<void>): void {
-    void done.then(
+    const settlement = done.then(
       () => this.onTurnSettled(threadId, turnId, taskKind),
       () => this.onTurnSettled(threadId, turnId, taskKind),
     ).catch(() => undefined);
+    const pending = this.pendingSettlements.get(threadId) ?? new Set<Promise<void>>();
+    pending.add(settlement);
+    this.pendingSettlements.set(threadId, pending);
+    void settlement.finally(() => {
+      pending.delete(settlement);
+      if (!pending.size && this.pendingSettlements.get(threadId) === pending) this.pendingSettlements.delete(threadId);
+    });
+  }
+
+  beginThreadDeletion(threadId: string): void {
+    this.deletionPausedThreads.add(threadId);
+  }
+
+  async waitForThreadDeletionPause(threadId: string): Promise<void> {
+    for (;;) {
+      const pending = [...(this.pendingSettlements.get(threadId) ?? [])];
+      if (!pending.length) return;
+      await Promise.all(pending);
+    }
+  }
+
+  finishThreadDeletion(threadId: string, deleted: boolean): void {
+    this.deletionPausedThreads.delete(threadId);
+    if (deleted) {
+      this.noProgressTurns.delete(threadId);
+      this.pendingSettlements.delete(threadId);
+      return;
+    }
+    void this.continueIfIdle(threadId).catch(() => undefined);
   }
 
   async execute(name: string, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<GoalToolExecutionResult> {
@@ -193,11 +224,11 @@ export class RuntimeGoalCoordinator {
   }
 
   private async continueIfIdle(threadId: string): Promise<void> {
-    if (this.stopped || this.scheduling.has(threadId) || this.options.activeTask(threadId)) return;
+    if (this.stopped || this.deletionPausedThreads.has(threadId) || this.scheduling.has(threadId) || this.options.activeTask(threadId)) return;
     this.scheduling.add(threadId);
     try {
       const goal = await this.getGoal(threadId);
-      if (!goal || goal.status !== 'active' || this.options.activeTask(threadId)) return;
+      if (this.deletionPausedThreads.has(threadId) || !goal || goal.status !== 'active' || this.options.activeTask(threadId)) return;
       if (goal.tokenBudget !== null && goal.tokensUsed >= goal.tokenBudget) {
         await this.updateStatus(goal, 'budgetLimited');
         return;
@@ -211,6 +242,7 @@ export class RuntimeGoalCoordinator {
   }
 
   private async onTurnSettled(threadId: string, turnId: string, taskKind: RuntimeTaskKind): Promise<void> {
+    if (this.deletionPausedThreads.has(threadId)) return;
     const goal = await this.getGoal(threadId);
     if (!goal) return;
     if (taskKind !== 'goal') {

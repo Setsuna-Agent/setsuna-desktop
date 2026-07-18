@@ -8,11 +8,14 @@ import {
   type RuntimePlanDecision,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
+import { useIdentityRequestGuard } from './useIdentityRequestGuard.js';
 
 export function useChatTurnActions({
   activeProjectId,
   activeTurnId,
+  claimComposerForThread,
   client,
+  composerKey,
   currentThread,
   draft,
   expandProject,
@@ -25,7 +28,9 @@ export function useChatTurnActions({
 }: {
   activeProjectId: string | null;
   activeTurnId: string | null;
+  claimComposerForThread: (threadId: string) => void;
   client: DesktopRuntimeClient;
+  composerKey: string;
   currentThread: RuntimeThread | null;
   draft: string;
   expandProject?: (projectId: string) => void;
@@ -36,6 +41,7 @@ export function useChatTurnActions({
   setError: Dispatch<SetStateAction<string | null>>;
   terminalTurnIdsRef: MutableRefObject<Set<string>>;
 }) {
+  const actionRequests = useIdentityRequestGuard(composerKey);
   const sendInput = useCallback(
     async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
       const input = (value ?? draft).trim();
@@ -43,15 +49,20 @@ export function useChatTurnActions({
       if (!input && !attachments.length && !options.planDecision) return false;
       // 计划决策只能针对已有线程里的 awaiting 计划，没有线程时无从裁决。
       if (options.planDecision && !currentThread) return false;
+      const isCurrentRequest = actionRequests.begin();
       try {
         let thread = currentThread;
         if (!thread) {
           // 首条消息事件会先投影出本地 fallback；runtime 随后用当前模型生成正式标题。
           thread = await client.createThread({ projectId: activeProjectId ?? undefined });
-          if (activeProjectId) {
-            expandProject?.(activeProjectId);
-          }
-          setCurrentThread(thread);
+          claimCreatedChatThreadForSend({
+            activeProjectId,
+            claimComposerForThread,
+            expandProject,
+            isCurrentRequest,
+            setCurrentThread,
+            thread,
+          });
           await reloadThreads();
         }
         const threadId = thread.id;
@@ -60,16 +71,18 @@ export function useChatTurnActions({
           // 目标轮次由 setThreadGoal 内部启动。重新读取 runtime 任务注册表快照，避免遗漏或重叠的
           // SSE turn.started 事件导致输入框缺少停止操作。
           const goalThread = await client.getThread(threadId);
-          terminalTurnIdsRef.current.delete(goalThread.activeTurnId ?? '');
-          setCurrentThread((current) => mergeGoalThreadSnapshot(current, goalThread, goal));
-          if (goalThread.activeTurnId) setActiveTurnId(goalThread.activeTurnId);
-          setDraft('');
+          if (isCurrentRequest()) {
+            terminalTurnIdsRef.current.delete(goalThread.activeTurnId ?? '');
+            setCurrentThread((current) => mergeGoalThreadSnapshot(current, goalThread, goal));
+            if (goalThread.activeTurnId) setActiveTurnId(goalThread.activeTurnId);
+            setDraft('');
+          }
           await reloadThreads();
           // 目标执行由 runtime 管理：设置目标会调度首个隐藏目标轮次，之后每次空闲完成都会调度
           // 下一个轮次，直到目标进入终止状态。
           return true;
         }
-        setDraft('');
+        if (isCurrentRequest()) setDraft('');
         const startTurn = () => client.sendTurn(threadId, {
           attachments,
           input,
@@ -91,15 +104,20 @@ export function useChatTurnActions({
               threadId,
             })
           : await startTurn();
-        if (!terminalTurnIdsRef.current.has(response.turnId)) setActiveTurnId(response.turnId);
+        if (isCurrentRequest() && !terminalTurnIdsRef.current.has(response.turnId)) {
+          setActiveTurnId(response.turnId);
+        }
+        if (!isCurrentRequest()) void reloadThreads().catch(() => undefined);
         return true;
       } catch (unknownError) {
-        setDraft((current) => current || input);
-        setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        if (isCurrentRequest()) {
+          setDraft((current) => current || input);
+          setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        }
         return false;
       }
     },
-    [activeProjectId, activeTurnId, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
+    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
   );
 
   const cancelActiveTurn = useCallback(async () => {
@@ -115,18 +133,20 @@ export function useChatTurnActions({
       if (!currentThread || activeTurnId) return;
       const ids = [...new Set(messageIds.map((id) => id.trim()).filter(Boolean))];
       if (!ids.length) return;
+      const isCurrentRequest = actionRequests.begin();
       try {
         setError(null);
         const updated = await client.deleteMessages(currentThread.id, { messageIds: ids });
-        setCurrentThread(updated);
+        if (isCurrentRequest()) setCurrentThread(updated);
         await reloadThreads();
       } catch (unknownError) {
         const message = normalizeRuntimeActionError(unknownError, '删除消息失败：当前运行时还没有加载消息删除接口，请重启 Electron 窗口后再试。');
+        if (!isCurrentRequest()) return;
         setError(message);
         throw new Error(message);
       }
     },
-    [activeTurnId, client, currentThread, reloadThreads, setCurrentThread, setError],
+    [actionRequests, activeTurnId, client, currentThread, reloadThreads, setCurrentThread, setError],
   );
 
   const editUserMessage = useCallback(
@@ -137,26 +157,54 @@ export function useChatTurnActions({
         setError('消息内容不能为空');
         return;
       }
+      const isCurrentRequest = actionRequests.begin();
       try {
         setError(null);
         const response = await client.regenerateFromMessage(currentThread.id, messageId, { content: nextContent });
         const updated = await client.getThread(currentThread.id);
-        setCurrentThread(updated);
+        if (isCurrentRequest()) setCurrentThread(updated);
         await reloadThreads();
-        if (!terminalTurnIdsRef.current.has(response.turnId)) setActiveTurnId(response.turnId);
+        if (isCurrentRequest() && !terminalTurnIdsRef.current.has(response.turnId)) {
+          setActiveTurnId(response.turnId);
+        }
       } catch (unknownError) {
         const message = normalizeRuntimeActionError(unknownError, '编辑消息失败：当前运行时还没有加载编辑重跑接口，请重启 Electron 窗口后再试。');
+        if (!isCurrentRequest()) return;
         setError(message);
         throw new Error(message);
       }
     },
-    [activeTurnId, client, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, terminalTurnIdsRef],
+    [actionRequests, activeTurnId, client, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, terminalTurnIdsRef],
   );
 
   return { cancelActiveTurn, deleteMessages, editUserMessage, sendInput };
 }
 
 export type ChatTurnActions = ReturnType<typeof useChatTurnActions>;
+
+export function claimCreatedChatThreadForSend({
+  activeProjectId,
+  claimComposerForThread,
+  expandProject,
+  isCurrentRequest,
+  setCurrentThread,
+  thread,
+}: {
+  activeProjectId: string | null;
+  claimComposerForThread: (threadId: string) => void;
+  expandProject?: (projectId: string) => void;
+  isCurrentRequest: () => boolean;
+  setCurrentThread: Dispatch<SetStateAction<RuntimeThread | null>>;
+  thread: RuntimeThread;
+}): boolean {
+  if (!isCurrentRequest()) return false;
+  // Claim before exposing the runtime thread so a first-turn send does not
+  // remount the composer and delete attachments that are about to be consumed.
+  claimComposerForThread(thread.id);
+  if (activeProjectId) expandProject?.(activeProjectId);
+  setCurrentThread(thread);
+  return true;
+}
 
 function normalizeRuntimeActionError(error: unknown, notFoundMessage: string): string {
   const message = error instanceof Error ? error.message : String(error);

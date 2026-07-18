@@ -16,6 +16,17 @@ import {
 
 const attachmentExitAnimationMs = 180;
 
+export function disposableChatAttachments(
+  items: ChatComposerAttachmentItem[],
+  inFlightAttachmentIds: ReadonlySet<string>,
+): RuntimeMessageAttachment[] {
+  return items
+    .map((item) => item.attachment)
+    .filter((attachment): attachment is RuntimeMessageAttachment => (
+      attachment !== undefined && !inFlightAttachmentIds.has(attachment.id)
+    ));
+}
+
 export function useChatAttachments({
   client,
   supportsImageInput,
@@ -26,6 +37,8 @@ export function useChatAttachments({
   const [items, setItems] = useState<ChatComposerAttachmentItem[]>([]);
   const itemsRef = useRef<ChatComposerAttachmentItem[]>([]);
   const cancelledKeysRef = useRef(new Set<string>());
+  const inFlightAttachmentIdsRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
   const removalTimersRef = useRef(new Map<string, number>());
 
   const commitItems = useCallback((next: ChatComposerAttachmentItem[]) => {
@@ -118,6 +131,23 @@ export function useChatAttachments({
     commitItems(itemsRef.current.filter((item) => !item.attachment || !sentIds.has(item.attachment.id)));
   }, [commitItems]);
 
+  const beginSend = useCallback((sentAttachments: RuntimeMessageAttachment[]) => {
+    for (const attachment of sentAttachments) inFlightAttachmentIdsRef.current.add(attachment.id);
+  }, []);
+
+  const settleSend = useCallback((sentAttachments: RuntimeMessageAttachment[], sent: boolean) => {
+    for (const attachment of sentAttachments) inFlightAttachmentIdsRef.current.delete(attachment.id);
+    if (sent) {
+      if (mountedRef.current) clearAfterSend(sentAttachments);
+      return;
+    }
+    // If navigation already disposed this composer, a rejected send has no UI that
+    // can retry the attachments. Release its stored assets now instead of leaking them.
+    if (!mountedRef.current) {
+      for (const attachment of sentAttachments) discardStoredAttachment(attachment);
+    }
+  }, [clearAfterSend, discardStoredAttachment]);
+
   useEffect(() => {
     if (supportsImageInput) return;
     const removed = itemsRef.current.filter((item) => item.attachment && isImageMessageAttachment(item.attachment));
@@ -125,13 +155,18 @@ export function useChatAttachments({
     commitItems(itemsRef.current.filter((item) => !removed.includes(item)));
   }, [commitItems, supportsImageInput]);
 
-  useEffect(() => () => {
-    for (const timer of removalTimersRef.current.values()) window.clearTimeout(timer);
-    for (const item of itemsRef.current) {
-      cancelledKeysRef.current.add(item.key);
-      discardStoredAttachment(item.attachment);
-    }
-    removalTimersRef.current.clear();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const timer of removalTimersRef.current.values()) window.clearTimeout(timer);
+      const disposableAttachments = disposableChatAttachments(itemsRef.current, inFlightAttachmentIdsRef.current);
+      for (const item of itemsRef.current) {
+        cancelledKeysRef.current.add(item.key);
+      }
+      for (const attachment of disposableAttachments) discardStoredAttachment(attachment);
+      removalTimersRef.current.clear();
+    };
   }, [discardStoredAttachment]);
 
   const sendableAttachments = items
@@ -142,11 +177,12 @@ export function useChatAttachments({
     addExistingImage,
     addFiles,
     atLimit: items.filter((item) => item.status !== 'removing').length >= maxChatAttachments,
+    beginSend,
     busy: items.some((item) => item.status === 'uploading'),
-    clearAfterSend,
     items,
     remove,
     sendableAttachments,
+    settleSend,
   };
 }
 

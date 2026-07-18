@@ -38,6 +38,7 @@ export type WorkspaceProjectStore = {
   archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
   ensureTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<WorkspaceProject>;
+  removeTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<void>;
   getStatus(projectId?: string): Promise<WorkspaceStatus>;
   listEntries(projectId: string, relativePath?: string): Promise<WorkspaceEntryList>;
   searchEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;

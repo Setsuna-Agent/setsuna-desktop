@@ -27,8 +27,12 @@ export type RuntimeTurnTaskRun<T = void> = {
 export class RuntimeTurnTaskRegistry {
   private readonly tasksByKey = new Map<string, RuntimeTurnTask>();
   private readonly tasksByThread = new Map<string, RuntimeTurnTask>();
+  private readonly blockedThreads = new Set<string>();
 
   start(input: RuntimeTurnTaskStartInput): RuntimeTurnTask {
+    if (this.blockedThreads.has(input.threadId)) {
+      throw new Error(`thread ${input.threadId} is being deleted and cannot accept new turns`);
+    }
     const active = this.activeForThread(input.threadId);
     if (active) {
       throw new Error(`thread ${input.threadId} already has active ${active.taskKind} turn ${active.turnId}`);
@@ -63,6 +67,20 @@ export class RuntimeTurnTaskRegistry {
     const task = this.tasksByThread.get(threadId);
     if (!task || task.controller.signal.aborted) return null;
     return task;
+  }
+
+  /** Returns a task until its done promise settles, even after cancellation hid it from active state. */
+  registeredForThread(threadId: string): RuntimeTurnTask | null {
+    return this.tasksByThread.get(threadId) ?? null;
+  }
+
+  blockThread(threadId: string): void {
+    if (this.blockedThreads.has(threadId)) throw new Error(`thread ${threadId} is already being deleted`);
+    this.blockedThreads.add(threadId);
+  }
+
+  unblockThread(threadId: string): void {
+    this.blockedThreads.delete(threadId);
   }
 
   taskFor(threadId: string, turnId: string): RuntimeTurnTask | null {

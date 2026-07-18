@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, symlink, truncate, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, realpath, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -117,6 +117,93 @@ describe('file workspace project store', () => {
     });
     await expect(store.readFile(second.id, 'src/example.ts')).rejects.toThrow();
     expect((await store.listProjects()).projects).toEqual([]);
+  });
+
+  it('removes only the selected scoped temporary workspace', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const dataDir = path.join(root, 'data');
+    const projectDir = path.join(root, 'formal-project');
+    await mkdir(projectDir);
+    await writeFile(path.join(projectDir, 'formal.txt'), 'keep formal\n');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+    const formalProject = await store.addProject({ path: projectDir });
+    const createdAt = new Date(2026, 6, 18, 12, 0, 0).toISOString();
+    const scoped = await store.ensureTemporaryWorkspace({ threadId: 'thread_remove', createdAt });
+    const sibling = await store.ensureTemporaryWorkspace({ threadId: 'thread_keep', createdAt });
+    const legacyMarker = path.join(dataDir, 'temporary-workspace', 'legacy.txt');
+    await Promise.all([
+      writeFile(path.join(scoped.path, 'delete-me.txt'), 'delete\n'),
+      writeFile(path.join(sibling.path, 'keep-me.txt'), 'keep sibling\n'),
+      writeFile(legacyMarker, 'keep legacy\n'),
+    ]);
+
+    await store.removeTemporaryWorkspace({ threadId: 'thread_remove', createdAt });
+
+    await expect(access(scoped.path)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(sibling.path, 'keep-me.txt'), 'utf8')).resolves.toBe('keep sibling\n');
+    await expect(readFile(legacyMarker, 'utf8')).resolves.toBe('keep legacy\n');
+    await expect(readFile(path.join(formalProject.path, 'formal.txt'), 'utf8')).resolves.toBe('keep formal\n');
+  });
+
+  it('unlinks a scoped workspace junction without traversing its target', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const dataDir = path.join(root, 'data');
+    const temporaryRoot = path.join(dataDir, 'temporary-workspace');
+    const dateRoot = path.join(temporaryRoot, '2026-07-18');
+    const outside = path.join(root, 'outside-target');
+    const scopedLink = path.join(dateRoot, 'thread_link');
+    await Promise.all([mkdir(dateRoot, { recursive: true }), mkdir(outside)]);
+    await writeFile(path.join(outside, 'sentinel.txt'), 'outside survives\n');
+    await symlink(outside, scopedLink, process.platform === 'win32' ? 'junction' : 'dir');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+
+    await store.removeTemporaryWorkspace({
+      threadId: 'thread_link',
+      createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
+    });
+
+    await expect(lstat(scopedLink)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(outside, 'sentinel.txt'), 'utf8')).resolves.toBe('outside survives\n');
+  });
+
+  it('rejects a temporary workspace root junction instead of deleting through it', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const dataDir = path.join(root, 'data');
+    const linkedRoot = path.join(dataDir, 'temporary-workspace');
+    const outside = path.join(root, 'outside-root');
+    const outsideScoped = path.join(outside, '2026-07-18', 'thread_target');
+    await mkdir(outsideScoped, { recursive: true });
+    await writeFile(path.join(outsideScoped, 'sentinel.txt'), 'outside survives\n');
+    await mkdir(dataDir, { recursive: true });
+    await symlink(outside, linkedRoot, process.platform === 'win32' ? 'junction' : 'dir');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+
+    await expect(store.removeTemporaryWorkspace({
+      threadId: 'thread_target',
+      createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
+    })).rejects.toThrow('must not be a symbolic link or junction');
+    await expect(readFile(path.join(outsideScoped, 'sentinel.txt'), 'utf8')).resolves.toBe('outside survives\n');
+  });
+
+  it('rejects a cross-date junction inside the temporary workspace root', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const dataDir = path.join(root, 'data');
+    const temporaryRoot = path.join(dataDir, 'temporary-workspace');
+    const targetDate = path.join(temporaryRoot, '2026-07-17');
+    const linkedDate = path.join(temporaryRoot, '2026-07-18');
+    const targetWorkspace = path.join(targetDate, 'thread_cross_date');
+    await mkdir(targetWorkspace, { recursive: true });
+    await writeFile(path.join(targetWorkspace, 'sentinel.txt'), 'other date survives\n');
+    await symlink(targetDate, linkedDate, process.platform === 'win32' ? 'junction' : 'dir');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+
+    await expect(store.removeTemporaryWorkspace({
+      threadId: 'thread_cross_date',
+      createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
+    })).rejects.toThrow('date directory must not be a symbolic link or junction');
+
+    await expect(readFile(path.join(targetWorkspace, 'sentinel.txt'), 'utf8')).resolves.toBe('other date survives\n');
+    expect((await lstat(linkedDate)).isSymbolicLink()).toBe(true);
   });
 
   it('does not materialize or cache an untrusted scoped temporary workspace id', async () => {

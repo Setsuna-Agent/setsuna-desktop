@@ -124,6 +124,7 @@ export function ChatComposer({
   const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const commandCursorOffset = cursorOffset ?? draft.length;
   const mentionCommand = useMemo(() => parseMentionCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
@@ -138,11 +139,12 @@ export function ChatComposer({
     addExistingImage,
     addFiles: addAttachmentFiles,
     atLimit: attachmentLimitReached,
+    beginSend: beginAttachmentSend,
     busy: attachmentsBusy,
-    clearAfterSend: clearAttachmentsAfterSend,
     items: attachmentItems,
     remove: removeAttachment,
     sendableAttachments,
+    settleSend: settleAttachmentSend,
   } = useChatAttachments({ client, supportsImageInput });
   const thinkingConfig = useMemo(() => activeModelThinkingConfig(config), [config]);
   const attachmentOnlyReady = sendableAttachments.length > 0 && !draft.trim();
@@ -336,6 +338,13 @@ export function ChatComposer({
     setGoalModeEnabled(false);
     setUsagePanelOpen(false);
   }, [currentThread?.id]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!workspaceMentionRequest || consumedWorkspaceMentionRequestIdRef.current === workspaceMentionRequest.requestId) return;
@@ -594,12 +603,15 @@ export function ChatComposer({
       thinkingEnabled,
       thinkingSupported: thinkingConfig.supported,
     });
+    const submittedAttachments = sendOptions.attachments ?? [];
+    beginAttachmentSend(submittedAttachments);
     setSubmitting(true);
     const sent = await onSend(value, sendOptions).catch(() => false);
+    settleAttachmentSend(submittedAttachments, sent);
+    if (!mountedRef.current) return;
     setSubmitting(false);
     if (!sent) return;
     setSelectedSkills([]);
-    clearAttachmentsAfterSend(sendOptions.attachments ?? []);
     if (!steering) {
       setPlanModeEnabled(false);
       setGoalModeEnabled(false);
@@ -703,7 +715,7 @@ export function ChatComposer({
         onSubmit={submitDraft}
         onCancel={onCancelActiveTurn}
         header={
-          <ChatAttachmentTray items={attachmentItems} onRemove={removeAttachment} />
+          <ChatAttachmentTray disabled={submitting} items={attachmentItems} onRemove={removeAttachment} />
         }
         footer={(actions) => (
           <div className="chat-sender__footer">

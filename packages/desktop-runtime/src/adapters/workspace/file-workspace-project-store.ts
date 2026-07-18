@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, realpath, rm, stat, writeFile as writeFileFs } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, stat, unlink, writeFile as writeFileFs } from 'node:fs/promises';
 import path from 'node:path';
 import {
   TEMPORARY_WORKSPACE_PROJECT_ID,
@@ -123,6 +123,68 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const date = existingDate ?? requestedDate;
     this.temporaryWorkspaceDates.set(threadId, date);
     return this.threadTemporaryWorkspace(date, threadId);
+  }
+
+  async removeTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<void> {
+    const threadId = assertSafeRuntimeId(input.threadId, 'Thread id');
+    try {
+      const rootStat = await lstatIfExists(this.temporaryWorkspacePath);
+      if (!rootStat) return;
+      // The root is a configured trust boundary. Following a junction here would make an external
+      // directory look self-contained after realpath and could turn scoped cleanup into data loss.
+      if (rootStat.isSymbolicLink()) {
+        throw new Error('Temporary workspace root must not be a symbolic link or junction.');
+      }
+      if (!rootStat.isDirectory()) throw new Error('Temporary workspace root is not a directory.');
+      const temporaryWorkspaceRoot = await realpath(this.temporaryWorkspacePath);
+      const requestedDate = localDateSegment(input.createdAt, this.clock.now());
+      const cachedDate = this.temporaryWorkspaceDates.get(threadId);
+      const date = cachedDate ?? await this.findTemporaryWorkspaceDate(threadId, requestedDate);
+      if (!date || !TEMPORARY_WORKSPACE_DATE.test(date)) return;
+
+      const dateDirectory = path.resolve(this.temporaryWorkspacePath, date);
+      assertPathWithin(this.temporaryWorkspacePath, dateDirectory);
+      const dateStat = await lstatIfExists(dateDirectory);
+      if (!dateStat) return;
+      if (dateStat.isSymbolicLink()) {
+        throw new Error('Temporary workspace date directory must not be a symbolic link or junction.');
+      }
+      if (!dateStat.isDirectory()) throw new Error('Temporary workspace date path is not a directory.');
+      const canonicalDateDirectory = await realpath(dateDirectory);
+      const expectedCanonicalDateDirectory = path.resolve(temporaryWorkspaceRoot, date);
+      if (!sameResolvedPath(canonicalDateDirectory, expectedCanonicalDateDirectory)) {
+        throw new Error('Temporary workspace date directory does not match its canonical path.');
+      }
+
+      const target = path.resolve(dateDirectory, threadId);
+      assertPathWithin(this.temporaryWorkspacePath, target);
+      const targetStat = await lstatIfExists(target);
+      if (!targetStat) return;
+      // A scoped workspace may have been replaced by a symlink/junction. Remove only that link;
+      // recursive deletion must never follow it into a location outside the runtime data root.
+      if (targetStat.isSymbolicLink()) {
+        await unlink(target);
+        return;
+      }
+      if (!targetStat.isDirectory()) throw new Error('Temporary workspace path is not a directory.');
+
+      const workspacePath = await realpath(target);
+      assertPathWithin(canonicalDateDirectory, workspacePath);
+      const currentRootStat = await lstat(this.temporaryWorkspacePath);
+      if (currentRootStat.isSymbolicLink() || !currentRootStat.isDirectory()) {
+        throw new Error('Temporary workspace root changed during cleanup.');
+      }
+      const currentDateStat = await lstat(dateDirectory);
+      if (currentDateStat.isSymbolicLink() || !currentDateStat.isDirectory()) {
+        throw new Error('Temporary workspace date directory changed during cleanup.');
+      }
+      if (!sameResolvedPath(await realpath(dateDirectory), canonicalDateDirectory)) {
+        throw new Error('Temporary workspace date directory changed during cleanup.');
+      }
+      await rm(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    } finally {
+      this.temporaryWorkspaceDates.delete(threadId);
+    }
   }
 
   async getStatus(projectId?: string): Promise<WorkspaceStatus> {
@@ -444,11 +506,24 @@ async function directoryExists(directory: string): Promise<boolean> {
   return stat(directory).then((value) => value.isDirectory()).catch(() => false);
 }
 
+async function lstatIfExists(target: string) {
+  try {
+    return await lstat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 function assertPathWithin(root: string, target: string): void {
   const relative = path.relative(path.resolve(root), path.resolve(target));
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error('Temporary workspace escapes its storage root.');
   }
+}
+
+function sameResolvedPath(left: string, right: string): boolean {
+  return path.relative(path.resolve(left), path.resolve(right)) === '';
 }
 
 async function safeResolve(projectRoot: string, relativePath: string): Promise<string> {

@@ -6,7 +6,10 @@ import {
   type CSSProperties,
   type SetStateAction,
 } from 'react';
+import type { RuntimeReviewTarget } from '@setsuna-desktop/contracts';
 import { useChatTurnActions } from './useChatTurnActions.js';
+import { chatComposerTargetIdentity, useChatComposerSession } from './useChatComposerSession.js';
+import { useIdentityRequestGuard } from './useIdentityRequestGuard.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { useDesktopPanelResize } from './useDesktopPanelResize.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
@@ -21,7 +24,6 @@ import type { ChatSkillSelectionRequest, MainView } from '../types/app.js';
 
 export function useDesktopAppController() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
   const [activeView, setActiveView] = useState<MainView>('chat');
   const [sidebarManuallyCollapsed, setSidebarManuallyCollapsed] = useState(false);
   const [sidebarManuallyExpanded, setSidebarManuallyExpanded] = useState(false);
@@ -44,6 +46,18 @@ export function useDesktopAppController() {
     terminalTurnIdsRef,
     threads,
   } = runtime;
+  const composerSession = useChatComposerSession(chatComposerTargetIdentity(
+    currentThread?.id,
+    currentThread ? null : activeProjectId,
+  ));
+  const {
+    claimForThread: claimComposerForThread,
+    composerKey,
+    draft,
+    reset: resetComposer,
+    setDraft,
+  } = composerSession;
+  const reviewRequests = useIdentityRequestGuard(composerKey);
 
   const shellRef = useRef<HTMLDivElement | null>(null);
   const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -164,7 +178,9 @@ export function useDesktopAppController() {
   const chatActions = useChatTurnActions({
     activeProjectId,
     activeTurnId,
+    claimComposerForThread,
     client,
+    composerKey,
     currentThread,
     draft,
     expandProject: navigation.expandProject,
@@ -180,14 +196,23 @@ export function useDesktopAppController() {
     skillSelectionRequestIdRef.current += 1;
     setActiveView('chat');
     setSkillSelectionRequest({
+      composerKey,
       skillId,
       requestId: skillSelectionRequestIdRef.current,
     });
-  }, []);
+  }, [composerKey]);
 
   const clearSkillSelectionRequest = useCallback((requestId: number) => {
     setSkillSelectionRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
+
+  const startCurrentThreadReview = useCallback((target: RuntimeReviewTarget) => {
+    const isCurrentRequest = reviewRequests.begin();
+    return runtime.startCurrentThreadReview(target, {
+      claimComposerForThread,
+      isCurrentRequest,
+    });
+  }, [claimComposerForThread, reviewRequests, runtime]);
 
   const shellSidebarState = resolveShellSidebarState(activeView, sidebarCollapsed);
   const shellStyle = {
@@ -215,6 +240,7 @@ export function useDesktopAppController() {
     activeView,
     chatActions,
     clearSkillSelectionRequest,
+    composerKey,
     draft,
     globalThreads,
     handleSidebarResizeStep,
@@ -226,6 +252,7 @@ export function useDesktopAppController() {
     loadState,
     navigation,
     projectWorkspace,
+    resetComposer,
     runtime,
     searchTriggerRef,
     selectSkillForChat,
@@ -240,6 +267,7 @@ export function useDesktopAppController() {
     sidebarMinWidth,
     sidebarWidth,
     skillSelectionRequest,
+    startCurrentThreadReview,
     terminalMaxHeight,
     terminalHeight,
     terminalMinHeight,
