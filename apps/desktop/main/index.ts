@@ -4,6 +4,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  Menu,
   nativeImage,
   safeStorage,
   session,
@@ -18,6 +19,7 @@ import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hydrateDesktopProcessEnvironment } from './desktop-environment.js';
+import { createBrowserContextMenuTemplate } from './browser-context-menu.js';
 import { DesktopBrowserController } from './browser-control.js';
 import { BrowserControlServer } from './browser-control-server.js';
 import { loadBrowserFavicon } from './browser-favicon.js';
@@ -178,21 +180,33 @@ async function createWindow(): Promise<void> {
   });
   mainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
     guestContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-    guestContents.setWindowOpenHandler(({ url }) => {
+    const requestNewBrowserTab = (url: string): boolean => {
       const hostWebContents = guestContents.hostWebContents;
-      if (isAllowedEmbeddedBrowserUrl(url) && hostWebContents) {
+      if (isAllowedEmbeddedBrowserUrl(url) && hostWebContents && !hostWebContents.isDestroyed()) {
         console.info('[browser] intercepted new-window request', { openerWebContentsId: guestContents.id, url });
         hostWebContents.send('browser:open-new-tab', {
           openerWebContentsId: guestContents.id,
           url,
         });
-      } else {
-        console.warn('[browser] blocked new-window request', {
-          hasHostWebContents: Boolean(hostWebContents),
-          openerWebContentsId: guestContents.id,
-          url,
-        });
+        return true;
       }
+      console.warn('[browser] blocked new-window request', {
+        hasHostWebContents: Boolean(hostWebContents),
+        openerWebContentsId: guestContents.id,
+        url,
+      });
+      return false;
+    };
+    guestContents.on('context-menu', (_contextMenuEvent, params) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      Menu.buildFromTemplate(createBrowserContextMenuTemplate(guestContents, params, {
+        canOpenInNewTab: isAllowedEmbeddedBrowserUrl,
+        copyText: (value) => clipboard.writeText(value),
+        openInNewTab: (url) => { requestNewBrowserTab(url); },
+      })).popup({ window: mainWindow });
+    });
+    guestContents.setWindowOpenHandler(({ url }) => {
+      requestNewBrowserTab(url);
       return { action: 'deny' };
     });
     guestContents.on('will-navigate', (event, url) => {
