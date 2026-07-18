@@ -32,6 +32,7 @@ import { RuntimePromptContextAssembler } from './runtime-prompt-context-assemble
 import { isReviewReadOnlyTool } from './runtime-review-profile.js';
 import { RuntimeToolRouter } from './tool-router.js';
 import { buildRuntimeAttachmentContext, messageForModel } from './runtime-attachment-context.js';
+import { normalizeModelConversationOrder } from './runtime-model-message-order.js';
 
 const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
@@ -107,6 +108,7 @@ export class RuntimeSamplingContextBuilder {
     turnId: string;
     toolAccess?: 'all' | 'read-only' | 'none';
   }): Promise<RuntimeSamplingStepContext> {
+    const orderedConversationMessages = normalizeModelConversationOrder(conversationMessages);
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
     const environment = await this.options.environmentResolver.resolve({
@@ -117,7 +119,7 @@ export class RuntimeSamplingContextBuilder {
     const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
     const attachmentContext = await buildRuntimeAttachmentContext({
       attachmentStore: this.options.attachmentStore,
-      messages: [...(snapshotThread?.messages ?? thread.messages), ...conversationMessages],
+      messages: [...(snapshotThread?.messages ?? thread.messages), ...orderedConversationMessages],
       now: this.options.clock.now(),
       threadId,
       turnId,
@@ -172,7 +174,7 @@ export class RuntimeSamplingContextBuilder {
         ...hookContextMessages,
         ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),
       ],
-      skillActivationText: currentTurnSkillActivationText(conversationMessages, turnId),
+      skillActivationText: currentTurnSkillActivationText(orderedConversationMessages, turnId),
       skillIds,
       thread,
       toolContext,
@@ -187,7 +189,7 @@ export class RuntimeSamplingContextBuilder {
       + reservedOutputTokens;
     const compactedConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
       force: false,
-      messages: conversationMessages,
+      messages: orderedConversationMessages,
       reservedTokens,
       runtimeConfig: stepRuntimeConfig,
       signal,

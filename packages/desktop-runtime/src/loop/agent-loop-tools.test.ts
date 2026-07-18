@@ -5257,6 +5257,18 @@ describe('agent loop tools', () => {
     expect(secondRequestMessages[steerMessageIndex]?.content).toBe('Prefer the shorter path.');
     expect(modelClient.requests[1].stepSnapshot?.inputMessageIds).toContain(secondRequestMessages[steerMessageIndex]?.id);
     expect(modelClient.requests[1].stepSnapshot?.conversationMessageIds).toContain(secondRequestMessages[steerMessageIndex]?.id);
+
+    await loop.sendTurn(thread.id, { input: 'Continue in the same thread.' });
+    const resumedMessages = modelClient.requests[2].messages;
+    const resumedToolCallIndex = resumedMessages.findIndex((message) =>
+      message.role === 'assistant' && message.toolCalls?.some((call) => call.id === 'call_1')
+    );
+    const resumedToolResultIndex = resumedMessages.findIndex((message) => message.toolCallId === 'call_1');
+    const resumedSteerIndex = resumedMessages.findIndex((message) => message.clientId === 'client-steer-during-tool');
+
+    expect(resumedToolCallIndex).toBeGreaterThanOrEqual(0);
+    expect(resumedToolResultIndex).toBeGreaterThan(resumedToolCallIndex);
+    expect(resumedSteerIndex).toBeGreaterThan(resumedToolResultIndex);
   });
 
   it('waits for an accepted steer message to be stored before the final drain closes the turn', async () => {
@@ -5495,7 +5507,11 @@ describe('agent loop tools', () => {
       (count) => count >= 2,
       (count) => `Timed out waiting for premature parent answer; requests=${count}`,
     );
-    const waitingThread = await threadStore.getThread(parent.id);
+    const waitingThread = await waitForTestState(
+      () => threadStore.getThread(parent.id),
+      (thread) => Boolean(thread?.messages.some((message) => message.content.includes('主任务会继续等待'))),
+      (thread) => `Timed out waiting for the persisted collaboration wait note; messages=${thread?.messages.length ?? 0}`,
+    );
     const waitingEvents = await threadStore.listEvents(parent.id, 0);
 
     expect(loop.activeTurnId(parent.id)).toBe(started.turnId);
