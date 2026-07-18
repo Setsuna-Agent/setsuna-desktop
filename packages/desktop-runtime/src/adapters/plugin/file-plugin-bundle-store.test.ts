@@ -120,6 +120,27 @@ describe('file plugin bundle store', () => {
     await expect(stat(installPath)).rejects.toThrow();
   });
 
+  it('updates and removes a plugin while Skill change watchers are active', async () => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const unsubscribe = runtime.skills.subscribeChanges(() => undefined);
+
+    try {
+      // Await a watcher refresh so Windows is definitely holding the nested
+      // plugin directory handles that previously blocked bundle renames.
+      await runtime.skills.setExtraRoots([]);
+      await patchPluginManifest(fixture.bundleDir, { version: '1.1.0' });
+
+      await expect(runtime.plugins.updatePlugin({ path: fixture.bundleDir })).resolves.toMatchObject({
+        plugin: { id: 'demo', version: '1.1.0' },
+      });
+      await expect(runtime.plugins.removePlugin('demo')).resolves.toMatchObject({ pluginId: 'demo' });
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it('reuses compatible MCP servers and preserves plugin-owned servers modified after install', async () => {
     const fixture = await createPluginFixture();
     const runtime = await createPluginRuntime(fixture.root);

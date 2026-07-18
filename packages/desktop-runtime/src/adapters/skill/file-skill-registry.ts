@@ -13,7 +13,12 @@ import type {
   RuntimeSkillSummary,
   RuntimePluginReference,
 } from '@setsuna-desktop/contracts';
-import type { SkillActivationContext, SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
+import type {
+  PluginSkillRegistry,
+  SkillActivationContext,
+  SkillInjection,
+  SkillRegistry,
+} from '../../ports/skill-registry.js';
 import type { InstalledPluginRecord } from '../../ports/plugin-bundle-store.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
@@ -48,7 +53,7 @@ type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
 const SKILL_CHANGE_DEBOUNCE_MS = 200;
 const MAX_SKILL_AGENT_MANIFEST_BYTES = 128 * 1024;
 
-export class FileSkillRegistry implements SkillRegistry {
+export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   private changeTimer: NodeJS.Timeout | undefined;
   private readonly changeSubscribers = new Set<() => void>();
   private extraSkillRoots: string[] = [];
@@ -56,6 +61,7 @@ export class FileSkillRegistry implements SkillRegistry {
   private readonly pluginIndexPath: string;
   private readonly userSkillsDir: string;
   private readonly watchers = new Map<string, FSWatcher>();
+  private readonly suspendedPluginRoots = new Map<string, number>();
 
   constructor(
     private readonly builtinSkillsDir: string,
@@ -193,6 +199,22 @@ export class FileSkillRegistry implements SkillRegistry {
     };
   }
 
+  beginPluginDirectoryMutation(pluginRoot: string): () => Promise<void> {
+    const resolvedRoot = path.resolve(pluginRoot);
+    this.suspendedPluginRoots.set(resolvedRoot, (this.suspendedPluginRoots.get(resolvedRoot) ?? 0) + 1);
+    this.closeChangeWatchersWithin(resolvedRoot);
+    let finished = false;
+    return async () => {
+      if (finished) return;
+      finished = true;
+      const remaining = (this.suspendedPluginRoots.get(resolvedRoot) ?? 1) - 1;
+      if (remaining > 0) this.suspendedPluginRoots.set(resolvedRoot, remaining);
+      else this.suspendedPluginRoots.delete(resolvedRoot);
+      await this.refreshChangeWatchers().catch(() => undefined);
+      this.queueChangeNotification();
+    };
+  }
+
   private async readSkills(): Promise<ParsedSkill[]> {
     const [builtinSkills, userSkills, extraSkills, pluginSkills] = await Promise.all([
       this.readSkillDirectory(this.builtinSkillsDir, 'builtin'),
@@ -263,6 +285,9 @@ export class FileSkillRegistry implements SkillRegistry {
     if (!this.changeSubscribers.size || this.changeTimer) return;
     this.changeTimer = setTimeout(() => {
       this.changeTimer = undefined;
+      // The plugin transaction will queue a fresh notification after its index
+      // and directory state agree again.
+      if (this.suspendedPluginRoots.size) return;
       void this.refreshChangeWatchers();
       for (const subscriber of this.changeSubscribers) subscriber();
     }, SKILL_CHANGE_DEBOUNCE_MS);
@@ -279,6 +304,7 @@ export class FileSkillRegistry implements SkillRegistry {
       this.watchers.delete(directory);
     }
     for (const directory of directories) {
+      if (this.isWithinSuspendedPluginRoot(directory)) continue;
       if (this.watchers.has(directory)) continue;
       try {
         const watcher = watch(directory, { persistent: false }, () => this.queueChangeNotification());
@@ -319,6 +345,21 @@ export class FileSkillRegistry implements SkillRegistry {
     }
     for (const watcher of this.watchers.values()) watcher.close();
     this.watchers.clear();
+  }
+
+  private closeChangeWatchersWithin(root: string): void {
+    for (const [directory, watcher] of this.watchers.entries()) {
+      if (!pathIsInside(root, directory)) continue;
+      watcher.close();
+      this.watchers.delete(directory);
+    }
+  }
+
+  private isWithinSuspendedPluginRoot(directory: string): boolean {
+    for (const root of this.suspendedPluginRoots.keys()) {
+      if (pathIsInside(root, directory)) return true;
+    }
+    return false;
   }
 }
 

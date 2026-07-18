@@ -38,3 +38,12 @@ export type SkillRegistry = {
   setExtraRoots(extraRoots: string[]): Promise<void>;
   subscribeChanges(listener: () => void): () => void;
 };
+
+/**
+ * Narrow lifecycle used by the plugin store. Installed plugin directories are
+ * watched for Skill changes, so Windows mutations must temporarily release the
+ * descendant directory handles before renaming the bundle root.
+ */
+export type PluginSkillRegistry = Pick<SkillRegistry, 'listSkills'> & {
+  beginPluginDirectoryMutation(pluginRoot: string): () => Promise<void>;
+};

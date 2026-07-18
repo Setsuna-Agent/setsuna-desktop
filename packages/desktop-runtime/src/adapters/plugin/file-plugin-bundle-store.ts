@@ -32,7 +32,7 @@ import type {
   PluginBundleStore,
   PluginResourceRead,
 } from '../../ports/plugin-bundle-store.js';
-import type { SkillRegistry } from '../../ports/skill-registry.js';
+import type { PluginSkillRegistry } from '../../ports/skill-registry.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, renameWithRetry, writeJsonFile } from '../store/json-file.js';
@@ -92,7 +92,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
 
   constructor(
     dataDir: string,
-    private readonly skills: Pick<SkillRegistry, 'listSkills'>,
+    private readonly skills: PluginSkillRegistry,
     private readonly mcpStore: McpStore,
     private readonly mcpClient: PluginMcpClient,
     private readonly configStore: ConfigStore,
@@ -206,6 +206,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const stagingPath = path.join(this.pluginsDir, `.${manifest.id}.${randomUUID()}.tmp`);
       const installedMcpServers: string[] = [];
       let hooksSaved = false;
+      const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(installPath);
       try {
         await mkdir(this.pluginsDir, { recursive: true });
         await copyBundleTree(sourcePath, stagingPath);
@@ -232,6 +233,8 @@ export class FilePluginBundleStore implements PluginBundleStore {
         await Promise.allSettled(installedMcpServers.map((key) => this.mcpStore.deleteServer(key)));
         await Promise.allSettled([rm(stagingPath, { force: true, recursive: true }), rm(installPath, { force: true, recursive: true })]);
         throw error;
+      } finally {
+        await finishPluginDirectoryMutation();
       }
       await Promise.allSettled(mcpOwnership.map(({ key }) => this.mcpClient.invalidateServer(key)));
       return {
@@ -273,6 +276,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const backupPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.backup`);
       const failedPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.failed`);
       let staged = true;
+      const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
 
       try {
         await copyBundleTree(sourcePath, stagingPath);
@@ -478,6 +482,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         };
       } finally {
         if (staged) await rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
+        await finishPluginDirectoryMutation();
       }
     });
   }
@@ -505,9 +510,14 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const configBefore = await this.configStore.getConfig();
       const removalPath = path.join(this.pluginsDir, `.${plugin.id}.${randomUUID()}.remove`);
       const installExists = await stat(plugin.installPath).then(() => true).catch(() => false);
-      if (installExists) await renameWithRetry(plugin.installPath, removalPath);
+      const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
+      let directoryMoved = false;
       const removedMcpServers: string[] = [];
       try {
+        if (installExists) {
+          await renameWithRetry(plugin.installPath, removalPath);
+          directoryMoved = true;
+        }
         for (const server of serversToRemove) {
           await this.mcpStore.deleteServer(server.key);
           removedMcpServers.push(server.key);
@@ -530,11 +540,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
             .filter((server) => removedMcpServers.includes(server.key))
             .map((server) => this.mcpStore.upsertServer(server)),
         );
-        if (installExists) await renameWithRetry(removalPath, plugin.installPath).catch(() => undefined);
+        if (directoryMoved) await renameWithRetry(removalPath, plugin.installPath).catch(() => undefined);
         await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
         throw error;
+      } finally {
+        await finishPluginDirectoryMutation();
       }
-      if (installExists) await rm(removalPath, { recursive: true, force: true }).catch(() => undefined);
+      if (directoryMoved) await rm(removalPath, { recursive: true, force: true }).catch(() => undefined);
       await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
       return { pluginId: plugin.id, removedMcpServers, preservedMcpServers };
     });
