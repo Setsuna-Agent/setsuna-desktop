@@ -8,6 +8,7 @@ import type {
   MessagePatch,
   RegenerateMessageInput,
   RuntimeFetchModelsInput,
+  RuntimeImageGenerationTestInput,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
@@ -25,7 +26,11 @@ import type {
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
-import { RUNTIME_FILE_ATTACHMENT_MAX_BYTES } from '@setsuna-desktop/contracts';
+import {
+  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
+  RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
+  RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
+} from '@setsuna-desktop/contracts';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { RuntimeAttachmentValidationError } from '../ports/attachment-store.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
@@ -163,6 +168,21 @@ export async function handleRuntimeRestRequest(
     sendJson(response, 201, await runtime.pluginMarketplace.installPlugin(
       assertSafeRuntimeId(decodeURIComponent(marketplaceInstallMatch[1]), 'plugin id'),
     ));
+    return true;
+  }
+
+  if (
+    request.method === 'POST'
+    && url.pathname === `/v1/plugins/${OPENAI_IMAGE_GENERATION_PLUGIN_ID}/test`
+  ) {
+    const input = await readBody<RuntimeImageGenerationTestInput | null>(request, null);
+    if (!input || typeof input !== 'object' || typeof input.prompt !== 'string' || !input.prompt.trim()) {
+      throw new RuntimeHttpError(400, 'prompt must be a non-empty string.');
+    }
+    if (input.prompt.trim().length > RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS) {
+      throw new RuntimeHttpError(400, `prompt must not exceed ${RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS} characters.`);
+    }
+    sendJson(response, 200, await runtime.imageGenerationToolHost.testGeneration({ prompt: input.prompt }));
     return true;
   }
 

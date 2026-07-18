@@ -190,6 +190,70 @@ describe('OpenAiImageGenerationToolHost', () => {
     expect(workspaceWriteCount).toBe(0);
   });
 
+  it('uses the same private provider path for a settings quick test without writing a workspace file', async () => {
+    let requestInit: RequestInit | undefined;
+    let workspaceWriteCount = 0;
+    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+      async clone() { return { assetId: 'unused_clone' }; },
+      async create() { return { assetId: 'generated_image_asset_quick_test' }; },
+      async delete() {},
+      async recover() {},
+    }, {
+      fetchImpl: (async (_input, init) => {
+        requestInit = init;
+        return Response.json({ data: [{ b64_json: ONE_PIXEL_PNG.toString('base64') }] });
+      }) as typeof fetch,
+      workspaceProjects: {
+        async writeBinaryFile(projectId, filePath, data) {
+          workspaceWriteCount += 1;
+          return { projectId, path: filePath, size: data.byteLength, created: true };
+        },
+        async deleteFile() {},
+      },
+    });
+
+    await expect(host.testGeneration({ prompt: 'a settings test image' })).resolves.toMatchObject({
+      images: [{
+        source: 'generated',
+        assetId: 'generated_image_asset_quick_test',
+        modelVisible: false,
+      }],
+      durationMs: expect.any(Number),
+      model: 'gpt-image-1',
+    });
+    expect(JSON.parse(String(requestInit?.body))).toEqual({
+      prompt: 'a settings test image',
+      model: 'gpt-image-1',
+      n: 1,
+    });
+    expect(requestInit?.headers).toMatchObject({ Authorization: 'Bearer image-secret' });
+    expect(workspaceWriteCount).toBe(0);
+  });
+
+  it('bounds unreferenced quick-test assets during a runtime session', async () => {
+    let nextAsset = 0;
+    const deletedAssetIds: string[] = [];
+    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+      async clone() { return { assetId: 'unused_clone' }; },
+      async create() {
+        nextAsset += 1;
+        return { assetId: `quick_test_asset_${nextAsset}` };
+      },
+      async delete(assetId) { deletedAssetIds.push(assetId); },
+      async recover() {},
+    }, {
+      fetchImpl: (async () => Response.json({
+        data: [{ b64_json: ONE_PIXEL_PNG.toString('base64') }],
+      })) as typeof fetch,
+    });
+
+    for (let index = 0; index < 13; index += 1) {
+      await host.testGeneration({ prompt: `quick test ${index}` });
+    }
+
+    expect(deletedAssetIds).toEqual(['quick_test_asset_1']);
+  });
+
   it('rolls back already stored images when a later response item is invalid', async () => {
     const deletedAssetIds: string[] = [];
     let nextAsset = 0;

@@ -27,6 +27,8 @@ import type {
   RuntimeConfigState,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
+  RuntimeImageGenerationTestInput,
+  RuntimeImageGenerationTestResult,
   RuntimeAvailableModelsResponse,
   RuntimeEvent,
   RuntimeRequestInput,
@@ -282,6 +284,13 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<RuntimePluginRemoveResult>({
         path: `/v1/plugins/${encodeURIComponent(pluginId)}`,
         method: 'DELETE',
+      });
+    },
+    testImageGeneration(input: RuntimeImageGenerationTestInput) {
+      return request<RuntimeImageGenerationTestResult>({
+        path: '/v1/plugins/openai-image-generation/test',
+        method: 'POST',
+        body: input,
       });
     },
     listProjects() {

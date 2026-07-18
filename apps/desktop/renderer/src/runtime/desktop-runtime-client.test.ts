@@ -144,6 +144,19 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
+  it('sends only the prompt when testing the configured image generation plugin', async () => {
+    const request = installRuntimeBridge(() => ({ images: [], durationMs: 12 }));
+    const client = createDesktopRuntimeClient();
+
+    await client.testImageGeneration({ prompt: 'a tiny moon' });
+
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/plugins/openai-image-generation/test',
+      method: 'POST',
+      body: { prompt: 'a tiny moon' },
+    });
+  });
+
   it('requests the workspace scoped to a conversation thread', async () => {
     const request = installRuntimeBridge(() => ({ exists: true, readable: true }));
     const client = createDesktopRuntimeClient();

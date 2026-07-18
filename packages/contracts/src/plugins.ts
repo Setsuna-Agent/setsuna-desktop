@@ -1,8 +1,21 @@
 import type { RuntimeMcpTransport } from './mcp.js';
 import type { RuntimeHookEventName } from './config.js';
+import type { RuntimeGeneratedMessageAttachment } from './attachments.js';
 
 export const OPENAI_IMAGE_GENERATION_PLUGIN_ID = 'openai-image-generation';
 export const OPENAI_IMAGE_GENERATION_TOOL_NAME = 'generate_image';
+export const RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS = 4_000;
+
+export type RuntimeImageGenerationTestInput = {
+  prompt: string;
+};
+
+/** 插件配置页直连 Images API 后返回的安全结果，不包含服务地址、密钥或图片 Base64。 */
+export type RuntimeImageGenerationTestResult = {
+  images: RuntimeGeneratedMessageAttachment[];
+  durationMs: number;
+  model?: string;
+};
 
 /** 与 runtime 活动一同存储、可安全提供给渲染进程的稳定归属信息。 */
 export type RuntimePluginReference = {

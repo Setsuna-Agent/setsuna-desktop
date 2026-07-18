@@ -9,6 +9,8 @@ import type { AppServerPtyFactory } from './app-server/command-exec.js';
 import { createRuntimeServer, type RuntimeServer } from './runtime-server.js';
 import { InMemoryDesktopNativeBridge } from '../adapters/store/in-memory-secret-store.js';
 
+const ONE_PIXEL_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
 describe('runtime server', () => {
   let server: RuntimeServer;
   let baseUrl: string;
@@ -693,6 +695,57 @@ describe('runtime server', () => {
     });
 
     expect(response.status).toBe(404);
+  });
+
+  it('tests the installed image plugin through its configured private provider', async () => {
+    const imageServer = await createImageGenerationCaptureServer();
+    try {
+      await runtimeFetch('/v1/plugin-marketplace/openai-image-generation/install', { method: 'POST' });
+      const savedConfig = await runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          imageGeneration: {
+            baseUrl: imageServer.baseUrl,
+            model: 'test-image-model',
+            apiKey: 'private-image-key',
+          },
+        }),
+      });
+      expect(savedConfig.imageGeneration).toMatchObject({
+        baseUrl: imageServer.baseUrl,
+        model: 'test-image-model',
+        apiKeySet: true,
+      });
+      expect(JSON.stringify(savedConfig)).not.toContain('private-image-key');
+
+      const result = await runtimeFetch('/v1/plugins/openai-image-generation/test', {
+        method: 'POST',
+        body: JSON.stringify({ prompt: 'a tiny moon above a quiet lake' }),
+      });
+      expect(result).toMatchObject({
+        images: [{
+          source: 'generated',
+          assetId: expect.stringMatching(/^generated_image_/u),
+          type: 'image/png',
+          modelVisible: false,
+        }],
+        durationMs: expect.any(Number),
+        model: 'test-image-model',
+      });
+      expect(JSON.stringify(result)).not.toContain(ONE_PIXEL_PNG_BASE64);
+      expect(JSON.stringify(result)).not.toContain('private-image-key');
+      await expect(imageServer.nextRequest).resolves.toEqual({
+        authorization: 'Bearer private-image-key',
+        path: '/v1/images/generations',
+        body: {
+          prompt: 'a tiny moon above a quiet lake',
+          model: 'test-image-model',
+          n: 1,
+        },
+      });
+    } finally {
+      await imageServer.close();
+    }
   });
 
   it('supports AppServer skills list, extra roots, and config writes', async () => {
@@ -4893,6 +4946,44 @@ async function createOpenAiCaptureServer(responseText = 'Captured.'): Promise<{
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     nextBody,
+    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+  };
+}
+
+async function createImageGenerationCaptureServer(): Promise<{
+  baseUrl: string;
+  nextRequest: Promise<{ authorization: string; path: string; body: Record<string, unknown> }>;
+  close(): Promise<void>;
+}> {
+  let resolveRequest: (request: { authorization: string; path: string; body: Record<string, unknown> }) => void = () => undefined;
+  let rejectRequest: (error: unknown) => void = () => undefined;
+  const nextRequest = new Promise<{ authorization: string; path: string; body: Record<string, unknown> }>((resolve, reject) => {
+    resolveRequest = resolve;
+    rejectRequest = reject;
+  });
+  const server = createServer(async (request, response) => {
+    try {
+      const body = JSON.parse(await readRequestText(request)) as Record<string, unknown>;
+      resolveRequest({
+        authorization: String(request.headers.authorization ?? ''),
+        path: request.url ?? '',
+        body,
+      });
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ data: [{ b64_json: ONE_PIXEL_PNG_BASE64 }] }));
+    } catch (error) {
+      rejectRequest(error);
+      response.writeHead(500);
+      response.end(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected TCP address for image generation server');
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    nextRequest,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
 }

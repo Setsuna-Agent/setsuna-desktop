@@ -4,6 +4,8 @@ import type {
   RuntimeHookMetadata,
   RuntimeImageGenerationConfigInput,
   RuntimeImageGenerationConfigState,
+  RuntimeImageGenerationTestInput,
+  RuntimeImageGenerationTestResult,
   RuntimeMcpServer,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
@@ -31,6 +33,7 @@ export function CapabilitiesPluginDetail({
   onInstall,
   onRemove,
   onSaveImageGenerationConfig,
+  onTestImageGeneration,
   removing,
   runtimeHooks,
 }: {
@@ -45,6 +48,7 @@ export function CapabilitiesPluginDetail({
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
   onSaveImageGenerationConfig?: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
+  onTestImageGeneration?: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
   removing: boolean;
   runtimeHooks?: RuntimeHookMetadata[];
 }) {
@@ -131,8 +135,15 @@ export function CapabilitiesPluginDetail({
         <div><dt>资源</dt><dd>{resourceCount}</dd></div>
       </dl>
 
-      {installed && plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID && onSaveImageGenerationConfig ? (
-        <ImageGenerationPluginSettings config={imageGenerationConfig} onSave={onSaveImageGenerationConfig} />
+      {installed
+        && plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID
+        && onSaveImageGenerationConfig
+        && onTestImageGeneration ? (
+        <ImageGenerationPluginSettings
+          config={imageGenerationConfig}
+          onSave={onSaveImageGenerationConfig}
+          onTest={onTestImageGeneration}
+        />
       ) : null}
 
       <CapabilitiesPluginDetailSection

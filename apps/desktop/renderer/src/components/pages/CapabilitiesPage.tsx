@@ -1,6 +1,6 @@
 import { useCallback, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { BookOpen, FilePlus2, Info, Loader2, LogIn, LogOut, MessageSquare, Pencil, Plug, Plus, Puzzle, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
-import type { RuntimeConfigState, RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeImageGenerationConfigInput, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginItemContent, RuntimePluginItemKind, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeHookEventName, RuntimeHookInput, RuntimeHookListResponse, RuntimeHookMetadata, RuntimeImageGenerationConfigInput, RuntimeImageGenerationTestInput, RuntimeImageGenerationTestResult, RuntimeMcpRequireApproval, RuntimeMcpServer, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpToolInfo, RuntimeMcpTransport, RuntimeMcpTrustLevel, RuntimePluginItemContent, RuntimePluginItemKind, RuntimePluginMarketplaceItem, RuntimePluginSummary, RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../primitives.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
@@ -132,6 +132,7 @@ export function CapabilitiesPage({
   onUpdateMarketplacePlugin,
   onRemovePlugin,
   onSaveImageGenerationConfig,
+  onTestImageGeneration,
 }: {
   config: RuntimeConfigState | null;
   skills: RuntimeSkillSummary[];
@@ -166,6 +167,7 @@ export function CapabilitiesPage({
   onUpdateMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onRemovePlugin: (pluginId: string) => Promise<void>;
   onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
+  onTestImageGeneration: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
 }) {
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
@@ -657,6 +659,7 @@ export function CapabilitiesPage({
             onGetItemContent={getSelectedPluginItemContent}
             onRemove={removePlugin}
             onSaveImageGenerationConfig={onSaveImageGenerationConfig}
+            onTestImageGeneration={onTestImageGeneration}
           />
         </section>
       </main>

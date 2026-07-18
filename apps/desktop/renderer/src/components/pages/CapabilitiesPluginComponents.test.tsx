@@ -322,6 +322,7 @@ describe('capabilities plugin components', () => {
         onInstall={async () => undefined}
         onRemove={async () => undefined}
         onSaveImageGenerationConfig={async () => undefined}
+        onTestImageGeneration={async () => ({ images: [], durationMs: 0 })}
       />,
     );
 
@@ -329,6 +330,9 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('http://127.0.0.1:8000');
     expect(html).toContain('gpt-image-1');
     expect(html).toContain('当前使用 HTTP');
+    expect(html).toContain('快速测试');
+    expect(html).toContain('保存配置并生成');
+    expect(html).toContain('测试请求只携带提示词');
     expect(html).not.toContain('>启用<');
     expect(html).not.toContain('image-secret');
   });

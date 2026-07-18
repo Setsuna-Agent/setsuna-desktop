@@ -1,6 +1,10 @@
 import {
+  isRuntimeGeneratedMessageAttachment,
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_IMAGE_GENERATION_TOOL_NAME,
+  RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
+  type RuntimeImageGenerationTestInput,
+  type RuntimeImageGenerationTestResult,
   type RuntimeMessageAttachment,
   type RuntimeThread,
   type RuntimeToolDefinition,
@@ -26,6 +30,7 @@ const MAX_TOTAL_IMAGE_BYTES = 50 * 1024 * 1024;
 const MAX_ENCODED_IMAGE_CHARS = Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 1_024;
 const MAX_RESPONSE_BYTES = Math.ceil((MAX_TOTAL_IMAGE_BYTES * 4) / 3) + 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
+const MAX_RETAINED_QUICK_TEST_ASSETS = 12;
 
 type ImageGenerationConfigStore = {
   getImageGenerationConfig(): Promise<RuntimeImageGenerationProviderConfig>;
@@ -84,9 +89,11 @@ const IMAGE_GENERATION_TOOL: RuntimeToolDefinition = {
  */
 export class OpenAiImageGenerationToolHost implements ToolHost {
   private readonly pendingAssetIdsByTurn = new Map<string, Set<string>>();
+  private readonly quickTestAssetIds: string[] = [];
   private readonly fetchImpl: typeof fetch;
   private readonly threadStore?: GeneratedImageReferenceStore;
   private readonly workspaceProjects?: Pick<WorkspaceProjectStore, 'deleteFile' | 'writeBinaryFile'>;
+  private quickTestSequence = 0;
 
   constructor(
     private readonly configStore: ImageGenerationConfigStore,
@@ -141,6 +148,41 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     return {
       argumentsPreview: prompt,
       resultPreview: `生成 ${boundedIntegerArg(args.n, 1, 1, 10)} 张图片`,
+    };
+  }
+
+  /**
+   * 配置页快速测试复用正式工具链，但使用只读、无会话的执行上下文：图片可预览和导出，
+   * 不会写入工作区或线程上下文，也不会把密钥返回给 renderer。
+   */
+  async testGeneration(
+    input: RuntimeImageGenerationTestInput,
+    signal?: AbortSignal,
+  ): Promise<RuntimeImageGenerationTestResult> {
+    const prompt = requiredStringArg(objectInput(input).prompt, 'prompt');
+    if (prompt.length > RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS) {
+      throw new Error(`测试提示词不能超过 ${RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS} 个字符。`);
+    }
+    const startedAt = Date.now();
+    this.quickTestSequence += 1;
+    const result = await this.runTool(
+      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+      { prompt, n: 1 },
+      {
+        threadId: 'image_generation_quick_test',
+        toolCallId: `quick_test_${Date.now()}_${this.quickTestSequence}`,
+        permissionProfile: 'read-only',
+        signal,
+      },
+    );
+    const images = (result.attachments ?? []).filter(isRuntimeGeneratedMessageAttachment);
+    if (!images.length) throw new Error('图片生成服务未返回可预览的图片。');
+    await this.retainQuickTestAssets(images.map((image) => image.assetId));
+    const model = imageGenerationResultModel(result.data);
+    return {
+      images,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      ...(model ? { model } : {}),
     };
   }
 
@@ -269,6 +311,14 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     this.pendingAssetIdsByTurn.set(turnKey, pending);
   }
 
+  private async retainQuickTestAssets(assetIds: string[]): Promise<void> {
+    this.quickTestAssetIds.push(...assetIds);
+    const overflow = this.quickTestAssetIds.length - MAX_RETAINED_QUICK_TEST_ASSETS;
+    if (overflow <= 0) return;
+    const expiredAssetIds = this.quickTestAssetIds.splice(0, overflow);
+    await Promise.allSettled(expiredAssetIds.map((assetId) => this.generatedImageStore.delete(assetId)));
+  }
+
   private async toAttachment(
     item: OpenAiImageResponseItem,
     index: number,
@@ -340,6 +390,12 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
 
 function generatedImageTurnKey(context: ToolExecutionContext): string | null {
   return context.turnId ? `${context.threadId}\u0000${context.turnId}` : null;
+}
+
+function imageGenerationResultModel(data: unknown): string | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const model = (data as { model?: unknown }).model;
+  return typeof model === 'string' && model.trim() ? model.trim() : undefined;
 }
 
 export function imageGenerationEndpoint(baseUrl: string): string {

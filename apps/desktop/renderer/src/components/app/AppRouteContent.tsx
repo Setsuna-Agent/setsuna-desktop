@@ -196,6 +196,7 @@ export function AppRouteContent({
         onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
         onRemovePlugin={runtime.removePlugin}
         onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
+        onTestImageGeneration={runtime.testImageGeneration}
       />
     );
   }

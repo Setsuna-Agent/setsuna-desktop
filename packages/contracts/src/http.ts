@@ -15,6 +15,8 @@ import type {
   RuntimePluginItemContent,
   RuntimePluginItemKind,
   RuntimePluginInstallResult,
+  RuntimeImageGenerationTestInput,
+  RuntimeImageGenerationTestResult,
   RuntimePluginList,
   RuntimePluginMarketplaceList,
   RuntimePluginRemoveResult,
@@ -113,6 +115,7 @@ export type DesktopRuntimeClient = {
   installMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
   updateMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
+  testImageGeneration(input: RuntimeImageGenerationTestInput): Promise<RuntimeImageGenerationTestResult>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;

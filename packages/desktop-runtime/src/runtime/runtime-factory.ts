@@ -96,6 +96,12 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
   const browserControl = HttpBrowserControlClient.fromEnvironment();
+  const imageGenerationToolHost = new OpenAiImageGenerationToolHost(
+    configStore,
+    pluginStore,
+    generatedImageStore,
+    { threadStore, workspaceProjects },
+  );
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
@@ -103,7 +109,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpManagementToolHost(mcpStore, mcpConnections),
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore),
-    new OpenAiImageGenerationToolHost(configStore, pluginStore, generatedImageStore, { threadStore, workspaceProjects }),
+    imageGenerationToolHost,
     new WorkspaceImageToolHost(workspaceProjects),
     new ArtifactToolHost(workspaceProjects),
     new PcLocalToolHost(workspaceProjects, policyAmendmentStore, workspaceDependencies),
@@ -147,6 +153,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     eventWriter,
     environmentResolver,
     generatedImageStore,
+    imageGenerationToolHost,
     memoryStore,
     modelClient,
     mcpConnections,

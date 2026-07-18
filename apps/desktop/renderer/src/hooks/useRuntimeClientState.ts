@@ -13,6 +13,7 @@ import type {
   RuntimeHookListResponse,
   RuntimeHookMetadata,
   RuntimeImageGenerationConfigInput,
+  RuntimeImageGenerationTestInput,
   RuntimeMemoryPreview,
   RuntimeMemoryRecord,
   RuntimeMcpServer,
@@ -429,6 +430,10 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   const saveImageGenerationConfig = useCallback(async (input: RuntimeImageGenerationConfigInput) => {
     const next = await client.saveConfig({ imageGeneration: input });
     setConfig(next);
+  }, [client]);
+
+  const testImageGeneration = useCallback(async (input: RuntimeImageGenerationTestInput) => {
+    return await client.testImageGeneration(input);
   }, [client]);
 
   const saveRuntimePreferences = useCallback(
@@ -927,6 +932,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     removePlugin,
     saveMcpServer,
     saveImageGenerationConfig,
+    testImageGeneration,
     saveProviders,
     saveRuntimePreferences,
     selectProviderModel,
