@@ -2323,6 +2323,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   min-width: 0;
   max-width: min(360px, 100%);
   overflow: hidden;
+  font-size: 13px;
 }
 
 .chat-tool-run__file-target > span:last-child,
@@ -2782,7 +2783,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-run__summary-text {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
@@ -2800,6 +2801,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   color: currentColor;
   font-size: 13px;
   font-weight: var(--app-font-weight);
+  line-height: 20px;
 }
 
 .chat-tool-run__target {
@@ -2937,7 +2939,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-run__inspection-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   min-width: 0;
   color: var(--app-text-muted);
