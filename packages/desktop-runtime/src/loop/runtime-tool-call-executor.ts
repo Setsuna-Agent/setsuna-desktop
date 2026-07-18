@@ -16,6 +16,7 @@ import type { AppServerNotificationBus } from '../ports/app-server-notification-
 import type { ApprovalGate } from '../ports/approval-gate.js';
 import type { Clock } from '../ports/clock.js';
 import type { IdGenerator } from '../ports/id-generator.js';
+import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type { PolicyAmendmentStore } from '../ports/policy-amendment-store.js';
 import type { PersistentToolApprovalStore } from '../ports/persistent-tool-approval-store.js';
 import type { ThreadStore } from '../ports/thread-store.js';
@@ -26,6 +27,7 @@ import { isGoalToolName, type RuntimeGoalCoordinator } from './runtime-goal-coor
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
 import { RuntimeToolRouter } from './tool-router.js';
 import type { RuntimeMemoryCoordinator } from './runtime-memory-coordinator.js';
+import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
 import {
   appServerDynamicToolContent,
   appServerDynamicToolErrorMessage,
@@ -71,6 +73,7 @@ type RuntimeToolCallExecutorOptions = {
   appServerNotificationBus?: AppServerNotificationBus;
   clock: Clock;
   ids: IdGenerator;
+  imageStore?: GeneratedImageStore;
   memory: RuntimeMemoryCoordinator;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
@@ -226,7 +229,7 @@ export class RuntimeToolCallExecutor {
         checkApproval: options.skipApproval !== true,
       });
       content = execution.content;
-      attachments = execution.result?.attachments;
+      attachments = await externalizeToolImageAttachments(execution.result?.attachments, this.options.imageStore);
       if (execution.status === 'success' && execution.result) {
         await this.options.memory.markPollutedByExternalContext(context.threadId, context.turnId, toolCall, execution.result, runtimeConfig);
       }

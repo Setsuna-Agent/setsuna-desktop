@@ -27,11 +27,13 @@ export type RuntimeInlineMessageAttachment = RuntimeMessageAttachmentBase & {
   assetId?: never;
 };
 
-/** runtime 持久化的生成图；按需通过 preload 窄桥接读取，不把 Base64 写入线程事件。 */
+/**
+ * runtime 持久化的受管图片资产。`generated` 作为历史判别字保留，但同一存储
+ * 也承载需要在模型请求边界临时解析的工具图片。Base64 不会写入线程事件。
+ */
 export type RuntimeGeneratedMessageAttachment = RuntimeMessageAttachmentBase & {
   source: 'generated';
   assetId: string;
-  modelVisible?: false;
   url?: never;
   localAssetId?: never;
 };

@@ -25,6 +25,11 @@ describe('file generated image store', () => {
       type: 'image/png',
       data: ONE_PIXEL_PNG,
     })).resolves.toEqual({ assetId: 'generated_image_1' });
+    await expect(store.read('generated_image_1')).resolves.toEqual({
+      name: 'mountain_night.png',
+      type: 'image/png',
+      data: ONE_PIXEL_PNG,
+    });
     await expect(readFile(path.join(dataDir, 'generated-images', 'generated_image_1', 'mountain_night.png')))
       .resolves.toEqual(ONE_PIXEL_PNG);
     await expect(store.delete('generated_image_1')).resolves.toBeUndefined();

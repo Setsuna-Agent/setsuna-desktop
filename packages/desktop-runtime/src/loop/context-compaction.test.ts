@@ -362,6 +362,40 @@ describe('runtime context compaction', () => {
     })).toBeNull();
   });
 
+  it('estimates model-visible images by visual cost instead of Base64 wire size', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Inspect the rendered page.',
+        createdAt: '2026-07-18T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'tool_1',
+        role: 'tool',
+        toolCallId: 'call_view_image',
+        toolName: 'view_image',
+        content: 'Loaded page_03.png.',
+        attachments: [{
+          id: 'page_03',
+          name: 'page_03.png',
+          type: 'image/png',
+          size: 480_000,
+          url: `data:image/png;base64,${'A'.repeat(640_000)}`,
+        }],
+        createdAt: '2026-07-18T00:00:01.000Z',
+        status: 'complete',
+      },
+    ];
+
+    expect(estimateRuntimeMessageTokens(messages)).toBeLessThan(5_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 100_000 },
+      messages,
+    })).toBeNull();
+  });
+
   it('allows oversized latest user text to be summarized when it alone exceeds the budget', () => {
     const messages: RuntimeMessage[] = [
       {

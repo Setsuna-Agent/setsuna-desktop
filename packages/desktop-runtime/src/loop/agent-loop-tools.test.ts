@@ -26,6 +26,8 @@ import type {
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
+import { ImageAssetResolvingModelClient } from '../adapters/model/image-asset-resolving-model-client.js';
+import { FileGeneratedImageStore } from '../adapters/store/file-generated-image-store.js';
 import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
@@ -3282,27 +3284,30 @@ describe('agent loop tools', () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(path.join(dataDir, 'thread-state'), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Workspace image vision', projectId: project.id });
-    const modelClient = new SingleToolCallModelClient({
+    const capturedModelClient = new SingleToolCallModelClient({
       id: 'call_view_image',
       name: 'view_image',
       arguments: JSON.stringify({ path: 'design.png' }),
     });
+    const imageStore = new FileGeneratedImageStore(path.join(dataDir, 'image-assets'), ids);
+    const modelClient = new ImageAssetResolvingModelClient(capturedModelClient, imageStore);
     const loop = new AgentLoop({
       threadStore,
       modelClient,
       eventBus: new InMemoryEventBus(),
       clock: systemClock,
       ids,
+      imageStore,
       configStore: new ImageCapabilityConfigStore(true),
       toolHost: new WorkspaceImageToolHost(projects),
     });
 
     await loop.sendTurn(thread.id, { input: 'inspect the design asset' });
-    const sampledImage = modelClient.requests[1]?.messages.find((message) =>
+    const sampledImage = capturedModelClient.requests[1]?.messages.find((message) =>
       message.role === 'tool' && message.toolName === 'view_image');
     const saved = await threadStore.getThread(thread.id);
 
-    expect(modelClient.requests[0]?.tools?.map((tool) => tool.name)).toContain('view_image');
+    expect(capturedModelClient.requests[0]?.tools?.map((tool) => tool.name)).toContain('view_image');
     expect(sampledImage?.attachments).toEqual([
       expect.objectContaining({
         name: 'design.png',
@@ -3311,8 +3316,17 @@ describe('agent loop tools', () => {
         url: `data:image/png;base64,${png.toString('base64')}`,
       }),
     ]);
-    expect(saved?.messages.find((message) => message.toolName === 'view_image')?.attachments)
-      .toEqual(sampledImage?.attachments);
+    expect(saved?.messages.find((message) => message.toolName === 'view_image')?.attachments).toEqual([
+      expect.objectContaining({
+        name: 'design.png',
+        size: png.byteLength,
+        type: 'image/png',
+        source: 'generated',
+        assetId: expect.any(String),
+        modelVisible: true,
+      }),
+    ]);
+    expect(JSON.stringify(saved)).not.toContain(png.toString('base64'));
   });
 
   it('pauses tool execution until approval is answered', async () => {

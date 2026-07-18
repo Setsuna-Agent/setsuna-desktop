@@ -18,6 +18,7 @@ import { FilePluginMarketplace } from '../adapters/plugin/file-plugin-marketplac
 import { HttpBrowserControlClient } from '../adapters/browser/http-browser-control-client.js';
 import { HttpDesktopNativeBridge } from '../adapters/native/http-desktop-native-bridge.js';
 import { ConfiguredModelClient } from '../adapters/model/configured-model-client.js';
+import { ImageAssetResolvingModelClient } from '../adapters/model/image-asset-resolving-model-client.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { SkillMcpDependencyCoordinator } from '../adapters/skill/skill-mcp-dependency-coordinator.js';
@@ -109,7 +110,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     new MemoryToolHost(memoryStore, configStore),
   ]);
-  const modelClient = new ConfiguredModelClient(configStore);
+  const modelClient = new ImageAssetResolvingModelClient(
+    new ConfiguredModelClient(configStore),
+    generatedImageStore,
+  );
   const agentLoop = new AgentLoop({
     attachmentStore,
     threadStore,
@@ -118,6 +122,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     environmentResolver,
     clock,
     ids,
+    imageStore: generatedImageStore,
     approvalGate,
     appServerNotificationBus,
     configStore,

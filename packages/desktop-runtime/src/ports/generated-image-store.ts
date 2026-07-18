@@ -10,3 +10,7 @@ export type GeneratedImageStore = {
   delete(assetId: string): Promise<void>;
   recover(retainedAssetIds: string[]): Promise<void>;
 };
+
+export type GeneratedImageReader = {
+  read(assetId: string): Promise<GeneratedImageStoreInput>;
+};

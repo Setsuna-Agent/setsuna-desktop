@@ -6,6 +6,7 @@ import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
 import type { EventBus } from '../ports/event-bus.js';
 import type { IdGenerator } from '../ports/id-generator.js';
+import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type { MemoryStore } from '../ports/memory-store.js';
 import type { McpStore } from '../ports/mcp-store.js';
 import type { ModelClient } from '../ports/model-client.js';
@@ -48,6 +49,7 @@ export type AgentLoopOptions = {
   eventBus: EventBus;
   clock: Clock;
   ids: IdGenerator;
+  imageStore?: GeneratedImageStore;
   approvalGate?: ApprovalGate;
   appServerNotificationBus?: AppServerNotificationBus;
   configStore?: ConfigStore;
@@ -124,6 +126,7 @@ export class AgentLoop {
       appServerNotificationBus: options.appServerNotificationBus,
       clock: options.clock,
       ids: options.ids,
+      imageStore: options.imageStore,
       memory: this.memory,
       policyAmendmentStore: options.policyAmendmentStore,
       persistentToolApprovalStore: options.persistentToolApprovalStore,

@@ -5,6 +5,9 @@ export const CONTEXT_COMPACTION_MAX_TOKENS_K = 256;
 export const CONTEXT_COMPACTION_MAX_TOKENS = CONTEXT_COMPACTION_MAX_TOKENS_K * 1000;
 
 const APPROX_CHARS_PER_TOKEN = 4;
+// Provider payloads encode images as URLs/Base64, but vision models charge image
+// inputs by their visual representation rather than by wire-format characters.
+const APPROX_MODEL_IMAGE_TOKENS = 4_096;
 const AUTO_COMPACT_TOKEN_LIMIT_RATIO = 0.85;
 // 这里用字符数估算 token，只用于触发压缩和 UI 百分比，不作为精确计费依据。
 const COMPACTED_CONTEXT_TARGET_RATIO_DIVISOR = 4;
@@ -319,6 +322,10 @@ function estimateMessageTokens(message: RuntimeMessage): number {
   // the transcript, but model adapters deliberately omit them from requests. Counting
   // their Base64 payload here would immediately trigger a false context compaction.
   const attachmentTokens = modelVisibleAttachments(message).reduce((total, attachment) => {
+    if (attachment.type.startsWith('image/')) {
+      return total + APPROX_MODEL_IMAGE_TOKENS
+        + estimateTextTokens(`${attachment.name} ${attachment.type} ${attachment.size}`);
+    }
     if (isRuntimeStoredMessageAttachment(attachment)) {
       return total + estimateTextTokens(`${attachment.name} ${attachment.type} ${attachment.size}`);
     }
@@ -359,7 +366,11 @@ function messageHasContextValue(message: RuntimeMessage): boolean {
 }
 
 function modelVisibleAttachments(message: RuntimeMessage): NonNullable<RuntimeMessage['attachments']> {
-  return (message.attachments ?? []).filter((attachment) => attachment.modelVisible !== false);
+  return (message.attachments ?? []).filter((attachment) => (
+    attachment.source === 'generated'
+      ? attachment.modelVisible === true
+      : attachment.modelVisible !== false
+  ));
 }
 
 function messageEligibleForCompaction(message: RuntimeMessage): boolean {

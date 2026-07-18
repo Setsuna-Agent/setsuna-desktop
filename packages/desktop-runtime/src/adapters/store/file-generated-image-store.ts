@@ -16,7 +16,7 @@ export class FileGeneratedImageStore implements GeneratedImageStore {
   }
 
   async clone(assetId: string): Promise<{ assetId: string }> {
-    const { data, name, type } = await this.readAsset(assetId);
+    const { data, name, type } = await this.read(assetId);
     return this.create({ data, name, type });
   }
 
@@ -48,27 +48,7 @@ export class FileGeneratedImageStore implements GeneratedImageStore {
     await rm(path.join(this.root, safeAssetId), { recursive: true, force: true });
   }
 
-  async recover(retainedAssetIds: string[]): Promise<void> {
-    const retained = new Set<string>();
-    for (const assetId of retainedAssetIds) {
-      try {
-        retained.add(assertSafeRuntimeId(assetId, 'Generated image asset id'));
-      } catch {
-        // Corrupt attachment metadata should not prevent the runtime from recovering other threads.
-      }
-    }
-    await mkdir(this.root, { recursive: true });
-    const entries = await readdir(this.root, { withFileTypes: true });
-    await Promise.all(entries.flatMap((entry) => {
-      if (!entry.isDirectory() || retained.has(entry.name)) return [];
-      // Directory names come from readdir, but validate containment before recursive removal.
-      const candidate = path.resolve(this.root, entry.name);
-      if (path.dirname(candidate) !== path.resolve(this.root)) return [];
-      return [rm(candidate, { recursive: true, force: true })];
-    }));
-  }
-
-  private async readAsset(assetId: string): Promise<{ data: Buffer; name: string; type: SafeImageMimeType }> {
+  async read(assetId: string): Promise<{ data: Buffer; name: string; type: SafeImageMimeType }> {
     const safeAssetId = assertSafeRuntimeId(assetId, 'Generated image asset id');
     const canonicalRoot = await realpath(this.root);
     const canonicalAssetDirectory = await realpath(path.join(this.root, safeAssetId));
@@ -93,6 +73,26 @@ export class FileGeneratedImageStore implements GeneratedImageStore {
     }
     if (images.length !== 1) throw new Error('Generated image asset is unavailable.');
     return images[0]!;
+  }
+
+  async recover(retainedAssetIds: string[]): Promise<void> {
+    const retained = new Set<string>();
+    for (const assetId of retainedAssetIds) {
+      try {
+        retained.add(assertSafeRuntimeId(assetId, 'Generated image asset id'));
+      } catch {
+        // Corrupt attachment metadata should not prevent the runtime from recovering other threads.
+      }
+    }
+    await mkdir(this.root, { recursive: true });
+    const entries = await readdir(this.root, { withFileTypes: true });
+    await Promise.all(entries.flatMap((entry) => {
+      if (!entry.isDirectory() || retained.has(entry.name)) return [];
+      // Directory names come from readdir, but validate containment before recursive removal.
+      const candidate = path.resolve(this.root, entry.name);
+      if (path.dirname(candidate) !== path.resolve(this.root)) return [];
+      return [rm(candidate, { recursive: true, force: true })];
+    }));
   }
 }
 
