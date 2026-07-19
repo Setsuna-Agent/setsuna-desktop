@@ -9,6 +9,7 @@ import {
   safeStorage,
   session,
   shell,
+  WebContentsView,
   webContents as electronWebContents,
   type NativeImage,
   type OpenDialogOptions,
@@ -40,6 +41,7 @@ import {
   unstageReviewFiles,
 } from './review-state.js';
 import { RuntimeHost } from './runtime-host.js';
+import { showStartupSplash, waitForRendererFirstPaint } from './startup-splash-window.js';
 import { DesktopTerminalStore } from './terminal-sessions.js';
 import { registerWindowsTitlebarDoubleClick, toggleWindowMaximized } from './window-frame.js';
 import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
@@ -58,15 +60,42 @@ let browserControlServer: BrowserControlServer | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
+let isAppQuitting = false;
 const usesCustomFrame = process.platform !== 'darwin';
 
 async function createWindow(): Promise<void> {
-  await hydrateDesktopProcessEnvironment({ loadLoginShell: app.isPackaged });
-
   const desktopIcon = loadDesktopIcon();
   if (process.platform === 'darwin' && desktopIcon) {
     app.dock?.setIcon(desktopIcon);
   }
+
+  // The splash and app share one native window so the OS never animates a window swap.
+  const currentMainWindow = createMainBrowserWindow(desktopIcon);
+  let startupClosedBeforeHandoff = false;
+  let startupInProgress = true;
+  mainWindow = currentMainWindow;
+  registerWindowsTitlebarDoubleClick(currentMainWindow);
+  if (usesCustomFrame) currentMainWindow.setMenu(null);
+  currentMainWindow.on('closed', () => {
+    startupClosedBeforeHandoff = startupInProgress;
+    if (mainWindow === currentMainWindow) mainWindow = null;
+    if (!isAppQuitting && startupInProgress) {
+      startupClosedBeforeHandoff = true;
+      app.quit();
+    }
+  });
+  const startupSplashView = new WebContentsView({
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  const startupSplashLayer = await showStartupSplash(currentMainWindow, startupSplashView, desktopIcon);
+  if (startupClosedBeforeHandoff) return;
+
+  await hydrateDesktopProcessEnvironment({ loadLoginShell: app.isPackaged });
+  if (startupClosedBeforeHandoff) return;
 
   const currentBrowserController = new DesktopBrowserController({
     openTab: async (url) => {
@@ -105,35 +134,8 @@ async function createWindow(): Promise<void> {
     throw error;
   }
   registerRuntimeIpc(currentRuntimeHost);
+  if (startupClosedBeforeHandoff) return;
 
-  mainWindow = new BrowserWindow({
-    width: 1320,
-    height: 860,
-    minWidth: mainWindowMinWidth,
-    minHeight: 640,
-    title: 'Setsuna Desktop',
-    frame: !usesCustomFrame,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
-    trafficLightPosition: process.platform === 'darwin' ? getMacTrafficLightPosition(1) : undefined,
-    autoHideMenuBar: usesCustomFrame,
-    // 保持 Windows HWND 真正透明：DWM 背景材质也会填充 CSS 阴影留白，
-    // 从而将其变成实心边框。
-    transparent: process.platform !== 'darwin',
-    backgroundColor: '#00000000',
-    vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
-    visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
-    icon: desktopIcon,
-    show: false,
-    webPreferences: {
-      preload: path.resolve(__dirname, '../preload/index.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      webviewTag: true,
-    },
-  });
-  registerWindowsTitlebarDoubleClick(mainWindow);
-  if (usesCustomFrame) mainWindow.setMenu(null);
   desktopUpdater = new DesktopUpdater({
     currentVersion: app.getVersion(),
     repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',
@@ -148,8 +150,7 @@ async function createWindow(): Promise<void> {
   registerDesktopIpc(terminalStore, desktopUpdater, currentDesktopNativeBridgeServer);
   registerBrowserIpc(currentBrowserController);
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
-  mainWindow.on('closed', () => {
+  currentMainWindow.on('closed', () => {
     currentBrowserController.clear();
     void currentBrowserControlServer.stop();
     void currentDesktopNativeBridgeServer.stop();
@@ -162,13 +163,13 @@ async function createWindow(): Promise<void> {
     desktopUpdater = null;
     terminalStore?.closeAll();
     terminalStore = null;
-    mainWindow = null;
+    if (mainWindow === currentMainWindow) mainWindow = null;
   });
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  currentMainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
-  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+  currentMainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     // 浏览器来宾页面绝不能继承桌面渲染进程的本地预加载脚本或 Node 能力。
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
@@ -178,7 +179,7 @@ async function createWindow(): Promise<void> {
     webPreferences.plugins = true;
     if (!isAllowedEmbeddedBrowserUrl(params.src)) event.preventDefault();
   });
-  mainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
+  currentMainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
     guestContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
     const requestNewBrowserTab = (url: string): boolean => {
       const hostWebContents = guestContents.hostWebContents;
@@ -198,12 +199,12 @@ async function createWindow(): Promise<void> {
       return false;
     };
     guestContents.on('context-menu', (_contextMenuEvent, params) => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (currentMainWindow.isDestroyed()) return;
       Menu.buildFromTemplate(createBrowserContextMenuTemplate(guestContents, params, {
         canOpenInNewTab: isAllowedEmbeddedBrowserUrl,
         copyText: (value) => clipboard.writeText(value),
         openInNewTab: (url) => { requestNewBrowserTab(url); },
-      })).popup({ window: mainWindow });
+      })).popup({ window: currentMainWindow });
     });
     guestContents.setWindowOpenHandler(({ url }) => {
       requestNewBrowserTab(url);
@@ -214,21 +215,52 @@ async function createWindow(): Promise<void> {
     });
   });
   const publishWindowMaximizedState = () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('window-control:maximized-change', isWindowMaximized(mainWindow));
+    if (currentMainWindow.isDestroyed()) return;
+    currentMainWindow.webContents.send('window-control:maximized-change', isWindowMaximized(currentMainWindow));
   };
-  mainWindow.on('maximize', publishWindowMaximizedState);
-  mainWindow.on('unmaximize', publishWindowMaximizedState);
-  mainWindow.on('enter-full-screen', publishWindowMaximizedState);
-  mainWindow.on('leave-full-screen', publishWindowMaximizedState);
+  currentMainWindow.on('maximize', publishWindowMaximizedState);
+  currentMainWindow.on('unmaximize', publishWindowMaximizedState);
+  currentMainWindow.on('enter-full-screen', publishWindowMaximizedState);
+  currentMainWindow.on('leave-full-screen', publishWindowMaximizedState);
 
   const devServerUrl = process.env.SETSUNA_DESKTOP_DEV_SERVER_URL;
   if (devServerUrl) {
-    await mainWindow.loadURL(devServerUrl);
+    await currentMainWindow.loadURL(devServerUrl);
   } else {
-    await mainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
+    await currentMainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
   }
+  await waitForRendererFirstPaint(currentMainWindow);
+  startupInProgress = false;
+  startupSplashLayer.dispose();
   desktopUpdater.start();
+}
+
+function createMainBrowserWindow(desktopIcon?: NativeImage): BrowserWindow {
+  return new BrowserWindow({
+    width: 1320,
+    height: 860,
+    minWidth: mainWindowMinWidth,
+    minHeight: 640,
+    title: 'Setsuna Desktop',
+    frame: !usesCustomFrame,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
+    trafficLightPosition: process.platform === 'darwin' ? getMacTrafficLightPosition(1) : undefined,
+    autoHideMenuBar: usesCustomFrame,
+    // Keep the existing transparent custom-frame surface for the final renderer.
+    transparent: process.platform !== 'darwin',
+    backgroundColor: '#00000000',
+    vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
+    visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
+    icon: desktopIcon,
+    show: false,
+    webPreferences: {
+      preload: path.resolve(__dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      webviewTag: true,
+    },
+  });
 }
 
 function loadDesktopIcon(): NativeImage | undefined {
@@ -618,6 +650,7 @@ if (!ownsDesktopInstance) {
   });
 
   app.on('before-quit', () => {
+    isAppQuitting = true;
     desktopUpdater?.stop();
     terminalStore?.closeAll();
     runtimeHost?.stop();
