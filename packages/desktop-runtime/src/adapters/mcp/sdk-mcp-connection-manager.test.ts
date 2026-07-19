@@ -3,9 +3,28 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { InMemoryDesktopNativeBridge } from '../store/in-memory-secret-store.js';
 import type { McpElicitationHandler } from './mcp-elicitation-coordinator.js';
-import { SdkMcpConnectionManager, threadScopeId } from './sdk-mcp-connection-manager.js';
+import {
+  SdkMcpConnectionManager,
+  stdioTransportEnvironment,
+  threadScopeId,
+} from './sdk-mcp-connection-manager.js';
 
 describe('SdkMcpConnectionManager', () => {
+  it('preserves Electron Node mode only when stdio reuses the current executable', () => {
+    const previous = process.env.ELECTRON_RUN_AS_NODE;
+    process.env.ELECTRON_RUN_AS_NODE = '1';
+    try {
+      expect(stdioTransportEnvironment(process.execPath, undefined)).toMatchObject({ ELECTRON_RUN_AS_NODE: '1' });
+      expect(stdioTransportEnvironment('different-node', undefined)).not.toHaveProperty('ELECTRON_RUN_AS_NODE');
+      expect(stdioTransportEnvironment(process.execPath, { ELECTRON_RUN_AS_NODE: '0' })).toMatchObject({
+        ELECTRON_RUN_AS_NODE: '0',
+      });
+    } finally {
+      if (previous === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+      else process.env.ELECTRON_RUN_AS_NODE = previous;
+    }
+  });
+
   it('uses newline-delimited stdio, paginates inventory, reuses state and propagates cancellation', async () => {
     const manager = new SdkMcpConnectionManager();
     const server = {

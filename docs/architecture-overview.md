@@ -82,10 +82,11 @@ BrowserToolHost
 
 线程不是直接改数组，而是 append-only event：
 
-- `JsonThreadStore.appendEvent()` 给事件分配递增 `seq`。
-- 事件写入 `threads/<threadId>.events.jsonl`。
+- `SqliteThreadStore.appendEvent()` 在 SQLite 写事务内分配递增 `seq`。
+- 事件写入 `threads.sqlite` 的 `runtime_events` 表，`(thread_id, seq)` 和事件 ID 都有唯一约束。
 - `applyRuntimeEventToThread()` 投影出 snapshot。
-- snapshot 写入 `threads/<threadId>.json`，摘要写入 `threads/index.json`。
+- snapshot 作为带 `snapshot_seq` 的 checkpoint 写入 `threads` 表；崩溃恢复只重放 checkpoint 后的事件尾部。
+- `runtime_owner` 租约和 fencing token 阻止第二个 runtime 同时写同一数据目录。
 - `InMemoryEventBus` 广播事件给 SSE 订阅。
 
 这个设计让 renderer、持久化和测试都复用同一套 reducer。新增事件时必须同步更新 contract、reducer、store/server/renderer 消费点和测试。
@@ -109,7 +110,8 @@ runtime 数据根是 Electron `userData/runtime`：
 
 - `config.json`：本地偏好和 provider 配置，不含明文 key。
 - `secrets.json`：provider API key，写入时设置 `0600`。
-- `threads/`：线程 snapshot、事件日志和 index。
+- `threads.sqlite`：线程摘要、snapshot checkpoint、事件日志和 runtime 所有权租约。
+- `threads/`：旧 JSON/JSONL store；首次 SQLite 导入后只保留为迁移源和人工备份，不再双写。
 - `projects.json`：用户添加的 workspace。
 - `mcp.json`：本地 MCP server 配置。
 - `skills.json` 与 `user-skills/`：Skill 状态和用户 Skill。

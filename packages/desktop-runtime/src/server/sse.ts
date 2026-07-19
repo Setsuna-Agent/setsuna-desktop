@@ -32,6 +32,7 @@ export async function handleSse({
   let closed = false;
   let processedSeq = format === 'swe' ? 0 : sinceSeq;
   const writeEvent = (event: RuntimeEvent) => {
+    if (closed || !responseCanWrite(response)) return;
     if (format === 'swe' && sweMapEvent) {
       const notifications = sweMapEvent(event);
       if (event.seq > sinceSeq) writeSweSse(response, notifications, { experimentalApi });
@@ -41,7 +42,7 @@ export async function handleSse({
     processedSeq = event.seq;
   };
   const unsubscribe = runtime.eventBus.subscribe(threadId, (event) => {
-    if (closed || event.seq <= processedSeq) return;
+    if (closed || !responseCanWrite(response) || event.seq <= processedSeq) return;
     if (replaying) buffered.push(event);
     else writeEvent(event);
   });
@@ -92,6 +93,7 @@ export function handleAppServerNotificationSse({
 
   const unsubscribe = runtime.appServerNotificationBus.subscribe((notification, metadata) => {
     if (metadata.connectionId !== undefined && metadata.connectionId !== connectionId) return;
+    if (!responseCanWrite(response)) return;
     writeSweSse(response, [notification], { experimentalApi });
   });
   response.on('close', () => {
@@ -120,6 +122,7 @@ export function runtimeEventStreamExperimentalApi(value: string | null): boolean
 }
 
 function writeRuntimeSse(response: ServerResponse, event: RuntimeEvent): void {
+  if (!responseCanWrite(response)) return;
   response.write('event: runtime-event\n');
   response.write(`data: ${JSON.stringify(event)}\n\n`);
 }
@@ -130,7 +133,12 @@ function writeSweSse(
   capabilities: { experimentalApi?: boolean } = {},
 ): void {
   for (const notification of filterSweNotificationsForClientCapabilities(notifications, capabilities)) {
+    if (!responseCanWrite(response)) return;
     response.write('event: swe-notification\n');
     response.write(`data: ${JSON.stringify(notification)}\n\n`);
   }
+}
+
+function responseCanWrite(response: ServerResponse): boolean {
+  return !response.destroyed && !response.writableEnded && !response.writableFinished;
 }

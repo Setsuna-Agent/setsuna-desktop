@@ -4,7 +4,7 @@
 
 ## 环境
 
-- Node.js `>=22.12.0`
+- Node.js `>=22.13.0`（内置 `node:sqlite` 从该版本起无需 `--experimental-sqlite`）
 - pnpm `>=7`
 - CI 固定 pnpm `7.33.7`
 - 原生依赖：`node-pty`

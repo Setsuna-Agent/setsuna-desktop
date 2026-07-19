@@ -591,24 +591,38 @@ function normalizeCommitInput(value: unknown): { includeUnstaged: boolean; messa
   };
 }
 
-app.whenReady().then(createWindow).catch((error) => {
-  console.error(error);
+const ownsDesktopInstance = app.requestSingleInstanceLock();
+
+if (!ownsDesktopInstance) {
+  // Exit before createWindow() can spawn a second runtime against the same user-data directory.
   app.quit();
-});
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.whenReady().then(createWindow).catch((error) => {
+    console.error(error);
+    app.quit();
+  });
 
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) void createWindow();
-});
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
 
-app.on('before-quit', () => {
-  desktopUpdater?.stop();
-  terminalStore?.closeAll();
-  runtimeHost?.stop();
-  browserController?.clear();
-  void browserControlServer?.stop();
-  void desktopNativeBridgeServer?.stop();
-});
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) void createWindow();
+  });
+
+  app.on('before-quit', () => {
+    desktopUpdater?.stop();
+    terminalStore?.closeAll();
+    runtimeHost?.stop();
+    browserController?.clear();
+    void browserControlServer?.stop();
+    void desktopNativeBridgeServer?.stop();
+  });
+}

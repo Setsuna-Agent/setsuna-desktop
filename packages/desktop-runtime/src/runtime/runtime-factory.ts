@@ -9,7 +9,7 @@ import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { FileMcpStore } from '../adapters/store/file-mcp-store.js';
 import { FilePersistentToolApprovalStore } from '../adapters/store/file-persistent-tool-approval-store.js';
 import { FilePolicyAmendmentStore } from '../adapters/store/file-policy-amendment-store.js';
-import { JsonThreadStore } from '../adapters/store/json-thread-store.js';
+import { SqliteThreadStore } from '../adapters/store/sqlite-thread-store.js';
 import { FileUsageStore } from '../adapters/store/file-usage-store.js';
 import { SdkMcpConnectionManager } from '../adapters/mcp/sdk-mcp-connection-manager.js';
 import { McpElicitationCoordinator } from '../adapters/mcp/mcp-elicitation-coordinator.js';
@@ -67,7 +67,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const appServerNotificationBus = new InMemoryAppServerNotificationBus();
   const approvalGate = new InMemoryApprovalGate(clock, ids);
   // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
-  const persistedThreadStore = new JsonThreadStore(runtimeDataDir, clock, ids);
+  const persistedThreadStore = new SqliteThreadStore(runtimeDataDir, clock, ids);
   const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
   const generatedImageStore = new FileGeneratedImageStore(runtimeDataDir, ids);
   const eventWriter = new RuntimeEventWriter(persistedThreadStore, eventBus);

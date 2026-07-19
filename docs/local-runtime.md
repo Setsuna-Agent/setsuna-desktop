@@ -12,7 +12,7 @@ runtime CLI 读取端口、数据目录、token、内置 skills 目录，创建 
 
 `createRuntimeFactory()` 是依赖组装点：
 
-- `JsonThreadStore`：线程 snapshot + event log。
+- `SqliteThreadStore`：线程 snapshot checkpoint + event log + runtime ownership lease。
 - `FileConfigStore`：runtime 配置和 secrets。
 - `FileUsageStore`：usage jsonl。
 - `FileMcpStore`：MCP server 配置。
@@ -201,13 +201,16 @@ REST 路由覆盖：
 - 归一化 approval policy、permission profile、setsuna style、feature flags、desktop settings。
 - global prompt 限制 8000 字符。
 
-### `JsonThreadStore`
+### `SqliteThreadStore`
 
-- snapshot：`threads/<threadId>.json`。
-- event log：`threads/<threadId>.events.jsonl`。
-- index：`threads/index.json`。
-- 用 per-thread queue 和 index queue 避免并发写乱序。
-- 所有事件通过 `applyRuntimeEventToThread()` 投影。
+- 主库：`threads.sqlite`，使用 WAL、外键和事务。
+- `runtime_events` 以 `(thread_id, seq)` 为主键；事件提交成功后才向 SSE 发布。
+- `threads` 保存可查询摘要、`last_seq` 和带 `snapshot_seq` 的投影 checkpoint。
+- 高频 delta 延迟 checkpoint，恢复时只重放 `snapshot_seq` 后的短事件尾部。
+- `runtime_owner` 使用租约和 fencing token，第二个 runtime 在恢复 stale turn 前就会被拒绝。
+- 首次启动会只读校验并导入旧 `threads/*.json` 与 `threads/*.jsonl`，不截断、不双写。缺号、乱序等不可证明的损坏仍会停止迁移；对于有后续连续事件且最终 snapshot 能佐证最后写入者的重复 seq，迁移器采用 last-writer-wins，并把被替换事件记录在 `legacy_json_import` 元数据中。
+
+`JsonThreadStore` 仍保留给旧数据格式测试和迁移读取，不再由 `runtime-factory` 作为主存储注入。
 
 ### `FileMcpStore`
 

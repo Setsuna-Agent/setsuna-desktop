@@ -1871,7 +1871,7 @@ runtime 依赖组装层。
   - `RandomIdGenerator`
   - `InMemoryEventBus`
   - `InMemoryApprovalGate`
-  - `JsonThreadStore`
+  - `SqliteThreadStore`
   - `FileUsageStore`
   - `FileMcpStore`
   - `FileConfigStore`
@@ -2287,25 +2287,25 @@ runtime 配置文件存储。
   - feature flags
   - desktop settings
 
-### `adapters/store/json-thread-store.ts`
+### `adapters/store/sqlite-thread-store.ts`
 
-线程和事件本地存储。
-
-持久化文件：
-
-- `<runtimeDataDir>/threads/index.json`
-- `<runtimeDataDir>/threads/<threadId>.json`
-- `<runtimeDataDir>/threads/<threadId>.jsonl`
+线程和事件的主存储 adapter，持久化到 `<runtimeDataDir>/threads.sqlite`。
 
 职责：
 
-- 用 snapshot JSON 保存 thread 当前状态。
-- 用 JSONL append 事件日志。
-- 用 `applyRuntimeEventToThread` 从事件更新 snapshot。
-- 维护 thread index。
-- 支持按 global/project/search/archive 过滤线程。
-- 对同一 thread 的写入排队，避免并发写竞争。
-- 删除 thread 时删除 snapshot 和 event log。
+- 在同一个 SQLite 事务内分配 seq、追加事件并更新线程摘要。
+- 用 `snapshot_seq` checkpoint + 事件尾部重放恢复 thread 投影。
+- 用 `(thread_id, seq)`、事件 ID 唯一约束保持 append-only 不变量。
+- 用 runtime lease 和 fencing token 阻止跨进程双写。
+- 首次启动只读导入并校验旧 JSON/JSONL store。
+
+### `adapters/store/legacy-json-thread-reader.ts`
+
+旧线程目录的一次性只读迁移器；缺号、乱序和无 checkpoint 佐证的重复 seq 会停止迁移。若后续连续事件与最终 snapshot 能证明某个重复 seq 的最后写入者继续运行，则保留最后写入并把冲突记入迁移元数据，源文件始终不修改。
+
+### `adapters/store/json-thread-store.ts`
+
+旧 JSON/JSONL 存储实现，保留用于格式回归测试和迁移兼容，不再作为 runtime 主存储。
 
 ### `adapters/store/file-mcp-store.ts`
 
@@ -3034,10 +3034,11 @@ Electron main 传给 runtime 的 data dir 来自 `app.getPath('userData')`。`ru
 ├── projects.json
 ├── skills.json
 ├── usage.jsonl
+├── threads.sqlite
 ├── memories.json
 ├── user-skills/
 │   └── <skill-id>/SKILL.md
-└── threads/
+└── threads/                  # 旧格式迁移源/备份
     ├── index.json
     ├── <thread-id>.json
     └── <thread-id>.jsonl
@@ -3052,7 +3053,7 @@ Electron main 传给 runtime 的 data dir 来自 `app.getPath('userData')`。`ru
 注意事项：
 
 - `secrets.json` 保存 provider API keys，代码会尝试设置 `0600`。
-- thread snapshot 是 `.json`，事件日志是 `.jsonl`。
+- thread 主存储是 `threads.sqlite`；旧 `.json`/`.jsonl` 文件导入后不再双写。
 - Skill 内置资产在仓库 `skills/`，用户 Skill 在 runtime data dir。
 - MCP 配置在 runtime data dir 的 `mcp.json`，不是仓库根目录。
 

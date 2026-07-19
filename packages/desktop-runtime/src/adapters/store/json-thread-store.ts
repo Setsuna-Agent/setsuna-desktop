@@ -18,12 +18,23 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId, resolveRuntimeStoragePath } from '../../security/runtime-id.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
+import {
+  assertThreadSnapshot,
+  cloneThread,
+  eventCanUseDelayedCheckpoint,
+  hydrateMessageCompletionTimesFromEvents,
+  normalizeThreadMemoryMode,
+  normalizeThreadSnapshot,
+  normalizeThreadSummary,
+  optionalSafeRuntimeId,
+  threadHasAncestor,
+  toSummary,
+} from './thread-store-state.js';
 
 type ThreadIndex = {
   threads: RuntimeThreadSummary[];
 };
 
-const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
 const STREAM_CHECKPOINT_DELAY_MS = 100;
 
 export class JsonThreadStore implements ThreadStore {
@@ -403,7 +414,7 @@ export class JsonThreadStore implements ThreadStore {
       thread = applyRuntimeEventToThread(thread, event);
       recovered = true;
     }
-    const hydrated = await this.hydrateMessageCompletionTimesFromEvents(thread, events);
+    const hydrated = hydrateMessageCompletionTimesFromEvents(thread, events);
     if (hydrated !== thread) recovered = true;
     thread = hydrated;
     if (recovered) {
@@ -451,155 +462,10 @@ export class JsonThreadStore implements ThreadStore {
     return events;
   }
 
-  private async hydrateMessageCompletionTimesFromEvents(thread: RuntimeThread, events: RuntimeEvent[]): Promise<RuntimeThread> {
-    const completedAtByMessageId = new Map<string, string>();
-    for (const event of events) {
-      if (event.type === 'message.completed') {
-        completedAtByMessageId.set(event.payload.messageId, event.createdAt);
-      }
-    }
-    let changed = false;
-    const messages = thread.messages.map((message) => {
-      if (message.completedAt || message.status !== 'complete') return message;
-      const completedAt = completedAtByMessageId.get(message.id);
-      if (!completedAt) return message;
-      changed = true;
-      return { ...message, completedAt };
-    });
-    return changed ? { ...thread, messages } : thread;
-  }
-}
-
-function optionalSafeRuntimeId(value: string | undefined, label: string): string | undefined {
-  const normalized = value?.trim();
-  return normalized ? assertSafeRuntimeId(normalized, label) : undefined;
-}
-
-function assertThreadSnapshot(thread: RuntimeThread, expectedThreadId: string): void {
-  if (
-    !thread
-    || thread.id !== expectedThreadId
-    || !Array.isArray(thread.messages)
-    || !Number.isInteger(thread.lastSeq)
-    || thread.lastSeq < 0
-  ) {
-    throw new Error(`Invalid thread snapshot: ${expectedThreadId}`);
-  }
-}
-
-function cloneThread(thread: RuntimeThread): RuntimeThread {
-  return structuredClone(thread);
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error;
-}
-
-function eventCanUseDelayedCheckpoint(event: RuntimeEvent): boolean {
-  return event.type === 'message.delta'
-    || event.type === 'item.delta'
-    || event.type === 'reasoning.summary_delta'
-    || event.type === 'reasoning.raw_delta'
-    || event.type === 'plan.delta'
-    || event.type === 'tool.preview'
-    || event.type === 'tool.output_delta';
-}
-
-function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
-  return {
-    id: thread.id,
-    activeTurnId: thread.activeTurnId,
-    forkedFromId: thread.forkedFromId,
-    parentThreadId: thread.parentThreadId,
-    projectId: thread.projectId,
-    title: thread.title,
-    createdAt: thread.createdAt,
-    updatedAt: thread.updatedAt,
-    archived: thread.archived,
-    memoryMode: normalizeThreadMemoryMode(thread.memoryMode),
-    gitInfo: thread.gitInfo ? { ...thread.gitInfo } : thread.gitInfo,
-    goal: thread.goal ? { ...thread.goal } : undefined,
-    messageCount: thread.messageCount,
-    lastMessagePreview: thread.lastMessagePreview,
-  };
-}
-
-function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boolean; thread: RuntimeThread } {
-  const parentThreadId = typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
-    ? (thread as { parentThreadId: string }).parentThreadId
-    : undefined;
-  const memoryMode = normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode);
-  let changed = parentThreadId !== thread.parentThreadId || memoryMode !== thread.memoryMode;
-  let normalized: RuntimeThread = changed ? {
-    ...thread,
-    parentThreadId,
-    memoryMode,
-  } : thread;
-  if (normalized.contextCompaction?.status === 'running') {
-    // 模型请求无法跨越存储重建继续存在，因此持久显示为运行中的压缩状态
-    // 必然来自被中断的旧进程。
-    normalized = { ...normalized, contextCompaction: undefined };
-    changed = true;
-  }
-  const migrated = normalizeLegacyCancelledToolRuns(normalized);
-  return { changed: changed || migrated !== normalized, thread: migrated };
-}
-
-/** 将旧快照里由 turn 取消错误折叠成 rejected 的工具记录迁移为 cancelled。 */
-function normalizeLegacyCancelledToolRuns(thread: RuntimeThread): RuntimeThread {
-  const cancelledAtByTurn = new Map(
-    (thread.turns ?? [])
-      .filter((turn) => turn.status === 'cancelled' && turn.completedAt)
-      .map((turn) => [turn.id, { completedAt: turn.completedAt, reason: turn.error }]),
-  );
-  if (!cancelledAtByTurn.size) return thread;
-  let changed = false;
-  const messages = thread.messages.map((message) => {
-    const cancellation = message.turnId ? cancelledAtByTurn.get(message.turnId) : undefined;
-    if (!cancellation || !message.toolRuns?.length) return message;
-    let messageChanged = false;
-    const toolRuns = message.toolRuns.map((run) => {
-      if (run.status !== 'rejected' || run.completedAt !== cancellation.completedAt) return run;
-      messageChanged = true;
-      changed = true;
-      const approvalWasCancelled = run.approvalStatus === 'rejected'
-        && Boolean(cancellation.reason)
-        && run.approvalMessage === cancellation.reason;
-      return {
-        ...run,
-        status: 'cancelled' as const,
-        approvalStatus: approvalWasCancelled ? 'cancelled' as const : run.approvalStatus,
-      };
-    });
-    return messageChanged ? { ...message, toolRuns } : message;
-  });
-  return changed ? { ...thread, messages } : thread;
-}
-
-function normalizeThreadSummary(thread: RuntimeThreadSummary): RuntimeThreadSummary {
-  return {
-    ...thread,
-    parentThreadId: typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
-      ? (thread as { parentThreadId: string }).parentThreadId
-      : undefined,
-    memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
-  };
-}
-
-function threadHasAncestor(threadId: string, ancestorThreadId: string, parentMap: Map<string, string | undefined>): boolean {
-  const seen = new Set<string>();
-  let current = parentMap.get(threadId);
-  while (current && !seen.has(current)) {
-    if (current === ancestorThreadId) return true;
-    seen.add(current);
-    current = parentMap.get(current);
-  }
-  return false;
-}
-
-function normalizeThreadMemoryMode(mode: unknown): RuntimeThreadMemoryMode {
-  if (mode === 'enabled' || mode === 'disabled' || mode === 'polluted') return mode;
-  return DEFAULT_THREAD_MEMORY_MODE;
 }
 
 export function createMessage(input: Omit<RuntimeMessage, 'createdAt'> & { createdAt?: string }): RuntimeMessage {

@@ -36,6 +36,7 @@ type Subscription = {
 
 const DEFAULT_SSE_RETRY_BASE_DELAY_MS = 250;
 const MAX_SSE_RETRY_DELAY_MS = 5_000;
+const RUNTIME_READY_TIMEOUT_MS = 30_000;
 
 /**
  * 管理本地 runtime 子进程，并把它的 HTTP/SSE 能力收敛到 Electron bridge 后面。
@@ -169,7 +170,10 @@ export class RuntimeHost {
   private async waitForReady(child: ChildProcessByStdio<null, Readable, Readable>): Promise<void> {
     let buffer = '';
     const ready = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Runtime did not become ready in time')), 10000);
+      const timer = setTimeout(
+        () => reject(new Error('Runtime did not become ready in time')),
+        RUNTIME_READY_TIMEOUT_MS,
+      );
       child.stdout.on('data', (chunk) => {
         buffer += String(chunk);
         // runtime 启动日志按行输出；只有 JSON ready 事件用于握手，其他行仅作为日志透传。

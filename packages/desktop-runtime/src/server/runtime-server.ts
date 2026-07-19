@@ -30,14 +30,20 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     builtinPluginsDir: options.builtinPluginsDir,
     nativeBridge: options.nativeBridge,
   });
-  await runtime.mcpStore.migrateLegacySecrets();
-  await runtime.threadStore.recover();
-  const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true });
-  const recoveredGeneratedImageAssetIds = await managedGeneratedImageAssetIdsFromStore(runtime.threadStore);
-  await runtime.generatedImageStore.recover([...recoveredGeneratedImageAssetIds]);
-  await runtime.attachmentStore.recover(recoveredThreads.map((thread) => thread.id));
-  // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
-  await settleStaleRuntimeTurns(runtime);
+  try {
+    await runtime.mcpStore.migrateLegacySecrets();
+    await runtime.threadStore.recover();
+    const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true });
+    const recoveredGeneratedImageAssetIds = await managedGeneratedImageAssetIdsFromStore(runtime.threadStore);
+    await runtime.generatedImageStore.recover([...recoveredGeneratedImageAssetIds]);
+    await runtime.attachmentStore.recover(recoveredThreads.map((thread) => thread.id));
+    // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
+    await settleStaleRuntimeTurns(runtime);
+  } catch (error) {
+    await runtime.mcpConnections.shutdown().catch(() => undefined);
+    await runtime.threadStore.close().catch(() => undefined);
+    throw error;
+  }
   // Recovery 完成后再排队历史记忆抽取，避免读取尚未结算的 turn；shutdown 会取消该后台队列。
   void runtime.agentLoop.runMemoryStartupExtraction().catch(() => undefined);
   const commandExecManager = createAppServerCommandExecManager(runtime.appServerNotificationBus, {
@@ -144,11 +150,19 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         unsubscribeSkillChanges();
         commandExecManager.terminateAll();
         fsManager.terminateAll();
-        await runtime.agentLoop.shutdown();
-        await runtime.mcpConnections.shutdown();
-        await runtime.eventWriter.flushAll();
-        await runtime.threadStore.flush();
-        await serverClosed;
+        try {
+          await runtime.agentLoop.shutdown();
+        } finally {
+          try {
+            await runtime.mcpConnections.shutdown();
+          } finally {
+            try {
+              await runtime.threadStore.close();
+            } finally {
+              await serverClosed;
+            }
+          }
+        }
       })();
       return closingPromise;
     },

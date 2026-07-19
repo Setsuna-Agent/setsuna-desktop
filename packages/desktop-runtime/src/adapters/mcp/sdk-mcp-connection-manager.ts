@@ -719,7 +719,7 @@ function createTransport(server: RuntimeMcpServerInput, oauth: McpOAuthCoordinat
       command,
       args: server.args ?? [],
       cwd: server.cwd?.trim() || undefined,
-      env: { ...getDefaultEnvironment(), ...(server.env ?? {}) },
+      env: stdioTransportEnvironment(command, server.env),
       stderr: 'pipe',
     });
   }
@@ -742,6 +742,32 @@ function createTransport(server: RuntimeMcpServerInput, oauth: McpOAuthCoordinat
       maxRetries: 5,
     },
   });
+}
+
+export function stdioTransportEnvironment(
+  command: string,
+  configuredEnvironment: Record<string, string> | undefined,
+): Record<string, string> {
+  const environment = { ...getDefaultEnvironment(), ...(configuredEnvironment ?? {}) };
+  const electronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
+  if (
+    electronRunAsNode !== undefined
+    && configuredEnvironment?.ELECTRON_RUN_AS_NODE === undefined
+    && sameExecutable(command, process.execPath)
+  ) {
+    // The packaged runtime is Electron running in Node mode. MCP fixtures and servers that reuse
+    // process.execPath must retain this flag or they accidentally launch a second desktop instance.
+    environment.ELECTRON_RUN_AS_NODE = electronRunAsNode;
+  }
+  return environment;
+}
+
+function sameExecutable(left: string, right: string): boolean {
+  const normalizedLeft = left.trim();
+  const normalizedRight = right.trim();
+  return process.platform === 'win32'
+    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+    : normalizedLeft === normalizedRight;
 }
 
 function resolvedHttpHeaders(server: RuntimeMcpServerInput): Record<string, string> {

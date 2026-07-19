@@ -18,6 +18,7 @@ import { RuntimeEventWriter } from '../loop/runtime-event-writer.js';
 export type RecoverableThreadStore = ThreadStore & {
   recover(): Promise<void>;
   flush(): Promise<void>;
+  close?(): Promise<void>;
 };
 
 /**
@@ -89,6 +90,18 @@ export class EventCoordinatedThreadStore implements ThreadStore {
   async flush(): Promise<void> {
     await this.eventWriter.flushAll();
     await this.inner.flush();
+  }
+
+  async close(): Promise<void> {
+    try {
+      await this.eventWriter.flushAll();
+    } finally {
+      if (this.inner.close) {
+        await this.inner.close();
+      } else {
+        await this.inner.flush();
+      }
+    }
   }
 
   private async afterPendingEvents<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
