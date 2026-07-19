@@ -81,7 +81,10 @@ describe('sqlite thread store', () => {
   it('rejects a second runtime owner before it can recover or append stale-turn events', async () => {
     const dataDir = await temporaryDirectory();
     const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), { ownerId: 'owner_first' });
-    const second = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), { ownerId: 'owner_second' });
+    const second = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), {
+      ownerId: 'owner_second',
+      ownershipWaitMs: 0,
+    });
     await first.recover();
 
     await expect(second.recover()).rejects.toBeInstanceOf(RuntimeStorageInUseError);
@@ -90,6 +93,27 @@ describe('sqlite thread store', () => {
     const next = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), { ownerId: 'owner_next' });
     await expect(next.recover()).resolves.toBeUndefined();
     await next.close();
+  });
+
+  it('waits for an uncleanly released runtime lease to expire during restart', async () => {
+    const dataDir = await temporaryDirectory();
+    const initialized = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await initialized.recover();
+    await initialized.close();
+
+    const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
+    database.prepare(`
+      INSERT OR REPLACE INTO runtime_owner(slot, owner_id, fence_token, lease_expires_at)
+      VALUES (1, ?, ?, ?)
+    `).run('owner_unclean_exit', 7, Date.now() + 75);
+    database.close();
+
+    const restarted = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), {
+      ownerId: 'owner_restarted',
+      ownershipWaitMs: 1_000,
+    });
+    await expect(restarted.recover()).resolves.toBeUndefined();
+    await restarted.close();
   });
 
   it('replays a committed event tail that was not included in the last snapshot checkpoint', async () => {

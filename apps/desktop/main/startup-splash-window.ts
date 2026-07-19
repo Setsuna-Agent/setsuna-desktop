@@ -7,10 +7,15 @@ export interface StartupSplashLayer {
   dispose(): void;
 }
 
+export interface StartupSplashOptions {
+  maximized?: boolean;
+}
+
 export async function showStartupSplash(
   window: BrowserWindow,
   view: WebContentsView,
   icon?: NativeImage,
+  options: StartupSplashOptions = {},
 ): Promise<StartupSplashLayer> {
   let disposed = false;
   const updateBounds = () => {
@@ -46,6 +51,9 @@ export async function showStartupSplash(
     dispose();
     throw new Error('Desktop window was closed before the startup splash became ready.');
   }
+  // Maximizing a hidden BrowserWindow does not make it visible on Windows.
+  // Restore the state first so showing it never flashes at the normal bounds.
+  if (options.maximized) window.maximize();
   window.show();
   return { dispose };
 }

@@ -36,12 +36,14 @@ const SCHEMA_VERSION = 1;
 const DEFAULT_CHECKPOINT_DELAY_MS = 250;
 const DEFAULT_LEASE_TTL_MS = 15_000;
 const DEFAULT_LEASE_HEARTBEAT_MS = 5_000;
+const DEFAULT_OWNERSHIP_WAIT_MS = 20_000;
 const LEGACY_IMPORT_KEY = 'legacy_json_import';
 
 type SqliteThreadStoreOptions = {
   checkpointDelayMs?: number;
   leaseHeartbeatMs?: number;
   leaseTtlMs?: number;
+  ownershipWaitMs?: number;
   ownerId?: string;
 };
 
@@ -50,7 +52,7 @@ type SqliteThreadRow = Record<string, string | number | bigint | Uint8Array | nu
 export class RuntimeStorageInUseError extends Error {
   readonly code = 'runtime_storage_in_use';
 
-  constructor(databasePath: string, leaseExpiresAt: number) {
+  constructor(databasePath: string, readonly leaseExpiresAt: number) {
     super(`Runtime storage is already owned by another process until ${new Date(leaseExpiresAt).toISOString()}: ${databasePath}`);
     this.name = 'RuntimeStorageInUseError';
   }
@@ -67,6 +69,7 @@ export class SqliteThreadStore implements ThreadStore {
   private readonly checkpointDelayMs: number;
   private readonly leaseHeartbeatMs: number;
   private readonly leaseTtlMs: number;
+  private readonly ownershipWaitMs: number;
   private readonly threadWriteQueues = new Map<string, Promise<void>>();
   private readonly threadCache = new Map<string, RuntimeThread>();
   private readonly checkpointTimers = new Map<string, NodeJS.Timeout>();
@@ -94,6 +97,7 @@ export class SqliteThreadStore implements ThreadStore {
       250,
       Math.min(options.leaseHeartbeatMs ?? DEFAULT_LEASE_HEARTBEAT_MS, Math.floor(this.leaseTtlMs / 2)),
     );
+    this.ownershipWaitMs = Math.max(0, options.ownershipWaitMs ?? DEFAULT_OWNERSHIP_WAIT_MS);
   }
 
   async recover(): Promise<void> {
@@ -348,7 +352,7 @@ export class SqliteThreadStore implements ThreadStore {
         PRAGMA temp_store = MEMORY;
       `);
       this.ensureSchema();
-      this.acquireOwnership();
+      await this.acquireOwnership();
       this.startLeaseHeartbeat();
       await this.importLegacyJsonStore();
     } catch (error) {
@@ -742,7 +746,24 @@ export class SqliteThreadStore implements ThreadStore {
     }
   }
 
-  private acquireOwnership(): void {
+  private async acquireOwnership(): Promise<void> {
+    const waitDeadline = Date.now() + this.ownershipWaitMs;
+    for (;;) {
+      try {
+        this.acquireOwnershipOnce();
+        return;
+      } catch (error) {
+        if (!(error instanceof RuntimeStorageInUseError) || this.ownershipWaitMs === 0) throw error;
+
+        const remainingWaitMs = waitDeadline - Date.now();
+        if (remainingWaitMs <= 0) throw error;
+        const remainingLeaseMs = error.leaseExpiresAt - this.clock.now().getTime();
+        await delay(Math.min(remainingWaitMs, Math.max(25, remainingLeaseMs + 25)));
+      }
+    }
+  }
+
+  private acquireOwnershipOnce(): void {
     const database = this.requireDatabase();
     const now = this.clock.now().getTime();
     let acquiredFenceToken = 1;
@@ -931,6 +952,10 @@ function numberColumn(row: SqliteThreadRow | undefined, column: string): number 
 
 function changedRows(result: StatementResultingChanges): number {
   return typeof result.changes === 'bigint' ? Number(result.changes) : result.changes;
+}
+
+function delay(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 function toError(error: unknown): Error {

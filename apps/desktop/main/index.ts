@@ -7,12 +7,14 @@ import {
   Menu,
   nativeImage,
   safeStorage,
+  screen,
   session,
   shell,
   WebContentsView,
   webContents as electronWebContents,
   type NativeImage,
   type OpenDialogOptions,
+  type Rectangle,
 } from 'electron';
 import { DESKTOP_BROWSER_PARTITION, RUNTIME_FILE_ATTACHMENT_MAX_BYTES, type DesktopUserProfile } from '@setsuna-desktop/contracts';
 import { existsSync } from 'node:fs';
@@ -29,6 +31,7 @@ import { DesktopCredentialVault } from './desktop-credential-vault.js';
 import { DesktopNativeBridgeServer } from './desktop-native-bridge-server.js';
 import { electronCredentialEncryption } from './electron-credential-encryption.js';
 import { copyChatImage, readGeneratedImageAsset, revealChatImage } from './generated-image-actions.js';
+import { loadDesktopWindowState, trackDesktopWindowState } from './desktop-window-state.js';
 import {
   checkoutReviewBranch,
   commitReviewChanges,
@@ -49,7 +52,11 @@ import { createWorkspaceFilePreviewUrl, openWorkspaceFileWithDefaultApp } from '
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
+const desktopWindowStateFileName = 'window-state.json';
+const mainWindowDefaultWidth = 1320;
+const mainWindowDefaultHeight = 860;
 const mainWindowMinWidth = 880;
+const mainWindowMinHeight = 640;
 const macTrafficLightX = 16;
 const macTrafficLightSize = 14;
 const appTopbarHeight = 42;
@@ -61,16 +68,31 @@ let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
 let isAppQuitting = false;
+let desktopServicesShutdownPromise: Promise<void> | null = null;
+let appQuitAfterShutdown = false;
+let appQuitShutdownPending = false;
 const usesCustomFrame = process.platform !== 'darwin';
 
 async function createWindow(): Promise<void> {
+  if (desktopServicesShutdownPromise) {
+    await desktopServicesShutdownPromise;
+    desktopServicesShutdownPromise = null;
+  }
   const desktopIcon = loadDesktopIcon();
   if (process.platform === 'darwin' && desktopIcon) {
     app.dock?.setIcon(desktopIcon);
   }
 
+  const windowStateFilePath = path.join(app.getPath('userData'), desktopWindowStateFileName);
+  const windowState = loadDesktopWindowState(windowStateFilePath, desktopDisplayWorkAreas(), {
+    defaultHeight: mainWindowDefaultHeight,
+    defaultWidth: mainWindowDefaultWidth,
+    minHeight: mainWindowMinHeight,
+    minWidth: mainWindowMinWidth,
+  });
   // The splash and app share one native window so the OS never animates a window swap.
-  const currentMainWindow = createMainBrowserWindow(desktopIcon);
+  const currentMainWindow = createMainBrowserWindow(desktopIcon, windowState.bounds);
+  trackDesktopWindowState(currentMainWindow, windowStateFilePath);
   let startupClosedBeforeHandoff = false;
   let startupInProgress = true;
   mainWindow = currentMainWindow;
@@ -91,7 +113,9 @@ async function createWindow(): Promise<void> {
       sandbox: true,
     },
   });
-  const startupSplashLayer = await showStartupSplash(currentMainWindow, startupSplashView, desktopIcon);
+  const startupSplashLayer = await showStartupSplash(currentMainWindow, startupSplashView, desktopIcon, {
+    maximized: windowState.maximized,
+  });
   if (startupClosedBeforeHandoff) return;
 
   await hydrateDesktopProcessEnvironment({ loadLoginShell: app.isPackaged });
@@ -151,18 +175,7 @@ async function createWindow(): Promise<void> {
   registerBrowserIpc(currentBrowserController);
 
   currentMainWindow.on('closed', () => {
-    currentBrowserController.clear();
-    void currentBrowserControlServer.stop();
-    void currentDesktopNativeBridgeServer.stop();
-    currentRuntimeHost.stop();
-    if (browserController === currentBrowserController) browserController = null;
-    if (browserControlServer === currentBrowserControlServer) browserControlServer = null;
-    if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
-    if (runtimeHost === currentRuntimeHost) runtimeHost = null;
-    desktopUpdater?.stop();
-    desktopUpdater = null;
-    terminalStore?.closeAll();
-    terminalStore = null;
+    void shutdownDesktopServices();
     if (mainWindow === currentMainWindow) mainWindow = null;
   });
   currentMainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -235,12 +248,11 @@ async function createWindow(): Promise<void> {
   desktopUpdater.start();
 }
 
-function createMainBrowserWindow(desktopIcon?: NativeImage): BrowserWindow {
+function createMainBrowserWindow(desktopIcon: NativeImage | undefined, bounds: Rectangle): BrowserWindow {
   return new BrowserWindow({
-    width: 1320,
-    height: 860,
+    ...bounds,
     minWidth: mainWindowMinWidth,
-    minHeight: 640,
+    minHeight: mainWindowMinHeight,
     title: 'Setsuna Desktop',
     frame: !usesCustomFrame,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
@@ -261,6 +273,16 @@ function createMainBrowserWindow(desktopIcon?: NativeImage): BrowserWindow {
       webviewTag: true,
     },
   });
+}
+
+function desktopDisplayWorkAreas(): Rectangle[] {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  return [
+    primaryDisplay.workArea,
+    ...screen.getAllDisplays()
+      .filter((display) => display.id !== primaryDisplay.id)
+      .map((display) => display.workArea),
+  ];
 }
 
 function loadDesktopIcon(): NativeImage | undefined {
@@ -623,6 +645,45 @@ function normalizeCommitInput(value: unknown): { includeUnstaged: boolean; messa
   };
 }
 
+function shutdownDesktopServices(): Promise<void> {
+  if (desktopServicesShutdownPromise) return desktopServicesShutdownPromise;
+
+  const currentRuntimeHost = runtimeHost;
+  const currentBrowserController = browserController;
+  const currentBrowserControlServer = browserControlServer;
+  const currentDesktopNativeBridgeServer = desktopNativeBridgeServer;
+  const currentTerminalStore = terminalStore;
+  const currentDesktopUpdater = desktopUpdater;
+
+  currentDesktopUpdater?.stop();
+  currentTerminalStore?.closeAll();
+  currentBrowserController?.clear();
+
+  desktopServicesShutdownPromise = (async () => {
+    try {
+      await currentRuntimeHost?.stop();
+    } catch (error) {
+      console.error('[runtime] graceful shutdown failed', error);
+    }
+
+    const bridgeResults = await Promise.allSettled([
+      currentBrowserControlServer?.stop() ?? Promise.resolve(),
+      currentDesktopNativeBridgeServer?.stop() ?? Promise.resolve(),
+    ]);
+    for (const result of bridgeResults) {
+      if (result.status === 'rejected') console.error('[desktop] local bridge shutdown failed', result.reason);
+    }
+
+    if (runtimeHost === currentRuntimeHost) runtimeHost = null;
+    if (browserController === currentBrowserController) browserController = null;
+    if (browserControlServer === currentBrowserControlServer) browserControlServer = null;
+    if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
+    if (terminalStore === currentTerminalStore) terminalStore = null;
+    if (desktopUpdater === currentDesktopUpdater) desktopUpdater = null;
+  })();
+  return desktopServicesShutdownPromise;
+}
+
 const ownsDesktopInstance = app.requestSingleInstanceLock();
 
 if (!ownsDesktopInstance) {
@@ -649,13 +710,15 @@ if (!ownsDesktopInstance) {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     isAppQuitting = true;
-    desktopUpdater?.stop();
-    terminalStore?.closeAll();
-    runtimeHost?.stop();
-    browserController?.clear();
-    void browserControlServer?.stop();
-    void desktopNativeBridgeServer?.stop();
+    if (appQuitAfterShutdown) return;
+    event.preventDefault();
+    if (appQuitShutdownPending) return;
+    appQuitShutdownPending = true;
+    void shutdownDesktopServices().finally(() => {
+      appQuitAfterShutdown = true;
+      app.quit();
+    });
   });
 }

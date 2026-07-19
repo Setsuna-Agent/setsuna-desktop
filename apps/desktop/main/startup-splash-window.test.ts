@@ -43,6 +43,34 @@ describe('startup splash window', () => {
     expect(close).toHaveBeenCalledWith({ waitForBeforeUnload: false });
   });
 
+  it('shows a window after restoring its maximized state', async () => {
+    const windowEvents = new EventEmitter();
+    const maximize = vi.fn();
+    const show = vi.fn();
+    const window = Object.assign(windowEvents, {
+      contentView: { addChildView: vi.fn(), removeChildView: vi.fn() },
+      getContentSize: () => [1320, 860],
+      isDestroyed: () => false,
+      maximize,
+      show,
+    }) as unknown as BrowserWindow;
+    const view = {
+      setBackgroundColor: vi.fn(),
+      setBounds: vi.fn(),
+      webContents: {
+        close: vi.fn(),
+        isDestroyed: () => false,
+        loadURL: vi.fn().mockResolvedValue(undefined),
+      },
+    } as unknown as WebContentsView;
+
+    await showStartupSplash(window, view, undefined, { maximized: true });
+
+    expect(maximize).toHaveBeenCalledOnce();
+    expect(show).toHaveBeenCalledOnce();
+    expect(maximize.mock.invocationCallOrder[0]).toBeLessThan(show.mock.invocationCallOrder[0]!);
+  });
+
   it('waits for the final renderer paint probe before removing the layer', async () => {
     const executeJavaScript = vi.fn().mockResolvedValue(undefined);
     const window = {

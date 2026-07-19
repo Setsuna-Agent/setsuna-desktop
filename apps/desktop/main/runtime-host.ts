@@ -1,15 +1,16 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import type { Readable } from 'node:stream';
+import type { Readable, Writable } from 'node:stream';
 import net from 'node:net';
 import path from 'node:path';
 import type { WebContents } from 'electron';
-import type {
-  RuntimeAttachmentUploadInput,
-  RuntimeEvent,
-  RuntimeRequestInput,
-  RuntimeStoredMessageAttachment,
+import {
+  RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
+  type RuntimeAttachmentUploadInput,
+  type RuntimeEvent,
+  type RuntimeRequestInput,
+  type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { desktopProcessEnvironment } from './desktop-environment.js';
 
@@ -25,6 +26,7 @@ type RuntimeHostOptions = {
   };
   dataDir: string;
   runtimeEntry?: string;
+  shutdownTimeoutMs?: number;
   sseRetryBaseDelayMs?: number;
 };
 
@@ -37,12 +39,18 @@ type Subscription = {
 const DEFAULT_SSE_RETRY_BASE_DELAY_MS = 250;
 const MAX_SSE_RETRY_DELAY_MS = 5_000;
 const RUNTIME_READY_TIMEOUT_MS = 30_000;
+const RUNTIME_SHUTDOWN_TIMEOUT_MS = 5_000;
+const RUNTIME_FORCE_EXIT_TIMEOUT_MS = 1_000;
+
+export type RuntimeChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
 
 /**
  * 管理本地 runtime 子进程，并把它的 HTTP/SSE 能力收敛到 Electron bridge 后面。
  */
 export class RuntimeHost {
-  private child: ChildProcessByStdio<null, Readable, Readable> | null = null;
+  private child: RuntimeChildProcess | null = null;
+  private stoppingChild: RuntimeChildProcess | null = null;
+  private stoppingPromise: Promise<void> | null = null;
   private port = 0;
   // 每次启动生成独立 token，避免任意 localhost 调用者绕过 Electron main 访问 runtime。
   private readonly token = randomBytes(32).toString('hex');
@@ -54,6 +62,7 @@ export class RuntimeHost {
    * 启动 runtime 子进程并等待 health check 通过。
    */
   async start(): Promise<void> {
+    if (this.stoppingPromise) await this.stoppingPromise;
     if (this.child) return;
     this.port = await findAvailablePort();
     const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
@@ -62,7 +71,7 @@ export class RuntimeHost {
     // Electron 打包后仍复用当前可执行文件，通过 ELECTRON_RUN_AS_NODE 切换成 Node runtime 进程。
     const child = spawn(process.execPath, [runtimeEntry, '--port', String(this.port)], {
       cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...desktopProcessEnvironment(process.env),
         ELECTRON_RUN_AS_NODE: '1',
@@ -83,8 +92,10 @@ export class RuntimeHost {
     this.child = child;
     child.stderr.on('data', (chunk) => console.error(`[runtime] ${String(chunk).trimEnd()}`));
     child.on('exit', (code, signal) => {
-      this.child = null;
-      console.error(`[runtime] exited code=${code ?? 'null'} signal=${signal ?? 'null'}`);
+      if (this.child === child) this.child = null;
+      const message = `[runtime] exited code=${code ?? 'null'} signal=${signal ?? 'null'}`;
+      if (this.stoppingChild === child) console.info(message);
+      else console.error(message);
     });
     await this.waitForReady(child);
     await this.healthCheck();
@@ -93,10 +104,20 @@ export class RuntimeHost {
   /**
    * 停止 runtime 子进程，并取消所有 SSE 订阅。
    */
-  stop(): void {
+  async stop(): Promise<void> {
     for (const subscriptionId of this.subscriptions.keys()) this.unsubscribe(subscriptionId);
-    this.child?.kill('SIGTERM');
-    this.child = null;
+    if (this.stoppingPromise) return this.stoppingPromise;
+    const child = this.child;
+    if (!child) return;
+    this.stoppingChild = child;
+    const stop = stopRuntimeChild(child, this.options.shutdownTimeoutMs ?? RUNTIME_SHUTDOWN_TIMEOUT_MS)
+      .finally(() => {
+        if (this.child === child) this.child = null;
+        if (this.stoppingChild === child) this.stoppingChild = null;
+        if (this.stoppingPromise === stop) this.stoppingPromise = null;
+      });
+    this.stoppingPromise = stop;
+    return stop;
   }
 
   /**
@@ -167,7 +188,7 @@ export class RuntimeHost {
    *
    * @param child 刚启动的 runtime 子进程。
    */
-  private async waitForReady(child: ChildProcessByStdio<null, Readable, Readable>): Promise<void> {
+  private async waitForReady(child: RuntimeChildProcess): Promise<void> {
     let buffer = '';
     const ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
@@ -348,6 +369,48 @@ function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
     }
     signal.addEventListener('abort', finish, { once: true });
   });
+}
+
+/**
+ * Ask the runtime to release durable resources before terminating it. Windows does not
+ * deliver POSIX signals to Node child processes, so child.kill('SIGTERM') is only a fallback.
+ */
+export async function stopRuntimeChild(
+  child: RuntimeChildProcess,
+  gracefulTimeoutMs = RUNTIME_SHUTDOWN_TIMEOUT_MS,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => resolve());
+  });
+  const ignoreStdinError = () => undefined;
+  child.stdin.once('error', ignoreStdinError);
+  try {
+    try {
+      child.stdin.end(RUNTIME_PROCESS_SHUTDOWN_MESSAGE);
+    } catch {
+      // A process that already closed stdin is handled by the forced-stop fallback below.
+    }
+    if (await settlesWithin(exited, Math.max(0, gracefulTimeoutMs))) return;
+
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS);
+  } finally {
+    child.stdin.off('error', ignoreStdinError);
+  }
+}
+
+async function settlesWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise.then(() => true as const), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function findAvailablePort(): Promise<number> {

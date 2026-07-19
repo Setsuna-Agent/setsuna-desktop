@@ -1,5 +1,8 @@
+import { EventEmitter } from 'node:events';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import type { WebContents } from 'electron';
+import { RUNTIME_PROCESS_SHUTDOWN_MESSAGE } from '@setsuna-desktop/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RuntimeHost,
@@ -7,6 +10,8 @@ import {
   resolveBuiltinSkillsDir,
   resolvePackagedRuntimeEntry,
   resolveRuntimeSpawnCwd,
+  stopRuntimeChild,
+  type RuntimeChildProcess,
 } from './runtime-host.js';
 
 describe('runtime host packaging paths', () => {
@@ -115,6 +120,50 @@ describe('runtime host packaging paths', () => {
       headers: expect.objectContaining({ Authorization: expect.stringMatching(/^Bearer /u) }),
     });
     expect(Buffer.from(init?.body as Uint8Array)).toEqual(Buffer.from([1, 2, 3]));
+  });
+
+  it('asks the runtime to shut down through stdin before terminating it', async () => {
+    const stdin = new PassThrough();
+    const childState = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      stdin,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: vi.fn(),
+    });
+    let controlInput = '';
+    stdin.setEncoding('utf8');
+    stdin.on('data', (chunk: string) => {
+      controlInput += chunk;
+      if (controlInput !== RUNTIME_PROCESS_SHUTDOWN_MESSAGE) return;
+      childState.exitCode = 0;
+      childState.emit('exit', 0, null);
+    });
+
+    await stopRuntimeChild(childState as unknown as RuntimeChildProcess, 100);
+
+    expect(controlInput).toBe(RUNTIME_PROCESS_SHUTDOWN_MESSAGE);
+    expect(childState.kill).not.toHaveBeenCalled();
+  });
+
+  it('force-stops a runtime that does not acknowledge the shutdown request', async () => {
+    const childState = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: vi.fn(() => {
+        childState.signalCode = 'SIGTERM';
+        childState.emit('exit', null, 'SIGTERM');
+        return true;
+      }),
+    });
+
+    await stopRuntimeChild(childState as unknown as RuntimeChildProcess, 0);
+
+    expect(childState.kill).toHaveBeenCalledWith('SIGTERM');
   });
 });
 
