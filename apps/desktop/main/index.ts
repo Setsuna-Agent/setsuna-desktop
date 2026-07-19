@@ -115,6 +115,7 @@ async function createWindow(): Promise<void> {
   });
   const startupSplashLayer = await showStartupSplash(currentMainWindow, startupSplashView, desktopIcon, {
     maximized: windowState.maximized,
+    windowControls: usesCustomFrame,
   });
   if (startupClosedBeforeHandoff) return;
 
@@ -244,7 +245,7 @@ async function createWindow(): Promise<void> {
   }
   await waitForRendererFirstPaint(currentMainWindow);
   startupInProgress = false;
-  startupSplashLayer.dispose();
+  startupSplashLayer.reveal();
   desktopUpdater.start();
 }
 

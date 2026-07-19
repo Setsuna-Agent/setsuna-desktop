@@ -1,6 +1,13 @@
 const STARTUP_SPLASH_DATA_URL_PREFIX = 'data:text/html;base64,';
+const STARTUP_SPLASH_WINDOW_ACTION_PROTOCOL = 'setsuna-startup-action:';
 
 export const STARTUP_SPLASH_SHIMMER_DURATION_MS = 5_000;
+
+export type StartupSplashWindowAction = 'close' | 'minimize' | 'toggle-maximize';
+
+export interface StartupSplashPageOptions {
+  windowControls?: boolean;
+}
 
 const fallbackLogoSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -12,9 +19,31 @@ const fallbackLogoSvg = `
 
 const fallbackLogoDataUrl = `data:image/svg+xml;base64,${Buffer.from(fallbackLogoSvg).toString('base64')}`;
 
-export function createStartupSplashPageUrl(logoDataUrl?: string): string {
-  const html = createStartupSplashHtml(normalizeLogoDataUrl(logoDataUrl));
+export function createStartupSplashPageUrl(
+  logoDataUrl?: string,
+  options: StartupSplashPageOptions = {},
+): string {
+  const html = createStartupSplashHtml(normalizeLogoDataUrl(logoDataUrl), options);
   return `${STARTUP_SPLASH_DATA_URL_PREFIX}${Buffer.from(html).toString('base64')}`;
+}
+
+export function createStartupSplashWindowActionUrl(action: StartupSplashWindowAction): string {
+  return `${STARTUP_SPLASH_WINDOW_ACTION_PROTOCOL}//${action}`;
+}
+
+export function startupSplashWindowActionFromUrl(value: string): StartupSplashWindowAction | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== STARTUP_SPLASH_WINDOW_ACTION_PROTOCOL || (url.pathname !== '' && url.pathname !== '/')) {
+      return null;
+    }
+    if (url.hostname === 'close' || url.hostname === 'minimize' || url.hostname === 'toggle-maximize') {
+      return url.hostname;
+    }
+  } catch {
+    // Ignore malformed and unrelated navigation targets.
+  }
+  return null;
 }
 
 export function decodeStartupSplashPageUrl(pageUrl: string): string {
@@ -29,10 +58,11 @@ function normalizeLogoDataUrl(value?: string): string {
   return fallbackLogoDataUrl;
 }
 
-function createStartupSplashHtml(logoDataUrl: string): string {
+function createStartupSplashHtml(logoDataUrl: string, options: StartupSplashPageOptions): string {
   const shimmerDurationSeconds = STARTUP_SPLASH_SHIMMER_DURATION_MS / 1_000;
+  const windowControls = options.windowControls ? createWindowControlsHtml() : '';
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="startup-splash-running">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -67,6 +97,54 @@ function createStartupSplashHtml(logoDataUrl: string): string {
         -webkit-app-region: drag;
       }
 
+      .startup-window-controls {
+        position: fixed;
+        top: 0;
+        right: 0;
+        z-index: 3;
+        display: flex;
+        align-items: stretch;
+        height: 34px;
+        -webkit-app-region: no-drag;
+      }
+
+      .startup-window-controls__button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 34px;
+        border: 0;
+        color: #62646a;
+        background: transparent;
+        text-decoration: none;
+      }
+
+      .startup-window-controls__button:hover {
+        color: #25262a;
+        background: rgba(31, 35, 40, 0.08);
+      }
+
+      .startup-window-controls__button--close:hover {
+        color: #fff;
+        background: #e81123;
+      }
+
+      .startup-window-controls__button:focus-visible {
+        outline: 1px solid rgba(76, 110, 245, 0.8);
+        outline-offset: -2px;
+      }
+
+      .startup-window-controls svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.4;
+      }
+
       .setsuna-logo {
         position: relative;
         width: 54px;
@@ -88,64 +166,91 @@ function createStartupSplashHtml(logoDataUrl: string): string {
       }
 
       .setsuna-logo__base {
-        opacity: 0.34;
+        opacity: 0.38;
         filter: grayscale(1) contrast(1.05) brightness(0.8);
         mix-blend-mode: multiply;
       }
 
       .setsuna-logo__highlight {
-        opacity: 0.58;
-        filter: grayscale(1) contrast(1.12) brightness(1.55);
-        mix-blend-mode: screen;
+        z-index: 1;
+        opacity: 0;
+        filter: grayscale(1) contrast(0.72) brightness(2.25);
         -webkit-mask-image: linear-gradient(
-          105deg,
-          transparent 4%,
-          rgba(0, 0, 0, 0.12) 30%,
-          #000 48%,
-          rgba(0, 0, 0, 0.2) 68%,
-          transparent 96%
+          104deg,
+          transparent 0%,
+          rgba(0, 0, 0, 0.08) 24%,
+          rgba(0, 0, 0, 0.48) 42%,
+          #000 50%,
+          rgba(0, 0, 0, 0.34) 60%,
+          rgba(0, 0, 0, 0.06) 76%,
+          transparent 100%
         );
         -webkit-mask-repeat: no-repeat;
-        -webkit-mask-size: 48% 100%;
+        -webkit-mask-size: 36% 100%;
+        -webkit-mask-position: -90% 0;
         mask-image: linear-gradient(
-          105deg,
-          transparent 4%,
-          rgba(0, 0, 0, 0.12) 30%,
-          #000 48%,
-          rgba(0, 0, 0, 0.2) 68%,
-          transparent 96%
+          104deg,
+          transparent 0%,
+          rgba(0, 0, 0, 0.08) 24%,
+          rgba(0, 0, 0, 0.48) 42%,
+          #000 50%,
+          rgba(0, 0, 0, 0.34) 60%,
+          rgba(0, 0, 0, 0.06) 76%,
+          transparent 100%
         );
         mask-repeat: no-repeat;
-        mask-size: 48% 100%;
-        animation: setsuna-logo-shimmer ${shimmerDurationSeconds}s cubic-bezier(0.22, 0.7, 0.35, 1) infinite;
-        will-change: mask-position, -webkit-mask-position;
+        mask-size: 36% 100%;
+        mask-position: -90% 0;
+        will-change: mask-position, -webkit-mask-position, opacity;
+      }
+
+      .startup-splash-running .setsuna-logo__highlight {
+        animation: setsuna-logo-shimmer ${shimmerDurationSeconds}s linear infinite;
       }
 
       @keyframes setsuna-logo-shimmer {
         0% {
-          -webkit-mask-position: -95% 0;
-          mask-position: -95% 0;
+          -webkit-mask-position: -90% 0;
+          mask-position: -90% 0;
+          opacity: 0;
         }
-        18%,
+        2% {
+          opacity: 0.72;
+        }
+        25% {
+          -webkit-mask-position: 190% 0;
+          mask-position: 190% 0;
+          opacity: 0.72;
+        }
+        29%,
         100% {
-          -webkit-mask-position: 195% 0;
-          mask-position: 195% 0;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .setsuna-logo__highlight {
-          display: none;
-          animation: none;
+          -webkit-mask-position: 190% 0;
+          mask-position: 190% 0;
+          opacity: 0;
         }
       }
     </style>
   </head>
   <body>
-    <div class="setsuna-logo" role="status" aria-label="Setsuna Desktop 正在启动">
+    ${windowControls}
+    <div class="setsuna-logo" role="status" aria-label="Setsuna Desktop is starting">
       <img class="setsuna-logo__layer setsuna-logo__base" src="${logoDataUrl}" alt="" />
       <img class="setsuna-logo__layer setsuna-logo__highlight" src="${logoDataUrl}" alt="" />
     </div>
   </body>
 </html>`;
+}
+
+function createWindowControlsHtml(): string {
+  return `<nav class="startup-window-controls" aria-label="Window controls">
+      <a class="startup-window-controls__button" href="${createStartupSplashWindowActionUrl('minimize')}" aria-label="Minimize" title="&#26368;&#23567;&#21270;">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5h10" /></svg>
+      </a>
+      <a class="startup-window-controls__button" href="${createStartupSplashWindowActionUrl('toggle-maximize')}" aria-label="Maximize" title="&#26368;&#22823;&#21270;">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="0.4" /></svg>
+      </a>
+      <a class="startup-window-controls__button startup-window-controls__button--close" href="${createStartupSplashWindowActionUrl('close')}" aria-label="Close" title="&#20851;&#38381;">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+      </a>
+    </nav>`;
 }
