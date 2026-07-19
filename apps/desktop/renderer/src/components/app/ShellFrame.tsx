@@ -1,4 +1,4 @@
-import { Maximize2, Minus, PanelLeft, Plus, X } from 'lucide-react';
+import { Minus, PanelLeft, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type Ref } from 'react';
 import { IconButton } from '../primitives.js';
 import { usesCustomFrameLayout } from '../../utils/desktopPlatform.js';
@@ -283,11 +283,29 @@ function WindowControls() {
         <Minus size={14} />
       </button>
       <button type="button" aria-label="最大化" title="最大化" onClick={() => void controls?.toggleMaximize()}>
-        <Maximize2 size={13} />
+        <WindowMaximizeIcon />
       </button>
       <button className="app-window-controls__close" type="button" aria-label="关闭" title="关闭" onClick={() => void controls?.close()}>
         <X size={14} />
       </button>
     </div>
+  );
+}
+
+function WindowMaximizeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.4"
+    >
+      <rect x="3.5" y="3.5" width="9" height="9" rx="0.4" />
+    </svg>
   );
 }
