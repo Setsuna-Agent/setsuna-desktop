@@ -20,7 +20,6 @@ const MAX_FIND_RESULTS = 200;
 const DEFAULT_SEARCH_RESULTS = 50;
 const MAX_SEARCH_RESULTS = 200;
 const MAX_SEARCH_CONTEXT_LINES = 5;
-const MAX_SEARCH_FILE_BYTES = 1024 * 1024;
 const MAX_DIFF_CELLS = 500000;
 const DIFF_CONTEXT_LINES = 2;
 const DIFF_FOLD_THRESHOLD_LINES = 20;
@@ -685,6 +684,7 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
     allowPassiveMemory: options?.allowPassiveMemory === true,
     memoryEnabled: options?.memoryEnabled !== false,
     memoryStorageRoot: options?.memoryStorageRoot || DEFAULT_MEMORY_STORE_DIR,
+    workspaceSearchEngine: options?.workspaceSearchEngine,
   };
 }
 
@@ -1135,7 +1135,7 @@ export async function executeLocalTool(name, args, state = createLocalToolState(
     }
     if (name === 'list_directory') return await listDirectory(args, state);
     if (name === 'find_files') return await findFiles(args, state);
-    if (name === 'search_text') return await searchText(args, state);
+    if (name === 'search_text') return await searchText(args, state, options.signal);
     if (name === 'read_file') return await readLocalFile(args, state);
     if (name === 'git_status') return await gitStatus(state, options.signal);
     if (name === 'git_log') return await gitLog(args, state, options.signal);
@@ -1666,207 +1666,44 @@ async function findFiles(args, state) {
   );
 }
 
-async function searchText(args, state) {
+async function searchText(args, state, signal) {
   const query = String(args?.query ?? '');
   if (!query) return errorResult('Search query cannot be empty.');
 
   const maxResults = boundedInteger(args?.max_results, DEFAULT_SEARCH_RESULTS, 1, MAX_SEARCH_RESULTS);
   const contextLines = boundedInteger(args?.context_lines, 0, 0, MAX_SEARCH_CONTEXT_LINES);
   const regex = args?.regex !== false;
-  const matcher = createTextMatcher(query, {
-    regex,
-    caseSensitive: Boolean(args?.case_sensitive),
-  });
-  if (!matcher.ok) return errorResult(matcher.error);
-
   const scopePath = args?.path ? resolveWorkspacePath(args.path, state.root) : state.root;
   if (deniedSandboxRuleForPath(scopePath, state)) {
     return errorResult(`Search path is denied by sandbox filesystem policy: ${formatPath(scopePath, state.root)}`);
   }
-  const scopeInfo = await stat(scopePath);
-  let candidates = [];
-  if (scopeInfo.isFile()) {
-    candidates = [{ path: workspaceRelativePath(scopePath, state.root) }];
-  } else if (scopeInfo.isDirectory()) {
-    const index = await buildFileMentionIndex(state.root);
-    candidates = filterFilesByScope(index, scopePath, state.root)
-      .filter((file) => !deniedSandboxRuleForPath(path.join(state.root, ...file.path.split('/')), state));
-  } else {
-    return errorResult(`Search path is not a file or directory: ${formatPath(scopePath, state.root)}`);
-  }
-
-  const externalResult = await searchTextWithExternalTool({
+  if (!state.workspaceSearchEngine) return errorResult('Workspace search engine is unavailable.');
+  const appliesSandboxDenyRules = normalizePermissionProfile(state.permissionProfile) !== 'danger-full-access';
+  const response = await state.workspaceSearchEngine.search({
+    root: state.root,
+    scopePath,
     query,
     regex,
     caseSensitive: Boolean(args?.case_sensitive),
     contextLines,
     maxResults,
-    candidates,
-    scopePath,
-    state,
+    excludeRoots: appliesSandboxDenyRules ? state.sandboxWorkspaceWrite?.deniedRoots : [],
+    excludeGlobs: appliesSandboxDenyRules ? state.sandboxWorkspaceWrite?.deniedGlobPatterns : [],
+    signal,
   });
-  if (externalResult) return externalResult;
-
-  const matches = [];
-  let scanned = 0;
-  let skippedLarge = 0;
-  let skippedBinary = 0;
-  let skippedUnreadable = 0;
-  for (const file of candidates) {
-    if (matches.length >= maxResults) break;
-    const filePath = path.join(state.root, ...file.path.split('/'));
-    const info = await stat(filePath).catch(() => null);
-    /* node:coverage ignore next 4 */
-    if (!info) {
-      skippedUnreadable += 1;
-      continue;
-    }
-    if (!info.isFile()) continue;
-    if (info.size > MAX_SEARCH_FILE_BYTES) {
-      skippedLarge += 1;
-      continue;
-    }
-    const content = await readFile(filePath, 'utf8').catch(() => {
-      skippedUnreadable += 1;
-      return null;
-    });
-    if (content === null) continue;
-    if (isProbablyBinary(content)) {
-      skippedBinary += 1;
-      continue;
-    }
-    scanned += 1;
-
-    const lines = content.split(/\r?\n/);
-    for (let index = 0; index < lines.length; index += 1) {
-      const found = matcher.match(lines[index]);
-      if (!found) continue;
-      matches.push({
-        path: file.path,
-        lineNumber: index + 1,
-        column: found.column,
-        line: lines[index],
-        before: contextLines ? lines.slice(Math.max(0, index - contextLines), index) : [],
-        beforeStart: contextLines ? Math.max(0, index - contextLines) + 1 : 0,
-        after: contextLines ? lines.slice(index + 1, Math.min(lines.length, index + 1 + contextLines)) : [],
-      });
-      if (matches.length >= maxResults) break;
-    }
-  }
-
-  const skipped = [];
-  if (skippedLarge) skipped.push(`${skippedLarge} large file${skippedLarge === 1 ? '' : 's'}`);
-  if (skippedBinary) skipped.push(`${skippedBinary} binary file${skippedBinary === 1 ? '' : 's'}`);
-  if (skippedUnreadable) skipped.push(`${skippedUnreadable} unreadable file${skippedUnreadable === 1 ? '' : 's'}`);
+  const matcherLabel = `${regex ? 'regex ' : ''}${JSON.stringify(query)}`;
+  const details = response.scannedFiles === undefined
+    ? `Engine: ${response.engine}.`
+    : `Scanned ${response.scannedFiles} file${response.scannedFiles === 1 ? '' : 's'} using ${response.engine}.`;
   return okResult(
     truncateText([
-      `Text search for ${matcher.label} under ${formatPath(scopePath, state.root)}: ${matches.length} match${matches.length === 1 ? '' : 'es'}`,
-      matches.map(formatSearchMatch).join('\n') || '(no matches)',
-      `Scanned ${scanned} file${scanned === 1 ? '' : 's'}${skipped.length ? `; skipped ${skipped.join(', ')}` : ''}.`,
-    ].join('\n'), MAX_TEXT_BYTES),
-    `found ${matches.length} text matches`,
+      `Text search for ${matcherLabel} under ${formatPath(scopePath, state.root)}: ${response.matches.length} match${response.matches.length === 1 ? '' : 'es'}`,
+      response.matches.map(formatSearchMatch).join('\n') || '(no matches)',
+      response.truncated ? `Showing first ${maxResults} matches.` : '',
+      details,
+    ].filter(Boolean).join('\n'), MAX_TEXT_BYTES),
+    `found ${response.matches.length} text matches`,
   );
-}
-
-async function searchTextWithExternalTool({
-  query,
-  regex,
-  caseSensitive,
-  contextLines,
-  maxResults,
-  candidates,
-  scopePath,
-  state,
-}) {
-  if (!candidates.length) return null;
-
-  const files = candidates.map((file) => file.path);
-  const backends = [
-    {
-      command: 'rg',
-      label: 'rg',
-      matchLine: /^.+?:\d+:\d+:/,
-      args(batch) {
-        const backendArgs = [
-          '--line-number',
-          '--column',
-          '--with-filename',
-          '--no-heading',
-          '--color',
-          'never',
-          '--max-count',
-          String(maxResults),
-        ];
-        if (!caseSensitive) backendArgs.push('--ignore-case');
-        if (contextLines) backendArgs.push('--context', String(contextLines));
-        if (!regex) backendArgs.push('--fixed-strings');
-        backendArgs.push('--regexp', query, '--', ...batch);
-        return backendArgs;
-      },
-    },
-    {
-      command: 'grep',
-      label: 'grep',
-      matchLine: /^.+?:\d+:/,
-      args(batch) {
-        const backendArgs = ['-n', '-H', '-I', '-m', String(maxResults)];
-        backendArgs.push(regex ? '-E' : '-F');
-        if (!caseSensitive) backendArgs.push('-i');
-        if (contextLines) backendArgs.push('-C', String(contextLines));
-        backendArgs.push('--', query, ...batch);
-        return backendArgs;
-      },
-    },
-  ];
-
-  for (const backend of backends) {
-    const lines = [];
-    let matchCount = 0;
-    let unavailable = false;
-    let failed = null;
-
-    for (const batch of chunk(files, 80)) {
-      const result = await collectProcess(
-        backend.command,
-        backend.args(batch),
-        state.root,
-        DEFAULT_READONLY_TIMEOUT_MS,
-      );
-
-      if (result.errorCode === 'ENOENT') {
-        unavailable = true;
-        break;
-      }
-      if (result.timedOut || (result.exitCode !== 0 && result.exitCode !== 1)) {
-        failed = result;
-        break;
-      }
-
-      const batchLines = String(result.stdout || '').split(/\r?\n/).filter(Boolean);
-      for (const line of batchLines) {
-        const isMatchLine = backend.matchLine.test(line);
-        if (isMatchLine) matchCount += 1;
-        if (matchCount <= maxResults || !isMatchLine) lines.push(line);
-        if (matchCount >= maxResults && isMatchLine) break;
-      }
-      if (matchCount >= maxResults) break;
-    }
-
-    if (unavailable || failed) continue;
-
-    const visibleMatches = Math.min(matchCount, maxResults);
-    const header = `Text search for ${regex ? 'regex ' : ''}${JSON.stringify(query)} under ${formatPath(scopePath, state.root)} using ${backend.label}: ${visibleMatches} match${visibleMatches === 1 ? '' : 'es'}`;
-    return okResult(
-      truncateText([
-        header,
-        lines.join('\n') || '(no matches)',
-        matchCount > maxResults ? `Showing first ${maxResults} matches.` : '',
-      ].filter(Boolean).join('\n'), MAX_TEXT_BYTES),
-      `found ${visibleMatches} text matches`,
-    );
-  }
-
-  return null;
 }
 
 async function readLocalFile(args, state) {
@@ -3363,18 +3200,6 @@ function filterFilesByScope(index, scopePath, root) {
   return index.filter((file) => file.path === scope || file.path.startsWith(prefix));
 }
 
-function chunk(items, size) {
-  const groups = [];
-  for (let index = 0; index < items.length; index += size) {
-    groups.push(items.slice(index, index + size));
-  }
-  return groups;
-}
-
-function isProbablyBinary(content) {
-  return content.includes('\0');
-}
-
 function normalizeEditArgs(args = {}) {
   return {
     ...args,
@@ -3397,35 +3222,6 @@ function normalizeReadRange(args = {}) {
   return {
     offset: start,
     limit: normalizedEnd === null ? null : normalizedEnd - start + 1,
-  };
-}
-
-function createTextMatcher(query, { regex, caseSensitive }) {
-  if (regex) {
-    try {
-      const expression = new RegExp(query, caseSensitive ? '' : 'i');
-      return {
-        ok: true,
-        label: `regex ${JSON.stringify(query)}`,
-        match(line) {
-          const match = expression.exec(line);
-          return match ? { column: match.index + 1 } : null;
-        },
-      };
-    } catch (error) {
-      return { ok: false, error: `Invalid regular expression: ${error.message || String(error)}` };
-    }
-  }
-
-  const needle = caseSensitive ? query : query.toLowerCase();
-  return {
-    ok: true,
-    label: JSON.stringify(query),
-    match(line) {
-      const haystack = caseSensitive ? line : line.toLowerCase();
-      const index = haystack.indexOf(needle);
-      return index >= 0 ? { column: index + 1 } : null;
-    },
   };
 }
 

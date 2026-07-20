@@ -33,7 +33,7 @@
     "test": "pnpm test:unit && pnpm test:integration",
     "test:all": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:release": "vitest run --config vitest.release.config.ts",
+    "test:release": "node scripts/ripgrep/prepare-ripgrep.mjs && vitest run --config vitest.release.config.ts",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "typecheck": "tsc -b --pretty false",
     "validate:release-version": "node scripts/validate-release-version.mjs"
@@ -87,7 +87,8 @@
   "build": {
     "appId": "dev.setsuna.desktop",
     "productName": "Setsuna Desktop",
-    "afterPack": "scripts/after-pack-mac.cjs",
+    "beforePack": "scripts/before-pack.cjs",
+    "afterPack": "scripts/after-pack.cjs",
     "directories": {
       "output": "release-artifacts",
       "buildResources": "assets/build"
@@ -102,6 +103,21 @@
     ],
     "asarUnpack": [
       "**/node_modules/node-pty/prebuilds/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".cache/ripgrep/${os}-${arch}",
+        "to": "setsuna-path",
+        "filter": [
+          "rg",
+          "rg.exe",
+          "LICENSE-MIT",
+          "UNLICENSE",
+          "COPYING",
+          "NOTICE.txt",
+          "metadata.json"
+        ]
+      }
     ],
     "mac": {
       "icon": "assets/build/icon.icns",

@@ -75,6 +75,8 @@ Runtime service
 │       │   ├── browser-control-server.ts
 │       │   ├── browser-control.ts
 │       │   ├── desktop-updater.ts
+│       │   ├── bundled-tools.ts
+│       │   ├── desktop-environment.ts
 │       │   ├── index.ts
 │       │   ├── review-state.ts
 │       │   ├── runtime-host.ts
@@ -116,6 +118,7 @@ Runtime service
 │   └── desktop-runtime/
 │       └── src/
 │           ├── adapters/
+│           │   └── search/
 │           ├── loop/
 │           ├── ports/
 │           ├── runtime/
@@ -123,6 +126,9 @@ Runtime service
 │           ├── cli.ts
 │           └── index.ts
 ├── scripts/
+│   ├── before-pack.cjs
+│   ├── after-pack.cjs
+│   └── ripgrep/
 ├── skills/
 ├── index.html
 ├── package.json
@@ -173,6 +179,7 @@ Runtime service
 - 配置 `electron-builder` 的应用 ID、产品名、输出目录、平台产物和 artifact 命名。
 - 指定打包时包含 `dist/**/*`、`package.json`、workspace package metadata、`skills/**/*`。
 - 指定 `node-pty` prebuild 需要 `asarUnpack`，避免 PTY 原生二进制被 asar 包破坏。
+- 通过 before/after pack hooks 和 `extraResources` 把校验后的 ripgrep sidecar 放到 asar 外。
 
 关键脚本：
 
@@ -444,6 +451,8 @@ Electron main 与本地 runtime service 的桥接层。
   - `ELECTRON_RUN_AS_NODE=1`
   - `SETSUNA_DESKTOP_DATA_DIR`
   - `SETSUNA_DESKTOP_RUNTIME_TOKEN`
+  - `SETSUNA_DESKTOP_RG_PATH`
+  - `SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG`（发行包）
 - 等待 runtime stdout 输出 `{ "type": "ready" }`。
 - 对 `/health` 做健康检查。
 - 将 renderer 的 runtime request 转发为本机 HTTP 请求。
@@ -455,6 +464,14 @@ Electron main 与本地 runtime service 的桥接层。
 - 停止时 abort 所有订阅并 kill 子进程。
 
 边界原则：renderer 不知道 runtime 端口和 token；RuntimeHost 是唯一拥有这些信息的 main 侧对象。
+
+### `bundled-tools.ts` / `desktop-environment.ts`
+
+main 侧内置工具与 PATH 管理：
+
+- 发行版只接受 `resources/setsuna-path/rg(.exe)`，不回退系统 PATH。
+- 开发模式支持显式路径、本地准备目录和系统 PATH。
+- 将绝对 rg 路径注入 runtime，并处理 Windows `Path` 键大小写与去重。
 
 ### `browser-control.ts` / `browser-control-server.ts` / `browser-cdp-automation.ts` / `browser-cdp-snapshot.ts`
 
@@ -2444,7 +2461,16 @@ usage JSONL 存储。
 - 搜索文件 entry。
 - 读取文件，限制最大读取字节。
 - 写文件，确保路径不逃逸项目根。
-- 项目内文本搜索。
+- 项目内文本搜索委托统一 `WorkspaceSearchEngine`。
+
+### `adapters/search/*`
+
+工作区内容搜索 adapters：
+
+- `RipgrepWorkspaceSearchEngine` 以绝对路径、`shell: false` 启动 rg，流式解析 `--json` 输出。
+- 同一 workspace 只保留最新搜索进程，支持调用方取消、超时和全局结果上限。
+- `workspace-search-policy.ts` 统一 ignore、敏感文件、symlink/根路径和 sandbox deny 规则。
+- `JavaScriptWorkspaceSearchEngine` 只作为开发环境缺少 rg 时的受控回退。
 
 ### `adapters/workspace/file-project-workflow-resolver.ts`
 
@@ -2833,7 +2859,7 @@ Electron 和 runtime bundle 构建脚本。
 - 使用 esbuild 构建：
   - `apps/desktop/main/index.ts` -> `dist/electron/main/index.js`
   - `apps/desktop/preload/index.ts` -> `dist/electron/preload/index.cjs`
-  - `packages/desktop-runtime/src/cli.ts` -> `dist/runtime/cli.js`
+  - `packages/desktop-runtime/src/cli.ts` -> `dist/runtime/cli.cjs`
 - main bundle external：
   - `electron`
   - `node-pty`
@@ -2865,6 +2891,15 @@ node-pty postinstall 修复脚本。
 - 找到 `node-pty/prebuilds`。
 - 在 darwin prebuild 中给 `spawn-helper` 加可执行权限。
 - 容忍非 darwin 或 package cache 不完整场景。
+
+### `before-pack.cjs` / `after-pack.cjs` / `ripgrep/*`
+
+内置 ripgrep 供应链：
+
+- manifest 固定四个发布目标的 URL、字节数、SHA-256 和归档成员。
+- 纯 Node 解包器支持 tar.gz/zip，只提取二进制与上游许可证。
+- before-pack 准备目标 sidecar；after-pack 校验包内文件并执行匹配架构的 `rg --version`。
+- 任一校验、缺文件或版本检查失败都会终止发行打包。
 
 ### `run-with-log.mjs`
 
@@ -3037,6 +3072,10 @@ TypeScript project references 增量构建缓存。
 - release workflow 脚本。
 
 不应手写修改；需要改 release metadata 时改 `scripts/*` 或 `package.json` build config。
+
+### `.cache/ripgrep`
+
+按 `os-arch` 保存已校验并提取的 rg sidecar，`downloads` 保存以 SHA-256 命名的固定归档。它是 before-pack/test:release 可重用的本地缓存，不进入 app.asar；Electron Builder 只把当前目标目录复制到 `resources/setsuna-path`。
 
 ### `release-logs`
 

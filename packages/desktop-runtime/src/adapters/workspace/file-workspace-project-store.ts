@@ -14,14 +14,15 @@ import {
   type WorkspaceProject,
   type WorkspaceProjectList,
   type WorkspaceSearchResponse,
-  type WorkspaceSearchResult,
   type WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
+import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.js';
 import type { TemporaryWorkspaceInput, WorkspaceFileMetadata, WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import { detectWorkspacePreviewImageMimeType, isProbablyBinaryWorkspaceFile } from '../../utils/workspace-file-preview.js';
+import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-search-engine.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
@@ -31,7 +32,6 @@ export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_ENTRY_SEARCH_RESULTS = 80;
 const MAX_ENTRY_SEARCH_SCAN = 12000;
 const MAX_SEARCH_RESULTS = 100;
-const MAX_SEARCH_FILE_BYTES = 1024 * 1024;
 const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', 'target', 'release-artifacts']);
 const TEMPORARY_WORKSPACE_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 
@@ -41,11 +41,13 @@ type ProjectIndex = {
 };
 
 type FileWorkspaceProjectStoreOptions = {
+  searchEngine?: WorkspaceSearchEngine;
   temporaryWorkspacePath?: string;
 };
 
 export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   private readonly indexPath: string;
+  private readonly searchEngine: WorkspaceSearchEngine;
   private readonly temporaryWorkspacePath: string;
   private readonly temporaryWorkspaceDates = new Map<string, string>();
 
@@ -55,6 +57,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     options: FileWorkspaceProjectStoreOptions = {},
   ) {
     this.indexPath = path.join(dataDir, 'projects.json');
+    this.searchEngine = options.searchEngine ?? new JavaScriptWorkspaceSearchEngine();
     this.temporaryWorkspacePath = path.resolve(options.temporaryWorkspacePath ?? path.join(dataDir, 'temporary-workspace'));
   }
 
@@ -427,34 +430,23 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const project = await this.requireProject(projectId);
     const needle = query.trim();
     if (!needle) return { query, results: [], truncated: false };
-    const results: WorkspaceSearchResult[] = [];
-    let truncated = false;
-    await walkWorkspaceFiles(project.path, async (filePath) => {
-      if (results.length >= MAX_SEARCH_RESULTS) {
-        truncated = true;
-        return false;
-      }
-      const fileStat = await stat(filePath);
-      if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) return true;
-      const text = await readFile(filePath, 'utf8').catch(() => '');
-      if (!text) return true;
-      const lines = text.split(/\r?\n/);
-      for (let index = 0; index < lines.length; index += 1) {
-        if (lines[index].toLowerCase().includes(needle.toLowerCase())) {
-          results.push({
-            path: toProjectRelative(project.path, filePath),
-            line: index + 1,
-            preview: lines[index].trim().slice(0, 240),
-          });
-          if (results.length >= MAX_SEARCH_RESULTS) {
-            truncated = true;
-            return false;
-          }
-        }
-      }
-      return true;
+    const response = await this.searchEngine.search({
+      root: project.path,
+      query: needle,
+      regex: false,
+      caseSensitive: false,
+      contextLines: 0,
+      maxResults: MAX_SEARCH_RESULTS,
     });
-    return { query, results, truncated };
+    return {
+      query,
+      results: response.matches.map((match) => ({
+        path: match.path,
+        line: match.lineNumber,
+        preview: match.line.trim().slice(0, 240),
+      })),
+      truncated: response.truncated,
+    };
   }
 
   private async findProject(projectId?: string): Promise<WorkspaceProject | undefined> {

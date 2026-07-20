@@ -10,6 +10,8 @@ import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPrevie
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type { WorkspaceDependencyManager } from '../../ports/workspace-dependency-manager.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.js';
+import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-search-engine.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../workspace/workspace-runtime-environment-resolver.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
 import * as pcTools from './pc-local-tools.js';
@@ -185,6 +187,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     projects: WorkspaceProjectStore,
     private readonly policyAmendmentStore?: PolicyAmendmentStore,
     private readonly workspaceDependencies?: WorkspaceDependencyManager,
+    private readonly workspaceSearchEngine: WorkspaceSearchEngine = new JavaScriptWorkspaceSearchEngine(),
   ) {
     this.environmentResolver = new WorkspaceRuntimeEnvironmentResolver(projects);
   }
@@ -422,7 +425,11 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       await this.refreshPolicyAmendments(existing);
       return existing;
     }
-    const toolState = pcTools.createLocalToolState(root, { environmentId: environment.id, shellProcessStore: this.shellProcessStore }) as PcToolState;
+    const toolState = pcTools.createLocalToolState(root, {
+      environmentId: environment.id,
+      shellProcessStore: this.shellProcessStore,
+      workspaceSearchEngine: this.workspaceSearchEngine,
+    }) as PcToolState;
     const created = {
       toolState,
       baseShellPolicyRules: [...(Array.isArray(toolState.shellPolicyRules) ? toolState.shellPolicyRules : [])],

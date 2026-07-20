@@ -42,6 +42,22 @@ export function desktopProcessEnvironment(
   return env;
 }
 
+/** Prepend a tool directory while preserving Windows' case-insensitive `Path` key. */
+export function prependPathDirectory(
+  env: NodeJS.ProcessEnv,
+  directory: string,
+  options: { caseInsensitive?: boolean; delimiter?: string } = {},
+): void {
+  const key = Object.keys(env).find((item) => item.toLowerCase() === 'path') ?? 'PATH';
+  const delimiter = options.delimiter ?? path.delimiter;
+  const caseInsensitive = options.caseInsensitive ?? process.platform === 'win32';
+  const normalize = (value: string) => caseInsensitive ? value.toLowerCase() : value;
+  const entries = [directory, ...String(env[key] ?? '').split(delimiter)]
+    .map((entry) => entry.trim())
+    .filter((entry, index, items) => entry && items.findIndex((item) => normalize(item) === normalize(entry)) === index);
+  env[key] = entries.join(delimiter);
+}
+
 export function desktopShellPath(basePath = ''): string {
   const home = process.env.HOME || process.env.USERPROFILE || homedir();
   return uniquePathEntries([

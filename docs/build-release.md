@@ -43,7 +43,7 @@ corepack pnpm@7.33.7 <command>
 - `pnpm test:all`：用默认全量 Vitest 配置一次性跑全部测试，配置上仍保持串行重链路。
 - `pnpm test:unit`：排除重集成文件的 Vitest 测试层。
 - `pnpm test:integration`：agent loop、runtime server、真实 git/shell/PTY、文件 watcher 等重集成测试，串行执行。
-- `pnpm test:release`：发版包矩阵使用的确定性测试门禁，范围同 unit，限制 CI worker 数。
+- `pnpm test:release`：先下载并校验当前平台固定版本的 ripgrep，再运行发版包矩阵的确定性测试门禁。
 - `pnpm lint`：ESLint。
 - `pnpm package:*`：按平台打包。
 - `pnpm release:dry-run`：生成 release manifest 和校验预览。
@@ -106,6 +106,20 @@ dev 启动流程：
   - `skills/**/*`
 - `asarUnpack`：
   - `**/node_modules/node-pty/prebuilds/**/*`
+- `extraResources`：
+  - `.cache/ripgrep/${os}-${arch}` -> `resources/setsuna-path`
+
+### Bundled ripgrep
+
+项目内容搜索和 Agent `search_text` 不依赖用户机器上预装的 `rg`：
+
+1. `scripts/ripgrep/manifest.json` 固定 ripgrep 版本、平台 URL、归档字节数、SHA-256 和归档成员。
+2. `scripts/before-pack.cjs` 在 Electron Builder 收集 `extraResources` 前准备目标平台二进制；下载或归档成员校验失败会直接终止打包。
+3. 归档只提取 `rg`/`rg.exe`、`LICENSE-MIT`、`UNLICENSE` 和 `COPYING`，并生成来源 notice/metadata。
+4. sidecar 放在 asar 外的 `resources/setsuna-path`；main 用绝对路径注入 `SETSUNA_DESKTOP_RG_PATH`，同时把该目录置于 runtime/terminal PATH 首位。
+5. `scripts/after-pack.cjs` 对包内二进制和许可证逐字节复核；原生目标还执行 `rg --version`，之后再完成 macOS ad-hoc 签名。
+
+开发模式会依次尝试显式 `SETSUNA_DESKTOP_RG_PATH`、本地已准备 sidecar、系统 PATH；三者都不可用时仅内部内容搜索降级到受限 JavaScript adapter。发行版缺少 sidecar 时失败关闭，不走系统 `grep` 或 JavaScript 回退。
 
 平台产物：
 
@@ -210,6 +224,8 @@ pnpm build:renderer
 
 ```bash
 pnpm build
+pnpm test:release
+pnpm package
 pnpm release:dry-run
 ```
 

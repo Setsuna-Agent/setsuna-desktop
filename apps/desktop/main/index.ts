@@ -21,6 +21,7 @@ import { existsSync } from 'node:fs';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installDesktopRipgrepEnvironment, resolveDesktopRipgrep } from './bundled-tools.js';
 import { hydrateDesktopProcessEnvironment } from './desktop-environment.js';
 import { createBrowserContextMenuTemplate } from './browser-context-menu.js';
 import { DesktopBrowserController } from './browser-control.js';
@@ -126,6 +127,12 @@ async function createWindow(): Promise<void> {
 
   await hydrateDesktopProcessEnvironment({ loadLoginShell: app.isPackaged });
   if (startupClosedBeforeHandoff) return;
+  const ripgrepPath = resolveDesktopRipgrep({
+    appRoot: app.getAppPath(),
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
+  installDesktopRipgrepEnvironment(process.env, ripgrepPath, { required: app.isPackaged });
 
   const currentBrowserController = new DesktopBrowserController({
     openTab: async (url) => {
@@ -153,6 +160,8 @@ async function createWindow(): Promise<void> {
     browserControl,
     nativeBridge,
     dataDir: app.getPath('userData'),
+    ripgrepPath,
+    requireBundledRipgrep: app.isPackaged,
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,
   });
   runtimeHost = currentRuntimeHost;

@@ -12,7 +12,7 @@ import {
   type RuntimeRequestInput,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
-import { desktopProcessEnvironment } from './desktop-environment.js';
+import { desktopProcessEnvironment, prependPathDirectory } from './desktop-environment.js';
 
 type RuntimeHostOptions = {
   appRoot: string;
@@ -25,6 +25,8 @@ type RuntimeHostOptions = {
     url: string;
   };
   dataDir: string;
+  ripgrepPath?: string;
+  requireBundledRipgrep?: boolean;
   runtimeEntry?: string;
   shutdownTimeoutMs?: number;
   sseRetryBaseDelayMs?: number;
@@ -73,7 +75,7 @@ export class RuntimeHost {
       cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
-        ...desktopProcessEnvironment(process.env),
+        ...runtimeProcessEnvironment(this.options),
         ELECTRON_RUN_AS_NODE: '1',
         ...(this.options.browserControl ? {
           SETSUNA_DESKTOP_BROWSER_CONTROL_TOKEN: this.options.browserControl.token,
@@ -342,6 +344,22 @@ export function resolveBuiltinPluginsDir(appRoot: string): string {
 
 export function resolveRuntimeSpawnCwd(appRoot: string): string {
   return appRoot.endsWith('.asar') ? path.dirname(appRoot) : appRoot;
+}
+
+export function runtimeProcessEnvironment(
+  options: Pick<RuntimeHostOptions, 'ripgrepPath' | 'requireBundledRipgrep'>,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env = desktopProcessEnvironment(baseEnv);
+  if (options.requireBundledRipgrep && !options.ripgrepPath) {
+    throw new Error('Bundled ripgrep is required for the packaged runtime.');
+  }
+  if (options.ripgrepPath) {
+    env.SETSUNA_DESKTOP_RG_PATH = options.ripgrepPath;
+    prependPathDirectory(env, path.dirname(options.ripgrepPath));
+  }
+  if (options.requireBundledRipgrep) env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG = '1';
+  return env;
 }
 
 function normalizeRuntimePath(value: string): string {

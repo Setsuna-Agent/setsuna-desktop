@@ -46,7 +46,10 @@ export function pcLocalToolPrompt(
   }
 
   if (advertised.has('search_text')) {
-    lines.push('- search_text treats query as a regular expression by default. Set regex to false only for an exact literal search.');
+    lines.push(
+      '- Prefer search_text for workspace content search instead of shell grep/find. It uses the runtime-managed ripgrep path and shared ignore policy.',
+      '- search_text treats query as a regular expression by default. Set regex to false only for an exact literal search.',
+    );
   }
 
   if (hasAny(advertised, GIT_TOOL_NAMES)) {

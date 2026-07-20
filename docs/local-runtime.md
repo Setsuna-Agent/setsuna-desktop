@@ -187,6 +187,7 @@ REST 路由覆盖：
 - `MemoryStore`：memory CRUD 和 preview。
 - `UsageStore`：usage 记录和聚合。
 - `WorkspaceProjectStore`：项目、文件、搜索、写入。
+- `WorkspaceSearchEngine`：统一项目内容搜索与 Agent `search_text`，生产 adapter 使用 main 注入的绝对 ripgrep 路径。
 - `EventBus`、`Clock`、`IdGenerator`：基础设施。
 
 新增业务能力优先定义 port 或复用现有 port，再写 adapter。
@@ -236,7 +237,9 @@ REST 路由覆盖：
 - `projects.json` 保存项目列表和 gitRoot。
 - 文件浏览、搜索和读取都限制在项目根下。
 - `search_text` 默认把 query 作为正则表达式；需要搜索 `|`、`[]` 等字面字符时显式传 `regex: false`，避免 schema 与执行语义漂移。
-- 忽略 `.git`、`node_modules`、`dist`、`build`、`coverage`、`target`、`release-artifacts`。
+- 项目内容搜索和 `search_text` 共用 `WorkspaceSearchEngine`；目录树/文件 mention 仍保留各自的目录遍历，因为它们还要返回目录节点或模糊文件名建议。
+- ripgrep adapter 使用 `--json --no-config --hidden`，遵守 `.gitignore`、`.ignore`、`.qwenignore`、`.setsunaignore`，同时排除 VCS/generated 目录、`.env*`、PEM/key 和 sandbox deny 路径。
+- 搜索不跟随 symlink，单文件上限 1 MiB；stdout 按 JSONL 流式解析，同一 workspace 的新搜索会取消旧进程，并应用 30 秒超时与全局结果上限。
 - 读取、搜索和列表都有大小/数量上限。
 
 ### `FileSkillRegistry`

@@ -20,6 +20,7 @@ import { HttpDesktopNativeBridge } from '../adapters/native/http-desktop-native-
 import { ConfiguredModelClient } from '../adapters/model/configured-model-client.js';
 import { ImageAssetResolvingModelClient } from '../adapters/model/image-asset-resolving-model-client.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
+import { createWorkspaceSearchEngine } from '../adapters/search/create-workspace-search-engine.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { SkillMcpDependencyCoordinator } from '../adapters/skill/skill-mcp-dependency-coordinator.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
@@ -50,6 +51,8 @@ export type RuntimeFactoryOptions = {
   builtinSkillsDir?: string;
   builtinPluginsDir?: string;
   nativeBridge?: DesktopNativeBridge;
+  ripgrepPath?: string;
+  requireBundledRipgrep?: boolean;
 };
 
 export type RuntimeContainer = ReturnType<typeof createRuntimeFactory>;
@@ -90,7 +93,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const builtinPluginsDir =
     options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
   const pluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
-  const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock);
+  const workspaceSearchEngine = createWorkspaceSearchEngine({
+    ripgrepPath: options.ripgrepPath,
+    requireBundledRipgrep: options.requireBundledRipgrep,
+  });
+  const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, { searchEngine: workspaceSearchEngine });
   const workspaceDependencies = new ManagedWorkspaceDependencyManager(runtimeDataDir, configStore);
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
@@ -106,6 +113,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     workspaceProjects,
     policyAmendmentStore,
     workspaceDependencies,
+    workspaceSearchEngine,
   );
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
@@ -177,5 +185,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     usageStore,
     workspaceDependencies,
     workspaceProjects,
+    workspaceSearchEngine,
   };
 }

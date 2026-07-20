@@ -65,6 +65,8 @@ describe('pcLocalToolPrompt', () => {
 
     expect(prompt).toContain('regular expression by default');
     expect(prompt).toContain('regex to false');
+    expect(prompt).toContain('runtime-managed ripgrep path');
+    expect(prompt).toContain('instead of shell grep/find');
   });
 });
 

@@ -10,6 +10,7 @@ import {
   resolveBuiltinSkillsDir,
   resolvePackagedRuntimeEntry,
   resolveRuntimeSpawnCwd,
+  runtimeProcessEnvironment,
   stopRuntimeChild,
   type RuntimeChildProcess,
 } from './runtime-host.js';
@@ -59,6 +60,25 @@ describe('runtime host packaging paths', () => {
     expect(resolveBuiltinPluginsDir(appRoot)).toBe(
       path.join('/Applications/Setsuna Desktop.app/Contents/Resources/app.asar/plugins'),
     );
+  });
+
+  it('passes the absolute bundled rg path to runtime and prepends its directory', () => {
+    const ripgrepPath = path.join('/Applications/Setsuna Desktop.app/Contents/Resources', 'setsuna-path', 'rg');
+    const env = runtimeProcessEnvironment(
+      { ripgrepPath, requireBundledRipgrep: true },
+      { PATH: '/usr/bin:/bin' },
+    );
+
+    expect(env.SETSUNA_DESKTOP_RG_PATH).toBe(ripgrepPath);
+    expect(env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG).toBe('1');
+    expect(String(env.PATH).split(path.delimiter)[0]).toBe(path.dirname(ripgrepPath));
+  });
+
+  it('fails closed when a packaged runtime has no bundled rg path', () => {
+    expect(() => runtimeProcessEnvironment(
+      { requireBundledRipgrep: true },
+      { PATH: '' },
+    )).toThrow('Bundled ripgrep is required');
   });
 
   it('reconnects a dropped SSE stream from the last delivered sequence', async () => {

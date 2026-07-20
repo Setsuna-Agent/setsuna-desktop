@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { desktopProcessEnvironment, desktopShellPath, parseNullSeparatedEnvironment } from './desktop-environment.js';
+import { desktopProcessEnvironment, desktopShellPath, parseNullSeparatedEnvironment, prependPathDirectory } from './desktop-environment.js';
 
 describe('desktop environment', () => {
   it('parses null-separated login shell environment after the marker', () => {
@@ -34,5 +34,14 @@ describe('desktop environment', () => {
 
     expect(pathEntries.filter((entry) => entry === '/usr/bin')).toHaveLength(1);
     expect(pathEntries.filter((entry) => entry === '/opt/homebrew/bin')).toHaveLength(1);
+  });
+
+  it('preserves a Windows-style Path key and deduplicates case-insensitively', () => {
+    const env = { Path: 'C:\\Tools;C:\\Windows' };
+
+    prependPathDirectory(env, 'c:\\tools', { caseInsensitive: true, delimiter: ';' });
+
+    expect(env).toEqual({ Path: 'c:\\tools;C:\\Windows' });
+    expect('PATH' in env).toBe(false);
   });
 });
