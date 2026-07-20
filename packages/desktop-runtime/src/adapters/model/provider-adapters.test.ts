@@ -8,6 +8,7 @@ import { AiSdkOpenAiCompatibleModelClient } from './ai-sdk-model-client.js';
 import { ConfiguredModelClient } from './configured-model-client.js';
 import { OpenAiChatModelClient } from './openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from './openai-responses-model-client.js';
+import { openAiCompatibleThinkingBody } from './provider-thinking.js';
 
 const model = {
   id: 'model-1',
@@ -1525,48 +1526,31 @@ describe('provider model adapters', () => {
     expect(expectBody(captured).reasoning_effort).toBe('max');
   });
 
-  it('passes Qwen thinking params through AI SDK OpenAI compatible requests', async () => {
-    const captured: CapturedRequest = {};
-    const qwenModel = {
+  it.each([
+    ['SiliconFlow', 'https://api.siliconflow.cn/v1', 'deepseek-v3'],
+    ['Qwen', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3-coder'],
+    ['MiniMax', 'https://api.minimaxi.com/v1', 'MiniMax-M3'],
+    ['MiMo', 'https://api.xiaomimimo.com/v1', 'mimo-v2'],
+    ['Volcengine Ark', 'https://ark.cn-beijing.volces.com/api/v3', 'doubao-pro'],
+    ['DeepSeek', 'https://api.deepseek.com/v1', 'deepseek-chat'],
+  ])('uses the same OpenAI-compatible reasoning effort payload for %s', (_family, baseUrl, modelCode) => {
+    const thinkingModel = {
       ...model,
-      code: 'qwen3-coder',
+      code: modelCode,
       thinkingEnabled: true,
-      thinkingEfforts: ['low', 'max'],
-      defaultThinkingEffort: 'low',
+      thinkingEfforts: ['high'],
+      defaultThinkingEffort: 'high',
     };
-    const client = new AiSdkOpenAiCompatibleModelClient(
-      provider('openai-compatible', 'https://dashscope.aliyuncs.com/compatible-mode/v1', qwenModel),
-      fakeFetch('data: {"choices":[{"delta":{"content":"Reasoned"}}]}\n\ndata: [DONE]\n\n', captured),
-    );
 
-    await collect(client, { thinking: true, reasoningEffort: 'max' });
-
-    expect(expectBody(captured)).toMatchObject({
-      enable_thinking: true,
-      reasoning_effort: 'max',
-    });
-  });
-
-  it('can enable Qwen thinking without configured efforts', async () => {
-    const captured: CapturedRequest = {};
-    const qwenModel = {
-      ...model,
-      code: 'qwen3-coder',
-      thinkingEnabled: true,
-      thinkingEfforts: [],
-      defaultThinkingEffort: undefined,
-    };
-    const client = new AiSdkOpenAiCompatibleModelClient(
-      provider('openai-compatible', 'https://dashscope.aliyuncs.com/compatible-mode/v1', qwenModel),
-      fakeFetch('data: {"choices":[{"delta":{"content":"Reasoned"}}]}\n\ndata: [DONE]\n\n', captured),
-    );
-
-    await collect(client, { thinking: true });
-
-    expect(expectBody(captured)).toMatchObject({
-      enable_thinking: true,
-    });
-    expect(expectBody(captured).reasoning_effort).toBeUndefined();
+    const configuredProvider = provider('openai-compatible', baseUrl, thinkingModel);
+    expect(openAiCompatibleThinkingBody(
+      configuredProvider,
+      { ...request, model: modelCode, thinking: false },
+    )).toEqual({});
+    expect(openAiCompatibleThinkingBody(
+      configuredProvider,
+      { ...request, model: modelCode, thinking: true, reasoningEffort: 'high' },
+    )).toEqual({ reasoning_effort: 'high' });
   });
 });
 
