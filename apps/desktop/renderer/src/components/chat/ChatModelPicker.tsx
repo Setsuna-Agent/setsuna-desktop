@@ -1,21 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input, Progress, Tooltip } from 'antd';
 import { Check, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
-import type { ProviderConfigState, ProviderModelConfig, RuntimeConfigState } from '@setsuna-desktop/contracts';
+import type { ProviderConfigState, RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { useOutsideClose } from './chatComposerControlUtils.js';
 import { formatTokenCount, type ChatContextTokenUsage } from './chatContextUsage.js';
+import {
+  chatModelOptionKey,
+  chatModelOptions,
+  chatModelSearchText,
+  type ChatModelOption,
+} from './chatModelOptions.js';
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
-
-type ModelOption = {
-  key: string;
-  model: ProviderModelConfig;
-  provider: ProviderConfigState;
-};
-
-const modelPickerCollator = new Intl.Collator('zh-CN', {
-  numeric: true,
-  sensitivity: 'base',
-});
 
 export function ChatModelPicker({
   config,
@@ -36,13 +31,13 @@ export function ChatModelPicker({
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLSpanElement>(null);
-  const options = useMemo(() => modelOptions(config), [config]);
+  const options = useMemo(() => chatModelOptions(config), [config]);
   const activeProvider = activeProviderFromConfig(config);
   const activeModel = activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0] ?? null;
-  const activeKey = activeProvider && activeModel ? modelOptionKey(activeProvider.id, activeModel.id) : '';
+  const activeKey = activeProvider && activeModel ? chatModelOptionKey(activeProvider.id, activeModel.id) : '';
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOptions = useMemo(
-    () => (normalizedQuery ? options.filter((option) => modelSearchText(option).includes(normalizedQuery)) : options),
+    () => (normalizedQuery ? options.filter((option) => chatModelSearchText(option).includes(normalizedQuery)) : options),
     [normalizedQuery, options],
   );
   const modelUsage = modelContextUsage(contextUsage);
@@ -56,7 +51,7 @@ export function ChatModelPicker({
   }, []);
 
   const selectModel = useCallback(
-    (option: ModelOption) => {
+    (option: ChatModelOption) => {
       onSelect(option.provider.id, option.model.id);
       closePicker();
     },
@@ -188,46 +183,12 @@ export function ChatModelPicker({
   );
 }
 
-function modelOptions(config: RuntimeConfigState | null): ModelOption[] {
-  if (!config) return [];
-  return config.providers
-    .flatMap((provider) =>
-      provider.models.map((model) => ({
-        key: modelOptionKey(provider.id, model.id),
-        provider,
-        model,
-      })),
-    )
-    .sort((left, right) => {
-      const providerResult = modelPickerCollator.compare(modelProviderSortKey(left), modelProviderSortKey(right));
-      if (providerResult) return providerResult;
-      const modelResult = modelPickerCollator.compare(modelNameSortKey(left), modelNameSortKey(right));
-      return modelResult || modelPickerCollator.compare(left.key, right.key);
-    });
-}
-
-function modelOptionKey(providerId: string, modelId: string): string {
-  return `${providerId}:${modelId}`;
-}
-
-function modelSearchText(option: ModelOption): string {
-  return `${option.model.name} ${option.model.code} ${option.provider.name} ${option.provider.id}`.toLowerCase();
-}
-
-function modelProviderSortKey(option: ModelOption): string {
-  return (option.provider.name || option.provider.id || '未命名厂商').toLowerCase();
-}
-
 function activeProviderFromConfig(config: RuntimeConfigState | null): ProviderConfigState | null {
   if (!config) return null;
   return config.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
     ?? config.providers.find((provider) => provider.enabled)
     ?? config.providers[0]
     ?? null;
-}
-
-function modelNameSortKey(option: ModelOption): string {
-  return (option.model.name || option.model.code || '').toLowerCase();
 }
 
 function modelContextUsage(usage?: ChatContextTokenUsage): {
