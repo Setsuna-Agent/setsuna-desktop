@@ -49,6 +49,7 @@ describe('pc local tool host', () => {
     expect((execTool?.inputSchema?.properties as Record<string, unknown>)?.sandbox_permissions).toMatchObject({
       enum: expect.arrayContaining(['with_additional_permissions', 'require_escalated']),
     });
+    expect((execTool?.inputSchema?.properties as Record<string, unknown>)?.persist).toMatchObject({ type: 'boolean' });
 
     await expect(host.approvalForTool('write_file', { file_path: 'src/generated.txt', content: 'generated\n' }, context))
       .resolves.toBeNull();
@@ -1124,6 +1125,52 @@ describe('pc local tool host', () => {
       ]));
     } finally {
       await host.runTool('terminate_shell_process', { process_id: processId }, context).catch(() => undefined);
+    }
+  });
+
+  it('lists and terminates persisted shell services within their originating conversation', async () => {
+    const { host, projectId } = await createHost();
+    const context = {
+      threadId: 'thread_services',
+      turnId: 'turn_services',
+      projectId,
+      toolCallId: 'call_service',
+      permissionProfile: 'danger-full-access' as const,
+    };
+    const running = await host.runTool(
+      'run_shell_command',
+      {
+        command: `${nodeCommand()} -e "setInterval(() => {}, 1000)"`,
+        risk_level: 'low',
+        yield_time_ms: 1,
+        persist: true,
+        persist_ttl_ms: 5_000,
+      },
+      context,
+    );
+    const processId = String((running.data as Record<string, unknown>).process_id || '');
+
+    try {
+      await expect(host.listBackgroundShellProcesses(context.threadId)).resolves.toEqual([
+        expect.objectContaining({
+          id: processId,
+          threadId: context.threadId,
+          turnId: context.turnId,
+          toolCallId: context.toolCallId,
+          command: expect.stringContaining('setInterval'),
+          directory: '.',
+          startedAt: expect.any(String),
+          expiresAt: expect.any(String),
+        }),
+      ]);
+      await expect(host.listBackgroundShellProcesses('thread_other')).resolves.toEqual([]);
+      await expect(host.terminateBackgroundShellProcess('thread_other', processId)).resolves.toEqual({ terminated: false });
+      await expect(host.listBackgroundShellProcesses(context.threadId)).resolves.toHaveLength(1);
+
+      await expect(host.terminateBackgroundShellProcess(context.threadId, processId)).resolves.toEqual({ terminated: true });
+      await expect(host.listBackgroundShellProcesses(context.threadId)).resolves.toEqual([]);
+    } finally {
+      await host.terminateBackgroundShellProcess(context.threadId, processId).catch(() => undefined);
     }
   });
 });

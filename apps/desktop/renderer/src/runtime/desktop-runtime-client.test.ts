@@ -18,6 +18,22 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('lists and terminates thread-scoped background shell services through encoded paths', async () => {
+    const request = installRuntimeBridge(() => ({ processes: [] }));
+    const client = createDesktopRuntimeClient();
+
+    await client.listBackgroundShellProcesses('thread / 1');
+    await client.terminateBackgroundShellProcess('thread / 1', 'process / 1');
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      { path: '/v1/threads/thread%20%2F%201/background-shell-processes' },
+      {
+        path: '/v1/threads/thread%20%2F%201/background-shell-processes/process%20%2F%201',
+        method: 'DELETE',
+      },
+    ]);
+  });
+
   it('uses the binary bridge for uploads and the authenticated request bridge for pending deletes', async () => {
     const uploadAttachment = vi.fn(async () => ({
       id: 'attachment_1',

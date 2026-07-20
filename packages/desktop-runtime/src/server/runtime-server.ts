@@ -154,12 +154,16 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           await runtime.agentLoop.shutdown();
         } finally {
           try {
-            await runtime.mcpConnections.shutdown();
+            await runtime.backgroundShellProcesses.shutdown();
           } finally {
             try {
-              await runtime.threadStore.close();
+              await runtime.mcpConnections.shutdown();
             } finally {
-              await serverClosed;
+              try {
+                await runtime.threadStore.close();
+              } finally {
+                await serverClosed;
+              }
             }
           }
         }

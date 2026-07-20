@@ -138,6 +138,20 @@ describe('runtime server', () => {
     expect(projectList.threads).toMatchObject([{ id: projectThread.id }]);
   });
 
+  it('lists and idempotently terminates background shell services for a conversation', async () => {
+    const thread = await runtimeFetch('/v1/threads', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Background services' }),
+    });
+    const encodedThreadId = encodeURIComponent(thread.id);
+
+    await expect(runtimeFetch(`/v1/threads/${encodedThreadId}/background-shell-processes`))
+      .resolves.toEqual({ processes: [] });
+    await expect(runtimeFetch(`/v1/threads/${encodedThreadId}/background-shell-processes/stale-process`, {
+      method: 'DELETE',
+    })).resolves.toEqual({ terminated: false });
+  });
+
   it('renames and archives local threads through the runtime API', async () => {
     const created = await runtimeFetch('/v1/threads', {
       method: 'POST',

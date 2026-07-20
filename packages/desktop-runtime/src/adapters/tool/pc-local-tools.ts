@@ -1207,6 +1207,39 @@ export async function closeShellProcessStore(store = createShellProcessStore()) 
   store.sessions?.clear?.();
 }
 
+/**
+ * Return only intentionally persisted, still-running processes for one conversation.
+ * Foreground commands are excluded so short build/test runs never appear as services.
+ */
+export function listBackgroundShellProcesses(store = createShellProcessStore(), threadId = '') {
+  pruneShellProcessStore(store);
+  const normalizedThreadId = String(threadId || '').trim();
+  if (!normalizedThreadId) return [];
+  return [...(store.sessions?.values?.() || [])]
+    .filter((session) => session.persist && !session.closed && session.threadId === normalizedThreadId)
+    .map((session) => shellProcessSnapshot(session, session.root || session.cwd))
+    .sort((left, right) => right.started_at_ms - left.started_at_ms);
+}
+
+/** Terminate a persisted process only when it belongs to the requested conversation. */
+export async function terminateBackgroundShellProcess(store = createShellProcessStore(), threadId = '', processId = '') {
+  pruneShellProcessStore(store);
+  const normalizedThreadId = String(threadId || '').trim();
+  const normalizedProcessId = String(processId || '').trim();
+  const session = store.sessions?.get?.(normalizedProcessId);
+  if (!session || !session.persist || session.threadId !== normalizedThreadId) return false;
+  if (session.closed) {
+    store.sessions.delete(normalizedProcessId);
+    return false;
+  }
+
+  session.terminatedByUser = true;
+  terminateShellSession(session, 'SIGTERM');
+  await waitForShellSession(session, SHELL_GRACEFUL_KILL_MS + 500);
+  if (session.closed) store.sessions.delete(normalizedProcessId);
+  return true;
+}
+
 function shellSessionsForStateClose(state) {
   const sessions = shellSessionsMap(state);
   if (state?.ownsShellProcessStore || !(state?.ownedShellProcessIds instanceof Set)) {

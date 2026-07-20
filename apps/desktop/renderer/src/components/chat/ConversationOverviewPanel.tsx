@@ -6,6 +6,7 @@ import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationGitControls } from './ConversationGitControls.js';
 import { ConversationPlanSummary } from './ConversationPlanSummary.js';
+import { ConversationBackgroundServices, type BackgroundShellProcessClient } from './ConversationBackgroundServices.js';
 
 export function ConversationOverviewPanel({
   activeProject,
@@ -14,6 +15,7 @@ export function ConversationOverviewPanel({
   contextPercent,
   currentThread,
   overview,
+  shellProcessClient,
   reviewLoading,
   reviewState,
   threadUsage,
@@ -31,6 +33,7 @@ export function ConversationOverviewPanel({
   contextPercent: number;
   currentThread: RuntimeThread;
   overview: ConversationOverviewState;
+  shellProcessClient?: BackgroundShellProcessClient;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   threadUsage: RuntimeUsageResponse | null;
@@ -119,6 +122,7 @@ export function ConversationOverviewPanel({
           <span className="chat-conversation-overview-panel__meta" title={usageDiagnosticLabel}>{usageDiagnosticLabel}</span>
         </div>
       </div>
+      {shellProcessClient ? <ConversationBackgroundServices client={shellProcessClient} threadId={currentThread.id} /> : null}
       {childThreads.length ? (
         <>
           <div className="chat-conversation-overview-panel__divider" />

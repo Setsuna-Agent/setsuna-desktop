@@ -7,6 +7,8 @@ import type {
   CreateRuntimeMemoryInput,
   DesktopRuntimeClient,
   RuntimeApprovalList,
+  RuntimeBackgroundShellProcessList,
+  RuntimeBackgroundShellProcessTermination,
   RuntimeMemoryList,
   RuntimeMemoryPreview,
   RuntimeMemoryQuery,
@@ -118,6 +120,17 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     deleteThread(threadId: string) {
       return appServerRequest<void>('thread/delete', { threadId });
+    },
+    listBackgroundShellProcesses(threadId: string) {
+      return request<RuntimeBackgroundShellProcessList>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/background-shell-processes`,
+      });
+    },
+    terminateBackgroundShellProcess(threadId: string, processId: string) {
+      return request<RuntimeBackgroundShellProcessTermination>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/background-shell-processes/${encodeURIComponent(processId)}`,
+        method: 'DELETE',
+      });
     },
     async setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch) {
       const result = await appServerRequest<{ goal: RuntimeThreadGoal }>('thread/goal/set', { threadId, ...patch });

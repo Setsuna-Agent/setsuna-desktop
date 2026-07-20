@@ -494,6 +494,35 @@ export async function handleRuntimeRestRequest(
     return true;
   }
 
+  const backgroundShellProcessesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/background-shell-processes$/u);
+  if (backgroundShellProcessesMatch && request.method === 'GET') {
+    const threadId = decodeRuntimeId(backgroundShellProcessesMatch[1], 'Thread id');
+    if (!await runtime.threadStore.getThread(threadId)) {
+      sendJson(response, 404, { error: 'Thread not found' });
+      return true;
+    }
+    sendJson(response, 200, {
+      processes: await runtime.backgroundShellProcesses.listBackgroundShellProcesses(threadId),
+    });
+    return true;
+  }
+
+  const backgroundShellProcessMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/background-shell-processes\/([^/]+)$/u);
+  if (backgroundShellProcessMatch && request.method === 'DELETE') {
+    const threadId = decodeRuntimeId(backgroundShellProcessMatch[1], 'Thread id');
+    const processId = decodeRuntimeId(backgroundShellProcessMatch[2], 'Shell process id');
+    if (!await runtime.threadStore.getThread(threadId)) {
+      sendJson(response, 404, { error: 'Thread not found' });
+      return true;
+    }
+    sendJson(
+      response,
+      200,
+      await runtime.backgroundShellProcesses.terminateBackgroundShellProcess(threadId, processId),
+    );
+    return true;
+  }
+
   const threadMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)$/);
   if (threadMatch && request.method === 'GET') {
     const thread = await runtime.threadStore.getThread(decodeRuntimeId(threadMatch[1], 'Thread id'));

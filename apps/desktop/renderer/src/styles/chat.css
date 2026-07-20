@@ -1597,6 +1597,107 @@
   background: var(--app-border);
 }
 
+.chat-conversation-background-services {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chat-conversation-background-services__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 7px 3px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.chat-conversation-background-services__title > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-conversation-background-services__title > span:last-child {
+  min-width: 16px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-conversation-background-services__list {
+  display: grid;
+  gap: 2px;
+  max-height: 176px;
+  overflow-y: auto;
+}
+
+.chat-conversation-background-service {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 3px 5px 3px 7px;
+  border-radius: 7px;
+}
+
+.chat-conversation-background-service:hover {
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+}
+
+.chat-conversation-background-service > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.chat-conversation-background-service > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.chat-conversation-background-service > button:hover:not(:disabled) {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 10%, transparent);
+}
+
+.chat-conversation-background-service > button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.chat-conversation-background-services__error {
+  min-width: 0;
+  padding: 3px 7px;
+  overflow: hidden;
+  color: var(--app-danger);
+  font-size: 11px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-conversation-background-services .is-spinning {
+  animation: chat-git-spin 0.9s linear infinite;
+}
+
 .chat-conversation-overview-panel__agents {
   display: grid;
   gap: 3px;

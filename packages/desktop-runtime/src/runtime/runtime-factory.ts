@@ -102,6 +102,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     generatedImageStore,
     { threadStore, workspaceProjects },
   );
+  const backgroundShellProcesses = new PcLocalToolHost(
+    workspaceProjects,
+    policyAmendmentStore,
+    workspaceDependencies,
+  );
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
@@ -112,7 +117,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     imageGenerationToolHost,
     new WorkspaceImageToolHost(workspaceProjects),
     new ArtifactToolHost(workspaceProjects),
-    new PcLocalToolHost(workspaceProjects, policyAmendmentStore, workspaceDependencies),
+    backgroundShellProcesses,
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     new MemoryToolHost(memoryStore, configStore),
   ]);
@@ -148,6 +153,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     attachmentStore,
     approvalGate,
     appServerNotificationBus,
+    backgroundShellProcesses,
     configStore,
     eventBus,
     eventWriter,

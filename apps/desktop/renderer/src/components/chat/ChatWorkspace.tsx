@@ -571,6 +571,7 @@ export function ChatWorkspace({
                 contextLabel={overviewContextLabel}
                 contextPercent={contextUsage.visiblePercent || contextUsage.percent}
                 overview={conversationOverview}
+                shellProcessClient={client}
                 reviewError={reviewError}
                 reviewLoading={reviewLoading}
                 reviewState={reviewState}

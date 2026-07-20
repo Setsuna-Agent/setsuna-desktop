@@ -1,5 +1,11 @@
 import path from 'node:path';
-import type { RuntimeSandboxWorkspaceWrite, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeBackgroundShellProcess,
+  RuntimeBackgroundShellProcessTermination,
+  RuntimeSandboxWorkspaceWrite,
+  RuntimeToolDefinition,
+} from '@setsuna-desktop/contracts';
+import type { BackgroundShellProcessManager } from '../../ports/background-shell-process-manager.js';
 import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost, type ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type { WorkspaceDependencyManager } from '../../ports/workspace-dependency-manager.js';
@@ -20,6 +26,7 @@ type ProjectToolState = {
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
+const MAX_PERSISTENT_SHELL_TTL_MS = 6 * 60 * 60 * 1_000;
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_PATH_ARGUMENT_TOOLS = new Set(['read_file', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
@@ -88,6 +95,8 @@ const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
         yield_time_ms: { type: 'integer', description: 'Milliseconds to wait before returning while the command keeps running.', minimum: 0, maximum: 30000 },
         timeout_ms: { type: 'integer', description: 'Optional timeout in milliseconds.', minimum: 1, maximum: 600000 },
         max_output_tokens: { type: 'integer', description: 'Accepted for Codex compatibility; output truncation is handled by the runtime.' },
+        persist: { type: 'boolean', description: 'Keep a still-running dev server or watcher available after the current turn completes.' },
+        persist_ttl_ms: { type: 'integer', description: 'Optional lifetime for a persisted process in milliseconds.', minimum: 1000, maximum: MAX_PERSISTENT_SHELL_TTL_MS },
         sandbox_permissions: { type: 'string', enum: ['use_default', 'with_additional_permissions', 'require_escalated'], description: 'Per-command sandbox override. Use with_additional_permissions only together with a non-empty additional_permissions request; otherwise omit this field or use use_default. require_escalated asks for unsandboxed execution.' },
         additional_permissions: {
           type: 'object',
@@ -165,7 +174,7 @@ const TOOL_ALIASES: Record<string, { name: string; args: (input: Record<string, 
 /**
  * 将 PC local tool 实现适配到桌面 runtime 的 ToolHost 协议。
  */
-export class PcLocalToolHost implements ToolHost {
+export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager {
   // 每个工作区根目录维护独立状态，避免 shell 进程和已读文件串到其他项目或临时目录。
   private readonly projectStates = new Map<string, ProjectToolState>();
   // shell process store 跨项目状态复用，但执行目录和权限仍由每个 toolState 控制。
@@ -371,6 +380,35 @@ export class PcLocalToolHost implements ToolHost {
     }));
   }
 
+  async listBackgroundShellProcesses(threadId: string): Promise<RuntimeBackgroundShellProcess[]> {
+    return pcTools.listBackgroundShellProcesses(this.shellProcessStore, threadId).map((rawProcess) => {
+      const process = recordInput(rawProcess);
+      return {
+        id: stringArg(process.process_id),
+        threadId: stringArg(process.thread_id),
+        turnId: nullableString(process.turn_id),
+        toolCallId: nullableString(process.tool_call_id),
+        command: stringArg(process.command),
+        directory: stringArg(process.directory),
+        startedAt: timestampString(process.started_at_ms),
+        expiresAt: nullableTimestampString(process.expires_at_ms),
+      };
+    });
+  }
+
+  async terminateBackgroundShellProcess(
+    threadId: string,
+    processId: string,
+  ): Promise<RuntimeBackgroundShellProcessTermination> {
+    return {
+      terminated: await pcTools.terminateBackgroundShellProcess(this.shellProcessStore, threadId, processId),
+    };
+  }
+
+  async shutdown(): Promise<void> {
+    await pcTools.closeShellProcessStore(this.shellProcessStore);
+  }
+
   /**
    * 获取或创建项目根目录对应的 PC local tool 状态。
    *
@@ -553,6 +591,20 @@ function shortSingleLine(value: unknown): string {
 
 function stringArg(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
+}
+
+function nullableString(value: unknown): string | null {
+  const normalized = stringArg(value);
+  return normalized || null;
+}
+
+function timestampString(value: unknown): string {
+  const timestamp = Number(value);
+  return new Date(Number.isFinite(timestamp) ? timestamp : 0).toISOString();
+}
+
+function nullableTimestampString(value: unknown): string | null {
+  return value == null ? null : timestampString(value);
 }
 
 function cloneSandboxWorkspaceWrite(value: ToolExecutionContext['sandboxWorkspaceWrite']): NonNullable<ToolExecutionContext['sandboxWorkspaceWrite']> {

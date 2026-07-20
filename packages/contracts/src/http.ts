@@ -1,4 +1,8 @@
 import type { AnswerRuntimeApprovalInput, RuntimeApprovalList } from './approvals.js';
+import type {
+  RuntimeBackgroundShellProcessList,
+  RuntimeBackgroundShellProcessTermination,
+} from './background-shell-processes.js';
 import type { RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeHookListResponse } from './config.js';
 import type { RuntimeEvent } from './events.js';
 import type { CreateRuntimeMemoryInput, RuntimeMemoryList, RuntimeMemoryPreview, RuntimeMemoryQuery } from './memory.js';
@@ -76,6 +80,8 @@ export type DesktopRuntimeClient = {
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;
+  listBackgroundShellProcesses(threadId: string): Promise<RuntimeBackgroundShellProcessList>;
+  terminateBackgroundShellProcess(threadId: string, processId: string): Promise<RuntimeBackgroundShellProcessTermination>;
   setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoal>;
   clearThreadGoal(threadId: string): Promise<boolean>;
   updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch): Promise<RuntimeThread>;
