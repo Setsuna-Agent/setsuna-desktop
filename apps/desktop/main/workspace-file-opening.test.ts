@@ -3,8 +3,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  copyWorkspaceFilePath,
   createWorkspaceFilePreviewUrl,
   openWorkspaceFileWithDefaultApp,
+  revealWorkspaceFileInFolder,
   workspaceFilePreviewMimeType,
 } from './workspace-file-opening.js';
 
@@ -34,6 +36,23 @@ describe('openWorkspaceFileWithDefaultApp', () => {
       error: 'File path must stay inside the workspace.',
     });
     expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it('copies and reveals only resolved files inside the workspace', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-file-actions-'));
+    await mkdir(path.join(workspaceRoot, 'src'));
+    const targetPath = path.join(workspaceRoot, 'src', 'main.ts');
+    await writeFile(targetPath, 'export {};\n');
+    const copyText = vi.fn();
+    const showItemInFolder = vi.fn();
+
+    await expect(copyWorkspaceFilePath(workspaceRoot, 'src/main.ts', copyText)).resolves.toEqual({ ok: true });
+    await expect(revealWorkspaceFileInFolder(workspaceRoot, 'src/main.ts', showItemInFolder)).resolves.toEqual({ ok: true });
+    expect(copyText).toHaveBeenCalledWith(await realpath(targetPath));
+    expect(showItemInFolder).toHaveBeenCalledWith(await realpath(targetPath));
+
+    await expect(copyWorkspaceFilePath(workspaceRoot, '../outside.ts', copyText)).resolves.toMatchObject({ ok: false });
+    expect(copyText).toHaveBeenCalledOnce();
   });
 
   it('creates previews only for PDF and image files inside the workspace', async () => {

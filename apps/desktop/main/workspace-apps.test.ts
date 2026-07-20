@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findCommandInPathVar, windowsTerminalLaunchSpec, workspaceAppSpawnSpec } from './workspace-apps.js';
+import { findCommandInPathVar, macLineAwareWorkspaceAppLaunchSpec, windowsTerminalLaunchSpec, workspaceAppSpawnSpec } from './workspace-apps.js';
 
 const WINDOWS_WORKSPACE = 'C:\\Projects\\sample-app';
 const WINDOWS_FILE_TARGET = `${WINDOWS_WORKSPACE}\\src\\index.ts:12`;
@@ -59,6 +59,24 @@ describe('desktop workspace app spawning', () => {
     const spec = { program: '/usr/local/bin/code.cmd', args: ['/work/sample-app'] };
 
     expect(workspaceAppSpawnSpec(spec, 'linux')).toBe(spec);
+  });
+
+  it('opens JetBrains editors at the requested line on macOS', () => {
+    expect(macLineAwareWorkspaceAppLaunchSpec(
+      'intellij-idea',
+      '/Users/tester/project/src/main.ts',
+      27,
+      '/Applications/IntelliJ IDEA.app/Contents/MacOS/idea',
+    )).toEqual({
+      program: '/Applications/IntelliJ IDEA.app/Contents/MacOS/idea',
+      args: ['--line', '27', '/Users/tester/project/src/main.ts'],
+    });
+    expect(macLineAwareWorkspaceAppLaunchSpec(
+      'terminal',
+      '/Users/tester/project/src/main.ts',
+      27,
+      '/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal',
+    )).toBeNull();
   });
 
   it('prefers Windows launchable command extensions over extensionless shims', () => {

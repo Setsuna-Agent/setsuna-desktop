@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
+import { pageScaleInverse, zoomedPortalPosition, type ZoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { WorkspaceAppGlyph } from './PanelChrome.js';
 import type { DesktopWorkspaceApp } from './model.js';
 
-type WorkspaceAppLauncherPosition = {
-  right: number;
-  top: number;
-};
+const WORKSPACE_APP_MENU_WIDTH = 196;
+const WORKSPACE_APP_MENU_OFFSET = 6;
 
 export function WorkspaceAppLauncher({
   selectedWorkspaceApp,
@@ -26,18 +25,22 @@ export function WorkspaceAppLauncher({
 }) {
   const launcherRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [menuPosition, setMenuPosition] = useState<WorkspaceAppLauncherPosition>({ right: 8, top: 0 });
+  const [menuPosition, setMenuPosition] = useState<ZoomedPortalPosition>({ left: 8, top: 8 });
 
-  const updateMenuPosition = () => {
+  const updateMenuPosition = useCallback(() => {
     const rect = launcherRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setMenuPosition({
-      right: Math.max(8, window.innerWidth - rect.right),
-      top: rect.bottom + 6,
-    });
-  };
+    setMenuPosition(workspaceAppLauncherMenuPosition({
+      menuHeight: menuRef.current?.offsetHeight ?? 0,
+      menuWidth: menuRef.current?.offsetWidth ?? WORKSPACE_APP_MENU_WIDTH,
+      rect,
+      scaleInverse: pageScaleInverse(),
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
+    }));
+  }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!workspaceAppMenuOpen) return undefined;
     updateMenuPosition();
     const handlePointerDown = (event: PointerEvent) => {
@@ -53,13 +56,19 @@ export function WorkspaceAppLauncher({
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', handleReposition);
     window.addEventListener('scroll', handleReposition, true);
+    const appearanceObserver = new MutationObserver(handleReposition);
+    appearanceObserver.observe(document.documentElement, {
+      attributeFilter: ['data-font-size'],
+      attributes: true,
+    });
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleReposition);
       window.removeEventListener('scroll', handleReposition, true);
+      appearanceObserver.disconnect();
     };
-  }, [onToggleWorkspaceAppMenu, workspaceAppMenuOpen]);
+  }, [onToggleWorkspaceAppMenu, updateMenuPosition, workspaceAppMenuOpen, workspaceApps.length]);
 
   return (
     <div className="desktop-workspace-launcher" ref={launcherRef} role="group" aria-label="用本地应用打开工作区">
@@ -94,7 +103,7 @@ export function WorkspaceAppLauncher({
               className="desktop-workspace-launcher-menu desktop-workspace-launcher-menu--native"
               ref={menuRef}
               role="menu"
-              style={{ right: menuPosition.right, top: menuPosition.top } as CSSProperties}
+              style={menuPosition}
             >
               {workspaceApps.length ? (
                 workspaceApps.map((app) => (
@@ -115,4 +124,32 @@ export function WorkspaceAppLauncher({
         : null}
     </div>
   );
+}
+
+export function workspaceAppLauncherMenuPosition({
+  menuHeight,
+  menuWidth,
+  rect,
+  scaleInverse = 1,
+  viewportHeight,
+  viewportWidth,
+}: {
+  menuHeight: number;
+  menuWidth: number;
+  rect: Pick<DOMRect, 'bottom' | 'right'>;
+  scaleInverse?: number;
+  viewportHeight: number;
+  viewportWidth: number;
+}): ZoomedPortalPosition {
+  return zoomedPortalPosition({
+    anchorX: rect.right,
+    anchorY: rect.bottom,
+    horizontalAlign: 'end',
+    menuHeight,
+    menuWidth,
+    offsetY: WORKSPACE_APP_MENU_OFFSET,
+    scaleInverse,
+    viewportHeight,
+    viewportWidth,
+  });
 }

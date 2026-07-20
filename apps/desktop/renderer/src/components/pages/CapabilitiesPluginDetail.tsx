@@ -128,13 +128,6 @@ export function CapabilitiesPluginDetail({
         </div>
       </div>
 
-      <dl className="desktop-capabilities-plugin-detail__stats">
-        <div><dt>技能</dt><dd>{skills.length}</dd></div>
-        <div><dt>MCP 服务</dt><dd>{mcpServers.length}</dd></div>
-        <div><dt>自动化</dt><dd>{hookCount}</dd></div>
-        <div><dt>资源</dt><dd>{resourceCount}</dd></div>
-      </dl>
-
       {installed
         && plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID
         && onSaveImageGenerationConfig

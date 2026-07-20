@@ -7,6 +7,7 @@ import type { DesktopWorkspaceApp } from '@setsuna-desktop/contracts';
 
 type WorkspaceAppDefinition = DesktopWorkspaceApp & {
   macAppName?: string;
+  macExecutableName?: string;
   macPaths?: string[];
   macAlways?: boolean;
   linuxCommands?: string[];
@@ -82,6 +83,7 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     label: 'IntelliJ IDEA',
     icon: 'intellij-idea',
     macAppName: 'IntelliJ IDEA',
+    macExecutableName: 'idea',
     macPaths: ['/Applications/IntelliJ IDEA.app', '/Applications/IntelliJ IDEA CE.app', '${HOME}/Applications/IntelliJ IDEA.app'],
     linuxCommands: ['idea', 'idea.sh'],
     windowsCommands: ['idea64.exe', 'idea.bat'],
@@ -91,6 +93,7 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     label: 'PyCharm',
     icon: 'pycharm',
     macAppName: 'PyCharm',
+    macExecutableName: 'pycharm',
     macPaths: ['/Applications/PyCharm.app', '/Applications/PyCharm CE.app', '${HOME}/Applications/PyCharm.app'],
     linuxCommands: ['pycharm', 'pycharm.sh'],
     windowsCommands: ['pycharm64.exe', 'pycharm.bat'],
@@ -100,6 +103,7 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
     label: 'WebStorm',
     icon: 'webstorm',
     macAppName: 'WebStorm',
+    macExecutableName: 'webstorm',
     macPaths: ['/Applications/WebStorm.app', '${HOME}/Applications/WebStorm.app'],
     linuxCommands: ['webstorm', 'webstorm.sh'],
     windowsCommands: ['webstorm64.exe', 'webstorm.bat'],
@@ -200,12 +204,46 @@ function macWorkspaceAppLaunchSpec(
   if (filePath) {
     const scheme = workspaceAppFileUriScheme(definition.id);
     if (scheme) return { program: 'open', args: [workspaceAppFileUri(scheme, filePath, line)] };
+    const lineAwareEditorSpec = macLineAwareWorkspaceAppLaunchSpec(
+      definition.id,
+      filePath,
+      line,
+      macWorkspaceAppExecutable(definition),
+    );
+    if (lineAwareEditorSpec) return lineAwareEditorSpec;
     if (definition.id === 'finder') return { program: 'open', args: ['-R', filePath] };
     if (definition.macAppName) return { program: 'open', args: ['-a', definition.macAppName, filePath] };
   }
   if (definition.id === 'finder') return { program: 'open', args: [workspaceRoot] };
   if (!definition.macAppName) throw new Error('当前系统不支持此应用。');
   return { program: 'open', args: ['-a', definition.macAppName, workspaceRoot] };
+}
+
+export function macLineAwareWorkspaceAppLaunchSpec(
+  appId: string,
+  filePath: string,
+  line: number | undefined,
+  executablePath: string | null,
+): WorkspaceAppLaunchSpec | null {
+  if (
+    !executablePath
+    || typeof line !== 'number'
+    || !Number.isSafeInteger(line)
+    || line <= 0
+    || !['intellij-idea', 'pycharm', 'webstorm'].includes(appId)
+  ) return null;
+  return { program: executablePath, args: workspaceAppFileArgs(appId, filePath, line) };
+}
+
+function macWorkspaceAppExecutable(definition: WorkspaceAppDefinition): string | null {
+  if (!definition.macExecutableName) return null;
+  for (const appPathValue of definition.macPaths ?? []) {
+    const appPath = expandHome(appPathValue);
+    if (!existsSync(appPath)) continue;
+    const executablePath = path.join(appPath, 'Contents', 'MacOS', definition.macExecutableName);
+    if (existsSync(executablePath)) return executablePath;
+  }
+  return null;
 }
 
 function windowsWorkspaceAppLaunchSpec(

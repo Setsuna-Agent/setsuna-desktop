@@ -23,6 +23,20 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(html).toContain('请使用其他应用打开此文件查看');
     expect(html).not.toContain('desktop-code-line');
   });
+
+  it('renders code lines as context-menu targets instead of left-click open buttons', () => {
+    const html = renderToStaticMarkup(WorkspaceFilePreviewContent({
+      file: {
+        ...workspaceFile({ kind: 'text' }),
+        content: 'const first = true;\nconst second = false;',
+        path: 'src/example.ts',
+      },
+    }));
+
+    expect(html).toContain('data-workspace-file-line="1"');
+    expect(html).toContain('data-workspace-file-line="2"');
+    expect(html).not.toContain('<button class="desktop-code-line');
+  });
 });
 
 describe('WorkspaceOverviewPanel', () => {

@@ -15,16 +15,21 @@ export function BottomToolsPanel({
   reviewLoading,
   reviewState,
   selectedWorkspaceApp,
+  workspaceApps,
   terminalSession,
+  onAddFileToConversation,
   onActivatePanel,
   onClosePanel,
   onCloseSlot,
+  onCopyFilePath,
   onExternalOpenFile,
+  onOpenFileWithApp,
   onOpenProjectFile,
   onOpenReviewPanel,
   onOpenTerminalPanel,
   onReorderPanels,
   onReviewRefresh,
+  onRevealFile,
   onResizeStep,
   onResizeStart,
   resizeMax,
@@ -40,16 +45,21 @@ export function BottomToolsPanel({
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
+  workspaceApps: DesktopWorkspaceApp[];
   terminalSession: DesktopTerminalSession | null;
+  onAddFileToConversation: (filePath: string) => void;
   onActivatePanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
   onCloseSlot: () => void;
+  onCopyFilePath: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
+  onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
   onOpenReviewPanel: () => void;
   onOpenTerminalPanel: () => void;
   onReorderPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
+  onRevealFile: (filePath: string) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   resizeMax: number;
@@ -114,9 +124,14 @@ export function BottomToolsPanel({
             loading={reviewLoading}
             reviewState={reviewState}
             workspaceApp={selectedWorkspaceApp}
+            workspaceApps={workspaceApps}
+            onAddFileToConversation={onAddFileToConversation}
+            onCopyFilePath={onCopyFilePath}
             onExternalOpenFile={onExternalOpenFile}
+            onOpenFileWithApp={onOpenFileWithApp}
             onOpenProjectFile={onOpenProjectFile}
             onRefresh={onReviewRefresh}
+            onRevealFile={onRevealFile}
           />
         </div>
       )}

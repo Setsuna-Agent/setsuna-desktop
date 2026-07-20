@@ -48,7 +48,12 @@ import { showStartupSplash, waitForRendererFirstPaint } from './startup-splash-w
 import { DesktopTerminalStore } from './terminal-sessions.js';
 import { registerWindowsTitlebarDoubleClick, toggleWindowMaximized } from './window-frame.js';
 import { listWorkspaceApps, openWorkspaceApp } from './workspace-apps.js';
-import { createWorkspaceFilePreviewUrl, openWorkspaceFileWithDefaultApp } from './workspace-file-opening.js';
+import {
+  copyWorkspaceFilePath,
+  createWorkspaceFilePreviewUrl,
+  openWorkspaceFileWithDefaultApp,
+  revealWorkspaceFileInFolder,
+} from './workspace-file-opening.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
@@ -433,6 +438,8 @@ function registerDesktopIpc(
   ipcMain.removeHandler('desktop:reveal-image-in-folder');
   ipcMain.removeHandler('desktop:open-path');
   ipcMain.removeHandler('desktop:open-workspace-file');
+  ipcMain.removeHandler('desktop:copy-workspace-file-path');
+  ipcMain.removeHandler('desktop:reveal-workspace-file');
   ipcMain.removeHandler('desktop:create-workspace-file-preview');
   ipcMain.removeHandler('desktop-updater:get-state');
   ipcMain.removeHandler('desktop-updater:check');
@@ -516,6 +523,22 @@ function registerDesktopIpc(
     input?.filePath,
     (targetPath) => shell.openPath(targetPath),
   ));
+  ipcMain.handle('desktop:copy-workspace-file-path', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return copyWorkspaceFilePath(
+      input?.workspaceRoot,
+      input?.filePath,
+      (targetPath) => clipboard.writeText(targetPath),
+    );
+  });
+  ipcMain.handle('desktop:reveal-workspace-file', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return revealWorkspaceFileInFolder(
+      input?.workspaceRoot,
+      input?.filePath,
+      (targetPath) => shell.showItemInFolder(targetPath),
+    );
+  });
   ipcMain.handle('desktop:create-workspace-file-preview', async (event, input) => {
     if (!isDesktopRendererSender(event.sender)) return { ok: false, error: 'Desktop renderer is unavailable.' };
     return createWorkspaceFilePreviewUrl(

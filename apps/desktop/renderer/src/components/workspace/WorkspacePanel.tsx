@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { ChevronDown, Code2, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
+import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { ChevronDown, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
 import { isTemporaryWorkspaceProjectId, type WorkspaceEntry, type WorkspaceEntrySearchItem, type WorkspaceEntrySearchResponse, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { EmptyState, IconButton } from '../primitives.js';
-import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+import { WorkspaceFileContextMenu, workspaceFileMentionEntry, type WorkspaceFileContextTarget } from './WorkspaceFileContextMenu.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import type { DesktopDiffSummary, DesktopPanelTab, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopTerminalSession, DesktopWorkspaceApp, ProjectTreeNode } from './model.js';
 
@@ -24,9 +23,12 @@ export function WorkspacePanel({
   reviewLoading,
   reviewState,
   selectedWorkspaceApp,
+  workspaceApps,
   terminalSession,
   onAddFileToConversation,
+  onCopyFilePath,
   onExternalOpenFile,
+  onOpenFileWithApp,
   onSearchProjectEntries,
   onOpenEntry,
   onOpenProjectFile,
@@ -36,6 +38,7 @@ export function WorkspacePanel({
   onOpenSideChat,
   onOpenTerminalPanel,
   onReviewRefresh,
+  onRevealFile,
   onResizeStep,
   onResizeStart,
   resizeMax,
@@ -51,9 +54,12 @@ export function WorkspacePanel({
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
+  workspaceApps: DesktopWorkspaceApp[];
   terminalSession: DesktopTerminalSession | null;
   onAddFileToConversation: (entry: WorkspaceEntrySearchItem) => void;
+  onCopyFilePath: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
+  onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
@@ -63,6 +69,7 @@ export function WorkspacePanel({
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
+  onRevealFile: (filePath: string) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   resizeMax: number;
@@ -79,8 +86,7 @@ export function WorkspacePanel({
   const [treeTruncated, setTreeTruncated] = useState(false);
   const [treeVisible, setTreeVisible] = useState(true);
   const [treeWidth, setTreeWidth] = useState(248);
-  const [contextMenu, setContextMenu] = useState<{ entry: WorkspaceEntry; x: number; y: number } | null>(null);
-  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<WorkspaceFileContextTarget | null>(null);
   const showsFileExplorer = activePanel.type === 'files' || activePanel.type === 'file';
   const tree = useMemo(() => buildProjectEntryTree(treeEntries), [treeEntries]);
   const query = treeQuery.trim().toLowerCase();
@@ -131,28 +137,6 @@ export function WorkspacePanel({
       cancelled = true;
     };
   }, [activeProject, onSearchProjectEntries, query, showsFileExplorer]);
-
-  useEffect(() => {
-    if (!contextMenu) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (contextMenuRef.current?.contains(event.target as Node)) return;
-      setContextMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setContextMenu(null);
-    };
-    const closeMenu = () => setContextMenu(null);
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-    };
-  }, [contextMenu]);
 
   const loadDirectory = async (pathValue: string) => {
     const normalizedPath = normalizeProjectTreePath(pathValue);
@@ -230,7 +214,7 @@ export function WorkspacePanel({
             onContextMenu={!directory ? (event) => {
               event.preventDefault();
               event.stopPropagation();
-              setContextMenu({ entry: node.entry, x: event.clientX, y: event.clientY });
+              setContextMenu({ filePath: node.path, x: event.clientX, y: event.clientY });
             } : undefined}
             onClick={() => (directory ? toggleDirectory(node.path) : onOpenEntry(node.entry))}
           >
@@ -265,16 +249,34 @@ export function WorkspacePanel({
         loading={reviewLoading}
         reviewState={reviewState}
         workspaceApp={selectedWorkspaceApp}
+        workspaceApps={workspaceApps}
+        onAddFileToConversation={(filePath) => onAddFileToConversation(workspaceFileMentionEntry(filePath))}
+        onCopyFilePath={onCopyFilePath}
         onExternalOpenFile={onExternalOpenFile}
+        onOpenFileWithApp={onOpenFileWithApp}
         onOpenProjectFile={onOpenProjectFile}
         onRefresh={onReviewRefresh}
+        onRevealFile={onRevealFile}
       />
     ) : activePanel.type === 'terminal' ? (
       <section className="desktop-workspace-terminal-panel" aria-label={desktopPanelTitle(activePanel)}>
         <TerminalPane session={terminalSession} />
       </section>
     ) : (
-      <section className="desktop-editor">
+      <section
+        className="desktop-editor"
+        onContextMenu={filePreview ? (event) => {
+          event.preventDefault();
+          const lineElement = (event.target as Element).closest<HTMLElement>('[data-workspace-file-line]');
+          const line = Number(lineElement?.dataset.workspaceFileLine);
+          setContextMenu({
+            filePath: filePreview.path,
+            line: Number.isSafeInteger(line) && line > 0 ? line : undefined,
+            x: event.clientX,
+            y: event.clientY,
+          });
+        } : undefined}
+      >
         <div className="desktop-editor__crumb">
           <span className="desktop-editor__crumb-path">
             <span>{activeProject?.name ?? 'No project'}</span>
@@ -290,28 +292,12 @@ export function WorkspacePanel({
           </IconButton>
         </div>
         {filePreview ? (
-          <WorkspaceFilePreviewContent
-            file={filePreview}
-            onOpenLine={selectedWorkspaceApp ? (line) => onExternalOpenFile(filePreview.path, line) : undefined}
-            openApp={selectedWorkspaceApp}
-          />
+          <WorkspaceFilePreviewContent file={filePreview} />
         ) : (
           <EmptyState title="未打开文件" body="从右侧文件树选择文件后会在这里预览。" />
         )}
       </section>
     );
-
-  const contextMenuStyle = contextMenu
-    ? zoomedPortalPosition({
-        anchorX: contextMenu.x,
-        anchorY: contextMenu.y,
-        menuHeight: 96,
-        menuWidth: 208,
-        scaleInverse: pageScaleInverse(),
-        viewportHeight: window.innerHeight,
-        viewportWidth: window.innerWidth,
-      })
-    : undefined;
 
   return (
     <>
@@ -385,38 +371,16 @@ export function WorkspacePanel({
           ) : null}
         </div>
       </aside>
-      {contextMenu
-        ? createPortal(
-            <div className="desktop-file-context-menu" ref={contextMenuRef} role="menu" style={contextMenuStyle}>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!selectedWorkspaceApp}
-                onClick={() => {
-                  const filePath = contextMenu.entry.path;
-                  setContextMenu(null);
-                  onExternalOpenFile(filePath);
-                }}
-              >
-                <Code2 size={14} />
-                <span>{selectedWorkspaceApp ? `用 ${selectedWorkspaceApp.label} 打开` : '未检测到打开方式'}</span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  const entry = workspaceEntryToSearchItem(contextMenu.entry);
-                  setContextMenu(null);
-                  onAddFileToConversation(entry);
-                }}
-              >
-                <MessageSquare size={14} />
-                <span>添加到对话</span>
-              </button>
-            </div>,
-            document.body,
-          )
-        : null}
+      <WorkspaceFileContextMenu
+        selectedWorkspaceApp={selectedWorkspaceApp}
+        target={contextMenu}
+        workspaceApps={workspaceApps}
+        onAddToConversation={(filePath) => onAddFileToConversation(workspaceFileMentionEntry(filePath))}
+        onClose={() => setContextMenu(null)}
+        onCopyPath={onCopyFilePath}
+        onOpenWithApp={onOpenFileWithApp}
+        onReveal={onRevealFile}
+      />
     </>
   );
 }
@@ -510,12 +474,8 @@ export function WorkspaceOverviewPanel({
 
 export function WorkspaceFilePreviewContent({
   file,
-  onOpenLine,
-  openApp,
 }: {
   file: WorkspaceFileRead;
-  onOpenLine?: (line: number) => void;
-  openApp?: DesktopWorkspaceApp | null;
 }) {
   if (file.preview?.kind === 'image') {
     return (
@@ -540,17 +500,13 @@ export function WorkspaceFilePreviewContent({
       </div>
     );
   }
-  return <CodeEditorPreview file={file} onOpenLine={onOpenLine} openApp={openApp} />;
+  return <CodeEditorPreview file={file} />;
 }
 
 function CodeEditorPreview({
   file,
-  onOpenLine,
-  openApp,
 }: {
   file: WorkspaceFileRead;
-  onOpenLine?: (line: number) => void;
-  openApp?: DesktopWorkspaceApp | null;
 }) {
   const content = useMemo(() => file.content.replace(/\r\n/g, '\n'), [file.content]);
   const language = fileLanguage(file.path);
@@ -561,12 +517,10 @@ function CodeEditorPreview({
       {lines.map((line, index) => {
         const highlighted = highlightedLines[index];
         return (
-          <button
-            className={`desktop-code-line ${onOpenLine ? 'desktop-code-line--clickable' : ''}`}
+          <div
+            className="desktop-code-line desktop-code-line--contextual"
+            data-workspace-file-line={index + 1}
             key={`${file.path}:${index}`}
-            title={openApp ? `用 ${openApp.label} 打开第 ${index + 1} 行` : undefined}
-            type="button"
-            onClick={() => onOpenLine?.(index + 1)}
           >
             <span className="desktop-code-line__number">{index + 1}</span>
             {highlighted !== undefined ? (
@@ -574,7 +528,7 @@ function CodeEditorPreview({
             ) : (
               <code>{line || ' '}</code>
             )}
-          </button>
+          </div>
         );
       })}
       {file.truncated ? <div className="desktop-code-truncated">文件过大，已截断预览。</div> : null}
@@ -598,17 +552,6 @@ function searchItemToWorkspaceEntry(item: WorkspaceEntrySearchItem): WorkspaceEn
     name: item.name,
     path: item.path,
     type: item.kind,
-  };
-}
-
-function workspaceEntryToSearchItem(entry: WorkspaceEntry): WorkspaceEntrySearchItem {
-  const normalizedPath = normalizeProjectTreePath(entry.path);
-  const separatorIndex = normalizedPath.lastIndexOf('/');
-  return {
-    kind: entry.type,
-    name: entry.name,
-    parent: separatorIndex >= 0 ? normalizedPath.slice(0, separatorIndex) : '',
-    path: normalizedPath,
   };
 }
 

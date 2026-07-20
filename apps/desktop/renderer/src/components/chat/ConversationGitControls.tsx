@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, Search, UploadCloud } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
@@ -180,12 +180,6 @@ export function ConversationGitControls({
     setError(null);
   };
 
-  const handleCommitTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!(event.metaKey || event.ctrlKey) || event.key !== 'Enter') return;
-    event.preventDefault();
-    if (commitableFileCount > 0) commitChanges(false);
-  };
-
   const commitModal = commitOpen && typeof document !== 'undefined' ? createPortal(
     <div
       className="chat-git-commit-modal"
@@ -239,7 +233,6 @@ export function ConversationGitControls({
           placeholder="提交信息（留空将自动生成）..."
           disabled={Boolean(busyAction)}
           onChange={(event) => setCommitMessage(event.currentTarget.value)}
-          onKeyDown={handleCommitTextareaKeyDown}
         />
         <label className="chat-git-commit-popover__check">
           <input
@@ -256,7 +249,6 @@ export function ConversationGitControls({
             disabled={Boolean(busyAction) || commitableFileCount === 0}
             icon={<GitCommitHorizontal size={14} />}
             loading={busyAction === 'commit' || busyAction === 'generate'}
-            shortcut="⌘↩"
             title={busyAction === 'generate' ? '生成提交信息' : '提交'}
             onClick={() => commitChanges(false)}
           />
@@ -523,14 +515,12 @@ function GitActionButton({
   disabled,
   icon,
   loading,
-  shortcut,
   title,
   onClick,
 }: {
   disabled: boolean;
   icon: ReactNode;
   loading?: boolean;
-  shortcut?: string;
   title: string;
   onClick: () => void;
 }) {
@@ -538,7 +528,6 @@ function GitActionButton({
     <button type="button" className="chat-git-commit-popover__action" disabled={disabled} onClick={onClick}>
       <span className="chat-git-commit-popover__action-icon">{loading ? <Loader2 size={14} /> : icon}</span>
       <span>{title}</span>
-      {shortcut ? <kbd>{shortcut}</kbd> : null}
     </button>
   );
 }

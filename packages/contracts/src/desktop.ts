@@ -175,6 +175,8 @@ export type SetsunaDesktopBridge = {
     revealImageInFolder(input: DesktopImageInput): Promise<DesktopImageActionResult>;
     openPath(targetPath: string): Promise<DesktopOpenPathResult>;
     openWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
+    copyWorkspaceFilePath(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
+    revealWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     createWorkspaceFilePreview(workspaceRoot: string, filePath: string): Promise<DesktopWorkspaceFilePreviewResult>;
   };
   desktopReview: {

@@ -225,6 +225,7 @@ export function AppRouteContent({
       reviewLoading={workspacePanels.reviewLoading}
       reviewState={workspacePanels.reviewState}
       selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
+      workspaceApps={workspacePanels.workspaceApps}
       skills={runtime.skills}
       threadUsage={runtime.threadUsage}
       threads={runtime.threads}
@@ -248,9 +249,11 @@ export function AppRouteContent({
       onDiscardFileChanges={discardFileChanges}
       onCloseBottomPanel={(panelId) => workspacePanels.closeDesktopPanelItem('bottom', panelId)}
       onCloseBottomSlot={() => workspacePanels.closeDesktopPanelSlot('bottom')}
+      onCopyFilePath={(filePath) => void workspacePanels.copyWorkspaceFilePath(filePath)}
       onDraftChange={setDraft}
       onEditUserMessage={(messageId, content) => chatActions.editUserMessage(messageId, content)}
       onExternalOpenFile={(filePath, line) => void workspacePanels.openFileInWorkspaceApp(filePath, line)}
+      onOpenFileWithApp={(appId, filePath, line) => void workspacePanels.openFileWithWorkspaceApp(appId, filePath, line)}
       onSelectModel={(providerId, modelId) => void runtime.selectProviderModel(providerId, modelId)}
       onSearchProjectEntries={projectWorkspace.searchProjectEntries}
       onOpenBottomReviewPanel={() => {
@@ -272,6 +275,7 @@ export function AppRouteContent({
       onOpenProjectFile={projectWorkspace.openProjectFile}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
       onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
+      onRevealFile={(filePath) => void workspacePanels.revealWorkspaceFile(filePath)}
       onSetMultiAgentEnabled={(enabled) => runtime.saveRuntimePreferences({
         features: {
           ...(runtime.config?.features ?? {}),

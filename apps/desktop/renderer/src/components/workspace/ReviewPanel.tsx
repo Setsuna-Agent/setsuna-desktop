@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type RefObject, type UIEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode, type UIEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import { AlignJustify, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Code2, Columns2, GitBranch, PanelRightOpen, RefreshCw, Rows3, Search, WrapText } from 'lucide-react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { ActionTooltip, EmptyState, IconButton } from '../primitives.js';
-import { pageScaleInverse, zoomedPortalPosition } from '../../utils/zoomedPortalPosition.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import { canCompareReviewBranch } from './reviewChanges.js';
+import { WorkspaceFileContextMenu, type WorkspaceFileContextTarget } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewFocusRequest, DesktopReviewLoadOptions, DesktopReviewState, DesktopWorkspaceApp } from './model.js';
 
@@ -17,12 +16,6 @@ export type ReviewPathContext = {
   source: DesktopReviewSource;
   workspaceRoot?: string | null;
   gitRoot?: string | null;
-};
-
-type ReviewLineContextMenuState = {
-  line?: number;
-  x: number;
-  y: number;
 };
 
 type HighlightedReviewDiffLine = {
@@ -90,6 +83,7 @@ const REVIEW_DIFF_VIRTUAL_VIEWPORT_HEIGHT_PX = 320;
 const REVIEW_DIFF_MAX_WRAPPABLE_LINE_CHARS = 240;
 const DEFAULT_REVIEW_LINE_WRAP = true;
 const useReviewLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+const noopWorkspaceFileAction = () => undefined;
 
 export function DesktopReviewPanel({
   activeProject,
@@ -99,9 +93,14 @@ export function DesktopReviewPanel({
   loading,
   reviewState,
   workspaceApp,
+  workspaceApps = [],
+  onAddFileToConversation = noopWorkspaceFileAction,
+  onCopyFilePath = noopWorkspaceFileAction,
   onExternalOpenFile,
+  onOpenFileWithApp = noopWorkspaceFileAction,
   onOpenProjectFile,
   onRefresh,
+  onRevealFile = noopWorkspaceFileAction,
 }: {
   activeProject?: WorkspaceProject;
   error: string | null;
@@ -110,9 +109,14 @@ export function DesktopReviewPanel({
   loading: boolean;
   reviewState: DesktopReviewState | null;
   workspaceApp?: DesktopWorkspaceApp | null;
+  workspaceApps?: DesktopWorkspaceApp[];
+  onAddFileToConversation?: (filePath: string) => void;
+  onCopyFilePath?: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
+  onOpenFileWithApp?: (appId: string, filePath: string, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
   onRefresh: (options?: DesktopReviewLoadOptions) => void;
+  onRevealFile?: (filePath: string) => void;
 }) {
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
   const [branchBaseRefByKey, setBranchBaseRefByKey] = useState<Record<string, string>>({});
@@ -397,8 +401,13 @@ export function DesktopReviewPanel({
           pathContext={pathContext}
           summary={activeSummary}
           workspaceApp={workspaceApp}
+          workspaceApps={workspaceApps}
+          onAddFileToConversation={onAddFileToConversation}
+          onCopyFilePath={onCopyFilePath}
           onExternalOpenFile={onExternalOpenFile}
+          onOpenFileWithApp={onOpenFileWithApp}
           onOpenProjectFile={onOpenProjectFile}
+          onRevealFile={onRevealFile}
         />
       </div>
     </section>
@@ -836,8 +845,13 @@ function ReviewSummarySection({
   pathContext,
   summary,
   workspaceApp,
+  workspaceApps,
+  onAddFileToConversation,
+  onCopyFilePath,
   onExternalOpenFile,
+  onOpenFileWithApp,
   onOpenProjectFile,
+  onRevealFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
   emptyText: { title: string; description: string };
@@ -847,8 +861,13 @@ function ReviewSummarySection({
   pathContext: ReviewPathContext;
   summary: DesktopDiffSummary | null;
   workspaceApp?: DesktopWorkspaceApp | null;
+  workspaceApps: DesktopWorkspaceApp[];
+  onAddFileToConversation: (filePath: string) => void;
+  onCopyFilePath: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
+  onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
+  onRevealFile: (filePath: string) => void;
 }) {
   const files = summary?.files ?? [];
   return (
@@ -865,8 +884,13 @@ function ReviewSummarySection({
               lineWrap={lineWrap}
               pathContext={pathContext}
               workspaceApp={workspaceApp}
+              workspaceApps={workspaceApps}
+              onAddFileToConversation={onAddFileToConversation}
+              onCopyFilePath={onCopyFilePath}
               onExternalOpenFile={onExternalOpenFile}
+              onOpenFileWithApp={onOpenFileWithApp}
               onOpenProjectFile={onOpenProjectFile}
+              onRevealFile={onRevealFile}
             />
           ))}
         </div>
@@ -888,8 +912,13 @@ function ReviewFileCard({
   lineWrap,
   pathContext,
   workspaceApp,
+  workspaceApps,
+  onAddFileToConversation,
+  onCopyFilePath,
   onExternalOpenFile,
+  onOpenFileWithApp,
   onOpenProjectFile,
+  onRevealFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
   fileExpansionRequest: ReviewFileExpansionRequest;
@@ -898,14 +927,18 @@ function ReviewFileCard({
   lineWrap: boolean;
   pathContext: ReviewPathContext;
   workspaceApp?: DesktopWorkspaceApp | null;
+  workspaceApps: DesktopWorkspaceApp[];
+  onAddFileToConversation: (filePath: string) => void;
+  onCopyFilePath: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
+  onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onOpenProjectFile: (filePath: string) => void;
+  onRevealFile: (filePath: string) => void;
 }) {
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
   const [focusHighlightVersion, setFocusHighlightVersion] = useState<number | null>(null);
-  const [lineContextMenu, setLineContextMenu] = useState<ReviewLineContextMenuState | null>(null);
+  const [lineContextMenu, setLineContextMenu] = useState<WorkspaceFileContextTarget | null>(null);
   const fileCardRef = useRef<HTMLElement | null>(null);
-  const lineContextMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
   const canOpenFile = Boolean(workspaceFilePath);
   const focusedByRequest = Boolean(
@@ -962,37 +995,17 @@ function ReviewFileCard({
     };
   }, [focusedByRequest, focusRequest?.version]);
 
-  const openDiffLine = (line: DesktopDiffFile['lines'][number], preferredLine?: number) => {
-    if (!workspaceFilePath) return;
-    onExternalOpenFile(workspaceFilePath, preferredLine ?? line.newLine ?? line.oldLine);
-  };
   const openDiffLineContextMenu = (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => {
     if (!workspaceFilePath) return;
     event.preventDefault();
-    setLineContextMenu({ line: preferredLine ?? line.newLine ?? line.oldLine, x: event.clientX, y: event.clientY });
+    event.stopPropagation();
+    setLineContextMenu({
+      filePath: workspaceFilePath,
+      line: preferredLine ?? line.newLine ?? line.oldLine,
+      x: event.clientX,
+      y: event.clientY,
+    });
   };
-
-  useEffect(() => {
-    if (!lineContextMenu) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (lineContextMenuRef.current?.contains(event.target as Node)) return;
-      setLineContextMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setLineContextMenu(null);
-    };
-    const closeMenu = () => setLineContextMenu(null);
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-    };
-  }, [lineContextMenu]);
 
   return (
     <>
@@ -1004,7 +1017,14 @@ function ReviewFileCard({
         ].filter(Boolean).join(' ')}
         ref={fileCardRef}
       >
-        <header className="desktop-review-file-card__summary">
+        <header
+          className="desktop-review-file-card__summary"
+          onContextMenu={(event) => {
+            if (!workspaceFilePath) return;
+            event.preventDefault();
+            setLineContextMenu({ filePath: workspaceFilePath, x: event.clientX, y: event.clientY });
+          }}
+        >
           <button
             className="desktop-review-file-card__path-main"
             type="button"
@@ -1041,7 +1061,6 @@ function ReviewFileCard({
         </header>
         {expanded && visibleLines.length ? (
           <ReviewDiffContent
-            canOpenLine={Boolean(workspaceApp && canOpenFile)}
             className={[
               'desktop-review-diff',
               `desktop-review-diff--${diffLayout}`,
@@ -1057,29 +1076,26 @@ function ReviewFileCard({
             splitRows={splitRows}
             wholeFileChange={splitWholeFileChange}
             onLineContextMenu={openDiffLineContextMenu}
-            onOpenLine={openDiffLine}
           >
             {file.truncated ? <div className="desktop-review-truncated">diff 过大，已截断展示。</div> : null}
           </ReviewDiffContent>
         ) : null}
       </article>
-      <ReviewDiffLineContextMenu
-        contextMenu={lineContextMenu}
-        menuRef={lineContextMenuRef}
-        workspaceApp={workspaceApp}
-        onOpen={() => {
-          if (!workspaceFilePath || !lineContextMenu) return;
-          const line = lineContextMenu.line;
-          setLineContextMenu(null);
-          onExternalOpenFile(workspaceFilePath, line);
-        }}
+      <WorkspaceFileContextMenu
+        selectedWorkspaceApp={workspaceApp ?? null}
+        target={lineContextMenu}
+        workspaceApps={workspaceApps}
+        onAddToConversation={onAddFileToConversation}
+        onClose={() => setLineContextMenu(null)}
+        onCopyPath={onCopyFilePath}
+        onOpenWithApp={onOpenFileWithApp}
+        onReveal={onRevealFile}
       />
     </>
   );
 }
 
 function ReviewDiffContent({
-  canOpenLine,
   children,
   className,
   diffLayout,
@@ -1090,9 +1106,7 @@ function ReviewDiffContent({
   splitRows,
   wholeFileChange,
   onLineContextMenu,
-  onOpenLine,
 }: {
-  canOpenLine: boolean;
   children?: ReactNode;
   className: string;
   diffLayout: DesktopReviewDiffLayout;
@@ -1103,7 +1117,6 @@ function ReviewDiffContent({
   splitRows: SplitReviewDiffRow[];
   wholeFileChange: WholeFileReviewChange | null;
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
-  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   const isTwoSidedSplit = diffLayout === 'split' && !wholeFileChange;
   const itemCount = isTwoSidedSplit ? splitRows.length : highlightedLines.length;
@@ -1123,13 +1136,11 @@ function ReviewDiffContent({
     if (shouldVirtualize && !lineWrap) {
       return (
         <ReviewSplitVirtualDiffViewport
-          canOpenLine={canOpenLine}
           className={className}
           language={language}
           rows={splitRows}
           rowEstimate={rowEstimate}
           onLineContextMenu={onLineContextMenu}
-          onOpenLine={onOpenLine}
         >
           {children}
         </ReviewSplitVirtualDiffViewport>
@@ -1142,12 +1153,10 @@ function ReviewDiffContent({
           itemCount={itemCount}
           renderItem={(index) => (
             <ReviewSplitDiffRow
-              canOpenLine={canOpenLine}
               language={language}
               lineWrap={lineWrap}
               row={splitRows[index]}
               onLineContextMenu={onLineContextMenu}
-              onOpenLine={onOpenLine}
             />
           )}
           rowEstimate={rowEstimate}
@@ -1160,12 +1169,10 @@ function ReviewDiffContent({
     return (
       <div className={className} style={intrinsicSizeStyle}>
         <ReviewSplitDiff
-          canOpenLine={canOpenLine}
           language={language}
           lineWrap={lineWrap}
           rows={splitRows}
           onLineContextMenu={onLineContextMenu}
-          onOpenLine={onOpenLine}
         />
         {children}
       </div>
@@ -1176,12 +1183,10 @@ function ReviewDiffContent({
     return (
       <div className={className} style={intrinsicSizeStyle}>
         <ReviewUnifiedDiff
-          canOpenLine={canOpenLine}
           language={language}
           lineWrap={lineWrap}
           lines={highlightedLines}
           onLineContextMenu={onLineContextMenu}
-          onOpenLine={onOpenLine}
         />
         {children}
       </div>
@@ -1194,12 +1199,10 @@ function ReviewDiffContent({
       itemCount={itemCount}
       renderItem={(index) => (
         <ReviewUnifiedDiffLine
-          canOpenLine={canOpenLine}
           item={highlightedLines[index]}
           language={language}
           lineWrap={lineWrap}
           onLineContextMenu={onLineContextMenu}
-          onOpenLine={onOpenLine}
         />
       )}
       rowEstimate={rowEstimate}
@@ -1211,23 +1214,19 @@ function ReviewDiffContent({
 }
 
 function ReviewSplitVirtualDiffViewport({
-  canOpenLine,
   children,
   className,
   language,
   rows,
   rowEstimate,
   onLineContextMenu,
-  onOpenLine,
 }: {
-  canOpenLine: boolean;
   children?: ReactNode;
   className: string;
   language: string;
   rows: SplitReviewDiffRow[];
   rowEstimate: (index: number) => number;
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
-  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   const oldPaneRef = useRef<HTMLDivElement | null>(null);
   const newPaneRef = useRef<HTMLDivElement | null>(null);
@@ -1300,13 +1299,11 @@ function ReviewSplitVirtualDiffViewport({
                 onMeasure={measureOldItem}
               >
                 <ReviewSplitDiffCell
-                  canOpenLine={canOpenLine}
                   item={rows[item.index]?.oldLine ?? null}
                   language={language}
                   lineWrap={false}
                   side="old"
                   onLineContextMenu={onLineContextMenu}
-                  onOpenLine={onOpenLine}
                 />
               </ReviewVirtualStackRow>
             ))}
@@ -1331,13 +1328,11 @@ function ReviewSplitVirtualDiffViewport({
                 onMeasure={measureNewItem}
               >
                 <ReviewSplitDiffCell
-                  canOpenLine={canOpenLine}
                   item={rows[item.index]?.newLine ?? null}
                   language={language}
                   lineWrap={false}
                   side="new"
                   onLineContextMenu={onLineContextMenu}
-                  onOpenLine={onOpenLine}
                 />
               </ReviewVirtualStackRow>
             ))}
@@ -1447,31 +1442,25 @@ function ReviewVirtualStackRow({
 }
 
 function ReviewUnifiedDiff({
-  canOpenLine,
   language,
   lineWrap,
   lines,
   onLineContextMenu,
-  onOpenLine,
 }: {
-  canOpenLine: boolean;
   language: string;
   lineWrap: boolean;
   lines: HighlightedReviewDiffLine[];
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
-  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   return (
     <>
       {lines.map((item) => (
         <ReviewUnifiedDiffLine
-          canOpenLine={canOpenLine}
           item={item}
           key={item.key}
           language={language}
           lineWrap={lineWrap}
           onLineContextMenu={onLineContextMenu}
-          onOpenLine={onOpenLine}
         />
       ))}
     </>
@@ -1479,19 +1468,15 @@ function ReviewUnifiedDiff({
 }
 
 function ReviewUnifiedDiffLine({
-  canOpenLine,
   item,
   language,
   lineWrap,
   onLineContextMenu,
-  onOpenLine,
 }: {
-  canOpenLine: boolean;
   item: HighlightedReviewDiffLine;
   language: string;
   lineWrap: boolean;
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
-  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   if (item.line.type === 'gap') {
     return (
@@ -1502,33 +1487,26 @@ function ReviewUnifiedDiffLine({
   }
   const targetLine = item.line.newLine ?? item.line.oldLine;
   return (
-    <button
+    <div
       className={`desktop-review-diff-line desktop-review-diff-line--${item.line.type} ${lineWrap ? 'desktop-review-diff-line--wrap' : ''}`}
-      disabled={!canOpenLine}
-      type="button"
-      onClick={() => onOpenLine(item.line, targetLine)}
       onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
     >
       <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
       <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} lineWrap={lineWrap} />
-    </button>
+    </div>
   );
 }
 
 function ReviewSplitDiff({
-  canOpenLine,
   language,
   lineWrap,
   rows,
   onLineContextMenu,
-  onOpenLine,
 }: {
-  canOpenLine: boolean;
   language: string;
   lineWrap: boolean;
   rows: SplitReviewDiffRow[];
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
-  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   if (!lineWrap) {
     return (
@@ -1536,28 +1514,24 @@ function ReviewSplitDiff({
         <div className="desktop-review-diff-split-pane desktop-review-diff-split-pane--old">
           {rows.map((row) => (
             <ReviewSplitDiffCell
-              canOpenLine={canOpenLine}
               item={row.oldLine}
               key={`${row.key}:old`}
               language={language}
               lineWrap={false}
               side="old"
               onLineContextMenu={onLineContextMenu}
-              onOpenLine={onOpenLine}
             />
           ))}
         </div>
         <div className="desktop-review-diff-split-pane desktop-review-diff-split-pane--new">
           {rows.map((row) => (
             <ReviewSplitDiffCell
-              canOpenLine={canOpenLine}
               item={row.newLine}
               key={`${row.key}:new`}
               language={language}
               lineWrap={false}
               side="new"
               onLineContextMenu={onLineContextMenu}
-              onOpenLine={onOpenLine}
             />
           ))}
         </div>
@@ -1569,13 +1543,11 @@ function ReviewSplitDiff({
     <>
       {rows.map((row) => (
         <ReviewSplitDiffRow
-          canOpenLine={canOpenLine}
           key={row.key}
           language={language}
           lineWrap={lineWrap}
           row={row}
           onLineContextMenu={onLineContextMenu}
-          onOpenLine={onOpenLine}
         />
       ))}
     </>
@@ -1583,41 +1555,33 @@ function ReviewSplitDiff({
 }
 
 function ReviewSplitDiffRow({
-  canOpenLine,
   language,
   lineWrap,
   row,
   onLineContextMenu,
-  onOpenLine,
 }: {
-  canOpenLine: boolean;
   language: string;
   lineWrap: boolean;
   row: SplitReviewDiffRow;
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
-  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   const isGapRow = row.oldLine?.line.type === 'gap' && !row.newLine;
   return (
     <div className={`desktop-review-diff-split-row ${isGapRow ? 'desktop-review-diff-split-row--gap' : ''}`}>
       <ReviewSplitDiffCell
-        canOpenLine={canOpenLine}
         item={row.oldLine}
         language={language}
         lineWrap={lineWrap}
         side="old"
         onLineContextMenu={onLineContextMenu}
-        onOpenLine={onOpenLine}
       />
       {isGapRow ? null : (
         <ReviewSplitDiffCell
-          canOpenLine={canOpenLine}
           item={row.newLine}
           language={language}
           lineWrap={lineWrap}
           side="new"
           onLineContextMenu={onLineContextMenu}
-          onOpenLine={onOpenLine}
         />
       )}
     </div>
@@ -1625,21 +1589,17 @@ function ReviewSplitDiffRow({
 }
 
 function ReviewSplitDiffCell({
-  canOpenLine,
   item,
   language,
   lineWrap,
   side,
   onLineContextMenu,
-  onOpenLine,
 }: {
-  canOpenLine: boolean;
   item: HighlightedReviewDiffLine | null;
   language: string;
   lineWrap: boolean;
   side: 'old' | 'new';
   onLineContextMenu: (event: MouseEvent, line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
-  onOpenLine: (line: DesktopDiffFile['lines'][number], preferredLine?: number) => void;
 }) {
   if (!item) {
     return <span aria-hidden="true" className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--empty ${lineWrap ? 'desktop-review-diff-split-cell--wrap' : ''}`} />;
@@ -1653,16 +1613,13 @@ function ReviewSplitDiffCell({
   }
   const targetLine = side === 'old' ? item.line.oldLine ?? item.line.newLine : item.line.newLine ?? item.line.oldLine;
   return (
-    <button
+    <div
       className={`desktop-review-diff-split-cell desktop-review-diff-split-cell--${side} desktop-review-diff-split-cell--${item.line.type} ${lineWrap ? 'desktop-review-diff-split-cell--wrap' : ''}`}
-      disabled={!canOpenLine}
-      type="button"
-      onClick={() => onOpenLine(item.line, targetLine)}
       onContextMenu={(event) => onLineContextMenu(event, item.line, targetLine)}
     >
       <span className="desktop-review-diff-line__number">{targetLine ?? ''}</span>
       <ReviewDiffCode content={item.line.content} highlighted={item.highlighted} language={language} lineWrap={lineWrap} />
-    </button>
+    </div>
   );
 }
 
@@ -1940,40 +1897,4 @@ function estimatedSplitDiffRowHeight(row?: SplitReviewDiffRow | null): number {
   const oldHeight = estimatedUnifiedDiffLineHeight(row?.oldLine);
   const newHeight = estimatedUnifiedDiffLineHeight(row?.newLine);
   return Math.max(oldHeight, newHeight);
-}
-
-function ReviewDiffLineContextMenu({
-  contextMenu,
-  menuRef,
-  workspaceApp,
-  onOpen,
-}: {
-  contextMenu: ReviewLineContextMenuState | null;
-  menuRef: RefObject<HTMLDivElement>;
-  workspaceApp?: DesktopWorkspaceApp | null;
-  onOpen: () => void;
-}) {
-  if (!contextMenu || typeof document === 'undefined') return null;
-  const style: CSSProperties = zoomedPortalPosition({
-    anchorX: contextMenu.x,
-    anchorY: contextMenu.y,
-    menuHeight: 72,
-    menuWidth: 224,
-    scaleInverse: pageScaleInverse(),
-    viewportHeight: window.innerHeight,
-    viewportWidth: window.innerWidth,
-  });
-  return createPortal(
-    <div className="desktop-file-context-menu desktop-review-line-context-menu" ref={menuRef} role="menu" style={style}>
-      <button type="button" role="menuitem" disabled={!workspaceApp} onClick={onOpen}>
-        <Code2 size={14} />
-        <span>{workspaceApp ? reviewLineContextMenuLabel(workspaceApp.label, contextMenu.line) : '未检测到打开方式'}</span>
-      </button>
-    </div>,
-    document.body,
-  );
-}
-
-function reviewLineContextMenuLabel(appLabel: string, line?: number): string {
-  return line ? `用 ${appLabel} 打开第 ${line} 行` : `用 ${appLabel} 打开`;
 }

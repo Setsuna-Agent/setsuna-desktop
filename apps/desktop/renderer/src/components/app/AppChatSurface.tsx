@@ -23,6 +23,7 @@ import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationP
 import { BottomToolsPanel } from '../workspace/BottomToolsPanel.js';
 import { BrowserPanel } from '../workspace/BrowserPanel.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
+import { workspaceFileMentionEntry } from '../workspace/WorkspaceFileContextMenu.js';
 import type { ChatSkillSelectionRequest, ChatWorkspaceMentionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import type {
   DesktopPanelSlotState,
@@ -63,6 +64,7 @@ export function AppChatSurface({
   reviewLoading,
   reviewState,
   selectedWorkspaceApp,
+  workspaceApps,
   skills,
   threadUsage,
   threads,
@@ -84,9 +86,11 @@ export function AppChatSurface({
   onDiscardFileChanges,
   onCloseBottomPanel,
   onCloseBottomSlot,
+  onCopyFilePath,
   onDraftChange,
   onEditUserMessage,
   onExternalOpenFile,
+  onOpenFileWithApp,
   onSelectModel,
   onSearchProjectEntries,
   onOpenBottomReviewPanel,
@@ -103,6 +107,7 @@ export function AppChatSurface({
   onReorderBottomPanels,
   onReloadThreads,
   onReviewRefresh,
+  onRevealFile,
   onSideChatError,
   onSetMultiAgentEnabled,
   onStartThreadReview,
@@ -143,6 +148,7 @@ export function AppChatSurface({
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
+  workspaceApps: DesktopWorkspaceApp[];
   skills: RuntimeSkillSummary[];
   threadUsage: RuntimeUsageResponse | null;
   threads: RuntimeThreadSummary[];
@@ -164,9 +170,11 @@ export function AppChatSurface({
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onCloseBottomPanel: (panelId: string) => void;
   onCloseBottomSlot: () => void;
+  onCopyFilePath: (filePath: string) => void;
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
+  onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenBottomReviewPanel: () => void;
@@ -183,6 +191,7 @@ export function AppChatSurface({
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReloadThreads: () => Promise<unknown>;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onRevealFile: (filePath: string) => void;
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: () => void | Promise<unknown>;
@@ -221,6 +230,10 @@ export function AppChatSurface({
       request: { entry, requestId: workspaceMentionRequestIdRef.current },
     });
   }, [composerKey]);
+  const requestWorkspaceFileMention = useCallback(
+    (filePath: string) => requestWorkspaceMention(workspaceFileMentionEntry(filePath)),
+    [requestWorkspaceMention],
+  );
   const consumeWorkspaceMentionRequest = useCallback((requestId: number) => {
     setScopedWorkspaceMentionRequest((current) => current?.request.requestId === requestId ? null : current);
   }, []);
@@ -340,9 +353,12 @@ export function AppChatSurface({
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           selectedWorkspaceApp={selectedWorkspaceApp}
+          workspaceApps={workspaceApps}
           terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
           onAddFileToConversation={requestWorkspaceMention}
+          onCopyFilePath={onCopyFilePath}
           onExternalOpenFile={onExternalOpenFile}
+          onOpenFileWithApp={onOpenFileWithApp}
           onSearchProjectEntries={onSearchProjectEntries}
           onOpenEntry={onOpenEntry}
           onOpenProjectFile={onOpenProjectFile}
@@ -352,6 +368,7 @@ export function AppChatSurface({
           onOpenSideChat={onOpenSideChat}
           onOpenTerminalPanel={onOpenSideTerminalPanel}
           onReviewRefresh={onReviewRefresh}
+          onRevealFile={onRevealFile}
           onResizeStep={onWorkspaceResizeStep}
           onResizeStart={onWorkspaceResizeStart}
           resizeMax={workspaceMaxWidth}
@@ -369,17 +386,22 @@ export function AppChatSurface({
           reviewLoading={reviewLoading}
           reviewState={reviewState}
           selectedWorkspaceApp={selectedWorkspaceApp}
+          workspaceApps={workspaceApps}
           activeProject={activeWorkspace}
           terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
+          onAddFileToConversation={requestWorkspaceFileMention}
           onActivatePanel={onActivateBottomPanel}
           onClosePanel={onCloseBottomPanel}
           onCloseSlot={onCloseBottomSlot}
+          onCopyFilePath={onCopyFilePath}
           onExternalOpenFile={onExternalOpenFile}
+          onOpenFileWithApp={onOpenFileWithApp}
           onOpenProjectFile={onOpenProjectFile}
           onOpenReviewPanel={onOpenBottomReviewPanel}
           onOpenTerminalPanel={onOpenBottomTerminalPanel}
           onReorderPanels={onReorderBottomPanels}
           onReviewRefresh={onReviewRefresh}
+          onRevealFile={onRevealFile}
           onResizeStep={onTerminalResizeStep}
           onResizeStart={onTerminalResizeStart}
           resizeMax={terminalMaxHeight}

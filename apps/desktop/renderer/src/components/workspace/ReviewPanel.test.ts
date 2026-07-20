@@ -33,6 +33,7 @@ describe('DesktopReviewPanel', () => {
     expect(html).not.toContain('desktop-review-file-card__height-toggle');
     expect(html).toContain('desktop-review-diff-line--removed');
     expect(html).toContain('desktop-review-diff-line--added');
+    expect(html).not.toContain('<button class="desktop-review-diff-line');
     expect(html).not.toContain('desktop-review-diff-line__prefix');
     expect(html).toContain('desktop-review-diff-line--gap');
     expect(html).toContain('desktop-review-diff-gap-content');

@@ -400,17 +400,61 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, autoLoadR
       .forEach((panel) => void openTerminalSessionForPanel(panel.id));
   }, [bottomActivePanel, openTerminalSessionForPanel, sideActivePanel]);
 
-  const openFileInWorkspaceApp = useCallback(
-    async (filePath?: string | null, line?: number) => {
-      if (!activeProject?.path || !selectedWorkspaceApp) return;
+  const openFileWithWorkspaceApp = useCallback(
+    async (appId: string, filePath?: string | null, line?: number) => {
+      if (!activeProject?.path) return;
+      if (!workspaceApps.some((app) => app.id === appId)) {
+        setError('所选打开方式当前不可用。');
+        return;
+      }
       try {
-        await window.setsunaDesktop?.workspaceApps.open(activeProject.path, selectedWorkspaceApp.id, filePath ?? null, line ?? null);
+        const api = window.setsunaDesktop?.workspaceApps;
+        if (!api) throw new Error('当前环境不支持外部应用打开。');
+        await api.open(activeProject.path, appId, filePath ?? null, line ?? null);
       } catch (unknownError) {
         setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       }
     },
-    [activeProject?.path, selectedWorkspaceApp, setError],
+    [activeProject?.path, setError, workspaceApps],
   );
+
+  const openFileInWorkspaceApp = useCallback(
+    async (filePath?: string | null, line?: number) => {
+      if (!selectedWorkspaceApp) return;
+      await openFileWithWorkspaceApp(selectedWorkspaceApp.id, filePath, line);
+    },
+    [openFileWithWorkspaceApp, selectedWorkspaceApp],
+  );
+
+  const copyWorkspaceFilePath = useCallback(async (filePath: string) => {
+    if (!activeProject?.path) return;
+    const api = window.setsunaDesktop?.desktop;
+    if (!api) {
+      setError('当前环境不支持复制文件路径。');
+      return;
+    }
+    try {
+      const result = await api.copyWorkspaceFilePath(activeProject.path, filePath);
+      if (!result.ok) setError(result.error);
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    }
+  }, [activeProject?.path, setError]);
+
+  const revealWorkspaceFile = useCallback(async (filePath: string) => {
+    if (!activeProject?.path) return;
+    const api = window.setsunaDesktop?.desktop;
+    if (!api) {
+      setError('当前环境不支持在文件夹中定位文件。');
+      return;
+    }
+    try {
+      const result = await api.revealWorkspaceFile(activeProject.path, filePath);
+      if (!result.ok) setError(result.error);
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    }
+  }, [activeProject?.path, setError]);
 
   const openSelectedWorkspaceApp = useCallback(async () => {
     await openFileInWorkspaceApp(null);
@@ -445,10 +489,12 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, autoLoadR
       closeDesktopPanelItem,
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
+      copyWorkspaceFilePath,
       loadReviewState,
       openBrowserPanel,
       openDesktopPanel,
       openFileInWorkspaceApp,
+      openFileWithWorkspaceApp,
       openFilePanel,
       openSelectedWorkspaceApp,
       panelLauncherMenuOpen,
@@ -457,6 +503,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, autoLoadR
       reviewError,
       reviewLoading,
       reviewState,
+      revealWorkspaceFile,
       reorderDesktopPanel,
       selectWorkspaceApp,
       selectedWorkspaceApp,
@@ -481,10 +528,12 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, autoLoadR
       closeDesktopPanelItem,
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
+      copyWorkspaceFilePath,
       loadReviewState,
       openBrowserPanel,
       openDesktopPanel,
       openFileInWorkspaceApp,
+      openFileWithWorkspaceApp,
       openFilePanel,
       openSelectedWorkspaceApp,
       panelLauncherMenuOpen,
@@ -493,6 +542,7 @@ export function useDesktopWorkspacePanels({ activeProject, activeView, autoLoadR
       reviewError,
       reviewLoading,
       reviewState,
+      revealWorkspaceFile,
       reorderDesktopPanel,
       selectWorkspaceApp,
       selectedWorkspaceApp,

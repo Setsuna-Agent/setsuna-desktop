@@ -1513,7 +1513,7 @@
 
 .chat-git-commit-popover__action {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
   gap: 7px;
   width: 100%;
@@ -1542,20 +1542,6 @@
   align-items: center;
   justify-content: center;
   color: currentColor;
-}
-
-.chat-git-commit-popover__action kbd {
-  min-width: 34px;
-  height: 20px;
-  padding: 0 6px;
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  color: var(--app-text-muted);
-  background: var(--app-surface-muted);
-  font-family: var(--app-font-family);
-  font-size: 12px;
-  line-height: 18px;
-  text-align: center;
 }
 
 .chat-git-commit-branch-menu {

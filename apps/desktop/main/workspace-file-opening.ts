@@ -4,6 +4,7 @@ import type { DesktopOpenPathResult, DesktopWorkspaceFilePreviewResult } from '@
 
 type OpenPath = (targetPath: string) => Promise<string>;
 type RegisterPreview = (input: { mimeType: string; name: string; targetPath: string }) => string;
+type WorkspaceFilePathAction = (targetPath: string) => void | Promise<void>;
 
 type WorkspaceFileResolution =
   | { ok: true; targetPath: string }
@@ -23,6 +24,32 @@ export async function openWorkspaceFileWithDefaultApp(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Failed to open workspace file.' };
   }
+}
+
+export async function copyWorkspaceFilePath(
+  workspaceRootValue: unknown,
+  filePathValue: unknown,
+  copyText: WorkspaceFilePathAction,
+): Promise<DesktopOpenPathResult> {
+  return runWorkspaceFilePathAction(
+    workspaceRootValue,
+    filePathValue,
+    copyText,
+    'Failed to copy workspace file path.',
+  );
+}
+
+export async function revealWorkspaceFileInFolder(
+  workspaceRootValue: unknown,
+  filePathValue: unknown,
+  showItemInFolder: WorkspaceFilePathAction,
+): Promise<DesktopOpenPathResult> {
+  return runWorkspaceFilePathAction(
+    workspaceRootValue,
+    filePathValue,
+    showItemInFolder,
+    'Failed to reveal workspace file.',
+  );
 }
 
 export async function createWorkspaceFilePreviewUrl(
@@ -75,6 +102,22 @@ async function resolveWorkspaceFile(
     return { ok: true, targetPath: canonicalTarget };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Failed to resolve workspace file.' };
+  }
+}
+
+async function runWorkspaceFilePathAction(
+  workspaceRootValue: unknown,
+  filePathValue: unknown,
+  action: WorkspaceFilePathAction,
+  fallbackError: string,
+): Promise<DesktopOpenPathResult> {
+  const resolved = await resolveWorkspaceFile(workspaceRootValue, filePathValue);
+  if (!resolved.ok) return resolved;
+  try {
+    await action(resolved.targetPath);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : fallbackError };
   }
 }
 
