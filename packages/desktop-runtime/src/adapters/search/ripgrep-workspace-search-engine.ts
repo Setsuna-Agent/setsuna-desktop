@@ -16,6 +16,7 @@ import {
   workspaceRelativeSearchPath,
   workspaceSearchIgnoreFiles,
 } from './workspace-search-policy.js';
+import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
 const MAX_STDERR_BYTES = 32 * 1024;
@@ -31,18 +32,15 @@ type RipgrepWorkspaceSearchEngineOptions = {
 type RipgrepMatch = Omit<WorkspaceTextSearchMatch, 'before' | 'beforeStart' | 'after'>;
 type RipgrepChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
-/** Uses one cancellable rg process per workspace and parses bounded JSONL output incrementally. */
+/** Runs cancellable rg processes and parses bounded JSONL output incrementally. */
 export class RipgrepWorkspaceSearchEngine implements WorkspaceSearchEngine {
-  private readonly activeSearches = new Map<string, AbortController>();
+  private readonly supersession = new WorkspaceSearchSupersessionCoordinator();
 
   constructor(private readonly options: RipgrepWorkspaceSearchEngineOptions) {}
 
   async search(request: WorkspaceTextSearchRequest): Promise<WorkspaceTextSearchResponse> {
-    const key = path.resolve(request.root);
-    this.activeSearches.get(key)?.abort(new WorkspaceSearchCancelledError('Workspace search was superseded.'));
-    const controller = new AbortController();
-    this.activeSearches.set(key, controller);
-    const unlinkRequestSignal = forwardAbort(request.signal, controller);
+    const lease = this.supersession.start(request);
+    const { controller } = lease;
     const timeoutMs = this.options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
     const timeout = setTimeout(
       () => controller.abort(new Error(`Workspace search timed out after ${timeoutMs}ms.`)),
@@ -58,8 +56,7 @@ export class RipgrepWorkspaceSearchEngine implements WorkspaceSearchEngine {
       throw error;
     } finally {
       clearTimeout(timeout);
-      unlinkRequestSignal();
-      if (this.activeSearches.get(key) === controller) this.activeSearches.delete(key);
+      lease.dispose();
     }
   }
 }
@@ -282,14 +279,6 @@ function withContext(
     if (line !== undefined) after.push(line);
   }
   return { ...match, before, beforeStart: before.length ? match.lineNumber - before.length : 0, after };
-}
-
-function forwardAbort(source: AbortSignal | undefined, destination: AbortController): () => void {
-  if (!source) return () => undefined;
-  const abort = () => destination.abort(source.reason ?? new WorkspaceSearchCancelledError());
-  if (source.aborted) abort();
-  else source.addEventListener('abort', abort, { once: true });
-  return () => source.removeEventListener('abort', abort);
 }
 
 function abortReason(signal: AbortSignal): Error {

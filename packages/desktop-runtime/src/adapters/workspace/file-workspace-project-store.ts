@@ -432,6 +432,8 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     if (!needle) return { query, results: [], truncated: false };
     const response = await this.searchEngine.search({
       root: project.path,
+      // Only repeated project-panel queries are latest-wins; Agent searches remain independent.
+      supersedeKey: 'project-content-search',
       query: needle,
       regex: false,
       caseSensitive: false,

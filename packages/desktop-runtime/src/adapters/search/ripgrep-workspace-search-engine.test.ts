@@ -74,22 +74,46 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     });
   });
 
-  it('cancels the previous process when a new search starts for the same workspace', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-cancel-'));
-    const children: FakeRipgrepChild[] = [];
-    const spawnProcess = vi.fn(() => {
-      const child = new FakeRipgrepChild();
-      children.push(child);
-      return child as never;
-    });
-    const engine = new RipgrepWorkspaceSearchEngine({
-      executablePath: '/bundled/rg',
-      spawnProcess: spawnProcess as never,
-    });
+  it('allows concurrent searches for the same workspace when no supersede key is provided', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-concurrent-'));
+    const { children, engine } = fakeSearchEngine();
 
-    const first = engine.search(request(root)).catch((error: unknown) => error);
+    const first = engine.search(request(root, { query: 'first' }));
+    const second = engine.search(request(root, { query: 'second' }));
+    await waitFor(() => children.length === 2);
+    finishEmptySearches(children);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({ query: 'first', engine: 'ripgrep' }),
+      expect.objectContaining({ query: 'second', engine: 'ripgrep' }),
+    ]);
+    expect(children[0].kill).not.toHaveBeenCalled();
+    expect(children[1].kill).not.toHaveBeenCalled();
+  });
+
+  it('keeps keyed UI search and unkeyed Agent searches independent', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-callers-'));
+    const { children, engine } = fakeSearchEngine();
+
+    const agentBefore = engine.search(request(root, { query: 'agent-before' }));
+    const ui = engine.search(request(root, { query: 'ui', supersedeKey: 'project-content-search' }));
+    const agentAfter = engine.search(request(root, { query: 'agent-after' }));
+    await waitFor(() => children.length === 3);
+    finishEmptySearches(children);
+
+    await expect(Promise.all([agentBefore, ui, agentAfter])).resolves.toHaveLength(3);
+    for (const child of children) expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it('only cancels the previous process when the workspace and supersede key match', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-cancel-'));
+    const { children, engine } = fakeSearchEngine();
+
+    const first = engine
+      .search(request(root, { supersedeKey: 'project-content-search' }))
+      .catch((error: unknown) => error);
     await waitFor(() => children.length === 1);
-    const second = engine.search(request(root));
+    const second = engine.search(request(root, { supersedeKey: 'project-content-search' }));
     await waitFor(() => children.length === 2);
     children[1].stdout.write(`${JSON.stringify({ type: 'summary', data: { stats: { searches: 0 } } })}\n`);
     children[1].emit('close', 1, null);
@@ -141,6 +165,32 @@ class FakeRipgrepChild extends EventEmitter {
     queueMicrotask(() => this.emit('close', null, 'SIGTERM'));
     return true;
   });
+}
+
+function fakeSearchEngine(): {
+  children: FakeRipgrepChild[];
+  engine: RipgrepWorkspaceSearchEngine;
+} {
+  const children: FakeRipgrepChild[] = [];
+  const spawnProcess = vi.fn(() => {
+    const child = new FakeRipgrepChild();
+    children.push(child);
+    return child as never;
+  });
+  return {
+    children,
+    engine: new RipgrepWorkspaceSearchEngine({
+      executablePath: '/bundled/rg',
+      spawnProcess: spawnProcess as never,
+    }),
+  };
+}
+
+function finishEmptySearches(children: readonly FakeRipgrepChild[]): void {
+  for (const child of children) {
+    child.stdout.write(`${JSON.stringify({ type: 'summary', data: { stats: { searches: 0 } } })}\n`);
+    child.emit('close', 1, null);
+  }
 }
 
 function request(root: string, overrides: Partial<WorkspaceTextSearchRequest> = {}): WorkspaceTextSearchRequest {

@@ -11,6 +11,11 @@ export type WorkspaceTextSearchMatch = {
 export type WorkspaceTextSearchRequest = {
   root: string;
   scopePath?: string;
+  /**
+   * Optional caller-owned cancellation group. Searches only supersede an older
+   * request when both the workspace root and this key match.
+   */
+  supersedeKey?: string;
   query: string;
   regex: boolean;
   caseSensitive: boolean;
