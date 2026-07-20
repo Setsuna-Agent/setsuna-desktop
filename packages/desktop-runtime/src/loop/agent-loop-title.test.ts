@@ -10,6 +10,7 @@ import type { ConfigStore, RuntimeProviderConfig } from '../ports/config-store.j
 import type { ModelClient } from '../ports/model-client.js';
 import { systemClock } from '../ports/clock.js';
 import { AgentLoop } from './agent-loop.js';
+import { THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS } from './runtime-thread-title-generator.js';
 
 const testDirs: string[] = [];
 
@@ -40,7 +41,8 @@ describe('agent loop thread titles', () => {
     const saved = await threadStore.getThread(thread.id);
     const events = await threadStore.listEvents(thread.id);
     expect(saved?.title).toBe('恢复模型自动生成标题');
-    expect(modelClient.requests.some((request) => request.model === 'current-model')).toBe(true);
+    const titleRequest = modelClient.requests.find((request) => request.model === 'current-model');
+    expect(titleRequest?.maxOutputTokens).toBe(THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS);
     expect(events.some((event) => event.type === 'thread.updated' && event.payload.title === '恢复模型自动生成标题')).toBe(true);
     expect(publishedEvents).toContain('thread.updated');
     expect(events.findIndex((event) => event.type === 'thread.updated')).toBeLessThan(events.findIndex((event) => event.type === 'turn.completed'));

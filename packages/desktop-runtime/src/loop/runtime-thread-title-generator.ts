@@ -5,6 +5,7 @@ import { createModelStreamTextCollector } from '../utils/model-stream-text-colle
 
 const TITLE_SOURCE_MAX_LENGTH = 6_000;
 const TITLE_GENERATION_TIMEOUT_MS = 12_000;
+export const THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS = 512;
 
 export type GeneratedThreadTitle = {
   title: string | null;
@@ -13,7 +14,7 @@ export type GeneratedThreadTitle = {
 
 export async function generateThreadTitle({
   attachmentCount,
-  maxOutputTokens = 96,
+  maxOutputTokens = THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
   model,
   modelClient,
   signal,
@@ -62,6 +63,9 @@ export function normalizeGeneratedThreadTitle(value: string): string | null {
     .replace(/\s+/gu, ' ')
     .replace(/[。.!！?？]+$/u, '')
     .trim();
+  // 兼容端点可能把 reasoning 混在文本里；若输出预算耗尽在未闭合的思考块中，
+  // 该内容不是标题，必须保留首条消息 fallback。
+  if (/<think>/iu.test(candidate)) return null;
   candidate = Array.from(candidate).slice(0, THREAD_TITLE_MAX_LENGTH).join('').trim();
 
   if (candidate.length < 2 || candidate.toLowerCase() === DEFAULT_THREAD_TITLE.toLowerCase()) return null;

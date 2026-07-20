@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelRequest, ModelStreamEvent } from '@setsuna-desktop/contracts';
 import type { ModelClient } from '../ports/model-client.js';
-import { generateThreadTitle, normalizeGeneratedThreadTitle } from './runtime-thread-title-generator.js';
+import {
+  generateThreadTitle,
+  normalizeGeneratedThreadTitle,
+  THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
+} from './runtime-thread-title-generator.js';
 
 describe('runtime thread title generator', () => {
   it('uses the selected model and reads item-based agent output', async () => {
@@ -31,7 +35,7 @@ describe('runtime thread title generator', () => {
     });
     expect(modelClient.request).toMatchObject({
       model: 'current-model',
-      maxOutputTokens: 96,
+      maxOutputTokens: THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
       thinking: false,
       toolChoice: 'none',
     });
@@ -44,6 +48,7 @@ describe('runtime thread title generator', () => {
     expect(normalizeGeneratedThreadTitle('Title: Fix automatic conversation titles!\nextra explanation')).toBe('Fix automatic conversation titles');
     expect(normalizeGeneratedThreadTitle('New thread')).toBeNull();
     expect(normalizeGeneratedThreadTitle('')).toBeNull();
+    expect(normalizeGeneratedThreadTitle('<think>仍在分析标题但输出已被截断')).toBeNull();
   });
 });
 

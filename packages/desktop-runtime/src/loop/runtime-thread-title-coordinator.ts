@@ -12,7 +12,11 @@ import type { ModelClient } from '../ports/model-client.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import type { RuntimeEventWriter } from './runtime-event-writer.js';
-import { generateThreadTitle, type GeneratedThreadTitle } from './runtime-thread-title-generator.js';
+import {
+  generateThreadTitle,
+  THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
+  type GeneratedThreadTitle,
+} from './runtime-thread-title-generator.js';
 
 export type RuntimeThreadTitleGeneration = {
   initialSeq: number;
@@ -57,7 +61,12 @@ export class RuntimeThreadTitleCoordinator {
         if (!model || !usable) return null;
         return generateThreadTitle({
           attachmentCount: attachments.length,
-          maxOutputTokens: Math.max(1, Math.min(96, provider?.activeModel?.maxOutputTokens ?? 96)),
+          // 部分 OpenAI-compatible 思考模型即使收到 thinking=false，仍会先输出
+          // reasoning；预算必须覆盖这部分，才能收集到最终可见标题。
+          maxOutputTokens: Math.max(1, Math.min(
+            THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
+            provider?.activeModel?.maxOutputTokens ?? THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
+          )),
           model,
           modelClient: this.options.modelClient,
           signal,
