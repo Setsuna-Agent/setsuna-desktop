@@ -29,6 +29,17 @@ describe('workspace search policy', () => {
     ]));
   });
 
+  it('escapes glob metacharacters in literal denied root names', () => {
+    const root = path.resolve('/workspace');
+
+    expect(ripgrepExcludeGlobs(root, ['blocked[1]', 'literal{dir}', 'star*dir'])).toEqual(expect.arrayContaining([
+      '/blocked\\[1\\]',
+      '/blocked\\[1\\]/**',
+      '/literal\\{dir\\}/**',
+      '/star\\*dir/**',
+    ]));
+  });
+
   it('does not let unrelated absolute deny patterns hide the entire workspace', () => {
     const root = path.resolve('/workspace');
 

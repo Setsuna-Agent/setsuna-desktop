@@ -32,6 +32,12 @@ export type TemporaryWorkspaceInput = {
   createdAt?: string;
 };
 
+export type WorkspaceProjectSearchOptions = {
+  /** Optional latest-wins group selected by the concrete caller. */
+  supersedeKey?: string;
+  signal?: AbortSignal;
+};
+
 export type WorkspaceProjectStore = {
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
@@ -48,5 +54,5 @@ export type WorkspaceProjectStore = {
   writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite>;
   writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite>;
   deleteFile(projectId: string, relativePath: string): Promise<void>;
-  search(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
+  search(projectId: string, query: string, options?: WorkspaceProjectSearchOptions): Promise<WorkspaceSearchResponse>;
 };

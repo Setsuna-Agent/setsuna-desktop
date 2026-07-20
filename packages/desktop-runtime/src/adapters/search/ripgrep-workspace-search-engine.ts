@@ -71,6 +71,7 @@ export function buildRipgrepArguments(input: {
   const args = [
     '--json',
     '--no-config',
+    '--no-ignore',
     '--hidden',
     '--max-filesize',
     String(MAX_WORKSPACE_SEARCH_FILE_BYTES),

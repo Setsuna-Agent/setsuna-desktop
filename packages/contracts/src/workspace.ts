@@ -128,4 +128,6 @@ export type WorkspaceSearchResponse = {
   query: string;
   results: WorkspaceSearchResult[];
   truncated: boolean;
+  /** A newer request in the same caller-owned search group replaced this one. */
+  superseded?: boolean;
 };

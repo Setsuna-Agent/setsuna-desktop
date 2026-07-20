@@ -238,8 +238,8 @@ REST 路由覆盖：
 - 文件浏览、搜索和读取都限制在项目根下。
 - `search_text` 默认把 query 作为正则表达式；需要搜索 `|`、`[]` 等字面字符时显式传 `regex: false`，避免 schema 与执行语义漂移。
 - 项目内容搜索和 `search_text` 共用 `WorkspaceSearchEngine`；目录树/文件 mention 仍保留各自的目录遍历，因为它们还要返回目录节点或模糊文件名建议。
-- ripgrep adapter 使用 `--json --no-config --hidden`，遵守 `.gitignore`、`.ignore`、`.qwenignore`、`.setsunaignore`，同时排除 VCS/generated 目录、`.env*`、PEM/key 和 sandbox deny 路径。
-- 搜索不跟随 symlink，单文件上限 1 MiB；stdout 按 JSONL 流式解析，并应用 30 秒超时与全局结果上限。只有携带相同 `supersedeKey` 的同 workspace 搜索才会 latest-wins；项目面板使用该机制，Agent 并行 `search_text` 彼此独立。
+- ripgrep adapter 使用 `--json --no-config --no-ignore --hidden`，只显式遵守项目根级 `.gitignore`、`.ignore`、`.qwenignore`、`.setsunaignore`，不受 `.rgignore`、父目录或机器全局 ignore 配置影响；同时排除 VCS/generated 目录、`.env*`、PEM/key 和 sandbox deny 路径。
+- 搜索不跟随 symlink，单文件上限 1 MiB；stdout 按 JSONL 流式解析，并应用 30 秒超时与全局结果上限。只有携带相同 `supersedeKey` 的同 workspace 搜索才会 latest-wins；REST 项目面板调用拥有该 key，并把被新请求替代的搜索收口为无害响应，Agent 并行 `search_text` 彼此独立。
 - 读取、搜索和列表都有大小/数量上限。
 
 ### `FileSkillRegistry`

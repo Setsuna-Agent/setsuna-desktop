@@ -24,7 +24,7 @@ describe('workspace search wiring', () => {
     const project = await store.addProject({ path: projectDir });
     const host = new PcLocalToolHost(store, undefined, undefined, engine);
 
-    const projectResult = await store.search(project.id, 'needle');
+    const projectResult = await store.search(project.id, 'needle', { supersedeKey: 'project-content-search' });
     const agentResult = await host.runTool('search_text', { query: 'needle', regex: false }, {
       threadId: 'thread_1',
       turnId: 'turn_1',
@@ -42,6 +42,22 @@ describe('workspace search wiring', () => {
     expect(engine.requests.map((request) => request.supersedeKey)).toEqual(['project-content-search', undefined]);
     expect(projectResult.results).toEqual([{ path: 'src/shared.ts', line: 7, preview: 'const needle = true;' }]);
     expect(agentResult.content).toContain('src/shared.ts:7:7: const needle = true;');
+  });
+
+  it('leaves generic project-store searches unkeyed unless the caller opts in', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-search-unkeyed-store-'));
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const engine = new RecordingSearchEngine();
+    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock, {
+      searchEngine: engine,
+      temporaryWorkspacePath: path.join(root, 'temporary'),
+    });
+    const project = await store.addProject({ path: projectDir });
+
+    await store.search(project.id, 'needle');
+
+    expect(engine.requests[0]?.supersedeKey).toBeUndefined();
   });
 
   it('keeps concurrent Agent searches for the same workspace independent', async () => {

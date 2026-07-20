@@ -66,13 +66,19 @@ export function ripgrepExcludeGlobs(
     const relative = relativePolicyPath(root, excludedRoot);
     if (relative === null) continue;
     if (!relative) return ['**'];
-    globs.push(`/${relative}`, `/${relative}/**`);
+    const literalRelative = escapeRipgrepGlobLiteral(relative);
+    globs.push(`/${literalRelative}`, `/${literalRelative}/**`);
   }
   for (const excludedGlob of excludeGlobs) {
     const relative = relativePolicyGlob(root, excludedGlob);
     if (relative !== null) globs.push(relative);
   }
   return [...new Set(globs)];
+}
+
+/** Escape path characters that ripgrep would otherwise interpret as glob syntax. */
+function escapeRipgrepGlobLiteral(value: string): string {
+  return value.replace(/[\\*?[\]{}]/gu, '\\$&');
 }
 
 export function isWorkspaceSearchPathExcluded(

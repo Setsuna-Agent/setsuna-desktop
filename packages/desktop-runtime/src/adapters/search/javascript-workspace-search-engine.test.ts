@@ -12,10 +12,12 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       mkdir(path.join(root, '.github'), { recursive: true }),
       mkdir(path.join(root, 'src'), { recursive: true }),
       writeFile(path.join(root, '.gitignore'), 'ignored.txt\n'),
+      writeFile(path.join(root, '.rgignore'), 'rg-only-ignore.txt\n'),
       writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
       writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
       writeFile(path.join(root, '.github', 'workflow.yml'), 'name: NEEDLE hidden source\n'),
       writeFile(path.join(root, 'ignored.txt'), 'NEEDLE ignored\n'),
+      writeFile(path.join(root, 'rg-only-ignore.txt'), 'NEEDLE must remain searchable\n'),
       writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom ignored\n'),
       writeFile(path.join(root, 'src', '你好.ts'), 'before\nconst NEEDLE = true\nafter\n'),
       writeFile(outside, 'NEEDLE outside\n'),
@@ -35,6 +37,7 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     expect(result.engine).toBe('javascript');
     expect(result.matches.map((match) => match.path).sort()).toEqual([
       '.github/workflow.yml',
+      'rg-only-ignore.txt',
       'src/你好.ts',
     ]);
     expect(result.matches.find((match) => match.path === 'src/你好.ts')).toMatchObject({

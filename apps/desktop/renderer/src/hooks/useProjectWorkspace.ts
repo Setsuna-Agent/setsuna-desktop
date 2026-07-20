@@ -86,7 +86,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
     const query = searchQuery;
     const isLatest = contentSearchRequests.begin();
     const result = await client.searchProject(projectId, query);
-    if (!isLatest() || activeProjectIdRef.current !== projectId) return;
+    if (result.superseded || !isLatest() || activeProjectIdRef.current !== projectId) return;
     setSearchResults(result.results);
   }, [activeProjectId, client, contentSearchRequests, searchQuery]);
 

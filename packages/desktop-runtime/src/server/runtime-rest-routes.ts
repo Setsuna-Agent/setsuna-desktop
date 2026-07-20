@@ -19,6 +19,7 @@ import type {
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeUsageQuery,
+  WorkspaceSearchResponse,
   RuntimeWorkspaceDependenciesToggleInput,
   SendTurnInput,
   SteerTurnInput,
@@ -33,6 +34,8 @@ import {
 } from '@setsuna-desktop/contracts';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { RuntimeAttachmentValidationError } from '../ports/attachment-store.js';
+import { WorkspaceSearchCancelledError } from '../ports/workspace-search-engine.js';
+import type { WorkspaceProjectStore } from '../ports/workspace-project-store.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 import { compactForPrompt, neutralizePromptClosingTags } from '../loop/prompt-utils.js';
@@ -42,6 +45,23 @@ import { RuntimeHttpError } from './http-error.js';
 import { cancelRuntimeTurn } from './runtime-thread-events.js';
 import { handleSse, publishThreadEventsSince, runtimeEventStreamExperimentalApi, runtimeEventStreamFormat } from './sse.js';
 import type { RuntimeFactory } from './types.js';
+
+const PROJECT_CONTENT_SEARCH_SUPERSEDE_KEY = 'project-content-search';
+
+export async function searchWorkspaceProjectForRest(
+  workspaceProjects: Pick<WorkspaceProjectStore, 'search'>,
+  projectId: string,
+  query: string,
+): Promise<WorkspaceSearchResponse> {
+  try {
+    return await workspaceProjects.search(projectId, query, {
+      supersedeKey: PROJECT_CONTENT_SEARCH_SUPERSEDE_KEY,
+    });
+  } catch (error) {
+    if (!(error instanceof WorkspaceSearchCancelledError)) throw error;
+    return { query, results: [], truncated: false, superseded: true };
+  }
+}
 
 export async function handleRuntimeRestRequest(
   runtime: RuntimeFactory,
@@ -472,12 +492,14 @@ export async function handleRuntimeRestRequest(
 
   const projectSearchMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/search$/);
   if (projectSearchMatch && request.method === 'GET') {
+    const query = url.searchParams.get('q') ?? '';
     sendJson(
       response,
       200,
-      await runtime.workspaceProjects.search(
+      await searchWorkspaceProjectForRest(
+        runtime.workspaceProjects,
         decodeURIComponent(projectSearchMatch[1]),
-        url.searchParams.get('q') ?? '',
+        query,
       ),
     );
     return true;

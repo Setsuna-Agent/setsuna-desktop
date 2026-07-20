@@ -2467,7 +2467,7 @@ usage JSONL 存储。
 
 工作区内容搜索 adapters：
 
-- `RipgrepWorkspaceSearchEngine` 以绝对路径、`shell: false` 启动 rg，流式解析 `--json` 输出。
+- `RipgrepWorkspaceSearchEngine` 以绝对路径、`shell: false` 启动 rg，流式解析 `--json` 输出；关闭隐式 ignore 来源，只加载统一策略声明的根级 ignore 文件。
 - `workspace-search-supersession.ts` 只在 workspace 与调用方 `supersedeKey` 同时匹配时取消旧搜索，避免 UI 与 Agent 或并行 Agent 搜索互相干扰。
 - 支持调用方取消、ripgrep 超时和全局结果上限。
 - `workspace-search-policy.ts` 统一 ignore、敏感文件、symlink/根路径和 sandbox deny 规则。

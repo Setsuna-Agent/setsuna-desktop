@@ -18,7 +18,13 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.js';
-import type { TemporaryWorkspaceInput, WorkspaceFileMetadata, WorkspaceImageRead, WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
+import type {
+  TemporaryWorkspaceInput,
+  WorkspaceFileMetadata,
+  WorkspaceImageRead,
+  WorkspaceProjectSearchOptions,
+  WorkspaceProjectStore,
+} from '../../ports/workspace-project-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import { detectWorkspacePreviewImageMimeType, isProbablyBinaryWorkspaceFile } from '../../utils/workspace-file-preview.js';
@@ -426,19 +432,23 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  async search(projectId: string, query: string): Promise<WorkspaceSearchResponse> {
+  async search(
+    projectId: string,
+    query: string,
+    options: WorkspaceProjectSearchOptions = {},
+  ): Promise<WorkspaceSearchResponse> {
     const project = await this.requireProject(projectId);
     const needle = query.trim();
     if (!needle) return { query, results: [], truncated: false };
     const response = await this.searchEngine.search({
       root: project.path,
-      // Only repeated project-panel queries are latest-wins; Agent searches remain independent.
-      supersedeKey: 'project-content-search',
+      supersedeKey: options.supersedeKey,
       query: needle,
       regex: false,
       caseSensitive: false,
       contextLines: 0,
       maxResults: MAX_SEARCH_RESULTS,
+      signal: options.signal,
     });
     return {
       query,
