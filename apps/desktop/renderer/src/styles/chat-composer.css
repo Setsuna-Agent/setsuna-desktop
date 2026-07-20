@@ -940,9 +940,16 @@
 }
 
 .chat-model-command-menu .chat-model-command-menu__item {
-  grid-template-columns: minmax(0, 1fr) auto auto 16px;
+  grid-template-columns: 18px minmax(0, 1fr) auto fit-content(160px) 16px;
   min-height: 28px;
   padding: 5px 8px;
+  gap: 7px;
+}
+
+.chat-model-command-menu__brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chat-model-command-menu .chat-model-command-menu__item-title {
@@ -951,9 +958,13 @@
 }
 
 .chat-model-command-menu__provider {
+  min-width: 0;
+  overflow: hidden;
   color: var(--app-text-muted);
   font-size: 12px;
-  text-align: right;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-model-command-menu__capabilities {
@@ -1010,10 +1021,17 @@
 
 .chat-model-selector__mark {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+}
+
+.chat-model-selector__placeholder-icon {
   width: 12px;
   height: 12px;
-  color: currentColor;
-  font-size: 11px;
 }
 
 .chat-model-selector__progress {

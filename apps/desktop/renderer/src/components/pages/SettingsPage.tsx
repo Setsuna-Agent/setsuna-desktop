@@ -2219,7 +2219,6 @@ function ProviderModelRow({
         </span>
       </div>
       <span className="settings-model-option__meta">
-        {model.enabled ? <span className="is-current">当前模型</span> : null}
         {model.contextWindowTokens ? <span title="上下文窗口">{`${formatTokens(model.contextWindowTokens)} 上下文`}</span> : null}
         <span title="最大输出 Token">{`${formatTokens(model.maxOutputTokens)} 输出`}</span>
         {model.thinkingEnabled ? <span>思考</span> : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeConfigState, RuntimeContextCompactionNotice, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
-import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './chatContextUsage.js';
+import { activeModelContextWindowTokens, contextTokenUsageFromThread, formatTokenCount } from './chatContextUsage.js';
 
 describe('chat context usage', () => {
   it('ignores transcript-only history immediately after compaction', () => {
@@ -36,6 +36,15 @@ describe('chat context usage', () => {
 
   it('reads the context window from the active provider model', () => {
     expect(activeModelContextWindowTokens(configWithContextWindow(1_000_000))).toBe(1_000_000);
+  });
+
+  it.each([
+    [999_000, '999k'],
+    [1_000_000, '1M'],
+    [1_250_000, '1.3M'],
+    [10_000_000, '10M'],
+  ])('formats %i tokens as %s', (tokens, expected) => {
+    expect(formatTokenCount(tokens)).toBe(expected);
   });
 });
 

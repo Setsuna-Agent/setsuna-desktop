@@ -1,0 +1,76 @@
+.brand-icon-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--app-text-secondary);
+}
+
+.brand-icon-mark img {
+  display: block;
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
+}
+
+.brand-icon-mark img.is-dark-variant {
+  display: none;
+}
+
+.brand-icon-mark.is-compact {
+  width: 18px;
+  height: 18px;
+}
+
+.brand-icon-mark.is-compact img {
+  width: 16px;
+  height: 16px;
+}
+
+.brand-icon-mark.is-large {
+  width: 36px;
+  height: 36px;
+}
+
+.brand-icon-mark.is-large img {
+  width: 24px;
+  height: 24px;
+}
+
+.brand-icon-mark.is-monochrome img {
+  opacity: 0.78;
+}
+
+.brand-icon-mark.is-fallback {
+  border: 1px solid color-mix(in srgb, var(--app-border) 52%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--app-bg) 76%, var(--app-surface));
+  font-family: var(--app-code-font-family);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.brand-icon-mark.is-compact.is-fallback {
+  border-radius: 5px;
+  font-size: 7px;
+}
+
+.brand-icon-mark.is-large.is-fallback {
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+:root[data-theme='dark'] .brand-icon-mark.is-monochrome img {
+  filter: invert(1);
+}
+
+:root[data-theme='dark'] .brand-icon-mark img.is-light-variant {
+  display: none;
+}
+
+:root[data-theme='dark'] .brand-icon-mark img.is-dark-variant {
+  display: block;
+}

@@ -5,6 +5,7 @@ import bailianLogoUrl from '../../assets/provider-logos/bailian.svg';
 import deepseekLogoUrl from '../../assets/provider-logos/deepseek.svg';
 import doubaoLogoUrl from '../../assets/provider-logos/doubao.svg';
 import geminiLogoUrl from '../../assets/provider-logos/gemini.svg';
+import glmLogoUrl from '../../assets/provider-logos/glm.png';
 import groqLogoUrl from '../../assets/provider-logos/groq.svg';
 import kimiDarkLogoUrl from '../../assets/provider-logos/kimi-dark.svg';
 import kimiLogoUrl from '../../assets/provider-logos/kimi.svg';
@@ -61,6 +62,10 @@ const providerBrandRules: readonly ProviderBrandRule[] = [
     monochrome: false,
     urlKeywords: ['deepseek.com'],
   }),
+  brandRule('glm', '智谱 GLM', glmLogoUrl, ['zhipu', '智谱', 'chatglm', 'glm', 'z.ai'], {
+    monochrome: false,
+    urlKeywords: ['bigmodel.cn', 'api.z.ai'],
+  }),
   brandRule('sakana', 'Sakana AI', sakanaLogoUrl, ['sakana'], { monochrome: false, urlKeywords: ['sakana.ai'] }),
   brandRule('qwen', 'Qwen', qwenLogoUrl, ['qwen', '通义千问', '千问'], { monochrome: false, urlKeywords: ['qwen'] }),
   brandRule('doubao', '豆包', doubaoLogoUrl, ['doubao', '豆包'], { monochrome: false, urlKeywords: ['doubao'] }),
@@ -93,6 +98,7 @@ const modelBrandRules: readonly ModelBrandRule[] = [
   modelBrandRule('anthropic', /(^|[^a-z0-9])(?:anthropic|claude)(?=$|[^a-z0-9])/),
   modelBrandRule('gemini', /(^|[^a-z0-9])gemini(?=$|[^a-z0-9])/),
   modelBrandRule('deepseek', /(^|[^a-z0-9])deepseek(?=$|[^a-z0-9])/),
+  modelBrandRule('glm', /(^|[^a-z0-9])(?:chatglm|glm)(?=$|[^a-z0-9])/),
   modelBrandRule('qwen', /(^|[^a-z0-9])(?:qwen(?:\d+(?:\.\d+)*)?|qwq)(?=$|[^a-z0-9])/),
   modelBrandRule('minimax', /(^|[^a-z0-9])minimax(?=$|[^a-z0-9])/),
   modelBrandRule('kimi', /(^|[^a-z0-9])(?:kimi|moonshot)(?=$|[^a-z0-9])/),

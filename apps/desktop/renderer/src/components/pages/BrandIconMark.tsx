@@ -4,13 +4,13 @@ import { providerInitials } from './providerBranding.js';
 type BrandIconMarkProps = {
   brand: ProviderBrandAsset | null;
   fallbackName: string;
-  size?: 'default' | 'large';
+  size?: 'compact' | 'default' | 'large';
 };
 
 export function BrandIconMark({ brand, fallbackName, size = 'default' }: BrandIconMarkProps) {
   const classes = [
-    'chat-user-settings__provider-brand-mark',
-    size === 'large' ? 'is-large' : '',
+    'brand-icon-mark',
+    size === 'default' ? '' : `is-${size}`,
     brand?.monochrome ? 'is-monochrome' : '',
     brand ? '' : 'is-fallback',
   ].filter(Boolean).join(' ');

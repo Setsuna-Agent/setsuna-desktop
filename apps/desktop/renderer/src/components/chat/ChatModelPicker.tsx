@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input, Progress, Tooltip } from 'antd';
 import { Check, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
 import type { ProviderConfigState, RuntimeConfigState } from '@setsuna-desktop/contracts';
+import { BrandIconMark } from '../pages/BrandIconMark.js';
+import { resolveModelBrand } from '../pages/providerBranding.js';
 import { useOutsideClose } from './chatComposerControlUtils.js';
 import { formatTokenCount, type ChatContextTokenUsage } from './chatContextUsage.js';
 import {
@@ -133,13 +135,22 @@ export function ChatModelPicker({
                     }}
                     onMouseMove={() => setActiveIndex(index)}
                   >
+                    <span className="chat-model-command-menu__brand">
+                      <BrandIconMark
+                        brand={resolveModelBrand(option.model, option.provider)}
+                        fallbackName={option.model.name || option.model.code}
+                        size="compact"
+                      />
+                    </span>
                     <span className="chat-command-menu__item-title chat-model-command-menu__item-title">{option.model.name}</span>
                     <span className="chat-model-command-menu__capabilities">
                       {option.model.thinkingEnabled ? <Sparkles size={12} /> : null}
                       {option.model.supportsImages ? <ImageIcon size={12} /> : null}
                       {option.model.contextWindowTokens ? <span className="chat-model-command-menu__ctx">{formatTokenCount(option.model.contextWindowTokens)}</span> : null}
                     </span>
-                    <span className="chat-command-menu__item-scope chat-model-command-menu__provider">{option.provider.name || '未命名厂商'}</span>
+                    <span className="chat-command-menu__item-scope chat-model-command-menu__provider">
+                      {option.provider.name || '未命名厂商'}
+                    </span>
                     <span className="chat-model-command-menu__check">{selected ? <Check size={13} /> : null}</span>
                   </button>
                 );
@@ -163,7 +174,17 @@ export function ChatModelPicker({
           disabled={disabled || !config}
           onClick={() => setOpen((value) => !value)}
         >
-          <Zap className="chat-model-selector__mark" fill="currentColor" size={13} strokeWidth={0} />
+          <span className="chat-model-selector__mark">
+            {activeProvider && activeModel ? (
+              <BrandIconMark
+                brand={resolveModelBrand(activeModel, activeProvider)}
+                fallbackName={activeModel.name || activeModel.code}
+                size="compact"
+              />
+            ) : (
+              <Zap className="chat-model-selector__placeholder-icon" fill="currentColor" size={13} strokeWidth={0} />
+            )}
+          </span>
           <span className="chat-model-selector__name">{activeModel?.name ?? '未选择模型'}</span>
           {modelUsage.visible ? (
             <Progress

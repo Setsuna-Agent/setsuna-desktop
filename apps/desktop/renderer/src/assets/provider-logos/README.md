@@ -8,4 +8,6 @@ Color variants are used whenever the package publishes one; providers whose offi
 
 `sakana.svg` wraps the official favicon downloaded from `https://sakana.ai/favicon.ico` on 2026-07-20.
 
-These brand marks are used only to identify a configured model provider. Brand names and logos remain trademarks of their respective owners.
+`glm.png` is the user-provided Zhipu GLM favicon used for GLM model-family matching.
+
+These brand marks are used only to identify configured model providers and model families. Brand names and logos remain trademarks of their respective owners.

@@ -16,6 +16,7 @@ import { applyDesktopPlatformAttribute } from './utils/desktopPlatform.js';
 import './styles/tokens.css';
 import './styles/app.css';
 import './styles/file-icons.css';
+import './styles/brand-icons.css';
 import './styles/primitives.css';
 import './styles/sidebar.css';
 import './styles/panel-chrome.css';

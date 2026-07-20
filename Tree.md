@@ -1032,6 +1032,7 @@ ready 状态的整体布局。
 
 - 从 runtime config 中提取可用 provider/model。
 - 支持搜索和排序。
+- 在模型项和当前选择入口复用已配置的模型品牌图标，厂商列保持纯文字以控制信息密度。
 - 显示模型上下文使用信息。
 - 切换 active provider/model。
 
@@ -1207,7 +1208,7 @@ runtime 文件变更提取。
 职责：
 
 - `BrandIconDialog` 为 provider 与 model 复用，展示自动匹配、全部内置品牌和自定义图片上传入口。
-- `BrandIconMark` 统一渲染彩色、单色、明暗主题、自定义与名称缩写兜底图标。
+- `BrandIconMark` 统一渲染彩色、单色、明暗主题、自定义与名称缩写兜底图标，并供设置页与聊天模型选择器复用。
 - 弹窗只提交 `BrandIconConfig`，provider/model 状态和自动保存仍由 `SettingsPage` 编排。
 
 ### `providerBranding.ts` / `brandIconUpload.ts`
@@ -1532,6 +1533,10 @@ runtime 文件变更转 desktop review summary。
 - 侧栏 action。
 - 折叠/active/hover 状态。
 - 搜索 overlay、popover、结果列表。
+
+### `brand-icons.css`
+
+跨设置页与聊天区复用的厂商/模型品牌图标尺寸、主题变体和名称缩写兜底样式。
 
 ### `chat.css` / `chat-composer.css`
 
