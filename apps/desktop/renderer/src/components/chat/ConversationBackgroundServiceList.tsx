@@ -1,4 +1,4 @@
-import { LoaderCircle, Server, Square } from 'lucide-react';
+import { LoaderCircle, Square, Terminal } from 'lucide-react';
 import type { RuntimeBackgroundShellProcess } from '@setsuna-desktop/contracts';
 
 export function ConversationBackgroundServiceList({
@@ -16,8 +16,7 @@ export function ConversationBackgroundServiceList({
   return (
     <section className="chat-conversation-background-services" aria-label="后台服务">
       <div className="chat-conversation-background-services__title">
-        <span><Server size={13} />后台服务</span>
-        <span aria-label={`${processes.length} 个后台服务`}>{processes.length}</span>
+        <span>后台服务</span>
       </div>
       <div className="chat-conversation-background-services__list">
         {processes.map((process) => {
@@ -25,6 +24,9 @@ export function ConversationBackgroundServiceList({
           const command = singleLineCommand(process.command);
           return (
             <div className="chat-conversation-background-service" key={process.id}>
+              <span className="chat-conversation-background-service__icon" aria-hidden="true">
+                <Terminal size={13} />
+              </span>
               <strong title={process.command}>{command}</strong>
               <button
                 type="button"

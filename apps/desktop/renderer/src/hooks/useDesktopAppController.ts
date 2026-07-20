@@ -46,10 +46,11 @@ export function useDesktopAppController() {
     terminalTurnIdsRef,
     threads,
   } = runtime;
-  const composerSession = useChatComposerSession(chatComposerTargetIdentity(
+  const chatTargetIdentity = chatComposerTargetIdentity(
     currentThread?.id,
     currentThread ? null : activeProjectId,
-  ));
+  );
+  const composerSession = useChatComposerSession(chatTargetIdentity);
   const {
     claimForThread: claimComposerForThread,
     composerKey,
@@ -72,15 +73,16 @@ export function useDesktopAppController() {
     activeView,
     autoLoadReview: Boolean(currentThread),
     setError,
+    targetIdentity: chatTargetIdentity,
     workspaceStatus: activeWorkspaceState.status,
   });
   const {
     bottomActivePanel,
     bottomPanelVisible,
+    claimForThread: claimWorkspacePanelsForThread,
     closeWorkspaceMenus,
     openFilePanel,
     panelLauncherMenuOpen,
-    resetPanelSlots,
     sideActivePanel,
     sidePanelVisible,
     workspaceAppMenuOpen,
@@ -144,10 +146,7 @@ export function useDesktopAppController() {
     activeProjectId: activeWorkspace?.id ?? null,
     client,
     onOpenFilePanel: openFilePanel,
-    onResetProjectPanels: workspacePanels.resetProjectBoundPanels,
-    onResetPanels: resetPanelSlots,
   });
-  const { resetProjectWorkspacePanels, resetWorkspacePanels } = projectWorkspace;
   const { globalThreads, threadsByProjectId } = useThreadGroups(threads);
 
   const navigation = useDesktopNavigation({
@@ -156,8 +155,9 @@ export function useDesktopAppController() {
     currentThread,
     globalThreads,
     reloadThreads,
-    resetProjectWorkspacePanels,
-    resetWorkspacePanels,
+    resetNewThreadWorkspacePanels: workspacePanels.resetNewThreadPanelSession,
+    resetProjectWorkspaceState: projectWorkspace.resetProjectWorkspaceState,
+    resetThreadWorkspacePanels: workspacePanels.resetThreadPanelSession,
     setActiveProjectId,
     setActiveView,
     setCurrentThread,
@@ -175,10 +175,15 @@ export function useDesktopAppController() {
     workspaceAppMenuOpen,
   });
 
+  const claimConversationSessionForThread = useCallback((threadId: string) => {
+    claimComposerForThread(threadId);
+    claimWorkspacePanelsForThread(threadId);
+  }, [claimComposerForThread, claimWorkspacePanelsForThread]);
+
   const chatActions = useChatTurnActions({
     activeProjectId,
     activeTurnId,
-    claimComposerForThread,
+    claimComposerForThread: claimConversationSessionForThread,
     client,
     composerKey,
     currentThread,
@@ -209,10 +214,10 @@ export function useDesktopAppController() {
   const startCurrentThreadReview = useCallback((target: RuntimeReviewTarget) => {
     const isCurrentRequest = reviewRequests.begin();
     return runtime.startCurrentThreadReview(target, {
-      claimComposerForThread,
+      claimComposerForThread: claimConversationSessionForThread,
       isCurrentRequest,
     });
-  }, [claimComposerForThread, reviewRequests, runtime]);
+  }, [claimConversationSessionForThread, reviewRequests, runtime]);
 
   const shellSidebarState = resolveShellSidebarState(activeView, sidebarCollapsed);
   const shellStyle = {

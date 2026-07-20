@@ -235,7 +235,7 @@ export function BrowserPanel({
         <BrowserDeviceToolbar value={tab.deviceEmulation} onChange={updateActiveDeviceEmulation} />
       ) : null}
       <div className={`desktop-browser-content ${tab.deviceEmulation.enabled ? 'is-device-emulation' : ''}`}>
-        <BrowserWebview active tab={tab} onRef={setWebview} onUpdate={updateTab} />
+        <BrowserWebview active={!hidden} tab={tab} onRef={setWebview} onUpdate={updateTab} />
         {tab.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{tab.error}</span></div> : null}
       </div>
       {screenshotNotice ? (

@@ -9,7 +9,6 @@ import type { DesktopWorkspacePanelsState } from '../../hooks/useDesktopWorkspac
 import type { ProjectWorkspaceState } from '../../hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../hooks/useRuntimeClientState.js';
 import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../../types/app.js';
-import type { DesktopPanelTabPatch } from '../workspace/model.js';
 import { latestBrowserOpenRequest } from '../../utils/runtimeBrowserActions.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
 
@@ -83,13 +82,10 @@ export function AppRouteContent({
     () => latestBrowserOpenRequest(runtime.activityEvents),
     [runtime.activityEvents],
   );
-  const { openBrowserPanel, updateDesktopPanel } = workspacePanels;
+  const { openBrowserPanel } = workspacePanels;
   const openBrowserUrl = useCallback((url: string) => {
     openBrowserPanel(url);
   }, [openBrowserPanel]);
-  const updateSidePanel = useCallback((panelId: string, patch: DesktopPanelTabPatch) => {
-    updateDesktopPanel('side', panelId, patch);
-  }, [updateDesktopPanel]);
   const markdownLinkOpenMode = markdownLinkOpenModeFromConfig(runtime.config);
   const openMarkdownWebLink = useCallback((url: string) => {
     if (markdownLinkOpenMode === 'in-app') {
@@ -209,6 +205,7 @@ export function AppRouteContent({
       bottomActivePanel={workspacePanels.bottomActivePanel}
       bottomPanelSlot={workspacePanels.bottomPanelSlot}
       bottomPanelVisible={workspacePanels.bottomPanelVisible}
+      browserPanelInstances={workspacePanels.browserPanelInstances}
       canClearContext={Boolean(runtime.currentThread?.messages.length)}
       composerKey={composerKey}
       config={runtime.config}
@@ -289,7 +286,7 @@ export function AppRouteContent({
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}
       onTerminalResizeStart={onTerminalResizeStart}
-      onUpdateSidePanel={updateSidePanel}
+      onUpdateBrowserPanel={workspacePanels.updateBrowserPanel}
       terminalHeight={terminalHeight}
       terminalMaxHeight={terminalMaxHeight}
       terminalMinHeight={terminalMinHeight}

@@ -12,11 +12,9 @@ type ProjectWorkspaceOptions = {
   activeProjectId: string | null;
   client: DesktopRuntimeClient;
   onOpenFilePanel: (filePath: string) => void;
-  onResetProjectPanels: () => void;
-  onResetPanels: () => void;
 };
 
-export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, onResetPanels, onResetProjectPanels }: ProjectWorkspaceOptions) {
+export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }: ProjectWorkspaceOptions) {
   const [filePreview, setFilePreview] = useState<WorkspaceFileRead | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<WorkspaceSearchResult[]>([]);
@@ -33,16 +31,6 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
     setSearchQuery('');
     setSearchResults([]);
   }, [contentSearchRequests, filePreviewRequests]);
-
-  const resetWorkspacePanels = useCallback(() => {
-    resetProjectWorkspaceState();
-    onResetPanels();
-  }, [onResetPanels, resetProjectWorkspaceState]);
-
-  const resetProjectWorkspacePanels = useCallback(() => {
-    resetProjectWorkspaceState();
-    onResetProjectPanels();
-  }, [onResetProjectPanels, resetProjectWorkspaceState]);
 
   useEffect(() => {
     if (previousProjectIdRef.current === activeProjectId) return;
@@ -112,8 +100,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel, 
     filePreview: visibleWorkspaceFilePreview(filePreview, activeProjectId),
     openEntry,
     openProjectFile,
-    resetProjectWorkspacePanels,
-    resetWorkspacePanels,
+    resetProjectWorkspaceState,
     searchProject,
     searchProjectEntries,
     searchQuery,

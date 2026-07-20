@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_BROWSER_URL,
   WORKSPACE_OVERVIEW_PANEL_ID,
   addPanelToSlotState,
   createBrowserPanel,
@@ -57,6 +58,12 @@ describe('desktop workspace panel model', () => {
 
     expect(withBrowsers.active).toBe(second.id);
     expect(withBrowsers.panels).toEqual([first, second]);
+  });
+
+  it('falls back to the default browser URL for non-string click payloads', () => {
+    const browser = createBrowserPanel('browser-invalid', {} as unknown as string);
+
+    expect(browser.browser?.url).toBe(DEFAULT_BROWSER_URL);
   });
 
   it('updates browser tab metadata without changing its identity or order', () => {

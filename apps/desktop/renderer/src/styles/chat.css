@@ -1031,13 +1031,13 @@
 
 .chat-conversation-overview-panel {
   display: grid;
-  gap: 8px;
-  width: 292px;
+  gap: 7px;
+  width: 284px;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 14px 12px 12px;
+  padding: 12px 10px 10px;
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: 14px;
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: var(--app-shadow-popover);
@@ -1075,11 +1075,11 @@
 
 .chat-conversation-overview-panel__header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 22px;
   align-items: center;
-  gap: 8px;
-  min-height: 24px;
-  padding: 0 0 0 12px;
+  gap: 7px;
+  min-height: 22px;
+  padding: 0 0 0 10px;
   color: var(--app-text-muted);
   font-size: 13px;
   line-height: 20px;
@@ -1089,8 +1089,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -1106,18 +1106,18 @@
 
 .chat-conversation-overview-panel__actions {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .chat-conversation-overview-panel__row {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   width: 100%;
   box-sizing: border-box;
-  min-height: 32px;
-  padding: 0 7px;
+  min-height: 30px;
+  padding: 0 6px;
   border: 0;
   border-radius: 7px;
   color: var(--app-text);
@@ -1150,7 +1150,7 @@
   align-items: center;
   justify-content: center;
   width: 20px;
-  height: 24px;
+  height: 22px;
   color: color-mix(in srgb, var(--app-text) 88%, transparent);
 }
 
@@ -1182,7 +1182,7 @@
 .chat-conversation-git {
   position: relative;
   display: grid;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
@@ -1594,36 +1594,23 @@
 
 .chat-conversation-overview-panel__divider {
   height: 1px;
-  background: var(--app-border);
+  background: color-mix(in srgb, var(--app-border) 58%, transparent);
 }
 
 .chat-conversation-background-services {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
 .chat-conversation-background-services__title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 7px 3px;
+  min-height: 22px;
+  padding: 0 10px 2px;
   color: var(--app-text-muted);
-  font-size: 12px;
-}
-
-.chat-conversation-background-services__title > span:first-child {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.chat-conversation-background-services__title > span:last-child {
-  min-width: 16px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .chat-conversation-background-services__list {
@@ -1635,11 +1622,11 @@
 
 .chat-conversation-background-service {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+  grid-template-columns: 20px minmax(0, 1fr) 22px;
   align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 3px 5px 3px 7px;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 4px 2px 6px;
   border-radius: 7px;
 }
 
@@ -1647,7 +1634,18 @@
   background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
 }
 
+.chat-conversation-background-service__icon {
+  grid-column: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
+  color: color-mix(in srgb, var(--app-text) 88%, transparent);
+}
+
 .chat-conversation-background-service > strong {
+  grid-column: 2;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1660,11 +1658,12 @@
 }
 
 .chat-conversation-background-service > button {
+  grid-column: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -1700,7 +1699,7 @@
 
 .chat-conversation-overview-panel__agents {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -1708,8 +1707,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 0 7px 3px;
+  gap: 7px;
+  padding: 0 6px 2px;
   color: var(--app-text-muted);
   font-size: 12px;
 }
@@ -1724,9 +1723,9 @@
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr);
   align-items: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 0 7px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 6px;
   border: 0;
   border-radius: 7px;
   background: transparent;

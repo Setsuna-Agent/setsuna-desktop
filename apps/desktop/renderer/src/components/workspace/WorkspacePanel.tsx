@@ -445,7 +445,7 @@ export function WorkspaceOverviewPanel({
       meta: '在右侧打开网页',
       icon: <Globe2 size={15} />,
       disabled: false,
-      onClick: onOpenBrowser,
+      onClick: () => onOpenBrowser(),
     },
   ];
 

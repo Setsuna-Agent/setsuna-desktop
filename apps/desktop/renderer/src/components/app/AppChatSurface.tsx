@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { useCallback, useMemo, useRef, useState, type ComponentProps, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import type {
   AnswerRuntimeApprovalInput,
   DesktopRuntimeClient,
@@ -38,8 +38,14 @@ import type {
 } from '../workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../workspace/runtimeReviewSummary.js';
 import { useChatImageAttachmentRequest } from '../../hooks/useChatImageAttachmentRequest.js';
+import type { DesktopBrowserPanelInstance } from '../../hooks/useDesktopWorkspacePanels.js';
 
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
+type BrowserPanelMetadataHandler = (
+  targetIdentity: DesktopBrowserPanelInstance['targetIdentity'],
+  panelId: string,
+  patch: DesktopPanelTabPatch,
+) => void;
 
 export function AppChatSurface({
   activeProject,
@@ -48,6 +54,7 @@ export function AppChatSurface({
   bottomActivePanel,
   bottomPanelSlot,
   bottomPanelVisible,
+  browserPanelInstances,
   canClearContext,
   composerKey,
   config,
@@ -116,7 +123,7 @@ export function AppChatSurface({
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
-  onUpdateSidePanel,
+  onUpdateBrowserPanel,
   terminalHeight,
   terminalMaxHeight,
   terminalMinHeight,
@@ -132,6 +139,7 @@ export function AppChatSurface({
   bottomActivePanel?: DesktopPanelTab | null;
   bottomPanelSlot: DesktopPanelSlotState;
   bottomPanelVisible: boolean;
+  browserPanelInstances: DesktopBrowserPanelInstance[];
   canClearContext: boolean;
   composerKey: string;
   config: RuntimeConfigState | null;
@@ -200,7 +208,7 @@ export function AppChatSurface({
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onUpdateSidePanel: (panelId: string, patch: DesktopPanelTabPatch) => void;
+  onUpdateBrowserPanel: BrowserPanelMetadataHandler;
   terminalHeight: number;
   terminalMaxHeight: number;
   terminalMinHeight: number;
@@ -328,12 +336,11 @@ export function AppChatSurface({
           workspaceWidth={workspaceWidth}
         />
       ))}
-      {sidePanelSlot.panels.filter((panel) => panel.type === 'browser').map((panel) => (
-        <BrowserPanel
-          hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
-          key={panel.id}
-          panel={panel}
-          onPanelMetadataChange={onUpdateSidePanel}
+      {browserPanelInstances.map((instance) => (
+        <PersistentBrowserPanel
+          instance={instance}
+          key={instance.panel.id}
+          onPanelMetadataChange={onUpdateBrowserPanel}
           onScreenshotAttachment={requestImageAttachment}
           onResizeStep={onWorkspaceResizeStep}
           onResizeStart={onWorkspaceResizeStart}
@@ -410,5 +417,27 @@ export function AppChatSurface({
         />
       ) : null}
     </>
+  );
+}
+
+function PersistentBrowserPanel({
+  instance,
+  onPanelMetadataChange,
+  ...panelProps
+}: {
+  instance: DesktopBrowserPanelInstance;
+  onPanelMetadataChange: BrowserPanelMetadataHandler;
+} & Omit<ComponentProps<typeof BrowserPanel>, 'hidden' | 'onPanelMetadataChange' | 'panel'>) {
+  const updatePanelMetadata = useCallback((panelId: string, patch: DesktopPanelTabPatch) => {
+    onPanelMetadataChange(instance.targetIdentity, panelId, patch);
+  }, [instance.targetIdentity, onPanelMetadataChange]);
+
+  return (
+    <BrowserPanel
+      {...panelProps}
+      hidden={!instance.active}
+      panel={instance.panel}
+      onPanelMetadataChange={updatePanelMetadata}
+    />
   );
 }

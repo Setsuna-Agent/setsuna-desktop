@@ -89,9 +89,9 @@ describe('WorkspaceOverviewPanel', () => {
     });
     const browserButton = panel.props.children.props.children[4];
 
-    browserButton.props.onClick();
+    browserButton.props.onClick({ type: 'click' });
 
-    expect(onOpenBrowser).toHaveBeenCalledOnce();
+    expect(onOpenBrowser.mock.calls).toEqual([[]]);
   });
 
   it('在普通对话的临时目录中开放工作区操作', () => {

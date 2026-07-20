@@ -28,7 +28,8 @@ describe('ConversationBackgroundServiceList', () => {
     }));
 
     expect(html).toContain('后台服务');
-    expect(html).toContain('aria-label="1 个后台服务"');
+    expect(html).not.toContain('个后台服务');
+    expect(html).toContain('chat-conversation-background-service__icon');
     expect(html).toContain('pnpm dev --host 127.0.0.1');
     expect(html).not.toContain('已运行');
     expect(html).not.toContain('chat-conversation-background-service__status');
@@ -43,7 +44,7 @@ describe('ConversationBackgroundServiceList', () => {
     });
     if (!view) throw new Error('Expected a populated background service list.');
     const service = view.props.children[1].props.children[0];
-    service.props.children[1].props.onClick();
+    service.props.children[2].props.onClick();
     expect(onTerminate).toHaveBeenCalledWith(process.id);
   });
 

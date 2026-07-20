@@ -55,12 +55,17 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
 export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边任务'): DesktopPanelTab => ({ id, type: 'chat', title });
-export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): DesktopPanelTab => ({
-  browser: { faviconUrl: null, loading: true, url },
-  id,
-  type: 'browser',
-  title: '新标签页',
-});
+export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): DesktopPanelTab => {
+  // A zero-argument callback can still receive React's click event at runtime.
+  // Never let that object become a relative `[object Object]` renderer URL.
+  const initialUrl = typeof url === 'string' && url.trim() ? url.trim() : DEFAULT_BROWSER_URL;
+  return {
+    browser: { faviconUrl: null, loading: true, url: initialUrl },
+    id,
+    type: 'browser',
+    title: '新标签页',
+  };
+};
 export const createReviewPanel = (): DesktopPanelTab => ({ id: REVIEW_PANEL_ID, type: 'review', title: '审查' });
 export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, type: 'files', title: '打开文件' });
 export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });
