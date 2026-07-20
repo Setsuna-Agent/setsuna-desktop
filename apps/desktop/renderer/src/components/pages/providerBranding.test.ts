@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { PROVIDER_BRAND_CATALOG, providerInitials, resolveProviderBrand } from './providerBranding.js';
+import {
+  PROVIDER_BRAND_CATALOG,
+  providerInitials,
+  resolveAutomaticModelBrand,
+  resolveModelBrand,
+  resolveProviderBrand,
+} from './providerBranding.js';
 
 describe('resolveProviderBrand', () => {
   it.each([
@@ -62,5 +68,39 @@ describe('providerInitials', () => {
     expect(providerInitials('Servyou')).toBe('SE');
     expect(providerInitials('Local Provider')).toBe('LP');
     expect(providerInitials('自定义服务')).toBe('自');
+  });
+});
+
+describe('model brand matching', () => {
+  it.each([
+    ['gpt-5.6-luna', 'openai'],
+    ['claude-sonnet-4', 'anthropic'],
+    ['gemini-2.5-pro', 'gemini'],
+    ['deepseek-r1', 'deepseek'],
+    ['qwen3-coder', 'qwen'],
+    ['MiniMax-M3', 'minimax'],
+    ['moonshot-v1-128k', 'kimi'],
+    ['mixtral-8x7b', 'mistral'],
+    ['doubao-seed-1.6', 'doubao'],
+    ['grok-4', 'xai'],
+  ])('matches %s to %s', (code, expectedKey) => {
+    expect(resolveAutomaticModelBrand(
+      { code, name: code },
+      { name: 'Local', baseUrl: 'http://127.0.0.1:8000/v1' },
+    )?.key).toBe(expectedKey);
+  });
+
+  it('falls back to the configured provider icon and allows a model override', () => {
+    const provider = {
+      name: 'Local',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      icon: { type: 'preset', key: 'ollama' } as const,
+    };
+    expect(resolveAutomaticModelBrand({ code: 'llama-3.3', name: 'Llama 3.3' }, provider)?.key).toBe('ollama');
+    expect(resolveModelBrand({
+      code: 'llama-3.3',
+      name: 'Llama 3.3',
+      icon: { type: 'preset', key: 'qwen' },
+    }, provider)?.key).toBe('qwen');
   });
 });

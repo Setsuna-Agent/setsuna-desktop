@@ -1,6 +1,6 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { normalizeImageGenerationServiceUrl, normalizeProviderIconConfig, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
+import { normalizeImageGenerationServiceUrl, normalizeModelIconConfig, normalizeProviderIconConfig, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
 import type {
   ProviderConfigInput,
   ProviderConfigState,
@@ -183,6 +183,7 @@ export class FileConfigStore implements ConfigStore {
         return {
           ...providerWithoutIcon,
           ...(icon ? { icon } : {}),
+          models: normalizeModels(provider.models),
           apiKeySet: apiKey.length > 0,
           apiKeyPreview: maskApiKey(apiKey),
         };
@@ -280,11 +281,13 @@ function normalizeProviders(
 function normalizeModels(models: ProviderConfigState['models']): ProviderConfigState['models'] {
   const normalized = models.map((model, index) => {
     const code = nonEmpty(model.code) ?? nonEmpty(model.id) ?? `model-${index + 1}`;
+    const icon = normalizeModelIconConfig(model.icon);
     return {
       id: nonEmpty(model.id) ?? code,
       name: nonEmpty(model.name) ?? code,
       code,
       enabled: model.enabled ?? true,
+      ...(icon ? { icon } : {}),
       contextWindowTokens: positiveOptionalInt(model.contextWindowTokens),
       maxOutputTokens: positiveInt(model.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS),
       thinkingEnabled: model.thinkingEnabled ?? false,

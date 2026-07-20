@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProviderConfigState } from '@setsuna-desktop/contracts';
-import { ProviderIconDialog } from './ProviderIconDialog.js';
-import { PROVIDER_BRAND_CATALOG } from './providerBranding.js';
+import { BrandIconDialog } from './BrandIconDialog.js';
+import { PROVIDER_BRAND_CATALOG, resolveAutomaticProviderBrand } from './providerBranding.js';
 
-describe('ProviderIconDialog', () => {
+describe('BrandIconDialog', () => {
   it('renders automatic matching, every preset and custom upload controls', () => {
     const html = renderDialog(providerFixture);
 
@@ -20,11 +20,32 @@ describe('ProviderIconDialog', () => {
     expect(html).toContain('settings-provider-icon-option is-selected');
     expect(html).toContain('aria-checked="true"');
   });
+
+  it('adapts its copy for a model icon', () => {
+    const html = renderToStaticMarkup(
+      <BrandIconDialog
+        automaticBrand={resolveAutomaticProviderBrand(providerFixture)}
+        name="gpt-5.6-sol"
+        subject="model"
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(html).toContain('配置模型图标');
+    expect(html).toContain('aria-label="模型图标"');
+  });
 });
 
 function renderDialog(provider: ProviderConfigState): string {
   return renderToStaticMarkup(
-    <ProviderIconDialog provider={provider} onClose={vi.fn()} onConfirm={vi.fn()} />,
+    <BrandIconDialog
+      automaticBrand={resolveAutomaticProviderBrand(provider)}
+      icon={provider.icon}
+      name={provider.name}
+      subject="provider"
+      onClose={vi.fn()}
+      onConfirm={vi.fn()}
+    />,
   );
 }
 

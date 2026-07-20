@@ -4,7 +4,7 @@
 
 ## 模块
 
-- `config.ts`：provider、model、可持久化服务图标、runtime preferences、permission profile、feature flags。
+- `config.ts`：provider、model、可持久化品牌图标、runtime preferences、permission profile、feature flags。
 - `environment.ts`：每次 runtime 操作共享的 cwd、workspace roots、shell 与 Git 仓库路径关系；不承载权限。
 - `provider.ts`：模型请求、工具定义、工具调用、流式模型事件。
 - `threads.ts`：线程、消息、附件、toolRun、context compaction、goal、git info。
@@ -145,7 +145,7 @@ runtime/
 ## 数据安全
 
 - API key 不在 `RuntimeConfigState.providers` 中明文返回，只暴露 `apiKeySet` 和 `apiKeyPreview`。
-- 自定义 provider 图标仅接受 PNG/JPEG/WebP data URL，并在 contract 与 runtime store 两侧限制为 512 KB；不接受可执行 SVG 内容。
+- 自定义 provider/model 图标仅接受 PNG/JPEG/WebP data URL，并在 contract 与 runtime store 两侧限制为 512 KB；不接受可执行 SVG 内容。
 - `secrets.json` 写入后尝试 `chmod 0600`。
 - workspace 文件访问都要防止路径逃逸。
 - MCP list 只暴露 env/header key，不返回值。

@@ -1,4 +1,4 @@
-import type { ProviderConfigState } from '@setsuna-desktop/contracts';
+import type { BrandIconConfig, ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
 import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
 import anthropicLogoUrl from '../../assets/provider-logos/anthropic.svg';
 import bailianLogoUrl from '../../assets/provider-logos/bailian.svg';
@@ -20,6 +20,7 @@ import xaiLogoUrl from '../../assets/provider-logos/xai.svg';
 
 type ProviderBrandMatchInput = Pick<ProviderConfigState, 'baseUrl' | 'name'>;
 type ProviderBrandInput = Pick<ProviderConfigState, 'baseUrl' | 'icon' | 'name'>;
+type ModelBrandInput = Pick<ProviderModelConfig, 'code' | 'icon' | 'name'>;
 
 export type ProviderBrandAsset = {
   darkSrc?: string;
@@ -38,6 +39,11 @@ type ProviderBrandRuleOptions = {
   darkSrc?: string;
   monochrome?: boolean;
   urlKeywords?: readonly string[];
+};
+
+type ModelBrandRule = {
+  key: string;
+  patterns: readonly RegExp[];
 };
 
 const providerBrandRules: readonly ProviderBrandRule[] = [
@@ -82,23 +88,45 @@ const providerBrandRules: readonly ProviderBrandRule[] = [
   brandRule('xai', 'xAI', xaiLogoUrl, ['xai', 'x.ai', 'grok'], { urlKeywords: ['api.x.ai'] }),
 ];
 
+const modelBrandRules: readonly ModelBrandRule[] = [
+  modelBrandRule('openai', /(^|[^a-z0-9])(?:openai|gpt|chatgpt|codex|o1|o3|o4)(?=$|[^a-z0-9])/),
+  modelBrandRule('anthropic', /(^|[^a-z0-9])(?:anthropic|claude)(?=$|[^a-z0-9])/),
+  modelBrandRule('gemini', /(^|[^a-z0-9])gemini(?=$|[^a-z0-9])/),
+  modelBrandRule('deepseek', /(^|[^a-z0-9])deepseek(?=$|[^a-z0-9])/),
+  modelBrandRule('qwen', /(^|[^a-z0-9])(?:qwen(?:\d+(?:\.\d+)*)?|qwq)(?=$|[^a-z0-9])/),
+  modelBrandRule('minimax', /(^|[^a-z0-9])minimax(?=$|[^a-z0-9])/),
+  modelBrandRule('kimi', /(^|[^a-z0-9])(?:kimi|moonshot)(?=$|[^a-z0-9])/),
+  modelBrandRule('mistral', /(^|[^a-z0-9])(?:mistral|mixtral|codestral)(?=$|[^a-z0-9])/),
+  modelBrandRule('doubao', /(^|[^a-z0-9])doubao(?=$|[^a-z0-9])/),
+  modelBrandRule('xai', /(^|[^a-z0-9])grok(?=$|[^a-z0-9])/),
+  modelBrandRule('groq', /(^|[^a-z0-9])groq(?=$|[^a-z0-9])/),
+  modelBrandRule('sakana', /(^|[^a-z0-9])sakana(?=$|[^a-z0-9])/),
+];
+
 export const PROVIDER_BRAND_CATALOG: readonly ProviderBrandAsset[] = providerBrandRules.map(providerBrandAsset);
 
 export function resolveProviderBrand(provider: ProviderBrandInput): ProviderBrandAsset | null {
-  if (provider.icon?.type === 'custom') {
+  return resolveBrandIcon(provider.icon, resolveAutomaticProviderBrand(provider));
+}
+
+export function resolveModelBrand(model: ModelBrandInput, provider: ProviderBrandInput): ProviderBrandAsset | null {
+  return resolveBrandIcon(model.icon, resolveAutomaticModelBrand(model, provider));
+}
+
+export function resolveBrandIcon(icon: BrandIconConfig | undefined, automaticBrand: ProviderBrandAsset | null): ProviderBrandAsset | null {
+  if (icon?.type === 'custom') {
     return {
       key: 'custom',
       label: '自定义图标',
       monochrome: false,
-      src: provider.icon.dataUrl,
+      src: icon.dataUrl,
     };
   }
-  if (provider.icon?.type === 'preset') {
-    const presetKey = provider.icon.key;
-    const preset = providerBrandRules.find((rule) => rule.key === presetKey);
+  if (icon?.type === 'preset') {
+    const preset = providerBrandRules.find((rule) => rule.key === icon.key);
     if (preset) return providerBrandAsset(preset);
   }
-  return resolveAutomaticProviderBrand(provider);
+  return automaticBrand;
 }
 
 export function resolveAutomaticProviderBrand(provider: ProviderBrandMatchInput): ProviderBrandAsset | null {
@@ -111,6 +139,13 @@ export function resolveAutomaticProviderBrand(provider: ProviderBrandMatchInput)
 
   const urlMatch = providerBrandRules.find((rule) => rule.urlKeywords?.some((keyword) => normalizedUrl.includes(keyword)));
   return urlMatch ? providerBrandAsset(urlMatch) : null;
+}
+
+export function resolveAutomaticModelBrand(model: ModelBrandInput, provider: ProviderBrandInput): ProviderBrandAsset | null {
+  const identity = normalizeBrandText(`${model.name} ${model.code}`);
+  const modelMatch = modelBrandRules.find((rule) => rule.patterns.some((pattern) => pattern.test(identity)));
+  const matchedBrand = modelMatch ? providerBrandRules.find((rule) => rule.key === modelMatch.key) : undefined;
+  return matchedBrand ? providerBrandAsset(matchedBrand) : resolveProviderBrand(provider);
 }
 
 export function providerInitials(name: string): string {
@@ -144,6 +179,10 @@ function brandRule(
     src,
     urlKeywords: options.urlKeywords?.map(normalizeBrandText),
   };
+}
+
+function modelBrandRule(key: string, ...patterns: RegExp[]): ModelBrandRule {
+  return { key, patterns };
 }
 
 function providerBrandAsset(rule: ProviderBrandRule): ProviderBrandAsset {

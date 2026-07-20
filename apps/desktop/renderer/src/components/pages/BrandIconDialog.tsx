@@ -1,39 +1,44 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ImagePlus, Sparkles, Upload, X } from 'lucide-react';
-import type { ProviderConfigState, ProviderIconConfig } from '@setsuna-desktop/contracts';
+import type { BrandIconConfig } from '@setsuna-desktop/contracts';
 import { Button, IconButton } from '../primitives.js';
-import { ProviderBrandMark } from './ProviderBrandMark.js';
+import { BrandIconMark } from './BrandIconMark.js';
 import {
   PROVIDER_BRAND_CATALOG,
-  resolveAutomaticProviderBrand,
-  resolveProviderBrand,
+  resolveBrandIcon,
+  type ProviderBrandAsset,
 } from './providerBranding.js';
 import {
-  providerIconFileAccept,
-  providerIconMaxSizeLabel,
-  readProviderIconFile,
-} from './providerIconUpload.js';
+  brandIconFileAccept,
+  brandIconMaxSizeLabel,
+  readBrandIconFile,
+} from './brandIconUpload.js';
 
-type ProviderIconDialogProps = {
-  provider: ProviderConfigState;
+type BrandIconDialogProps = {
+  automaticBrand: ProviderBrandAsset | null;
+  icon?: BrandIconConfig;
+  name: string;
+  subject: 'model' | 'provider';
   onClose: () => void;
-  onConfirm: (icon: ProviderIconConfig | undefined) => void;
+  onConfirm: (icon: BrandIconConfig | undefined) => void;
 };
 
-export function ProviderIconDialog({ provider, onClose, onConfirm }: ProviderIconDialogProps) {
+export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, onConfirm }: BrandIconDialogProps) {
   const titleId = useId();
   const descriptionId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isMountedRef = useRef(true);
   const previousFocusRef = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null);
-  const [draftIcon, setDraftIcon] = useState<ProviderIconConfig | undefined>(() => provider.icon);
-  const [customIcon, setCustomIcon] = useState<Extract<ProviderIconConfig, { type: 'custom' }> | null>(
-    provider.icon?.type === 'custom' ? provider.icon : null,
+  const [draftIcon, setDraftIcon] = useState<BrandIconConfig | undefined>(() => icon);
+  const [customIcon, setCustomIcon] = useState<Extract<BrandIconConfig, { type: 'custom' }> | null>(
+    icon?.type === 'custom' ? icon : null,
   );
   const [uploadError, setUploadError] = useState('');
   const [uploading, setUploading] = useState(false);
-  const automaticBrand = resolveAutomaticProviderBrand(provider);
-  const customBrand = customIcon ? resolveProviderBrand({ ...provider, icon: customIcon }) : null;
+  const customBrand = customIcon ? resolveBrandIcon(customIcon, null) : null;
+  const subjectLabel = subject === 'provider' ? '服务' : '模型';
+  const displayName = name || `未命名${subjectLabel}`;
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -43,19 +48,30 @@ export function ProviderIconDialog({ provider, onClose, onConfirm }: ProviderIco
     return () => document.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
 
-  useEffect(() => () => previousFocusRef.current?.focus(), []);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      previousFocusRef.current?.focus();
+    };
+  }, []);
 
   const chooseCustomFile = (file: File | undefined) => {
     if (!file) return;
     setUploading(true);
     setUploadError('');
-    void readProviderIconFile(file)
+    void readBrandIconFile(file)
       .then((icon) => {
+        if (!isMountedRef.current) return;
         setCustomIcon(icon);
         setDraftIcon(icon);
       })
-      .catch((error) => setUploadError(error instanceof Error ? error.message : String(error)))
-      .finally(() => setUploading(false));
+      .catch((error) => {
+        if (isMountedRef.current) setUploadError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (isMountedRef.current) setUploading(false);
+      });
   };
 
   const dialog = (
@@ -72,22 +88,22 @@ export function ProviderIconDialog({ provider, onClose, onConfirm }: ProviderIco
           <div className="settings-provider-icon-dialog__title">
             <span><ImagePlus size={16} /></span>
             <div>
-              <strong id={titleId}>配置服务图标</strong>
-              <small>{provider.name || '未命名服务'}</small>
+              <strong id={titleId}>{`配置${subjectLabel}图标`}</strong>
+              <small>{displayName}</small>
             </div>
           </div>
           <IconButton autoFocus label="关闭图标配置" onClick={onClose}><X size={15} /></IconButton>
         </header>
 
         <div className="settings-provider-icon-dialog__body">
-          <p id={descriptionId}>选择内置厂商品牌，或上传自己的图片。图标只保存在本机配置中。</p>
+          <p id={descriptionId}>{`选择内置厂商品牌，或上传自己的图片。${subjectLabel}图标只保存在本机配置中。`}</p>
 
           <section className="settings-provider-icon-section" aria-labelledby={`${titleId}-presets`}>
             <div className="settings-provider-icon-section__head">
               <strong id={`${titleId}-presets`}>内置图标</strong>
               <span>{`${PROVIDER_BRAND_CATALOG.length} 个品牌`}</span>
             </div>
-            <div className="settings-provider-icon-grid" role="radiogroup" aria-label="服务图标">
+            <div className="settings-provider-icon-grid" role="radiogroup" aria-label={`${subjectLabel}图标`}>
               <button
                 className={`settings-provider-icon-option ${draftIcon === undefined ? 'is-selected' : ''}`}
                 type="button"
@@ -96,7 +112,7 @@ export function ProviderIconDialog({ provider, onClose, onConfirm }: ProviderIco
                 onClick={() => setDraftIcon(undefined)}
               >
                 <span className="settings-provider-icon-option__mark is-automatic">
-                  <ProviderBrandMark brand={automaticBrand} fallbackName={provider.name} size="large" />
+                  <BrandIconMark brand={automaticBrand} fallbackName={displayName} size="large" />
                   <Sparkles size={10} />
                 </span>
                 <span>自动匹配</span>
@@ -114,7 +130,7 @@ export function ProviderIconDialog({ provider, onClose, onConfirm }: ProviderIco
                     onClick={() => setDraftIcon({ type: 'preset', key: brand.key })}
                   >
                     <span className="settings-provider-icon-option__mark">
-                      <ProviderBrandMark brand={brand} fallbackName={brand.label} size="large" />
+                      <BrandIconMark brand={brand} fallbackName={brand.label} size="large" />
                     </span>
                     <span title={brand.label}>{brand.label}</span>
                     {selected ? <Check className="settings-provider-icon-option__check" size={12} /> : null}
@@ -127,14 +143,14 @@ export function ProviderIconDialog({ provider, onClose, onConfirm }: ProviderIco
           <section className="settings-provider-icon-section" aria-labelledby={`${titleId}-custom`}>
             <div className="settings-provider-icon-section__head">
               <strong id={`${titleId}-custom`}>自定义上传</strong>
-              <span>{`PNG、JPEG、WebP · 最大 ${providerIconMaxSizeLabel}`}</span>
+              <span>{`PNG、JPEG、WebP · 最大 ${brandIconMaxSizeLabel}`}</span>
             </div>
             <div className={`settings-provider-icon-upload ${draftIcon?.type === 'custom' ? 'is-selected' : ''}`}>
               <input
                 ref={fileInputRef}
                 className="settings-provider-icon-upload__input"
                 type="file"
-                accept={providerIconFileAccept}
+                accept={brandIconFileAccept}
                 onChange={(event) => {
                   const file = event.currentTarget.files?.[0];
                   event.currentTarget.value = '';
@@ -151,7 +167,7 @@ export function ProviderIconDialog({ provider, onClose, onConfirm }: ProviderIco
                 }}
               >
                 {customBrand ? (
-                  <ProviderBrandMark brand={customBrand} fallbackName={provider.name} size="large" />
+                  <BrandIconMark brand={customBrand} fallbackName={displayName} size="large" />
                 ) : (
                   <span className="settings-provider-icon-upload__placeholder"><ImagePlus size={18} /></span>
                 )}

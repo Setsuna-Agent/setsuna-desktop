@@ -1,13 +1,20 @@
 import type { ModelProviderKind } from './provider.js';
 
-export const PROVIDER_CUSTOM_ICON_MAX_BYTES = 512 * 1024;
-export const PROVIDER_CUSTOM_ICON_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export const BRAND_ICON_MAX_BYTES = 512 * 1024;
+export const BRAND_ICON_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+// Backwards-compatible names for callers added with provider icon configuration.
+export const PROVIDER_CUSTOM_ICON_MAX_BYTES = BRAND_ICON_MAX_BYTES;
+export const PROVIDER_CUSTOM_ICON_MIME_TYPES = BRAND_ICON_MIME_TYPES;
 
-export type ProviderCustomIconMimeType = typeof PROVIDER_CUSTOM_ICON_MIME_TYPES[number];
+export type BrandIconMimeType = typeof BRAND_ICON_MIME_TYPES[number];
+export type ProviderCustomIconMimeType = BrandIconMimeType;
 
-export type ProviderIconConfig =
+export type BrandIconConfig =
   | { type: 'preset'; key: string }
   | { type: 'custom'; dataUrl: string };
+
+export type ProviderIconConfig = BrandIconConfig;
+export type ModelIconConfig = BrandIconConfig;
 
 export type ProviderConfigState = {
   id: string;
@@ -21,8 +28,8 @@ export type ProviderConfigState = {
   models: ProviderModelConfig[];
 };
 
-/** Provider icons live in config.json, so reject unsafe formats and unexpectedly large inline images at the contract boundary. */
-export function normalizeProviderIconConfig(value: unknown): ProviderIconConfig | undefined {
+/** Brand icons live in config.json, so reject unsafe formats and unexpectedly large inline images at the contract boundary. */
+export function normalizeBrandIconConfig(value: unknown): BrandIconConfig | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
 
@@ -34,20 +41,24 @@ export function normalizeProviderIconConfig(value: unknown): ProviderIconConfig 
   if (record.type !== 'custom' || typeof record.dataUrl !== 'string') return undefined;
   const match = /^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/]+={0,2})$/i.exec(record.dataUrl.trim());
   if (!match) return undefined;
-  const mimeType = match[1]?.toLocaleLowerCase() as ProviderCustomIconMimeType | undefined;
+  const mimeType = match[1]?.toLocaleLowerCase() as BrandIconMimeType | undefined;
   const payload = match[2];
   if (!mimeType || !payload || payload.length % 4 !== 0) return undefined;
   const paddingBytes = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
   const decodedBytes = Math.floor((payload.length * 3) / 4) - paddingBytes;
-  if (decodedBytes <= 0 || decodedBytes > PROVIDER_CUSTOM_ICON_MAX_BYTES) return undefined;
+  if (decodedBytes <= 0 || decodedBytes > BRAND_ICON_MAX_BYTES) return undefined;
   return { type: 'custom', dataUrl: `data:${mimeType};base64,${payload}` };
 }
+
+export const normalizeProviderIconConfig = normalizeBrandIconConfig;
+export const normalizeModelIconConfig = normalizeBrandIconConfig;
 
 export type ProviderModelConfig = {
   id: string;
   name: string;
   code: string;
   enabled: boolean;
+  icon?: ModelIconConfig;
   contextWindowTokens?: number;
   maxOutputTokens: number;
   thinkingEnabled: boolean;

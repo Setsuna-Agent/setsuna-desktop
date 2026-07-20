@@ -1,13 +1,13 @@
 import type { ProviderBrandAsset } from './providerBranding.js';
 import { providerInitials } from './providerBranding.js';
 
-type ProviderBrandMarkProps = {
+type BrandIconMarkProps = {
   brand: ProviderBrandAsset | null;
   fallbackName: string;
   size?: 'default' | 'large';
 };
 
-export function ProviderBrandMark({ brand, fallbackName, size = 'default' }: ProviderBrandMarkProps) {
+export function BrandIconMark({ brand, fallbackName, size = 'default' }: BrandIconMarkProps) {
   const classes = [
     'chat-user-settings__provider-brand-mark',
     size === 'large' ? 'is-large' : '',

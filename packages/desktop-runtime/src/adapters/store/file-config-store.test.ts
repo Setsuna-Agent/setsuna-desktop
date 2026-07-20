@@ -144,6 +144,34 @@ describe('file config store', () => {
     expect((await store.getConfig()).providers[0]).not.toHaveProperty('icon');
   });
 
+  it('persists valid model icons and drops unsafe model icon data', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    const initial = await store.getConfig();
+    const baseProvider = initial.providers[0];
+    const baseModel = baseProvider?.models[0];
+    if (!baseProvider || !baseModel) throw new Error('Expected the default provider and model fixtures.');
+
+    await expect(store.saveConfig({
+      providers: [{
+        ...baseProvider,
+        models: [{ ...baseModel, icon: { type: 'preset', key: 'openai' } }],
+      }],
+    })).resolves.toMatchObject({
+      providers: [{ models: [{ icon: { type: 'preset', key: 'openai' } }] }],
+    });
+
+    const configPath = path.join(dataDir, 'config.json');
+    const tampered = JSON.parse(await readFile(configPath, 'utf8')) as {
+      providers: Array<{ models: Array<Record<string, unknown>> }>;
+    };
+    const storedModel = tampered.providers[0]?.models[0];
+    if (!storedModel) throw new Error('Expected a stored model fixture.');
+    storedModel.icon = { type: 'custom', dataUrl: 'data:image/svg+xml;base64,PHN2Zy8+' };
+    await writeFile(configPath, `${JSON.stringify(tampered, null, 2)}\n`, 'utf8');
+    expect((await store.getConfig()).providers[0]?.models[0]).not.toHaveProperty('icon');
+  });
+
   it('stores the image generation API key only in secrets and supports clearing it', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);
