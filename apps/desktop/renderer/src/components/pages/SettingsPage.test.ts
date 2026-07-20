@@ -13,6 +13,7 @@ describe('SettingsSidebar', () => {
     }));
 
     expect(html).toContain('<nav class="app-sidebar desktop-settings-sidebar chat-user-settings__nav">');
+    expect(html).toContain('模型服务');
     expect(html).not.toContain('chat-user-settings--page');
   });
 });

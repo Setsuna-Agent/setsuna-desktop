@@ -1179,7 +1179,7 @@ runtime 文件变更提取。
   - runtime
   - about
 - 管理主题、字体、Setsuna 风格、全局 prompt。
-- 管理本地模型 provider：
+- 管理模型服务 provider：
   - OpenAI compatible
   - OpenAI Responses
   - Anthropic

@@ -50,11 +50,11 @@ Setsuna Desktop 把本地对话、项目工作区、文件审查、MCP、Skills 
   </tr>
   <tr>
     <td width="100%">
-      <img src="assets/readme/local-models.png" alt="本地模型配置" width="100%">
+      <img src="assets/readme/local-models.png" alt="模型服务配置" width="100%">
       <br>
-      <strong>本地模型配置</strong>
+      <strong>模型服务配置</strong>
       <br>
-      <sub>本地模型供应商、模型列表、思考能力和多模态能力由桌面端配置。</sub>
+      <sub>模型服务、模型列表、思考能力和多模态能力统一由桌面端配置。</sub>
     </td>
   </tr>
 </table>
@@ -102,7 +102,7 @@ pnpm dev
 
 `pnpm dev` 会同时启动 Vite renderer 和 Electron desktop shell。开发环境默认 renderer 地址是 `http://127.0.0.1:5174`。
 
-如果还没有配置模型供应商，应用会使用本地 smoke fallback 验证 runtime 链路。要连接真实模型，进入 `设置 -> 本地模型` 添加 OpenAI-compatible、OpenAI Responses 或 Anthropic provider。
+如果还没有配置模型供应商，应用会使用本地 smoke fallback 验证 runtime 链路。要连接真实模型，进入 `设置 -> 模型服务` 添加 OpenAI-compatible、OpenAI Responses 或 Anthropic provider。
 
 ## 常用脚本
 

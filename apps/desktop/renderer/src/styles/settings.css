@@ -151,6 +151,19 @@
   line-height: 26px;
 }
 
+.desktop-settings-panel .chat-user-settings__page-heading-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__page-heading-copy p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .desktop-settings-panel .chat-user-settings__section {
   display: grid;
   min-width: 0;
@@ -1405,7 +1418,6 @@
 
 .desktop-settings-panel .chat-user-settings__local-provider-stack {
   display: grid;
-  gap: 12px;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -1413,15 +1425,15 @@
 
 .desktop-settings-panel .chat-user-settings__local-provider-layout {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: 268px minmax(0, 1fr);
   align-items: stretch;
-  gap: 0;
   min-width: 0;
   min-height: 0;
   height: 100%;
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--app-surface);
+  box-shadow: 0 14px 42px color-mix(in srgb, #000000 4%, transparent);
   overflow: hidden;
 }
 
@@ -1430,17 +1442,17 @@
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   border-right: 1px solid var(--chat-settings-divider);
-  background: color-mix(in srgb, var(--app-bg) 64%, var(--app-surface) 36%);
+  background: color-mix(in srgb, var(--app-surface-subtle) 82%, var(--app-surface));
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-rail-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  min-height: 52px;
-  padding: 0 10px 0 12px;
+  min-height: 72px;
+  padding: 0 12px 0 16px;
   border-bottom: 1px solid var(--chat-settings-divider);
 }
 
@@ -1450,14 +1462,14 @@
   min-width: 0;
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-rail-head span {
+.desktop-settings-panel .chat-user-settings__local-provider-rail-head > div > span {
   color: var(--app-text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-rail-head strong {
+.desktop-settings-panel .chat-user-settings__local-provider-rail-head > div > strong {
   overflow: hidden;
   color: var(--app-text-muted);
   font-size: 11px;
@@ -1467,67 +1479,128 @@
   white-space: nowrap;
 }
 
+.desktop-settings-panel .chat-user-settings__add-provider.sd-button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .desktop-settings-panel .chat-user-settings__local-provider-list {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   min-height: 0;
-  padding: 8px;
+  padding: 10px;
   overflow: auto;
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  min-height: 52px;
-  padding: 8px 9px;
-  border: 0;
-  border-radius: 7px;
+  min-height: 60px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
   color: var(--app-text);
   background: transparent;
   text-align: left;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item:hover,
-.desktop-settings-panel .chat-user-settings__local-provider-item:focus-visible,
-.desktop-settings-panel .chat-user-settings__local-provider-item.is-active {
-  background: var(--desktop-agent-control-hover-bg);
+.desktop-settings-panel .chat-user-settings__local-provider-item:focus-visible {
+  border-color: color-mix(in srgb, var(--app-text) 14%, var(--chat-settings-divider));
+  background: color-mix(in srgb, var(--app-text) 4%, var(--app-surface));
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item.is-active {
-  box-shadow: 0 0 0 1px var(--desktop-agent-button-hover-border);
+  border-color: var(--app-border-strong);
+  background: var(--app-surface);
+  box-shadow: 0 5px 16px color-mix(in srgb, #000000 6%, transparent);
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-item-icon {
+.desktop-settings-panel .chat-user-settings__provider-brand-mark {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--chat-settings-divider);
-  border-radius: 7px;
-  color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-bg) 78%, var(--app-surface) 22%);
+  width: 32px;
+  height: 32px;
+  color: var(--app-text-secondary);
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-item.is-active .chat-user-settings__local-provider-item-icon {
-  color: var(--app-text);
-  border-color: var(--desktop-agent-button-hover-border);
+.desktop-settings-panel .chat-user-settings__provider-brand-mark img {
+  display: block;
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
+}
+
+.desktop-settings-panel .chat-user-settings__provider-brand-mark img.is-dark-variant {
+  display: none;
+}
+
+.desktop-settings-panel .chat-user-settings__provider-brand-mark.is-large {
+  width: 36px;
+  height: 36px;
+}
+
+.desktop-settings-panel .chat-user-settings__provider-brand-mark.is-large img {
+  width: 24px;
+  height: 24px;
+}
+
+.desktop-settings-panel .chat-user-settings__provider-brand-mark.is-monochrome img {
+  opacity: 0.78;
+}
+
+.desktop-settings-panel .chat-user-settings__provider-brand-mark.is-fallback {
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--app-bg) 76%, var(--app-surface));
+  font-family: var(--app-code-font-family);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.desktop-settings-panel .chat-user-settings__provider-brand-mark.is-large.is-fallback {
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+:root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__provider-brand-mark.is-monochrome img {
+  filter: invert(1);
+}
+
+:root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__provider-brand-mark img.is-light-variant {
+  display: none;
+}
+
+:root[data-theme='dark'] .desktop-settings-panel .chat-user-settings__provider-brand-mark img.is-dark-variant {
+  display: block;
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item-body {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-item-name,
-.desktop-settings-panel .chat-user-settings__local-provider-item-meta {
+.desktop-settings-panel .chat-user-settings__local-provider-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-item-name {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1541,10 +1614,57 @@
   line-height: 18px;
 }
 
+.desktop-settings-panel .chat-user-settings__local-provider-item-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: var(--app-text-subtle);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-item-status i,
+.desktop-settings-panel .chat-user-settings__provider-toggle > span i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-item-status.is-enabled,
+.desktop-settings-panel .chat-user-settings__provider-toggle > span.is-enabled {
+  color: var(--app-success);
+}
+
 .desktop-settings-panel .chat-user-settings__local-provider-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
   color: var(--app-text-muted);
   font-size: 11px;
   line-height: 15px;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-item-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-item-meta span:first-child {
+  flex: 0 1 auto;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-item-meta i {
+  flex: 0 0 auto;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--app-text-subtle);
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-card {
@@ -1560,27 +1680,55 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 52px;
-  padding: 0 12px 0 16px;
+  min-height: 72px;
+  padding: 0 14px 0 18px;
   border-bottom: 1px solid var(--chat-settings-divider);
-  background: color-mix(in srgb, var(--app-surface) 96%, var(--app-bg) 4%);
+  background: var(--app-surface);
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-title {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  gap: 8px;
+  gap: 11px;
   color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 18px;
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-title span {
+.desktop-settings-panel .settings-provider-section__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--chat-settings-divider);
+  color: var(--app-text-secondary);
+  background: var(--app-surface-subtle);
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-title-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-title-copy strong,
+.desktop-settings-panel .chat-user-settings__local-provider-title-copy > span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-title-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 19px;
+}
+
+.desktop-settings-panel .chat-user-settings__local-provider-title-copy > span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: var(--app-font-weight);
+  line-height: 15px;
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-actions {
@@ -1593,11 +1741,25 @@
   flex-wrap: nowrap;
 }
 
-.desktop-settings-panel .chat-user-settings__provider-meta {
-  flex: 0 0 auto;
+.desktop-settings-panel .chat-user-settings__provider-toggle {
+  gap: 9px;
+  min-height: 34px;
+  padding: 0 9px 0 10px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-subtle);
+}
+
+.desktop-settings-panel .chat-user-settings__provider-toggle > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 11px;
+}
+
+.desktop-settings-panel .chat-user-settings__delete-provider {
+  margin-left: 1px;
 }
 
 .desktop-settings-panel .settings-auto-save-status {
@@ -1650,18 +1812,18 @@
 
 .desktop-settings-panel .chat-user-settings__local-provider-body {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(180px, 1fr);
   align-content: stretch;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
   min-height: 0;
-  padding: 16px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--app-bg) 76%, var(--app-surface));
   overflow: hidden;
 }
 
 .desktop-settings-panel .settings-form-section {
   display: grid;
-  gap: 8px;
   min-width: 0;
   min-height: 0;
 }
@@ -1670,22 +1832,65 @@
   height: 100%;
 }
 
-.desktop-settings-panel .settings-form-section__head {
+.desktop-settings-panel .settings-provider-connection,
+.desktop-settings-panel .settings-model-list {
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 10px;
+  background: var(--app-surface);
+  box-shadow: 0 5px 18px color-mix(in srgb, #000000 2.5%, transparent);
+  overflow: hidden;
+}
+
+.desktop-settings-panel .settings-provider-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
+  min-height: 54px;
+  padding: 10px 14px 8px;
 }
 
-.desktop-settings-panel .settings-form-section__head span {
+.desktop-settings-panel .settings-provider-section__heading,
+.desktop-settings-panel .settings-model-list__heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-provider-section__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.desktop-settings-panel .settings-provider-section__heading > span:last-child,
+.desktop-settings-panel .settings-model-list__heading > span:last-child {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-provider-section__heading strong,
+.desktop-settings-panel .settings-model-list__heading strong {
   color: var(--app-text);
   font-size: 13px;
   font-weight: 600;
   line-height: 18px;
 }
 
-.desktop-settings-panel .settings-form-section__head code {
+.desktop-settings-panel .settings-provider-section__heading small,
+.desktop-settings-panel .settings-model-list__heading small {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-provider-section__head code {
   overflow: hidden;
   color: var(--app-text-muted);
   font-family: var(--app-code-font-family);
@@ -1695,7 +1900,32 @@
   white-space: nowrap;
 }
 
-.desktop-settings-panel .chat-user-settings__row-label em {
+.desktop-settings-panel .settings-provider-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 16px;
+  min-width: 0;
+  padding: 4px 14px 15px;
+}
+
+.desktop-settings-panel .settings-provider-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-provider-field__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.desktop-settings-panel .settings-provider-field__label em {
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-subtle);
@@ -1706,10 +1936,14 @@
   white-space: nowrap;
 }
 
+.desktop-settings-panel .settings-provider-field .settings-local-control {
+  justify-self: stretch;
+  max-width: none;
+}
+
 .desktop-settings-panel .settings-model-list {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 8px;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -1719,14 +1953,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 32px;
-}
-
-.desktop-settings-panel .settings-model-list__head > span {
-  color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
+  gap: 14px;
+  min-height: 62px;
+  padding: 10px 12px 10px 14px;
+  border-bottom: 1px solid var(--chat-settings-divider);
 }
 
 .desktop-settings-panel .settings-model-list__actions {
@@ -1738,11 +1968,13 @@
 }
 
 .desktop-settings-panel .settings-model-fetch-state {
-  min-height: 30px;
-  padding: 6px 2px 0;
+  min-height: 34px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--chat-settings-divider);
+  background: var(--app-surface-subtle);
   color: var(--app-text-muted);
   font-size: 12px;
-  line-height: 16px;
+  line-height: 17px;
 }
 
 .desktop-settings-panel .settings-model-fetch-state--error {
@@ -1751,41 +1983,89 @@
 
 .desktop-settings-panel .settings-model-browser {
   display: grid;
-  align-content: start;
-  grid-auto-rows: max-content;
-  gap: 6px;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding: 4px;
-  border: 1px solid var(--chat-settings-divider);
-  border-radius: var(--app-radius-md);
-  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-bg));
+  background: var(--app-surface);
+  overflow: hidden;
+}
+
+.desktop-settings-panel .settings-model-browser__head {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(230px, auto) 68px;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+  color: var(--app-text-subtle);
+  background: var(--app-surface-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+.desktop-settings-panel .settings-model-browser__head span:nth-child(2),
+.desktop-settings-panel .settings-model-browser__head span:nth-child(3) {
+  text-align: right;
+}
+
+.desktop-settings-panel .settings-model-browser__body {
+  display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 
 .desktop-settings-panel .settings-model-option {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(230px, auto) 68px;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 9px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-sm);
+  min-height: 62px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--chat-settings-divider);
   color: var(--app-text);
-  background: transparent;
+  background: var(--app-surface);
   text-align: left;
-  transition: background 140ms ease, border-color 140ms ease;
+  transition: background 140ms ease;
+}
+
+.desktop-settings-panel .settings-model-option:last-child {
+  border-bottom: 0;
 }
 
 .desktop-settings-panel .settings-model-option:hover {
-  background: var(--app-surface);
+  background: color-mix(in srgb, var(--app-text) 3.5%, var(--app-surface));
 }
 
 .desktop-settings-panel .settings-model-option__body {
   display: grid;
-  gap: 2px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-model-option__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-subtle);
+}
+
+.desktop-settings-panel .settings-model-option__copy {
+  display: grid;
+  gap: 1px;
   min-width: 0;
 }
 
@@ -1793,7 +2073,7 @@
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1814,20 +2094,28 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 4px;
-  min-width: 128px;
+  min-width: 230px;
 }
 
 .desktop-settings-panel .settings-model-option__meta span {
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  min-height: 22px;
   padding: 0 7px;
-  border-radius: var(--app-radius-xs);
+  border: 1px solid transparent;
+  border-radius: 999px;
   color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-surface-muted) 74%, var(--app-surface));
-  font-size: 11px;
+  background: var(--app-surface-muted);
+  font-size: 10px;
   line-height: 1;
+}
+
+.desktop-settings-panel .settings-model-option__meta span.is-current {
+  border-color: color-mix(in srgb, var(--app-success) 24%, transparent);
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 9%, var(--app-surface));
 }
 
 .desktop-settings-panel .settings-model-option__actions {
@@ -1835,6 +2123,11 @@
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.desktop-settings-panel .settings-model-option__actions .sd-icon-button {
+  width: 28px;
+  height: 28px;
 }
 
 .settings-model-code-control {
@@ -2319,13 +2612,14 @@
   }
 
   .desktop-settings-panel .chat-user-settings__local-provider-rail {
+    grid-template-rows: auto auto;
     border-right: 0;
     border-bottom: 1px solid var(--chat-settings-divider);
   }
 
   .desktop-settings-panel .chat-user-settings__local-provider-list {
     grid-auto-flow: column;
-    grid-auto-columns: minmax(180px, 1fr);
+    grid-auto-columns: minmax(210px, 1fr);
     overflow-x: auto;
   }
 }
@@ -2458,6 +2752,24 @@
     overflow-x: visible;
   }
 
+  .desktop-settings-panel .chat-user-settings__local-provider-body {
+    grid-template-rows: auto auto;
+    overflow: visible;
+  }
+
+  .desktop-settings-panel .settings-provider-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-settings-panel .settings-provider-section__head {
+    align-items: flex-start;
+  }
+
+  .desktop-settings-panel .settings-provider-section__head code,
+  .desktop-settings-panel .settings-model-browser__head {
+    display: none;
+  }
+
   .desktop-settings-panel .chat-user-settings__local-provider-head,
   .desktop-settings-panel .settings-model-list__head {
     align-items: stretch;
@@ -2477,6 +2789,14 @@
   .desktop-settings-panel .settings-model-option__actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .desktop-settings-panel .settings-model-list,
+  .desktop-settings-panel .settings-model-browser,
+  .desktop-settings-panel .settings-model-browser__body {
+    height: auto;
+    overflow: visible;
   }
 
   .settings-model-modal {

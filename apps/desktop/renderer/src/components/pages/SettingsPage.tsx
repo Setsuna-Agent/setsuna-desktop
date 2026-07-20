@@ -13,6 +13,7 @@ import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../h
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
 import { ProviderModelReplacementDialog } from './ProviderModelReplacementDialog.js';
+import { providerInitials, resolveProviderBrand } from './providerBranding.js';
 import { providerModelReplacementDecision } from './providerModelReplacement.js';
 import { WorkspaceDependenciesSettings } from './WorkspaceDependenciesSettings.js';
 
@@ -22,7 +23,7 @@ type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storage
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
   { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
   { id: 'personalization', label: '个性化', icon: <Pencil size={14} /> },
-  { id: 'localLlm', label: '本地模型', icon: <HardDrive size={14} /> },
+  { id: 'localLlm', label: '模型服务', icon: <HardDrive size={14} /> },
   { id: 'usage', label: '用量', icon: <Database size={14} /> },
   { id: 'archives', label: '归档对话', icon: <Archive size={14} /> },
   { id: 'runtime', label: '高级设置', icon: <Wrench size={14} /> },
@@ -32,7 +33,7 @@ const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: Reac
 const settingsSectionLabels: Record<SettingsSectionId, string> = {
   general: '通用',
   personalization: '个性化',
-  localLlm: '本地模型',
+  localLlm: '模型服务',
   usage: '用量',
   archives: '归档对话',
   runtime: '高级设置',
@@ -41,6 +42,9 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
 const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
+const settingsSectionDescriptions: Partial<Record<SettingsSectionId, string>> = {
+  localLlm: '接入并管理用于对话与自动化任务的模型服务。',
+};
 
 type SettingsChoiceOption<TValue extends string> = {
   value: TValue;
@@ -174,7 +178,10 @@ export function SettingsPage({
       <main className="desktop-settings-panel">
         <section className={`chat-user-settings__content ${activeSection === 'localLlm' ? 'chat-user-settings__content--local-llm' : ''} ${activeSection === 'usage' ? 'chat-user-settings__content--usage' : ''}`}>
           <header className="chat-user-settings__page-heading">
-            <h1>{settingsSectionLabels[activeSection]}</h1>
+            <div className="chat-user-settings__page-heading-copy">
+              <h1>{settingsSectionLabels[activeSection]}</h1>
+              {settingsSectionDescriptions[activeSection] ? <p>{settingsSectionDescriptions[activeSection]}</p> : null}
+            </div>
             {activeSection === 'localLlm' && localModelSaveState.message ? <AutoSaveStatus state={localModelSaveState} /> : null}
           </header>
           {content}
@@ -1890,41 +1897,43 @@ function ProviderSettings({
         <aside className="chat-user-settings__local-provider-rail">
           <div className="chat-user-settings__local-provider-rail-head">
             <div>
-              <span>厂商</span>
-              <strong>{`${enabledProviderCount} / ${providers.length} 启用`}</strong>
+              <span>服务列表</span>
+              <strong>{`${providers.length} 个服务 · ${enabledProviderCount} 个启用`}</strong>
             </div>
-            <IconButton label="添加厂商" onClick={addProvider}>
-              <Plus size={14} />
-            </IconButton>
+            <Button className="chat-user-settings__add-provider" icon={<Plus size={13} />} onClick={addProvider}>
+              添加
+            </Button>
           </div>
-          <div className="chat-user-settings__local-provider-list" role="listbox" aria-label="本地模型厂商">
-            {providers.map((provider, providerIndex) => {
-              const activeModel = provider.models.find((model) => model.enabled) ?? provider.models[0];
-              const selected = provider.id === selectedProvider?.id;
-              return (
-                <button className={`chat-user-settings__local-provider-item ${selected ? 'is-active' : ''}`} key={provider.id} type="button" role="option" aria-selected={selected} onClick={() => setSelectedProviderId(provider.id)}>
-                  <span className="chat-user-settings__local-provider-item-icon">
-                    <HardDrive size={13} />
-                  </span>
-                  <span className="chat-user-settings__local-provider-item-body">
-                    <span className="chat-user-settings__local-provider-item-name">{provider.name || `厂商 ${providerIndex + 1}`}</span>
-                    <span className="chat-user-settings__local-provider-item-meta">{`${provider.enabled ? '启用' : '停用'} · ${providerProtocolLabel(provider.provider)} · ${provider.models.length} 模型${activeModel?.name ? ` · ${activeModel.name}` : ''}`}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <nav className="chat-user-settings__local-provider-list" aria-label="模型服务">
+            {providers.map((provider, providerIndex) => (
+              <ProviderRailItem
+                key={provider.id}
+                index={providerIndex}
+                provider={provider}
+                selected={provider.id === selectedProvider?.id}
+                onSelect={() => setSelectedProviderId(provider.id)}
+              />
+            ))}
+          </nav>
         </aside>
         {selectedProvider ? (
           <div className="chat-user-settings__local-provider-card">
             <div className="chat-user-settings__local-provider-head">
               <div className="chat-user-settings__local-provider-title">
-                <HardDrive size={14} />
-                <span>{selectedProvider.name || `厂商 ${selectedProviderIndex + 1}`}</span>
+                <ProviderBrandIcon provider={selectedProvider} size="large" />
+                <span className="chat-user-settings__local-provider-title-copy">
+                  <strong>{selectedProvider.name || `服务 ${selectedProviderIndex + 1}`}</strong>
+                  <span>{`${providerProtocolLabel(selectedProvider.provider)} · ${selectedProvider.models.length} 个模型`}</span>
+                </span>
               </div>
               <div className="chat-user-settings__local-provider-actions">
-                <label className="sd-check">
+                <label className="sd-check chat-user-settings__provider-toggle">
+                  <span className={selectedProvider.enabled ? 'is-enabled' : ''}>
+                    <i aria-hidden="true" />
+                    {selectedProvider.enabled ? '服务已启用' : '服务已停用'}
+                  </span>
                   <input
+                    aria-label={selectedProvider.enabled ? '停用服务' : '启用服务'}
                     type="checkbox"
                     checked={selectedProvider.enabled}
                     onChange={(event) => {
@@ -1932,20 +1941,18 @@ function ProviderSettings({
                       updateProvider(selectedProvider.id, (item) => ({ ...item, enabled }));
                     }}
                   />
-                  <span>启用</span>
                 </label>
-                <span className="chat-user-settings__provider-meta">{`${providerProtocolLabel(selectedProvider.provider)} · ${selectedProvider.models.length} models`}</span>
                 {providers.length > 1 ? (
                   <Popconfirm
-                    title={`删除厂商“${selectedProvider.name || `厂商 ${selectedProviderIndex + 1}`}”？`}
-                    description={`将同时删除该厂商的 ${selectedProvider.models.length} 个模型和已保存的 API Key，此操作无法撤销。`}
+                    title={`删除服务“${selectedProvider.name || `服务 ${selectedProviderIndex + 1}`}”？`}
+                    description={`将同时删除该服务的 ${selectedProvider.models.length} 个模型和已保存的 API Key，此操作无法撤销。`}
                     placement="bottomRight"
-                    okText="删除厂商"
+                    okText="删除服务"
                     cancelText="取消"
                     okButtonProps={DANGER_CONFIRM_BUTTON_PROPS}
                     onConfirm={() => removeProvider(selectedProvider.id)}
                   >
-                    <IconButton label="删除厂商" variant="danger">
+                    <IconButton className="chat-user-settings__delete-provider" label="删除服务" variant="danger">
                       <Trash2 size={14} />
                     </IconButton>
                   </Popconfirm>
@@ -1953,14 +1960,22 @@ function ProviderSettings({
               </div>
             </div>
             <div className="chat-user-settings__local-provider-body">
-              <section className="settings-form-section">
-                <div className="settings-form-section__head">
-                  <span>连接</span>
+              <section className="settings-form-section settings-provider-connection">
+                <header className="settings-provider-section__head">
+                  <div className="settings-provider-section__heading">
+                    <span className="settings-provider-section__icon">
+                      <Globe2 size={15} />
+                    </span>
+                    <span>
+                      <strong>连接配置</strong>
+                      <small>设置协议、接口地址与访问凭据</small>
+                    </span>
+                  </div>
                   <code>{providerProtocolMeta(selectedProvider.provider)}</code>
-                </div>
-                <div className="chat-user-settings__group chat-user-settings__local-provider-form">
-                  <label className="chat-user-settings__row">
-                    <span className="chat-user-settings__row-label">协议</span>
+                </header>
+                <div className="settings-provider-fields">
+                  <label className="settings-provider-field">
+                    <span className="settings-provider-field__label">协议</span>
                     <SelectField
                       className="settings-local-control"
                       value={selectedProvider.provider}
@@ -1977,8 +1992,8 @@ function ProviderSettings({
                       ))}
                     </SelectField>
                   </label>
-                  <label className="chat-user-settings__row">
-                    <span className="chat-user-settings__row-label">供应商名称</span>
+                  <label className="settings-provider-field">
+                    <span className="settings-provider-field__label">显示名称</span>
                     <TextField
                       className="settings-local-control"
                       value={selectedProvider.name}
@@ -1988,8 +2003,8 @@ function ProviderSettings({
                       }}
                     />
                   </label>
-                  <label className="chat-user-settings__row">
-                    <span className="chat-user-settings__row-label">服务地址</span>
+                  <label className="settings-provider-field">
+                    <span className="settings-provider-field__label">服务地址</span>
                     <TextField
                       className="settings-local-control"
                       value={selectedProvider.baseUrl}
@@ -2001,48 +2016,50 @@ function ProviderSettings({
                       }}
                     />
                   </label>
-                  <label className="chat-user-settings__row">
-                    <span className="chat-user-settings__row-label">API Key {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
+                  <label className="settings-provider-field">
+                    <span className="settings-provider-field__label">API 密钥 {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
                     <TextField className="settings-local-control" type="password" value={apiKeysByProviderId[selectedProvider.id] ?? ''} onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)} placeholder={providerApiKeyPlaceholder(selectedProvider)} />
                   </label>
                 </div>
               </section>
-              <section className="settings-form-section">
+              <section className="settings-form-section settings-model-section">
                 <div className="settings-model-list">
                   <div className="settings-model-list__head">
-                    <span>模型</span>
+                    <div className="settings-model-list__heading">
+                      <span className="settings-provider-section__icon">
+                        <Cpu size={15} />
+                      </span>
+                      <span>
+                        <strong>模型目录</strong>
+                        <small>{`${selectedProvider.models.length} 个模型 · 可自动同步或手动添加`}</small>
+                      </span>
+                    </div>
                     <div className="settings-model-list__actions">
-                      <Button icon={<RefreshCw size={14} />} disabled={selectedFetchState.fetching} onClick={() => fetchModels(selectedProvider)}>
-                        {selectedFetchState.fetching ? '获取中' : '自动获取'}
+                      <Button icon={<RefreshCw className={selectedFetchState.fetching ? 'is-spinning' : undefined} size={14} />} disabled={selectedFetchState.fetching} onClick={() => fetchModels(selectedProvider)}>
+                        {selectedFetchState.fetching ? '同步中' : '同步模型'}
                       </Button>
-                      <Button icon={<Plus size={14} />} onClick={() => addModel(selectedProvider.id)}>
+                      <Button icon={<Plus size={14} />} variant="primary" onClick={() => addModel(selectedProvider.id)}>
                         添加模型
                       </Button>
                     </div>
                   </div>
-                  <div className="settings-model-browser" role="list" aria-label="模型列表">
-                    {selectedProvider.models.map((model) => (
-                      <div className="settings-model-option" key={model.id} role="listitem">
-                        <div className="settings-model-option__body">
-                          <span className="settings-model-option__name">{model.name || model.code || '未命名模型'}</span>
-                          <code>{model.code || '未填写模型 ID'}</code>
-                        </div>
-                        <span className="settings-model-option__meta">
-                          <span>{model.maxOutputTokens}</span>
-                          {model.contextWindowTokens ? <span>{formatTokens(model.contextWindowTokens)} ctx</span> : null}
-                          {model.thinkingEnabled ? <span>思考</span> : null}
-                          {model.supportsImages ? <span>图片</span> : null}
-                        </span>
-                        <div className="settings-model-option__actions">
-                          <IconButton label="编辑模型" onClick={() => setEditingModel({ mode: 'edit', providerId: selectedProvider.id, modelId: model.id })}>
-                            <Pencil size={14} />
-                          </IconButton>
-                          <IconButton label="删除模型" variant="danger" disabled={selectedProvider.models.length <= 1} onClick={() => removeModel(selectedProvider.id, model.id)}>
-                            <Trash2 size={14} />
-                          </IconButton>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="settings-model-browser">
+                    <div className="settings-model-browser__head" aria-hidden="true">
+                      <span>模型</span>
+                      <span>能力与限制</span>
+                      <span>操作</span>
+                    </div>
+                    <div className="settings-model-browser__body" role="list" aria-label="模型列表">
+                      {selectedProvider.models.map((model) => (
+                        <ProviderModelRow
+                          key={model.id}
+                          canDelete={selectedProvider.models.length > 1}
+                          model={model}
+                          onDelete={() => removeModel(selectedProvider.id, model.id)}
+                          onEdit={() => setEditingModel({ mode: 'edit', providerId: selectedProvider.id, modelId: model.id })}
+                        />
+                      ))}
+                    </div>
                   </div>
                   {selectedFetchState.error ? <div className="settings-model-fetch-state settings-model-fetch-state--error">{selectedFetchState.error}</div> : null}
                   {!selectedFetchState.error && selectedFetchState.message ? <div className="settings-model-fetch-state">{selectedFetchState.message}</div> : null}
@@ -2053,7 +2070,7 @@ function ProviderSettings({
           </div>
         ) : (
           <div className="chat-user-settings__local-provider-card">
-            <EmptyState title="暂无厂商" />
+            <EmptyState title="暂无模型服务" />
           </div>
         )}
       </div>
@@ -2066,6 +2083,107 @@ function ProviderSettings({
           onConfirm={confirmModelReplacement}
         />
       ) : null}
+    </div>
+  );
+}
+
+function ProviderBrandIcon({ provider, size = 'default' }: { provider: ProviderConfigState; size?: 'default' | 'large' }) {
+  const brand = resolveProviderBrand(provider);
+  const classes = [
+    'chat-user-settings__provider-brand-mark',
+    size === 'large' ? 'is-large' : '',
+    brand?.monochrome ? 'is-monochrome' : '',
+    brand ? '' : 'is-fallback',
+  ].filter(Boolean).join(' ');
+
+  return (
+    <span className={classes} aria-hidden="true" title={brand?.label}>
+      {brand ? (
+        <>
+          <img alt="" className={brand.darkSrc ? 'is-light-variant' : undefined} draggable={false} src={brand.src} />
+          {brand.darkSrc ? <img alt="" className="is-dark-variant" draggable={false} src={brand.darkSrc} /> : null}
+        </>
+      ) : <span>{providerInitials(provider.name)}</span>}
+    </span>
+  );
+}
+
+function ProviderRailItem({
+  index,
+  provider,
+  selected,
+  onSelect,
+}: {
+  index: number;
+  provider: ProviderConfigState;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const name = provider.name || `服务 ${index + 1}`;
+  return (
+    <button
+      className={`chat-user-settings__local-provider-item ${selected ? 'is-active' : ''}`}
+      type="button"
+      aria-current={selected ? 'true' : undefined}
+      title={`${name} · ${providerProtocolLabel(provider.provider)} · ${provider.models.length} 个模型`}
+      onClick={onSelect}
+    >
+      <ProviderBrandIcon provider={provider} />
+      <span className="chat-user-settings__local-provider-item-body">
+        <span className="chat-user-settings__local-provider-item-main">
+          <span className="chat-user-settings__local-provider-item-name">{name}</span>
+          <span className={`chat-user-settings__local-provider-item-status ${provider.enabled ? 'is-enabled' : ''}`}>
+            <i aria-hidden="true" />
+            {provider.enabled ? '启用' : '停用'}
+          </span>
+        </span>
+        <span className="chat-user-settings__local-provider-item-meta">
+          <span>{providerProtocolLabel(provider.provider)}</span>
+          <i aria-hidden="true" />
+          <span>{`${provider.models.length} 个模型`}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ProviderModelRow({
+  canDelete,
+  model,
+  onDelete,
+  onEdit,
+}: {
+  canDelete: boolean;
+  model: ProviderModelConfig;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="settings-model-option" role="listitem">
+      <div className="settings-model-option__body">
+        <span className="settings-model-option__icon">
+          <Cpu size={14} />
+        </span>
+        <span className="settings-model-option__copy">
+          <span className="settings-model-option__name">{model.name || model.code || '未命名模型'}</span>
+          <code>{model.code || '未填写模型 ID'}</code>
+        </span>
+      </div>
+      <span className="settings-model-option__meta">
+        {model.enabled ? <span className="is-current">当前模型</span> : null}
+        {model.contextWindowTokens ? <span title="上下文窗口">{`${formatTokens(model.contextWindowTokens)} 上下文`}</span> : null}
+        <span title="最大输出 Token">{`${formatTokens(model.maxOutputTokens)} 输出`}</span>
+        {model.thinkingEnabled ? <span>思考</span> : null}
+        {model.supportsImages ? <span>视觉</span> : null}
+      </span>
+      <div className="settings-model-option__actions">
+        <IconButton label="编辑模型" onClick={onEdit}>
+          <Pencil size={14} />
+        </IconButton>
+        <IconButton label="删除模型" variant="danger" disabled={!canDelete} onClick={onDelete}>
+          <Trash2 size={14} />
+        </IconButton>
+      </div>
     </div>
   );
 }
@@ -2333,7 +2451,7 @@ function normalizeSettingsProviders(providers: ProviderConfigState[]): ProviderC
   const normalized = (providers.length ? providers : [defaultProviderConfig()]).map((provider) => ({
     ...provider,
     provider: normalizeProviderKind(provider.provider),
-    name: provider.name || 'Local provider',
+    name: provider.name || '模型服务',
     models: normalizeProviderModels(provider.models),
   }));
   return normalized.length ? normalized : [defaultProviderConfig()];
@@ -2351,7 +2469,7 @@ function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = fa
   return {
     ...model,
     id: model.id || modelIdFromCode(code),
-    name: model.name || code || 'New model',
+    name: model.name || code || '新模型',
     code,
     enabled: model.enabled ?? fallbackEnabled,
     maxOutputTokens: positiveInt(model.maxOutputTokens, DEFAULT_MODEL_MAX_OUTPUT_TOKENS),
@@ -2366,7 +2484,7 @@ function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = fa
 function defaultProviderConfig(): ProviderConfigState {
   return {
     id: uniqueLocalId('provider'),
-    name: 'Local provider',
+    name: '新模型服务',
     provider: DEFAULT_PROVIDER_KIND,
     baseUrl: 'http://127.0.0.1:11434/v1',
     enabled: true,
@@ -2379,7 +2497,7 @@ function defaultProviderConfig(): ProviderConfigState {
 function defaultProviderModel(code: string, enabled = true): ProviderModelConfig {
   return {
     id: modelIdFromCode(code),
-    name: code || 'New model',
+    name: code || '新模型',
     code,
     enabled,
     maxOutputTokens: DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
