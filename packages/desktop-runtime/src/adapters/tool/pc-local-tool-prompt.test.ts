@@ -12,6 +12,8 @@ describe('pcLocalToolPrompt', () => {
     expect(prompt).not.toContain('git_log');
     expect(prompt).not.toContain('git_show');
     expect(prompt).not.toContain('file deletion');
+    expect(prompt).toContain('execute them in parallel');
+    expect(prompt).toContain('Keep dependent calls sequential');
   });
 
   it('includes focused mutation and shell policy when those tools are advertised', () => {
@@ -60,13 +62,16 @@ describe('pcLocalToolPrompt', () => {
     expect(prompt).toContain('workspace-relative paths');
   });
 
-  it('states the default search_text regex semantics', () => {
+  it('states the search_text regex and parallel batching semantics', () => {
     const prompt = pcLocalToolPrompt([tool('search_text')]);
 
     expect(prompt).toContain('regular expression by default');
     expect(prompt).toContain('regex to false');
     expect(prompt).toContain('runtime-managed ripgrep path');
     expect(prompt).toContain('instead of shell grep/find');
+    expect(prompt).toContain('issue all of them together in the same response');
+    expect(prompt).toContain('runtime executes the calls in parallel');
+    expect(prompt).toContain('otherwise keep them as separate search_text calls');
   });
 });
 

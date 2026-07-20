@@ -42,6 +42,7 @@ export function pcLocalToolPrompt(
     lines.push(
       '- For questions about current workspace contents, inspect with read-only tools first.',
       '- Inspect only the files and snippets needed for the task; do not read every file or entire large files by default.',
+      '- When several read-only inspections are independent, issue their tool calls together in the same response so the runtime can execute them in parallel. Keep dependent calls sequential.',
     );
   }
 
@@ -49,6 +50,8 @@ export function pcLocalToolPrompt(
     lines.push(
       '- Prefer search_text for workspace content search instead of shell grep/find. It uses the runtime-managed ripgrep path and shared ignore policy.',
       '- search_text treats query as a regular expression by default. Set regex to false only for an exact literal search.',
+      '- When multiple search_text queries are independent, issue all of them together in the same response; do not wait for one result before issuing the next. The runtime executes the calls in parallel.',
+      '- Combine alternatives into one regular expression only when the searches share scope and options and do not need separate result attribution; otherwise keep them as separate search_text calls.',
     );
   }
 

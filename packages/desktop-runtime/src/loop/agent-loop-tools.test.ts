@@ -1498,6 +1498,41 @@ describe('agent loop tools', () => {
     expect(saved?.messages.at(-1)?.content).toContain('parallel results received');
   });
 
+  it('runs search_text calls emitted in the same model response in parallel', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Parallel searches', projectId: 'project_1' });
+    const modelClient = new ParallelSearchModelClient();
+    const toolHost = new ParallelReadToolHost();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost,
+      configStore: new SandboxWorkspaceWriteConfigStore(),
+    });
+
+    const turn = loop.sendTurn(thread.id, { input: 'search for both independent terms' });
+    let waitError: unknown;
+    try {
+      await waitForToolStarts(toolHost, 2);
+    } catch (error) {
+      waitError = error;
+    } finally {
+      toolHost.releaseAll();
+    }
+    await turn;
+    if (waitError) throw waitError;
+
+    const saved = await threadStore.getThread(thread.id);
+    expect(toolHost.started).toEqual(['search_text', 'search_text']);
+    expect(modelClient.requests).toHaveLength(2);
+    expect(saved?.messages.filter((message) => message.role === 'tool').map((message) => message.toolName)).toEqual(['search_text', 'search_text']);
+    expect(saved?.messages.at(-1)?.content).toContain('parallel search results received');
+  });
+
   it('honors tool runtime profile when deciding parallel execution', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -6097,6 +6132,27 @@ class ParallelReadModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'parallel results received' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ParallelSearchModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [
+          { id: 'call_search_first', name: 'search_text', arguments: '{"query":"first"}' },
+          { id: 'call_search_second', name: 'search_text', arguments: '{"query":"second"}' },
+        ],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'parallel search results received' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

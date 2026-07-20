@@ -170,7 +170,7 @@ export const LOCAL_TOOL_DEFINITIONS = [
   ),
   localTool(
     'search_text',
-    'Search text in workspace files, respecting ignore files and common generated/sensitive paths.',
+    'Search text in workspace files with the runtime-managed ripgrep engine, respecting ignore files and common generated/sensitive paths. Issue independent search_text calls together in one response so the runtime can execute them in parallel.',
     {
       query: {
         type: 'string',
