@@ -8381,9 +8381,11 @@ class CapturingUsageStore implements UsageStore {
       records: this.records,
       summary: {
         inputTokens: 0,
+        cachedInputTokens: 0,
         outputTokens: 0,
         totalTokens: 0,
         recordCount: this.records.length,
+        byDay: [],
         byProvider: [],
         byModel: [],
       },

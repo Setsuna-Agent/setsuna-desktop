@@ -7,7 +7,7 @@ import type {
   RuntimeUsageSummary,
 } from '@setsuna-desktop/contracts';
 
-type UsageTotals = Pick<RuntimeUsageSummary, 'inputTokens' | 'outputTokens' | 'totalTokens'>;
+type UsageTotals = Pick<RuntimeUsageSummary, 'inputTokens' | 'cachedInputTokens' | 'outputTokens' | 'totalTokens'>;
 type UsageAggregate = UsageTotals & { recordCount: number };
 
 type LiveUsageBucket = UsageAggregate & {
@@ -45,6 +45,7 @@ export function chatThreadUsageForDisplay(
       const existing = liveByKey.get(key) ?? {
         createdAt: count.createdAt,
         inputTokens: 0,
+        cachedInputTokens: 0,
         outputTokens: 0,
         recordCount: 0,
         totalTokens: 0,
@@ -55,6 +56,7 @@ export function chatThreadUsageForDisplay(
         ...existing,
         createdAt: count.createdAt,
         inputTokens: existing.inputTokens + tokenCount(count.usage.inputTokens),
+        cachedInputTokens: existing.cachedInputTokens + tokenCount(count.usage.cachedInputTokens),
         outputTokens: existing.outputTokens + tokenCount(count.usage.outputTokens),
         recordCount: existing.recordCount + 1,
         totalTokens: existing.totalTokens + tokenCount(count.usage.totalTokens),
@@ -126,9 +128,10 @@ function aggregateStoredUsage(records: RuntimeUsageRecord[]): Map<string, UsageA
   const byKey = new Map<string, UsageAggregate>();
   for (const record of records) {
     const key = usageIdentity(record.turnId, record);
-    const existing = byKey.get(key) ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0, recordCount: 0 };
+    const existing = byKey.get(key) ?? { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, recordCount: 0 };
     byKey.set(key, {
       inputTokens: existing.inputTokens + tokenCount(record.inputTokens),
+      cachedInputTokens: existing.cachedInputTokens + tokenCount(record.cachedInputTokens),
       outputTokens: existing.outputTokens + tokenCount(record.outputTokens),
       totalTokens: existing.totalTokens + tokenCount(record.totalTokens),
       recordCount: existing.recordCount + 1,
@@ -145,13 +148,14 @@ function usageIdentity(turnId: string, usage: RuntimeUsage): string {
 function usageDelta(live: UsageTotals, stored: UsageTotals | undefined): UsageTotals {
   return {
     inputTokens: Math.max(0, live.inputTokens - (stored?.inputTokens ?? 0)),
+    cachedInputTokens: Math.max(0, live.cachedInputTokens - (stored?.cachedInputTokens ?? 0)),
     outputTokens: Math.max(0, live.outputTokens - (stored?.outputTokens ?? 0)),
     totalTokens: Math.max(0, live.totalTokens - (stored?.totalTokens ?? 0)),
   };
 }
 
 function hasUsage(usage: UsageTotals): boolean {
-  return usage.inputTokens > 0 || usage.outputTokens > 0 || usage.totalTokens > 0;
+  return usage.inputTokens > 0 || usage.cachedInputTokens > 0 || usage.outputTokens > 0 || usage.totalTokens > 0;
 }
 
 function addRecordsToSummary(
@@ -160,30 +164,37 @@ function addRecordsToSummary(
 ): RuntimeUsageSummary {
   const next: RuntimeUsageSummary = {
     inputTokens: summary.inputTokens,
+    cachedInputTokens: summary.cachedInputTokens,
     outputTokens: summary.outputTokens,
     totalTokens: summary.totalTokens,
     recordCount: summary.recordCount,
+    byDay: summary.byDay.map((bucket) => ({ ...bucket })),
     byProvider: summary.byProvider.map((bucket) => ({ ...bucket })),
     byModel: summary.byModel.map((bucket) => ({ ...bucket })),
   };
   for (const { record, recordCount } of records) {
     next.inputTokens += tokenCount(record.inputTokens);
+    next.cachedInputTokens += tokenCount(record.cachedInputTokens);
     next.outputTokens += tokenCount(record.outputTokens);
     next.totalTokens += tokenCount(record.totalTokens);
     next.recordCount += recordCount;
+    const dateKey = localUsageDateKey(record.createdAt);
+    if (dateKey) addToBucket(next.byDay, dateKey, record, recordCount);
     addToBucket(next.byProvider, record.provider ?? 'unknown', record, recordCount);
     addToBucket(next.byModel, record.model ?? 'unknown', record, recordCount);
   }
+  next.byDay.sort((a, b) => a.key.localeCompare(b.key));
   return next;
 }
 
 function addToBucket(buckets: RuntimeUsageBucket[], key: string, usage: RuntimeUsage, recordCount: number): void {
   let bucket = buckets.find((candidate) => candidate.key === key);
   if (!bucket) {
-    bucket = { key, inputTokens: 0, outputTokens: 0, totalTokens: 0, recordCount: 0 };
+    bucket = { key, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, recordCount: 0 };
     buckets.push(bucket);
   }
   bucket.inputTokens += tokenCount(usage.inputTokens);
+  bucket.cachedInputTokens += tokenCount(usage.cachedInputTokens);
   bucket.outputTokens += tokenCount(usage.outputTokens);
   bucket.totalTokens += tokenCount(usage.totalTokens);
   bucket.recordCount += recordCount;
@@ -192,12 +203,23 @@ function addToBucket(buckets: RuntimeUsageBucket[], key: string, usage: RuntimeU
 function emptyUsageSummary(): RuntimeUsageSummary {
   return {
     inputTokens: 0,
+    cachedInputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
     recordCount: 0,
+    byDay: [],
     byProvider: [],
     byModel: [],
   };
+}
+
+function localUsageDateKey(value: string): string | undefined {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function tokenCount(value: number | undefined): number {

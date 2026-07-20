@@ -127,11 +127,11 @@
 }
 
 .desktop-settings-panel .chat-user-settings__content > .chat-user-settings__usage-section {
-  width: min(920px, 100%);
+  width: min(1040px, 100%);
 }
 
 .desktop-settings-panel .chat-user-settings__content--usage .chat-user-settings__page-heading {
-  width: min(920px, 100%);
+  width: min(1040px, 100%);
 }
 
 .desktop-settings-panel .chat-user-settings__page-heading {
@@ -261,141 +261,545 @@
 
 .desktop-settings-panel .settings-usage-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
   min-width: 0;
 }
 
 .desktop-settings-panel .settings-usage-metric,
-.desktop-settings-panel .settings-usage-breakdown,
-.desktop-settings-panel .settings-usage-records {
+.desktop-settings-panel .settings-usage-card {
   border: 1px solid var(--chat-settings-divider);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--app-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 4%, transparent);
   overflow: hidden;
 }
 
 .desktop-settings-panel .settings-usage-metric {
+  --settings-usage-tone: var(--app-primary);
+
+  position: relative;
   display: grid;
-  gap: 4px;
+  min-height: 104px;
+  align-content: start;
+  gap: 3px;
   min-width: 0;
-  padding: 12px;
+  padding: 11px 14px 10px;
 }
 
-.desktop-settings-panel .settings-usage-metric span,
-.desktop-settings-panel .settings-usage-breakdown header span,
-.desktop-settings-panel .settings-usage-records header span,
-.desktop-settings-panel .settings-usage-record div span {
-  overflow: hidden;
+.desktop-settings-panel .settings-usage-metric::after {
+  position: absolute;
+  top: -38px;
+  right: -24px;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--settings-usage-tone) 8%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.desktop-settings-panel .settings-usage-metric[data-tone='input'] {
+  --settings-usage-tone: #2563eb;
+}
+
+.desktop-settings-panel .settings-usage-metric[data-tone='output'] {
+  --settings-usage-tone: #7c3aed;
+}
+
+.desktop-settings-panel .settings-usage-metric[data-tone='cache'] {
+  --settings-usage-tone: #d97706;
+}
+
+.desktop-settings-panel .settings-usage-metric[data-tone='calls'] {
+  --settings-usage-tone: #0f9f6e;
+}
+
+.desktop-settings-panel .settings-usage-metric__heading {
+  display: flex;
+  z-index: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .settings-usage-metric__icon,
+.desktop-settings-panel .settings-usage-card__icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.desktop-settings-panel .settings-usage-metric__icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--settings-usage-tone);
+  background: color-mix(in srgb, var(--settings-usage-tone) 10%, var(--app-surface));
+}
+
+.desktop-settings-panel .settings-usage-metric__heading > span:last-child {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .desktop-settings-panel .settings-usage-metric strong {
+  z-index: 1;
   overflow: hidden;
   color: var(--app-text);
   font-family: var(--app-code-font-family);
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 500;
-  line-height: 22px;
+  letter-spacing: -0.04em;
+  line-height: 27px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-metric small {
+  z-index: 1;
+  overflow: hidden;
+  color: var(--app-text-subtle);
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-card__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 66px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .settings-usage-card__icon {
+  color: #2563eb;
+  background: color-mix(in srgb, #2563eb 9%, var(--app-surface));
+}
+
+.desktop-settings-panel .settings-usage-card__header > div:not(.settings-usage-calendar__summary) {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.desktop-settings-panel .settings-usage-card__header strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 19px;
+}
+
+.desktop-settings-panel .settings-usage-card__header > div > span,
+.desktop-settings-panel .settings-usage-card__count {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-card__count {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--app-surface-muted);
+}
+
+.desktop-settings-panel .settings-usage-card__empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  color: var(--app-text-subtle);
+  font-size: 11px;
+}
+
+.desktop-settings-panel .settings-usage-calendar {
+  --settings-usage-calendar-gap: 3px;
+  --settings-usage-calendar-min-width: 720px;
+  --settings-usage-calendar-color: #3b82f6;
+}
+
+.desktop-settings-panel .settings-usage-calendar__summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-usage-calendar__summary span {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-calendar__summary strong {
+  margin-right: 3px;
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.desktop-settings-panel .settings-usage-calendar__scroller {
+  min-width: 0;
+  padding: 16px 16px 13px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
+}
+
+.desktop-settings-panel .settings-usage-calendar__canvas {
+  width: 100%;
+  min-width: var(--settings-usage-calendar-min-width);
+}
+
+.desktop-settings-panel .settings-usage-calendar__months,
+.desktop-settings-panel .settings-usage-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(53, minmax(0, 1fr));
+  column-gap: var(--settings-usage-calendar-gap);
+  width: 100%;
+}
+
+.desktop-settings-panel .settings-usage-calendar__months {
+  height: 19px;
+}
+
+.desktop-settings-panel .settings-usage-calendar__months span {
+  width: max-content;
+  color: var(--app-text-muted);
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.desktop-settings-panel .settings-usage-calendar__week {
+  display: grid;
+  grid-template-rows: repeat(7, auto);
+  row-gap: var(--settings-usage-calendar-gap);
+}
+
+.desktop-settings-panel .settings-usage-calendar__day,
+.desktop-settings-panel .settings-usage-calendar__legend i {
+  display: block;
+  border-radius: 3px;
+  background: var(--app-surface-muted);
+}
+
+.desktop-settings-panel .settings-usage-calendar__day {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.desktop-settings-panel .settings-usage-calendar__day[data-level='1'],
+.desktop-settings-panel .settings-usage-calendar__legend i[data-level='1'] {
+  background: color-mix(in srgb, var(--settings-usage-calendar-color) 22%, var(--app-surface));
+}
+
+.desktop-settings-panel .settings-usage-calendar__day[data-level='2'],
+.desktop-settings-panel .settings-usage-calendar__legend i[data-level='2'] {
+  background: color-mix(in srgb, var(--settings-usage-calendar-color) 42%, var(--app-surface));
+}
+
+.desktop-settings-panel .settings-usage-calendar__day[data-level='3'],
+.desktop-settings-panel .settings-usage-calendar__legend i[data-level='3'] {
+  background: color-mix(in srgb, var(--settings-usage-calendar-color) 68%, var(--app-surface));
+}
+
+.desktop-settings-panel .settings-usage-calendar__day[data-level='4'],
+.desktop-settings-panel .settings-usage-calendar__legend i[data-level='4'] {
+  background: var(--settings-usage-calendar-color);
+}
+
+.desktop-settings-panel .settings-usage-calendar__day.is-outside {
+  background: transparent;
+}
+
+.desktop-settings-panel .settings-usage-calendar__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 39px;
+  padding: 8px 16px 10px;
+  color: var(--app-text-muted);
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.desktop-settings-panel .settings-usage-calendar__legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.desktop-settings-panel .settings-usage-calendar__legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
 }
 
 .desktop-settings-panel .settings-usage-breakdowns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__item {
+  display: grid;
+  grid-template-columns: 16px 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 59px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .settings-usage-breakdown__item:last-child {
+  border-bottom: 0;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__rank {
+  width: 16px;
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 9px;
+  text-align: center;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__item:first-child .settings-usage-breakdown__rank {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__brand {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--app-surface-muted);
+}
+
+.desktop-settings-panel .settings-usage-breakdown__main,
+.desktop-settings-panel .settings-usage-breakdown__value {
+  display: grid;
+  min-width: 0;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__main {
+  gap: 7px;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   min-width: 0;
 }
 
-.desktop-settings-panel .settings-usage-breakdown header,
-.desktop-settings-panel .settings-usage-records header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 40px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--chat-settings-divider);
-}
-
-.desktop-settings-panel .settings-usage-breakdown header strong,
-.desktop-settings-panel .settings-usage-records header strong {
-  color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.desktop-settings-panel .settings-usage-breakdown-list,
-.desktop-settings-panel .settings-usage-record-list {
-  display: grid;
-  min-width: 0;
-}
-
-.desktop-settings-panel .settings-usage-breakdown-row,
-.desktop-settings-panel .settings-usage-record {
-  display: grid;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 38px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--chat-settings-divider);
-}
-
-.desktop-settings-panel .settings-usage-breakdown-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.desktop-settings-panel .settings-usage-breakdown-row:last-child,
-.desktop-settings-panel .settings-usage-record:last-child {
-  border-bottom: 0;
-}
-
-.desktop-settings-panel .settings-usage-breakdown-row span {
+.desktop-settings-panel .settings-usage-breakdown__label-row strong {
   min-width: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 500;
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.desktop-settings-panel .settings-usage-breakdown-row code,
-.desktop-settings-panel .settings-usage-record code,
-.desktop-settings-panel .settings-usage-record > span {
+.desktop-settings-panel .settings-usage-breakdown__label-row span,
+.desktop-settings-panel .settings-usage-breakdown__value span {
   color: var(--app-text-muted);
+  font-size: 9px;
+  line-height: 13px;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__main progress {
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  overflow: hidden;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__main progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--app-surface-muted);
+}
+
+.desktop-settings-panel .settings-usage-breakdown__main progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: color-mix(in srgb, #3b82f6 76%, var(--app-text));
+}
+
+.desktop-settings-panel .settings-usage-breakdown__value {
+  justify-items: end;
+  gap: 1px;
+}
+
+.desktop-settings-panel .settings-usage-breakdown__value strong {
+  color: var(--app-text);
   font-family: var(--app-code-font-family);
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 500;
   line-height: 15px;
   white-space: nowrap;
 }
 
-.desktop-settings-panel .settings-usage-record {
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  min-height: 46px;
+.desktop-settings-panel .settings-usage-records__scroller {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
-.desktop-settings-panel .settings-usage-record div {
-  display: grid;
-  gap: 2px;
+.desktop-settings-panel .settings-usage-records table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.desktop-settings-panel .settings-usage-records th,
+.desktop-settings-panel .settings-usage-records td {
+  padding: 0 16px;
+  text-align: left;
+}
+
+.desktop-settings-panel .settings-usage-records th {
+  height: 32px;
+  color: var(--app-text-subtle);
+  background: color-mix(in srgb, var(--app-surface-muted) 54%, var(--app-surface));
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+.desktop-settings-panel .settings-usage-records th:nth-child(1) {
+  width: 34%;
+}
+
+.desktop-settings-panel .settings-usage-records th:nth-child(2) {
+  width: 20%;
+}
+
+.desktop-settings-panel .settings-usage-records th:nth-child(3) {
+  width: 28%;
+}
+
+.desktop-settings-panel .settings-usage-records th:nth-child(4) {
+  width: 18%;
+}
+
+.desktop-settings-panel .settings-usage-records td {
+  height: 54px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+  color: var(--app-text);
+  font-size: 10px;
+  line-height: 15px;
+  vertical-align: middle;
+}
+
+.desktop-settings-panel .settings-usage-records tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.desktop-settings-panel .settings-usage-records__model {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   min-width: 0;
 }
 
-.desktop-settings-panel .settings-usage-record div strong {
+.desktop-settings-panel .settings-usage-records__model-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-muted);
+}
+
+.desktop-settings-panel .settings-usage-records__model strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--app-text);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
-  line-height: 16px;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-records__provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px 3px 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-records__provider > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-settings-panel .settings-usage-records__tokens {
+  display: block;
+  font-family: var(--app-code-font-family);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.desktop-settings-panel .settings-usage-records td small {
+  display: block;
+  margin-top: 1px;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 9px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-usage-records time {
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 9px;
   white-space: nowrap;
 }
 
@@ -2960,15 +3364,21 @@
     margin-left: 0;
   }
 
-  .desktop-settings-panel .settings-usage-summary,
+  .desktop-settings-panel .settings-usage-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .desktop-settings-panel .settings-usage-breakdowns {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .desktop-settings-panel .settings-usage-record {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    padding: 8px 12px;
+  .desktop-settings-panel .settings-usage-calendar__header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .desktop-settings-panel .settings-usage-calendar__summary {
+    grid-column: 2;
+    justify-content: flex-start;
   }
 
   .desktop-settings-panel .chat-user-settings__local-storage-control,

@@ -1053,9 +1053,11 @@ describe('runtime server', () => {
       records: [],
       summary: {
         inputTokens: 0,
+        cachedInputTokens: 0,
         outputTokens: 0,
         totalTokens: 0,
         recordCount: 0,
+        byDay: [],
         byProvider: [],
         byModel: [],
       },

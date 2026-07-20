@@ -16,6 +16,7 @@ describe('file usage store', () => {
       provider: 'openai-compatible',
       model: 'model-a',
       inputTokens: 10,
+      cachedInputTokens: 6,
       outputTokens: 20,
       totalTokens: 30,
     });
@@ -26,6 +27,7 @@ describe('file usage store', () => {
       provider: 'anthropic',
       model: 'model-b',
       inputTokens: 7,
+      cachedInputTokens: 3,
       outputTokens: 8,
       totalTokens: 15,
     });
@@ -35,13 +37,17 @@ describe('file usage store', () => {
 
     expect(all.summary).toMatchObject({
       inputTokens: 17,
+      cachedInputTokens: 9,
       outputTokens: 28,
       totalTokens: 45,
       recordCount: 2,
     });
     expect(all.summary.byProvider).toMatchObject([
-      { key: 'openai-compatible', totalTokens: 30, recordCount: 1 },
-      { key: 'anthropic', totalTokens: 15, recordCount: 1 },
+      { key: 'openai-compatible', cachedInputTokens: 6, totalTokens: 30, recordCount: 1 },
+      { key: 'anthropic', cachedInputTokens: 3, totalTokens: 15, recordCount: 1 },
+    ]);
+    expect(all.summary.byDay).toMatchObject([
+      { key: '2026-06-25', cachedInputTokens: 9, totalTokens: 45, recordCount: 2 },
     ]);
     expect(threadOnly.records).toHaveLength(1);
     expect(threadOnly.summary).toMatchObject({ totalTokens: 30, recordCount: 1 });

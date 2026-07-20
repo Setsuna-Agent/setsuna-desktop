@@ -164,11 +164,13 @@ function mergeAnthropicUsage(
 ): ReturnType<typeof normalizeAnthropicUsage> {
   if (!next) return previous;
   const inputTokens = next.inputTokens ?? previous?.inputTokens;
+  const cachedInputTokens = next.cachedInputTokens ?? previous?.cachedInputTokens;
   const outputTokens = next.outputTokens ?? previous?.outputTokens;
   return {
     ...previous,
     ...next,
     inputTokens,
+    cachedInputTokens,
     outputTokens,
     totalTokens: inputTokens !== undefined || outputTokens !== undefined
       ? (inputTokens ?? 0) + (outputTokens ?? 0)

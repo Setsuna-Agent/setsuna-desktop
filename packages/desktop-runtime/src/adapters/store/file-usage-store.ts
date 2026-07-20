@@ -100,26 +100,31 @@ function isLegacyProviderKind(value: string | undefined): value is ModelProvider
 function summarizeUsage(records: RuntimeUsageRecord[]): RuntimeUsageSummary {
   return {
     inputTokens: sum(records, 'inputTokens'),
+    cachedInputTokens: sum(records, 'cachedInputTokens'),
     outputTokens: sum(records, 'outputTokens'),
     totalTokens: sum(records, 'totalTokens'),
     recordCount: records.length,
+    byDay: bucket(records, (record) => localUsageDateKey(record.createdAt)).sort((a, b) => a.key.localeCompare(b.key)),
     byProvider: bucket(records, (record) => record.provider ?? 'unknown'),
     byModel: bucket(records, (record) => record.model ?? 'unknown'),
   };
 }
 
-function bucket(records: RuntimeUsageRecord[], keyFor: (record: RuntimeUsageRecord) => string): RuntimeUsageBucket[] {
+function bucket(records: RuntimeUsageRecord[], keyFor: (record: RuntimeUsageRecord) => string | undefined): RuntimeUsageBucket[] {
   const buckets = new Map<string, RuntimeUsageBucket>();
   for (const record of records) {
     const key = keyFor(record);
+    if (!key) continue;
     const existing = buckets.get(key) ?? {
       key,
       inputTokens: 0,
+      cachedInputTokens: 0,
       outputTokens: 0,
       totalTokens: 0,
       recordCount: 0,
     };
     existing.inputTokens += record.inputTokens ?? 0;
+    existing.cachedInputTokens += record.cachedInputTokens ?? 0;
     existing.outputTokens += record.outputTokens ?? 0;
     existing.totalTokens += record.totalTokens ?? 0;
     existing.recordCount += 1;
@@ -128,7 +133,7 @@ function bucket(records: RuntimeUsageRecord[], keyFor: (record: RuntimeUsageReco
   return [...buckets.values()].sort((a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key));
 }
 
-function sum(records: RuntimeUsageRecord[], key: 'inputTokens' | 'outputTokens' | 'totalTokens'): number {
+function sum(records: RuntimeUsageRecord[], key: 'inputTokens' | 'cachedInputTokens' | 'outputTokens' | 'totalTokens'): number {
   return records.reduce((total, record) => total + (record[key] ?? 0), 0);
 }
 
@@ -136,6 +141,7 @@ function normalizeRecord(record: RuntimeUsageRecord): RuntimeUsageRecord {
   return {
     ...record,
     inputTokens: numberValue(record.inputTokens),
+    cachedInputTokens: numberValue(record.cachedInputTokens),
     outputTokens: numberValue(record.outputTokens),
     totalTokens: numberValue(record.totalTokens),
   };
@@ -143,6 +149,15 @@ function normalizeRecord(record: RuntimeUsageRecord): RuntimeUsageRecord {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function localUsageDateKey(value: string): string | undefined {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function clampLimit(value: unknown): number {

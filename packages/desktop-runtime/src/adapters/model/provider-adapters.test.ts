@@ -37,7 +37,7 @@ describe('provider model adapters', () => {
         [
           'data: {"choices":[{"delta":{"content":"Hel"}}]}',
           '',
-          'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}',
+          'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"prompt_tokens_details":{"cached_tokens":1},"completion_tokens":3,"total_tokens":5}}',
           '',
           'data: [DONE]',
           '',
@@ -56,7 +56,7 @@ describe('provider model adapters', () => {
     expect(body.max_tokens).toBe(1234);
     expect(events.filter((event) => event.type === 'text_delta').map((event) => event.text).join('')).toBe('Hello');
     expect(events.find((event) => event.type === 'usage')).toMatchObject({
-      usage: { providerId: 'provider-1', provider: 'Provider 1', totalTokens: 5 },
+      usage: { providerId: 'provider-1', provider: 'Provider 1', cachedInputTokens: 1, totalTokens: 5 },
     });
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'stop' });
   });
@@ -122,6 +122,26 @@ describe('provider model adapters', () => {
     expect(events.find((event) => event.type === 'tool_calls')).toEqual({
       type: 'tool_calls',
       toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+    });
+  });
+
+  it('preserves cache hits reported through the AI SDK adapter', async () => {
+    const client = new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch([
+        'data: {"choices":[{"delta":{"content":"Cached"}}]}',
+        '',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"prompt_tokens_details":{"cached_tokens":7},"completion_tokens":2,"total_tokens":12}}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n'), {}),
+    );
+
+    const events = await collect(client);
+
+    expect(events.find((event) => event.type === 'usage')).toMatchObject({
+      usage: { inputTokens: 10, cachedInputTokens: 7, outputTokens: 2, totalTokens: 12 },
     });
   });
 
@@ -362,7 +382,7 @@ describe('provider model adapters', () => {
           'data: {"type":"response.output_text.delta","delta":"Hi"}',
           '',
           'event: response.completed',
-          'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":4,"output_tokens":2,"total_tokens":6}}}',
+          'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":3},"output_tokens":2,"total_tokens":6}}}',
           '',
         ].join('\n'),
         captured,
@@ -376,7 +396,7 @@ describe('provider model adapters', () => {
     expect(body.instructions).toBe('System prompt');
     expect(body.input).toEqual([{ role: 'user', content: 'Hello' }]);
     expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Hi' });
-    expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { totalTokens: 6 } });
+    expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { cachedInputTokens: 3, totalTokens: 6 } });
   });
 
   it('preserves developer authority without elevating user context across providers', async () => {
@@ -875,7 +895,7 @@ describe('provider model adapters', () => {
       fakeFetch(
         [
           'event: message_start',
-          'data: {"type":"message_start","message":{"usage":{"input_tokens":3,"output_tokens":0}}}',
+          'data: {"type":"message_start","message":{"usage":{"input_tokens":3,"cache_read_input_tokens":4,"cache_creation_input_tokens":7,"output_tokens":0}}}',
           '',
           'event: content_block_delta',
           'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Claude"}}',
@@ -901,7 +921,7 @@ describe('provider model adapters', () => {
     expect(body.system).toBe('System prompt');
     expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Claude' });
     expect(events.find((event) => event.type === 'usage')).toMatchObject({
-      usage: { providerId: 'provider-1', provider: 'Provider 1', inputTokens: 3, outputTokens: 5, totalTokens: 8 },
+      usage: { providerId: 'provider-1', provider: 'Provider 1', inputTokens: 14, cachedInputTokens: 4, outputTokens: 5, totalTokens: 19 },
     });
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'end_turn' });
   });

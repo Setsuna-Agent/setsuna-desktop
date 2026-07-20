@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Archive, ArchiveRestore, BadgeCheck, Bold, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Library, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
-import type { BrandIconConfig, ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeDesktopSettings, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { Archive, BadgeCheck, Bold, Brain, ChevronRight, CircleGauge, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Library, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, Type, Undo2, Wrench, X } from 'lucide-react';
+import type { BrandIconConfig, ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeDesktopSettings, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
@@ -18,15 +18,16 @@ import { ProviderModelReplacementDialog } from './ProviderModelReplacementDialog
 import { resolveAutomaticModelBrand, resolveAutomaticProviderBrand, resolveModelBrand, resolveProviderBrand } from './providerBranding.js';
 import { providerModelReplacementDecision } from './providerModelReplacement.js';
 import { WorkspaceDependenciesSettings } from './WorkspaceDependenciesSettings.js';
+import { UsageSettings } from './usage/UsageSettings.js';
 
 type SettingsSectionId = 'general' | 'personalization' | 'localLlm' | 'usage' | 'archives' | 'runtime' | 'about';
 type RuntimePreferenceInput = Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>;
 
 const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
   { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
-  { id: 'personalization', label: '个性化', icon: <Pencil size={14} /> },
+  { id: 'personalization', label: '个性化', icon: <Sparkles size={14} /> },
   { id: 'localLlm', label: '模型服务', icon: <HardDrive size={14} /> },
-  { id: 'usage', label: '用量', icon: <Database size={14} /> },
+  { id: 'usage', label: '用量统计', icon: <CircleGauge size={14} /> },
   { id: 'archives', label: '归档对话', icon: <Archive size={14} /> },
   { id: 'runtime', label: '高级设置', icon: <Wrench size={14} /> },
   { id: 'about', label: '关于', icon: <Info size={14} /> },
@@ -36,7 +37,7 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
   general: '通用',
   personalization: '个性化',
   localLlm: '模型服务',
-  usage: '用量',
+  usage: '用量统计',
   archives: '归档对话',
   runtime: '高级设置',
   about: '关于',
@@ -44,8 +45,10 @@ const settingsSectionLabels: Record<SettingsSectionId, string> = {
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
 const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
+const EMPTY_PROVIDER_CONFIGS: ProviderConfigState[] = [];
 const settingsSectionDescriptions: Partial<Record<SettingsSectionId, string>> = {
   localLlm: '接入并管理用于对话与自动化任务的模型服务。',
+  usage: '追踪模型调用、Token 消耗与过去一年的活跃趋势。',
 };
 
 type SettingsChoiceOption<TValue extends string> = {
@@ -153,7 +156,7 @@ export function SettingsPage({
         <EmptyState title="Config unavailable" />
       )
     ) : activeSection === 'usage' ? (
-      <UsageSettings usage={usage} />
+      <UsageSettings providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS} usage={usage} />
     ) : activeSection === 'archives' ? (
       <ArchivedThreadsSettings threads={archivedThreads} onDeleteAll={onDeleteAllArchivedThreads} onDelete={onDeleteArchivedThread} onRestore={onRestoreArchivedThread} />
     ) : activeSection === 'personalization' ? (
@@ -286,7 +289,7 @@ export function ArchivedThreadsSettings({
                   <strong title={thread.title}>{thread.title || '未命名对话'}</strong>
                   <small>{thread.messageCount} 条消息 · 更新于 {formatMemoryDate(thread.updatedAt)}</small>
                 </span>
-                <Button icon={<ArchiveRestore size={14} />} disabled={busy} onClick={() => void runAction(thread.id, () => onRestore(thread.id))}>恢复</Button>
+                <Button icon={<Undo2 size={14} />} disabled={busy} onClick={() => void runAction(thread.id, () => onRestore(thread.id))}>恢复</Button>
                 <Popconfirm title={`永久删除“${thread.title || '未命名对话'}”？`} description="此操作不可撤销。" placement="topRight" okText="永久删除" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={() => runAction(thread.id, () => onDelete(thread.id))}>
                   <IconButton label={`永久删除 ${thread.title || '未命名对话'}`} variant="danger" disabled={busy}><Trash2 size={14} /></IconButton>
                 </Popconfirm>
@@ -1555,77 +1558,6 @@ function LocalModelSettings({
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__local-llm-section">
       <ProviderSettings config={config} onFetchModels={onFetchModels} onSave={onSave} onSaveStateChange={onSaveStateChange} />
     </div>
-  );
-}
-
-function UsageSettings({ usage }: { usage: RuntimeUsageResponse | null }) {
-  const summary = usage?.summary;
-  const records = usage?.records ?? [];
-  return (
-    <div className="chat-user-settings__section chat-user-settings__usage-section">
-      <div className="settings-usage-summary">
-        <UsageMetric label="总计" value={formatTokens(summary?.totalTokens ?? 0)} />
-        <UsageMetric label="输入" value={formatTokens(summary?.inputTokens ?? 0)} />
-        <UsageMetric label="输出" value={formatTokens(summary?.outputTokens ?? 0)} />
-        <UsageMetric label="次数" value={`${summary?.recordCount ?? 0}`} />
-      </div>
-      <div className="settings-usage-breakdowns">
-        <UsageBreakdown title="厂商" buckets={summary?.byProvider ?? []} empty="暂无厂商用量" />
-        <UsageBreakdown title="模型" buckets={summary?.byModel ?? []} empty="暂无模型用量" />
-      </div>
-      <section className="settings-usage-records">
-        <header>
-          <strong>最近调用</strong>
-          <span>{records.length ? `${records.length} 条` : '暂无记录'}</span>
-        </header>
-        {records.length ? (
-          <div className="settings-usage-record-list">
-            {records.slice(0, 12).map((record) => (
-              <div className="settings-usage-record" key={record.id}>
-                <div>
-                  <strong>{record.model || 'unknown model'}</strong>
-                  <span>{record.provider || 'unknown provider'}</span>
-                </div>
-                <code>{formatMemoryDate(record.createdAt)}</code>
-                <span>{formatTokens(record.totalTokens ?? 0)}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="暂无用量记录" />
-        )}
-      </section>
-    </div>
-  );
-}
-
-function UsageMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="settings-usage-metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function UsageBreakdown({ title, buckets, empty }: { title: string; buckets: RuntimeUsageBucket[]; empty: string }) {
-  return (
-    <section className="settings-usage-breakdown">
-      <header>
-        <strong>{title}</strong>
-        <span>{buckets.length ? `${buckets.length} 项` : empty}</span>
-      </header>
-      {buckets.length ? (
-        <div className="settings-usage-breakdown-list">
-          {buckets.slice(0, 8).map((bucket) => (
-            <div className="settings-usage-breakdown-row" key={bucket.key}>
-              <span title={bucket.key}>{bucket.key || 'unknown'}</span>
-              <code>{formatTokens(bucket.totalTokens)}</code>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </section>
   );
 }
 

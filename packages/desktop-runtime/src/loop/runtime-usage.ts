@@ -4,6 +4,7 @@ import type { RuntimeUsage } from '@setsuna-desktop/contracts';
 export function addRuntimeUsage(previous: RuntimeUsage | undefined, next: RuntimeUsage | undefined): RuntimeUsage | undefined {
   if (!next) return previous ? { ...previous } : undefined;
   const inputTokens = sumTokenCounts(previous?.inputTokens, next.inputTokens);
+  const cachedInputTokens = sumTokenCounts(previous?.cachedInputTokens, next.cachedInputTokens);
   const outputTokens = sumTokenCounts(previous?.outputTokens, next.outputTokens);
   const totalTokens = sumTokenCounts(
     previous ? reportedRuntimeUsageTokenCount(previous) : undefined,
@@ -13,6 +14,7 @@ export function addRuntimeUsage(previous: RuntimeUsage | undefined, next: Runtim
     ...previous,
     ...next,
     ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(cachedInputTokens === undefined ? {} : { cachedInputTokens }),
     ...(outputTokens === undefined ? {} : { outputTokens }),
     ...(totalTokens === undefined ? {} : { totalTokens }),
   };

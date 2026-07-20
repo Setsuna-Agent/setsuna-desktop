@@ -136,6 +136,7 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
         type: 'usage',
         usage: {
           inputTokens: usage.inputTokens,
+          cachedInputTokens: usage.inputTokenDetails.cacheReadTokens,
           outputTokens: usage.outputTokens,
           totalTokens: usage.totalTokens,
           providerId: this.provider.id,

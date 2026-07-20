@@ -5,18 +5,19 @@ import { chatThreadUsageForDisplay } from './chatThreadUsage.js';
 describe('chat thread usage projection', () => {
   it('shows accumulated token counts before a turn is settled', () => {
     const usage = chatThreadUsageForDisplay(null, runtimeThread('in_progress', [
-      tokenCount('2026-07-16T00:00:01.000Z', 100, 20),
-      tokenCount('2026-07-16T00:00:02.000Z', 130, 30),
+      tokenCount('2026-07-16T00:00:01.000Z', 100, 20, 70),
+      tokenCount('2026-07-16T00:00:02.000Z', 130, 30, 80),
     ]));
 
     expect(usage?.summary).toMatchObject({
       inputTokens: 230,
+      cachedInputTokens: 150,
       outputTokens: 50,
       totalTokens: 280,
       recordCount: 2,
     });
     expect(usage?.summary.byProvider).toEqual([
-      { key: 'Kimi', inputTokens: 230, outputTokens: 50, totalTokens: 280, recordCount: 2 },
+      { key: 'Kimi', inputTokens: 230, cachedInputTokens: 150, outputTokens: 50, totalTokens: 280, recordCount: 2 },
     ]);
   });
 
@@ -150,11 +151,12 @@ function samplingStep(index: number): NonNullable<NonNullable<RuntimeThread['tur
   };
 }
 
-function tokenCount(createdAt: string, inputTokens: number, outputTokens: number) {
+function tokenCount(createdAt: string, inputTokens: number, outputTokens: number, cachedInputTokens = 0) {
   return {
     createdAt,
     usage: {
       inputTokens,
+      cachedInputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
       providerId: 'kimi',
@@ -171,6 +173,7 @@ function usageRecord(id: string, inputTokens: number, outputTokens: number): Run
     turnId: 'turn_1',
     createdAt: '2026-07-16T00:00:01.500Z',
     inputTokens,
+    cachedInputTokens: 0,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     providerId: 'kimi',
@@ -182,7 +185,7 @@ function usageRecord(id: string, inputTokens: number, outputTokens: number): Run
 function emptyStoredUsage(): RuntimeUsageResponse {
   return {
     records: [],
-    summary: { inputTokens: 0, outputTokens: 0, totalTokens: 0, recordCount: 0, byProvider: [], byModel: [] },
+    summary: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, recordCount: 0, byDay: [], byProvider: [], byModel: [] },
   };
 }
 
@@ -191,9 +194,11 @@ function storedUsage(...records: RuntimeUsageRecord[]): RuntimeUsageResponse {
     records,
     summary: {
       inputTokens: records.reduce((total, record) => total + (record.inputTokens ?? 0), 0),
+      cachedInputTokens: records.reduce((total, record) => total + (record.cachedInputTokens ?? 0), 0),
       outputTokens: records.reduce((total, record) => total + (record.outputTokens ?? 0), 0),
       totalTokens: records.reduce((total, record) => total + (record.totalTokens ?? 0), 0),
       recordCount: records.length,
+      byDay: [],
       byProvider: [],
       byModel: [],
     },

@@ -114,7 +114,7 @@ describe('ConversationOverviewPanel', () => {
       },
       threadUsage: {
         records: [],
-        summary: { inputTokens: 900, outputTokens: 600, totalTokens: 1500, recordCount: 2, byProvider: [], byModel: [] },
+        summary: { inputTokens: 900, cachedInputTokens: 0, outputTokens: 600, totalTokens: 1500, recordCount: 2, byDay: [], byProvider: [], byModel: [] },
       },
       threads: [{
         id: 'child_1',

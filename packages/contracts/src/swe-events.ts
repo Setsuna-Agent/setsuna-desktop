@@ -1890,7 +1890,7 @@ function tokenUsageBreakdown(usage: RuntimeUsage): SweTokenUsageBreakdown {
   return {
     totalTokens,
     inputTokens,
-    cachedInputTokens: 0,
+    cachedInputTokens: finiteTokenCount(usage.cachedInputTokens),
     outputTokens,
     reasoningOutputTokens: 0,
   };
