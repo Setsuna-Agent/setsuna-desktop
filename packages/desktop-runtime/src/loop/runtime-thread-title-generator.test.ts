@@ -40,13 +40,18 @@ describe('runtime thread title generator', () => {
       toolChoice: 'none',
     });
     expect(modelClient.request?.messages[0]?.role).toBe('system');
+    expect(modelClient.request?.messages[0]?.content).toContain('Never return a generic placeholder');
     expect(modelClient.request?.messages[1]?.content).toContain('现在标题直接截取用户输入');
   });
 
-  it('normalizes common wrappers and rejects the default placeholder', () => {
+  it('normalizes common wrappers and rejects generic placeholders', () => {
     expect(normalizeGeneratedThreadTitle('{"title":"`模型生成对话标题。`"}')).toBe('模型生成对话标题');
     expect(normalizeGeneratedThreadTitle('Title: Fix automatic conversation titles!\nextra explanation')).toBe('Fix automatic conversation titles');
     expect(normalizeGeneratedThreadTitle('New thread')).toBeNull();
+    expect(normalizeGeneratedThreadTitle('New chat!')).toBeNull();
+    expect(normalizeGeneratedThreadTitle('新对话')).toBeNull();
+    expect(normalizeGeneratedThreadTitle('新聊天。')).toBeNull();
+    expect(normalizeGeneratedThreadTitle('日常问候')).toBe('日常问候');
     expect(normalizeGeneratedThreadTitle('')).toBeNull();
     expect(normalizeGeneratedThreadTitle('<think>仍在分析标题但输出已被截断')).toBeNull();
   });

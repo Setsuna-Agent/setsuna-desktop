@@ -69,6 +69,27 @@ describe('agent loop thread titles', () => {
     expect(saved?.messages.at(-1)?.content).toBe('主回答正常完成');
   });
 
+  it('keeps the deterministic fallback when the model returns a generic placeholder', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new PlaceholderTitleModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new TitleConfigStore(),
+    });
+
+    await loop.sendTurn(thread.id, { input: '你好' });
+
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id);
+    expect(saved?.title).toBe('你好');
+    expect(events.some((event) => event.type === 'thread.updated' && event.payload.title === '新对话')).toBe(false);
+  });
+
   it('does not overwrite a manual rename made while the first turn is running', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
@@ -111,6 +132,13 @@ class FailingTitleModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     if (request.model === 'current-model') throw new Error('title generation failed');
     yield { type: 'text_delta', text: '主回答正常完成' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class PlaceholderTitleModelClient implements ModelClient {
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    yield { type: 'text_delta', text: request.model === 'current-model' ? '新对话' : '主回答正常完成' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
