@@ -374,6 +374,7 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
       provider: provider.provider,
       baseUrl: provider.baseUrl,
       enabled: provider.enabled,
+      icon: provider.icon ?? null,
       models: provider.models.map((model) => ({ ...model })),
     }));
     return providers;

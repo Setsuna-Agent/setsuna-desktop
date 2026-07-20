@@ -1,15 +1,47 @@
 import type { ModelProviderKind } from './provider.js';
 
+export const PROVIDER_CUSTOM_ICON_MAX_BYTES = 512 * 1024;
+export const PROVIDER_CUSTOM_ICON_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+
+export type ProviderCustomIconMimeType = typeof PROVIDER_CUSTOM_ICON_MIME_TYPES[number];
+
+export type ProviderIconConfig =
+  | { type: 'preset'; key: string }
+  | { type: 'custom'; dataUrl: string };
+
 export type ProviderConfigState = {
   id: string;
   name: string;
   provider: ModelProviderKind;
   baseUrl: string;
   enabled: boolean;
+  icon?: ProviderIconConfig;
   apiKeySet: boolean;
   apiKeyPreview: string;
   models: ProviderModelConfig[];
 };
+
+/** Provider icons live in config.json, so reject unsafe formats and unexpectedly large inline images at the contract boundary. */
+export function normalizeProviderIconConfig(value: unknown): ProviderIconConfig | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+
+  if (record.type === 'preset' && typeof record.key === 'string') {
+    const key = record.key.trim().toLocaleLowerCase();
+    return /^[a-z0-9][a-z0-9-]{0,63}$/.test(key) ? { type: 'preset', key } : undefined;
+  }
+
+  if (record.type !== 'custom' || typeof record.dataUrl !== 'string') return undefined;
+  const match = /^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/]+={0,2})$/i.exec(record.dataUrl.trim());
+  if (!match) return undefined;
+  const mimeType = match[1]?.toLocaleLowerCase() as ProviderCustomIconMimeType | undefined;
+  const payload = match[2];
+  if (!mimeType || !payload || payload.length % 4 !== 0) return undefined;
+  const paddingBytes = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  const decodedBytes = Math.floor((payload.length * 3) / 4) - paddingBytes;
+  if (decodedBytes <= 0 || decodedBytes > PROVIDER_CUSTOM_ICON_MAX_BYTES) return undefined;
+  return { type: 'custom', dataUrl: `data:${mimeType};base64,${payload}` };
+}
 
 export type ProviderModelConfig = {
   id: string;
@@ -259,6 +291,7 @@ export type ProviderConfigInput = {
   provider?: ModelProviderKind;
   baseUrl?: string;
   enabled?: boolean;
+  icon?: ProviderIconConfig | null;
   apiKey?: string;
   clearApiKey?: boolean;
   models?: ProviderModelConfig[];

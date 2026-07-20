@@ -112,6 +112,38 @@ describe('file config store', () => {
     expect(secrets.providerApiKeys).toEqual({ [baseProvider.id]: 'retained-secret' });
   });
 
+  it('persists preset and custom provider icons and supports restoring automatic matching', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    const initial = await store.getConfig();
+    const baseProvider = initial.providers[0];
+    if (!baseProvider) throw new Error('Expected the default provider fixture.');
+
+    await expect(store.saveConfig({
+      providers: [{ ...baseProvider, icon: { type: 'preset', key: 'minimax' } }],
+    })).resolves.toMatchObject({
+      providers: [{ icon: { type: 'preset', key: 'minimax' } }],
+    });
+
+    const dataUrl = `data:image/png;base64,${Buffer.from('provider icon').toString('base64')}`;
+    await expect(store.saveConfig({
+      providers: [{ ...baseProvider, icon: { type: 'custom', dataUrl } }],
+    })).resolves.toMatchObject({
+      providers: [{ icon: { type: 'custom', dataUrl } }],
+    });
+
+    const restored = await store.saveConfig({ providers: [{ ...baseProvider, icon: null }] });
+    expect(restored.providers[0]).not.toHaveProperty('icon');
+    expect(await readFile(path.join(dataDir, 'config.json'), 'utf8')).not.toContain(dataUrl);
+
+    const configPath = path.join(dataDir, 'config.json');
+    const tampered = JSON.parse(await readFile(configPath, 'utf8')) as { providers: Array<Record<string, unknown>> };
+    if (!tampered.providers[0]) throw new Error('Expected a stored provider fixture.');
+    tampered.providers[0].icon = { type: 'custom', dataUrl: 'data:image/svg+xml;base64,PHN2Zy8+' };
+    await writeFile(configPath, `${JSON.stringify(tampered, null, 2)}\n`, 'utf8');
+    expect((await store.getConfig()).providers[0]).not.toHaveProperty('icon');
+  });
+
   it('stores the image generation API key only in secrets and supports clearing it', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);

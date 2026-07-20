@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Form
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
 import { Archive, ArchiveRestore, BadgeCheck, Bold, Brain, ChevronRight, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
-import type { ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeDesktopSettings, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { ProviderConfigState, ProviderIconConfig, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeDesktopSettings, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageBucket, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
@@ -12,8 +12,10 @@ import { sidebarBackgroundOptions, useSidebarBackgroundPreference, type SidebarB
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
+import { ProviderBrandMark } from './ProviderBrandMark.js';
+import { ProviderIconDialog } from './ProviderIconDialog.js';
 import { ProviderModelReplacementDialog } from './ProviderModelReplacementDialog.js';
-import { providerInitials, resolveProviderBrand } from './providerBranding.js';
+import { resolveProviderBrand } from './providerBranding.js';
 import { providerModelReplacementDecision } from './providerModelReplacement.js';
 import { WorkspaceDependenciesSettings } from './WorkspaceDependenciesSettings.js';
 
@@ -1641,6 +1643,7 @@ function ProviderSettings({
   const [providers, setProviders] = useState<ProviderConfigState[]>(() => normalizeSettingsProviders(config.providers));
   const [selectedProviderId, setSelectedProviderId] = useState(() => selectedProviderIdFromConfig(config));
   const [editingModel, setEditingModel] = useState<EditingModelState | null>(null);
+  const [editingProviderIconId, setEditingProviderIconId] = useState<string | null>(null);
   const [pendingModelReplacement, setPendingModelReplacement] = useState<PendingModelReplacement | null>(null);
   const [apiKeysByProviderId, setApiKeysByProviderId] = useState<Record<string, string>>({});
   const [fetchStateByProviderId, setFetchStateByProviderId] = useState<Record<string, ModelFetchState>>({});
@@ -1674,6 +1677,7 @@ function ProviderSettings({
       if (current.mode === 'create') return current;
       return hasProviderModel(nextProviders, current.providerId, current.modelId) ? current : null;
     });
+    setEditingProviderIconId((current) => (current && nextProviders.some((provider) => provider.id === current) ? current : null));
     setPendingModelReplacement((current) => (current && nextProviders.some((provider) => provider.id === current.providerId) ? current : null));
     setFetchStateByProviderId({});
   }, [config.activeProviderId, config.providers]);
@@ -1755,6 +1759,7 @@ function ProviderSettings({
   };
 
   const removeProvider = (providerId: string) => {
+    setEditingProviderIconId((current) => (current === providerId ? null : current));
     markDirty();
     setProviders((current) => {
       const removedIndex = Math.max(
@@ -1890,6 +1895,7 @@ function ProviderSettings({
   const selectedFetchState = selectedProvider ? fetchStateByProviderId[selectedProvider.id] ?? emptyModelFetchState() : emptyModelFetchState();
   const editingProvider = editingModel ? providers.find((provider) => provider.id === editingModel.providerId) : undefined;
   const editingModelConfig = editingModel?.mode === 'create' ? editingModel.model : editingProvider?.models.find((model) => model.id === editingModel?.modelId);
+  const editingProviderIcon = editingProviderIconId ? providers.find((provider) => provider.id === editingProviderIconId) : undefined;
 
   return (
     <div className="chat-user-settings__local-provider-stack">
@@ -1920,7 +1926,16 @@ function ProviderSettings({
           <div className="chat-user-settings__local-provider-card">
             <div className="chat-user-settings__local-provider-head">
               <div className="chat-user-settings__local-provider-title">
-                <ProviderBrandIcon provider={selectedProvider} size="large" />
+                <button
+                  className="chat-user-settings__provider-brand-trigger"
+                  type="button"
+                  aria-label={`配置“${selectedProvider.name || `服务 ${selectedProviderIndex + 1}`}”的图标`}
+                  title="配置服务图标"
+                  onClick={() => setEditingProviderIconId(selectedProvider.id)}
+                >
+                  <ProviderBrandMark brand={resolveProviderBrand(selectedProvider)} fallbackName={selectedProvider.name} size="large" />
+                  <span className="chat-user-settings__provider-brand-trigger-edit" aria-hidden="true"><Pencil size={8} /></span>
+                </button>
                 <span className="chat-user-settings__local-provider-title-copy">
                   <strong>{selectedProvider.name || `服务 ${selectedProviderIndex + 1}`}</strong>
                   <span>{`${providerProtocolLabel(selectedProvider.provider)} · ${selectedProvider.models.length} 个模型`}</span>
@@ -2083,28 +2098,18 @@ function ProviderSettings({
           onConfirm={confirmModelReplacement}
         />
       ) : null}
+      {editingProviderIcon ? (
+        <ProviderIconDialog
+          key={editingProviderIcon.id}
+          provider={editingProviderIcon}
+          onClose={() => setEditingProviderIconId(null)}
+          onConfirm={(icon) => {
+            updateProvider(editingProviderIcon.id, (provider) => providerWithIcon(provider, icon));
+            setEditingProviderIconId(null);
+          }}
+        />
+      ) : null}
     </div>
-  );
-}
-
-function ProviderBrandIcon({ provider, size = 'default' }: { provider: ProviderConfigState; size?: 'default' | 'large' }) {
-  const brand = resolveProviderBrand(provider);
-  const classes = [
-    'chat-user-settings__provider-brand-mark',
-    size === 'large' ? 'is-large' : '',
-    brand?.monochrome ? 'is-monochrome' : '',
-    brand ? '' : 'is-fallback',
-  ].filter(Boolean).join(' ');
-
-  return (
-    <span className={classes} aria-hidden="true" title={brand?.label}>
-      {brand ? (
-        <>
-          <img alt="" className={brand.darkSrc ? 'is-light-variant' : undefined} draggable={false} src={brand.src} />
-          {brand.darkSrc ? <img alt="" className="is-dark-variant" draggable={false} src={brand.darkSrc} /> : null}
-        </>
-      ) : <span>{providerInitials(provider.name)}</span>}
-    </span>
   );
 }
 
@@ -2128,7 +2133,7 @@ function ProviderRailItem({
       title={`${name} · ${providerProtocolLabel(provider.provider)} · ${provider.models.length} 个模型`}
       onClick={onSelect}
     >
-      <ProviderBrandIcon provider={provider} />
+      <ProviderBrandMark brand={resolveProviderBrand(provider)} fallbackName={provider.name} />
       <span className="chat-user-settings__local-provider-item-body">
         <span className="chat-user-settings__local-provider-item-main">
           <span className="chat-user-settings__local-provider-item-name">{name}</span>
@@ -2516,6 +2521,13 @@ function prepareProviderForSave(provider: ProviderConfigState): ProviderConfigSt
       defaultThinkingEffort: normalizedDefaultThinkingEffort(model),
     })),
   };
+}
+
+function providerWithIcon(provider: ProviderConfigState, icon: ProviderIconConfig | undefined): ProviderConfigState {
+  if (icon) return { ...provider, icon };
+  const nextProvider = { ...provider };
+  delete nextProvider.icon;
+  return nextProvider;
 }
 
 function normalizeProviderKind(value: unknown): ProviderConfigState['provider'] {

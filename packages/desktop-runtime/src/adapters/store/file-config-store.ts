@@ -1,6 +1,6 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { normalizeImageGenerationServiceUrl, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
+import { normalizeImageGenerationServiceUrl, normalizeProviderIconConfig, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
 import type {
   ProviderConfigInput,
   ProviderConfigState,
@@ -178,8 +178,11 @@ export class FileConfigStore implements ConfigStore {
       imageGeneration: imageGenerationState(stored.imageGeneration, secrets),
       providers: stored.providers.map((provider) => {
         const apiKey = secrets.providerApiKeys[provider.id] ?? '';
+        const icon = normalizeProviderIconConfig(provider.icon);
+        const { icon: _storedIcon, ...providerWithoutIcon } = provider;
         return {
-          ...provider,
+          ...providerWithoutIcon,
+          ...(icon ? { icon } : {}),
           apiKeySet: apiKey.length > 0,
           apiKeyPreview: maskApiKey(apiKey),
         };
@@ -255,6 +258,7 @@ function normalizeProviders(
   return inputProviders.map((provider, index) => {
     const id = nonEmpty(provider.id) ?? `provider-${index + 1}`;
     const previous = previousById.get(id);
+    const icon = normalizeProviderIconConfig(Object.hasOwn(provider, 'icon') ? provider.icon : previous?.icon);
     if ('apiKey' in provider && typeof provider.apiKey === 'string' && provider.apiKey.trim()) {
       secrets.providerApiKeys[id] = provider.apiKey.trim();
     }
@@ -267,6 +271,7 @@ function normalizeProviders(
       provider: provider.provider ?? previous?.provider ?? 'openai-compatible',
       baseUrl: normalizeBaseUrl(provider.baseUrl ?? previous?.baseUrl ?? ''),
       enabled: provider.enabled ?? previous?.enabled ?? true,
+      ...(icon ? { icon } : {}),
       models: normalizeModels(provider.models ?? previous?.models ?? []),
     };
   });

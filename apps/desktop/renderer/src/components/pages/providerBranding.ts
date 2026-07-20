@@ -18,7 +18,8 @@ import siliconCloudLogoUrl from '../../assets/provider-logos/siliconcloud.svg';
 import volcengineLogoUrl from '../../assets/provider-logos/volcengine.svg';
 import xaiLogoUrl from '../../assets/provider-logos/xai.svg';
 
-type ProviderBrandInput = Pick<ProviderConfigState, 'baseUrl' | 'name'>;
+type ProviderBrandMatchInput = Pick<ProviderConfigState, 'baseUrl' | 'name'>;
+type ProviderBrandInput = Pick<ProviderConfigState, 'baseUrl' | 'icon' | 'name'>;
 
 export type ProviderBrandAsset = {
   darkSrc?: string;
@@ -81,7 +82,26 @@ const providerBrandRules: readonly ProviderBrandRule[] = [
   brandRule('xai', 'xAI', xaiLogoUrl, ['xai', 'x.ai', 'grok'], { urlKeywords: ['api.x.ai'] }),
 ];
 
+export const PROVIDER_BRAND_CATALOG: readonly ProviderBrandAsset[] = providerBrandRules.map(providerBrandAsset);
+
 export function resolveProviderBrand(provider: ProviderBrandInput): ProviderBrandAsset | null {
+  if (provider.icon?.type === 'custom') {
+    return {
+      key: 'custom',
+      label: '自定义图标',
+      monochrome: false,
+      src: provider.icon.dataUrl,
+    };
+  }
+  if (provider.icon?.type === 'preset') {
+    const presetKey = provider.icon.key;
+    const preset = providerBrandRules.find((rule) => rule.key === presetKey);
+    if (preset) return providerBrandAsset(preset);
+  }
+  return resolveAutomaticProviderBrand(provider);
+}
+
+export function resolveAutomaticProviderBrand(provider: ProviderBrandMatchInput): ProviderBrandAsset | null {
   const normalizedName = normalizeBrandText(provider.name);
   const normalizedUrl = normalizeBrandText(provider.baseUrl);
 

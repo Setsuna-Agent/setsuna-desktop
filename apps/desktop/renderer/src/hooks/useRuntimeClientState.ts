@@ -418,6 +418,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
           provider: provider.provider,
           baseUrl: provider.baseUrl,
           enabled: provider.enabled,
+          icon: provider.icon ?? null,
           apiKey: apiKeysByProviderId[provider.id] || undefined,
           models: provider.models,
         })),
@@ -588,6 +589,7 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
           provider: provider.provider,
           baseUrl: provider.baseUrl,
           enabled: provider.id === providerId ? true : provider.enabled,
+          icon: provider.icon ?? null,
           models: provider.models.map((model) => ({
             ...model,
             enabled: provider.id === providerId ? model.id === modelId : model.enabled,

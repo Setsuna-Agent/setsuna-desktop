@@ -1184,6 +1184,7 @@ runtime 文件变更提取。
   - OpenAI Responses
   - Anthropic
 - 管理 provider base URL、API key、模型列表、active model、max output tokens。
+- 管理 provider 图标的自动匹配、内置品牌选择和自定义上传。
 - 管理模型 thinking 能力和 reasoning effort。
 - 拉取 provider models。
 - 保存 runtime preferences：
@@ -1197,6 +1198,26 @@ runtime 文件变更提取。
 - 展示 about/version 信息。
 
 这个文件当前体量较大，后续新增设置项时应优先抽成局部组件或 hook，而不是继续堆在单文件里。
+
+### `ProviderIconDialog.tsx` / `ProviderBrandMark.tsx`
+
+模型服务图标组件。
+
+职责：
+
+- `ProviderIconDialog` 展示自动匹配、全部内置品牌和自定义图片上传入口。
+- `ProviderBrandMark` 统一渲染彩色、单色、明暗主题、自定义与名称缩写兜底图标。
+- 弹窗只提交 `ProviderIconConfig`，provider 状态和自动保存仍由 `SettingsPage` 编排。
+
+### `providerBranding.ts` / `providerIconUpload.ts`
+
+模型服务图标纯逻辑。
+
+职责：
+
+- 按 provider 名称和 base URL 自动匹配品牌，并允许 preset/custom 配置覆盖。
+- 维护可供弹窗选择的内置品牌目录。
+- 校验 PNG/JPEG/WebP 上传类型和 512 KB 大小上限，再转换为受 contract 约束的 data URL。
 
 ### `CapabilitiesPage.tsx`
 
