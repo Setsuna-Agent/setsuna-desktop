@@ -2689,35 +2689,28 @@ memory 工具 host。
 
 ### `adapters/tool/pc-local-tools.ts`
 
-本地文件、搜索、shell、MCP 配置、memory 等工具实现集合。
+PC local tools 的稳定门面和执行调度入口。
 
 职责：
 
-- 定义 local tool system prompt。
-- 定义本地工具 schema。
-- 实现本地只读工具：
-  - list directory
-  - find files
-  - search text
-  - read file
-  - git status/diff 类能力
-- 实现本地写入工具：
-  - apply patch
-  - write file
-  - append file
-  - delete file
-  - edit file
-- 实现 shell 工具：
-  - timeout
-  - persistent session
-  - progress output
-  - 风险判断
-- 实现 MCP config 辅助。
-- 实现 memory helper。
-- 实现文件变更 plan/begin preview。
-- 管理忽略目录、搜索限制、输出截断、敏感环境变量过滤。
+- 初始化工作区级 local tool state。
+- 统一调度文件、Git、shell、MCP、memory 和 plan 工具。
+- 生成工具摘要和文件变更预览。
+- 保留 `PcLocalToolHost` 依赖的公共导出，具体实现下沉到同前缀领域模块。
 
-这个文件来自 PC 本地工具能力迁移，体量很大。新增工具时应确认是否应该拆出独立 ToolHost，而不是继续无边界扩张。
+### `adapters/tool/pc-local-tool-*.ts`
+
+PC local tools 的领域实现模块：
+
+- `pc-local-tool-definitions.ts`：模型可见的工具 schema。
+- `pc-local-tool-arguments.ts`：完整参数与流式 partial arguments 解析。
+- `pc-local-tool-files.ts` / `pc-local-tool-patch.ts` / `pc-local-tool-diff.ts`：文件查找、读写、补丁和 diff。
+- `pc-local-tool-paths.ts`：工作区路径归一化与 filesystem sandbox 边界。
+- `pc-local-tool-shell-policy.ts` / `pc-local-tool-shell-process.ts`：shell 风险策略、OS sandbox、进程会话和只读 Git 命令。
+- `pc-local-tool-mcp.ts` / `pc-local-tool-memory.ts`：MCP 配置、plan 和 memory helper。
+- `pc-local-tool-constants.ts` / `pc-local-tool-utils.ts`：跨领域共享的常量与小型纯函数。
+
+新增能力时先判断是否应实现为独立 ToolHost；确实属于 PC local tool family 时，放入对应领域模块，不再向门面堆叠实现。
 
 ### `adapters/tool/shell-tool-host.ts`
 
@@ -3207,7 +3200,7 @@ UI 配置入口：
 - 文件变更提取：`apps/desktop/renderer/src/components/chat/runtimeFileChanges.ts`
 - Review 面板：`apps/desktop/renderer/src/components/workspace/ReviewPanel.tsx`
 
-新增工具优先考虑独立 ToolHost，只有确实属于 PC local tool family 时才放进 `pc-local-tools.ts`。
+新增工具优先考虑独立 ToolHost；只有确实属于 PC local tool family 时，才通过 `pc-local-tools.ts` 门面接入，并把实现放进对应的 `pc-local-tool-*.ts` 领域模块。
 
 ### 改 Skill 能力
 

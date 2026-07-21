@@ -307,7 +307,7 @@ REST 路由覆盖：
 
 ### PC Local Tools
 
-`PcLocalToolHost` 适配 `pc-local-tools.ts`：
+`PcLocalToolHost` 适配 `pc-local-tools.ts` 稳定门面；文件、路径、diff、shell policy/process、MCP、memory 等实现按职责拆在 `pc-local-tool-*.ts`：
 
 - 暴露 list/read/search/diff/shell/apply/write/edit 等本地工具。
 - 维护每个项目独立 tool state，shell process store 可复用。
