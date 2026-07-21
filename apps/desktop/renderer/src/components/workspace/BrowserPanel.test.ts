@@ -1,8 +1,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { ToastProvider } from '../ToastProvider.js';
 import { BrowserPanel, nextBrowserZoomFactor, normalizeBrowserInput, resolveBrowserFaviconUrl, resolveBrowserFaviconUrls } from './BrowserPanel.js';
 import { createBrowserPanel } from './model.js';
+import { browserScreenshotOutcomeFeedback } from './useBrowserScreenshot.js';
 
 describe('normalizeBrowserInput', () => {
   it('keeps absolute web URLs', () => {
@@ -53,18 +55,33 @@ describe('nextBrowserZoomFactor', () => {
   });
 });
 
+describe('browserScreenshotOutcomeFeedback', () => {
+  it('maps screenshot outcomes to the shared toast tones', () => {
+    expect(browserScreenshotOutcomeFeedback('added')).toEqual({
+      message: '截图已添加到输入框，并复制到剪切板',
+      tone: 'success',
+    });
+    expect(browserScreenshotOutcomeFeedback('unsupported').tone).toBe('warning');
+    expect(browserScreenshotOutcomeFeedback('limit-reached').tone).toBe('warning');
+    expect(browserScreenshotOutcomeFeedback('too-large').tone).toBe('warning');
+    expect(browserScreenshotOutcomeFeedback('unavailable').tone).toBe('warning');
+  });
+});
+
 describe('BrowserPanel', () => {
   it('allows popup requests so main can route them into ordinary workspace tabs', () => {
-    const html = renderToStaticMarkup(createElement(BrowserPanel, {
-      hidden: false,
-      panel: createBrowserPanel('browser-1'),
-      onPanelMetadataChange: () => undefined,
-      onResizeStart: () => undefined,
-      onResizeStep: () => undefined,
-      resizeMax: 960,
-      resizeMin: 320,
-      resizeValue: 640,
-    }));
+    const html = renderToStaticMarkup(createElement(ToastProvider, null,
+      createElement(BrowserPanel, {
+        hidden: false,
+        panel: createBrowserPanel('browser-1'),
+        onPanelMetadataChange: () => undefined,
+        onResizeStart: () => undefined,
+        onResizeStep: () => undefined,
+        resizeMax: 960,
+        resizeMin: 320,
+        resizeValue: 640,
+      }),
+    ));
 
     expect(html).toContain('allowpopups="true"');
     expect(html).not.toContain('desktop-browser-tabs');
@@ -79,16 +96,18 @@ describe('BrowserPanel', () => {
   });
 
   it('uses an AI browser request as the initial tab URL', () => {
-    const html = renderToStaticMarkup(createElement(BrowserPanel, {
-      hidden: false,
-      panel: createBrowserPanel('browser-event-1', 'https://www.baidu.com/'),
-      onPanelMetadataChange: () => undefined,
-      onResizeStart: () => undefined,
-      onResizeStep: () => undefined,
-      resizeMax: 960,
-      resizeMin: 320,
-      resizeValue: 640,
-    }));
+    const html = renderToStaticMarkup(createElement(ToastProvider, null,
+      createElement(BrowserPanel, {
+        hidden: false,
+        panel: createBrowserPanel('browser-event-1', 'https://www.baidu.com/'),
+        onPanelMetadataChange: () => undefined,
+        onResizeStart: () => undefined,
+        onResizeStep: () => undefined,
+        resizeMax: 960,
+        resizeMin: 320,
+        resizeValue: 640,
+      }),
+    ));
 
     expect(html).toContain('src="https://www.baidu.com/"');
     expect(html).not.toContain('src="https://www.bing.com/"');

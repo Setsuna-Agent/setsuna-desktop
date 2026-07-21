@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CheckCircle2, ChevronDown, GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, Search, UploadCloud } from 'lucide-react';
+import { Check, ChevronDown, GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, Search, UploadCloud } from 'lucide-react';
 import type { DesktopReviewCommitResult, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { useToast } from '../ToastProvider.js';
 import type { DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import { localReviewChangeStats } from '../workspace/reviewChanges.js';
 import { ChangeCountText } from './ChangeCountText.js';
 
 type GitBusyAction = 'checkout' | 'commit' | 'commit-and-push' | 'create' | 'push' | null;
 type CommitPhase = 'committing' | 'generating' | null;
-type GitActionFeedback = { id: number; message: string };
-
-const GIT_FEEDBACK_DURATION_MS = 3_500;
 
 export function ConversationGitControls({
   activeProject,
@@ -25,6 +23,7 @@ export function ConversationGitControls({
   reviewState: DesktopReviewState | null;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
 }) {
+  const toast = useToast();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const commitModalRef = useRef<HTMLDivElement | null>(null);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
@@ -38,8 +37,6 @@ export function ConversationGitControls({
   const [busyAction, setBusyAction] = useState<GitBusyAction>(null);
   const [commitPhase, setCommitPhase] = useState<CommitPhase>(null);
   const [error, setError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<GitActionFeedback | null>(null);
-  const feedbackIdRef = useRef(0);
   const workspaceRoot = activeProject?.path ?? '';
   const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
   const hasGit = Boolean(reviewState?.isGitRepository);
@@ -82,14 +79,7 @@ export function ConversationGitControls({
     setCreatingBranch(false);
     setBranchDraft('');
     setError(null);
-    setFeedback(null);
   }, [projectStateKey]);
-
-  useEffect(() => {
-    if (!feedback) return undefined;
-    const timeoutId = window.setTimeout(() => setFeedback(null), GIT_FEEDBACK_DURATION_MS);
-    return () => window.clearTimeout(timeoutId);
-  }, [feedback]);
 
   if (!activeProject || (reviewState && !reviewState.isGitRepository)) return null;
 
@@ -124,11 +114,6 @@ export function ConversationGitControls({
     resetCommitPanel();
   };
 
-  const showFeedback = (message: string) => {
-    feedbackIdRef.current += 1;
-    setFeedback({ id: feedbackIdRef.current, message });
-  };
-
   const runGitAction = async (action: GitBusyAction, task: () => Promise<void>) => {
     if (!workspaceRoot || busyAction) return;
     const api = window.setsunaDesktop?.desktopReview;
@@ -137,7 +122,6 @@ export function ConversationGitControls({
       return;
     }
     setBusyAction(action);
-    setFeedback(null);
     setError(null);
     try {
       await task();
@@ -191,7 +175,7 @@ export function ConversationGitControls({
         setError(`提交 ${result.commitHash || '已完成'}，但推送失败：${result.pushError}`);
       } else {
         resetCommitPanel();
-        showFeedback(commitSuccessMessage(result, push));
+        toast.success(commitSuccessMessage(result, push));
       }
     });
   };
@@ -200,7 +184,7 @@ export function ConversationGitControls({
     void runGitAction('push', async () => {
       await window.setsunaDesktop?.desktopReview.push(workspaceRoot);
       resetCommitPanel();
-      showFeedback(`推送成功 · ${currentBranch}`);
+      toast.success(`推送成功 · ${currentBranch}`);
     });
   };
 
@@ -366,13 +350,6 @@ export function ConversationGitControls({
       ) : null}
 
       {commitModal}
-      {feedback && typeof document !== 'undefined' ? createPortal(
-        <div className="chat-git-action-feedback" key={feedback.id} role="status" aria-live="polite">
-          <CheckCircle2 size={15} />
-          <span>{feedback.message}</span>
-        </div>,
-        document.body,
-      ) : null}
     </div>
   );
 }

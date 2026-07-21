@@ -8,8 +8,8 @@ import {
   type RuntimeGeneratedMessageAttachment,
   type RuntimeInlineMessageAttachment,
 } from '@setsuna-desktop/contracts';
+import { useDesktopImageAction, type DesktopImageAction } from '../../hooks/useDesktopImageAction.js';
 
-type ChatImageAction = 'copy' | 'reveal';
 type ChatImageAttachment = RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment;
 type GalleryStyle = CSSProperties & {
   '--chat-image-gallery-columns': number;
@@ -29,7 +29,7 @@ export function ChatMessageImageGallery({
   attachments: ChatImageAttachment[];
   variant: 'user' | 'assistant';
 }) {
-  const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const runDesktopImageAction = useDesktopImageAction();
   if (!attachments.length) return null;
   const columns = chatImageGalleryColumns(attachments.length);
   const multiple = attachments.length > 1;
@@ -38,24 +38,8 @@ export function ChatMessageImageGallery({
     '--chat-image-gallery-width': `${columns * 176 + (columns - 1) * 8}px`,
   };
 
-  const runAction = async (action: ChatImageAction, attachment: ChatImageAttachment) => {
-    try {
-      const desktop = window.setsunaDesktop?.desktop;
-      if (!desktop) {
-        setActionStatus('当前环境无法执行图片操作');
-        return;
-      }
-      const input = desktopImageInput(attachment);
-      const result = action === 'copy'
-        ? await desktop.copyImageToClipboard(input)
-        : await desktop.revealImageInFolder(input);
-      setActionStatus(result.ok
-        ? action === 'copy' ? '图片已复制' : '已在文件夹中显示图片'
-        : result.error);
-    } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : '图片操作失败');
-    }
-  };
+  const runAction = (action: DesktopImageAction, attachment: ChatImageAttachment) =>
+    runDesktopImageAction(action, desktopImageInput(attachment));
 
   return (
     <div className="chat-image-gallery-shell">
@@ -74,7 +58,6 @@ export function ChatMessageImageGallery({
           ))}
         </div>
       </Image.PreviewGroup>
-      {actionStatus ? <div className="chat-image-gallery__status" aria-live="polite">{actionStatus}</div> : null}
     </div>
   );
 }
@@ -84,7 +67,7 @@ function ChatMessageImage({
   onAction,
 }: {
   attachment: ChatImageAttachment;
-  onAction: (action: ChatImageAction) => void;
+  onAction: (action: DesktopImageAction) => void;
 }) {
   const imageRef = useRef<HTMLDivElement>(null);
   const { loadError, reservedAspectRatio, source } = useChatImageSource(attachment, imageRef);
@@ -110,7 +93,7 @@ function ChatMessageImage({
       transitionName=""
       menu={{
         items,
-        onClick: ({ key }) => onAction(key as ChatImageAction),
+        onClick: ({ key }) => onAction(key as DesktopImageAction),
       }}
     >
       <div

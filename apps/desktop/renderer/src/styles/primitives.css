@@ -1,3 +1,118 @@
+.app-toast-region {
+  position: fixed;
+  top: calc(var(--app-topbar-height) + 12px);
+  left: 50%;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: calc(100vw - 32px);
+  max-width: 420px;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.app-toast {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 24px;
+  align-items: start;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 8px 7px 8px 11px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+  font-size: 13px;
+  line-height: 18px;
+  pointer-events: auto;
+  animation: app-toast-enter 160ms ease-out;
+}
+
+.app-toast--success {
+  border-color: color-mix(in srgb, var(--app-success) 32%, var(--app-border));
+}
+
+.app-toast--warning {
+  border-color: color-mix(in srgb, var(--app-warning) 36%, var(--app-border));
+}
+
+.app-toast--error {
+  border-color: color-mix(in srgb, var(--app-danger) 36%, var(--app-border));
+}
+
+.app-toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  color: var(--app-text-muted);
+}
+
+.app-toast--success .app-toast__icon {
+  color: var(--app-success);
+}
+
+.app-toast--warning .app-toast__icon {
+  color: var(--app-warning);
+}
+
+.app-toast--error .app-toast__icon {
+  color: var(--app-danger);
+}
+
+.app-toast__message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-toast > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.app-toast > button:hover {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.app-toast > button:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+@keyframes app-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toast {
+    animation: none;
+  }
+}
+
 .desktop-agent-modal-backdrop {
   position: fixed;
   inset: 0;

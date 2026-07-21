@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { RuntimeGeneratedMessageAttachment, RuntimeInlineMessageAttachment, RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
+import { ToastProvider } from '../ToastProvider.js';
 import { ChatAttachmentTray } from './ChatAttachmentTray.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
 import { chatImageGalleryColumns } from './ChatMessageImageGallery.js';
@@ -37,7 +38,9 @@ describe('chat attachment cards', () => {
 
   it('uses the integrated file icon set in sent attachment cards', () => {
     const html = renderToStaticMarkup(
-      <ChatMessageAttachments attachments={[pdfAttachment]} />,
+      <ToastProvider>
+        <ChatMessageAttachments attachments={[pdfAttachment]} />
+      </ToastProvider>,
     );
 
     expect(html).toContain('class="chat-user-message-file__icon"');
@@ -54,7 +57,11 @@ describe('chat attachment cards', () => {
       url: 'data:image/png;base64,AA==',
       localAssetId: `generated_image_asset_${index}`,
     }));
-    const html = renderToStaticMarkup(<ChatMessageAttachments attachments={images} variant="assistant" />);
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <ChatMessageAttachments attachments={images} variant="assistant" />
+      </ToastProvider>,
+    );
 
     expect(html).toContain('chat-image-gallery--multiple');
     expect(html).toContain('--chat-image-gallery-columns:2');
@@ -72,7 +79,11 @@ describe('chat attachment cards', () => {
       modelVisible: false,
     };
 
-    const html = renderToStaticMarkup(<ChatMessageAttachments attachments={[generated]} variant="assistant" />);
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <ChatMessageAttachments attachments={[generated]} variant="assistant" />
+      </ToastProvider>,
+    );
 
     expect(html).toContain('chat-image-gallery--single');
     expect(html).toContain('正在加载图片');

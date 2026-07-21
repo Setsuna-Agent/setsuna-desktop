@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { ToastProvider } from '../ToastProvider.js';
 import type { DesktopDiffSummary, DesktopReviewState } from '../workspace/model.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationOverviewPanel } from './ConversationOverviewPanel.js';
@@ -16,16 +17,16 @@ describe('ConversationOverviewPanel', () => {
         files: [{ ...gitSummary.files[0], path: 'README.md', additions: 3, deletions: 5 }],
       },
     };
-    const compactHtml = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    const compactHtml = renderOverviewPanel({
       ...baseProps,
       compact: true,
       reviewState: localReviewState,
-    }));
-    const expandedHtml = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    });
+    const expandedHtml = renderOverviewPanel({
       ...baseProps,
       compact: false,
       reviewState: localReviewState,
-    }));
+    });
 
     expect(compactHtml).toContain('变更');
     expect(compactHtml).toContain('aria-label="展开对话环境信息"');
@@ -51,11 +52,11 @@ describe('ConversationOverviewPanel', () => {
       stagedSummary: { additions: 0, deletions: 0, files: [] },
       unstagedSummary: gitSummary,
     };
-    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
       reviewState: unbornReviewState,
-    }));
+    });
 
     expect(html).toContain('+71');
     expect(html).toContain('-247');
@@ -64,12 +65,12 @@ describe('ConversationOverviewPanel', () => {
   });
 
   it('does not report a clean worktree or HEAD while git status is still loading', () => {
-    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
       reviewLoading: true,
       reviewState: null,
-    }));
+    });
 
     expect(html.match(/加载中/g)).toHaveLength(2);
     expect(html).not.toContain('无变更');
@@ -77,12 +78,12 @@ describe('ConversationOverviewPanel', () => {
   });
 
   it('shows the review failure instead of reporting no changes', () => {
-    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
       reviewError: 'git status failed',
       reviewState: null,
-    }));
+    });
 
     expect(html.match(/加载失败/g)).toHaveLength(2);
     expect(html).toContain('title="git status failed"');
@@ -105,7 +106,7 @@ describe('ConversationOverviewPanel', () => {
   });
 
   it('combines usage and diagnostics, with collaboration count on its section title', () => {
-    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
       currentThread: {
@@ -126,7 +127,7 @@ describe('ConversationOverviewPanel', () => {
         messageCount: 1,
         lastMessagePreview: 'working',
       }],
-    }));
+    });
 
     expect(html).toContain('用量与诊断');
     expect(html).toContain('1.5K · 2 次 · 已完成 · 1 次验证');
@@ -137,7 +138,7 @@ describe('ConversationOverviewPanel', () => {
   });
 
   it('does not treat a forked conversation as a collaboration task', () => {
-    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
       threads: [{
@@ -150,14 +151,14 @@ describe('ConversationOverviewPanel', () => {
         messageCount: 0,
         lastMessagePreview: '',
       }],
-    }));
+    });
 
     expect(html).not.toContain('协作任务');
     expect(html).not.toContain('Forked conversation');
   });
 
   it('summarizes plan progress in one row and keeps the full plan in a hover popover', () => {
-    const html = renderToStaticMarkup(createElement(ConversationOverviewPanel, {
+    const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
       overview: {
@@ -171,7 +172,7 @@ describe('ConversationOverviewPanel', () => {
           { step: '运行验证', status: 'pending' },
         ],
       },
-    }));
+    });
 
     expect(html).toContain('aria-label="计划推进中，已完成 2/6"');
     expect(html).toContain('chat-conversation-overview-panel__plan-loading');
@@ -181,6 +182,14 @@ describe('ConversationOverviewPanel', () => {
     expect(html.match(/>2\/6</g)).toHaveLength(2);
   });
 });
+
+function renderOverviewPanel(props: Parameters<typeof ConversationOverviewPanel>[0]): string {
+  return renderToStaticMarkup(createElement(
+    ToastProvider,
+    null,
+    createElement(ConversationOverviewPanel, props),
+  ));
+}
 
 const project: WorkspaceProject = {
   id: 'project_1',

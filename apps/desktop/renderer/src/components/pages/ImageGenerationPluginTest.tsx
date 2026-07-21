@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { Image } from 'antd';
 import { Copy, FolderOpen, Loader2, Play } from 'lucide-react';
 import type {
-  DesktopImageInput,
   RuntimeGeneratedMessageAttachment,
   RuntimeImageGenerationTestResult,
 } from '@setsuna-desktop/contracts';
 import { RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS } from '@setsuna-desktop/contracts';
+import { useDesktopImageAction, type DesktopImageAction } from '../../hooks/useDesktopImageAction.js';
 import { Button, TextArea } from '../primitives.js';
 
 export function ImageGenerationPluginTest({
@@ -102,9 +102,9 @@ export function ImageGenerationPluginTest({
 }
 
 function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAttachment }) {
+  const runDesktopImageAction = useDesktopImageAction();
   const [source, setSource] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     const desktop = window.setsunaDesktop?.desktop;
@@ -138,23 +138,10 @@ function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAtt
     };
   }, [attachment.assetId]);
 
-  async function runAction(action: 'copy' | 'reveal') {
-    const desktop = window.setsunaDesktop?.desktop;
-    if (!desktop) {
-      setActionError('当前环境无法执行图片操作。');
-      return;
-    }
-    setActionError(null);
-    try {
-      const input: DesktopImageInput = { assetId: attachment.assetId, name: attachment.name };
-      const result = action === 'copy'
-        ? await desktop.copyImageToClipboard(input)
-        : await desktop.revealImageInFolder(input);
-      if (!result.ok) setActionError(result.error);
-    } catch (unknownError) {
-      setActionError(unknownError instanceof Error ? unknownError.message : '图片操作失败。');
-    }
-  }
+  const runAction = (action: DesktopImageAction) => runDesktopImageAction(action, {
+    assetId: attachment.assetId,
+    name: attachment.name,
+  });
 
   return (
     <article className="desktop-image-generation-test__image">
@@ -176,7 +163,6 @@ function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAtt
           </Button>
         </div>
       </div>
-      {actionError ? <small className="desktop-image-generation-test__action-error" role="alert">{actionError}</small> : null}
     </article>
   );
 }

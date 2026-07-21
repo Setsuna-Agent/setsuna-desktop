@@ -82,6 +82,8 @@ const hookHarness = vi.hoisted(() => {
   };
 });
 
+const imageActionHarness = vi.hoisted(() => vi.fn());
+
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>();
   return {
@@ -91,6 +93,10 @@ vi.mock('react', async (importOriginal) => {
     useState: hookHarness.useState,
   };
 });
+
+vi.mock('../../hooks/useDesktopImageAction.js', () => ({
+  useDesktopImageAction: () => imageActionHarness,
+}));
 
 const generatedAttachment: RuntimeGeneratedMessageAttachment = {
   id: 'generated_1',

@@ -2,13 +2,16 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AppReadyLayout } from './components/app/AppReadyLayout.js';
 import { ShellFrame } from './components/app/ShellFrame.js';
 import { Button, EmptyState, StatusBadge } from './components/primitives.js';
+import { ToastProvider } from './components/ToastProvider.js';
 import { useDesktopAppController } from './hooks/useDesktopAppController.js';
 
 export function App() {
   return (
-    <AppErrorBoundary>
-      <AppContent />
-    </AppErrorBoundary>
+    <ToastProvider>
+      <AppErrorBoundary>
+        <AppContent />
+      </AppErrorBoundary>
+    </ToastProvider>
   );
 }
 

@@ -1223,18 +1223,6 @@
   padding: 4px 7px;
 }
 
-.desktop-image-generation-test__image > small {
-  display: block;
-  padding: 0 10px 9px;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.desktop-image-generation-test__image > .desktop-image-generation-test__action-error {
-  color: var(--app-danger);
-}
-
 .desktop-capabilities-plugin-detail__section {
   display: grid;
   min-width: 0;

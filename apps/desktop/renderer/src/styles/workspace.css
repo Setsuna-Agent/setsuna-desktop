@@ -520,36 +520,6 @@
   color: var(--app-text);
 }
 
-.desktop-browser-capture-notice {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 45;
-  max-width: min(340px, calc(100% - 32px));
-  box-sizing: border-box;
-  padding: 8px 11px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-surface) 94%, transparent);
-  box-shadow: var(--app-shadow-popover);
-  font-size: 12px;
-  line-height: 18px;
-  pointer-events: none;
-}
-
-.desktop-browser-capture-notice.is-success {
-  border-color: color-mix(in srgb, var(--app-success) 32%, var(--app-border));
-}
-
-.desktop-browser-capture-notice.is-warning {
-  border-color: color-mix(in srgb, var(--app-warning) 36%, var(--app-border));
-}
-
-.desktop-browser-capture-notice.is-error {
-  border-color: color-mix(in srgb, var(--app-danger) 36%, var(--app-border));
-}
-
 .desktop-browser-panel .is-spinning {
   animation: desktop-browser-spin 900ms linear infinite;
 }

@@ -67,7 +67,6 @@ export function BrowserPanel({
   const {
     captureScreenshot,
     capturing: screenshotCapturing,
-    notice: screenshotNotice,
   } = useBrowserScreenshot({
     activeTabId: tab.id,
     onAttachment: onScreenshotAttachment,
@@ -238,15 +237,6 @@ export function BrowserPanel({
         <BrowserWebview active={!hidden} tab={tab} onRef={setWebview} onUpdate={updateTab} />
         {tab.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{tab.error}</span></div> : null}
       </div>
-      {screenshotNotice ? (
-        <div
-          className={`desktop-browser-capture-notice is-${screenshotNotice.kind}`}
-          role={screenshotNotice.kind === 'error' ? 'alert' : 'status'}
-          aria-live="polite"
-        >
-          {screenshotNotice.message}
-        </div>
-      ) : null}
     </aside>
   );
 }
