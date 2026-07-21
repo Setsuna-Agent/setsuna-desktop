@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, Search, UploadCloud } from 'lucide-react';
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import { Check, CheckCircle2, ChevronDown, GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, Search, UploadCloud } from 'lucide-react';
+import type { DesktopReviewCommitResult, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import { localReviewChangeStats } from '../workspace/reviewChanges.js';
 import { ChangeCountText } from './ChangeCountText.js';
 
-type GitBusyAction = 'checkout' | 'commit' | 'create' | 'generate' | 'push' | null;
+type GitBusyAction = 'checkout' | 'commit' | 'commit-and-push' | 'create' | 'push' | null;
+type CommitPhase = 'committing' | 'generating' | null;
+type GitActionFeedback = { id: number; message: string };
+
+const GIT_FEEDBACK_DURATION_MS = 3_500;
 
 export function ConversationGitControls({
   activeProject,
@@ -32,7 +36,10 @@ export function ConversationGitControls({
   const [creatingBranch, setCreatingBranch] = useState(false);
   const [branchDraft, setBranchDraft] = useState('');
   const [busyAction, setBusyAction] = useState<GitBusyAction>(null);
+  const [commitPhase, setCommitPhase] = useState<CommitPhase>(null);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<GitActionFeedback | null>(null);
+  const feedbackIdRef = useRef(0);
   const workspaceRoot = activeProject?.path ?? '';
   const projectStateKey = activeProject ? `${activeProject.id}:${workspaceRoot}` : '';
   const hasGit = Boolean(reviewState?.isGitRepository);
@@ -75,7 +82,14 @@ export function ConversationGitControls({
     setCreatingBranch(false);
     setBranchDraft('');
     setError(null);
+    setFeedback(null);
   }, [projectStateKey]);
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const timeoutId = window.setTimeout(() => setFeedback(null), GIT_FEEDBACK_DURATION_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [feedback]);
 
   if (!activeProject || (reviewState && !reviewState.isGitRepository)) return null;
 
@@ -96,12 +110,23 @@ export function ConversationGitControls({
     closeBranchCreate();
   };
 
-  const closeCommitPanel = () => {
-    if (busyAction) return;
+  const resetCommitPanel = () => {
     setCommitOpen(false);
     setCommitBranchMenuOpen(false);
+    setCommitMessage('');
+    setIncludeUnstaged(true);
     setError(null);
     closeBranchCreate();
+  };
+
+  const closeCommitPanel = () => {
+    if (busyAction) return;
+    resetCommitPanel();
+  };
+
+  const showFeedback = (message: string) => {
+    feedbackIdRef.current += 1;
+    setFeedback({ id: feedbackIdRef.current, message });
   };
 
   const runGitAction = async (action: GitBusyAction, task: () => Promise<void>) => {
@@ -112,6 +137,7 @@ export function ConversationGitControls({
       return;
     }
     setBusyAction(action);
+    setFeedback(null);
     setError(null);
     try {
       await task();
@@ -120,6 +146,7 @@ export function ConversationGitControls({
       setError(gitControlErrorMessage(unknownError));
     } finally {
       setBusyAction(null);
+      if (isCommitAction(action)) setCommitPhase(null);
     }
   };
 
@@ -144,24 +171,27 @@ export function ConversationGitControls({
   };
 
   const commitChanges = (push: boolean) => {
-    void runGitAction('commit', async () => {
+    const action = push ? 'commit-and-push' : 'commit';
+    void runGitAction(action, async () => {
       const api = window.setsunaDesktop?.desktopReview;
       if (!api) throw new Error('当前环境不支持 Git 操作。');
       let message = commitMessage.trim();
       if (!message) {
-        setBusyAction('generate');
+        setCommitPhase('generating');
         const generated = await api.generateCommitMessage(workspaceRoot, { includeUnstaged });
         message = generated.message.trim();
         if (!message) throw new Error('提交信息生成失败。');
         setCommitMessage(message);
-        setBusyAction('commit');
       }
+      setCommitPhase('committing');
       const result = await api.commit(workspaceRoot, { includeUnstaged, message, push });
       closeFloatingMenus();
       if (result.pushError) {
+        setCommitMessage('');
         setError(`提交 ${result.commitHash || '已完成'}，但推送失败：${result.pushError}`);
       } else {
-        setCommitOpen(false);
+        resetCommitPanel();
+        showFeedback(commitSuccessMessage(result, push));
       }
     });
   };
@@ -169,15 +199,19 @@ export function ConversationGitControls({
   const pushBranch = () => {
     void runGitAction('push', async () => {
       await window.setsunaDesktop?.desktopReview.push(workspaceRoot);
-      setCommitOpen(false);
-      closeFloatingMenus();
+      resetCommitPanel();
+      showFeedback(`推送成功 · ${currentBranch}`);
     });
   };
 
   const openCommitPanel = () => {
     setBranchMenuOpen(false);
-    setCommitOpen((open) => !open);
-    setError(null);
+    if (commitOpen) {
+      closeCommitPanel();
+      return;
+    }
+    resetCommitPanel();
+    setCommitOpen(true);
   };
 
   const commitModal = commitOpen && typeof document !== 'undefined' ? createPortal(
@@ -248,15 +282,19 @@ export function ConversationGitControls({
           <GitActionButton
             disabled={Boolean(busyAction) || commitableFileCount === 0}
             icon={<GitCommitHorizontal size={14} />}
-            loading={busyAction === 'commit' || busyAction === 'generate'}
-            title={busyAction === 'generate' ? '生成提交信息' : '提交'}
+            loading={busyAction === 'commit'}
+            title={busyAction === 'commit'
+              ? commitPhase === 'generating' ? '正在生成提交信息...' : '提交中...'
+              : '提交'}
             onClick={() => commitChanges(false)}
           />
           <GitActionButton
             disabled={Boolean(busyAction) || commitableFileCount === 0}
             icon={<GitPullRequestArrow size={14} />}
-            loading={busyAction === 'commit'}
-            title="提交并推送"
+            loading={busyAction === 'commit-and-push'}
+            title={busyAction === 'commit-and-push'
+              ? commitPhase === 'generating' ? '正在生成提交信息...' : '提交并推送中...'
+              : '提交并推送'}
             onClick={() => commitChanges(true)}
           />
           <GitActionButton
@@ -280,9 +318,8 @@ export function ConversationGitControls({
         className="chat-conversation-overview-panel__row chat-conversation-git__branch-row"
         disabled={!hasGit || reviewLoading}
         onClick={() => {
-          setCommitOpen(false);
+          resetCommitPanel();
           setBranchMenuOpen((open) => !open);
-          setError(null);
         }}
       >
         <span className="chat-conversation-overview-panel__icon">
@@ -329,6 +366,13 @@ export function ConversationGitControls({
       ) : null}
 
       {commitModal}
+      {feedback && typeof document !== 'undefined' ? createPortal(
+        <div className="chat-git-action-feedback" key={feedback.id} role="status" aria-live="polite">
+          <CheckCircle2 size={15} />
+          <span>{feedback.message}</span>
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }
@@ -502,7 +546,7 @@ function CreateBranchControl({
         onChange={(event) => onBranchDraftChange(event.currentTarget.value)}
       />
       <button type="submit" disabled={createDisabled} aria-label="创建分支" title={disabledReason ?? undefined}>
-        {busyAction === 'create' ? <Loader2 size={13} /> : compact ? '创建' : <Check size={13} />}
+        {busyAction === 'create' ? <Loader2 className="chat-git-loading-icon" size={13} /> : compact ? '创建' : <Check size={13} />}
       </button>
       <button type="button" disabled={Boolean(busyAction)} onClick={onCancelCreate}>
         取消
@@ -511,7 +555,7 @@ function CreateBranchControl({
   );
 }
 
-function GitActionButton({
+export function GitActionButton({
   disabled,
   icon,
   loading,
@@ -525,11 +569,26 @@ function GitActionButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="chat-git-commit-popover__action" disabled={disabled} onClick={onClick}>
-      <span className="chat-git-commit-popover__action-icon">{loading ? <Loader2 size={14} /> : icon}</span>
+    <button
+      type="button"
+      className="chat-git-commit-popover__action"
+      aria-busy={loading || undefined}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="chat-git-commit-popover__action-icon">{loading ? <Loader2 className="chat-git-loading-icon" size={14} /> : icon}</span>
       <span>{title}</span>
     </button>
   );
+}
+
+export function commitSuccessMessage(result: Pick<DesktopReviewCommitResult, 'commitHash'>, pushed: boolean): string {
+  const action = pushed ? '提交并推送成功' : '提交成功';
+  return result.commitHash ? `${action} · ${result.commitHash}` : action;
+}
+
+function isCommitAction(action: GitBusyAction): action is 'commit' | 'commit-and-push' {
+  return action === 'commit' || action === 'commit-and-push';
 }
 
 function fileCount(summary: DesktopDiffSummary | null | undefined): number {

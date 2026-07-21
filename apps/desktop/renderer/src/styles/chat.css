@@ -1544,6 +1544,34 @@
   color: currentColor;
 }
 
+.chat-git-action-feedback {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: min(420px, calc(100vw - 32px));
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--app-success) 28%, var(--app-border));
+  border-radius: 8px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+  font-size: 13px;
+  line-height: 18px;
+  transform: translateX(-50%);
+  animation: chat-git-feedback-enter 0.16s ease-out;
+}
+
+.chat-git-action-feedback svg {
+  flex: 0 0 auto;
+  color: var(--app-success);
+}
+
 .chat-git-commit-branch-menu {
   position: absolute;
   top: 30px;
@@ -1560,9 +1588,21 @@
   grid-template-columns: 20px minmax(0, 1fr) 20px;
 }
 
-.chat-git-commit-popover .lucide-loader-2,
-.chat-git-branch-menu .lucide-loader-2 {
+.chat-git-loading-icon {
+  transform-origin: center;
   animation: chat-git-spin 0.9s linear infinite;
+}
+
+@keyframes chat-git-feedback-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 @keyframes chat-git-spin {
