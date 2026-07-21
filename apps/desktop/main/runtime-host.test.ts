@@ -9,6 +9,7 @@ import {
   resolveBuiltinPluginsDir,
   resolveBuiltinSkillsDir,
   resolvePackagedRuntimeEntry,
+  resolveRuntimeNodeExecutable,
   resolveRuntimeSpawnCwd,
   runtimeProcessEnvironment,
   stopRuntimeChild,
@@ -38,6 +39,41 @@ describe('runtime host packaging paths', () => {
     expect(resolvePackagedRuntimeEntry(appRoot)).toBe(
       path.join('/Applications/Setsuna Desktop.app/Contents/Resources/app.asar/dist/runtime/cli.cjs'),
     );
+  });
+
+  it('runs macOS Node mode through the background Electron Helper', () => {
+    const executablePath = path.join(
+      '/Applications/Setsuna Desktop.app',
+      'Contents',
+      'MacOS',
+      'Setsuna Desktop',
+    );
+    const helperPath = path.join(
+      '/Applications/Setsuna Desktop.app',
+      'Contents',
+      'Frameworks',
+      'Setsuna Desktop Helper.app',
+      'Contents',
+      'MacOS',
+      'Setsuna Desktop Helper',
+    );
+
+    expect(resolveRuntimeNodeExecutable(
+      executablePath,
+      'darwin',
+      (candidate) => candidate === helperPath,
+    )).toBe(helperPath);
+  });
+
+  it('falls back to the main executable when a macOS Helper is unavailable', () => {
+    const executablePath = path.join('/Applications/Custom.app', 'Contents', 'MacOS', 'custom-bin');
+
+    expect(resolveRuntimeNodeExecutable(executablePath, 'darwin', () => false)).toBe(executablePath);
+  });
+
+  it('keeps the current executable on non-macOS platforms', () => {
+    expect(resolveRuntimeNodeExecutable('/opt/setsuna/setsuna-desktop', 'linux', () => true))
+      .toBe('/opt/setsuna/setsuna-desktop');
   });
 
   it('points packaged built-in skills at the asar app root', () => {
@@ -72,6 +108,10 @@ describe('runtime host packaging paths', () => {
     expect(env.SETSUNA_DESKTOP_RG_PATH).toBe(ripgrepPath);
     expect(env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG).toBe('1');
     expect(String(env.PATH).split(path.delimiter)[0]).toBe(path.dirname(ripgrepPath));
+  });
+
+  it('always starts the selected Electron executable in Node mode', () => {
+    expect(runtimeProcessEnvironment({}, {}).ELECTRON_RUN_AS_NODE).toBe('1');
   });
 
   it('fails closed when a packaged runtime has no bundled rg path', () => {

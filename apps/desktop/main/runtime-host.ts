@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { accessSync, constants as fsConstants } from 'node:fs';
 import type { Readable, Writable } from 'node:stream';
 import net from 'node:net';
 import path from 'node:path';
@@ -70,13 +71,13 @@ export class RuntimeHost {
     const runtimeEntry = this.options.runtimeEntry ?? resolvePackagedRuntimeEntry(this.options.appRoot);
     const builtinSkillsDir = resolveBuiltinSkillsDir(this.options.appRoot);
     const builtinPluginsDir = resolveBuiltinPluginsDir(this.options.appRoot);
-    // Electron 打包后仍复用当前可执行文件，通过 ELECTRON_RUN_AS_NODE 切换成 Node runtime 进程。
-    const child = spawn(process.execPath, [runtimeEntry, '--port', String(this.port)], {
+    // macOS 使用 LSUIElement Helper 承载 Node 模式，避免 runtime 和后续 Node 子进程注册额外 Dock 图标。
+    const runtimeExecutable = resolveRuntimeNodeExecutable();
+    const child = spawn(runtimeExecutable, [runtimeEntry, '--port', String(this.port)], {
       cwd: resolveRuntimeSpawnCwd(this.options.appRoot),
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...runtimeProcessEnvironment(this.options),
-        ELECTRON_RUN_AS_NODE: '1',
         ...(this.options.browserControl ? {
           SETSUNA_DESKTOP_BROWSER_CONTROL_TOKEN: this.options.browserControl.token,
           SETSUNA_DESKTOP_BROWSER_CONTROL_URL: this.options.browserControl.url,
@@ -346,11 +347,56 @@ export function resolveRuntimeSpawnCwd(appRoot: string): string {
   return appRoot.endsWith('.asar') ? path.dirname(appRoot) : appRoot;
 }
 
+/**
+ * Electron 的 macOS Helper 与主程序使用相同的 Node ABI，但被标记为 LSUIElement。
+ * Node 模式从 Helper 启动后，runtime 内的 process.execPath 也会指向 Helper，因此工作空间
+ * 依赖管理器生成的 node 垫片不会在每次 pnpm/test 调用时闪烁 Dock 图标。
+ */
+export function resolveRuntimeNodeExecutable(
+  executablePath: string = process.execPath,
+  platform: NodeJS.Platform = process.platform,
+  isExecutable: (candidate: string) => boolean = executableExists,
+): string {
+  if (platform !== 'darwin') return executablePath;
+
+  const macosDir = path.dirname(executablePath);
+  const contentsDir = path.dirname(macosDir);
+  const appBundleDir = path.dirname(contentsDir);
+  if (
+    path.basename(macosDir) !== 'MacOS'
+    || path.basename(contentsDir) !== 'Contents'
+    || path.extname(appBundleDir) !== '.app'
+  ) {
+    return executablePath;
+  }
+
+  // electron-builder 通常按 app bundle 命名 Helper；同时兼容主可执行文件自定义名称。
+  const helperBaseNames = [
+    path.basename(appBundleDir, '.app'),
+    path.basename(executablePath),
+  ];
+  for (const baseName of new Set(helperBaseNames)) {
+    const helperName = `${baseName} Helper`;
+    const helperPath = path.join(
+      contentsDir,
+      'Frameworks',
+      `${helperName}.app`,
+      'Contents',
+      'MacOS',
+      helperName,
+    );
+    if (isExecutable(helperPath)) return helperPath;
+  }
+  return executablePath;
+}
+
 export function runtimeProcessEnvironment(
   options: Pick<RuntimeHostOptions, 'ripgrepPath' | 'requireBundledRipgrep'>,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   const env = desktopProcessEnvironment(baseEnv);
+  // 主 App 和 macOS Helper 都必须显式进入 Node 模式，否则会启动 Electron 桌面实例。
+  env.ELECTRON_RUN_AS_NODE = '1';
   if (options.requireBundledRipgrep && !options.ripgrepPath) {
     throw new Error('Bundled ripgrep is required for the packaged runtime.');
   }
@@ -360,6 +406,15 @@ export function runtimeProcessEnvironment(
   }
   if (options.requireBundledRipgrep) env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG = '1';
   return env;
+}
+
+function executableExists(candidate: string): boolean {
+  try {
+    accessSync(candidate, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeRuntimePath(value: string): string {

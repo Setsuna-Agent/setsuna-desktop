@@ -446,7 +446,7 @@ Electron main 与本地 runtime service 的桥接层。
 
 - 寻找本机可用端口。
 - 生成每个 RuntimeHost 实例独立的 bearer token。
-- 以 `process.execPath` 启动 runtime CLI 子进程。
+- 以 Electron Node 模式启动 runtime CLI 子进程；macOS 优先使用 `LSUIElement` Helper，其他环境回退 `process.execPath`。
 - 传入环境变量：
   - `ELECTRON_RUN_AS_NODE=1`
   - `SETSUNA_DESKTOP_DATA_DIR`

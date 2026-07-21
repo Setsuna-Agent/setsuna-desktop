@@ -35,7 +35,7 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 
 - token 和端口只存在 main 内。
 - 代理 path 只允许 `/health` 和 `/v1/*`。
-- 打包后用 `ELECTRON_RUN_AS_NODE=1` 运行 runtime CLI。
+- 用 `ELECTRON_RUN_AS_NODE=1` 运行 runtime CLI；macOS 优先选择后台 Electron Helper，避免 Node 模式子进程显示 Dock 图标。
 - `resolveRuntimeSpawnCwd()` 要兼容 `app.asar`。
 
 ### `browser-control.ts` / `browser-control-server.ts` / `browser-cdp-automation.ts` / `browser-cdp-snapshot.ts`

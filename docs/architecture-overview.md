@@ -25,8 +25,8 @@ React renderer
 ## 启动链路
 
 1. `apps/desktop/main/index.ts` 在 `app.whenReady()` 后创建 `RuntimeHost`。
-2. `RuntimeHost` 分配本地端口，生成一次性 bearer token，用 `process.execPath` 启动 runtime CLI。
-3. 打包环境通过 `ELECTRON_RUN_AS_NODE=1` 复用 Electron 可执行文件跑 Node runtime；开发环境可通过 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向 `packages/desktop-runtime/dist/cli.js`。
+2. `RuntimeHost` 分配本地端口，生成一次性 bearer token，并解析承载 runtime CLI 的 Node 模式可执行文件。
+3. runtime 通过 `ELECTRON_RUN_AS_NODE=1` 复用 Electron 可执行文件；macOS 优先使用 `LSUIElement` Helper，避免 runtime 及工作空间 Node 子进程注册额外 Dock 图标。开发环境可通过 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向 `packages/desktop-runtime/dist/cli.js`。
 4. runtime stdout 输出 ready JSON 后，main 做 `/health` 检查。
 5. main 创建 `BrowserWindow`，加载 Vite dev server 或 `dist/renderer/index.html`。
 6. renderer 初始化 `useRuntimeClientState()`，并行拉取 config、threads、skills、MCP、插件市场/已安装插件、projects、usage、memory、approvals。
