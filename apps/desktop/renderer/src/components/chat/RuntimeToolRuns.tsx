@@ -1910,7 +1910,7 @@ function toolRunSummary(run: RuntimeToolRun): { title: string; target?: string }
   if (name === 'workspace_read_file' || name === 'read_file') return { title: runningAware(run, '读取文件', '已读取文件'), target: path };
   if (name === 'workspace_list_directory' || name === 'list_directory') return { title: runningAware(run, '查看目录', '已查看目录'), target: path || '.' };
   if (name === 'find_files') return { title: runningAware(run, '查找文件', '已查找文件'), target: query || path };
-  if (name === 'workspace_search_text' || name === 'search_text') return { title: runningAware(run, '搜索代码', '已搜索代码'), target: query };
+  if (name === 'workspace_search_text' || name === 'search_text') return searchRunSummary(run, path, query);
   if (isFileOperationRun(run)) return { title: fileOperationVerb(run), target: fileOperationTarget(run) || path };
   if (name === 'run_shell_command') return shellRunSummary(run, command);
   if (name === 'read_shell_process') return { title: runningAware(run, '读取命令输出', '已读取命令输出'), target: stringField(args.process_id ?? args.processId) };
@@ -1918,6 +1918,24 @@ function toolRunSummary(run: RuntimeToolRun): { title: string; target?: string }
   if (name === 'recall_memory') return { title: runningAware(run, '检索记忆', '已检索记忆'), target: query };
   if (name === PUBLISH_ARTIFACT_TOOL_NAME) return { title: runningAware(run, '发布产物', '已发布产物'), target: path };
   return { title: runningAware(run, toolDisplayName(name), `已使用 ${toolDisplayName(name)}`) };
+}
+
+function searchRunSummary(run: RuntimeToolRun, path: string, query: string): { title: string; target?: string } {
+  if (!path) return { title: runningAware(run, '搜索代码', '已搜索代码'), target: query };
+
+  const scope = pathBaseName(path);
+  const target = query ? `“${query}”` : undefined;
+  if (run.status === 'pending_approval') return { title: `等待授权：在 ${scope} 中搜索`, target };
+  if (run.status === 'running') {
+    return {
+      title: isPreparingToolRun(run) ? `正在准备在 ${scope} 中搜索` : `正在 ${scope} 中搜索`,
+      target,
+    };
+  }
+  if (run.status === 'error') return { title: `在 ${scope} 中搜索失败`, target };
+  if (run.status === 'cancelled') return { title: `已取消在 ${scope} 中搜索`, target };
+  if (run.status === 'rejected') return { title: `已拒绝在 ${scope} 中搜索`, target };
+  return { title: `已在 ${scope} 中搜索`, target };
 }
 
 function shellRunSummary(run: RuntimeToolRun, command: string): { title: string; target?: string } {

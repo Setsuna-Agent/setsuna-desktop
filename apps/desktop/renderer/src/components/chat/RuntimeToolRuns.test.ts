@@ -79,6 +79,45 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     ]);
   });
 
+  it('shows the search scope alongside the query when a path is available', () => {
+    const completedSummary = firstToolRunSummaryHtml(renderedHtml([
+      toolRun('search_file', 'search_text', {
+        path: 'apps/desktop/renderer/src/hooks/useChatTurnActions.ts',
+        query: 'setError',
+      }),
+    ]));
+    const runningSummary = firstToolRunSummaryHtml(renderedHtml([
+      toolRun('search_running', 'search_text', { path: 'threads', query: 'needle' }, 'running'),
+    ]));
+    const projectSummary = firstToolRunSummaryHtml(renderedHtml([
+      toolRun('search_root', 'search_text', { path: '.', query: 'TODO' }),
+    ]));
+
+    expect(renderedTextFromHtml(completedSummary))
+      .toContain('已在 useChatTurnActions.ts 中搜索“setError”');
+    expect(renderedTextFromHtml(runningSummary)).toContain('正在 threads 中搜索“needle”');
+    expect(renderedTextFromHtml(projectSummary)).toContain('已在 项目根目录 中搜索“TODO”');
+  });
+
+  it('keeps the generic search summary when the tool does not provide a path', () => {
+    const summary = firstToolRunSummaryHtml(renderedHtml([
+      toolRun('workspace_search', 'workspace_search_text', { query: 'needle' }),
+    ]));
+
+    expect(renderedTextFromHtml(summary)).toContain('已搜索代码needle');
+  });
+
+  it('shows each search scope inside a grouped search disclosure', () => {
+    const text = renderedText([
+      toolRun('search_controller', 'search_text', { path: 'src/useDesktopAppController.ts', query: 'error:' }),
+      toolRun('search_actions', 'search_text', { path: 'src/useChatTurnActions.ts', query: 'setError' }),
+    ]);
+
+    expect(text).toContain('已搜索 2 次代码');
+    expect(text).toContain('已在 useDesktopAppController.ts 中搜索“error:”');
+    expect(text).toContain('已在 useChatTurnActions.ts 中搜索“setError”');
+  });
+
   it('summarizes adjacent file mutation runs without raw JSON details', () => {
     const runs = [
       fileRun('write_selection', 'write_file', 'selection_sort.py', 'Created'),
