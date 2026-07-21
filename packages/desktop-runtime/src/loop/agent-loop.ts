@@ -585,7 +585,7 @@ export class AgentLoop {
     return this.modelStreamEvents.publishAssistantDelta(threadId, turnId, messageId, text);
   }
 
-  private completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; planMode?: RuntimeMessage['planMode'] } = {}): Promise<void> {
+  private completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; planMode?: RuntimeMessage['planMode']; providerMetadata?: RuntimeMessage['providerMetadata'] } = {}): Promise<void> {
     return this.modelStreamEvents.completeMessage(threadId, turnId, messageId, payload);
   }
   /**

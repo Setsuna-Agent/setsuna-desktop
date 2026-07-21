@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Form
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
 import { Archive, BadgeCheck, Bold, Brain, ChevronRight, CircleGauge, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Library, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, Type, Undo2, Wrench, X } from 'lucide-react';
-import type { BrandIconConfig, ProviderConfigState, ProviderModelConfig, RuntimeAvailableModel, RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeDesktopSettings, RuntimeFetchModelsInput, RuntimeMemoryPreview, RuntimeMemoryPreviewItem, RuntimeThread, RuntimeThreadSummary, RuntimeUsageResponse, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { defaultModelMaxOutputTokens, type BrandIconConfig, type ProviderConfigState, type ProviderModelConfig, type RuntimeAvailableModel, type RuntimeAvailableModelsResponse, type RuntimeConfigInput, type RuntimeConfigState, type RuntimeDesktopSettings, type RuntimeFetchModelsInput, type RuntimeMemoryPreview, type RuntimeMemoryPreviewItem, type RuntimeThread, type RuntimeThreadSummary, type RuntimeUsageResponse, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
 import { accentColorOptions, useAccentColorPreference, type AccentColor } from '../../hooks/useAccentColorPreference.js';
@@ -1717,7 +1717,11 @@ function ProviderSettings({
 
   const addModel = (providerId: string) => {
     const provider = providers.find((item) => item.id === providerId);
-    setEditingModel({ mode: 'create', providerId, model: defaultProviderModel('', !provider?.models.length) });
+    setEditingModel({
+      mode: 'create',
+      providerId,
+      model: defaultProviderModel('', !provider?.models.length, provider?.provider),
+    });
   };
 
   const removeModel = (providerId: string, modelId: string) => {
@@ -1738,14 +1742,14 @@ function ProviderSettings({
       updateProvider(current.providerId, (provider) =>
         ensureProviderActiveModel({
           ...provider,
-          models: [...provider.models, normalizeProviderModel(nextModel, provider.models.length === 0)],
+          models: [...provider.models, normalizeProviderModel(nextModel, provider.models.length === 0, provider.provider)],
         })
       );
     } else {
       updateProvider(current.providerId, (provider) =>
         ensureProviderActiveModel({
           ...provider,
-          models: provider.models.map((model) => (model.id === current.modelId ? normalizeProviderModel({ ...nextModel, id: current.modelId }, model.enabled) : model)),
+          models: provider.models.map((model) => (model.id === current.modelId ? normalizeProviderModel({ ...nextModel, id: current.modelId }, model.enabled, provider.provider) : model)),
         })
       );
     }
@@ -1766,7 +1770,7 @@ function ProviderSettings({
       .then((result) => {
         const currentProvider = providersRef.current.find((item) => item.id === provider.id);
         if (!currentProvider) return;
-        const nextModels = mergeFetchedModels(currentProvider.models, result.models);
+        const nextModels = mergeFetchedModels(currentProvider.models, result.models, currentProvider.provider);
         const decision = providerModelReplacementDecision(currentProvider.models, nextModels);
         if (decision === 'confirm') {
           setPendingModelReplacement({
@@ -2023,7 +2027,7 @@ function ProviderSettings({
                 </div>
               </section>
             </div>
-            {editingModel && editingProvider && editingModelConfig ? <ModelSettingsDialog key={`${editingModel.mode}-${editingProvider.id}-${editingModelConfig.id}`} model={editingModelConfig} onClose={() => setEditingModel(null)} onConfirm={commitEditingModel} /> : null}
+            {editingModel && editingProvider && editingModelConfig ? <ModelSettingsDialog key={`${editingModel.mode}-${editingProvider.id}-${editingModelConfig.id}`} defaultMaxOutputTokens={defaultModelMaxOutputTokens(editingProvider.provider)} model={editingModelConfig} onClose={() => setEditingModel(null)} onConfirm={commitEditingModel} /> : null}
           </div>
         ) : (
           <div className="chat-user-settings__local-provider-card">
@@ -2169,7 +2173,6 @@ function ProviderModelRow({
 }
 
 const DEFAULT_PROVIDER_KIND: ProviderConfigState['provider'] = 'openai-compatible';
-const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 68000;
 const SETTINGS_AUTO_SAVE_DELAY_MS = 300;
 const DANGER_CONFIRM_BUTTON_PROPS = { danger: true } as const;
 const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -2243,7 +2246,7 @@ function AutoSaveStatus({ state }: { state: SaveState }) {
   );
 }
 
-function ModelSettingsDialog({ model, onClose, onConfirm }: { model: ProviderModelConfig; onClose: () => void; onConfirm: (model: ProviderModelConfig) => void }) {
+function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm }: { defaultMaxOutputTokens: number; model: ProviderModelConfig; onClose: () => void; onConfirm: (model: ProviderModelConfig) => void }) {
   const [draftModel, setDraftModel] = useState(model);
   const thinkingEfforts = normalizeThinkingEfforts([...draftModel.thinkingEfforts, draftModel.defaultThinkingEffort]);
   const customThinkingEffortsText = draftModel.thinkingEnabled ? customThinkingEfforts(thinkingEfforts).join(', ') : '';
@@ -2307,7 +2310,7 @@ function ModelSettingsDialog({ model, onClose, onConfirm }: { model: ProviderMod
                 min={1}
                 value={draftModel.maxOutputTokens}
                 onChange={(event) => {
-                  const maxOutputTokens = positiveInt(Number(event.target.value), DEFAULT_MODEL_MAX_OUTPUT_TOKENS);
+                  const maxOutputTokens = positiveInt(Number(event.target.value), defaultMaxOutputTokens);
                   updateDraft((item) => ({ ...item, maxOutputTokens }));
                 }}
               />
@@ -2433,22 +2436,26 @@ function hasProviderModel(providers: ProviderConfigState[], providerId: string, 
 }
 
 function normalizeSettingsProviders(providers: ProviderConfigState[]): ProviderConfigState[] {
-  const normalized = (providers.length ? providers : [defaultProviderConfig()]).map((provider) => ({
-    ...provider,
-    provider: normalizeProviderKind(provider.provider),
-    name: provider.name || '模型服务',
-    models: normalizeProviderModels(provider.models),
-  }));
+  const normalized = (providers.length ? providers : [defaultProviderConfig()]).map((provider) => {
+    const providerKind = normalizeProviderKind(provider.provider);
+    return {
+      ...provider,
+      provider: providerKind,
+      name: provider.name || '模型服务',
+      models: normalizeProviderModels(provider.models, providerKind),
+    };
+  });
   return normalized.length ? normalized : [defaultProviderConfig()];
 }
 
-function normalizeProviderModels(models: ProviderModelConfig[]): ProviderModelConfig[] {
-  const normalized = (models.length ? models : [defaultProviderModel('')]).map((model, index) => normalizeProviderModel(model, index === 0));
+function normalizeProviderModels(models: ProviderModelConfig[], provider: ProviderConfigState['provider']): ProviderModelConfig[] {
+  const normalized = (models.length ? models : [defaultProviderModel('', true, provider)])
+    .map((model, index) => normalizeProviderModel(model, index === 0, provider));
   const activeModelId = normalized.find((model) => model.enabled)?.id ?? normalized[0]?.id;
   return normalized.map((model) => ({ ...model, enabled: model.id === activeModelId }));
 }
 
-function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = false): ProviderModelConfig {
+function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = false, provider: ProviderConfigState['provider'] = DEFAULT_PROVIDER_KIND): ProviderModelConfig {
   const code = model.code?.trim() ?? '';
   const thinkingEfforts = normalizeThinkingEfforts([...model.thinkingEfforts, model.defaultThinkingEffort]);
   return {
@@ -2457,7 +2464,7 @@ function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = fa
     name: model.name || code || '新模型',
     code,
     enabled: model.enabled ?? fallbackEnabled,
-    maxOutputTokens: positiveInt(model.maxOutputTokens, DEFAULT_MODEL_MAX_OUTPUT_TOKENS),
+    maxOutputTokens: positiveInt(model.maxOutputTokens, defaultModelMaxOutputTokens(provider)),
     contextWindowTokens: model.contextWindowTokens ? positiveInt(model.contextWindowTokens, 0) || undefined : undefined,
     thinkingEnabled: Boolean(model.thinkingEnabled),
     thinkingEfforts,
@@ -2475,17 +2482,17 @@ function defaultProviderConfig(): ProviderConfigState {
     enabled: true,
     apiKeySet: false,
     apiKeyPreview: '',
-    models: [defaultProviderModel('', true)],
+    models: [defaultProviderModel('', true, DEFAULT_PROVIDER_KIND)],
   };
 }
 
-function defaultProviderModel(code: string, enabled = true): ProviderModelConfig {
+function defaultProviderModel(code: string, enabled = true, provider: ProviderConfigState['provider'] = DEFAULT_PROVIDER_KIND): ProviderModelConfig {
   return {
     id: modelIdFromCode(code),
     name: code || '新模型',
     code,
     enabled,
-    maxOutputTokens: DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+    maxOutputTokens: defaultModelMaxOutputTokens(provider),
     thinkingEnabled: false,
     thinkingEfforts: [],
     supportsImages: false,
@@ -2496,7 +2503,7 @@ function prepareProviderForSave(provider: ProviderConfigState): ProviderConfigSt
   return {
     ...provider,
     provider: normalizeProviderKind(provider.provider),
-    models: normalizeProviderModels(provider.models).map((model) => ({
+    models: normalizeProviderModels(provider.models, provider.provider).map((model) => ({
       ...model,
       defaultThinkingEffort: normalizedDefaultThinkingEffort(model),
     })),
@@ -2543,10 +2550,10 @@ function providerApiKeyPlaceholder(provider: ProviderConfigState): string {
 }
 
 function ensureProviderActiveModel(provider: ProviderConfigState): ProviderConfigState {
-  return { ...provider, models: normalizeProviderModels(provider.models) };
+  return { ...provider, models: normalizeProviderModels(provider.models, provider.provider) };
 }
 
-function mergeFetchedModels(previousModels: ProviderModelConfig[], fetchedModels: RuntimeAvailableModel[]): ProviderModelConfig[] {
+function mergeFetchedModels(previousModels: ProviderModelConfig[], fetchedModels: RuntimeAvailableModel[], provider: ProviderConfigState['provider']): ProviderModelConfig[] {
   const previousByCode = new Map(previousModels.map((model) => [model.code, model]));
   const previousByName = new Map(previousModels.map((model) => [model.name, model]));
   const previousActiveCode = previousModels.find((model) => model.enabled)?.code;
@@ -2558,20 +2565,21 @@ function mergeFetchedModels(previousModels: ProviderModelConfig[], fetchedModels
     const defaultThinkingEffort = nonEmptyString(previous?.defaultThinkingEffort) ?? nonEmptyString(model.defaultThinkingEffort);
     return normalizeProviderModel(
       {
-        ...defaultProviderModel(code, code === activeCode),
+        ...defaultProviderModel(code, code === activeCode, provider),
         id: previous?.id || modelIdFromCode(code),
         name: model.name?.trim() || code,
         ...(previous?.icon ? { icon: previous.icon } : {}),
-        maxOutputTokens: previous?.maxOutputTokens ?? model.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+        maxOutputTokens: previous?.maxOutputTokens ?? model.maxOutputTokens ?? defaultModelMaxOutputTokens(provider),
         thinkingEnabled: Boolean(previous?.thinkingEnabled || model.thinkingEnabled || thinkingEfforts.length || defaultThinkingEffort),
         thinkingEfforts,
         defaultThinkingEffort,
         supportsImages: Boolean(previous?.supportsImages || model.supportsImages),
       },
-      code === activeCode
+      code === activeCode,
+      provider,
     );
   });
-  return normalizeProviderModels(merged);
+  return normalizeProviderModels(merged, provider);
 }
 
 function updateModelCode(model: ProviderModelConfig, code: string): ProviderModelConfig {

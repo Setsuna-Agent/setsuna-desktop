@@ -193,6 +193,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       if (event.payload.toolCalls?.length) message.toolCalls = event.payload.toolCalls.map((toolCall) => ({ ...toolCall }));
       if (event.payload.memoryCitation) message.memoryCitation = cloneMemoryCitation(event.payload.memoryCitation);
       if (event.payload.planMode) message.planMode = { ...event.payload.planMode };
+      if (event.payload.providerMetadata) message.providerMetadata = cloneProviderMetadata(event.payload.providerMetadata);
       if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
     }
     return next;
@@ -495,11 +496,37 @@ function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
+    providerMetadata: message.providerMetadata ? cloneProviderMetadata(message.providerMetadata) : undefined,
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map(cloneToolRun),
     hookRuns: message.hookRuns?.map(cloneHookRun),
   };
+}
+
+function cloneProviderMetadata(metadata: NonNullable<RuntimeMessage['providerMetadata']>): NonNullable<RuntimeMessage['providerMetadata']> {
+  return {
+    ...metadata,
+    anthropic: metadata.anthropic
+      ? {
+          contentBlocks: metadata.anthropic.contentBlocks.map((block) => (
+            block.type === 'tool_use'
+              ? { ...block, input: cloneJsonValue(block.input) }
+              : { ...block }
+          )),
+        }
+      : undefined,
+  };
+}
+
+function cloneJsonValue<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => cloneJsonValue(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, cloneJsonValue(item)]),
+    ) as T;
+  }
+  return value;
 }
 
 function cloneThreadTurn(turn: RuntimeThreadTurn): RuntimeThreadTurn {

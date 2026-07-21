@@ -50,6 +50,7 @@ export function useChatTurnActions({
       // 计划决策只能针对已有线程里的 awaiting 计划，没有线程时无从裁决。
       if (options.planDecision && !currentThread) return false;
       const isCurrentRequest = actionRequests.begin();
+      if (isCurrentRequest()) setError(null);
       try {
         let thread = currentThread;
         if (!thread) {

@@ -1,8 +1,9 @@
-import { isRuntimeInlineMessageAttachment, type ModelStreamEvent, type RuntimeInlineMessageAttachment, type RuntimeMessage, type RuntimeToolDefinition, type RuntimeUsage } from '@setsuna-desktop/contracts';
+import { DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_MAX_OUTPUT_TOKENS, isRuntimeInlineMessageAttachment, type ModelStreamEvent, type RuntimeInlineMessageAttachment, type RuntimeMessage, type RuntimeToolDefinition, type RuntimeUsage } from '@setsuna-desktop/contracts';
 
 export type FetchImpl = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
-export const DEFAULT_MAX_OUTPUT_TOKENS = 68000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = DEFAULT_MODEL_MAX_OUTPUT_TOKENS;
+export const DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS = DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS;
 
 export function requireFetch(fetchImpl: FetchImpl | undefined): FetchImpl {
   if (typeof fetchImpl !== 'function') {
@@ -48,36 +49,45 @@ export async function* parseSse(response: Response): AsyncGenerator<{ event?: st
         break;
       }
       buffer += decoder.decode(value, { stream: true });
-      const chunks = buffer.split('\n\n');
+      const chunks = buffer.split(/(?:\r\n|\r|\n){2}/);
       buffer = chunks.pop() ?? '';
       for (const chunk of chunks) {
-        const lines = chunk.split('\n');
-        const event = lines.find((line) => line.startsWith('event: '))?.slice(7).trim();
-        const data = lines
-          .filter((line) => line.startsWith('data: '))
-          .map((line) => line.slice(6))
-          .join('\n');
-        if (data) yield { event, data };
+        const parsed = parseSseEventBlock(chunk);
+        if (parsed) yield parsed;
       }
     }
-    const event = buffer.split('\n').find((line) => line.startsWith('event: '))?.slice(7).trim();
-    const data = buffer
-      .split('\n')
-      .filter((line) => line.startsWith('data: '))
-      .map((line) => line.slice(6))
-      .join('\n');
-    if (data) yield { event, data };
+    buffer += decoder.decode();
+    const parsed = parseSseEventBlock(buffer);
+    if (parsed) yield parsed;
   } finally {
     if (!completed) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
 
-export function parseJson(value: string): unknown | null {
+function parseSseEventBlock(block: string): { event?: string; data: string } | null {
+  let event: string | undefined;
+  const dataLines: string[] = [];
+  for (const line of block.split(/\r\n|\r|\n/)) {
+    if (!line || line.startsWith(':')) continue;
+    const separator = line.indexOf(':');
+    const field = separator < 0 ? line : line.slice(0, separator);
+    let value = separator < 0 ? '' : line.slice(separator + 1);
+    if (value.startsWith(' ')) value = value.slice(1);
+    if (field === 'event') event = value.trim();
+    if (field === 'data') dataLines.push(value);
+  }
+  if (!dataLines.length) return null;
+  const data = dataLines.join('\n');
+  return data ? { ...(event ? { event } : {}), data } : null;
+}
+
+export function parseJson(value: string): unknown {
   try {
     return JSON.parse(value) as unknown;
-  } catch {
-    return null;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Model stream returned invalid JSON: ${detail}`);
   }
 }
 
@@ -226,16 +236,8 @@ export function toAnthropicMessages(messages: RuntimeMessage[]): Array<Record<st
     if (message.role === 'user') {
       output.push({ role: 'user', content: anthropicUserContentParts(message) });
     } else if (message.role === 'assistant') {
-      const blocks = [];
-      if (message.content) blocks.push({ type: 'text', text: message.content });
-      for (const toolCall of message.toolCalls ?? []) {
-        blocks.push({
-          type: 'tool_use',
-          id: toolCall.id,
-          name: toolCall.name,
-          input: parseToolInput(toolCall.arguments),
-        });
-      }
+      const replayBlocks = anthropicReplayBlocks(message);
+      const blocks = replayBlocks.length ? replayBlocks : anthropicAssistantContentParts(message);
       output.push({
         role: 'assistant',
         content: blocks.length ? blocks : message.content,
@@ -256,6 +258,33 @@ export function toAnthropicMessages(messages: RuntimeMessage[]): Array<Record<st
     }
   }
   return output;
+}
+
+function anthropicAssistantContentParts(message: RuntimeMessage): Array<Record<string, unknown>> {
+  const blocks: Array<Record<string, unknown>> = [];
+  if (message.content) blocks.push({ type: 'text', text: message.content });
+  for (const toolCall of message.toolCalls ?? []) {
+    blocks.push({
+      type: 'tool_use',
+      id: toolCall.id,
+      name: toolCall.name,
+      input: parseToolInput(toolCall.arguments),
+    });
+  }
+  return blocks;
+}
+
+function anthropicReplayBlocks(message: RuntimeMessage): Array<Record<string, unknown>> {
+  const blocks = message.providerMetadata?.anthropic?.contentBlocks;
+  if (!blocks?.length) return [];
+  return blocks.map((block) => {
+    if (block.type === 'thinking') {
+      return { type: block.type, thinking: block.thinking, signature: block.signature };
+    }
+    if (block.type === 'redacted_thinking') return { type: block.type, data: block.data };
+    if (block.type === 'text') return { type: block.type, text: block.text };
+    return { type: block.type, id: block.id, name: block.name, input: cloneJsonValue(block.input) };
+  });
 }
 
 export function toAnthropicTools(tools: RuntimeToolDefinition[] = []): unknown[] {
@@ -308,6 +337,16 @@ function parseToolInput(argumentsText: string): unknown {
   } catch {
     return {};
   }
+}
+
+function cloneJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(cloneJsonValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, cloneJsonValue(item)]),
+    );
+  }
+  return value;
 }
 
 function openAiChatContentParts(message: RuntimeMessage): unknown[] {

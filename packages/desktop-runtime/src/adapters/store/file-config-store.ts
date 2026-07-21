@@ -1,6 +1,6 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { normalizeImageGenerationServiceUrl, normalizeModelIconConfig, normalizeProviderIconConfig, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
+import { defaultModelMaxOutputTokens, normalizeImageGenerationServiceUrl, normalizeModelIconConfig, normalizeProviderIconConfig, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
 import type {
   ProviderConfigInput,
   ProviderConfigState,
@@ -23,7 +23,6 @@ import type {
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
-const DEFAULT_MAX_OUTPUT_TOKENS = 68000;
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
 const CONFIG_SCHEMA_VERSION = 2;
 
@@ -183,7 +182,7 @@ export class FileConfigStore implements ConfigStore {
         return {
           ...providerWithoutIcon,
           ...(icon ? { icon } : {}),
-          models: normalizeModels(provider.models),
+          models: normalizeModels(provider.models, provider.provider),
           apiKeySet: apiKey.length > 0,
           apiKeyPreview: maskApiKey(apiKey),
         };
@@ -233,7 +232,7 @@ function defaultConfig(): StoredConfig {
             code: 'local-runtime-smoke',
             enabled: true,
             contextWindowTokens: 256_000,
-            maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+            maxOutputTokens: defaultModelMaxOutputTokens('openai-compatible'),
             thinkingEnabled: false,
             thinkingEfforts: [],
             supportsImages: false,
@@ -273,12 +272,18 @@ function normalizeProviders(
       baseUrl: normalizeBaseUrl(provider.baseUrl ?? previous?.baseUrl ?? ''),
       enabled: provider.enabled ?? previous?.enabled ?? true,
       ...(icon ? { icon } : {}),
-      models: normalizeModels(provider.models ?? previous?.models ?? []),
+      models: normalizeModels(
+        provider.models ?? previous?.models ?? [],
+        provider.provider ?? previous?.provider ?? 'openai-compatible',
+      ),
     };
   });
 }
 
-function normalizeModels(models: ProviderConfigState['models']): ProviderConfigState['models'] {
+function normalizeModels(
+  models: ProviderConfigState['models'],
+  provider: ProviderConfigState['provider'],
+): ProviderConfigState['models'] {
   const normalized = models.map((model, index) => {
     const code = nonEmpty(model.code) ?? nonEmpty(model.id) ?? `model-${index + 1}`;
     const icon = normalizeModelIconConfig(model.icon);
@@ -289,7 +294,7 @@ function normalizeModels(models: ProviderConfigState['models']): ProviderConfigS
       enabled: model.enabled ?? true,
       ...(icon ? { icon } : {}),
       contextWindowTokens: positiveOptionalInt(model.contextWindowTokens),
-      maxOutputTokens: positiveInt(model.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS),
+      maxOutputTokens: positiveInt(model.maxOutputTokens, defaultModelMaxOutputTokens(provider)),
       thinkingEnabled: model.thinkingEnabled ?? false,
       thinkingEfforts: Array.isArray(model.thinkingEfforts) ? model.thinkingEfforts : [],
       defaultThinkingEffort: nonEmpty(model.defaultThinkingEffort),
@@ -371,10 +376,12 @@ function runtimeProviderConfig(
   secrets: StoredSecrets,
 ): RuntimeProviderConfig | null {
   if (!provider) return null;
+  const models = normalizeModels(provider.models, provider.provider);
   return {
     ...provider,
+    models,
     apiKey: secrets.providerApiKeys[provider.id] ?? '',
-    activeModel: provider.models.find((model) => model.enabled) ?? provider.models[0],
+    activeModel: models.find((model) => model.enabled) ?? models[0],
   };
 }
 

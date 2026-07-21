@@ -105,6 +105,13 @@ export class RuntimeModelSampler {
       signal,
     })) {
       throwIfAborted(signal);
+      if (item.type === 'assistant_metadata') {
+        assistantMessage.providerMetadata = mergeProviderMetadata(
+          assistantMessage.providerMetadata,
+          item.providerMetadata,
+        );
+        continue;
+      }
       if (await this.options.streamEvents.publishModelStreamProtocolEvent(threadId, turnId, item)) {
         if (captureProtocolUsage && item.type === 'token_count') usage = item.usage;
         await streamBridge.consume(item);
@@ -153,6 +160,12 @@ export class RuntimeModelSampler {
         await this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, fallbackText);
       }
     }
+    if (!text.trim() && !toolCalls.length) {
+      // A transport can terminate cleanly while returning no usable model output (for example,
+      // when an OpenAI-compatible base URL points at a website instead of its API). Treating that
+      // as success leaves a blank assistant turn and hides the configuration failure from users.
+      throw new Error('模型服务返回了空响应，请检查 API Base URL、模型 ID 和供应商协议配置。');
+    }
 
     return {
       assistantMessage,
@@ -163,6 +176,21 @@ export class RuntimeModelSampler {
       usage,
     };
   }
+}
+
+function mergeProviderMetadata(
+  previous: RuntimeMessage['providerMetadata'],
+  next: NonNullable<RuntimeMessage['providerMetadata']>,
+): NonNullable<RuntimeMessage['providerMetadata']> {
+  const previousBlocks = previous?.anthropic?.contentBlocks ?? [];
+  const nextBlocks = next.anthropic?.contentBlocks ?? [];
+  return {
+    ...previous,
+    ...next,
+    ...(previousBlocks.length || nextBlocks.length
+      ? { anthropic: { contentBlocks: [...previousBlocks, ...nextBlocks] } }
+      : {}),
+  };
 }
 
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {

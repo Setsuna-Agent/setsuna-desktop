@@ -39,6 +39,7 @@ export class OpenAiChatModelClient implements ModelClient {
         model: activeModel?.code || request.model,
         messages: toOpenAiMessages(request.messages),
         stream: true,
+        stream_options: { include_usage: true },
         max_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiChatTools(request.tools) } : {}),
@@ -115,7 +116,7 @@ function toOpenAiChatToolChoice(toolChoice: ModelRequest['toolChoice']) {
 
 function mergeToolCallDelta(toolCallsByIndex: Map<number, RuntimeToolCall>, value: unknown) {
   const item = objectValue(value);
-  const index = typeof item.index === 'number' ? item.index : toolCallsByIndex.size;
+  const index = toolCallIndex(toolCallsByIndex, item);
   const existing = toolCallsByIndex.get(index) ?? {
     id: stringValue(item.id) || `tool_call_${index}`,
     name: '',
@@ -136,4 +137,20 @@ function mergeToolCallDelta(toolCallsByIndex: Map<number, RuntimeToolCall>, valu
     name: next.name,
     argumentsDelta: argumentDelta,
   };
+}
+
+function toolCallIndex(toolCallsByIndex: Map<number, RuntimeToolCall>, item: Record<string, unknown>): number {
+  if (typeof item.index === 'number' && Number.isInteger(item.index)) return item.index;
+  const id = stringValue(item.id);
+  if (id) {
+    for (const [index, toolCall] of toolCallsByIndex) {
+      if (toolCall.id === id) return index;
+    }
+    return toolCallsByIndex.size;
+  }
+  // Some compatible endpoints omit index after the first fragment. Continue the
+  // most recently observed call instead of creating a new call for every chunk.
+  let latestIndex = 0;
+  for (const index of toolCallsByIndex.keys()) latestIndex = index;
+  return toolCallsByIndex.size ? latestIndex : 0;
 }

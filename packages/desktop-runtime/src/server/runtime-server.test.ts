@@ -382,7 +382,7 @@ describe('runtime server', () => {
       expect(request.authorization).toBe('Bearer sk-model-list');
       expect(result.models).toEqual([
         { id: 'llama3.1', name: 'Llama 3.1' },
-        { id: 'qwen2.5', name: 'qwen2.5', thinkingEnabled: true, thinkingEfforts: ['low', 'high'], supportsImages: true },
+        { id: 'qwen2.5', name: 'qwen2.5', maxOutputTokens: 8192, thinkingEnabled: true, thinkingEfforts: ['low', 'high'], supportsImages: true },
       ]);
     } finally {
       await modelServer.close();
@@ -5137,7 +5137,7 @@ async function createModelListCaptureServer(): Promise<{
     response.end(JSON.stringify({
       data: [
         { id: 'llama3.1', display_name: 'Llama 3.1' },
-        { model: 'qwen2.5', capabilities: { reasoning: true, reasoningEfforts: ['low', 'high'] }, modalities: ['text', 'image'] },
+        { model: 'qwen2.5', max_tokens: 8192, capabilities: { reasoning: true, reasoningEfforts: ['low', 'high'] }, modalities: ['text', 'image'] },
         { id: 'llama3.1', name: 'Duplicate' },
       ],
     }));

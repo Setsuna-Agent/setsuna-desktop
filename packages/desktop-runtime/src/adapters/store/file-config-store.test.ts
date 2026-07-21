@@ -52,6 +52,39 @@ describe('file config store', () => {
     });
   });
 
+  it('normalizes missing Anthropic output limits to the provider-specific fallback', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    const initial = await store.getConfig();
+    const baseProvider = initial.providers[0];
+    const baseModel = baseProvider?.models[0];
+    if (!baseProvider || !baseModel) throw new Error('Expected the default provider and model fixtures.');
+    await store.saveConfig({
+      activeProviderId: 'anthropic-provider',
+      providers: [{
+        ...baseProvider,
+        id: 'anthropic-provider',
+        provider: 'anthropic',
+        models: [{ ...baseModel, id: 'claude', code: 'claude', maxOutputTokens: 4096 }],
+      }],
+    });
+    const configPath = path.join(dataDir, 'config.json');
+    const stored = JSON.parse(await readFile(configPath, 'utf8')) as {
+      providers: Array<{ models: Array<Record<string, unknown>> }>;
+    };
+    const storedModel = stored.providers[0]?.models[0];
+    if (!storedModel) throw new Error('Expected a stored Anthropic model fixture.');
+    delete storedModel.maxOutputTokens;
+    await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
+
+    await expect(store.getConfig()).resolves.toMatchObject({
+      providers: [{ models: [{ maxOutputTokens: 8192 }] }],
+    });
+    await expect(store.getActiveProviderConfig()).resolves.toMatchObject({
+      activeModel: { maxOutputTokens: 8192 },
+    });
+  });
+
   it('reports corrupted config instead of silently replacing it with defaults', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     await writeFile(path.join(dataDir, 'config.json'), '{broken', 'utf8');

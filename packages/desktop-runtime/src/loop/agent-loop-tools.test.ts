@@ -245,6 +245,72 @@ describe('agent loop tools', () => {
     ]);
   });
 
+  it('persists provider metadata and carries it into the tool-result sampling step', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Provider metadata tool loop', projectId: 'project_1' });
+    const modelClient = new ProviderMetadataToolModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new CapturingToolHost(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'read with thinking' });
+
+    const expectedMetadata = {
+      anthropic: {
+        contentBlocks: [
+          { type: 'thinking', thinking: 'Need the file.', signature: 'opaque-signature' },
+          { type: 'tool_use', id: 'call_metadata_1', name: 'workspace_read_file', input: { path: 'README.md' } },
+        ],
+      },
+    } as const;
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const toolAssistant = saved?.messages.find((message) => message.role === 'assistant' && message.toolCalls?.length);
+    const continuedAssistant = modelClient.requests[1]?.messages.find((message) => message.role === 'assistant' && message.toolCalls?.length);
+
+    expect(toolAssistant?.providerMetadata).toEqual(expectedMetadata);
+    expect(continuedAssistant?.providerMetadata).toEqual(expectedMetadata);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'message.completed',
+      payload: expect.objectContaining({ providerMetadata: expectedMetadata }),
+    }));
+  });
+
+  it('fails an empty model stream instead of completing a blank assistant message', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Empty model response' });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new EmptyModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    await expect(loop.sendTurn(thread.id, { input: 'hello' })).rejects.toThrow('模型服务返回了空响应');
+
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    expect(saved?.turns?.at(-1)).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('模型服务返回了空响应'),
+    });
+    expect(saved?.messages.find((message) => message.role === 'assistant')).toMatchObject({
+      content: '',
+      status: 'error',
+      error: expect.stringContaining('模型服务返回了空响应'),
+    });
+    expect(events.some((event) => event.type === 'runtime.error')).toBe(true);
+    expect(events.some((event) => event.type === 'turn.completed')).toBe(false);
+  });
+
   it('keeps a completed turn terminal when tool cleanup fails', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -5709,6 +5775,12 @@ describe('agent loop tools', () => {
   });
 });
 
+class EmptyModelClient implements ModelClient {
+  async *stream(): AsyncGenerator<ModelStreamEvent> {
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 class ToolCallingModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -5743,6 +5815,40 @@ class ToolCallingModelClient implements ModelClient {
         totalTokens: 8,
       },
     };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class ProviderMetadataToolModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      const toolCall = { id: 'call_metadata_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' };
+      yield {
+        type: 'assistant_metadata',
+        providerMetadata: {
+          anthropic: {
+            contentBlocks: [
+              { type: 'thinking', thinking: 'Need the file.', signature: 'opaque-signature' },
+              { type: 'tool_use', id: toolCall.id, name: toolCall.name, input: { path: 'README.md' } },
+            ],
+          },
+        },
+      };
+      yield {
+        type: 'item_started',
+        item: { id: toolCall.id, kind: 'tool_call', status: 'in_progress', toolCall },
+      };
+      yield {
+        type: 'item_completed',
+        item: { id: toolCall.id, kind: 'tool_call', status: 'completed', toolCall },
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The metadata-backed tool continuation completed.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

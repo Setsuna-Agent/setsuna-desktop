@@ -488,6 +488,72 @@
     grid-template-rows 180ms ease;
 }
 
+.app-runtime-error-notice {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: flex-start;
+  align-self: end;
+  justify-self: center;
+  gap: 9px;
+  z-index: 60;
+  width: min(720px, calc(100% - 32px));
+  max-height: min(180px, 40vh);
+  margin-bottom: 14px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, #ef4444 44%, var(--app-border));
+  border-radius: var(--app-radius-md);
+  color: #991b1b;
+  background: color-mix(in srgb, #ef4444 8%, var(--app-surface));
+  box-shadow: var(--app-shadow-popover);
+}
+
+.app-runtime-error-notice__icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.app-runtime-error-notice__content {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+  max-height: 150px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.app-runtime-error-notice__content strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-runtime-error-notice > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: currentColor;
+  background: transparent;
+}
+
+.app-runtime-error-notice > button:hover {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+}
+
+.app-runtime-error-notice > button:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
 /* Windows 主区使用同一条轮廓连接顶边与侧边，避免圆角处叠出直角边线。 */
 :root[data-desktop-platform='win32'] .app-workbench:has(> .app-sidebar)::before {
   position: absolute;
@@ -680,6 +746,10 @@ body.desktop-terminal-resizing {
   .app-workbench,
   .app-workbench--inspector-closed {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-runtime-error-notice {
+    grid-column: 1;
   }
 
   .app-topbar__workspace {

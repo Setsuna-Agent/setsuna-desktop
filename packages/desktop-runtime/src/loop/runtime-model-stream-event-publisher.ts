@@ -329,7 +329,7 @@ export class RuntimeModelStreamEventPublisher {
    * @param messageId 要完成的消息 ID。
    * @param payload 可选的 usage 和 toolCalls 补充数据。
    */
-  async completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; planMode?: RuntimeMessage['planMode'] } = {}): Promise<void> {
+  async completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; planMode?: RuntimeMessage['planMode']; providerMetadata?: RuntimeMessage['providerMetadata'] } = {}): Promise<void> {
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,

@@ -161,7 +161,16 @@ function availableModelCapabilities(object: Record<string, unknown>): Partial<Ru
     capabilities.maxContextTokens ??
     capabilities.max_context_tokens,
   );
-  const maxOutputTokens = numberValue(object.maxOutputTokens ?? object.max_output_tokens ?? object.outputTokenLimit ?? object.output_token_limit ?? capabilities.maxOutputTokens ?? capabilities.max_output_tokens);
+  const maxOutputTokens = numberValue(
+    object.maxOutputTokens
+    ?? object.max_output_tokens
+    ?? object.max_tokens
+    ?? object.outputTokenLimit
+    ?? object.output_token_limit
+    ?? capabilities.maxOutputTokens
+    ?? capabilities.max_output_tokens
+    ?? capabilities.max_tokens,
+  );
   return {
     ...(contextWindowTokens ? { contextWindowTokens } : {}),
     ...(maxOutputTokens ? { maxOutputTokens } : {}),

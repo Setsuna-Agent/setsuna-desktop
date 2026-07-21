@@ -53,6 +53,7 @@ type RuntimeAgentTurnRunnerOptions = {
       toolCalls?: RuntimeToolCall[];
       memoryCitation?: RuntimeMemoryCitation;
       planMode?: RuntimeMessage['planMode'];
+      providerMetadata?: RuntimeMessage['providerMetadata'];
     },
   ): Promise<void>;
   publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void>;
@@ -251,6 +252,7 @@ export class RuntimeAgentTurnRunner {
             toolCalls,
             usage: sampled.usage,
             memoryCitation: roundMemoryCitation,
+            providerMetadata: assistantMessage.providerMetadata,
           });
           activeAssistantMessageId = null;
           conversationMessages.push({
@@ -269,7 +271,7 @@ export class RuntimeAgentTurnRunner {
         const pendingMailboxMessages = await this.options.turnInputs.drainMailboxMessages(threadId, turnId);
         const pendingSteers = await this.options.turnInputs.drainSteers(threadId, turnId);
         if (pendingMailboxMessages.length || pendingSteers.length) {
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
@@ -288,7 +290,7 @@ export class RuntimeAgentTurnRunner {
             roundText += COLLABORATION_WAIT_NOTE;
             await this.options.publishAssistantDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
           }
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
@@ -308,7 +310,7 @@ export class RuntimeAgentTurnRunner {
           stopHookActive,
         });
         if (stopHookOutcome.shouldBlock && stopHookOutcome.blockReason) {
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
@@ -336,6 +338,7 @@ export class RuntimeAgentTurnRunner {
               userContent: explicitMemoryUserContent,
             },
             memoryCitation: roundMemoryCitation,
+            providerMetadata: assistantMessage.providerMetadata,
             content: roundText,
             planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
             review: options.review ? roundText : undefined,

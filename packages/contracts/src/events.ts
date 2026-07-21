@@ -98,7 +98,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'message.delta', { messageId: string; text: string }>
   | RuntimeEventBase<'message.updated', { messageId: string; content: string }>
   | RuntimeEventBase<'message.plan_mode_updated', { messageId: string; content?: string; planMode: NonNullable<RuntimeMessage['planMode']> }>
-  | RuntimeEventBase<'message.completed', { messageId: string; content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls']; memoryCitation?: RuntimeMessage['memoryCitation']; planMode?: RuntimeMessage['planMode'] }>
+  | RuntimeEventBase<'message.completed', { messageId: string; content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls']; memoryCitation?: RuntimeMessage['memoryCitation']; planMode?: RuntimeMessage['planMode']; providerMetadata?: RuntimeMessage['providerMetadata'] }>
   | RuntimeEventBase<'item.started', { item: RuntimeStreamItem }>
   | RuntimeEventBase<'item.delta', { itemId: string; delta: string }>
   | RuntimeEventBase<'item.completed', { item: RuntimeStreamItem; content?: string; data?: unknown }>

@@ -1,8 +1,8 @@
-import type { ModelRequest, ModelStreamEvent, RuntimeStreamItem, RuntimeToolCall } from '@setsuna-desktop/contracts';
+import type { ModelRequest, ModelStreamEvent, RuntimeAnthropicContentBlock, RuntimeStreamItem, RuntimeToolCall } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
-  DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS,
   anthropicApiKeyHeader,
   assertOkResponse,
   doneEvent,
@@ -32,7 +32,8 @@ export class AnthropicMessagesModelClient implements ModelClient {
     const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
     const system = systemAndDeveloperText(request.messages);
-    const thinking = anthropicThinkingBody(this.provider, request);
+    const maxOutputTokens = request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS;
+    const thinking = anthropicThinkingBody(this.provider, { ...request, maxOutputTokens });
     const response = await fetcher(withEndpoint(this.provider.baseUrl, '/v1/messages'), {
       method: 'POST',
       headers: {
@@ -44,7 +45,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
       body: JSON.stringify({
         model: activeModel?.code || request.model,
         messages: toAnthropicMessages(request.messages),
-        max_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+        max_tokens: maxOutputTokens,
         stream: true,
         ...(system ? { system } : {}),
         ...(request.tools?.length ? { tools: toAnthropicTools(request.tools) } : {}),
@@ -60,6 +61,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
     let toolCallsYielded = false;
     let nativeToolItems = false;
     const blocks = new Map<number, AnthropicBlockState>();
+    const completedContentBlocks: RuntimeAnthropicContentBlock[] = [];
     for await (const { event, data } of parseSse(response)) {
       const payload = objectValue(parseJson(data));
       const type = stringValue(payload.type) || event || '';
@@ -71,12 +73,14 @@ export class AnthropicMessagesModelClient implements ModelClient {
           blocks.set(blockState.index, blockState);
           if (blockState.item.kind === 'tool_call') nativeToolItems = true;
           yield { type: 'item_started' as const, item: cloneRuntimeStreamItem(blockState.item) };
-        } else {
-          const toolCall = mergeAnthropicBlockStart(toolCalls, payload);
-          if (toolCall) {
+          if (blockState.item.kind === 'tool_call' && blockState.item.toolCall?.arguments) {
             yield {
               type: 'tool_call_delta' as const,
-              call: { id: toolCall.id, name: toolCall.name, argumentsDelta: toolCall.arguments },
+              call: {
+                id: blockState.item.toolCall.id,
+                name: blockState.item.toolCall.name,
+                argumentsDelta: blockState.item.toolCall.arguments,
+              },
             };
           }
         }
@@ -86,12 +90,16 @@ export class AnthropicMessagesModelClient implements ModelClient {
         const blockState = index === undefined ? null : blocks.get(index) ?? null;
         const text = stringValue(delta.text);
         const thinking = stringValue(delta.thinking);
+        const signature = stringValue(delta.signature);
         const partialJson = stringValue(delta.partial_json);
         if (blockState?.item.kind === 'reasoning' && thinking) {
           blockState.content += thinking;
           yield { type: 'reasoning_raw_delta' as const, itemId: blockState.item.id, text: thinking, contentIndex: 0 };
         } else if (thinking) {
           yield { type: 'reasoning_delta' as const, text: thinking };
+        }
+        if (blockState?.contentBlock.type === 'thinking' && signature) {
+          blockState.contentBlock.signature += signature;
         }
         if (blockState?.item.kind === 'agent_message' && text) {
           blockState.content += text;
@@ -104,7 +112,11 @@ export class AnthropicMessagesModelClient implements ModelClient {
           toolCall.arguments = `${toolCall.arguments}${partialJson}`;
           blockState.item.toolCall = toolCall;
           toolCalls.set(blockState.index, toolCall);
-        } else {
+          yield {
+            type: 'tool_call_delta' as const,
+            call: { id: toolCall.id, name: toolCall.name, argumentsDelta: partialJson },
+          };
+        } else if (!blockState) {
           const toolCall = mergeAnthropicInputDelta(toolCalls, payload);
           if (toolCall) {
             yield {
@@ -118,6 +130,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
         const blockState = index === undefined ? null : blocks.get(index) ?? null;
         if (blockState) {
           blocks.delete(blockState.index);
+          completedContentBlocks.push(completedAnthropicContentBlock(blockState));
           yield { type: 'item_completed' as const, item: completedAnthropicBlockItem(blockState) };
         }
       } else if (type === 'message_delta') {
@@ -141,6 +154,12 @@ export class AnthropicMessagesModelClient implements ModelClient {
     if (!toolCallsYielded && !nativeToolItems && toolCalls.size) {
       const calls = [...toolCalls.values()].filter((call) => call.name);
       if (calls.length) yield { type: 'tool_calls' as const, toolCalls: calls };
+    }
+    if (shouldPreserveAnthropicContentBlocks(completedContentBlocks)) {
+      yield {
+        type: 'assistant_metadata' as const,
+        providerMetadata: { anthropic: { contentBlocks: completedContentBlocks } },
+      };
     }
     if (usage) {
       yield {
@@ -184,6 +203,7 @@ function toAnthropicToolChoice(toolChoice: Exclude<ModelRequest['toolChoice'], u
 }
 
 type AnthropicBlockState = {
+  contentBlock: RuntimeAnthropicContentBlock;
   content: string;
   index: number;
   item: RuntimeStreamItem;
@@ -197,6 +217,7 @@ function anthropicBlockState(payload: Record<string, unknown>): AnthropicBlockSt
     const content = stringValue(block.text);
     return {
       content,
+      contentBlock: { type: 'text', text: content },
       index,
       item: { id: `content_${index}`, kind: 'agent_message', content, status: 'in_progress' },
     };
@@ -205,8 +226,21 @@ function anthropicBlockState(payload: Record<string, unknown>): AnthropicBlockSt
     const content = stringValue(block.thinking);
     return {
       content,
+      contentBlock: {
+        type: 'thinking',
+        thinking: content,
+        signature: stringValue(block.signature),
+      },
       index,
       item: { id: `reasoning_${index}`, kind: 'reasoning', content, status: 'in_progress' },
+    };
+  }
+  if (type === 'redacted_thinking') {
+    return {
+      content: '',
+      contentBlock: { type: 'redacted_thinking', data: stringValue(block.data) },
+      index,
+      item: { id: `reasoning_${index}`, kind: 'reasoning', content: '', status: 'in_progress' },
     };
   }
   if (type === 'tool_use') {
@@ -218,11 +252,44 @@ function anthropicBlockState(payload: Record<string, unknown>): AnthropicBlockSt
     };
     return {
       content: '',
+      contentBlock: {
+        type: 'tool_use',
+        id: toolCall.id,
+        name: toolCall.name,
+        input: block.input ?? {},
+      },
       index,
       item: { id: toolCall.id, kind: 'tool_call', name: toolCall.name, status: 'in_progress', toolCall },
     };
   }
   return null;
+}
+
+function completedAnthropicContentBlock(blockState: AnthropicBlockState): RuntimeAnthropicContentBlock {
+  const block = blockState.contentBlock;
+  if (block.type === 'thinking') return { ...block, thinking: blockState.content };
+  if (block.type === 'text') return { ...block, text: blockState.content };
+  if (block.type === 'tool_use') {
+    return {
+      ...block,
+      input: parseAnthropicToolInput(blockState.item.toolCall?.arguments ?? ''),
+    };
+  }
+  return { ...block };
+}
+
+function parseAnthropicToolInput(argumentsText: string): unknown {
+  if (!argumentsText.trim()) return {};
+  try {
+    return JSON.parse(argumentsText) as unknown;
+  } catch {
+    return {};
+  }
+}
+
+function shouldPreserveAnthropicContentBlocks(blocks: RuntimeAnthropicContentBlock[]): boolean {
+  return blocks.some((block) => block.type === 'tool_use')
+    && blocks.some((block) => block.type === 'thinking' || block.type === 'redacted_thinking');
 }
 
 function completedAnthropicBlockItem(blockState: AnthropicBlockState): RuntimeStreamItem {
@@ -246,20 +313,6 @@ function cloneRuntimeStreamItem(item: RuntimeStreamItem): RuntimeStreamItem {
     ...item,
     ...(item.toolCall ? { toolCall: { ...item.toolCall } } : {}),
   };
-}
-
-function mergeAnthropicBlockStart(toolCalls: Map<number, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {
-  const block = objectValue(payload.content_block);
-  if (stringValue(block.type) !== 'tool_use') return null;
-  const index = typeof payload.index === 'number' ? payload.index : toolCalls.size;
-  const input = block.input === undefined ? '' : JSON.stringify(block.input);
-  const next = {
-    id: stringValue(block.id) || `toolu_${index}`,
-    name: stringValue(block.name),
-    arguments: input === '{}' ? '' : input,
-  };
-  toolCalls.set(index, next);
-  return next;
 }
 
 function mergeAnthropicInputDelta(toolCalls: Map<number, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {

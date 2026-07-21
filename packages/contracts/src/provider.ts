@@ -1,4 +1,4 @@
-import type { RuntimeMessage, RuntimeMessagePromptSource } from './threads.js';
+import type { RuntimeMessage, RuntimeMessagePromptSource, RuntimeMessageProviderMetadata } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './config.js';
 import type { RuntimeEnvironment } from './environment.js';
@@ -190,6 +190,7 @@ export type ModelRequest = {
 };
 
 export type ModelStreamEvent =
+  | { type: 'assistant_metadata'; providerMetadata: RuntimeMessageProviderMetadata }
   | { type: 'item_started'; item: RuntimeStreamItem }
   | { type: 'item_delta'; itemId: string; delta: string }
   | { type: 'item_completed'; item: RuntimeStreamItem }

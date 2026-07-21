@@ -35,7 +35,7 @@ export function anthropicThinkingBody(provider: RuntimeProviderConfig, request: 
   if (!effort) return null;
   const normalized = effort.toLowerCase();
   if (normalized === 'adaptive' || normalized === 'auto') return { type: 'adaptive' };
-  const budgetTokens = anthropicThinkingBudgetForEffort(normalized, service.maxOutputTokens);
+  const budgetTokens = anthropicThinkingBudgetForEffort(normalized, request.maxOutputTokens ?? service.maxOutputTokens);
   return budgetTokens ? { type: 'enabled', budget_tokens: budgetTokens } : null;
 }
 

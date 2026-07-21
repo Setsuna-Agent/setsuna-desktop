@@ -2,6 +2,8 @@ import type { ModelProviderKind } from './provider.js';
 
 export const BRAND_ICON_MAX_BYTES = 512 * 1024;
 export const BRAND_ICON_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 68000;
+export const DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS = 8192;
 // Backwards-compatible names for callers added with provider icon configuration.
 export const PROVIDER_CUSTOM_ICON_MAX_BYTES = BRAND_ICON_MAX_BYTES;
 export const PROVIDER_CUSTOM_ICON_MIME_TYPES = BRAND_ICON_MIME_TYPES;
@@ -27,6 +29,12 @@ export type ProviderConfigState = {
   apiKeyPreview: string;
   models: ProviderModelConfig[];
 };
+
+export function defaultModelMaxOutputTokens(provider: ModelProviderKind): number {
+  return provider === 'anthropic'
+    ? DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS
+    : DEFAULT_MODEL_MAX_OUTPUT_TOKENS;
+}
 
 /** Brand icons live in config.json, so reject unsafe formats and unexpectedly large inline images at the contract boundary. */
 export function normalizeBrandIconConfig(value: unknown): BrandIconConfig | undefined {

@@ -54,11 +54,40 @@ describe('provider model adapters', () => {
     expect(headers.Authorization).toBe('Bearer secret');
     expect(body.model).toBe('model-code');
     expect(body.max_tokens).toBe(1234);
+    expect(body.stream_options).toEqual({ include_usage: true });
     expect(events.filter((event) => event.type === 'text_delta').map((event) => event.text).join('')).toBe('Hello');
     expect(events.find((event) => event.type === 'usage')).toMatchObject({
       usage: { providerId: 'provider-1', provider: 'Provider 1', cachedInputTokens: 1, totalTokens: 5 },
     });
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'stop' });
+  });
+
+  it('parses CRLF-delimited SSE events without collapsing the stream', async () => {
+    const client = new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch([
+        'data: {"choices":[{"delta":{"content":"CR"}}]}',
+        '',
+        'data: {"choices":[{"delta":{"content":"LF"},"finish_reason":"stop"}]}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\r\n'), {}),
+    );
+
+    const events = await collect(client);
+
+    expect(events.filter((event) => event.type === 'text_delta').map((event) => event.text).join('')).toBe('CRLF');
+    expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'stop' });
+  });
+
+  it('surfaces malformed SSE JSON instead of silently returning an empty response', async () => {
+    const client = new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {not-json}\r\n\r\n', {}),
+    );
+
+    await expect(collect(client)).rejects.toThrow('Model stream returned invalid JSON');
   });
 
   it('normalizes OpenAI compatible tool calls', async () => {
@@ -119,6 +148,27 @@ describe('provider model adapters', () => {
         },
       },
     ]);
+    expect(events.find((event) => event.type === 'tool_calls')).toEqual({
+      type: 'tool_calls',
+      toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+    });
+  });
+
+  it('keeps legacy tool argument fragments on the same call when later indices are omitted', async () => {
+    const client = new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch([
+        `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'workspace_read_file', arguments: '{"path":"' } }] } }] })}`,
+        '',
+        `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ function: { arguments: 'README.md"}' } }] }, finish_reason: 'tool_calls' }] })}`,
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n'), {}),
+    );
+
+    const events = await collect(client);
+
     expect(events.find((event) => event.type === 'tool_calls')).toEqual({
       type: 'tool_calls',
       toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
@@ -535,6 +585,24 @@ describe('provider model adapters', () => {
     expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { totalTokens: 6 } });
   });
 
+  it('reports usage and truncation reason from response.incomplete', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch([
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":8,"output_tokens":4,"total_tokens":12}}}',
+        '',
+      ].join('\n'), {}),
+    );
+
+    const events = await collect(client);
+
+    expect(events.find((event) => event.type === 'usage')).toMatchObject({
+      usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
+    });
+    expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'max_output_tokens' });
+  });
+
   it('streams OpenAI Responses metadata, safety buffering, and reasoning section events', async () => {
     const client = new OpenAiResponsesModelClient(
       provider('openai-responses', 'https://api.openai.test/v1'),
@@ -714,16 +782,16 @@ describe('provider model adapters', () => {
       fakeFetch(
         [
           'event: response.output_item.added',
-          'data: {"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_1","name":"workspace_read_file"}}',
+          'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"workspace_read_file"}}',
           '',
           'event: response.function_call_arguments.delta',
-          'data: {"type":"response.function_call_arguments.delta","call_id":"call_1","delta":"{\\"path\\":\\""}',
+          'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\\"path\\":\\""}',
           '',
           'event: response.function_call_arguments.delta',
-          'data: {"type":"response.function_call_arguments.delta","call_id":"call_1","delta":"README.md\\"}"}',
+          'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"README.md\\"}"}',
           '',
           'event: response.output_item.done',
-          'data: {"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}"}}',
+          'data: {"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}"}}',
           '',
         ].join('\n'),
         captured,
@@ -926,6 +994,46 @@ describe('provider model adapters', () => {
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'end_turn' });
   });
 
+  it('uses a safe Anthropic output fallback when model discovery has no limit', async () => {
+    const captured: CapturedRequest = {};
+    const configuredProvider = {
+      ...provider('anthropic', 'https://api.anthropic.test'),
+      models: [],
+      activeModel: undefined,
+    };
+    await collect(
+      new AnthropicMessagesModelClient(
+        configuredProvider,
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+      ),
+    );
+
+    expect(expectBody(captured).max_tokens).toBe(8192);
+  });
+
+  it('caps Anthropic thinking budget against the request max_tokens override', async () => {
+    const captured: CapturedRequest = {};
+    const thinkingModel = {
+      ...model,
+      maxOutputTokens: 16_000,
+      thinkingEnabled: true,
+      thinkingEfforts: ['high'],
+      defaultThinkingEffort: 'high',
+    };
+    await collect(
+      new AnthropicMessagesModelClient(
+        provider('anthropic', 'https://api.anthropic.test', thinkingModel),
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+      ),
+      { thinking: true, reasoningEffort: 'high', maxOutputTokens: 2048 },
+    );
+
+    expect(expectBody(captured)).toMatchObject({
+      max_tokens: 2048,
+      thinking: { type: 'enabled', budget_tokens: 2047 },
+    });
+  });
+
   it('streams native Anthropic content blocks as runtime items', async () => {
     const client = new AnthropicMessagesModelClient(
       provider('anthropic', 'https://api.anthropic.test'),
@@ -967,6 +1075,124 @@ describe('provider model adapters', () => {
     expect(events).toContainEqual({ type: 'item_completed', item: { id: 'content_1', kind: 'agent_message', content: 'Claude', status: 'completed' } });
     expect(events.some((event) => event.type === 'text_delta')).toBe(false);
     expect(events.some((event) => event.type === 'reasoning_delta')).toBe(false);
+  });
+
+  it('preserves signed and redacted Anthropic thinking blocks across a tool continuation', async () => {
+    const firstClient = new AnthropicMessagesModelClient(
+      provider('anthropic', 'https://api.anthropic.test'),
+      fakeFetch(
+        [
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Need context."}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"signed-thinking"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":0}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":1,"content_block":{"type":"redacted_thinking","data":"encrypted-thinking"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":1}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":2,"content_block":{"type":"text","text":"I will search."}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":2}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":3,"content_block":{"type":"tool_use","id":"toolu_1","name":"workspace_search_text","input":{}}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":3,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"needle\\"}"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":3}',
+          '',
+          'event: message_delta',
+          'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}',
+          '',
+          'event: message_stop',
+          'data: {"type":"message_stop"}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const firstEvents = await collect(firstClient);
+    const metadataEvent = firstEvents.find((event) => event.type === 'assistant_metadata');
+    expect(firstEvents).toContainEqual({
+      type: 'tool_call_delta',
+      call: {
+        id: 'toolu_1',
+        name: 'workspace_search_text',
+        argumentsDelta: '{"query":"needle"}',
+      },
+    });
+    expect(metadataEvent).toEqual({
+      type: 'assistant_metadata',
+      providerMetadata: {
+        anthropic: {
+          contentBlocks: [
+            { type: 'thinking', thinking: 'Need context.', signature: 'signed-thinking' },
+            { type: 'redacted_thinking', data: 'encrypted-thinking' },
+            { type: 'text', text: 'I will search.' },
+            { type: 'tool_use', id: 'toolu_1', name: 'workspace_search_text', input: { query: 'needle' } },
+          ],
+        },
+      },
+    });
+    if (!metadataEvent || metadataEvent.type !== 'assistant_metadata') throw new Error('Expected Anthropic assistant metadata.');
+
+    const captured: CapturedRequest = {};
+    await collect(
+      new AnthropicMessagesModelClient(
+        provider('anthropic', 'https://api.anthropic.test'),
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+      ),
+      {
+        messages: [
+          ...request.messages,
+          {
+            id: 'assistant-thinking-tool',
+            role: 'assistant',
+            content: '<think>Need context.</think>I will search.',
+            createdAt: '2026-06-25T00:00:02.000Z',
+            toolCalls: [{ id: 'toolu_1', name: 'workspace_search_text', arguments: '{"query":"needle"}' }],
+            providerMetadata: metadataEvent.providerMetadata,
+          },
+          {
+            id: 'tool-result',
+            role: 'tool',
+            content: 'found it',
+            createdAt: '2026-06-25T00:00:03.000Z',
+            toolCallId: 'toolu_1',
+            toolName: 'workspace_search_text',
+          },
+        ],
+      },
+    );
+
+    expect(expectBody(captured).messages).toEqual([
+      { role: 'user', content: 'Hello' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'Need context.', signature: 'signed-thinking' },
+          { type: 'redacted_thinking', data: 'encrypted-thinking' },
+          { type: 'text', text: 'I will search.' },
+          { type: 'tool_use', id: 'toolu_1', name: 'workspace_search_text', input: { query: 'needle' } },
+        ],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'found it' }] },
+    ]);
   });
 
   it('normalizes Anthropic tool_use blocks and tool_result history', async () => {
@@ -1061,6 +1287,10 @@ describe('provider model adapters', () => {
         status: 'completed',
         toolCall: { id: 'toolu_1', name: 'workspace_search_text', arguments: '{"query":"needle"}' },
       },
+    });
+    expect(events).toContainEqual({
+      type: 'tool_call_delta',
+      call: { id: 'toolu_1', name: 'workspace_search_text', argumentsDelta: '{"query":"needle"}' },
     });
     expect(events.some((event) => event.type === 'tool_calls')).toBe(false);
   });

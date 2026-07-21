@@ -4,6 +4,7 @@ import { AppSidebarSurface } from './AppSidebarSurface.js';
 import { AppTopbarActions } from './AppTopbarActions.js';
 import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
 import { AppOverlays } from './AppOverlays.js';
+import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from './RuntimeErrorNotice.js';
 import { ShellFrame } from './ShellFrame.js';
 import { WorkspaceAppLauncher } from '../workspace/WorkspaceAppLauncher.js';
 import type { DesktopAppController } from '../../hooks/useDesktopAppController.js';
@@ -58,6 +59,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
+  const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
   const handleToggleConversationOverview = useCallback(() => {
     if (conversationOverviewRendered) {
@@ -175,6 +177,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         workspaceMinWidth={workspaceMinWidth}
         workspaceWidth={workspaceWidth}
       />
+
+      {visibleRuntimeError ? (
+        <RuntimeErrorNotice message={visibleRuntimeError} onDismiss={() => runtime.setError(null)} />
+      ) : null}
 
       <AppOverlays
         client={runtime.client}

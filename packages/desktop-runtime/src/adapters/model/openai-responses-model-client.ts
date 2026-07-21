@@ -56,6 +56,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
     const requestedModel = activeModel?.code || request.model;
     let lastServerModel = '';
     const toolCalls = new Map<string, RuntimeToolCall>();
+    const toolCallIdByItemId = new Map<string, string>();
     let toolCallsYielded = false;
     let nativeToolCallsCompleted = false;
     const nativeToolItemIds = new Set<string>();
@@ -127,7 +128,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
             yield { type: 'item_completed' as const, item: streamItem };
           }
         }
-        const toolCall = mergeResponsesOutputItem(toolCalls, payload);
+        const toolCall = mergeResponsesOutputItem(toolCalls, toolCallIdByItemId, payload);
         if (toolCall) {
           if (type === 'response.output_item.done') {
             nativeToolCallsCompleted = true;
@@ -137,16 +138,13 @@ export class OpenAiResponsesModelClient implements ModelClient {
           }
         }
       } else if (type === 'response.function_call_arguments.delta' || type === 'response.function_call_arguments.done') {
-        mergeResponsesArguments(toolCalls, payload);
-        const toolCallId = stringValue(payload.call_id) || stringValue(payload.item_id);
+        const toolCall = mergeResponsesArguments(toolCalls, toolCallIdByItemId, payload);
         if (type === 'response.function_call_arguments.done') {
-          const toolCall = toolCalls.get(toolCallId);
           if (toolCall?.name && !nativeToolCallsCompleted && !nativeToolItemIds.has(toolCall.id)) {
             toolCallsYielded = true;
             yield { type: 'tool_calls' as const, toolCalls: [toolCall] };
           }
         } else if (!nativeToolCallsCompleted) {
-          const toolCall = toolCalls.get(toolCallId);
           if (toolCall) {
             yield {
               type: 'tool_call_delta' as const,
@@ -174,10 +172,12 @@ export class OpenAiResponsesModelClient implements ModelClient {
             item: { id: itemId, kind: 'reasoning', content: text, status: 'completed' },
           };
         }
-      } else if (type === 'response.completed') {
+      } else if (type === 'response.completed' || type === 'response.incomplete') {
         const responsePayload = objectValue(payload.response);
         usage = normalizeOpenAiUsage(responsePayload.usage);
-        finishReason = stringValue(responsePayload.status) || 'stop';
+        finishReason = type === 'response.incomplete'
+          ? stringValue(objectValue(responsePayload.incomplete_details).reason) || stringValue(responsePayload.status) || 'incomplete'
+          : stringValue(responsePayload.status) || 'stop';
       } else if (type === 'response.failed' || type === 'error') {
         throw new Error(openAiResponsesErrorMessage(payload));
       }
@@ -403,26 +403,41 @@ function responsesReasoningText(item: Record<string, unknown>): string {
   return stringValue(item.text);
 }
 
-function mergeResponsesOutputItem(toolCalls: Map<string, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {
+function mergeResponsesOutputItem(
+  toolCalls: Map<string, RuntimeToolCall>,
+  toolCallIdByItemId: Map<string, string>,
+  payload: Record<string, unknown>,
+): RuntimeToolCall | null {
   const item = objectValue(payload.item);
   if (stringValue(item.type) !== 'function_call') return null;
-  const id = stringValue(item.call_id) || stringValue(item.id) || `call_${toolCalls.size}`;
-  const existing = toolCalls.get(id) ?? { id, name: '', arguments: '' };
+  const itemId = stringValue(item.id);
+  const id = stringValue(item.call_id) || toolCallIdByItemId.get(itemId) || itemId || `call_${toolCalls.size}`;
+  if (itemId) toolCallIdByItemId.set(itemId, id);
+  const itemIdEntry = itemId && itemId !== id ? toolCalls.get(itemId) : undefined;
+  const existing = toolCalls.get(id) ?? itemIdEntry ?? { id, name: '', arguments: '' };
   const next = {
     id,
     name: stringValue(item.name) || existing.name,
     arguments: stringValue(item.arguments) || existing.arguments,
   };
+  if (itemIdEntry) toolCalls.delete(itemId);
   toolCalls.set(id, next);
   return next;
 }
 
-function mergeResponsesArguments(toolCalls: Map<string, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {
-  const id = stringValue(payload.call_id) || stringValue(payload.item_id) || `call_${toolCalls.size}`;
+function mergeResponsesArguments(
+  toolCalls: Map<string, RuntimeToolCall>,
+  toolCallIdByItemId: Map<string, string>,
+  payload: Record<string, unknown>,
+): RuntimeToolCall {
+  const itemId = stringValue(payload.item_id);
+  const id = stringValue(payload.call_id) || toolCallIdByItemId.get(itemId) || itemId || `call_${toolCalls.size}`;
+  if (itemId) toolCallIdByItemId.set(itemId, id);
   const existing = toolCalls.get(id) ?? { id, name: '', arguments: '' };
+  const completedArguments = stringValue(payload.arguments);
   const next = {
     ...existing,
-    arguments: `${existing.arguments}${stringValue(payload.delta)}`,
+    arguments: completedArguments || `${existing.arguments}${stringValue(payload.delta)}`,
   };
   toolCalls.set(id, next);
   return next;
