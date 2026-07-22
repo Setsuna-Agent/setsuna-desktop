@@ -3,6 +3,7 @@ import type {
   RuntimeApprovalAvailableDecision,
   RuntimeApprovalList,
   RuntimeApprovalRequest,
+  RuntimeApprovalRetryKind,
   RuntimeExecPolicyAmendment,
   RuntimeMcpElicitation,
   RuntimeNetworkApprovalContext,
@@ -18,6 +19,7 @@ export type CreateApprovalInput = {
   toolName: string;
   reason: string;
   argumentsPreview: string;
+  retryKind?: RuntimeApprovalRetryKind;
   availableDecisions?: RuntimeApprovalAvailableDecision[];
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
   networkApprovalContext?: RuntimeNetworkApprovalContext;

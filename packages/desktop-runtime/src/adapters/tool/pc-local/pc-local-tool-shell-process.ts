@@ -697,7 +697,7 @@ function completedShellResult(session, root) {
     : session.exitCode === 0
       ? 'command completed'
       : `command exited ${session.exitCode ?? session.signal}`;
-  const failure = shellSessionFailure(session);
+  const failure = classifyShellSessionFailure(session);
   return {
     ok: session.exitCode === 0 && !session.timedOut && !session.aborted,
     content: truncateText(formatShellSessionOutput(session, root), MAX_TEXT_BYTES),
@@ -709,7 +709,7 @@ function completedShellResult(session, root) {
   };
 }
 
-function shellSessionFailure(session) {
+export function classifyShellSessionFailure(session) {
   if (!session.timedOut && !session.aborted && session.exitCode === 0) return null;
   if (session.timedOut) {
     return {
@@ -723,7 +723,7 @@ function shellSessionFailure(session) {
       failure_stage: 'execution',
     };
   }
-  if (session.sandboxed && isSandboxDeniedShellOutput(session)) {
+  if (session.sandboxed && isSandboxDeniedShellFailure(session)) {
     const suggestedReadableRoots = sandboxDeniedReadableRoots(session);
     return {
       failure_kind: 'sandbox_denied',
@@ -741,9 +741,20 @@ function shellSessionFailure(session) {
   };
 }
 
-function isSandboxDeniedShellOutput(session) {
+function isSandboxDeniedShellFailure(session) {
+  // Node child_process failures often expose only a symbolic spawn code instead
+  // of the localized OS error text emitted by ordinary shell commands.
+  const errorCode = String(session.errorCode || '').toUpperCase();
+  if (errorCode === 'EPERM' || errorCode === 'EACCES') return true;
+
   const output = `${session.stdout || ''}\n${session.stderr || ''}`;
-  return /Operation not permitted|operation not permitted|deny\(\d+\)|sandbox/i.test(output)
+  const nodeSpawnPermissionError = /\bspawn(?:\s+[^\r\n]*)?\s+(?:EPERM|EACCES)\b/i.test(output)
+    || (
+      /\bcode\s*:\s*['"]?(?:EPERM|EACCES)\b/i.test(output)
+      && /\bsyscall\s*:\s*['"]?spawn\b/i.test(output)
+    );
+  return /\boperation not permitted\b|\bpermission denied\b|\bread-only file system\b|deny\(\d+\)|sandbox|seatbelt/i.test(output)
+    || nodeSpawnPermissionError
     || shellCommandHiddenBySandbox(output, session);
 }
 

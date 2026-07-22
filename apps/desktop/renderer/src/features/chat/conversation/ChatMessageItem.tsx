@@ -24,7 +24,11 @@ import {
   type AssistantGuidanceTimelinePlan,
   type AssistantWorkHistoryPlanEntry,
 } from './chatAssistantGuidanceTimeline.js';
-import { createAssistantRunTimeline, type AssistantRunTimelineBlock } from './chatAssistantTimeline.js';
+import {
+  createAssistantRunTimeline,
+  shouldShowAssistantTrailingLoading,
+  type AssistantRunTimelineBlock,
+} from './chatAssistantTimeline.js';
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
 import {
@@ -340,9 +344,13 @@ function AssistantRunContent({
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
-  const awaitingApproval = toolRuns.some((run) => run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected' && run.approvalStatus !== 'cancelled');
-  // 活动回合已有内容时，等待反馈始终跟在最新内容之后；等待用户审批时则不显示假进度。
-  const showTrailingLoading = active && status !== 'error' && hasRenderableContent && !awaitingApproval;
+  // 工具行本身已经提供实时进度，只有模型继续处理且没有活动工具时才显示尾部等待反馈。
+  const showTrailingLoading = shouldShowAssistantTrailingLoading({
+    active,
+    hasRenderableContent,
+    status,
+    toolRuns,
+  });
   const guidanceMessageIds = useMemo(() => new Set(item.handledSteerMessageIds), [item.handledSteerMessageIds]);
   const assistantGuidanceMessages = item.steerMessages;
   const timelinePlan = useMemo(

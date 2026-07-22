@@ -706,7 +706,6 @@ export class ToolOrchestrator {
           });
           return { content, processed: true, status: 'error' };
         }
-        toolError = narrowError;
       }
     }
 
@@ -722,7 +721,9 @@ export class ToolOrchestrator {
       return { content, processed: true, status: 'error' };
     }
 
-    const retryReason = `Sandbox denied ${toolCall.name}: ${toolError.message}. Approve retry without the OS sandbox.`;
+    // The full first-attempt output is already retained as tool output events.
+    // Keep the approval concise instead of duplicating an entire stack trace.
+    const retryReason = `The OS sandbox blocked the first ${toolCall.name} attempt. Approve retry without the OS sandbox.`;
     const decision = await this.approveSandboxBypassRetry(toolCall, parsedArguments, context, retryReason, environment);
     if (decision === 'reject') {
       const content = `Tool ${toolCall.name} sandbox retry was rejected.`;
@@ -881,6 +882,7 @@ export class ToolOrchestrator {
       environmentId: environment.id,
       reason,
       argumentsPreview: previewArguments(parsedArguments),
+      retryKind: 'sandbox_bypass',
       availableDecisions: [
         { type: 'approve' },
         { type: 'approve_for_session' },

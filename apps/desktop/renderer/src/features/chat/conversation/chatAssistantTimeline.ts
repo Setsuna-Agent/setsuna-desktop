@@ -1,6 +1,7 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { isRuntimeFileMutationRun } from '../tool-runs/runtimeFileChanges.js';
+import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
 
 export type AssistantRunTimelineBlock =
@@ -95,7 +96,7 @@ export function createAssistantRunTimeline(
       items: hideThinkingItems ? workBlock.items.filter((item) => item.type !== 'thinking') : workBlock.items,
       contentSegments: workBlock.contentSegments,
       thinkingSegments: workBlock.thinkingSegments,
-      active: workBlock.segments.some((segment) => segment.status === 'streaming') || workBlock.toolRuns.some(isActiveWorkToolRun),
+      active: workBlock.segments.some((segment) => segment.status === 'streaming') || workBlock.toolRuns.some(isActiveRuntimeToolRun),
     });
     workBlock = null;
   };
@@ -259,13 +260,21 @@ function isEmptyStreamingAssistantSegment(segment: RuntimeMessage): boolean {
   return segment.status === 'streaming' && !hasRenderableThinkingContent(segment.content, true) && !segment.toolRuns?.length && !segment.error;
 }
 
-function isActiveWorkToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
-  return run.status === 'running' || (
-    run.status === 'pending_approval'
-    && run.approvalStatus !== 'approved'
-    && run.approvalStatus !== 'rejected'
-    && run.approvalStatus !== 'cancelled'
-  );
+export function shouldShowAssistantTrailingLoading({
+  active,
+  hasRenderableContent,
+  status,
+  toolRuns,
+}: {
+  active: boolean;
+  hasRenderableContent: boolean;
+  status: RuntimeMessage['status'];
+  toolRuns: NonNullable<RuntimeMessage['toolRuns']>;
+}): boolean {
+  return active
+    && status !== 'error'
+    && hasRenderableContent
+    && !toolRuns.some(isActiveRuntimeToolRun);
 }
 
 function isFileChangeWorkflowRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {

@@ -1,6 +1,9 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { createAssistantRunTimeline } from '../../../../../src/features/chat/conversation/chatAssistantTimeline.js';
+import {
+  createAssistantRunTimeline,
+  shouldShowAssistantTrailingLoading,
+} from '../../../../../src/features/chat/conversation/chatAssistantTimeline.js';
 
 describe('createAssistantRunTimeline', () => {
   it('places Plugin attribution in work before a final answer', () => {
@@ -147,6 +150,38 @@ describe('createAssistantRunTimeline', () => {
     ];
 
     expect(createAssistantRunTimeline(segments).filter((block) => block.type === 'work').map((block) => block.active)).toEqual([true]);
+  });
+
+  it('does not add a trailing loader while an active tool already reports progress', () => {
+    const base = {
+      active: true,
+      hasRenderableContent: true,
+      status: 'streaming' as const,
+    };
+
+    expect(shouldShowAssistantTrailingLoading({ ...base, toolRuns: [] })).toBe(true);
+    expect(shouldShowAssistantTrailingLoading({
+      ...base,
+      toolRuns: [{ id: 'call_running', name: 'exec_command', status: 'running' }],
+    })).toBe(false);
+    expect(shouldShowAssistantTrailingLoading({
+      ...base,
+      toolRuns: [{
+        id: 'call_pending',
+        name: 'exec_command',
+        status: 'pending_approval',
+        approvalStatus: 'pending',
+      }],
+    })).toBe(false);
+    expect(shouldShowAssistantTrailingLoading({
+      ...base,
+      toolRuns: [{
+        id: 'call_approved',
+        name: 'exec_command',
+        status: 'pending_approval',
+        approvalStatus: 'approved',
+      }],
+    })).toBe(true);
   });
 
   it('keeps all pre-final output in work before the final answer', () => {

@@ -23,6 +23,7 @@ describe('ToolApprovalStore', () => {
 describe('ToolOrchestrator terminal and retry handling', () => {
   it.each(['network_denied', 'sandbox_denied'] as const)('runs post-processing and PostToolUse after a %s retry', async (failureKind) => {
     let attempts = 0;
+    let retryApproval: CreateApprovalInput | undefined;
     const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
     const toolHost = stubToolHost(async (_name, _input, context) => {
       contexts.push(context);
@@ -35,7 +36,9 @@ describe('ToolOrchestrator terminal and retry handling', () => {
       shouldBlock: false,
     }));
     const postProcessResult = vi.fn(async (result) => ({ ...result, content: `${result.content} processed` }));
-    const approvalGate = failureKind === 'sandbox_denied' ? autoApproveGate() : undefined;
+    const approvalGate = failureKind === 'sandbox_denied'
+      ? autoApproveGate({ onCreate: (input) => { retryApproval = input; } })
+      : undefined;
     const fixture = createOrchestratorFixture(toolHost, postHook, approvalGate);
 
     const execution = await fixture.orchestrator.runToolCall(
@@ -49,6 +52,12 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     expect(attempts).toBe(2);
     if (failureKind === 'sandbox_denied') {
       expect(contexts[1]?.sandbox).toMatchObject({ mode: 'bypass' });
+      expect(retryApproval).toMatchObject({
+        toolCallId: 'call_retry',
+        retryKind: 'sandbox_bypass',
+        reason: expect.stringContaining('Approve retry without the OS sandbox'),
+      });
+      expect(retryApproval?.reason).not.toContain('retry required');
     }
     expect(postProcessResult).toHaveBeenCalledTimes(1);
     expect(postHook).toHaveBeenCalledTimes(1);

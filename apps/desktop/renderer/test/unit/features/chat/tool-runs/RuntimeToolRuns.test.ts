@@ -286,6 +286,72 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     expect(text).not.toContain('已运行 1 条命令');
   });
 
+  it('keeps a sandbox retry approval compact and shows the exec command', () => {
+    const html = renderedHtml([{
+      id: 'exec_retry',
+      name: 'exec_command',
+      status: 'pending_approval',
+      argumentsPreview: '{"cmd":"pnpm dev"}',
+      resultPreview: 'node:internal/child_process:420\nError: spawn EPERM\nfull stack trace',
+      approvalId: 'approval_retry',
+      approvalStatus: 'pending',
+      approvalReason: 'Sandbox denied exec_command: Error: spawn EPERM. Approve retry without the OS sandbox.',
+    }]);
+    const text = renderedTextFromHtml(html);
+
+    expect(text).toContain('等待授权：运行 pnpm dev');
+    expect(text).toContain('$pnpm dev');
+    expect(text).toContain('允许');
+    expect(text).toContain('拒绝');
+    expect(text).not.toContain('待确认');
+    expect(text).not.toContain('spawn EPERM');
+    expect(text).not.toContain('full stack trace');
+    expect(text).not.toContain('$shell');
+  });
+
+  it('shows a single pending approval summary only once inside grouped tool history', () => {
+    const pendingRun: RuntimeToolRun = {
+      id: 'exec_pending',
+      name: 'exec_command',
+      status: 'pending_approval',
+      argumentsPreview: '{"cmd":"cd /Users/dev/project && pnpm dev"}',
+      approvalId: 'approval_pending',
+      approvalStatus: 'pending',
+    };
+    const groupedShellHtml = renderedHtml([
+      toolRun('exec_previous', 'exec_command', { cmd: 'pnpm typecheck' }),
+      pendingRun,
+    ], 'latest');
+    const mixedHistoryHtml = renderedHtml([
+      fileRun('edit_previous', 'edit_file', 'src/App.tsx', 'Modified'),
+      pendingRun,
+    ], 'latest');
+
+    const mixedHistoryText = renderedTextFromHtml(mixedHistoryHtml);
+    expect(mixedHistoryText.split('等待授权：运行')).toHaveLength(2);
+    expect(mixedHistoryText).not.toContain('待确认');
+    for (const html of [groupedShellHtml, mixedHistoryHtml]) {
+      const text = renderedTextFromHtml(html);
+      expect(html.match(/<summary/gu)).toHaveLength(1);
+      expect(text).toContain('cd /Users/dev/project &amp;&amp; pnpm dev');
+      expect(text).toContain('允许');
+      expect(text).toContain('拒绝');
+    }
+  });
+
+  it('uses the outer progress summary as the only loading state for one running tool', () => {
+    const html = renderedHtml([
+      toolRun('plan_previous', 'update_plan', { plan: [] }),
+      toolRun('exec_running', 'exec_command', { cmd: 'cd /Users/dev/project && pnpm dev' }, 'running'),
+    ], 'latest');
+    const text = renderedTextFromHtml(html);
+
+    expect(html.match(/<summary/gu)).toHaveLength(1);
+    expect(text.split('正在运行')).toHaveLength(2);
+    expect(text).toContain('cd /Users/dev/project &amp;&amp; pnpm dev');
+    expect(text).not.toContain('已使用 update plan');
+  });
+
   it('wraps adjacent file and shell groups into one mixed summary', () => {
     const runs = [
       fileRun('write_selection', 'write_file', 'selection_sort.py', 'Created'),

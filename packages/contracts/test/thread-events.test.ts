@@ -153,6 +153,64 @@ describe('applyRuntimeEventToThread context compaction', () => {
     ]);
   });
 
+  it('clears the failed first-attempt output when a sandbox bypass retry awaits approval', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [{
+        id: 'msg_1',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: '',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'streaming',
+        toolRuns: [{
+          id: 'call_1',
+          name: 'exec_command',
+          status: 'running',
+          resultPreview: 'Error: spawn EPERM\nfull stack trace',
+        }],
+      }],
+    };
+    const approvalRequested: RuntimeEvent = {
+      id: 'event_approval',
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.requested',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        approval: {
+          id: 'approval_1',
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          toolCallId: 'call_1',
+          toolName: 'exec_command',
+          reason: 'The OS sandbox blocked the first exec_command attempt. Approve retry without the OS sandbox.',
+          argumentsPreview: '{"cmd":"pnpm dev"}',
+          retryKind: 'sandbox_bypass',
+          status: 'pending',
+          createdAt: '2026-06-26T00:00:01.000Z',
+        },
+      },
+    };
+
+    const updated = applyRuntimeEventToThread(thread, approvalRequested);
+
+    expect(updated.messages[0].toolRuns?.[0]).toMatchObject({
+      id: 'call_1',
+      status: 'pending_approval',
+      resultPreview: '',
+      approvalRetryKind: 'sandbox_bypass',
+    });
+  });
+
   it('uses tool completion content as the final preview after streaming deltas', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',

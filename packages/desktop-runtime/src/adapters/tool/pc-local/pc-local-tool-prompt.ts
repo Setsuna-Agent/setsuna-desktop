@@ -125,7 +125,7 @@ export function pcLocalToolPrompt(
   if (advertised.has('exec_command')) {
     lines.push(
       '- exec_command is the Codex-compatible shell surface. Request only the narrowest per-command sandbox override when broader access is necessary.',
-      '- If required access cannot be represented by narrow filesystem or network grants, retry exec_command with sandbox_permissions set to require_escalated and a concise justification so the runtime can request unsandboxed execution.',
+      '- If an important exec_command fails with a likely sandbox or permission error and narrow filesystem or network grants are insufficient, retry the same command with sandbox_permissions set to require_escalated and a concise justification so the runtime can request unsandboxed execution. Do not skip required build, test, lint, or typecheck validation solely because the sandboxed attempt failed.',
     );
   }
   if (advertised.has('write_stdin')) {

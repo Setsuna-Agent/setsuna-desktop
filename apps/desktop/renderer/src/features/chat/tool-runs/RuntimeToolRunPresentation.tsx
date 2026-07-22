@@ -22,6 +22,7 @@ import type {
   ToolRunGroupKind,
   ToolRunSummaryMode,
 } from './runtime-tool-run-types.js';
+import { isPendingRuntimeToolApproval } from './runtimeToolRunState.js';
 import {
   fileChangeFromToolRun,
   fileChangesFromToolRun,
@@ -283,10 +284,7 @@ export function isFileOperationRun(run: RuntimeToolRun): boolean {
 }
 
 export function isPendingApprovalRun(run: RuntimeToolRun): boolean {
-  return run.status === 'pending_approval'
-    && run.approvalStatus !== 'approved'
-    && run.approvalStatus !== 'rejected'
-    && run.approvalStatus !== 'cancelled';
+  return isPendingRuntimeToolApproval(run);
 }
 
 export function pendingApprovalDisclosureKey(runs: RuntimeToolRun[]): string | undefined {
@@ -478,7 +476,7 @@ export function toolRunTarget(run: RuntimeToolRun): string {
   const args = recordFromJson(run.argumentsPreview);
   const url = stringField(args.url ?? args.uri ?? args.href);
   if (url) return compactUrlTarget(url);
-  return stringField(args.command ?? args.query ?? args.path ?? args.file_path ?? args.target_path ?? args.file ?? args.process_id ?? args.processId);
+  return stringField(args.command ?? args.cmd ?? args.query ?? args.path ?? args.file_path ?? args.target_path ?? args.file ?? args.process_id ?? args.processId);
 }
 
 export function fileOperationTarget(run: RuntimeToolRun): string {
@@ -761,7 +759,7 @@ export function fileMutationPathFromReason(value: string | undefined): string {
 
 export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
   const command = shellCommand(run);
-  const segments = shellOutputSegments(run.resultPreview);
+  const segments = shellOutputSegments(shellResultPreviewForDisplay(run));
   const status = shellStatusLabel(run);
   const diagnostic = shellDiagnosticText(run);
   return (
@@ -790,7 +788,22 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
 export function shellCommand(run: RuntimeToolRun): string {
   const args = recordFromJson(run.argumentsPreview);
   const content = run.resultPreview ?? '';
-  return stringField(args.command) || shellContentLine(content, /^\$\s+(.+)$/m) || shellContentLine(content, /^command:\s*(.+)$/im) || toolRunTarget(run);
+  return stringField(args.command ?? args.cmd) || shellContentLine(content, /^\$\s+(.+)$/m) || shellContentLine(content, /^command:\s*(.+)$/im) || toolRunTarget(run);
+}
+
+export function shellResultPreviewForDisplay(run: RuntimeToolRun): string | undefined {
+  if (run.status !== 'pending_approval' && run.status !== 'running') return run.resultPreview;
+  const preview = run.resultPreview ?? '';
+  const showsSandboxFailure = /\bspawn\b[^\r\n]*\b(?:EPERM|EACCES)\b|\boperation not permitted\b|\bpermission denied\b|\bread-only file system\b/iu.test(preview);
+  if (!showsSandboxFailure) return run.resultPreview;
+  if (run.approvalRetryKind === 'sandbox_bypass') return undefined;
+
+  // Older persisted approvals predate retryKind. Keep them compact after an
+  // app update by recognizing the stable sandbox-retry wording.
+  const reason = run.approvalReason ?? '';
+  const legacySandboxRetry = reason.startsWith('Sandbox denied ')
+    && reason.includes('Approve retry without the OS sandbox.');
+  return legacySandboxRetry ? undefined : run.resultPreview;
 }
 
 export function shellStatusLabel(run: RuntimeToolRun): string {
@@ -889,7 +902,7 @@ export function toolRunSummary(run: RuntimeToolRun): { title: string; target?: s
   const name = run.name;
   const path = stringField(args.path ?? args.file_path ?? args.target_path ?? args.file);
   const query = stringField(args.query);
-  const command = stringField(args.command);
+  const command = stringField(args.command ?? args.cmd);
   const url = stringField(args.url ?? args.uri ?? args.href);
 
   if (isWebContentRun(run, url)) return { title: runningAware(run, '获取网页', '已获取网页'), target: compactUrlTarget(url) };
@@ -898,7 +911,7 @@ export function toolRunSummary(run: RuntimeToolRun): { title: string; target?: s
   if (name === 'find_files') return { title: runningAware(run, '查找文件', '已查找文件'), target: query || path };
   if (name === 'workspace_search_text' || name === 'search_text') return searchRunSummary(run, path, query);
   if (isFileOperationRun(run)) return { title: fileOperationVerb(run), target: fileOperationTarget(run) || path };
-  if (name === 'run_shell_command') return shellRunSummary(run, command);
+  if (name === 'run_shell_command' || name === 'exec_command') return shellRunSummary(run, command);
   if (name === 'read_shell_process') return { title: runningAware(run, '读取命令输出', '已读取命令输出'), target: stringField(args.process_id ?? args.processId) };
   if (name === 'remember_memory') return { title: runningAware(run, '保存记忆', '已保存记忆') };
   if (name === 'recall_memory') return { title: runningAware(run, '检索记忆', '已检索记忆'), target: query };
@@ -946,13 +959,19 @@ export function runningAware(run: RuntimeToolRun, running: string, complete: str
   return complete;
 }
 
-export function ToolRunStatus({ status }: { status: RuntimeToolRun['status'] }) {
-  const text = statusTextFromStatus(status);
+export function ToolRunStatus({
+  status,
+  summaryTitle,
+}: {
+  status: RuntimeToolRun['status'];
+  summaryTitle?: string;
+}) {
+  const text = statusTextFromStatus(status, summaryTitle);
   return text ? <span className="chat-tool-run__status">{text}</span> : null;
 }
 
-export function statusTextFromStatus(status: RuntimeToolRun['status']) {
-  if (status === 'pending_approval') return '待确认';
+export function statusTextFromStatus(status: RuntimeToolRun['status'], summaryTitle = '') {
+  if (status === 'pending_approval') return summaryTitle.trim().startsWith('等待授权') ? '' : '待确认';
   if (status === 'cancelled') return '已取消';
   if (status === 'rejected') return '已拒绝';
   if (status === 'error') return '失败';

@@ -49,7 +49,9 @@ describe('agent loop sandbox and network retries', () => {
   
       expect(toolHost.attempts).toEqual(['default']);
       expect(pendingApproval.toolName).toBe('sandboxed_tool');
-      expect(pendingApproval.reason).toContain('Sandbox denied sandboxed_tool');
+      expect(pendingApproval.retryKind).toBe('sandbox_bypass');
+      expect(pendingApproval.reason).toBe('The OS sandbox blocked the first sandboxed_tool attempt. Approve retry without the OS sandbox.');
+      expect(pendingApproval.reason).not.toContain('seatbelt denied file write');
   
       await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve' });
       await pendingTurn;

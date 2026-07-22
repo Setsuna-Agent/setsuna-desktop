@@ -31,6 +31,7 @@ import type {
 import {
   type RuntimeFileChangeSummary
 } from './runtimeFileChanges.js';
+import { isActiveRuntimeToolRun } from './runtimeToolRunState.js';
 import {
   compactStructuredInputValues,
   RuntimeStructuredInputField,
@@ -219,7 +220,7 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
             <span className="chat-tool-run__title">{summary.title}</span>
             <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={kind} target={summary.target} />
           </span>
-          <ToolRunStatus status={run.status} />
+          <ToolRunStatus status={run.status} summaryTitle={summary.title} />
         </>
       )}
     >
@@ -236,8 +237,9 @@ function toolRunGroupPanelNode(
 ): JSX.Element {
   const status = toolRunGroupStatus(group.runs);
   const summary = toolRunGroupSummary(group);
-  const hasPendingApproval = group.runs.some(isPendingApprovalRun);
-  const visibleRuns = hasPendingApproval ? group.runs.filter(isPendingApprovalRun) : group.runs;
+  const activeRuns = group.runs.filter(isActiveRuntimeToolRun);
+  const visibleRuns = activeRuns.length ? activeRuns : group.runs;
+  const focusedActiveRun = activeRuns.length === 1 ? activeRuns[0] : undefined;
   const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
   const shellGroup = group.kind === 'shell';
   const fileOperationGroup = group.kind === 'fileMutation';
@@ -265,7 +267,7 @@ function toolRunGroupPanelNode(
               />
             ) : null}
           </span>
-          <ToolRunStatus status={status} />
+          <ToolRunStatus status={status} summaryTitle={summary.title} />
         </>
       )}
     >
@@ -278,7 +280,14 @@ function toolRunGroupPanelNode(
               : 'chat-tool-run__body--group'
         }`}
       >
-        {group.kind === 'inspection' ? (
+        {focusedActiveRun ? (
+          // 外层分组已经显示当前活动项的摘要，直接展开详情可避免重复的运行/审批状态。
+          <ToolRunDetails
+            run={focusedActiveRun}
+            onAnswerApproval={onAnswerApproval}
+            pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
+          />
+        ) : group.kind === 'inspection' ? (
           <>
             <InspectionTargetList runs={visibleRuns} />
             <GroupedHookRunList runs={visibleRuns} />
@@ -325,8 +334,9 @@ function mixedToolRunGroupPanelNode(
 ): JSX.Element {
   const runs = group.groups.flatMap(toolRunGroupRuns);
   const status = toolRunGroupStatus(runs);
-  const hasPendingApproval = runs.some(isPendingApprovalRun);
-  const visibleGroups = hasPendingApproval ? group.groups.map(onlyPendingApprovalGroup).filter(isToolRunGroup) : group.groups;
+  const activeRuns = runs.filter(isActiveRuntimeToolRun);
+  const focusedActiveRun = activeRuns.length === 1 ? activeRuns[0] : undefined;
+  const visibleGroups = activeRuns.length ? group.groups.map(onlyActiveToolGroup).filter(isToolRunGroup) : group.groups;
   const compactSummary = mixedToolRunGroupSummary(group.groups, group.summaryMode);
   const compactSummaryChangeCounts = compactSummary.target && isConcreteFileOperationTarget(compactSummary.target)
     ? compactSummary.changeCounts
@@ -353,12 +363,21 @@ function mixedToolRunGroupPanelNode(
               />
             ) : null}
           </span>
-          <ToolRunStatus status={status} />
+          <ToolRunStatus status={status} summaryTitle={compactSummary.title} />
         </>
       )}
     >
       <div className="chat-tool-run__body chat-tool-run__body--mixed-list">
-        {visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))}
+        {focusedActiveRun ? (
+          // 活动期间只聚焦当前工具；仅有一项时无需再渲染一层相同的进度摘要。
+          <ToolRunDetails
+            run={focusedActiveRun}
+            onAnswerApproval={onAnswerApproval}
+            pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
+          />
+        ) : (
+          visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))
+        )}
       </div>
     </ToolRunDisclosure>
   );
@@ -387,14 +406,14 @@ function renderMixedToolRunChildGroup(
   );
 }
 
-function onlyPendingApprovalGroup(group: ToolRunGroup): ToolRunGroup | null {
-  const runs = toolRunGroupRuns(group).filter(isPendingApprovalRun);
+function onlyActiveToolGroup(group: ToolRunGroup): ToolRunGroup | null {
+  const runs = toolRunGroupRuns(group).filter(isActiveRuntimeToolRun);
   if (!runs.length) return null;
   return runs.length === 1
     ? { type: 'single', run: runs[0] }
     : {
         type: 'group',
-        id: `${toolRunGroupId(group)}:pending`,
+        id: `${toolRunGroupId(group)}:active`,
         kind: group.type === 'single' ? toolRunGroupKind(group.run) : group.kind,
         runs,
       };
@@ -419,7 +438,7 @@ function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
             target={summary.target}
           />
         </span>
-        <ToolRunStatus status={run.status} />
+        <ToolRunStatus status={run.status} summaryTitle={summary.title} />
       </div>
     </div>
   );

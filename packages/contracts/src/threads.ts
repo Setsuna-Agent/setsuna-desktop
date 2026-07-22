@@ -1,5 +1,6 @@
 import type {
   RuntimeApprovalAvailableDecision,
+  RuntimeApprovalRetryKind,
   RuntimeExecPolicyAmendment,
   RuntimeMcpElicitation,
   RuntimeNetworkApprovalContext,
@@ -230,6 +231,7 @@ export type RuntimeToolRun = {
   completedAt?: string;
   approvalId?: string;
   approvalReason?: string;
+  approvalRetryKind?: RuntimeApprovalRetryKind;
   approvalStatus?: 'pending' | 'approved' | 'rejected' | 'cancelled';
   approvalMessage?: string;
   availableApprovalDecisions?: RuntimeApprovalAvailableDecision[];

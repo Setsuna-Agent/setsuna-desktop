@@ -19,6 +19,7 @@ export function runtimePermissionsPrompt({
     : sandbox.writableRoots?.length ? sandbox.writableRoots : [environment.workspaceRoot];
   const networkAccess = unrestrictedFileSystem || sandbox.networkAccess === true;
   const canRequestPermissions = tools.some((tool) => tool.name === 'request_permissions');
+  const canEscalateExec = tools.some((tool) => tool.name === 'exec_command');
 
   return [
     'Runtime permissions for this sampling step:',
@@ -34,10 +35,13 @@ export function runtimePermissionsPrompt({
       : approvalPolicy === 'full'
         ? 'The runtime automatically approves supported tool operations, but sandbox and path restrictions still apply.'
         : approvalPolicy === 'strict'
-          ? 'The runtime requires explicit approval for sensitive operations. Use the normal tool call and let the runtime present the approval.'
-          : 'Sensitive operations may require approval. Use the normal tool call and let the runtime request it when needed.',
+          ? 'The runtime requires explicit approval for sensitive operations. Request the needed access through an approval-capable tool call.'
+          : 'Sensitive operations may require approval. Request the needed access through an approval-capable tool call instead of skipping the operation.',
     canRequestPermissions
       ? 'If a necessary path is outside the current roots, request the narrowest additional permission with request_permissions.'
+      : '',
+    canEscalateExec && approvalPolicy !== 'full'
+      ? 'If an important exec_command fails with a likely sandbox or permission error, retry the same exec_command with sandbox_permissions set to require_escalated and include a concise user-facing justification. Do not skip required validation solely because the sandboxed attempt failed.'
       : '',
     'Do not claim access beyond this effective profile; runtime enforcement remains authoritative.',
   ].filter(Boolean).join('\n');

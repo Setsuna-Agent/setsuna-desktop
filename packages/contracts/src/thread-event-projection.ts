@@ -508,6 +508,7 @@ export function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): Run
     completedAt: next.completedAt ?? current.completedAt,
     approvalId: next.approvalId ?? current.approvalId,
     approvalReason: next.approvalReason ?? current.approvalReason,
+    approvalRetryKind: next.approvalRetryKind ?? current.approvalRetryKind,
     approvalStatus: next.approvalStatus ?? current.approvalStatus,
     approvalMessage: next.approvalMessage ?? current.approvalMessage,
     availableApprovalDecisions: next.availableApprovalDecisions ?? current.availableApprovalDecisions,

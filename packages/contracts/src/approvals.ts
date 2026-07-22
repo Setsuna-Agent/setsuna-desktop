@@ -1,5 +1,7 @@
 export type RuntimeApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
+export type RuntimeApprovalRetryKind = 'sandbox_bypass';
+
 export type RuntimeApprovalDecision =
   | 'approve'
   | 'approve_for_turn_with_strict_auto_review'
@@ -143,6 +145,7 @@ export type RuntimeApprovalRequest = {
   toolName: string;
   reason: string;
   argumentsPreview: string;
+  retryKind?: RuntimeApprovalRetryKind;
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
   networkApprovalContext?: RuntimeNetworkApprovalContext;
   proposedNetworkPolicyAmendments?: RuntimeNetworkPolicyAmendment[];

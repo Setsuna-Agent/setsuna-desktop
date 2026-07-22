@@ -54,6 +54,7 @@ describe('pcLocalToolPrompt', () => {
     expect(prompt).toContain('Prefer declared scripts');
     expect(prompt).toContain('sandbox_permissions set to require_escalated');
     expect(prompt).toContain('request unsandboxed execution');
+    expect(prompt).toContain('Do not skip required build, test, lint, or typecheck validation');
     expect(prompt).not.toContain('Use run_shell_command');
   });
 
