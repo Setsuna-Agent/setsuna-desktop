@@ -73,7 +73,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 387 total files
+apps/desktop/renderer/ — 0 direct / 388 total files
 ├── src/ — 2 direct / 283 total files
 │   ├── app/ — 2 direct / 29 total files
 │   │   ├── controller/ — 5 direct / 5 total files
@@ -118,9 +118,9 @@ apps/desktop/renderer/ — 0 direct / 387 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 3 direct / 3 total files
-└── test/ — 104 files
-    └── unit/ — 104 files
-        ├── app/ — 8 files
+└── test/ — 105 files
+    └── unit/ — 105 files
+        ├── app/ — 1 direct / 9 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 2 direct / 2 total files
         │   ├── providers/ — 1 direct / 1 total files

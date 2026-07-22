@@ -1,2 +1,8 @@
 @import "../../shared/styles/base.css";
 @import "./shell.css";
+
+.app-blank-surface {
+  width: 100%;
+  height: 100%;
+  background: #F7F7F7;
+}

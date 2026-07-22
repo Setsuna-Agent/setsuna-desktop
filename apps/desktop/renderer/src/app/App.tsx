@@ -6,6 +6,9 @@ import { ShellFrame } from './layout/ShellFrame.js';
 import { ToastProvider } from './providers/ToastProvider.js';
 
 export function App() {
+  // 沙箱化的浏览器预览不会注入桌面 preload bridge；误打开 renderer 开发地址时只显示中性底色。
+  if (!window.setsunaDesktop?.runtime) return <AppBlankSurface />;
+
   return (
     <ToastProvider>
       <AppErrorBoundary>
@@ -19,7 +22,7 @@ function AppContent() {
   const controller = useDesktopAppController();
 
   if (controller.loadState === 'loading') {
-    return <ShellFrame status={<StatusBadge>Starting runtime</StatusBadge>} />;
+    return <AppBlankSurface />;
   }
 
   if (controller.loadState === 'error') {
@@ -35,6 +38,10 @@ function AppContent() {
   }
 
   return <AppReadyLayout controller={controller} />;
+}
+
+function AppBlankSurface() {
+  return <div className="app-blank-surface" aria-hidden="true" />;
 }
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
