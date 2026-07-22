@@ -7,13 +7,13 @@ import {
   type ThreadPatch,
   type ThreadQuery,
 } from '@setsuna-desktop/contracts';
+import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
 import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import {
   managedGeneratedImageAssetIds,
   managedGeneratedImageAssetIdsFromStore,
 } from '../utils/generated-image-assets.js';
-import { RuntimeEventWriter } from '../loop/runtime-event-writer.js';
 
 export type RecoverableThreadStore = ThreadStore & {
   recover(): Promise<void>;

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { auth, type OAuthClientProvider, type OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
   OAuthClientInformationMixed,
@@ -6,6 +5,7 @@ import type {
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { RuntimeMcpAuthStatus, RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
+import { createHash } from 'node:crypto';
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
 import { McpOAuthCallbackServer } from './mcp-oauth-callback-server.js';
 

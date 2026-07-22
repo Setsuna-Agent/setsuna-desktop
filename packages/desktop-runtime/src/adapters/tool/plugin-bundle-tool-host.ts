@@ -1,7 +1,12 @@
-import path from 'node:path';
 import type { RuntimePluginSummary, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import path from 'node:path';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
-import type { ToolApprovalRequirement, ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
+import type {
+  ToolApprovalRequirement,
+  ToolExecutionContext,
+  ToolExecutionResult,
+  ToolHost,
+} from '../../ports/tool-host.js';
 import { objectInput, requiredStringArg } from './tool-input.js';
 
 const INSTALL_PLUGIN_TOOL = 'install_plugin_bundle';

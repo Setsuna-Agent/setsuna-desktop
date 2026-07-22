@@ -1,6 +1,14 @@
-import type { ModelRequest, ModelStreamEvent, RuntimeModelVerification, RuntimeSafetyBuffering, RuntimeStreamItem, RuntimeToolCall } from '@setsuna-desktop/contracts';
+import type {
+  ModelRequest,
+  ModelStreamEvent,
+  RuntimeModelVerification,
+  RuntimeSafetyBuffering,
+  RuntimeStreamItem,
+  RuntimeToolCall,
+} from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest, ModelCompactionResult } from '../../ports/model-client.js';
+import { openAiResponsesReasoningBody } from './provider-thinking.js';
 import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   assertOkResponse,
@@ -18,7 +26,6 @@ import {
   withEndpoint,
   type FetchImpl,
 } from './provider-utils.js';
-import { openAiResponsesReasoningBody } from './provider-thinking.js';
 
 export class OpenAiResponsesModelClient implements ModelClient {
   constructor(

@@ -1,7 +1,7 @@
-import type { RuntimeEvent } from './events.js';
-import type { RuntimeRequestInput } from './http.js';
 import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
 import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
+import type { RuntimeEvent } from './events.js';
+import type { RuntimeRequestInput } from './http.js';
 import type {
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSourceInput,

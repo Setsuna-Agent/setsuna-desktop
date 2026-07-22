@@ -1,4 +1,8 @@
-import type { AnswerRuntimeApprovalInput, RuntimeNetworkPolicyAmendment, RuntimePermissionGrantResponse } from '@setsuna-desktop/contracts';
+import type {
+  AnswerRuntimeApprovalInput,
+  RuntimeNetworkPolicyAmendment,
+  RuntimePermissionGrantResponse,
+} from '@setsuna-desktop/contracts';
 import { AppServerRpcError } from './errors.js';
 import { recordInput, stringInput } from './input.js';
 import type { AppServerRpcRequest } from './rpc-types.js';

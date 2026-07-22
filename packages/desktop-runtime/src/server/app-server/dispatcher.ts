@@ -1,7 +1,22 @@
+import {
+  DEFAULT_THREAD_TITLE,
+  type RuntimeCollaborationMode,
+  type RuntimePlanDecision,
+  type ThreadQuery,
+} from '@setsuna-desktop/contracts';
 import path from 'node:path';
-import { DEFAULT_THREAD_TITLE, type RuntimeCollaborationMode, type RuntimePlanDecision, type ThreadQuery } from '@setsuna-desktop/contracts';
-import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
 import { threadScopeId } from '../../adapters/mcp/sdk-mcp-connection-manager.js';
+import {
+  appendAndPublishRuntimeEvent,
+  cancelRuntimeTurn,
+  copyRuntimeMessagesToThread,
+  randomRuntimeId,
+  requireRuntimeThread,
+  rollbackStartMessageId,
+  runAppServerThreadShellCommand,
+  runtimeMessagesThroughTurn,
+} from '../runtime-thread-events.js';
+import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
 import type { AppServerCommandExecManager } from './command-exec.js';
 import type { AppServerConnectionRegistry } from './connections.js';
 import { appServerDynamicToolsInput } from './dynamic-tools.js';
@@ -17,23 +32,15 @@ import {
   type AppServerFsManager,
 } from './fs-protocol.js';
 import { appServerHooksListResponse } from './hooks-protocol.js';
-import { recordInput, requiredArray, requiredPositiveInteger, requiredString, stringInput, numericInput } from './input.js';
+import {
+  numericInput,
+  recordInput,
+  requiredArray,
+  requiredPositiveInteger,
+  requiredString,
+  stringInput,
+} from './input.js';
 import { platformOs } from './platform.js';
-import {
-  appServerSkillsConfigWriteResponse,
-  appServerSkillsExtraRootsSetResponse,
-  appServerSkillsListResponse,
-} from './skills-protocol.js';
-import {
-  appendAndPublishRuntimeEvent,
-  cancelRuntimeTurn,
-  copyRuntimeMessagesToThread,
-  randomRuntimeId,
-  requireRuntimeThread,
-  rollbackStartMessageId,
-  runAppServerThreadShellCommand,
-  runtimeMessagesThroughTurn,
-} from '../runtime-thread-events.js';
 import {
   appServerConfigEdit,
   appServerConfigReadResponse,
@@ -43,11 +50,10 @@ import {
   sweCollaborationModeListResponse,
   sweExperimentalFeatureListResponse,
   sweFeatureEnablementRuntimeInput,
-  sweInjectedResponseItemsToRuntimeMessages,
   sweInitialTurnsPage,
+  sweInjectedResponseItemsToRuntimeMessages,
   sweLoadedThreadListResponse,
   sweMcpServerStatusListResponse,
-  type AppServerMcpStatusInventory,
   sweModelListResponse,
   sweModelProviderCapabilitiesResponse,
   swePatchThreadGitInfo,
@@ -65,7 +71,13 @@ import {
   sweTurn,
   sweUserInputText,
   sweValidateConfigWriteTarget,
+  type AppServerMcpStatusInventory,
 } from './protocol.js';
+import {
+  appServerSkillsConfigWriteResponse,
+  appServerSkillsExtraRootsSetResponse,
+  appServerSkillsListResponse,
+} from './skills-protocol.js';
 
 export async function dispatchAppServerRpcRequest(
   runtime: RuntimeFactory,

@@ -1,7 +1,7 @@
 import { copyFile, lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { writeJsonFile } from './json-file.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
+import { writeJsonFile } from './json-file.js';
 
 const CUSTOM_MEMORY_DIR_NAME = '.setsuna-memory';
 const MEMORY_ROOT_MARKER_FILE_NAME = '.setsuna-memory-root.json';

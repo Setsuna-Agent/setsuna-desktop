@@ -1,14 +1,11 @@
-import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readdir, readFile, realpath, rm, stat, unlink, writeFile as writeFileFs } from 'node:fs/promises';
-import path from 'node:path';
 import {
-  TEMPORARY_WORKSPACE_PROJECT_ID,
   parseTemporaryWorkspaceProjectId,
+  TEMPORARY_WORKSPACE_PROJECT_ID,
   temporaryWorkspaceProjectId,
   type AddWorkspaceProjectInput,
   type WorkspaceEntry,
-  type WorkspaceEntrySearchResponse,
   type WorkspaceEntryList,
+  type WorkspaceEntrySearchResponse,
   type WorkspaceFileRead,
   type WorkspaceFileWrite,
   type WorkspaceProject,
@@ -16,8 +13,20 @@ import {
   type WorkspaceSearchResponse,
   type WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
+import { randomUUID } from 'node:crypto';
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  unlink,
+  writeFile as writeFileFs,
+} from 'node:fs/promises';
+import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
-import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.js';
 import type {
   TemporaryWorkspaceInput,
   WorkspaceFileMetadata,
@@ -25,9 +34,13 @@ import type {
   WorkspaceProjectSearchOptions,
   WorkspaceProjectStore,
 } from '../../ports/workspace-project-store.js';
+import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
-import { detectWorkspacePreviewImageMimeType, isProbablyBinaryWorkspaceFile } from '../../utils/workspace-file-preview.js';
+import {
+  detectWorkspacePreviewImageMimeType,
+  isProbablyBinaryWorkspaceFile,
+} from '../../utils/workspace-file-preview.js';
 import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-search-engine.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';

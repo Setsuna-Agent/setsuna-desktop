@@ -1,6 +1,13 @@
-import type { ModelRequest, ModelStreamEvent, RuntimeAnthropicContentBlock, RuntimeStreamItem, RuntimeToolCall } from '@setsuna-desktop/contracts';
+import type {
+  ModelRequest,
+  ModelStreamEvent,
+  RuntimeAnthropicContentBlock,
+  RuntimeStreamItem,
+  RuntimeToolCall,
+} from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
+import { anthropicThinkingBody } from './provider-thinking.js';
 import {
   DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS,
   anthropicApiKeyHeader,
@@ -18,7 +25,6 @@ import {
   withEndpoint,
   type FetchImpl,
 } from './provider-utils.js';
-import { anthropicThinkingBody } from './provider-thinking.js';
 
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
 

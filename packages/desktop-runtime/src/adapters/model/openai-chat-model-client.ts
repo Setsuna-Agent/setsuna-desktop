@@ -1,6 +1,7 @@
 import type { ModelRequest, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import type { ModelClient } from '../../ports/model-client.js';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
+import type { ModelClient } from '../../ports/model-client.js';
+import { openAiCompatibleThinkingBody } from './provider-thinking.js';
 import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   arrayValue,
@@ -17,7 +18,6 @@ import {
   withEndpoint,
   type FetchImpl,
 } from './provider-utils.js';
-import { openAiCompatibleThinkingBody } from './provider-thinking.js';
 
 export class OpenAiChatModelClient implements ModelClient {
   constructor(

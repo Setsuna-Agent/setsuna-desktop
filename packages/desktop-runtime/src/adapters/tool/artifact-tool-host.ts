@@ -1,4 +1,3 @@
-import path from 'node:path';
 import {
   PUBLISH_ARTIFACT_TOOL_NAME,
   type RuntimeArtifact,
@@ -6,6 +5,7 @@ import {
   type RuntimeToolDefinition,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import path from 'node:path';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';

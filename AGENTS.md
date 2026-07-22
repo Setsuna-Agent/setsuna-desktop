@@ -36,18 +36,18 @@
 - `docs/local-runtime.md`：runtime server、agent loop、ports/adapters、模型、工具、MCP、Skill、memory。
 - `docs/contracts-and-data.md`：共享契约、线程事件、HTTP client、本地数据布局和变更扩散点。
 - `docs/build-release.md`：构建脚本、CI、release workflow、打包产物和验证命令。
-- `Tree.md`：目录树和逐文件职责索引，适合定位入口。
+- `Tree.md`：由 `pnpm docs:tree` 生成的目录索引，适合定位入口；职责说明仍以 `docs/` 为准。
 
 ## 常见改动入口
 
-- 改窗口、IPC、本机能力：先看 `apps/desktop/main/index.ts`、对应 main 模块、`apps/desktop/preload/index.ts`，再补 renderer 类型/调用。
-- 改 runtime REST API：同步改 `packages/contracts/src/http.ts`、`apps/desktop/renderer/src/runtime/desktop-runtime-client.ts`、`packages/desktop-runtime/src/server/runtime-rest-routes.ts` 和相关测试。
-- 改线程事件或消息投影：同步看 `packages/contracts/src/events.ts`、`packages/contracts/src/thread-events.ts`、`packages/desktop-runtime/src/adapters/store/json-thread-store.ts`、`apps/desktop/renderer/src/utils/runtimeEvents.ts`。
-- 改 agent 行为：从 `packages/desktop-runtime/src/loop/agent-loop.ts` 入手，保持事件先落盘再发布，注意取消、审批、usage、memory 和 context compaction。
-- 改本地工具：优先走 `ToolHost` 抽象，重点看 `PcLocalToolHost`、`pc-local-tools.ts`、approval/preview 流程和对应测试。
+- 改窗口、IPC、本机能力：先看 `apps/desktop/main/src/index.ts`、对应 main 模块、`apps/desktop/preload/src/index.ts`，再补 renderer 类型/调用。
+- 改 runtime REST API：同步改 `packages/contracts/src/http.ts`、`apps/desktop/renderer/src/services/runtime-client/client.ts`、`packages/desktop-runtime/src/server/runtime-rest-routes.ts` 和相关测试。
+- 改线程事件或消息投影：同步看 `packages/contracts/src/events.ts`、`packages/contracts/src/thread-events.ts`、`packages/contracts/src/thread-event-projection.ts`、`packages/desktop-runtime/src/adapters/store/json-thread-store.ts`、`apps/desktop/renderer/src/services/runtime-client/runtimeEvents.ts`。
+- 改 agent 行为：从 `packages/desktop-runtime/src/loop/core/agent-loop.ts` 入手，再按 `context/lifecycle/memory/tools` 找对应 coordinator；保持事件先落盘再发布，注意取消、审批、usage、memory 和 context compaction。
+- 改本地工具：优先走 `ToolHost` 抽象，重点看 `packages/desktop-runtime/src/adapters/tool/pc-local/`、approval/preview 流程和对应测试。
 - 改模型供应商：看 `ConfiguredModelClient`、具体 provider client、`provider-utils.ts`、`model-discovery.ts`，再更新设置页和 contract。
-- 改聊天 UI：看 `ChatWorkspace.tsx`、`ChatComposer.tsx`、`RuntimeToolRuns.tsx`、`chatMessageDisplay.ts`、`runtimeFileChanges.ts`、`chat.css`、`chat-composer.css`。
-- 改项目/文件/review/terminal：看 `useProjectWorkspace.ts`、`useDesktopWorkspacePanels.ts`、`WorkspacePanel.tsx`、`ReviewPanel.tsx`、main 侧 `review-state.ts`、`terminal-sessions.ts`、`workspace-apps.ts`。
+- 改聊天 UI：从 `apps/desktop/renderer/src/features/chat/` 进入，页面编排在根目录，消息、输入、工具、产物、mention 分别在 `conversation/composer/tool-runs/artifacts/mentions`。
+- 改项目/文件/review/terminal：看 `apps/desktop/renderer/src/features/workspace/` 及其 `hooks/`，main 侧对应 `src/review/`、`src/terminal/`、`src/workspace/`。
 - 改设置或能力管理：看 `SettingsPage.tsx`、`CapabilitiesPage.tsx`、runtime config/MCP/Skill stores 和 `FileSkillRegistry`。
 - 改发布流程：看 `package.json` 的 `build` 配置、`scripts/*release*`、`.github/workflows/*`。
 
@@ -61,6 +61,7 @@
 - 样式分域维护：全局 token 在 `tokens.css`，布局在 `shell.css`/`app.css`，聊天、workspace、settings、capabilities 各归各的 CSS 文件。
 - 注释克制但必要：不要给显而易见的赋值写注释；对跨进程、事件投影、路径安全、并发队列、工具审批等复杂逻辑加短注释说明原因。
 - 本地安全：路径必须归一化并限制在 workspace 内；shell、文件写入、MCP 默认经过审批或权限策略。
+- 生产代码和测试严格分离：`src/` 不放 `*.test.*`，测试放同模块 `test/` 的镜像目录；不要绕过 `pnpm check:architecture` 的体积、密度和分层约束。
 
 ## 验证建议
 

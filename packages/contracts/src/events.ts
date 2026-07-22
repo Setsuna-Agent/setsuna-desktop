@@ -1,7 +1,18 @@
 import type { RuntimeApprovalDecision, RuntimeApprovalRequest } from './approvals.js';
 import type { RuntimePluginReference } from './plugins.js';
-import type { RuntimeModelRequestStepSnapshot, RuntimeModelVerification, RuntimeSafetyBuffering, RuntimeStreamItem } from './provider.js';
-import type { RuntimeGitInfo, RuntimeHookRun, RuntimeMessage, RuntimeThreadGoal, RuntimeThreadMemoryMode } from './threads.js';
+import type {
+  RuntimeModelRequestStepSnapshot,
+  RuntimeModelVerification,
+  RuntimeSafetyBuffering,
+  RuntimeStreamItem,
+} from './provider.js';
+import type {
+  RuntimeGitInfo,
+  RuntimeHookRun,
+  RuntimeMessage,
+  RuntimeThreadGoal,
+  RuntimeThreadMemoryMode,
+} from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 
 export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell';

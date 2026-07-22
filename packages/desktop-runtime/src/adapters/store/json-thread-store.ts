@@ -1,5 +1,3 @@
-import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import type {
   CreateThreadInput,
   MessageDeleteInput,
@@ -13,6 +11,8 @@ import type {
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE } from '@setsuna-desktop/contracts';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';

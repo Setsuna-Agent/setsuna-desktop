@@ -1,5 +1,5 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SendTurnInput, ThreadQuery } from '@setsuna-desktop/contracts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { RuntimeHttpError } from './http-error.js';
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;

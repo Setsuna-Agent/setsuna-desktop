@@ -34,17 +34,19 @@ corepack pnpm@7.33.7 <command>
 - `pnpm dev:renderer`：启动 Vite，默认 `127.0.0.1:5174`。
 - `pnpm dev:electron`：构建 contracts/runtime/electron bundle，再启动 Electron。
 - `pnpm build`：clean 后构建 contracts、runtime、electron、renderer。
-- `pnpm build:contracts`：`tsc -b packages/contracts`。
-- `pnpm build:runtime`：`tsc -b packages/desktop-runtime`。
+- `pnpm build:contracts`：只编译 `packages/contracts/src`，测试由独立 test tsconfig 类型检查。
+- `pnpm build:runtime`：只编译 `packages/desktop-runtime/src`，不会把测试发进 `dist`。
 - `pnpm build:electron`：运行 `scripts/build-electron.ts`。
 - `pnpm build:renderer`：Vite build。
-- `pnpm typecheck`：TypeScript project references。
+- `pnpm check:architecture`：检查分层依赖、contracts 循环引用、测试隔离、文件体积和目录密度，并验证 `Tree.md` 已同步。
+- `pnpm docs:tree`：从真实目录重新生成 `Tree.md`。
+- `pnpm typecheck`：先运行架构检查，再运行 TypeScript project references。
 - `pnpm test`：先跑稳定单元/轻量测试，再串行跑重集成测试。
 - `pnpm test:all`：用默认全量 Vitest 配置一次性跑全部测试，配置上仍保持串行重链路。
 - `pnpm test:unit`：排除重集成文件的 Vitest 测试层。
 - `pnpm test:integration`：agent loop、runtime server、真实 git/shell/PTY、文件 watcher 等重集成测试，串行执行。
 - `pnpm test:release`：先下载并校验当前平台固定版本的 ripgrep，再运行发版包矩阵的确定性测试门禁。
-- `pnpm lint`：ESLint。
+- `pnpm lint`：ESLint；架构规则由 `pnpm typecheck` 前置执行。
 - `pnpm package:*`：按平台打包。
 - `pnpm release:dry-run`：生成 release manifest 和校验预览。
 
@@ -143,7 +145,7 @@ dev 启动流程：
 4. setup Python `3.11`。
 5. `node scripts/configure-node-gyp-python.mjs`。
 6. `pnpm install --frozen-lockfile`。
-7. `pnpm typecheck`。
+7. `pnpm typecheck`（包含 architecture check）。
 8. `pnpm test:release`。
 9. `pnpm build`。
 10. `pnpm release:dry-run`。

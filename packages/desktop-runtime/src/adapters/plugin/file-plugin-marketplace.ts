@@ -1,12 +1,12 @@
-import { readdir, realpath } from 'node:fs/promises';
-import path from 'node:path';
 import type {
+  RuntimePluginInstallResult,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
-  RuntimePluginInstallResult,
   RuntimePluginMarketplaceItem,
   RuntimePluginMarketplaceList,
 } from '@setsuna-desktop/contracts';
+import { readdir, realpath } from 'node:fs/promises';
+import path from 'node:path';
 import type { PluginBundleInspection, PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { PluginMarketplace } from '../../ports/plugin-marketplace.js';
 

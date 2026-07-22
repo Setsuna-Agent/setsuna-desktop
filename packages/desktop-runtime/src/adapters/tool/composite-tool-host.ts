@@ -1,5 +1,11 @@
 import type { RuntimeMessage, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
-import type { ToolExecutionContext, ToolExecutionResult, ToolExternalContext, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
+import type {
+  ToolExecutionContext,
+  ToolExecutionResult,
+  ToolExternalContext,
+  ToolHost,
+  ToolTurnCleanupOutcome,
+} from '../../ports/tool-host.js';
 
 export class CompositeToolHost implements ToolHost {
   private readonly toolNamesByContext = new WeakMap<ToolExecutionContext, Map<ToolHost, Set<string>>>();

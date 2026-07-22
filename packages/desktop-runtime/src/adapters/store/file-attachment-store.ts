@@ -1,5 +1,3 @@
-import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import {
   RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   isRuntimeStoredMessageAttachment,
@@ -8,13 +6,15 @@ import {
   type RuntimeMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
-import type { Clock } from '../../ports/clock.js';
-import type { IdGenerator } from '../../ports/id-generator.js';
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   RuntimeAttachmentValidationError,
   type AttachmentStore,
   type RuntimeResolvedAttachment,
 } from '../../ports/attachment-store.js';
+import type { Clock } from '../../ports/clock.js';
+import type { IdGenerator } from '../../ports/id-generator.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 

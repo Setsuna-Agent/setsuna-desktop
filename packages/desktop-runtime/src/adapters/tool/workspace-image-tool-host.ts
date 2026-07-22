@@ -1,5 +1,5 @@
-import path from 'node:path';
 import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
+import path from 'node:path';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { objectInput, requiredStringArg } from './tool-input.js';

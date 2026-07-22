@@ -1,4 +1,12 @@
-import type { RuntimeEnvironment, RuntimeMessage, RuntimePermissionProfile, RuntimePluginReference, RuntimeSandboxWorkspaceWrite, RuntimeToolChoice, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeEnvironment,
+  RuntimeMessage,
+  RuntimePermissionProfile,
+  RuntimePluginReference,
+  RuntimeSandboxWorkspaceWrite,
+  RuntimeToolChoice,
+  RuntimeToolDefinition,
+} from '@setsuna-desktop/contracts';
 
 export type ToolExecutionEnvironment = RuntimeEnvironment;
 

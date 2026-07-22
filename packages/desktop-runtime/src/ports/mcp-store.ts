@@ -1,4 +1,9 @@
-import type { RuntimeMcpRequireApproval, RuntimeMcpServerInput, RuntimeMcpServerList, RuntimeMcpServerPatch } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeMcpRequireApproval,
+  RuntimeMcpServerInput,
+  RuntimeMcpServerList,
+  RuntimeMcpServerPatch,
+} from '@setsuna-desktop/contracts';
 
 export type McpStore = {
   listServers(): Promise<RuntimeMcpServerList>;

@@ -1,6 +1,8 @@
-import type { RuntimeMcpTransport } from './mcp.js';
-import type { RuntimeHookEventName } from './config.js';
 import type { RuntimeGeneratedMessageAttachment } from './attachments.js';
+import type { RuntimeHookEventName } from './hooks.js';
+import type { RuntimeMcpTransport } from './mcp.js';
+
+export type { RuntimePluginReference } from './plugin-reference.js';
 
 export const OPENAI_IMAGE_GENERATION_PLUGIN_ID = 'openai-image-generation';
 export const OPENAI_IMAGE_GENERATION_TOOL_NAME = 'generate_image';
@@ -15,13 +17,6 @@ export type RuntimeImageGenerationTestResult = {
   images: RuntimeGeneratedMessageAttachment[];
   durationMs: number;
   model?: string;
-};
-
-/** 与 runtime 活动一同存储、可安全提供给渲染进程的稳定归属信息。 */
-export type RuntimePluginReference = {
-  id: string;
-  name: string;
-  icon?: string;
 };
 
 export type RuntimePluginSkill = {

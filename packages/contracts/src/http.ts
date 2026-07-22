@@ -1,11 +1,21 @@
 import type { AnswerRuntimeApprovalInput, RuntimeApprovalList } from './approvals.js';
 import type {
+  RuntimeAttachmentDeleteResponse,
+  RuntimeAttachmentUploadInput,
+  RuntimeStoredMessageAttachment,
+} from './attachments.js';
+import type {
   RuntimeBackgroundShellProcessList,
   RuntimeBackgroundShellProcessTermination,
 } from './background-shell-processes.js';
-import type { RuntimeAvailableModelsResponse, RuntimeConfigInput, RuntimeConfigState, RuntimeFetchModelsInput, RuntimeHookListResponse } from './config.js';
+import type {
+  RuntimeAvailableModelsResponse,
+  RuntimeConfigInput,
+  RuntimeConfigState,
+  RuntimeFetchModelsInput,
+  RuntimeHookListResponse,
+} from './config.js';
 import type { RuntimeEvent } from './events.js';
-import type { CreateRuntimeMemoryInput, RuntimeMemoryList, RuntimeMemoryPreview, RuntimeMemoryQuery } from './memory.js';
 import type {
   RuntimeMcpResourceReadResult,
   RuntimeMcpServerInput,
@@ -16,16 +26,28 @@ import type {
   RuntimeMcpToolList,
 } from './mcp.js';
 import type {
-  RuntimePluginItemContent,
-  RuntimePluginItemKind,
-  RuntimePluginInstallResult,
+  CreateRuntimeMemoryInput,
+  RuntimeMemoryList,
+  RuntimeMemoryPreview,
+  RuntimeMemoryQuery,
+} from './memory.js';
+import type {
   RuntimeImageGenerationTestInput,
   RuntimeImageGenerationTestResult,
+  RuntimePluginInstallResult,
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginList,
   RuntimePluginMarketplaceList,
   RuntimePluginRemoveResult,
 } from './plugins.js';
-import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillList, RuntimeSkillMcpDependencyInstallResult, RuntimeSkillPatch } from './skills.js';
+import type {
+  RuntimeSkillDetail,
+  RuntimeSkillInput,
+  RuntimeSkillList,
+  RuntimeSkillMcpDependencyInstallResult,
+  RuntimeSkillPatch,
+} from './skills.js';
 import type {
   CreateThreadInput,
   MessageDeleteInput,
@@ -45,9 +67,13 @@ import type {
 } from './threads.js';
 import type { RuntimeUsageQuery, RuntimeUsageResponse } from './usage.js';
 import type {
+  RuntimeWorkspaceDependenciesStatus,
+  RuntimeWorkspaceDependenciesToggleInput,
+} from './workspace-dependencies.js';
+import type {
   AddWorkspaceProjectInput,
-  WorkspaceEntrySearchResponse,
   WorkspaceEntryList,
+  WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
   WorkspaceProject,
   WorkspaceProjectList,
@@ -55,8 +81,6 @@ import type {
   WorkspaceStatus,
   WorkspaceStatusQuery,
 } from './workspace.js';
-import type { RuntimeWorkspaceDependenciesStatus, RuntimeWorkspaceDependenciesToggleInput } from './workspace-dependencies.js';
-import type { RuntimeAttachmentDeleteResponse, RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
 
 export type RuntimeHealth = {
   ok: true;

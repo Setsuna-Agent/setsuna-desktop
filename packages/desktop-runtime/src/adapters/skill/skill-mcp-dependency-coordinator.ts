@@ -11,7 +11,12 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
-import type { SkillActivationContext, SkillInjection, SkillMcpDependencyManager, SkillRegistry } from '../../ports/skill-registry.js';
+import type {
+  SkillActivationContext,
+  SkillInjection,
+  SkillMcpDependencyManager,
+  SkillRegistry,
+} from '../../ports/skill-registry.js';
 
 type SkillMcpClient = Pick<McpClientRuntime, 'authStatus' | 'invalidateServer' | 'login'>;
 

@@ -1,8 +1,8 @@
+import type { IDisposable } from 'node-pty';
+import * as nodePty from 'node-pty';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import * as nodePty from 'node-pty';
-import type { IDisposable } from 'node-pty';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import { AppServerRpcError } from './errors.js';
 import { hasOwn, numericInput, recordInput, requiredArray, requiredRawString, requiredString } from './input.js';

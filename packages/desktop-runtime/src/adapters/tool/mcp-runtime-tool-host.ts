@@ -8,9 +8,15 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { McpClientRuntime, McpRequestContext } from '../../ports/mcp-client-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
-import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolExternalContext, ToolHost } from '../../ports/tool-host.js';
-import { threadScopeId } from '../mcp/sdk-mcp-connection-manager.js';
+import type {
+  ToolExecutionContext,
+  ToolExecutionPreview,
+  ToolExecutionResult,
+  ToolExternalContext,
+  ToolHost,
+} from '../../ports/tool-host.js';
 import { mcpToolExecutionResult } from '../mcp/mcp-tool-result.js';
+import { threadScopeId } from '../mcp/sdk-mcp-connection-manager.js';
 
 type McpToolMapping = {
   name: string;

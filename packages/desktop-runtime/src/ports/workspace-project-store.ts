@@ -1,7 +1,7 @@
 import type {
   AddWorkspaceProjectInput,
-  WorkspaceEntrySearchResponse,
   WorkspaceEntryList,
+  WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
   WorkspaceFileWrite,
   WorkspaceProject,

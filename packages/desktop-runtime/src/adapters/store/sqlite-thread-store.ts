@@ -1,7 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
-import path from 'node:path';
-import type { DatabaseSync, StatementResultingChanges } from 'node:sqlite';
 import type {
   CreateThreadInput,
   MessageDeleteInput,
@@ -14,6 +10,10 @@ import type {
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE } from '@setsuna-desktop/contracts';
+import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import type { DatabaseSync, StatementResultingChanges } from 'node:sqlite';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';

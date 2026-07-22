@@ -1,5 +1,5 @@
-import path from 'node:path';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import path from 'node:path';
 import type { RuntimeFactory } from '../types.js';
 import { AppServerRpcError } from './errors.js';
 import { recordInput, requiredString } from './input.js';

@@ -1,6 +1,10 @@
+import type {
+  RuntimeExecPolicyAmendment,
+  RuntimeNetworkApprovalProtocol,
+  RuntimeNetworkPolicyAmendment,
+} from '@setsuna-desktop/contracts';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { RuntimeExecPolicyAmendment, RuntimeNetworkApprovalProtocol, RuntimeNetworkPolicyAmendment } from '@setsuna-desktop/contracts';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../ports/policy-amendment-store.js';
 import { readJsonFile } from './json-file.js';
 

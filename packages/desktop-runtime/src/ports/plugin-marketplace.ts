@@ -1,7 +1,7 @@
 import type {
+  RuntimePluginInstallResult,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
-  RuntimePluginInstallResult,
   RuntimePluginMarketplaceList,
 } from '@setsuna-desktop/contracts';
 

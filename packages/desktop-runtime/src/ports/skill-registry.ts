@@ -1,11 +1,11 @@
 import type {
+  RuntimePluginReference,
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillList,
   RuntimeSkillMcpDependency,
   RuntimeSkillMcpDependencyInstallResult,
   RuntimeSkillPatch,
-  RuntimePluginReference,
 } from '@setsuna-desktop/contracts';
 
 export type SkillInjection = {

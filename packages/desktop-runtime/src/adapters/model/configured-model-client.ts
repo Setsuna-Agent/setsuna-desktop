@@ -1,14 +1,18 @@
 import type { ModelRequest } from '@setsuna-desktop/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest, ModelCompactionResult } from '../../ports/model-client.js';
-import { AnthropicMessagesModelClient } from './anthropic-messages-model-client.js';
 import { AiSdkOpenAiCompatibleModelClient } from './ai-sdk-model-client.js';
+import { AnthropicMessagesModelClient } from './anthropic-messages-model-client.js';
+import {
+  runWithModelTimeout,
+  streamWithModelTimeout,
+  type ModelRequestTimeoutOptions,
+} from './model-request-timeout.js';
 import { OpenAiChatModelClient } from './openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from './openai-responses-model-client.js';
-import { TestModelClient } from './test-model-client.js';
-import type { FetchImpl } from './provider-utils.js';
-import { runWithModelTimeout, streamWithModelTimeout, type ModelRequestTimeoutOptions } from './model-request-timeout.js';
 import { thinkingRequestDefaults } from './provider-thinking.js';
+import type { FetchImpl } from './provider-utils.js';
+import { TestModelClient } from './test-model-client.js';
 
 export class ConfiguredModelClient implements ModelClient {
   constructor(

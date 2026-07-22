@@ -19,7 +19,7 @@
     "zod": "^4.4.3"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b tsconfig.build.json",
     "typecheck": "tsc -b --pretty false"
   }
 }

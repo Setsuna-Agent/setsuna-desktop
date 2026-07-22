@@ -1,10 +1,14 @@
-import type { RuntimeMessage, RuntimeMessagePromptSource, RuntimeMessageProviderMetadata } from './threads.js';
-import type { RuntimeUsage } from './usage.js';
-import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './config.js';
 import type { RuntimeEnvironment } from './environment.js';
-import type { RuntimePluginReference } from './plugins.js';
+import type {
+  RuntimeMessagePromptSource,
+  RuntimeMessageProviderMetadata,
+  RuntimeMessageRole,
+} from './message-metadata.js';
+import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './permissions.js';
+import type { RuntimePluginReference } from './plugin-reference.js';
+import type { RuntimeUsage } from './usage.js';
 
-export type ModelProviderKind = 'openai-compatible' | 'openai-responses' | 'anthropic';
+export type { ModelProviderKind } from './model-provider.js';
 
 export type RuntimeToolChoice = 'auto' | 'none' | { type: 'tool'; name: string };
 
@@ -58,7 +62,7 @@ export type RuntimeModelRequestStepSkill = {
 
 export type RuntimePromptManifestEntry = {
   id: string;
-  role: Extract<RuntimeMessage['role'], 'system' | 'developer' | 'user' | 'assistant'>;
+  role: Extract<RuntimeMessageRole, 'system' | 'developer' | 'user' | 'assistant'>;
   source: 'product' | 'tool_policy' | 'tool_external_context' | 'environment' | 'permissions' | 'personalization' | 'project_workflow' | 'project_instruction' | 'memory' | 'skill' | RuntimeMessagePromptSource;
   trust: 'runtime' | 'trusted_local' | 'user' | 'external';
   lifecycle: 'runtime' | 'workspace' | 'turn';
@@ -154,7 +158,7 @@ export type RuntimeStreamItem = {
   kind: RuntimeStreamItemKind;
   content?: string;
   name?: string;
-  role?: RuntimeMessage['role'];
+  role?: RuntimeMessageRole;
   status?: 'in_progress' | 'completed' | 'failed' | 'cancelled';
   transcriptMessageId?: string;
   toolCall?: RuntimeToolCall;
@@ -174,19 +178,6 @@ export type RuntimeModelVerification = {
   provider?: string;
   serverModel?: string;
   warnings?: string[];
-};
-
-export type ModelRequest = {
-  model: string;
-  messages: RuntimeMessage[];
-  tools?: RuntimeToolDefinition[];
-  toolChoice?: RuntimeToolChoice;
-  stepSnapshot?: RuntimeModelRequestStepSnapshot;
-  maxOutputTokens?: number;
-  temperature?: number;
-  thinking?: boolean;
-  reasoningEffort?: string;
-  signal?: AbortSignal;
 };
 
 export type ModelStreamEvent =

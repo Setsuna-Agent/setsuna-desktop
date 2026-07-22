@@ -1,5 +1,5 @@
-import { realpath, stat } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
+import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 export const MAX_WORKSPACE_SEARCH_FILE_BYTES = 1024 * 1024;

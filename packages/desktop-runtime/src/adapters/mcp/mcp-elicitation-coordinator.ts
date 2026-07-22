@@ -1,14 +1,14 @@
+import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeMcpElicitation,
   RuntimeMcpElicitationResponse,
   RuntimeMcpElicitationSchema,
 } from '@setsuna-desktop/contracts';
-import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
+import type { RuntimeEventWriter } from '../../loop/lifecycle/runtime-event-writer.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { RuntimeEventWriter } from '../../loop/runtime-event-writer.js';
 
 const MAX_MESSAGE_BYTES = 8 * 1024;
 const MAX_SCHEMA_BYTES = 64 * 1024;

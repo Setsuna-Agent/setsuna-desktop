@@ -1,6 +1,3 @@
-import { createHash } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
-import path from 'node:path';
 import type {
   RuntimeMcpRequireApproval,
   RuntimeMcpServer,
@@ -11,6 +8,9 @@ import type {
   RuntimeMcpTransport,
   RuntimeMcpTrustLevel,
 } from '@setsuna-desktop/contracts';
+import { createHash } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import type { McpStore } from '../../ports/mcp-store.js';
 import type { SecretStore } from '../../ports/secret-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';

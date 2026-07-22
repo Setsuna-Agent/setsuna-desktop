@@ -6,9 +6,9 @@ import { defineConfig } from 'vitest/config';
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
 export const testFileGlobs = [
-  'apps/**/*.test.{ts,tsx}',
-  'packages/**/*.test.{ts,tsx}',
-  'scripts/**/*.test.ts',
+  'apps/**/test/**/*.test.{ts,tsx}',
+  'packages/**/test/**/*.test.{ts,tsx}',
+  'scripts/test/**/*.test.ts',
 ];
 
 export const baseExcludeGlobs = [
@@ -21,16 +21,10 @@ export const baseExcludeGlobs = [
   'release-logs/**',
 ];
 
-// 发布任务排除这些波动较大的集成测试套件；诊断任务会单独运行它们。
-export const integrationTestFiles = [
-  'apps/desktop/main/review-state.test.ts',
-  'apps/desktop/main/terminal-sessions.test.ts',
-  'packages/desktop-runtime/src/adapters/skill/file-skill-registry.test.ts',
-  'packages/desktop-runtime/src/adapters/store/file-memory-store.test.ts',
-  'packages/desktop-runtime/src/adapters/tool/pc-local-tool-host.test.ts',
-  'packages/desktop-runtime/src/adapters/tool/shell-tool-host.test.ts',
-  'packages/desktop-runtime/src/loop/agent-loop-tools.test.ts',
-  'packages/desktop-runtime/src/server/runtime-server.test.ts',
+// 集成测试按目录归类，新增套件无需再同步维护一份易遗漏的文件清单。
+export const integrationTestGlobs = [
+  'apps/**/test/integration/**/*.test.{ts,tsx}',
+  'packages/**/test/integration/**/*.test.{ts,tsx}',
 ];
 
 type VitestTestConfig = NonNullable<Parameters<typeof defineConfig>[0]['test']>;

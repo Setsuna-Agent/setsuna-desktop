@@ -1,16 +1,24 @@
-import path from 'node:path';
 import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
-  RuntimeMemorySettings,
   RuntimeMcpAuthStatus,
   RuntimeMcpServer,
   RuntimeMcpToolInfo,
+  RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
+import path from 'node:path';
 import type { RuntimeFactory } from '../types.js';
 import { AppServerRpcError } from './errors.js';
-import { hasOwn, numericInput, recordInput, requiredPositiveInteger, requiredRawString, requiredString, stringInput } from './input.js';
+import {
+  hasOwn,
+  numericInput,
+  recordInput,
+  requiredPositiveInteger,
+  requiredRawString,
+  requiredString,
+  stringInput,
+} from './input.js';
 
 type AppServerModelCatalogItem = {
   id: string;

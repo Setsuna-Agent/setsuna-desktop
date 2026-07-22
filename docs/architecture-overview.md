@@ -24,7 +24,7 @@ React renderer
 
 ## 启动链路
 
-1. `apps/desktop/main/index.ts` 在 `app.whenReady()` 后创建 `RuntimeHost`。
+1. `apps/desktop/main/src/index.ts` 在 `app.whenReady()` 后创建 `RuntimeHost`。
 2. `RuntimeHost` 分配本地端口，生成一次性 bearer token，并解析承载 runtime CLI 的 Node 模式可执行文件。
 3. runtime 通过 `ELECTRON_RUN_AS_NODE=1` 复用 Electron 可执行文件；macOS 优先使用 `LSUIElement` Helper，避免 runtime 及工作空间 Node 子进程注册额外 Dock 图标。开发环境可通过 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向 `packages/desktop-runtime/dist/cli.js`。
 4. runtime stdout 输出 ready JSON 后，main 做 `/health` 检查。
@@ -136,4 +136,13 @@ runtime 数据根是 Electron `userData/runtime`：
 - append-only event 提升恢复能力，也让 reducer 成为 UI 和存储的共同真源。
 - runtime 使用 ports/adapters，便于替换文件存储、模型客户端、ToolHost。
 - Electron main 保留本机能力，避免 renderer 侧出现 Node 或系统 API。
-- `Tree.md` 保持目录索引，`docs/` 负责沉淀长期设计约束。
+- `Tree.md` 由 `pnpm docs:tree` 生成目录索引，`docs/` 负责沉淀长期设计约束。
+
+## 目录与依赖纪律
+
+- 每个可构建模块把生产代码放在 `src/`，测试放在独立的 `test/` 并镜像生产目录；构建 tsconfig 只包含 `src/`。
+- renderer 使用 `app / features / services / shared` 四层：顶层编排、业务功能、跨功能服务、无业务归属的复用代码各自收口。
+- Electron main 按 `browser / ipc / review / runtime / security / terminal / updater / window / workspace` 分域，`src/index.ts` 只负责组装和生命周期。
+- Agent loop 按 `core / context / lifecycle / memory / tools` 分域；工具和存储的具体实现继续通过 ports/adapters 注入。
+- contracts 的 SWE 映射与 thread projection 从公共门面中拆出实现模块，并保持相对 import graph 无环。
+- `pnpm check:architecture` 检查跨层依赖、contracts 循环引用、`src/` 中混入测试、构建产物混入测试、单文件体积和单目录文件密度；`pnpm typecheck` 会先运行该检查。

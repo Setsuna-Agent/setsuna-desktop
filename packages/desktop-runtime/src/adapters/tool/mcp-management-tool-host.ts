@@ -8,7 +8,12 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
-import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
+import type {
+  ToolExecutionContext,
+  ToolExecutionPreview,
+  ToolExecutionResult,
+  ToolHost,
+} from '../../ports/tool-host.js';
 
 const configureMcpToolName = 'configure_mcp_server';
 const DEFAULT_TIMEOUT_MS = 120_000;

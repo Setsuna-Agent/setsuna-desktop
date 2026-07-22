@@ -87,7 +87,7 @@ REST 路由覆盖：
 
 ## Agent Loop
 
-`src/loop/agent-loop.ts` 是 turn 生命周期的薄编排器。它决定阶段顺序和分支，但不再负责构造每个阶段的内部细节：memory、hooks、context compaction、sampling context、模型采样/流事件、工具执行、标题、终态写入和用户 shell 分别下沉到同目录的 coordinator、builder、sampler、publisher、executor 和 runner。
+`src/loop/core/agent-loop.ts` 是 turn 生命周期的薄编排器。实现按职责分到 `core/`、`context/`、`lifecycle/`、`memory/`、`tools/`：memory、hooks、context compaction、sampling context、模型采样/流事件、工具执行、标题、终态写入和用户 shell 分别由对应 coordinator、builder、sampler、publisher、executor 和 runner 承担。
 
 内部协作者按职责划分：
 
@@ -307,7 +307,7 @@ REST 路由覆盖：
 
 ### PC Local Tools
 
-`PcLocalToolHost` 适配 `pc-local-tools.ts` 稳定门面；文件、路径、diff、shell policy/process、MCP、memory 等实现按职责拆在 `pc-local-tool-*.ts`：
+`PcLocalToolHost` 适配 `src/adapters/tool/pc-local/pc-local-tools.ts` 稳定门面；文件、路径、diff、shell policy/process、MCP、memory 等实现按职责拆在同目录的 `pc-local-tool-*.ts`：
 
 - 暴露 list/read/search/diff/shell/apply/write/edit 等本地工具。
 - 维护每个项目独立 tool state，shell process store 可复用。
@@ -319,13 +319,12 @@ REST 路由覆盖：
 
 ## 测试重点
 
-runtime 改动通常要覆盖：
+runtime 测试统一位于 `packages/desktop-runtime/test/`，不与 `src/` 混放：
 
-- `runtime-server.test.ts`
-- `runtime-factory.test.ts`
-- `agent-loop-tools.test.ts`
-- `context-compaction.test.ts`
-- 对应 adapter/store/tool 的 `*.test.ts`
-- contracts 里的 event projection test
+- `test/integration/runtime-server/`：按 REST、SSE、配置、线程、插件等协议拆分的 server 场景。
+- `test/integration/agent-loop/`：按 turn lifecycle、工具、memory、context、协作等场景拆分的 AgentLoop 测试。
+- `test/adapters/`、`test/loop/`、`test/server/`：镜像生产目录的单元测试。
+- `test/support/`：跨 suite 共用 harness、fixture 和断言；不得复制大型 setup。
+- contracts 的 event projection 测试继续作为协议真源。
 
 如果改动穿透到 renderer，还要补 renderer 纯函数或 hook 测试。

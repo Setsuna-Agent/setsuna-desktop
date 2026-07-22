@@ -1,0 +1,5 @@
+@import './settings-base.css';
+@import './settings-personalization.css';
+@import './settings-providers.css';
+@import './settings-dialogs.css';
+@import './settings-runtime.css';

@@ -1,9 +1,9 @@
-import { baseExcludeGlobs, createVitestConfig, integrationTestFiles } from './vitest.shared.config';
+import { baseExcludeGlobs, createVitestConfig, integrationTestGlobs } from './vitest.shared.config';
 
 export default createVitestConfig({
   exclude: [
     ...baseExcludeGlobs,
-    ...integrationTestFiles,
+    ...integrationTestGlobs,
   ],
   hookTimeout: 20_000,
   maxWorkers: process.env.CI ? 2 : undefined,

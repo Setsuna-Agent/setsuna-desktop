@@ -1,6 +1,16 @@
-import type { RuntimeSkillDetail, RuntimeSkillInput, RuntimeSkillMcpDependencyInput, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeSkillDetail,
+  RuntimeSkillInput,
+  RuntimeSkillMcpDependencyInput,
+  RuntimeToolDefinition,
+} from '@setsuna-desktop/contracts';
 import type { SkillMcpDependencyManager, SkillRegistry } from '../../ports/skill-registry.js';
-import type { ToolExecutionContext, ToolExecutionPreview, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
+import type {
+  ToolExecutionContext,
+  ToolExecutionPreview,
+  ToolExecutionResult,
+  ToolHost,
+} from '../../ports/tool-host.js';
 
 const configureSkillToolName = 'configure_skill';
 const installSkillMcpDependenciesToolName = 'install_skill_mcp_dependencies';

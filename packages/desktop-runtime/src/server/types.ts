@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net';
+import type { DesktopNativeBridge } from '../ports/secret-store.js';
 import type { createRuntimeFactory } from '../runtime/runtime-factory.js';
 import type { AppServerPtyFactory } from './app-server/command-exec.js';
-import type { DesktopNativeBridge } from '../ports/secret-store.js';
 
 export type RuntimeServerOptions = {
   dataDir: string;

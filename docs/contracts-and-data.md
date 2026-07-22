@@ -4,13 +4,13 @@
 
 ## 模块
 
-- `config.ts`：provider、model、可持久化品牌图标、runtime preferences、permission profile、feature flags。
+- `config.ts`：runtime preferences 与 feature flags；provider、permission 等叶子类型位于 `model-provider.ts`、`model-request.ts`、`permissions.ts`，由兼容门面重导出。
 - `environment.ts`：每次 runtime 操作共享的 cwd、workspace roots、shell 与 Git 仓库路径关系；不承载权限。
 - `provider.ts`：模型请求、工具定义、工具调用、流式模型事件。
 - `threads.ts`：线程、消息、附件、toolRun、context compaction、goal、git info。
 - `events.ts`：runtime event union 和 SSE envelope。
-- `thread-events.ts`：runtime event -> thread snapshot reducer。
-- `swe-events.ts`：Codex/SWE app-server 映射类型。
+- `thread-events.ts`：runtime event -> thread snapshot reducer；复用的 projection helper 位于 `thread-event-projection.ts`。
+- `swe-events.ts`：Codex/SWE app-server 公共门面；类型与 mapper 实现位于 `swe/`。
 - `http.ts`：runtime health、request input、`DesktopRuntimeClient` 方法面。
 - `workspace.ts`：项目、文件树、文件读写、搜索。
 - `mcp.ts`：MCP server、transport、tool、审批策略。
@@ -158,9 +158,9 @@ runtime/
 
 1. `config.ts` 加字段。
 2. `FileConfigStore` normalize、default、toState、save。
-3. `SettingsPage.tsx` 增加 UI。
+3. `features/settings/sections/` 或 `features/settings/providers/` 增加 UI。
 4. `useRuntimeClientState.saveRuntimePreferences()` 类型允许该字段。
-5. 如果影响 AgentLoop，在 `agent-loop.ts` 读取 runtimeConfig。
+5. 如果影响 AgentLoop，在 `loop/core/agent-loop.ts` 或对应 coordinator 读取 runtimeConfig。
 6. 加 store 或 UI 测试。
 
 新增一个 toolRun 展示字段：
@@ -168,7 +168,7 @@ runtime/
 1. `threads.ts` 更新 `RuntimeToolRun`。
 2. 工具执行处写入 event payload 或 toolRun data。
 3. `thread-events.ts` 投影字段。
-4. `RuntimeToolRuns.tsx` 展示。
+4. `features/chat/tool-runs/` 展示。
 5. 添加 projection 和 renderer 测试。
 
 新增一个 provider：
@@ -177,14 +177,15 @@ runtime/
 2. 新增 model client adapter。
 3. `ConfiguredModelClient` 选择 adapter。
 4. `model-discovery.ts` 支持模型列表。
-5. `SettingsPage.tsx` 加 provider 表单逻辑。
+5. `features/settings/providers/` 加 provider 表单逻辑。
 6. provider adapter tests。
 
 ## 测试真源
 
-contracts 层测试特别重要：
+contracts 层测试特别重要，并统一位于 `packages/contracts/test/`：
 
 - `thread-events.test.ts`：线程投影是否稳定。
-- `swe-events.test.ts`：app-server 映射是否兼容。
+- `swe-events/`：按 notification、turn、stream、capability 等职责拆分的 app-server 映射兼容测试。
+- `support/`：SWE fixture 与共用断言。
 
 只要 runtime event 或 thread message 结构变化，都应优先补这里的测试，再补上层测试。

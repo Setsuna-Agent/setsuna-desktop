@@ -1,4 +1,13 @@
-import { DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_MAX_OUTPUT_TOKENS, isRuntimeInlineMessageAttachment, type ModelStreamEvent, type RuntimeInlineMessageAttachment, type RuntimeMessage, type RuntimeToolDefinition, type RuntimeUsage } from '@setsuna-desktop/contracts';
+import {
+  DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+  isRuntimeInlineMessageAttachment,
+  type ModelStreamEvent,
+  type RuntimeInlineMessageAttachment,
+  type RuntimeMessage,
+  type RuntimeToolDefinition,
+  type RuntimeUsage,
+} from '@setsuna-desktop/contracts';
 
 export type FetchImpl = (input: string | URL, init?: RequestInit) => Promise<Response>;
 

@@ -1,9 +1,9 @@
 import type {
   RuntimeMcpServerInput,
-  RuntimePluginItemContent,
-  RuntimePluginItemKind,
   RuntimePluginInstallInput,
   RuntimePluginInstallResult,
+  RuntimePluginItemContent,
+  RuntimePluginItemKind,
   RuntimePluginList,
   RuntimePluginMarketplaceItem,
   RuntimePluginRemoveResult,

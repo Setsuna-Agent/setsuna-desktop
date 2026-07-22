@@ -1,12 +1,23 @@
+import type {
+  RuntimeEnvironment,
+  RuntimeWorkspaceDependenciesStatus,
+  RuntimeWorkspaceDependenciesToggleInput,
+  RuntimeWorkspaceDependencySource,
+  RuntimeWorkspaceDependencyToolStatus,
+} from '@setsuna-desktop/contracts';
+import {
+  DEFAULT_NPM_REGISTRY_URL,
+  DEFAULT_PYTHON_PACKAGE_INDEX_URL,
+} from '@setsuna-desktop/contracts';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
 import {
   access,
   mkdir,
+  readdir,
   readFile,
   readlink,
-  readdir,
   realpath,
   rename,
   rm,
@@ -15,17 +26,6 @@ import {
 } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import {
-  DEFAULT_NPM_REGISTRY_URL,
-  DEFAULT_PYTHON_PACKAGE_INDEX_URL,
-} from '@setsuna-desktop/contracts';
-import type {
-  RuntimeEnvironment,
-  RuntimeWorkspaceDependenciesStatus,
-  RuntimeWorkspaceDependencySource,
-  RuntimeWorkspaceDependencyToolStatus,
-  RuntimeWorkspaceDependenciesToggleInput,
-} from '@setsuna-desktop/contracts';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type {
   PrepareShellToolchainInput,

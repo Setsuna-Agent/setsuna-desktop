@@ -1,7 +1,7 @@
-import { readFile, readdir } from 'node:fs/promises';
-import path from 'node:path';
 import type { RuntimeEvent, RuntimeThread } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread } from '@setsuna-desktop/contracts';
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
 import { assertSafeRuntimeId, resolveRuntimeStoragePath } from '../../security/runtime-id.js';
 import {
   assertThreadSnapshot,

@@ -1,5 +1,3 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { URL } from 'node:url';
 import type {
   AnswerRuntimeApprovalInput,
   CreateRuntimeMemoryInput,
@@ -7,43 +5,58 @@ import type {
   MessageDeleteInput,
   MessagePatch,
   RegenerateMessageInput,
+  RuntimeConfigState,
   RuntimeFetchModelsInput,
   RuntimeImageGenerationTestInput,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
-  RuntimePluginItemKind,
   RuntimeMemoryQuery,
   RuntimeMessage,
-  RuntimeConfigState,
+  RuntimePluginItemKind,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeUsageQuery,
-  WorkspaceSearchResponse,
   RuntimeWorkspaceDependenciesToggleInput,
   SendTurnInput,
   SteerTurnInput,
   ThreadMemoryModePatch,
   ThreadPatch,
   ThreadQuery,
+  WorkspaceSearchResponse,
 } from '@setsuna-desktop/contracts';
 import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
 } from '@setsuna-desktop/contracts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { URL } from 'node:url';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
+import { compactForPrompt, neutralizePromptClosingTags } from '../loop/context/prompt-utils.js';
 import { RuntimeAttachmentValidationError } from '../ports/attachment-store.js';
-import { WorkspaceSearchCancelledError } from '../ports/workspace-search-engine.js';
 import type { WorkspaceProjectStore } from '../ports/workspace-project-store.js';
+import { WorkspaceSearchCancelledError } from '../ports/workspace-search-engine.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
-import { compactForPrompt, neutralizePromptClosingTags } from '../loop/prompt-utils.js';
 import { stringInput } from './app-server/input.js';
-import { isRuntimeMessageAttachment, memoryScope, optionalNumber, readBinaryBody, readBody, sendJson, threadScope } from './http-utils.js';
 import { RuntimeHttpError } from './http-error.js';
+import {
+  isRuntimeMessageAttachment,
+  memoryScope,
+  optionalNumber,
+  readBinaryBody,
+  readBody,
+  sendJson,
+  threadScope,
+} from './http-utils.js';
 import { cancelRuntimeTurn } from './runtime-thread-events.js';
-import { handleSse, publishThreadEventsSince, runtimeEventStreamExperimentalApi, runtimeEventStreamFormat } from './sse.js';
+import {
+  handleSse,
+  publishThreadEventsSince,
+  runtimeEventStreamExperimentalApi,
+  runtimeEventStreamFormat,
+} from './sse.js';
 import type { RuntimeFactory } from './types.js';
 
 const PROJECT_CONTENT_SEARCH_SUPERSEDE_KEY = 'project-content-search';

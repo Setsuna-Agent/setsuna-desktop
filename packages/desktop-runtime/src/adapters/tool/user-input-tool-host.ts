@@ -8,7 +8,7 @@ import type {
   RuntimeUserInputRequest,
   RuntimeUserInputResponse,
 } from '@setsuna-desktop/contracts';
-import type { RuntimeEventWriter } from '../../loop/runtime-event-writer.js';
+import type { RuntimeEventWriter } from '../../loop/lifecycle/runtime-event-writer.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';

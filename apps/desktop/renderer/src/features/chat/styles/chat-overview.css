@@ -1,0 +1,935 @@
+.chat-conversation-overview {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  z-index: 8;
+  max-width: min(300px, calc(100% - 24px));
+  pointer-events: none;
+}
+
+.chat-conversation-overview.is-auto-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:root[data-desktop-platform='win32'] .chat-conversation-overview,
+:root[data-desktop-platform='linux'] .chat-conversation-overview {
+  top: calc(var(--app-topbar-height) + 10px);
+}
+
+.chat-conversation-overview-chip,
+.chat-conversation-overview-panel {
+  pointer-events: auto;
+  transform-origin: top right;
+  animation: chat-conversation-overview-enter 160ms cubic-bezier(0.2, 0.82, 0.2, 1);
+}
+
+.chat-conversation-overview-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.chat-conversation-overview-chip:hover {
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+}
+
+.chat-conversation-overview-chip svg {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+.chat-conversation-overview-chip__meta {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.chat-conversation-overview-panel {
+  display: grid;
+  gap: 7px;
+  width: 284px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 12px 10px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+}
+
+@keyframes chat-conversation-overview-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-content-frame,
+  .chat-action-error,
+  .chat-delete-bar__inner,
+  .chat-scroll-bottom,
+  .chat-sender:not(.chat-sender--starter) > .chat-usage-panel,
+  .chat-sender:not(.chat-sender--starter) .ant-sender,
+  .chat-sender:not(.chat-sender--starter) > .chat-command-menu,
+  .chat-sender:not(.chat-sender--starter) .chat-attachments {
+    transition: none;
+  }
+
+  .chat-conversation-overview-chip,
+  .chat-conversation-overview-panel {
+    animation: none;
+  }
+}
+
+.chat-conversation-overview-panel__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+  padding: 0 0 0 10px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.chat-conversation-overview-panel__header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.chat-conversation-overview-panel__header button:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
+}
+
+.chat-conversation-overview-panel__actions {
+  display: grid;
+  gap: 3px;
+}
+
+.chat-conversation-overview-panel__row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--app-text);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.chat-conversation-overview-panel__row:not(.chat-conversation-overview-panel__row--static) {
+  cursor: pointer;
+}
+
+.chat-conversation-overview-panel__row:not(.chat-conversation-overview-panel__row--static):hover {
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+}
+
+.chat-conversation-overview-panel__row:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chat-conversation-overview-panel__row--static {
+  cursor: default;
+}
+
+.chat-conversation-overview-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
+  color: color-mix(in srgb, var(--app-text) 88%, transparent);
+}
+
+.chat-conversation-overview-panel__label,
+.chat-conversation-overview-panel__meta,
+.chat-conversation-overview-panel__plan-step {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-conversation-overview-panel__meta {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  justify-content: flex-end;
+  gap: 7px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.chat-conversation-overview-panel__label {
+  color: var(--app-text);
+  font-weight: 500;
+}
+
+.chat-conversation-git {
+  position: relative;
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.chat-conversation-git__branch-row .chat-conversation-overview-panel__meta svg {
+  flex: 0 0 auto;
+}
+
+.chat-git-branch-menu,
+.chat-git-commit-popover,
+.chat-git-commit-branch-menu,
+.chat-conversation-overview-panel__plan-popover {
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+}
+
+.chat-git-branch-menu {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 8px);
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: min(298px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.chat-git-branch-menu__search {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  color: var(--app-text-muted);
+}
+
+.chat-git-branch-menu__search input,
+.chat-git-branch-menu__create-form input,
+.chat-git-commit-popover__message {
+  min-width: 0;
+  border: 0;
+  outline: none;
+  color: var(--app-text);
+  background: transparent;
+  font: inherit;
+}
+
+.chat-git-branch-menu__search input::placeholder,
+.chat-git-branch-menu__create-form input::placeholder,
+.chat-git-commit-popover__message::placeholder {
+  color: color-mix(in srgb, var(--app-text-muted) 78%, transparent);
+}
+
+.chat-git-branch-menu__label,
+.chat-git-commit-branch-menu__label {
+  padding: 0 2px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-git-branch-menu__list {
+  display: grid;
+  gap: 2px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.chat-git-branch-menu__item,
+.chat-git-branch-menu__create,
+.chat-git-commit-branch-menu__item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.chat-git-branch-menu__item.has-detail {
+  min-height: 42px;
+  padding-block: 4px;
+}
+
+.chat-git-branch-menu__item:not(:disabled):hover,
+.chat-git-branch-menu__create:not(:disabled):hover {
+  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
+}
+
+.chat-git-branch-menu__item.is-current,
+.chat-git-commit-branch-menu__item.is-current {
+  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
+}
+
+.chat-git-branch-menu__item:disabled,
+.chat-git-branch-menu__create:disabled {
+  cursor: default;
+}
+
+.chat-git-branch-menu__item-body {
+  display: grid;
+  min-width: 0;
+  line-height: 18px;
+}
+
+.chat-git-branch-menu__item-body span,
+.chat-git-commit-popover__branch span,
+.chat-git-commit-branch-menu__item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-git-branch-menu__item-body small {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.chat-git-branch-menu__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--app-text-muted);
+}
+
+.chat-git-branch-menu__empty,
+.chat-git-branch-menu__error,
+.chat-git-commit-popover__error {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-git-branch-menu__error,
+.chat-git-commit-popover__error {
+  color: var(--app-danger);
+  overflow-wrap: anywhere;
+}
+
+.chat-git-branch-menu__divider,
+.chat-git-commit-popover__divider {
+  height: 1px;
+  background: var(--app-border);
+}
+
+.chat-git-branch-menu__create {
+  cursor: pointer;
+}
+
+.chat-git-branch-menu__create.has-detail {
+  min-height: 42px;
+  padding-block: 4px;
+}
+
+.chat-git-branch-menu__create:disabled {
+  color: var(--app-text-muted);
+  cursor: default;
+}
+
+.chat-git-branch-menu__create-body {
+  display: grid;
+  min-width: 0;
+  line-height: 18px;
+}
+
+.chat-git-branch-menu__create-body > span,
+.chat-git-branch-menu__create-body > small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-git-branch-menu__create-body > small {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.chat-git-branch-menu__create-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 44px;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-git-branch-menu__create-form--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  padding: 4px 2px 2px;
+}
+
+.chat-git-branch-menu__create-form input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface);
+}
+
+.chat-git-branch-menu__create-form--compact input {
+  grid-column: 1 / -1;
+  height: 32px;
+}
+
+.chat-git-branch-menu__create-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  font: inherit;
+  font-size: 12px;
+}
+
+.chat-git-branch-menu__create-form--compact button {
+  width: 100%;
+  height: 30px;
+}
+
+.chat-git-commit-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.26);
+}
+
+.chat-git-commit-popover {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  width: min(418px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 14px;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.chat-git-commit-popover__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.chat-git-commit-popover__branch-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.chat-git-commit-popover__branch {
+  display: inline-grid;
+  grid-template-columns: 16px minmax(0, auto) 14px;
+  align-items: center;
+  gap: 7px;
+  max-width: 190px;
+  min-height: 28px;
+  padding: 0 8px 0 2px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.chat-git-commit-popover__branch:not(:disabled):hover {
+  color: var(--app-text);
+}
+
+.chat-git-commit-popover__branch.is-open {
+  color: var(--app-text);
+  background: transparent;
+}
+
+.chat-git-commit-popover__message {
+  width: 100%;
+  min-height: 54px;
+  box-sizing: border-box;
+  padding: 8px 2px;
+  resize: vertical;
+  line-height: 20px;
+}
+
+.chat-git-commit-popover__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.chat-git-commit-popover__check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--app-primary);
+}
+
+.chat-git-commit-popover__actions {
+  display: grid;
+  gap: 4px;
+}
+
+.chat-git-commit-popover__action {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.chat-git-commit-popover__action:not(:disabled):hover {
+  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
+}
+
+.chat-git-commit-popover__action:disabled {
+  color: var(--app-text-muted);
+  cursor: default;
+}
+
+.chat-git-commit-popover__action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.chat-git-commit-branch-menu {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 22;
+  display: grid;
+  gap: 5px;
+  width: 224px;
+  padding: 9px 8px;
+  border-radius: 8px;
+}
+
+.chat-git-commit-branch-menu__item {
+  grid-template-columns: 20px minmax(0, 1fr) 20px;
+}
+
+.chat-git-loading-icon {
+  transform-origin: center;
+  animation: chat-git-spin 0.9s linear infinite;
+}
+
+@keyframes chat-git-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chat-conversation-overview-progress-icon {
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+}
+
+.chat-conversation-overview-progress-icon circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.6;
+}
+
+.chat-conversation-overview-progress-icon circle:first-child {
+  opacity: 0.24;
+}
+
+.chat-conversation-overview-progress-icon circle:last-child {
+  opacity: 0.95;
+}
+
+.chat-conversation-overview-panel__divider {
+  height: 1px;
+  background: color-mix(in srgb, var(--app-border) 58%, transparent);
+}
+
+.chat-conversation-background-services {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chat-conversation-background-services__title {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px 2px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.chat-conversation-background-services__list {
+  display: grid;
+  gap: 2px;
+  max-height: 176px;
+  overflow-y: auto;
+}
+
+.chat-conversation-background-service {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 4px 2px 6px;
+  border-radius: 7px;
+}
+
+.chat-conversation-background-service:hover {
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+}
+
+.chat-conversation-background-service__icon {
+  grid-column: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
+  color: color-mix(in srgb, var(--app-text) 88%, transparent);
+}
+
+.chat-conversation-background-service > strong {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text);
+  font-family: var(--app-code-font-family);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.chat-conversation-background-service > button {
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.chat-conversation-background-service > button:hover:not(:disabled) {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 10%, transparent);
+}
+
+.chat-conversation-background-service > button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.chat-conversation-background-services__error {
+  min-width: 0;
+  padding: 3px 7px;
+  overflow: hidden;
+  color: var(--app-danger);
+  font-size: 11px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-conversation-background-services .is-spinning {
+  animation: chat-git-spin 0.9s linear infinite;
+}
+
+.chat-conversation-overview-panel__agents {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chat-conversation-overview-panel__agents-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 0 6px 2px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.chat-conversation-overview-panel__agents-title > span:last-child {
+  min-width: 16px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-conversation-overview-panel__agents > button {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-conversation-overview-panel__agents > button:hover {
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+}
+
+.chat-conversation-overview-panel__agents > button > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-muted);
+}
+
+.chat-conversation-overview-panel__agents > button > span.is-running {
+  background: var(--app-success);
+}
+
+.chat-conversation-overview-panel__agents strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-conversation-overview-panel__plan {
+  position: relative;
+  min-width: 0;
+}
+
+.chat-conversation-overview-panel__row.chat-conversation-overview-panel__plan-trigger {
+  cursor: default;
+}
+
+.chat-conversation-overview-panel__plan-trigger:focus-visible {
+  outline: 0;
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+  box-shadow: 0 0 0 2px var(--app-focus);
+}
+
+.chat-conversation-overview-panel__plan:focus-within .chat-conversation-overview-panel__plan-trigger {
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
+}
+
+.chat-conversation-overview-panel__plan-loading {
+  animation: chat-conversation-plan-spin 0.9s linear infinite;
+}
+
+@keyframes chat-conversation-plan-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chat-conversation-overview-panel__plan-progress {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-conversation-overview-panel__plan-popover {
+  position: absolute;
+  right: calc(100% + 8px);
+  bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  width: min(310px, calc(100vw - 32px));
+  max-height: min(260px, calc(100vh - 32px));
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 8px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(4px) scale(0.98);
+  transform-origin: bottom right;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 120ms ease;
+}
+
+.chat-conversation-overview-panel__plan-popover::after {
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 8px;
+  height: 100%;
+  content: '';
+}
+
+.chat-conversation-overview-panel__plan:hover .chat-conversation-overview-panel__plan-popover,
+.chat-conversation-overview-panel__plan:focus-within .chat-conversation-overview-panel__plan-popover {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+.chat-conversation-overview-panel__plan-popover-head {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.chat-conversation-overview-panel__plan-popover-head svg,
+.chat-conversation-overview-panel__plan-popover-head > span:last-child {
+  color: var(--app-text-muted);
+}
+
+.chat-conversation-overview-panel__plan-popover-head > span:last-child {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-conversation-overview-panel__plan-list {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.chat-conversation-overview-panel__plan-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-conversation-overview-panel__plan-item.is-in_progress {
+  color: var(--app-text);
+}
+
+.chat-conversation-overview-panel__plan-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.chat-conversation-overview-panel__plan-status {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-conversation-overview-panel__plan-loading {
+    animation: none;
+  }
+
+  .chat-conversation-overview-panel__plan-popover {
+    transition: none;
+  }
+}

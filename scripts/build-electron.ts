@@ -1,7 +1,7 @@
+import { build } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const electronMainExternals = ['electron', 'node-pty'];
@@ -14,7 +14,7 @@ export async function buildElectron(): Promise<void> {
 
   await Promise.all([
     build({
-      entryPoints: [resolve(rootDir, 'apps/desktop/main/index.ts')],
+      entryPoints: [resolve(rootDir, 'apps/desktop/main/src/index.ts')],
       outfile: resolve(rootDir, 'dist/electron/main/index.js'),
       bundle: true,
       platform: 'node',
@@ -24,7 +24,7 @@ export async function buildElectron(): Promise<void> {
       external: electronMainExternals,
     }),
     build({
-      entryPoints: [resolve(rootDir, 'apps/desktop/preload/index.ts')],
+      entryPoints: [resolve(rootDir, 'apps/desktop/preload/src/index.ts')],
       outfile: resolve(rootDir, 'dist/electron/preload/index.cjs'),
       bundle: true,
       platform: 'node',

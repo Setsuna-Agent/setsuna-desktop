@@ -1,9 +1,9 @@
-import { createVitestConfig, integrationTestFiles } from './vitest.shared.config';
+import { createVitestConfig, integrationTestGlobs } from './vitest.shared.config';
 
 export default createVitestConfig({
   fileParallelism: false,
   hookTimeout: 45_000,
-  include: integrationTestFiles,
+  include: integrationTestGlobs,
   maxWorkers: 1,
   minWorkers: 1,
   pool: 'forks',

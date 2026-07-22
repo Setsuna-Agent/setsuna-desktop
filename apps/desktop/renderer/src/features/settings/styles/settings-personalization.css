@@ -1,0 +1,427 @@
+.desktop-settings-panel .chat-user-settings__personalization-section {
+  gap: 14px;
+  padding: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__personalization-card {
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  background: var(--app-surface);
+  overflow: hidden;
+}
+
+.desktop-settings-panel .chat-user-settings__personalization-card--prompt {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.desktop-settings-panel .chat-user-settings__prompt-stack {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__prompt-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.desktop-settings-panel .chat-user-settings__prompt-title {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.desktop-settings-panel .chat-user-settings__prompt-heading p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .chat-user-settings__prompt-input-shell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__prompt-input {
+  min-height: 184px;
+  padding-bottom: 28px;
+  overflow-x: hidden;
+  border-radius: 7px;
+}
+
+.desktop-settings-panel .chat-user-settings__prompt-count {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  color: var(--app-text-subtle);
+  font-size: 11px;
+  line-height: 14px;
+  pointer-events: none;
+}
+
+.desktop-settings-panel .chat-user-settings__local-action-row .sd-button {
+  justify-self: end;
+}
+
+.desktop-settings-panel .chat-user-settings__preview-open .sd-button__icon {
+  order: 2;
+}
+
+.desktop-settings-panel .chat-user-settings__local-storage-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-error,
+.desktop-settings-panel .chat-user-settings__runtime-error {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 28%, transparent);
+  border-radius: 7px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, var(--app-surface));
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-preview-section {
+  width: min(720px, 100%);
+  padding: 10px 0 0;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-preview-header {
+  padding-bottom: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__tiny-action.sd-button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.desktop-settings-panel .chat-user-settings__update-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px 14px;
+}
+
+.desktop-settings-panel .chat-user-settings__update-main {
+  display: flex;
+  flex: 1 1 260px;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.desktop-settings-panel .chat-user-settings__update-progress {
+  --settings-update-progress: 0%;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: conic-gradient(var(--app-warning) var(--settings-update-progress), color-mix(in srgb, var(--app-border) 72%, transparent) 0);
+}
+
+.desktop-settings-panel .chat-user-settings__update-progress span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  color: var(--app-text-muted);
+  background: var(--app-surface);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.desktop-settings-panel .chat-user-settings__update-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.desktop-settings-panel .chat-user-settings__update-copy strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.desktop-settings-panel .chat-user-settings__update-copy span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__release-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--app-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: left;
+}
+
+.desktop-settings-panel .chat-user-settings__release-link span {
+  min-width: 0;
+  overflow: hidden;
+  color: currentColor;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__release-link:hover,
+.desktop-settings-panel .chat-user-settings__release-link:focus-visible {
+  color: var(--app-text);
+  text-decoration: underline;
+}
+
+.desktop-settings-panel .chat-user-settings__update-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-settings-panel .chat-user-settings__update-action.sd-button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-copy strong {
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-copy span,
+.desktop-settings-panel .chat-user-settings__download-source-help,
+.desktop-settings-panel .chat-user-settings__download-source-current {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-actions,
+.desktop-settings-panel .chat-user-settings__download-source-form-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-actions .settings-local-control {
+  width: 190px;
+  min-width: 140px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-actions .sd-button,
+.desktop-settings-panel .chat-user-settings__download-source-actions .sd-icon-button,
+.desktop-settings-panel .chat-user-settings__download-source-form-actions .sd-button {
+  min-height: 30px;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-current code {
+  color: var(--app-text-muted);
+  font-family: var(--app-font-mono);
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(220px, 1fr) auto;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-help {
+  grid-column: 1 / -1;
+}
+
+.desktop-settings-panel .chat-user-settings__download-source-error {
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 28%, transparent);
+  border-radius: 7px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, var(--app-surface));
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-preview-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 42%);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  background: var(--app-surface);
+}
+
+.desktop-settings-panel .chat-user-settings__memory-preview-summary div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-preview-summary strong {
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-preview-summary span {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-preview-summary code {
+  min-width: 0;
+  overflow: hidden;
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: var(--app-text);
+  background: var(--app-bg);
+  font-family: var(--app-code-font-family);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-list[aria-busy="true"] {
+  opacity: 0.72;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-item {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  background: var(--app-surface);
+}
+
+.desktop-settings-panel .chat-user-settings__memory-item-head {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-item-head > svg {
+  color: var(--app-text-secondary);
+}
+
+.desktop-settings-panel .chat-user-settings__memory-item-head > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-item-meta,
+.desktop-settings-panel .chat-user-settings__memory-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-item-meta span,
+.desktop-settings-panel .chat-user-settings__memory-tags span {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--app-text-muted);
+  background: var(--app-bg);
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .chat-user-settings__memory-snippet {
+  max-height: 168px;
+  margin: 0;
+  overflow: auto;
+  padding: 9px 10px;
+  border-radius: 7px;
+  color: var(--app-text);
+  background: var(--app-bg);
+  font-family: var(--app-code-font-family);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+}

@@ -11,9 +11,9 @@ import { runtimeThreadToSweTurns } from '@setsuna-desktop/contracts';
 import { randomRuntimeId } from '../runtime-ids.js';
 import { toUnixSeconds } from '../time-utils.js';
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
+import { activeModelCode, activeModelProvider, appServerApprovalPolicy, sweSandboxPolicy } from './config-protocol.js';
 import { AppServerRpcError } from './errors.js';
 import { hasOwn, numericInput, recordInput, requiredRawString, requiredString, stringInput } from './input.js';
-import { activeModelCode, activeModelProvider, appServerApprovalPolicy, sweSandboxPolicy } from './config-protocol.js';
 
 export function sweThreadFromRuntimeSummary(
   thread: RuntimeThread | Pick<RuntimeThread, 'id' | 'forkedFromId' | 'parentThreadId' | 'title' | 'createdAt' | 'updatedAt' | 'lastMessagePreview' | 'archived' | 'gitInfo'>,

@@ -1,5 +1,5 @@
-import path from 'node:path';
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
+import path from 'node:path';
 
 export const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'workspace_write_file']);
 const PROTECTED_WORKSPACE_METADATA_DIRS = new Set(['.git', '.agents', '.codex']);

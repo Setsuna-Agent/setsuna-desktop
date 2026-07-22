@@ -1,6 +1,6 @@
+import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 

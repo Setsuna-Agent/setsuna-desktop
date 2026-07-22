@@ -1,6 +1,6 @@
-import type { ServerResponse } from 'node:http';
 import type { RuntimeEvent, SweNotification } from '@setsuna-desktop/contracts';
 import { createSweNotificationMapper, filterSweNotificationsForClientCapabilities } from '@setsuna-desktop/contracts';
+import type { ServerResponse } from 'node:http';
 import type { RuntimeFactory } from './types.js';
 
 export async function handleSse({

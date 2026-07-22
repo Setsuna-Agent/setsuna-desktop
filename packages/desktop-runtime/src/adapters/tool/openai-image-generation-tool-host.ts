@@ -12,7 +12,6 @@ import {
 import type { RuntimeImageGenerationProviderConfig } from '../../ports/config-store.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
 import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
-import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import type {
   ToolExecutionContext,
   ToolExecutionPreview,
@@ -20,6 +19,7 @@ import type {
   ToolHost,
   ToolTurnCleanupOutcome,
 } from '../../ports/tool-host.js';
+import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { managedGeneratedImageAssetIdsFromStore } from '../../utils/generated-image-assets.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import { boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';

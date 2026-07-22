@@ -2,12 +2,12 @@ import type {
   AnswerRuntimeApprovalInput,
   RuntimeApprovalAvailableDecision,
   RuntimeApprovalList,
-  RuntimeExecPolicyAmendment,
-  RuntimeNetworkPolicyAmendment,
-  RuntimeNetworkApprovalContext,
-  RuntimeMcpElicitation,
-  RuntimePermissionApprovalContext,
   RuntimeApprovalRequest,
+  RuntimeExecPolicyAmendment,
+  RuntimeMcpElicitation,
+  RuntimeNetworkApprovalContext,
+  RuntimeNetworkPolicyAmendment,
+  RuntimePermissionApprovalContext,
   RuntimeUserInputRequest,
 } from '@setsuna-desktop/contracts';
 

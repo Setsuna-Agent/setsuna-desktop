@@ -1,4 +1,8 @@
-import type { RuntimeExecPolicyAmendment, RuntimeNetworkApprovalProtocol, RuntimeNetworkPolicyAmendment } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeExecPolicyAmendment,
+  RuntimeNetworkApprovalProtocol,
+  RuntimeNetworkPolicyAmendment,
+} from '@setsuna-desktop/contracts';
 
 export type RuntimePolicyAmendments = {
   execPolicyAmendments: RuntimeExecPolicyAmendment[];

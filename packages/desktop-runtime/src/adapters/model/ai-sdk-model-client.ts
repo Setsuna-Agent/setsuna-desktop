@@ -1,9 +1,18 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import {
+  isRuntimeInlineMessageAttachment,
+  type ModelRequest,
+  type ModelStreamEvent,
+  type RuntimeInlineMessageAttachment,
+  type RuntimeMessage,
+  type RuntimeToolCall,
+  type RuntimeToolDefinition,
+} from '@setsuna-desktop/contracts';
+import {
   jsonSchema,
   streamText,
-  type FinishReason,
   type AssistantContent,
+  type FinishReason,
   type LanguageModelUsage,
   type ModelMessage,
   type TextStreamPart,
@@ -11,9 +20,9 @@ import {
   type ToolSet,
   type UserContent,
 } from 'ai';
-import { isRuntimeInlineMessageAttachment, type ModelRequest, type ModelStreamEvent, type RuntimeInlineMessageAttachment, type RuntimeMessage, type RuntimeToolCall, type RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
+import { openAiCompatibleAiSdkProviderOptions } from './provider-thinking.js';
 import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   doneEvent,
@@ -21,7 +30,6 @@ import {
   stringValue,
   type FetchImpl,
 } from './provider-utils.js';
-import { openAiCompatibleAiSdkProviderOptions } from './provider-thinking.js';
 
 type PendingToolCall = {
   id: string;

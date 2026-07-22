@@ -1,9 +1,9 @@
+import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import type { RuntimeToolDefinition, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { powershellCommand } from '../../utils/windows-shell.js';

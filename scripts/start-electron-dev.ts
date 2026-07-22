@@ -1,6 +1,6 @@
+import electronPath from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import electronPath from 'electron';
 import { buildElectron } from './build-electron.js';
 
 const rootDir = resolve(import.meta.dirname, '..');

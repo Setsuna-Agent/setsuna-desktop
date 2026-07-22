@@ -18,10 +18,11 @@
   },
   "include": [
     "apps/desktop/renderer/src/**/*.ts",
-    "apps/desktop/renderer/src/**/*.tsx"
+    "apps/desktop/renderer/src/**/*.tsx",
+    "apps/desktop/renderer/test/**/*.ts",
+    "apps/desktop/renderer/test/**/*.tsx"
   ],
   "references": [
-    { "path": "./packages/contracts" }
+    { "path": "./packages/contracts/tsconfig.build.json" }
   ]
 }
-
