@@ -2,7 +2,7 @@
 
 /** Shell risk classification, policy evaluation, and OS sandbox profiles. */
 
-import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { SandboxExecutionPlan } from '../../ports/sandbox-execution-plan.js';
 import { protectedWorkspaceMetadataPathForPath } from '../../security/file-system-policy.js';
@@ -651,7 +651,12 @@ function shellCandidateToPath(raw) {
 
 export function createShellSandboxExecutionPlan(
   state,
-  options: { cwd?: string; environment?: Record<string, string>; capability?: ReturnType<typeof shellSandboxCapability> } = {},
+  options: {
+    cwd?: string;
+    environment?: Record<string, string>;
+    capability?: ReturnType<typeof shellSandboxCapability>;
+    temporaryRoot?: string;
+  } = {},
 ): SandboxExecutionPlan {
   const permissionProfile = normalizePermissionProfile(state?.permissionProfile);
   const capability = options.capability ?? shellSandboxCapability();
@@ -660,22 +665,28 @@ export function createShellSandboxExecutionPlan(
     : capability.supported && capability.provider === 'macos-seatbelt'
       ? 'macos-seatbelt'
       : 'unavailable';
+  const environment = { ...(options.environment ?? state?.shellEnvironment ?? {}) };
+  // The process layer gives each macOS shell session its own TMPDIR. Grant that
+  // one directory instead of widening the sandbox to the shared user temp root.
+  const defaultTempRoots = provider === 'macos-seatbelt' && permissionProfile === 'workspace-write'
+    ? shellSandboxTempRoots(options.temporaryRoot)
+    : [];
   const writableRoots = permissionProfile === 'read-only'
     ? shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false })
-    : shellWorkspaceWriteRoots(state);
+    : [...shellWorkspaceWriteRoots(state), ...defaultTempRoots];
   const workspaceRoot = realPathIfExists(state?.root || process.cwd());
   return {
     cwd: path.resolve(options.cwd ?? workspaceRoot),
     workspaceRoot,
     permissionProfile,
     provider,
-    readableRoots: shellExplicitReadableRoots(state),
+    readableRoots: shellExplicitReadableRoots(state, defaultTempRoots),
     writableRoots: [...new Set(writableRoots.map(realPathIfExists))],
     deniedRoots: deniedRootsForState(state),
     deniedGlobRegExpSources: deniedGlobRegExpSourcesForState(state),
     protectedWritableRoots: ['.git', '.agents', '.codex'].map((name) => realPathIfExists(path.join(workspaceRoot, name))),
     networkAccess: state?.sandboxWorkspaceWrite?.networkAccess === true,
-    environment: { ...(options.environment ?? state?.shellEnvironment ?? {}) },
+    environment,
   };
 }
 
@@ -754,10 +765,21 @@ const MACOS_SEATBELT_EXACT_READ_PATHS = [
   '/var/select/developer_dir',
 ];
 
-function shellExplicitReadableRoots(state) {
+function shellSandboxTempRoots(temporaryRoot) {
+  const candidate = String(temporaryRoot ?? '').trim();
+  if (!candidate || !path.isAbsolute(candidate)) return [];
+  try {
+    return statSync(candidate).isDirectory() ? [path.resolve(candidate)] : [];
+  } catch {
+    return [];
+  }
+}
+
+function shellExplicitReadableRoots(state, additionalRoots = []) {
   const roots = [
     ...readableRootsForState(state),
     ...shellWorkspaceWriteRoots(state),
+    ...additionalRoots,
   ];
   return [...new Set(roots
     .flatMap(shellReadablePathVariants)

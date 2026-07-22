@@ -5,8 +5,8 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { accessSync, constants as fsConstants, existsSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   MAX_TEXT_BYTES,
@@ -244,7 +244,7 @@ export async function runShellCommand(args, state, options = {}) {
       failure_stage: 'execution',
     });
   }
-  const session = startShellSession({
+  const session = await startShellSession({
     command,
     cwd,
     state,
@@ -527,7 +527,7 @@ function normalizedGitRevision(value, fallback = '') {
   return revision;
 }
 
-function startShellSession({ command, cwd, state, timeout, signal, onProgress }) {
+async function startShellSession({ command, cwd, state, timeout, signal, onProgress }) {
   const root = state.root;
   const session = {
     id: randomUUID(),
@@ -546,6 +546,7 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
     errorCode: '',
     sandboxed: false,
     sandboxProvider: 'bypass',
+    temporaryRoot: '',
     environment: {},
     toolchainCommands: {},
     threadId: '',
@@ -571,21 +572,38 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
   const detached = process.platform !== 'win32';
   // 沙箱规则和子进程必须基于同一份最终 PATH。desktopShellPath 会补充常见
   // 包管理器目录；若这里只在 spawn 时补充，Seatbelt 会把这些命令隐藏掉。
-  const environment = shellEnvironment(state?.shellEnvironment);
-  const sandboxPlan = createShellSandboxExecutionPlan(state, { cwd, environment });
-  const spawnSpec = shellSpawnSpec(command, sandboxPlan);
-  session.sandboxed = Boolean(spawnSpec.sandboxed);
-  session.sandboxProvider = spawnSpec.sandboxProvider;
-  session.environment = environment;
-  session.toolchainCommands = state?.shellToolchain?.commands ?? {};
-  const child = spawn(spawnSpec.command, spawnSpec.args, {
-    cwd,
-    shell: spawnSpec.shell,
-    detached,
-    env: environment,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
+  let environment = shellEnvironment(state?.shellEnvironment);
+  let sandboxPlan = createShellSandboxExecutionPlan(state, { cwd, environment });
+  const temporaryRoot = await createShellSessionTempDirectory(sandboxPlan);
+  session.temporaryRoot = temporaryRoot;
+  let child;
+  try {
+    if (temporaryRoot) {
+      environment = {
+        ...environment,
+        TMPDIR: temporaryRoot,
+        TEMP: temporaryRoot,
+        TMP: temporaryRoot,
+      };
+      sandboxPlan = createShellSandboxExecutionPlan(state, { cwd, environment, temporaryRoot });
+    }
+    const spawnSpec = shellSpawnSpec(command, sandboxPlan);
+    session.sandboxed = Boolean(spawnSpec.sandboxed);
+    session.sandboxProvider = spawnSpec.sandboxProvider;
+    session.environment = environment;
+    session.toolchainCommands = state?.shellToolchain?.commands ?? {};
+    child = spawn(spawnSpec.command, spawnSpec.args, {
+      cwd,
+      shell: spawnSpec.shell,
+      detached,
+      env: environment,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+  } catch (error) {
+    await removeShellSessionTempDirectory(session);
+    throw error;
+  }
   session.child = child;
 
   const finish = (exitCode, childSignal) => {
@@ -598,7 +616,8 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
     clearTimeout(session.killTimer);
     signal?.removeEventListener('abort', abort);
     flushShellProgress(session, root);
-    session.resolveDone?.(session);
+    void removeShellSessionTempDirectory(session)
+      .finally(() => session.resolveDone?.(session));
   };
   const abort = () => {
     session.aborted = true;
@@ -622,6 +641,27 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
   });
   child.on('close', finish);
   return session;
+}
+
+async function createShellSessionTempDirectory(sandboxPlan) {
+  if (sandboxPlan.provider !== 'macos-seatbelt' || sandboxPlan.permissionProfile !== 'workspace-write') return '';
+  const candidates = [...new Set([tmpdir(), '/tmp'])]
+    .filter((candidate) => candidate && path.isAbsolute(candidate));
+  for (const candidate of candidates) {
+    try {
+      return realPathIfExists(await mkdtemp(path.join(candidate, 'setsuna-shell-')));
+    } catch {
+      // Try the conventional Unix temp root when the inherited TMPDIR is stale.
+    }
+  }
+  return '';
+}
+
+async function removeShellSessionTempDirectory(session) {
+  const temporaryRoot = String(session?.temporaryRoot || '');
+  session.temporaryRoot = '';
+  if (!temporaryRoot) return;
+  await rm(temporaryRoot, { recursive: true, force: true }).catch(() => undefined);
 }
 
 function waitForShellSession(session, waitMs) {

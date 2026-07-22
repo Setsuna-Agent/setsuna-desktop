@@ -935,17 +935,19 @@ describe('pc local tool host', () => {
     });
   });
 
-  it('builds a macOS seatbelt profile for workspace-write shell sandboxing', () => {
+  it('builds a macOS seatbelt profile for workspace-write shell sandboxing', async () => {
     const root = path.join(tmpdir(), 'setsuna seatbelt workspace');
     const writableRoot = path.join(tmpdir(), 'setsuna approved writes');
     const deniedRoot = path.join(root, 'blocked');
+    const shellTempRoot = await realpath(tmpdir());
     const capability = { supported: true, provider: 'macos-seatbelt', reason: '' };
     const workspaceFilter = `(require-not (subpath ${JSON.stringify(path.resolve(root))}))`;
     const writableRootFilter = `(require-not (subpath ${JSON.stringify(path.resolve(writableRoot))}))`;
+    const shellTempRootFilter = `(require-not (subpath ${JSON.stringify(shellTempRoot)}))`;
     const devNullFilter = `(require-not (literal ${JSON.stringify('/dev/null')}))`;
-    const denyOutsideWritableRoots = `(deny file-write* (require-all ${workspaceFilter} ${writableRootFilter} ${devNullFilter}))`;
+    const denyOutsideWritableRoots = `(deny file-write* (require-all ${workspaceFilter} ${writableRootFilter} ${shellTempRootFilter} ${devNullFilter}))`;
 
-    const profile = shellSandboxProfile({
+    const state = {
       root,
       osSandbox: true,
       permissionProfile: 'workspace-write',
@@ -955,7 +957,13 @@ describe('pc local tool host', () => {
         deniedGlobPatterns: [path.join(root, '**/*.env')],
         networkAccess: false,
       },
-    }, capability);
+    };
+    const plan = createShellSandboxExecutionPlan(state, {
+      capability,
+      environment: { TMPDIR: tmpdir() },
+      temporaryRoot: tmpdir(),
+    });
+    const profile = shellSandboxProfile(plan, capability);
 
     const lines = profile.split('\n');
     expect(lines.slice(0, 2)).toEqual(['(version 1)', '(allow default)']);
@@ -981,10 +989,15 @@ describe('pc local tool host', () => {
     }, capability)).toBe('');
   });
 
-  it('builds one explicit sandbox execution plan for the provider', () => {
+  it('builds one explicit sandbox execution plan for the provider', async () => {
     const root = path.join(tmpdir(), 'setsuna-explicit-plan');
     const toolchainRoot = path.join(tmpdir(), 'setsuna-toolchain');
-    const environment = { PATH: path.join(toolchainRoot, 'bin'), COREPACK_HOME: path.join(root, '.cache') };
+    const canonicalTempRoot = await realpath(tmpdir());
+    const environment = {
+      PATH: path.join(toolchainRoot, 'bin'),
+      COREPACK_HOME: path.join(root, '.cache'),
+      TMPDIR: tmpdir(),
+    };
     const plan = createShellSandboxExecutionPlan({
       root,
       osSandbox: true,
@@ -998,6 +1011,7 @@ describe('pc local tool host', () => {
       cwd: root,
       environment,
       capability: { supported: true, provider: 'macos-seatbelt', reason: '' },
+      temporaryRoot: tmpdir(),
     });
 
     expect(plan).toMatchObject({
@@ -1008,8 +1022,27 @@ describe('pc local tool host', () => {
       provider: 'macos-seatbelt',
       workspaceRoot: path.resolve(root),
     });
-    expect(plan.readableRoots).toEqual(expect.arrayContaining([path.resolve(root), path.resolve(toolchainRoot)]));
-    expect(plan.writableRoots).toEqual(expect.arrayContaining([path.resolve(root), path.join(path.resolve(root), '.cache')]));
+    expect(plan.readableRoots).toEqual(expect.arrayContaining([
+      path.resolve(root),
+      path.resolve(toolchainRoot),
+      path.resolve(tmpdir()),
+      canonicalTempRoot,
+    ]));
+    expect(plan.writableRoots).toEqual(expect.arrayContaining([
+      path.resolve(root),
+      path.join(path.resolve(root), '.cache'),
+      canonicalTempRoot,
+    ]));
+
+    const planWithoutExplicitTempRoot = createShellSandboxExecutionPlan({
+      root,
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+    }, {
+      environment,
+      capability: { supported: true, provider: 'macos-seatbelt', reason: '' },
+    });
+    expect(planWithoutExplicitTempRoot.writableRoots).not.toContain(canonicalTempRoot);
   });
 
   it('keeps macOS seatbelt network open only after sandbox network approval', () => {
@@ -1499,6 +1532,56 @@ describe('pc local tool host', () => {
     }
   });
 
+  it.skipIf(
+    process.platform !== 'darwin'
+      || !existsSync('/usr/bin/sandbox-exec')
+      || !commandAvailableOnPath('node'),
+  )('allows the active macOS temp directory when the workspace is elsewhere', async () => {
+    const dependencyDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-temp-sandbox-'));
+    const configStore = new FileConfigStore(dependencyDataDir);
+    await configStore.saveConfig({ desktopSettings: { workspaceDependenciesEnabled: false } });
+    const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
+    const { host, projectDir, fixtureRoot } = await createHost({
+      fixtureRootParent: homedir(),
+      workspaceDependencies,
+    });
+    const scriptName = 'verify-sandbox-temp.cjs';
+    await writeFile(path.join(projectDir, scriptName), [
+      "const fs = require('node:fs');",
+      "const os = require('node:os');",
+      "const path = require('node:path');",
+      'const tempRoot = fs.realpathSync(os.tmpdir());',
+      "const marker = path.join(tempRoot, `setsuna-temp-${process.pid}-${Date.now()}`);",
+      "fs.writeFileSync(marker, 'ok');",
+      'fs.unlinkSync(marker);',
+      "process.stdout.write(`temp-ok:${tempRoot}\\n`);",
+    ].join('\n'), 'utf8');
+
+    try {
+      const result = await host.runTool('run_shell_command', {
+        command: `node ${scriptName}`,
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        permissionProfile: 'workspace-write',
+        sandboxWorkspaceWrite: { networkAccess: false },
+      });
+
+      expect(result.content).toContain('Sandbox: macos-seatbelt');
+      const shellTempRoot = result.content.match(/^temp-ok:(.+)$/mu)?.[1]?.trim();
+      expect(shellTempRoot).toBeTruthy();
+      expect(path.dirname(String(shellTempRoot))).toBe(await realpath(tmpdir()));
+      expect(path.basename(String(shellTempRoot))).toMatch(/^setsuna-shell-/u);
+      expect(existsSync(String(shellTempRoot))).toBe(false);
+    } finally {
+      await host.shutdown();
+      await rm(fixtureRoot, { recursive: true, force: true });
+      await rm(dependencyDataDir, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('runs the app-owned Corepack fallback through the real macOS sandbox', async () => {
     const dependencyDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-bundled-corepack-sandbox-'));
     const fakeBin = path.join(dependencyDataDir, 'fake-bin');
@@ -1875,11 +1958,13 @@ async function expectRestrictedShellUnavailable(execution: Promise<unknown>): Pr
 }
 
 async function createHost(options: {
+  fixtureRootParent?: string;
   policyAmendmentStore?: PolicyAmendmentStore;
   projectDirName?: string;
   workspaceDependencies?: WorkspaceDependencyManager;
-} = {}): Promise<{ host: PcLocalToolHost; projectDir: string; projectId: string }> {
-  const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-toolhost-test-'));
+} = {}): Promise<{ fixtureRoot: string; host: PcLocalToolHost; projectDir: string; projectId: string }> {
+  const fixtureRootParent = options.fixtureRootParent ?? tmpdir();
+  const root = await mkdtemp(path.join(fixtureRootParent, 'setsuna-pc-toolhost-test-'));
   const temporaryWorkspaceRoot = path.join(root, options.projectDirName ?? 'project');
   const dataDir = path.join(root, 'data');
   await mkdir(temporaryWorkspaceRoot, { recursive: true });
@@ -1891,6 +1976,7 @@ async function createHost(options: {
   const projectDir = (await store.ensureTemporaryWorkspace({ threadId: 'thread_1' })).path;
   const project = await store.addProject({ path: projectDir });
   return {
+    fixtureRoot: root,
     host: new PcLocalToolHost(store, options.policyAmendmentStore, options.workspaceDependencies),
     projectDir,
     projectId: project.id,
