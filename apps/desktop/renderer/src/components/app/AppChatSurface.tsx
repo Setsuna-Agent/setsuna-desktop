@@ -39,6 +39,7 @@ import type {
 import { latestDesktopReviewSummaryFromMessages } from '../workspace/runtimeReviewSummary.js';
 import { useChatImageAttachmentRequest } from '../../hooks/useChatImageAttachmentRequest.js';
 import type { DesktopBrowserPanelInstance } from '../../hooks/useDesktopWorkspacePanels.js';
+import type { RuntimeAccessModeSelection } from '../../utils/runtimeAccessMode.js';
 
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 type BrowserPanelMetadataHandler = (
@@ -82,7 +83,7 @@ export function AppChatSurface({
   terminalSessionsByPanelId,
   onActivateBottomPanel,
   onCancelActiveTurn,
-  onApprovalPolicyChange,
+  onAccessModeChange,
   onConversationOverviewRenderedChange,
   onAnswerApproval,
   onCompactContext,
@@ -167,7 +168,7 @@ export function AppChatSurface({
   terminalSessionsByPanelId: Record<string, DesktopTerminalSession>;
   onActivateBottomPanel: (panelId: string) => void;
   onCancelActiveTurn: () => void;
-  onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
+  onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onConversationOverviewRenderedChange: (visible: boolean) => void;
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
@@ -282,7 +283,7 @@ export function AppChatSurface({
           threadUsage={threadUsage}
           threads={threads}
           onCancelActiveTurn={onCancelActiveTurn}
-          onApprovalPolicyChange={onApprovalPolicyChange}
+          onAccessModeChange={onAccessModeChange}
           onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
           onAnswerApproval={onAnswerApproval}
           onCompactContext={onCompactContext}
@@ -320,7 +321,7 @@ export function AppChatSurface({
           selectedWorkspaceApp={selectedWorkspaceApp}
           skills={skills}
           threads={threads}
-          onApprovalPolicyChange={onApprovalPolicyChange}
+          onAccessModeChange={onAccessModeChange}
           onError={onSideChatError}
           onOpenWorkspaceFile={openChatWorkspaceFile}
           onOpenMarkdownWebLink={onOpenMarkdownWebLink}

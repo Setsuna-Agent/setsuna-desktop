@@ -1,11 +1,28 @@
 import type {
+  RuntimeEnvironment,
   RuntimeWorkspaceDependenciesStatus,
   RuntimeWorkspaceDependenciesToggleInput,
 } from '@setsuna-desktop/contracts';
 
-export type WorkspaceDependencyShellEnvironment = {
+export type ShellToolchainCommand = {
+  executablePath: string;
+  installationRoot: string;
+};
+
+/**
+ * Shell 命令发现与沙箱能力的单一来源。PATH 只决定命令发现顺序；沙箱直接消费
+ * commands/readableRoots，避免再从 PATH 猜测软链接或包装脚本背后的安装目录。
+ */
+export type ShellToolchain = {
   environment: Record<string, string>;
-  writableRoots: string[];
+  commands: Record<string, ShellToolchainCommand>;
+  readableRoots: string[];
+  writableCacheRoots: string[];
+};
+
+export type PrepareShellToolchainInput = {
+  command: string;
+  environment: RuntimeEnvironment;
 };
 
 export type WorkspaceDependencyPromptContext = {
@@ -23,5 +40,5 @@ export type WorkspaceDependencyManager = {
   setEnabled(input: RuntimeWorkspaceDependenciesToggleInput): Promise<RuntimeWorkspaceDependenciesStatus>;
   diagnose(): Promise<RuntimeWorkspaceDependenciesStatus>;
   reinstall(): Promise<RuntimeWorkspaceDependenciesStatus>;
-  prepareShellEnvironment(command: string): Promise<WorkspaceDependencyShellEnvironment | null>;
+  prepareShellToolchain(input: PrepareShellToolchainInput): Promise<ShellToolchain>;
 };

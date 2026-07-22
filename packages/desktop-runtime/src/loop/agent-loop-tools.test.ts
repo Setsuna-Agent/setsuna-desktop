@@ -4168,7 +4168,7 @@ describe('agent loop tools', () => {
     )).toBe(true);
   });
 
-  it('retries a sandbox-denied tool without prompting under full policy', async () => {
+  it('starts without a sandbox or prompt under full access', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Full-policy sandbox retry loop' });
@@ -4182,12 +4182,12 @@ describe('agent loop tools', () => {
       ids,
       toolHost,
       approvalGate,
-      configStore: new FullApprovalConfigStore(),
+      configStore: new FullApprovalConfigStore('danger-full-access'),
     });
 
     await loop.sendTurn(thread.id, { input: 'run sandboxed tool with full approval' });
 
-    expect(toolHost.attempts).toEqual(['default', 'bypass']);
+    expect(toolHost.attempts).toEqual(['bypass']);
     await expect(approvalGate.listApprovals()).resolves.toEqual({ approvals: [] });
     const events = await threadStore.listEvents(thread.id, 0);
     expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
@@ -4991,7 +4991,7 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
   });
 
-  it('runs unsandboxed exec without prompting under full policy', async () => {
+  it('runs unsandboxed exec without prompting under full access', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Full approval escalated exec loop' });
@@ -5006,7 +5006,7 @@ describe('agent loop tools', () => {
       ids,
       toolHost,
       approvalGate,
-      configStore: new FullApprovalConfigStore(),
+      configStore: new FullApprovalConfigStore('danger-full-access'),
     });
 
     await loop.sendTurn(thread.id, { input: 'run escalated command under full policy' });
@@ -9121,6 +9121,10 @@ class RequestPermissionsDisabledConfigStore extends ReadOnlyConfigStore {
 }
 
 class FullApprovalConfigStore implements ConfigStore {
+  constructor(
+    private readonly permissionProfile: 'workspace-write' | 'danger-full-access' = 'workspace-write',
+  ) {}
+
   async getConfig() {
     return {
       configPath: '/tmp/config.json',
@@ -9138,7 +9142,7 @@ class FullApprovalConfigStore implements ConfigStore {
       memoryEnabled: true,
       setsunaStyle: 'developer' as const,
       approvalPolicy: 'full' as const,
-      permissionProfile: 'workspace-write' as const,
+      permissionProfile: this.permissionProfile,
     };
   }
 

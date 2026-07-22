@@ -1152,6 +1152,17 @@
   font-weight: 500;
 }
 
+.desktop-settings-panel .runtime-access-mode-trigger--settings {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 7px;
+  justify-content: stretch;
+  padding: 0 9px;
+  color: var(--app-text);
+  text-align: left;
+}
+
 .desktop-settings-panel .chat-user-settings__option-group {
   display: inline-flex;
   justify-self: end;

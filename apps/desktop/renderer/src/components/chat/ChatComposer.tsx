@@ -21,6 +21,7 @@ import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import { parseMentionCommand, parseSlashCommand, skillDisplayText } from './chatCommandUtils.js';
 import { useChatAttachments } from './useChatAttachments.js';
 import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ChatWorkspaceMentionRequest } from '../../types/app.js';
+import type { RuntimeAccessModeSelection } from '../../utils/runtimeAccessMode.js';
 
 type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
 type ActiveThinkingConfig = {
@@ -48,7 +49,7 @@ export function ChatComposer({
   starter = false,
   placeholder = '输入消息（输入 / 唤起命令）',
   onCancelActiveTurn,
-  onApprovalPolicyChange,
+  onAccessModeChange,
   onCompactContext,
   onClearContext,
   onClearThreadGoal,
@@ -83,7 +84,7 @@ export function ChatComposer({
   placeholder?: string;
   threadMemoryMode?: RuntimeThreadMemoryMode;
   onCancelActiveTurn: () => void;
-  onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
+  onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onCompactContext: () => void;
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
@@ -740,8 +741,9 @@ export function ChatComposer({
                 onValueChange={setThinkingEffort}
               />
               <ChatApprovalPolicyMenu
-                policy={config?.approvalPolicy ?? 'on-request'}
-                onChange={onApprovalPolicyChange}
+                approvalPolicy={config?.approvalPolicy ?? 'on-request'}
+                permissionProfile={config?.permissionProfile ?? 'workspace-write'}
+                onChange={onAccessModeChange}
               />
               {planModeEnabled ? (
                 <ChatModeBadge label={activeTurnId ? '计划（下一轮）' : '计划'} onClose={() => setPlanModeEnabled(false)} />

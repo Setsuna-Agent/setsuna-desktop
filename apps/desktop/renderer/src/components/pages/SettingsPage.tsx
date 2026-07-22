@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Popconfirm } from 'antd';
-import { Archive, BadgeCheck, Bold, Brain, ChevronRight, CircleGauge, Code2, Cpu, Database, Eye, FileCog, FileText, FolderLock, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Library, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, Type, Undo2, Wrench, X } from 'lucide-react';
+import { Archive, Bold, Brain, ChevronRight, CircleGauge, Code2, Cpu, Database, Eye, FileCog, FileText, FolderOpen, Globe2, HardDrive, Image as ImageIcon, Info, Library, Monitor, Moon, Paintbrush, Palette, PanelLeft, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, Type, Undo2, Wrench, X } from 'lucide-react';
 import { defaultModelMaxOutputTokens, type BrandIconConfig, type ProviderConfigState, type ProviderModelConfig, type RuntimeAvailableModel, type RuntimeAvailableModelsResponse, type RuntimeConfigInput, type RuntimeConfigState, type RuntimeDesktopSettings, type RuntimeFetchModelsInput, type RuntimeMemoryPreview, type RuntimeMemoryPreviewItem, type RuntimeThread, type RuntimeThreadSummary, type RuntimeUsageResponse, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, EmptyState, IconButton, PageBackButton, PageHeader, SelectField, StatusBadge, TextArea, TextField } from '../primitives.js';
 import { formatTokens } from '../workspace/model.js';
@@ -12,6 +12,12 @@ import { sidebarBackgroundOptions, useSidebarBackgroundPreference, type SidebarB
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../hooks/useDesktopUpdater.js';
 import { useThemeTransition, type ThemeMode } from '../../hooks/useThemeTransition.js';
 import { markdownLinkOpenModeFromConfig } from '../../utils/markdownLinkPreference.js';
+import {
+  runtimeAccessModeForConfig,
+  runtimeAccessModeOptions,
+  runtimeAccessModeSelection as accessModeSelection,
+} from '../../utils/runtimeAccessMode.js';
+import { RuntimeAccessModeMenu } from '../RuntimeAccessModeMenu.js';
 import { BrandIconDialog } from './BrandIconDialog.js';
 import { BrandIconMark } from './BrandIconMark.js';
 import { ProviderModelReplacementDialog } from './ProviderModelReplacementDialog.js';
@@ -856,6 +862,8 @@ function RuntimePolicySettings({
   const isOpeningConfig = openingPath === config.configPath;
   const isOpeningData = openingPath === config.dataPath;
   const pathActionDisabled = Boolean(openingPath);
+  const accessMode = runtimeAccessModeForConfig(config);
+  const accessModeOption = runtimeAccessModeOptions.find((option) => option.value === accessMode) ?? runtimeAccessModeOptions[1];
   const persistWorkspaceDependencySettings = (
     settings: Partial<Pick<RuntimeDesktopSettings, 'pythonPackageIndexUrl' | 'workspaceDependenciesEnabled'>>,
   ) => onSave({
@@ -868,35 +876,21 @@ function RuntimePolicySettings({
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__runtime-section">
       <div className="chat-user-settings__section-block">
-        <div className="chat-user-settings__group-title">策略</div>
+        <div className="chat-user-settings__group-title">权限</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
           <label className="chat-user-settings__row chat-user-settings__runtime-policy-row">
             <span className="chat-user-settings__runtime-policy-copy">
-              <BadgeCheck size={14} />
+              <ShieldCheck size={14} />
               <span>
-                <strong>审批策略</strong>
-                <small>{config.approvalPolicy === 'full' ? '不再弹出工具授权确认；实际文件范围仍由下方策略独立控制' : '控制工具执行操作前何时需要向你确认'}</small>
+                <strong>权限策略</strong>
+                <small>{accessModeOption.description}</small>
               </span>
             </span>
-            <SelectField aria-label="审批策略" className="settings-local-control chat-user-settings__runtime-policy-control" value={config.approvalPolicy} onValueChange={(nextValue) => void onSave({ approvalPolicy: nextValue as RuntimeConfigState['approvalPolicy'] })}>
-              <option value="strict">严格授权</option>
-              <option value="on-request">智能授权</option>
-              <option value="full">完全授权</option>
-            </SelectField>
-          </label>
-          <label className="chat-user-settings__row chat-user-settings__runtime-policy-row">
-            <span className="chat-user-settings__runtime-policy-copy">
-              <FolderLock size={14} />
-              <span>
-                <strong>文件访问范围</strong>
-                <small>限制工具能够读取或修改本机文件的范围</small>
-              </span>
-            </span>
-            <SelectField aria-label="文件访问范围" className="settings-local-control chat-user-settings__runtime-policy-control" value={config.permissionProfile} onValueChange={(nextValue) => void onSave({ permissionProfile: nextValue as RuntimeConfigState['permissionProfile'] })}>
-              <option value="read-only">只读</option>
-              <option value="workspace-write">工作区写入</option>
-              <option value="danger-full-access">完全访问</option>
-            </SelectField>
+            <RuntimeAccessModeMenu
+              mode={accessMode}
+              variant="settings"
+              onChange={(mode) => void onSave(accessModeSelection(mode))}
+            />
           </label>
         </div>
       </div>

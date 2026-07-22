@@ -73,6 +73,7 @@ import {
 } from './pc-local-tool-files.js';
 import { openValidatedReadableFile } from './pc-local-tool-secure-read.js';
 import {
+  createShellSandboxExecutionPlan,
   shellSandboxCapability,
   normalizeShellCommandForRisk,
   obviousHighRiskShellReason,
@@ -121,6 +122,7 @@ export {
 };
 
 export {
+  createShellSandboxExecutionPlan,
   shellSandboxCapability,
   shellSandboxUnavailableReason,
   shellSandboxProfile,

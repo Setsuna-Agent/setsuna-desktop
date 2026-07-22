@@ -235,7 +235,7 @@ export function AppRouteContent({
       terminalSessionsByPanelId={workspacePanels.terminalSessionsByPanelId}
       onActivateBottomPanel={(panelId) => workspacePanels.activateDesktopPanel('bottom', panelId)}
       onCancelActiveTurn={() => void chatActions.cancelActiveTurn()}
-      onApprovalPolicyChange={(policy) => void runtime.saveRuntimePreferences({ approvalPolicy: policy })}
+      onAccessModeChange={(selection) => void runtime.saveRuntimePreferences(selection)}
       onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
       onAnswerApproval={(approvalId, input) => runtime.answerApproval(approvalId, input)}
       onCompactContext={() => void runtime.compactCurrentThreadContext()}

@@ -23,7 +23,9 @@ describe('ToolApprovalStore', () => {
 describe('ToolOrchestrator terminal and retry handling', () => {
   it.each(['network_denied', 'sandbox_denied'] as const)('runs post-processing and PostToolUse after a %s retry', async (failureKind) => {
     let attempts = 0;
-    const toolHost = stubToolHost(async () => {
+    const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
+    const toolHost = stubToolHost(async (_name, _input, context) => {
+      contexts.push(context);
       attempts += 1;
       if (attempts === 1) throw new ToolExecutionError('retry required', { failureKind });
       return { content: 'retried result', data: { attempt: attempts } };
@@ -33,23 +35,76 @@ describe('ToolOrchestrator terminal and retry handling', () => {
       shouldBlock: false,
     }));
     const postProcessResult = vi.fn(async (result) => ({ ...result, content: `${result.content} processed` }));
-    const fixture = createOrchestratorFixture(toolHost, postHook);
+    const approvalGate = failureKind === 'sandbox_denied' ? autoApproveGate() : undefined;
+    const fixture = createOrchestratorFixture(toolHost, postHook, approvalGate);
 
     const execution = await fixture.orchestrator.runToolCall(
       { id: 'call_retry', name: 'network_tool', arguments: '{}' },
       {},
       executionContext(),
-      'full',
+      failureKind === 'sandbox_denied' ? 'on-request' : 'full',
       { postProcessResult },
     );
 
     expect(attempts).toBe(2);
+    if (failureKind === 'sandbox_denied') {
+      expect(contexts[1]?.sandbox).toMatchObject({ mode: 'bypass' });
+    }
     expect(postProcessResult).toHaveBeenCalledTimes(1);
     expect(postHook).toHaveBeenCalledTimes(1);
     expect(execution).toMatchObject({ status: 'success', content: expect.stringContaining('retry audited') });
     expect(fixture.completions).toEqual([
       expect.objectContaining({ status: 'success', content: expect.stringContaining('retried result processed') }),
     ]);
+  });
+
+  it('keeps no-confirm workspace mode sandboxed instead of silently bypassing', async () => {
+    let attempts = 0;
+    const toolHost = stubToolHost(async () => {
+      attempts += 1;
+      throw new ToolExecutionError('sandbox denied', { failureKind: 'sandbox_denied' });
+    });
+    const fixture = createOrchestratorFixture(toolHost);
+
+    const execution = await fixture.orchestrator.runToolCall(
+      { id: 'call_no_confirm', name: 'run_shell_command', arguments: '{}' },
+      {},
+      executionContext(),
+      'full',
+    );
+
+    expect(attempts).toBe(1);
+    expect(execution).toMatchObject({ status: 'error', content: expect.stringContaining('No unsandboxed retry') });
+  });
+
+  it('requests a narrow readable root and retries inside the sandbox before bypassing', async () => {
+    const readableRoot = '/opt/toolchains/node-22';
+    const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
+    let approvalInput: CreateApprovalInput | undefined;
+    const toolHost = stubToolHost(async (_name, _input, context) => {
+      contexts.push(context);
+      if (contexts.length === 1) {
+        throw new ToolExecutionError('toolchain hidden', {
+          failureKind: 'sandbox_denied',
+          data: { suggested_readable_roots: [readableRoot] },
+        });
+      }
+      return { content: 'sandboxed retry succeeded' };
+    });
+    const approvalGate = autoApproveGate({ onCreate: (input) => { approvalInput = input; } });
+    const fixture = createOrchestratorFixture(toolHost, undefined, approvalGate);
+
+    const execution = await fixture.orchestrator.runToolCall(
+      { id: 'call_narrow_retry', name: 'run_shell_command', arguments: JSON.stringify({ command: 'node --version' }) },
+      { command: 'node --version' },
+      executionContext(),
+      'on-request',
+    );
+
+    expect(execution.status).toBe('success');
+    expect(contexts[1]?.sandbox).toMatchObject({ mode: 'default' });
+    expect(contexts[1]?.sandboxWorkspaceWrite?.readableRoots).toContain(readableRoot);
+    expect(approvalInput?.additionalPermissions).toMatchObject({ file_system: { read: [readableRoot] } });
   });
 
   it('uses the cancellation profile while waiting for a retry runtime', async () => {
@@ -198,6 +253,24 @@ function stubToolHost(runTool: ToolHost['runTool']): ToolHost {
   return {
     listTools: async () => [],
     runTool,
+  };
+}
+
+function autoApproveGate(options: { onCreate?(input: CreateApprovalInput): void } = {}): ApprovalGate {
+  return {
+    createApproval: async (input) => {
+      options.onCreate?.(input);
+      return {
+        ...input,
+        id: 'approval_auto',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+    },
+    waitForDecision: async () => ({ decision: 'approve' }),
+    answerApproval: async () => { throw new Error('not expected'); },
+    listApprovals: async () => ({ approvals: [] }),
+    forgetApproval: () => undefined,
   };
 }
 

@@ -4,7 +4,7 @@
 
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { accessSync, constants as fsConstants, existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -49,6 +49,7 @@ import {
   shellNetworkBlockReason,
   shellSandboxUnavailableReason,
   shellWorkspaceWriteRoots,
+  createShellSandboxExecutionPlan,
   shellSandboxProfile,
 } from './pc-local-tool-shell-policy.js';
 
@@ -215,11 +216,12 @@ export async function runShellCommand(args, state, options = {}) {
   }
   const sandboxBlock = shellSandboxUnavailableReason(state);
   if (sandboxBlock) {
-    return errorResult(sandboxBlock, {
+    return errorResult(`Sandbox: unavailable\n${sandboxBlock}`, {
       // 编排器会将其视为操作系统级拒绝，并可能提供显式的无沙箱重试。
       // 绝不能静默回退到策略启发式判断。
-      failure_kind: 'sandbox_denied',
+      failure_kind: 'sandbox_unavailable',
       failure_stage: 'preflight',
+      sandbox_provider: 'unavailable',
     });
   }
 
@@ -543,6 +545,9 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
     signal: null,
     errorCode: '',
     sandboxed: false,
+    sandboxProvider: 'bypass',
+    environment: {},
+    toolchainCommands: {},
     threadId: '',
     turnId: '',
     toolCallId: '',
@@ -564,13 +569,20 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
   });
 
   const detached = process.platform !== 'win32';
-  const spawnSpec = shellSpawnSpec(command, state);
+  // 沙箱规则和子进程必须基于同一份最终 PATH。desktopShellPath 会补充常见
+  // 包管理器目录；若这里只在 spawn 时补充，Seatbelt 会把这些命令隐藏掉。
+  const environment = shellEnvironment(state?.shellEnvironment);
+  const sandboxPlan = createShellSandboxExecutionPlan(state, { cwd, environment });
+  const spawnSpec = shellSpawnSpec(command, sandboxPlan);
   session.sandboxed = Boolean(spawnSpec.sandboxed);
+  session.sandboxProvider = spawnSpec.sandboxProvider;
+  session.environment = environment;
+  session.toolchainCommands = state?.shellToolchain?.commands ?? {};
   const child = spawn(spawnSpec.command, spawnSpec.args, {
     cwd,
     shell: spawnSpec.shell,
     detached,
-    env: shellEnvironment(state?.shellEnvironment),
+    env: environment,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -672,11 +684,13 @@ function shellSessionFailure(session) {
     };
   }
   if (session.sandboxed && isSandboxDeniedShellOutput(session)) {
+    const suggestedReadableRoots = sandboxDeniedReadableRoots(session);
     return {
       failure_kind: 'sandbox_denied',
       failure_stage: 'execution',
       exit_code: session.exitCode,
       signal: session.signal,
+      ...(suggestedReadableRoots.length ? { suggested_readable_roots: suggestedReadableRoots } : {}),
     };
   }
   return {
@@ -689,7 +703,54 @@ function shellSessionFailure(session) {
 
 function isSandboxDeniedShellOutput(session) {
   const output = `${session.stdout || ''}\n${session.stderr || ''}`;
-  return /Operation not permitted|operation not permitted|deny\(\d+\)|sandbox/i.test(output);
+  return /Operation not permitted|operation not permitted|deny\(\d+\)|sandbox/i.test(output)
+    || shellCommandHiddenBySandbox(output, session);
+}
+
+export function shellCommandHiddenBySandbox(output, session) {
+  if (session.exitCode !== 126 && session.exitCode !== 127) return false;
+  return shellHiddenCommandNames(output).some((commandName) => hostExecutableExists(commandName, session));
+}
+
+function shellHiddenCommandNames(output) {
+  const commandNames = new Set();
+  for (const match of output.matchAll(/^(?:[^:\n]+:\s*)?(?:line\s+\d+:\s*)?([^\s:]+): (?:command )?not found\s*$/gimu)) {
+    commandNames.add(match[1]);
+  }
+  for (const match of output.matchAll(/^(?:[^:\n]+:\s*)?command not found:\s*([^\s]+)\s*$/gimu)) {
+    commandNames.add(match[1]);
+  }
+  return [...commandNames];
+}
+
+function sandboxDeniedReadableRoots(session) {
+  const output = `${session.stdout || ''}\n${session.stderr || ''}`;
+  const roots = [];
+  for (const commandName of shellHiddenCommandNames(output)) {
+    if (!hostExecutableExists(commandName, session)) continue;
+    const normalizedName = path.basename(String(commandName || '').replace(/^['"]|['"]$/g, '')).replace(/\.(?:cmd|exe)$/iu, '');
+    const descriptor = session.toolchainCommands?.[normalizedName]
+      ?? session.toolchainCommands?.[path.basename(String(commandName || ''))];
+    if (!descriptor) continue;
+    roots.push(path.dirname(descriptor.executablePath), descriptor.installationRoot);
+  }
+  return [...new Set(roots.map((root) => path.resolve(root)).filter((root) => root !== path.parse(root).root))];
+}
+
+function hostExecutableExists(commandName, session) {
+  const command = String(commandName || '').replace(/^['"]|['"]$/g, '');
+  if (!command || command.includes('\0')) return false;
+  const candidates = command.includes('/')
+    ? [path.isAbsolute(command) ? command : path.resolve(session.cwd, command)]
+    : String(session.environment?.PATH || '').split(path.delimiter).filter(Boolean).map((directory) => path.join(directory, command));
+  return candidates.some((candidate) => {
+    try {
+      accessSync(candidate, process.platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function isShellSessionVisibleToState(state, session) {
@@ -713,6 +774,7 @@ function shellProcessSnapshot(session, root) {
     expires_at_ms: session.persist ? session.expiresAt : null,
     exit_code: session.exitCode ?? null,
     signal: session.signal ?? null,
+    sandbox_provider: session.sandboxProvider,
     timed_out: Boolean(session.timedOut),
     stdout_chars: String(session.stdout || '').length + (session.stdoutOmittedChars || 0),
     stderr_chars: String(session.stderr || '').length + (session.stderrOmittedChars || 0),
@@ -725,6 +787,7 @@ function formatShellSessionOutput(session, root) {
     `Command: ${session.command}`,
     `Directory: ${formatPath(session.cwd, root)}`,
     `Status: ${session.closed ? 'completed' : 'running'}`,
+    `Sandbox: ${session.sandboxProvider}`,
     `Persisted: ${session.persist ? 'yes' : 'no'}`,
     session.persist ? `Expires At: ${new Date(session.expiresAt).toISOString()}` : '',
     `Elapsed Ms: ${Math.max(0, (session.finishedAt || Date.now()) - session.startedAt)}`,
@@ -987,14 +1050,15 @@ function formattedCollectedProcessOutput(result, empty) {
   return empty;
 }
 
-function shellSpawnSpec(command, state) {
+function shellSpawnSpec(command, sandboxPlan) {
   const guardedCommand = shellCommandWithPipefail(command);
-  const sandboxProfile = shellSandboxProfile(state);
+  const sandboxProfile = shellSandboxProfile(sandboxPlan);
   if (!sandboxProfile) {
     return {
       command: guardedCommand,
       args: [],
       sandboxed: false,
+      sandboxProvider: 'bypass',
       shell: shellWithPipefailSupport(),
     };
   }
@@ -1004,6 +1068,7 @@ function shellSpawnSpec(command, state) {
     // 并把受管理工具垫片移到 /usr/bin 之后。
     args: ['-p', sandboxProfile, '/bin/sh', '-c', guardedCommand],
     sandboxed: true,
+    sandboxProvider: sandboxPlan.provider,
     shell: false,
   };
 }

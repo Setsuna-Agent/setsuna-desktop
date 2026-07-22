@@ -19,6 +19,7 @@ importers:
       '@xterm/xterm': ^6.0.0
       antd: ^6.3.6
       concurrently: ^9.1.2
+      corepack: 0.34.7
       electron: ^43.1.0
       electron-builder: ^25.1.8
       esbuild: ^0.24.2
@@ -51,6 +52,7 @@ importers:
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
       antd: 6.3.6_nnrd3gsncyragczmpvfhocinkq
+      corepack: 0.34.7
       katex: 0.16.47
       lucide-react: 0.468.0_react@18.3.1
       marked: 17.0.6
@@ -3962,6 +3964,12 @@ packages:
   /core-util-is/1.0.3:
     resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
     dev: true
+
+  /corepack/0.34.7:
+    resolution: {integrity: sha512-d5OLuTNh4zeJK8+u+G10KScqrnHKNNm6NvR4XO28FZyBFMGE60SNCrBetJLyKR9H1xGCG6U2LyswsyPNdO6kxw==}
+    engines: {node: ^20.10.0 || ^22.11.0 || >=24.0.0}
+    hasBin: true
+    dev: false
 
   /cors/2.8.6:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}

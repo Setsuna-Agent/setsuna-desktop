@@ -125,7 +125,10 @@ export function pcLocalToolPrompt(
     lines.push('- For multi-step tasks, keep a concise plan with exactly one step in progress and update it as work completes.');
   }
   if (advertised.has('exec_command')) {
-    lines.push('- exec_command is the Codex-compatible shell surface. Request only the narrowest per-command sandbox override when broader access is necessary.');
+    lines.push(
+      '- exec_command is the Codex-compatible shell surface. Request only the narrowest per-command sandbox override when broader access is necessary.',
+      '- If required access cannot be represented by narrow filesystem or network grants, retry exec_command with sandbox_permissions set to require_escalated and a concise justification so the runtime can request unsandboxed execution.',
+    );
   }
   if (advertised.has('write_stdin')) {
     lines.push('- Use write_stdin only with an existing compatible shell session id; empty input polls the session.');

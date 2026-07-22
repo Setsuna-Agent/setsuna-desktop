@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
-import { access, chmod, copyFile, link, mkdir, mkdtemp, readlink, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, link, mkdir, mkdtemp, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../store/file-config-store.js';
-import { ManagedWorkspaceDependencyManager } from './managed-workspace-dependency-manager.js';
+import { ManagedWorkspaceDependencyManager, runtimeExecutableReadRoot } from './managed-workspace-dependency-manager.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -43,7 +43,7 @@ describe('managed workspace dependency manager', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')('wraps the app Node runtime and reuses healthy host Python and uv tools', async () => {
+  it.skipIf(process.platform === 'win32')('prefers healthy host tools before managed fallbacks', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-dependencies-'));
     const fakeBin = path.join(dataDir, 'fake-bin');
     const previousPath = process.env.PATH;
@@ -72,11 +72,14 @@ describe('managed workspace dependency manager', () => {
       expect(status).toMatchObject({
         enabled: true,
         state: 'ready',
-        node: { available: true, source: 'bundled' },
+        node: { available: true, source: 'system' },
         python: { available: true, source: 'system', version: 'Python 3.12.9' },
         uv: { available: true, source: 'system', version: 'uv 0.11.28' },
       });
-      const shell = await manager.prepareShellEnvironment('python --version');
+      const shell = await manager.prepareShellToolchain({
+        command: 'python --version',
+        environment: testEnvironment(dataDir),
+      });
       const dependencyRoot = path.join(dataDir, 'workspace-dependencies');
       const installBin = path.join(dependencyRoot, 'toolchain', 'bin');
       expect(shell).toMatchObject({
@@ -86,12 +89,14 @@ describe('managed workspace dependency manager', () => {
           UV_DEFAULT_INDEX: 'https://mirror.example/simple',
           UV_PYTHON: path.join(fakeBin, 'python3'),
         },
-        writableRoots: [path.join(dependencyRoot, 'cache')],
+        readableRoots: expect.arrayContaining([dependencyRoot]),
+        writableCacheRoots: [path.join(dependencyRoot, 'cache')],
       });
-      expect(shell?.environment.PATH.split(path.delimiter).slice(0, 2)).toEqual([
-        path.join(dependencyRoot, 'bin'),
-        installBin,
-      ]);
+      expect(shell?.readableRoots.some((root) => pathIsInside(process.execPath, root))).toBe(true);
+      expect(shell.environment.PATH.split(path.delimiter)).toContain(installBin);
+      expect(shell.environment.PATH.split(path.delimiter).indexOf(fakeBin)).toBeLessThan(
+        shell.environment.PATH.split(path.delimiter).indexOf(installBin),
+      );
       await expect(execFileAsync(path.join(installBin, 'python'), ['--version'])).resolves.toMatchObject({
         stdout: expect.stringContaining('Python 3.12.9'),
       });
@@ -170,14 +175,16 @@ describe('managed workspace dependency manager', () => {
       const configStore = new FileConfigStore(dataDir);
       const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
 
-      const shell = await manager.prepareShellEnvironment('git status --short');
-      expect(shell?.environment.PATH.split(path.delimiter)[0]).toBe(
-        path.join(dataDir, 'workspace-dependencies', 'bin'),
+      const shell = await manager.prepareShellToolchain({
+        command: 'git status --short',
+        environment: testEnvironment(dataDir),
+      });
+      expect(shell.environment.PATH.split(path.delimiter)).toEqual(
+        expect.arrayContaining([...new Set(String(process.env.PATH ?? '').split(path.delimiter).filter(Boolean))]),
       );
-      expect(shell?.environment).not.toHaveProperty('PIP_INDEX_URL');
-      expect(shell?.environment).not.toHaveProperty('UV_DEFAULT_INDEX');
-      await expect(runNodeShim(path.join(dataDir, 'workspace-dependencies', 'bin')))
-        .resolves.toMatchObject({ stdout: expect.stringMatching(/^v\d+/u) });
+      expect(shell.environment).not.toHaveProperty('PIP_INDEX_URL');
+      expect(shell.environment).not.toHaveProperty('UV_DEFAULT_INDEX');
+      expect(shell.commands.node?.executablePath).not.toBe(path.join(dataDir, 'workspace-dependencies', 'bin', 'node'));
       await expect(manager.getStatus()).resolves.toMatchObject({ enabled: true });
       await expect(access(path.join(dataDir, 'workspace-dependencies', 'toolchain', 'manifest.json')))
         .rejects.toMatchObject({ code: 'ENOENT' });
@@ -185,11 +192,135 @@ describe('managed workspace dependency manager', () => {
       await rm(dataDir, { recursive: true, force: true });
     }
   });
+
+  it.skipIf(process.platform === 'win32')('uses the project packageManager version through an isolated Corepack shim', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-project-package-manager-'));
+    const fakeBin = path.join(dataDir, 'fake-bin');
+    const previousPath = process.env.PATH;
+    await mkdir(fakeBin, { recursive: true });
+    await Promise.all([
+      writeExecutable(path.join(fakeBin, 'node'), '#!/bin/sh\necho v22.23.1\n'),
+      writeExecutable(path.join(fakeBin, 'corepack'), '#!/bin/sh\necho "corepack $*"\n'),
+      writeExecutable(path.join(fakeBin, 'pnpm'), '#!/bin/sh\necho 9.15.0\n'),
+      writeFile(path.join(dataDir, 'package.json'), JSON.stringify({ packageManager: 'pnpm@7.33.7' }), 'utf8'),
+    ]);
+    process.env.PATH = fakeBin;
+
+    try {
+      const manager = new ManagedWorkspaceDependencyManager(dataDir, new FileConfigStore(dataDir));
+      const shell = await manager.prepareShellToolchain({
+        command: 'pnpm --version',
+        environment: testEnvironment(dataDir),
+      });
+      const projectBin = path.join(dataDir, 'workspace-dependencies', 'project-bin');
+
+      expect(shell.environment.PATH.split(path.delimiter)[0]).toBe(projectBin);
+      expect(shell.commands.pnpm).toMatchObject({
+        executablePath: path.join(projectBin, 'pnpm'),
+        installationRoot: await realpath(projectBin),
+      });
+      expect(shell.readableRoots).toEqual(expect.arrayContaining([projectBin, fakeBin]));
+      await expect(execFileAsync(path.join(projectBin, 'pnpm'), ['--version'], {
+        env: { ...process.env, ...shell.environment },
+      })).resolves.toMatchObject({ stdout: expect.stringContaining('corepack pnpm@7.33.7 --version') });
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('provides app-owned package manager shims when the host only has Node.js', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-bundled-corepack-'));
+    const fakeBin = path.join(dataDir, 'fake-bin');
+    const previousPath = process.env.PATH;
+    await mkdir(fakeBin, { recursive: true });
+    await writeExecutable(path.join(fakeBin, 'node'), '#!/bin/sh\necho v22.23.1\n');
+    process.env.PATH = fakeBin;
+
+    try {
+      const manager = new ManagedWorkspaceDependencyManager(dataDir, new FileConfigStore(dataDir));
+      const shell = await manager.prepareShellToolchain({
+        command: 'corepack --version',
+        environment: testEnvironment(dataDir),
+      });
+      const projectBin = path.join(dataDir, 'workspace-dependencies', 'project-bin');
+
+      expect(shell.environment.PATH.split(path.delimiter)[0]).toBe(projectBin);
+      expect(shell.commands).toMatchObject({
+        corepack: { executablePath: path.join(projectBin, 'corepack') },
+        npm: { executablePath: path.join(projectBin, 'npm') },
+        npx: { executablePath: path.join(projectBin, 'npx') },
+        pnpm: { executablePath: path.join(projectBin, 'pnpm') },
+      });
+      expect(shell.readableRoots.some((root) => path.basename(root) === 'corepack')).toBe(true);
+      await expect(execFileAsync(path.join(projectBin, 'corepack'), ['--version'], {
+        env: { ...process.env, ...shell.environment },
+      })).resolves.toMatchObject({ stdout: expect.stringContaining('0.34.7') });
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('resolves explicit command and installation roots even when managed downloads are disabled', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-explicit-toolchain-'));
+    const fakeBin = path.join(dataDir, 'session-bin');
+    const installationRoot = path.join(dataDir, 'installation');
+    const target = path.join(installationRoot, 'bin', 'setsuna-explicit-tool');
+    const previousPath = process.env.PATH;
+    await mkdir(fakeBin, { recursive: true });
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeExecutable(target, '#!/bin/sh\necho explicit\n');
+    await symlink(target, path.join(fakeBin, 'setsuna-explicit-tool'));
+    process.env.PATH = fakeBin;
+
+    try {
+      const configStore = new FileConfigStore(dataDir);
+      await configStore.saveConfig({ desktopSettings: { workspaceDependenciesEnabled: false } });
+      const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
+      const shell = await manager.prepareShellToolchain({
+        command: 'setsuna-explicit-tool --version',
+        environment: testEnvironment(dataDir),
+      });
+
+      expect(shell.commands['setsuna-explicit-tool']).toEqual({
+        executablePath: path.join(fakeBin, 'setsuna-explicit-tool'),
+        installationRoot: await realpath(installationRoot),
+      });
+      expect(shell.readableRoots).toEqual(expect.arrayContaining([fakeBin, await realpath(installationRoot)]));
+      expect(shell.writableCacheRoots).toEqual([]);
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('opens the containing app bundle instead of only the Electron helper directory', () => {
+    expect(runtimeExecutableReadRoot(
+      '/Applications/Setsuna Desktop.app/Contents/Frameworks/Setsuna Desktop Helper.app/Contents/MacOS/Setsuna Desktop Helper',
+      'darwin',
+    )).toBe('/Applications/Setsuna Desktop.app');
+  });
 });
+
+function testEnvironment(root: string) {
+  return {
+    id: 'test-environment',
+    cwd: root,
+    workspaceRoot: root,
+    workspaceRoots: [root],
+    shell: process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : '/bin/sh',
+  };
+}
 
 async function writeExecutable(filePath: string, content: string): Promise<void> {
   await writeFile(filePath, content, 'utf8');
   await chmod(filePath, 0o755);
+}
+
+function pathIsInside(candidate: string, root: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 async function writeFakeHostTools(fakeBin: string): Promise<void> {
@@ -208,11 +339,4 @@ async function writeFakeHostTools(fakeBin: string): Promise<void> {
 
 async function linkOrCopyExecutable(source: string, destination: string): Promise<void> {
   await link(source, destination).catch(() => copyFile(source, destination));
-}
-
-function runNodeShim(binDir: string) {
-  const shimPath = path.join(binDir, process.platform === 'win32' ? 'node.cmd' : 'node');
-  return process.platform === 'win32'
-    ? execFileAsync(shimPath, ['--version'], { shell: true, windowsHide: true })
-    : execFileAsync(shimPath, ['--version']);
 }

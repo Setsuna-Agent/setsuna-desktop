@@ -8,7 +8,7 @@ import type {
 import type { BackgroundShellProcessManager } from '../../ports/background-shell-process-manager.js';
 import { ToolExecutionError, type ToolExecutionContext, type ToolExecutionPreview, type ToolExecutionResult, type ToolHost, type ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
-import type { WorkspaceDependencyManager } from '../../ports/workspace-dependency-manager.js';
+import type { ShellToolchain, WorkspaceDependencyManager } from '../../ports/workspace-dependency-manager.js';
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import type { WorkspaceSearchEngine } from '../../ports/workspace-search-engine.js';
 import { JavaScriptWorkspaceSearchEngine } from '../search/javascript-workspace-search-engine.js';
@@ -19,6 +19,7 @@ import * as pcTools from './pc-local-tools.js';
 type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandboxWorkspaceWrite'> & {
   sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite;
   shellEnvironment?: Record<string, string>;
+  shellToolchain?: ShellToolchain;
   expectedMutationIntegrityToken?: string;
 };
 
@@ -323,17 +324,33 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
     assertLocalFileMutationPolicy(normalized.name, normalized.args, toolState);
-    const dependencyEnvironment = normalized.name === 'run_shell_command'
-      ? await this.workspaceDependencies?.prepareShellEnvironment(stringArg(normalized.args.command))
+    const shellToolchain = normalized.name === 'run_shell_command' && this.workspaceDependencies
+      ? await this.workspaceDependencies.prepareShellToolchain({
+          command: stringArg(normalized.args.command),
+          environment: context.environment ?? {
+            id: toolState.environmentId || context.projectId || context.threadId,
+            cwd: toolState.root,
+            workspaceRoot: toolState.root,
+            workspaceRoots: [toolState.root],
+            shell: process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : '/bin/sh',
+          },
+        })
       : null;
-    if (dependencyEnvironment) {
-      toolState.shellEnvironment = dependencyEnvironment.environment;
+    if (shellToolchain) {
+      toolState.shellEnvironment = shellToolchain.environment;
+      toolState.shellToolchain = shellToolchain;
       toolState.sandboxWorkspaceWrite = {
         ...toolState.sandboxWorkspaceWrite,
+        readableRoots: [
+          ...new Set([
+            ...(toolState.sandboxWorkspaceWrite?.readableRoots ?? []),
+            ...shellToolchain.readableRoots,
+          ]),
+        ],
         writableRoots: [
           ...new Set([
             ...(toolState.sandboxWorkspaceWrite?.writableRoots ?? []),
-            ...dependencyEnvironment.writableRoots,
+            ...shellToolchain.writableCacheRoots,
           ]),
         ],
       };

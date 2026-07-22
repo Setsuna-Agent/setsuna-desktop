@@ -15,6 +15,7 @@ import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { useSideChat } from '../../hooks/useSideChat.js';
 import { useThreadWorkspace } from '../../hooks/useThreadWorkspace.js';
 import { openSideWorkspaceFileAtRoot } from './sideWorkspaceFileOpening.js';
+import type { RuntimeAccessModeSelection } from '../../utils/runtimeAccessMode.js';
 
 export function SideChatPanel({
   activeProjectId,
@@ -26,7 +27,7 @@ export function SideChatPanel({
   selectedWorkspaceApp,
   skills,
   threads,
-  onApprovalPolicyChange,
+  onAccessModeChange,
   onError,
   onOpenInAppBrowser,
   onOpenMarkdownWebLink,
@@ -50,7 +51,7 @@ export function SideChatPanel({
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   skills: RuntimeSkillSummary[];
   threads: RuntimeThreadSummary[];
-  onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
+  onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onError: Dispatch<SetStateAction<string | null>>;
   onOpenInAppBrowser: (url: string) => void;
   onOpenMarkdownWebLink: (url: string) => void;
@@ -139,7 +140,7 @@ export function SideChatPanel({
           threads={threads}
           variant="side"
           onAnswerApproval={sideChat.answerApproval}
-          onApprovalPolicyChange={onApprovalPolicyChange}
+          onAccessModeChange={onAccessModeChange}
           onCancelActiveTurn={() => void sideChat.actions.cancelActiveTurn()}
           onClearContext={() => void sideChat.clearContext()}
           onClearThreadGoal={sideChat.clearGoal}

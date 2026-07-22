@@ -51,6 +51,8 @@ describe('pcLocalToolPrompt', () => {
 
     expect(prompt).toContain('nearest relevant manifest');
     expect(prompt).toContain('Prefer declared scripts');
+    expect(prompt).toContain('sandbox_permissions set to require_escalated');
+    expect(prompt).toContain('request unsandboxed execution');
     expect(prompt).not.toContain('Use run_shell_command');
   });
 

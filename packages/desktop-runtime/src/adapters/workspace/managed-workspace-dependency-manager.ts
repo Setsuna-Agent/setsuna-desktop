@@ -4,15 +4,19 @@ import { constants as fsConstants } from 'node:fs';
 import {
   access,
   mkdir,
+  readFile,
   readlink,
   readdir,
+  realpath,
   rename,
   rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import type {
+  RuntimeEnvironment,
   RuntimeWorkspaceDependenciesStatus,
   RuntimeWorkspaceDependencySource,
   RuntimeWorkspaceDependencyToolStatus,
@@ -20,9 +24,11 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type {
+  PrepareShellToolchainInput,
+  ShellToolchain,
+  ShellToolchainCommand,
   WorkspaceDependencyManager,
   WorkspaceDependencyPromptContext,
-  WorkspaceDependencyShellEnvironment,
 } from '../../ports/workspace-dependency-manager.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
@@ -32,7 +38,23 @@ const MANAGED_PYTHON_VERSION = '3.12';
 const MINIMUM_PYTHON_VERSION = [3, 10] as const;
 const MINIMUM_NODE_MAJOR = 18;
 const UV_VERSION = '0.11.28';
+const FALLBACK_PNPM_VERSION = '7.33.7';
 const MAX_COMMAND_OUTPUT_CHARS = 24_000;
+const MAX_PROJECT_HINT_BYTES = 64 * 1024;
+const BASELINE_SHELL_COMMANDS = [
+  'node',
+  'npm',
+  'npx',
+  'corepack',
+  'pnpm',
+  'python',
+  'python3',
+  'pip',
+  'pip3',
+  'uv',
+  'git',
+  'rg',
+] as const;
 
 type ManagedToolManifest = {
   path: string;
@@ -54,6 +76,33 @@ type CommandResult = {
   stdout: string;
 };
 
+type ProjectToolchainHints = {
+  nodeVersion?: string;
+  packageManager?: {
+    name: 'bun' | 'npm' | 'pnpm' | 'yarn';
+    version?: string;
+  };
+  pythonVersion?: string;
+};
+
+type PackageManagerShims = {
+  binDir: string | null;
+  readableRoots: string[];
+};
+
+type BundledCorepackEntrypoints = {
+  corepack: string;
+  npm: string;
+  npx: string;
+  root: string;
+};
+
+// 生产 runtime 会被 esbuild 输出为 CJS，不能依赖 import.meta.url。argv[1] 在开发和
+// 打包后都指向实际 runtime 入口，因此 Node 的包解析会从应用自身的模块树开始。
+const requireFromRuntime = createRequire(
+  path.resolve(process.argv[1] ?? path.join(process.cwd(), 'setsuna-runtime.cjs')),
+);
+
 /**
  * 在不修改用户 Shell 配置的前提下提供确定的工作区二进制文件。可用的主机安装会通过
  * 私有 PATH 封装；只有缺失或过时的工具才会配置到 runtime 数据目录下。
@@ -62,9 +111,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   private readonly cacheRoot: string;
   private readonly installRoot: string;
   private readonly nodeBinDir: string;
+  private readonly projectBinDir: string;
   private readonly workspaceDependencyRoot: string;
   private installPromise: Promise<void> | null = null;
-  private nodeShimReady = false;
+  private nodeShimTarget = '';
   private nodeShimPromise: Promise<void> | null = null;
   private lastError: string | undefined;
 
@@ -76,6 +126,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     this.cacheRoot = path.join(this.workspaceDependencyRoot, 'cache');
     this.installRoot = path.join(this.workspaceDependencyRoot, 'toolchain');
     this.nodeBinDir = path.join(this.workspaceDependencyRoot, 'bin');
+    this.projectBinDir = path.join(this.workspaceDependencyRoot, 'project-bin');
   }
 
   async getStatus(): Promise<RuntimeWorkspaceDependenciesStatus> {
@@ -118,47 +169,77 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     return this.status(true);
   }
 
-  async prepareShellEnvironment(command: string): Promise<WorkspaceDependencyShellEnvironment | null> {
+  async prepareShellToolchain({ command, environment }: PrepareShellToolchainInput): Promise<ShellToolchain> {
     const config = await this.configStore.getConfig();
-    if (config.desktopSettings?.workspaceDependenciesEnabled !== true) return null;
-    const packageIndexUrl = typeof config.desktopSettings.pythonPackageIndexUrl === 'string'
+    const enabled = config.desktopSettings?.workspaceDependenciesEnabled === true;
+    const packageIndexUrl = typeof config.desktopSettings?.pythonPackageIndexUrl === 'string'
       ? config.desktopSettings.pythonPackageIndexUrl
       : '';
-    await Promise.all([
-      this.ensureNodeShim(),
-      mkdir(path.join(this.cacheRoot, 'uv'), { recursive: true }),
-      mkdir(path.join(this.cacheRoot, 'pip'), { recursive: true }),
-      mkdir(path.join(this.cacheRoot, 'npm'), { recursive: true }),
-    ]);
-    const existingManifest = await this.readManifest();
+    const hints = await projectToolchainHints(environment);
+    const hostNode = await this.findSystemNode();
+    const bundledNode = await this.resolveNode();
+    const selectedNode = preferredToolForVersion(hostNode, bundledNode, hints.nodeVersion);
+    const useBundledNodeFallback = enabled && selectedNode?.source === 'bundled';
+    if (useBundledNodeFallback && selectedNode) await this.ensureNodeShim(selectedNode);
+
+    if (enabled) {
+      await Promise.all([
+        mkdir(path.join(this.cacheRoot, 'uv'), { recursive: true }),
+        mkdir(path.join(this.cacheRoot, 'pip'), { recursive: true }),
+        mkdir(path.join(this.cacheRoot, 'npm'), { recursive: true }),
+        mkdir(path.join(this.cacheRoot, 'corepack'), { recursive: true }),
+      ]);
+    }
+
+    const existingManifest = enabled ? await this.readManifest() : null;
     // 默认开启的设置不能让无关的首条 Shell 命令触发 Python 下载。
     // 只有请求受管理命令时才延迟配置。
     const needsPython = usesPythonDependencyCommand(command);
-    if (needsPython) await this.ensureInstalled(false);
-    const manifest = needsPython ? await this.readManifest() : existingManifest;
-    if (needsPython && !manifest) throw new Error('工作空间依赖项安装结果缺少清单。');
+    if (enabled && needsPython) await this.ensureInstalled(false);
+    const manifest = enabled && needsPython ? await this.readManifest() : existingManifest;
+    if (enabled && needsPython && !manifest) throw new Error('工作空间依赖项安装结果缺少清单。');
     const toolchainBinDir = manifest ? path.join(this.installRoot, 'bin') : null;
-    return {
-      environment: {
-        PATH: prependPaths([this.nodeBinDir, toolchainBinDir], process.env.PATH),
+    const packageManagerShims = enabled
+      ? await this.ensureProjectPackageManagerShims(hints.packageManager, process.env.PATH)
+      : { binDir: null, readableRoots: [] };
+    const environmentOverrides = {
+      PATH: composePaths([
+        packageManagerShims.binDir,
+        useBundledNodeFallback ? this.nodeBinDir : null,
+      ], process.env.PATH, [toolchainBinDir]),
+      ...(enabled ? {
+        COREPACK_DEFAULT_TO_LATEST: '0',
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0',
+        COREPACK_HOME: path.join(this.cacheRoot, 'corepack'),
         PIP_CACHE_DIR: path.join(this.cacheRoot, 'pip'),
         PIP_DISABLE_PIP_VERSION_CHECK: '1',
         PIP_REQUIRE_VIRTUALENV: '1',
         PYTHONDONTWRITEBYTECODE: '1',
         UV_CACHE_DIR: path.join(this.cacheRoot, 'uv'),
         UV_NO_MODIFY_PATH: '1',
-        ...(packageIndexUrl ? {
-          PIP_INDEX_URL: packageIndexUrl,
-          UV_DEFAULT_INDEX: packageIndexUrl,
-        } : {}),
-        ...(manifest ? {
-          UV_PYTHON: manifest.python.path,
-          UV_PYTHON_BIN_DIR: path.join(this.installRoot, 'python-bin'),
-          UV_PYTHON_INSTALL_DIR: path.join(this.installRoot, 'python'),
-        } : {}),
         npm_config_cache: path.join(this.cacheRoot, 'npm'),
-      },
-      writableRoots: [this.cacheRoot],
+      } : {}),
+      ...(enabled && packageIndexUrl ? {
+        PIP_INDEX_URL: packageIndexUrl,
+        UV_DEFAULT_INDEX: packageIndexUrl,
+      } : {}),
+      ...(manifest ? {
+        UV_PYTHON: manifest.python.path,
+        UV_PYTHON_BIN_DIR: path.join(this.installRoot, 'python-bin'),
+        UV_PYTHON_INSTALL_DIR: path.join(this.installRoot, 'python'),
+      } : {}),
+    };
+    const resolvedToolchain = await resolveShellToolchain(command, environmentOverrides.PATH);
+    const managedRoots = [
+      ...(manifest || packageManagerShims.binDir || useBundledNodeFallback ? [this.workspaceDependencyRoot] : []),
+      ...(useBundledNodeFallback ? [runtimeExecutableReadRoot(process.execPath)] : []),
+      ...packageManagerShims.readableRoots,
+    ];
+    return {
+      commands: resolvedToolchain.commands,
+      environment: environmentOverrides,
+      readableRoots: uniqueSafeRoots([...resolvedToolchain.readableRoots, ...managedRoots]),
+      writableCacheRoots: enabled ? [this.cacheRoot] : [],
     };
   }
 
@@ -225,15 +306,16 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     python: RuntimeWorkspaceDependencyToolStatus;
     uv: RuntimeWorkspaceDependencyToolStatus;
   }> {
+    const nodeTool = await this.findSystemNode().catch(() => null) ?? manifest.node;
     if (!runChecks) {
       return {
-        node: manifestToolStatus(manifest.node),
+        node: manifestToolStatus(nodeTool),
         python: manifestToolStatus(manifest.python),
         uv: manifestToolStatus(manifest.uv),
       };
     }
     const [node, python, uv] = await Promise.all([
-      checkedToolStatus(manifest.node, ['--version']),
+      checkedToolStatus(nodeTool, ['--version']),
       checkedToolStatus(manifest.python, ['--version']),
       checkedToolStatus(manifest.uv, ['--version']),
     ]);
@@ -246,7 +328,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     uv: RuntimeWorkspaceDependencyToolStatus;
   }> {
     const [node, python, uv] = await Promise.all([
-      this.resolveNode().catch(() => null),
+      this.findSystemNode().then((tool) => tool ?? this.resolveNode()).catch(() => null),
       this.findSystemPython(),
       this.findSystemUv(),
     ]);
@@ -277,17 +359,97 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     return this.installPromise;
   }
 
-  private async ensureNodeShim(): Promise<void> {
-    if (this.nodeShimReady) return;
+  private async ensureNodeShim(node: ManagedToolManifest): Promise<void> {
+    const targetKey = `${node.path}\0${node.source}`;
+    if (this.nodeShimTarget === targetKey) return;
     if (this.nodeShimPromise) return this.nodeShimPromise;
     this.nodeShimPromise = (async () => {
       await mkdir(this.nodeBinDir, { recursive: true });
-      await writeCommandShim(this.nodeBinDir, 'node', process.execPath, { electronRunAsNode: true });
-      this.nodeShimReady = true;
+      await writeCommandShim(this.nodeBinDir, 'node', node.path, { electronRunAsNode: node.source === 'bundled' });
+      this.nodeShimTarget = targetKey;
     })().finally(() => {
       this.nodeShimPromise = null;
     });
     return this.nodeShimPromise;
+  }
+
+  private async ensureProjectPackageManagerShims(
+    packageManager: ProjectToolchainHints['packageManager'],
+    currentPath: string | undefined,
+  ): Promise<PackageManagerShims> {
+    const bundledCorepack = resolveBundledCorepackEntrypoints();
+    const bundledReadRoots: string[] = [];
+    let corepack = await findExecutable('corepack', currentPath);
+    let wroteShim = false;
+    let wrotePnpmShim = false;
+    let wroteNpmShim = false;
+    let wroteNpxShim = false;
+
+    if (!corepack && bundledCorepack) {
+      await mkdir(this.projectBinDir, { recursive: true });
+      await writeNodeScriptShim(this.projectBinDir, 'corepack', process.execPath, bundledCorepack.corepack);
+      corepack = commandShimPath(this.projectBinDir, 'corepack');
+      wroteShim = true;
+      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(process.execPath));
+    }
+
+    if (packageManager?.version && packageManager.name !== 'bun') {
+      const existing = await findExecutable(packageManager.name, currentPath);
+      const existingUsesBundledCorepack = existing && bundledCorepack
+        ? await commandUsesBundledCorepack(existing, bundledCorepack.root)
+        : false;
+      const result = existing && !existingUsesBundledCorepack
+        ? await runCommand(existing, ['--version']).catch(() => null)
+        : null;
+      if (!result || result.exitCode !== 0 || !versionMatchesHint(versionText(result), packageManager.version)) {
+        if (corepack) {
+          await mkdir(this.projectBinDir, { recursive: true });
+          await writeCorepackShim(this.projectBinDir, packageManager.name, packageManager.version, corepack);
+          wroteShim = true;
+          wrotePnpmShim = packageManager.name === 'pnpm';
+          wroteNpmShim = packageManager.name === 'npm';
+          if (packageManager.name === 'npm') {
+            await writeCorepackNpxShim(this.projectBinDir, packageManager.version, corepack);
+            wroteNpxShim = true;
+          }
+        }
+      }
+    }
+
+    // Electron ships Node.js but not npm/Corepack. The application-owned Corepack
+    // entrypoints provide a deterministic fallback without changing global shims.
+    if (!wroteNpmShim && !await findExecutable('npm', currentPath) && bundledCorepack) {
+      await mkdir(this.projectBinDir, { recursive: true });
+      await writeNodeScriptShim(this.projectBinDir, 'npm', process.execPath, bundledCorepack.npm);
+      wroteShim = true;
+      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(process.execPath));
+    }
+    if (!wroteNpxShim && !await findExecutable('npx', currentPath) && bundledCorepack) {
+      await mkdir(this.projectBinDir, { recursive: true });
+      await writeNodeScriptShim(this.projectBinDir, 'npx', process.execPath, bundledCorepack.npx);
+      wroteShim = true;
+      bundledReadRoots.push(bundledCorepack.root, runtimeExecutableReadRoot(process.execPath));
+    }
+    // pnpm is part of the managed baseline even for non-Node projects. Corepack keeps the
+    // package manager version deterministic without writing into the user's global prefix.
+    const existingPnpm = wrotePnpmShim ? null : await findExecutable('pnpm', currentPath);
+    const existingPnpmUsesBundledCorepack = existingPnpm && bundledCorepack
+      ? await commandUsesBundledCorepack(existingPnpm, bundledCorepack.root)
+      : false;
+    if (!wrotePnpmShim && (!existingPnpm || existingPnpmUsesBundledCorepack) && corepack) {
+      await mkdir(this.projectBinDir, { recursive: true });
+      await writeCorepackShim(
+        this.projectBinDir,
+        'pnpm',
+        packageManager?.name === 'pnpm' && packageManager.version ? packageManager.version : FALLBACK_PNPM_VERSION,
+        corepack,
+      );
+      wroteShim = true;
+    }
+    return {
+      binDir: wroteShim ? this.projectBinDir : null,
+      readableRoots: uniqueSafeRoots(bundledReadRoots),
+    };
   }
 
   private async install(): Promise<void> {
@@ -373,6 +535,16 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     });
     if (bundled.exitCode !== 0) throw new Error(`应用内置 Node.js 不可用：${commandFailure(bundled)}`);
     return { path: process.execPath, source: 'bundled', version: versionText(bundled) };
+  }
+
+  private async findSystemNode(): Promise<ManagedToolManifest | null> {
+    const executable = await findExecutable('node');
+    if (!executable || path.resolve(executable) === path.resolve(process.execPath)) return null;
+    const result = await runCommand(executable, ['--version']).catch(() => null);
+    const version = result ? versionText(result) : '';
+    return result?.exitCode === 0 && versionMajor(version) >= MINIMUM_NODE_MAJOR
+      ? { path: executable, source: 'system', version }
+      : null;
   }
 
   private async resolveUv(stagingRoot: string, uvInstallDir: string): Promise<ManagedToolManifest> {
@@ -524,12 +696,12 @@ function relocatePath(value: string, fromRoot: string, toRoot: string): string {
     : value;
 }
 
-async function findExecutable(command: string): Promise<string | null> {
+async function findExecutable(command: string, pathValue = process.env.PATH): Promise<string | null> {
   if (path.isAbsolute(command)) return await executableExists(command) ? command : null;
   const extensions = process.platform === 'win32'
     ? executableExtensions(command)
     : [''];
-  for (const directory of String(process.env.PATH ?? '').split(path.delimiter)) {
+  for (const directory of String(pathValue ?? '').split(path.delimiter)) {
     if (!directory) continue;
     for (const extension of extensions) {
       const candidate = path.join(directory, command.endsWith(extension) ? command : `${command}${extension}`);
@@ -537,6 +709,117 @@ async function findExecutable(command: string): Promise<string | null> {
     }
   }
   return null;
+}
+
+async function resolveShellToolchain(command: string, pathValue: string): Promise<{
+  commands: Record<string, ShellToolchainCommand>;
+  readableRoots: string[];
+}> {
+  const commandNames = new Set<string>([
+    ...BASELINE_SHELL_COMMANDS,
+    ...shellCommandNames(command),
+  ]);
+  const commands: Record<string, ShellToolchainCommand> = {};
+  const readableRoots: string[] = [];
+  for (const commandName of commandNames) {
+    const executablePath = await findExecutable(commandName, pathValue);
+    if (!executablePath) continue;
+    const canonicalPath = await realpath(executablePath).catch(() => path.resolve(executablePath));
+    const packageBinTargets = await packageBinWrapperTargets(executablePath);
+    const commandTarget = packageBinTargets[0] ?? await platformCommandTarget(commandName, canonicalPath);
+    const installationRoot = commandInstallationRoot(commandTarget);
+    commands[commandName] = { executablePath, installationRoot };
+    readableRoots.push(
+      path.dirname(executablePath),
+      path.dirname(canonicalPath),
+      ...packageBinTargets.flatMap((target) => [path.dirname(target), commandInstallationRoot(target)]),
+      path.dirname(commandTarget),
+      installationRoot,
+    );
+  }
+  return { commands, readableRoots: uniqueSafeRoots(readableRoots) };
+}
+
+async function packageBinWrapperTargets(executablePath: string): Promise<string[]> {
+  const binDir = path.dirname(path.resolve(executablePath));
+  const nodeModulesRoot = path.dirname(binDir);
+  if (path.basename(binDir) !== '.bin' || path.basename(nodeModulesRoot) !== 'node_modules') return [];
+  const content = await readFile(executablePath, 'utf8').catch(() => '');
+  if (!content || Buffer.byteLength(content) > MAX_PROJECT_HINT_BYTES) return [];
+
+  const targets: string[] = [];
+  for (const match of content.matchAll(/\$(?:\{?basedir\}?)[/\\]\.\.[/\\]([^"'\r\n]+)/giu)) {
+    const candidate = path.resolve(binDir, '..', match[1].replaceAll('\\', path.sep));
+    if (!pathIsInsideRoot(candidate, nodeModulesRoot) || !await pathExists(candidate)) continue;
+    targets.push(candidate, await realpath(candidate).catch(() => candidate));
+  }
+  return [...new Set(targets)];
+}
+
+async function commandUsesBundledCorepack(executablePath: string, bundledCorepackRoot: string): Promise<boolean> {
+  const targets = await packageBinWrapperTargets(executablePath);
+  return targets.some((target) => pathIsInsideRoot(target, bundledCorepackRoot));
+}
+
+function shellCommandNames(command: string): string[] {
+  const names = new Set<string>();
+  const segments = String(command || '').split(/(?:^|[;&|()\n])+/u);
+  for (const rawSegment of segments) {
+    const words = shellWords(rawSegment);
+    let index = 0;
+    while (index < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[index])) index += 1;
+    while (['command', 'env', 'exec', 'nohup', 'sudo', 'time'].includes(words[index] ?? '')) {
+      index += 1;
+      while (index < words.length && words[index].startsWith('-')) index += 1;
+    }
+    const candidate = words[index];
+    if (candidate && !candidate.startsWith('-')) names.add(path.basename(candidate));
+  }
+  for (const match of String(command || '').matchAll(/\b(?:command\s+-v|which|type)\s+([A-Za-z0-9_.+-]+)/gu)) {
+    names.add(match[1]);
+  }
+  return [...names];
+}
+
+function shellWords(segment: string): string[] {
+  return [...String(segment || '').matchAll(/(?:"([^"]*)"|'([^']*)'|([^\s]+))/gu)]
+    .map((match) => match[1] ?? match[2] ?? match[3] ?? '')
+    .filter(Boolean);
+}
+
+function commandInstallationRoot(executablePath: string): string {
+  const resolved = path.resolve(executablePath);
+  const appRoot = runtimeExecutableReadRoot(resolved);
+  if (appRoot.endsWith('.app')) return appRoot;
+  const normalized = resolved.replace(/\\/gu, '/');
+  const commandLineToolsRoot = '/Library/Developer/CommandLineTools';
+  if (normalized.startsWith(`${commandLineToolsRoot}/`)) return commandLineToolsRoot;
+  const nodeModulesIndex = normalized.indexOf('/lib/node_modules/');
+  if (nodeModulesIndex > 0) return path.resolve(normalized.slice(0, nodeModulesIndex));
+  const binIndex = normalized.lastIndexOf('/bin/');
+  if (binIndex > 0) return path.resolve(normalized.slice(0, binIndex));
+  const sbinIndex = normalized.lastIndexOf('/sbin/');
+  if (sbinIndex > 0) return path.resolve(normalized.slice(0, sbinIndex));
+  return path.dirname(resolved);
+}
+
+async function platformCommandTarget(commandName: string, executablePath: string): Promise<string> {
+  if (process.platform !== 'darwin' || !executablePath.startsWith('/usr/bin/')) return executablePath;
+  const result = await runCommand('/usr/bin/xcrun', ['--find', commandName]).catch(() => null);
+  const resolved = result?.exitCode === 0 ? result.stdout.trim().split(/\r?\n/u)[0] : '';
+  return resolved && path.isAbsolute(resolved) && await executableExists(resolved)
+    ? await realpath(resolved).catch(() => path.resolve(resolved))
+    : executablePath;
+}
+
+function uniqueSafeRoots(roots: string[]): string[] {
+  const result = new Set<string>();
+  for (const root of roots) {
+    const resolved = path.resolve(String(root || ''));
+    if (!root || resolved === path.parse(resolved).root) continue;
+    result.add(resolved);
+  }
+  return [...result];
 }
 
 function executableExtensions(command: string): string[] {
@@ -629,6 +912,29 @@ async function writeCommandShim(
   await access(shimPath, fsConstants.X_OK);
 }
 
+async function writeNodeScriptShim(
+  binDir: string,
+  name: string,
+  nodePath: string,
+  scriptPath: string,
+): Promise<void> {
+  if (process.platform === 'win32') {
+    await writeFile(
+      path.join(binDir, `${name}.cmd`),
+      `@echo off\r\nset "ELECTRON_RUN_AS_NODE=1"\r\n"${nodePath}" "${scriptPath}" %*\r\n`,
+      'utf8',
+    );
+    return;
+  }
+  const shimPath = path.join(binDir, name);
+  await writeFile(
+    shimPath,
+    `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec ${shellQuote(nodePath)} ${shellQuote(scriptPath)} "$@"\n`,
+    { encoding: 'utf8', mode: 0o755 },
+  );
+  await access(shimPath, fsConstants.X_OK);
+}
+
 async function writeUvPipShim(binDir: string, name: string, uvPath: string): Promise<void> {
   if (process.platform === 'win32') {
     await writeFile(path.join(binDir, `${name}.cmd`), `@echo off\r\n"${uvPath}" pip %*\r\n`, 'utf8');
@@ -636,6 +942,53 @@ async function writeUvPipShim(binDir: string, name: string, uvPath: string): Pro
   }
   const shimPath = path.join(binDir, name);
   await writeFile(shimPath, `#!/bin/sh\nexec ${shellQuote(uvPath)} pip "$@"\n`, { encoding: 'utf8', mode: 0o755 });
+}
+
+async function writeCorepackShim(
+  binDir: string,
+  name: 'npm' | 'pnpm' | 'yarn',
+  version: string,
+  corepackPath: string,
+): Promise<void> {
+  const spec = `${name}@${version}`;
+  if (process.platform === 'win32') {
+    await writeFile(path.join(binDir, `${name}.cmd`), `@echo off\r\n"${corepackPath}" "${spec}" %*\r\n`, 'utf8');
+    return;
+  }
+  const shimPath = path.join(binDir, name);
+  await writeFile(shimPath, `#!/bin/sh\nexec ${shellQuote(corepackPath)} ${shellQuote(spec)} "$@"\n`, { encoding: 'utf8', mode: 0o755 });
+}
+
+async function writeCorepackNpxShim(binDir: string, version: string, corepackPath: string): Promise<void> {
+  const spec = `npm@${version}`;
+  if (process.platform === 'win32') {
+    await writeFile(path.join(binDir, 'npx.cmd'), `@echo off\r\n"${corepackPath}" "${spec}" exec %*\r\n`, 'utf8');
+    return;
+  }
+  const shimPath = path.join(binDir, 'npx');
+  await writeFile(
+    shimPath,
+    `#!/bin/sh\nexec ${shellQuote(corepackPath)} ${shellQuote(spec)} exec "$@"\n`,
+    { encoding: 'utf8', mode: 0o755 },
+  );
+}
+
+function commandShimPath(binDir: string, name: string): string {
+  return path.join(binDir, process.platform === 'win32' ? `${name}.cmd` : name);
+}
+
+function resolveBundledCorepackEntrypoints(): BundledCorepackEntrypoints | null {
+  try {
+    const packageRoot = path.dirname(requireFromRuntime.resolve('corepack/package.json'));
+    return {
+      corepack: path.join(packageRoot, 'dist', 'corepack.js'),
+      npm: path.join(packageRoot, 'dist', 'npm.js'),
+      npx: path.join(packageRoot, 'dist', 'npx.js'),
+      root: packageRoot,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function shellQuote(value: string): string {
@@ -646,10 +999,120 @@ function executableName(name: string): string {
   return process.platform === 'win32' ? `${name}.exe` : name;
 }
 
-function prependPaths(directories: Array<string | null>, current: string | undefined): string {
-  return [...directories, ...(current ?? '').split(path.delimiter)]
+function composePaths(
+  preferred: Array<string | null>,
+  current: string | undefined,
+  fallbacks: Array<string | null>,
+): string {
+  return [...preferred, ...(current ?? '').split(path.delimiter), ...fallbacks]
     .filter((item, index, all) => Boolean(item) && all.indexOf(item) === index)
     .join(path.delimiter);
+}
+
+export function runtimeExecutableReadRoot(executablePath: string, platform = process.platform): string {
+  const resolved = path.resolve(executablePath);
+  if (platform !== 'darwin') return path.dirname(resolved);
+  const parts = resolved.split(path.sep);
+  const appIndex = parts.findIndex((part) => part.endsWith('.app'));
+  return appIndex >= 0
+    ? path.join(path.parse(resolved).root, ...parts.slice(1, appIndex + 1))
+    : path.dirname(resolved);
+}
+
+async function projectToolchainHints(environment: RuntimeEnvironment): Promise<ProjectToolchainHints> {
+  const workspaceRoot = path.resolve(environment.workspaceRoot);
+  let current = pathIsInsideRoot(environment.cwd, workspaceRoot)
+    ? path.resolve(environment.cwd)
+    : workspaceRoot;
+  const hints: ProjectToolchainHints = {};
+  for (let depth = 0; depth < 32; depth += 1) {
+    const manifest = await readSmallJson(path.join(current, 'package.json'));
+    if (!hints.packageManager) hints.packageManager = projectPackageManager(manifest?.packageManager);
+    if (!hints.nodeVersion) {
+      hints.nodeVersion = await readFirstProjectVersion(current, ['.node-version', '.nvmrc'])
+        ?? projectEngineVersion(manifest, 'node');
+    }
+    if (!hints.pythonVersion) hints.pythonVersion = await readFirstProjectVersion(current, ['.python-version']);
+    if (current === workspaceRoot || !pathIsInsideRoot(path.dirname(current), workspaceRoot)) break;
+    current = path.dirname(current);
+  }
+  return hints;
+}
+
+async function readSmallJson(filePath: string): Promise<Record<string, unknown> | null> {
+  const content = await readFile(filePath, 'utf8').catch(() => '');
+  if (!content || Buffer.byteLength(content) > MAX_PROJECT_HINT_BYTES) return null;
+  try {
+    const value: unknown = JSON.parse(content);
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readFirstProjectVersion(directory: string, fileNames: string[]): Promise<string | undefined> {
+  for (const fileName of fileNames) {
+    const content = await readFile(path.join(directory, fileName), 'utf8').catch(() => '');
+    const version = content.trim().split(/\s+/u)[0];
+    if (version && Buffer.byteLength(version) <= 128) return version;
+  }
+  return undefined;
+}
+
+function projectPackageManager(value: unknown): ProjectToolchainHints['packageManager'] {
+  if (typeof value !== 'string') return undefined;
+  const match = value.trim().match(/^(pnpm|yarn|npm|bun)(?:@([^\s]+))?$/u);
+  if (!match) return undefined;
+  return {
+    name: match[1] as NonNullable<ProjectToolchainHints['packageManager']>['name'],
+    ...(match[2] ? { version: match[2] } : {}),
+  };
+}
+
+function projectEngineVersion(manifest: Record<string, unknown> | null, name: string): string | undefined {
+  const engines = manifest?.engines;
+  if (!engines || typeof engines !== 'object' || Array.isArray(engines)) return undefined;
+  const value = (engines as Record<string, unknown>)[name];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function preferredToolForVersion(
+  host: ManagedToolManifest | null,
+  bundled: ManagedToolManifest | null,
+  hint: string | undefined,
+): ManagedToolManifest | null {
+  if (!hint) return host ?? bundled;
+  if (host && versionMatchesHint(host.version, hint)) return host;
+  if (bundled && versionMatchesHint(bundled.version, hint)) return bundled;
+  return host ?? bundled;
+}
+
+function versionMatchesHint(actual: string, hint: string): boolean {
+  const actualParts = semanticVersionParts(actual);
+  const hintedParts = semanticVersionParts(hint);
+  if (!actualParts || !hintedParts) return true;
+  if (/[<>]=?|\^|~|\*|x/iu.test(hint)) {
+    if (/^\s*</u.test(hint)) return actualParts[0] < hintedParts[0];
+    return actualParts[0] > hintedParts[0]
+      || (actualParts[0] === hintedParts[0] && actualParts[1] >= hintedParts[1]);
+  }
+  const componentCount = hint.match(/\d+/gu)?.length ?? 0;
+  if (actualParts[0] !== hintedParts[0]) return false;
+  if (componentCount >= 2 && actualParts[1] !== hintedParts[1]) return false;
+  return componentCount < 3 || actualParts[2] === hintedParts[2];
+}
+
+function semanticVersionParts(value: string): readonly [number, number, number] | null {
+  const match = String(value || '').match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/u);
+  return match
+    ? [Number.parseInt(match[1], 10), Number.parseInt(match[2] ?? '0', 10), Number.parseInt(match[3] ?? '0', 10)]
+    : null;
+}
+
+function versionMajor(value: string): number {
+  return semanticVersionParts(value)?.[0] ?? 0;
 }
 
 function usesPythonDependencyCommand(command: string): boolean {

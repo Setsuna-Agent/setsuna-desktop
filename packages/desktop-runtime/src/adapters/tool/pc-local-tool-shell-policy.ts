@@ -2,8 +2,9 @@
 
 /** Shell risk classification, policy evaluation, and OS sandbox profiles. */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs';
 import path from 'node:path';
+import type { SandboxExecutionPlan } from '../../ports/sandbox-execution-plan.js';
 import { protectedWorkspaceMetadataPathForPath } from '../../security/file-system-policy.js';
 import { assessShellNetworkAccess } from '../../security/network-approval-policy.js';
 import { reusableShellCommandWords } from '../../security/shell-command-analysis.js';
@@ -648,46 +649,79 @@ function shellCandidateToPath(raw) {
   return value;
 }
 
-export function shellSandboxProfile(state, capability = shellSandboxCapability()) {
-  if (!state?.osSandbox) return '';
-  const profile = normalizePermissionProfile(state?.permissionProfile);
-  if (profile === 'danger-full-access') return '';
-  if (capability.provider !== 'macos-seatbelt') return '';
+export function createShellSandboxExecutionPlan(
+  state,
+  options: { cwd?: string; environment?: Record<string, string>; capability?: ReturnType<typeof shellSandboxCapability> } = {},
+): SandboxExecutionPlan {
+  const permissionProfile = normalizePermissionProfile(state?.permissionProfile);
+  const capability = options.capability ?? shellSandboxCapability();
+  const provider = !state?.osSandbox || permissionProfile === 'danger-full-access'
+    ? 'bypass'
+    : capability.supported && capability.provider === 'macos-seatbelt'
+      ? 'macos-seatbelt'
+      : 'unavailable';
+  const writableRoots = permissionProfile === 'read-only'
+    ? shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false })
+    : shellWorkspaceWriteRoots(state);
+  const workspaceRoot = realPathIfExists(state?.root || process.cwd());
+  return {
+    cwd: path.resolve(options.cwd ?? workspaceRoot),
+    workspaceRoot,
+    permissionProfile,
+    provider,
+    readableRoots: shellExplicitReadableRoots(state),
+    writableRoots: [...new Set(writableRoots.map(realPathIfExists))],
+    deniedRoots: deniedRootsForState(state),
+    deniedGlobRegExpSources: deniedGlobRegExpSourcesForState(state),
+    protectedWritableRoots: ['.git', '.agents', '.codex'].map((name) => realPathIfExists(path.join(workspaceRoot, name))),
+    networkAccess: state?.sandboxWorkspaceWrite?.networkAccess === true,
+    environment: { ...(options.environment ?? state?.shellEnvironment ?? {}) },
+  };
+}
+
+export function shellSandboxProfile(stateOrPlan, capability = shellSandboxCapability()) {
+  const plan = isSandboxExecutionPlan(stateOrPlan)
+    ? stateOrPlan
+    : createShellSandboxExecutionPlan(stateOrPlan, { capability });
+  if (plan.provider !== 'macos-seatbelt') return '';
+  const profile = plan.permissionProfile;
   const lines = [
     '(version 1)',
     '(allow default)',
   ];
-  const readableRoots = shellSeatbeltReadableRoots(state);
+  const readableRoots = [...plan.readableRoots, ...MACOS_SEATBELT_SYSTEM_READ_ROOTS];
   lines.push(seatbeltDenyOutsideRoots('file-read*', readableRoots, MACOS_SEATBELT_EXACT_READ_PATHS));
-  if (state?.sandboxWorkspaceWrite?.networkAccess !== true) lines.push('(deny network*)');
+  if (!plan.networkAccess) lines.push('(deny network*)');
   if (profile === 'read-only') {
-    const writableRoots = [...new Set(shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false }).map(realPathIfExists))];
-    lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
-    for (const root of deniedRootsForState(state)) {
+    lines.push(seatbeltDenyWritesOutsideRoots(plan.writableRoots));
+    for (const root of plan.deniedRoots) {
       lines.push(`(deny file-read* (literal ${seatbeltString(root)}))`);
       lines.push(`(deny file-read* (subpath ${seatbeltString(root)}))`);
       lines.push(`(deny file-write* (literal ${seatbeltString(root)}))`);
       lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
     }
-    lines.push(...seatbeltDeniedGlobRules(state));
-    lines.push(...seatbeltProtectedMetadataRules(state));
+    lines.push(...seatbeltDeniedGlobRules(plan));
+    lines.push(...seatbeltProtectedMetadataRules(plan));
     return lines.join('\n');
   }
   if (profile !== 'workspace-write') return '';
 
-  const writableRoots = [...new Set(shellWorkspaceWriteRoots(state).map(realPathIfExists))];
   // Seatbelt 无法用后续允许规则重新开放宽泛拒绝项，因此仅当目标位于所有已批准
   // 可写根目录之外时才拒绝写入。
-  lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
-  for (const root of deniedRootsForState(state)) {
+  lines.push(seatbeltDenyWritesOutsideRoots(plan.writableRoots));
+  for (const root of plan.deniedRoots) {
     lines.push(`(deny file-read* (literal ${seatbeltString(root)}))`);
     lines.push(`(deny file-read* (subpath ${seatbeltString(root)}))`);
     lines.push(`(deny file-write* (literal ${seatbeltString(root)}))`);
     lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
   }
-  lines.push(...seatbeltDeniedGlobRules(state));
-  lines.push(...seatbeltProtectedMetadataRules(state));
+  lines.push(...seatbeltDeniedGlobRules(plan));
+  lines.push(...seatbeltProtectedMetadataRules(plan));
   return lines.join('\n');
+}
+
+function isSandboxExecutionPlan(value): value is SandboxExecutionPlan {
+  return Boolean(value && typeof value === 'object' && typeof value.provider === 'string' && Array.isArray(value.readableRoots));
 }
 
 const MACOS_SEATBELT_SYSTEM_READ_ROOTS = [
@@ -705,6 +739,8 @@ const MACOS_SEATBELT_SYSTEM_READ_ROOTS = [
   '/private/etc/services',
   '/private/etc/protocols',
   '/private/var/select/sh',
+  '/private/var/select/developer_dir',
+  '/var/select/developer_dir',
   '/private/var/db/timezone',
 ];
 
@@ -714,35 +750,61 @@ const MACOS_SEATBELT_EXACT_READ_PATHS = [
   '/private/etc/services',
   '/private/etc/protocols',
   '/private/var/select/sh',
+  '/private/var/select/developer_dir',
+  '/var/select/developer_dir',
 ];
 
-function shellSeatbeltReadableRoots(state) {
+function shellExplicitReadableRoots(state) {
   const roots = [
     ...readableRootsForState(state),
     ...shellWorkspaceWriteRoots(state),
-    ...MACOS_SEATBELT_SYSTEM_READ_ROOTS,
   ];
-  const configuredPath = String(state?.shellEnvironment?.PATH || process.env.PATH || '');
-  for (const entry of configuredPath.split(path.delimiter)) {
-    const resolved = String(entry || '').trim();
-    if (!resolved) continue;
-    roots.push(resolved);
-    const toolRoot = shellToolInstallationRoot(resolved);
-    if (toolRoot) roots.push(toolRoot);
+  return [...new Set(roots
+    .flatMap(shellReadablePathVariants)
+    .filter((root) => Boolean(root) && path.resolve(root) !== path.parse(path.resolve(root)).root))];
+}
+
+function shellReadablePathVariants(value) {
+  const lexical = path.resolve(String(value || ''));
+  const canonical = realPathIfExists(lexical);
+  const variants = new Set([lexical, canonical]);
+  collectShellSymlinkPathVariants(lexical, variants, new Set(), 0);
+  return [...variants];
+}
+
+function collectShellSymlinkPathVariants(value, variants, visited, depth) {
+  if (depth >= 16) return;
+  const resolved = path.resolve(String(value || ''));
+  if (visited.has(resolved)) return;
+  visited.add(resolved);
+  const parsed = path.parse(resolved);
+  const parts = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
+  let current = parsed.root;
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index]);
+    let symbolicLink = false;
+    try {
+      symbolicLink = lstatSync(current).isSymbolicLink();
+    } catch {
+      return;
+    }
+    if (!symbolicLink) continue;
+    const rawTarget = readlinkSync(current);
+    const target = path.resolve(path.dirname(current), rawTarget);
+    variants.add(current);
+    variants.add(target);
+    collectShellSymlinkPathVariants(target, variants, visited, depth + 1);
+    const remaining = parts.slice(index + 1);
+    if (remaining.length) {
+      const targetWithRemainder = path.join(realPathIfExists(target), ...remaining);
+      variants.add(targetWithRemainder);
+      collectShellSymlinkPathVariants(targetWithRemainder, variants, visited, depth + 1);
+    }
   }
-  return [...new Set(roots.map(realPathIfExists).filter((root) => Boolean(root) && path.resolve(root) !== path.parse(path.resolve(root)).root))];
 }
 
-function shellToolInstallationRoot(pathEntry) {
-  const normalized = String(pathEntry || '').replace(/\\/g, '/').replace(/\/+$/u, '');
-  if (/^\/opt\/homebrew\/(?:bin|sbin)$/u.test(normalized)) return '/opt/homebrew';
-  if (normalized === '/usr/local/bin') return '/usr/local';
-  if (/\/(?:installation|current)\/bin$/u.test(normalized)) return path.dirname(pathEntry);
-  return '';
-}
-
-function seatbeltDeniedGlobRules(state) {
-  return deniedGlobRegExpSourcesForState(state).flatMap((source) => [
+function seatbeltDeniedGlobRules(plan: SandboxExecutionPlan) {
+  return plan.deniedGlobRegExpSources.flatMap((source) => [
     // Seatbelt's #"..." regex form is raw. Feeding it JSON-escaped text would
     // turn `\.` into two backslashes and silently stop matching paths such as
     // `.env`. A normal Scheme string decodes the JSON escape exactly once.
@@ -751,11 +813,9 @@ function seatbeltDeniedGlobRules(state) {
   ]);
 }
 
-function seatbeltProtectedMetadataRules(state) {
-  if (normalizePermissionProfile(state?.permissionProfile) === 'danger-full-access') return [];
-  const workspaceRoot = realPathIfExists(state?.root || process.cwd());
-  return ['.git', '.agents', '.codex'].flatMap((name) => {
-    const protectedRoot = realPathIfExists(path.join(workspaceRoot, name));
+function seatbeltProtectedMetadataRules(plan: SandboxExecutionPlan) {
+  if (plan.permissionProfile === 'danger-full-access') return [];
+  return plan.protectedWritableRoots.flatMap((protectedRoot) => {
     return [
       `(deny file-write* (literal ${seatbeltString(protectedRoot)}))`,
       `(deny file-write* (subpath ${seatbeltString(protectedRoot)}))`,

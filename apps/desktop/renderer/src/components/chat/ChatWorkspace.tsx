@@ -32,6 +32,7 @@ import { commitChatWorkspaceOperation } from './chatWorkspaceOperationScope.js';
 import type { ChatImageAttachmentOutcome, ChatImageAttachmentRequest, ChatSkillSelectionRequest, ChatWorkspaceMentionRequest, ConversationOverviewVisibility } from '../../types/app.js';
 import { useIdentityRequestGuard } from '../../hooks/useIdentityRequestGuard.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
+import type { RuntimeAccessModeSelection } from '../../utils/runtimeAccessMode.js';
 import { ActionTooltip } from '../primitives.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
@@ -99,7 +100,7 @@ export function ChatWorkspace({
   threadUsage,
   threads,
   onCancelActiveTurn,
-  onApprovalPolicyChange,
+  onAccessModeChange,
   onAnswerApproval,
   onConversationOverviewRenderedChange,
   onCompactContext,
@@ -147,7 +148,7 @@ export function ChatWorkspace({
   threadUsage: RuntimeUsageResponse | null;
   threads: RuntimeThreadSummary[];
   onCancelActiveTurn: () => void;
-  onApprovalPolicyChange: (policy: RuntimeConfigState['approvalPolicy']) => void;
+  onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onAnswerApproval: AnswerApprovalHandler;
   onConversationOverviewRenderedChange?: (visible: boolean) => void;
   onCompactContext: () => void;
@@ -445,7 +446,7 @@ export function ChatWorkspace({
       threadMemoryMode={currentThread?.memoryMode}
       placeholder={variant === 'side' ? '给侧边任务发送消息' : undefined}
       onCancelActiveTurn={onCancelActiveTurn}
-      onApprovalPolicyChange={onApprovalPolicyChange}
+      onAccessModeChange={onAccessModeChange}
       onCompactContext={onCompactContext}
       onClearContext={onClearContext}
       onClearThreadGoal={onClearThreadGoal}

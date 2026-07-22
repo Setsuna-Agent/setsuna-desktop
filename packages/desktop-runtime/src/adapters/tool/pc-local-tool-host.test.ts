@@ -10,9 +10,12 @@ import { systemClock } from '../../ports/clock.js';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../ports/policy-amendment-store.js';
 import { ToolExecutionError } from '../../ports/tool-host.js';
 import type { WorkspaceDependencyManager } from '../../ports/workspace-dependency-manager.js';
+import { FileConfigStore } from '../store/file-config-store.js';
 import { FileWorkspaceProjectStore } from '../workspace/file-workspace-project-store.js';
+import { ManagedWorkspaceDependencyManager } from '../workspace/managed-workspace-dependency-manager.js';
 import { PcLocalToolHost } from './pc-local-tool-host.js';
-import { shellSandboxProfile, shellSandboxUnavailableReason } from './pc-local-tools.js';
+import { shellCommandHiddenBySandbox } from './pc-local-tool-shell-process.js';
+import { createShellSandboxExecutionPlan, shellSandboxCapability, shellSandboxProfile, shellSandboxUnavailableReason } from './pc-local-tools.js';
 
 const execFileAsync = promisify(execFile);
 const restrictedShellExecutionUnavailable = Boolean(shellSandboxUnavailableReason({
@@ -978,6 +981,37 @@ describe('pc local tool host', () => {
     }, capability)).toBe('');
   });
 
+  it('builds one explicit sandbox execution plan for the provider', () => {
+    const root = path.join(tmpdir(), 'setsuna-explicit-plan');
+    const toolchainRoot = path.join(tmpdir(), 'setsuna-toolchain');
+    const environment = { PATH: path.join(toolchainRoot, 'bin'), COREPACK_HOME: path.join(root, '.cache') };
+    const plan = createShellSandboxExecutionPlan({
+      root,
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: {
+        readableRoots: [toolchainRoot],
+        writableRoots: [path.join(root, '.cache')],
+        networkAccess: false,
+      },
+    }, {
+      cwd: root,
+      environment,
+      capability: { supported: true, provider: 'macos-seatbelt', reason: '' },
+    });
+
+    expect(plan).toMatchObject({
+      cwd: path.resolve(root),
+      environment,
+      networkAccess: false,
+      permissionProfile: 'workspace-write',
+      provider: 'macos-seatbelt',
+      workspaceRoot: path.resolve(root),
+    });
+    expect(plan.readableRoots).toEqual(expect.arrayContaining([path.resolve(root), path.resolve(toolchainRoot)]));
+    expect(plan.writableRoots).toEqual(expect.arrayContaining([path.resolve(root), path.join(path.resolve(root), '.cache')]));
+  });
+
   it('keeps macOS seatbelt network open only after sandbox network approval', () => {
     const capability = { supported: true, provider: 'macos-seatbelt', reason: '' };
     const profile = shellSandboxProfile({
@@ -989,6 +1023,23 @@ describe('pc local tool host', () => {
 
     expect(profile).not.toContain('(deny network*)');
     expect(profile).toContain('(deny file-write*');
+  });
+
+  it('routes restricted Windows shell execution through the sandbox-unavailable approval path', () => {
+    const capability = shellSandboxCapability('win32');
+    expect(capability).toMatchObject({ supported: false, provider: '' });
+    expect(shellSandboxUnavailableReason({
+      root: 'C:\\workspace',
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: {},
+    }, capability)).toContain('显式批准一次无沙箱重试');
+    expect(shellSandboxUnavailableReason({
+      root: 'C:\\workspace',
+      osSandbox: true,
+      permissionProfile: 'danger-full-access',
+      sandboxWorkspaceWrite: {},
+    }, capability)).toBe('');
   });
 
   it('allows read-only shell writes only inside approved writable roots', async () => {
@@ -1131,7 +1182,7 @@ describe('pc local tool host', () => {
       turnId: 'turn_unrestricted',
       projectId,
       permissionProfile: 'danger-full-access',
-    })).resolves.toMatchObject({ content: expect.stringContaining('Exit Code: 0') });
+    })).resolves.toMatchObject({ content: expect.stringContaining('Sandbox: bypass') });
     await expect(readFile(outsideTarget, 'utf8')).resolves.toBe('escaped');
   });
 
@@ -1272,9 +1323,13 @@ describe('pc local tool host', () => {
   it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('preserves the managed PATH inside the macOS shell sandbox', async () => {
     let managedBin = '';
     const workspaceDependencies = stubWorkspaceDependencyManager({
-      prepareShellEnvironment: async () => ({
+      prepareShellToolchain: async () => ({
+        commands: {
+          python3: { executablePath: path.join(managedBin, 'python3'), installationRoot: managedBin },
+        },
         environment: { PATH: [managedBin, process.env.PATH ?? ''].filter(Boolean).join(path.delimiter) },
-        writableRoots: [],
+        readableRoots: [managedBin],
+        writableCacheRoots: [],
       }),
     });
     const { host, projectDir } = await createHost({ workspaceDependencies });
@@ -1298,6 +1353,210 @@ describe('pc local tool host', () => {
     expect(result.content).toContain(managedPython);
     expect(result.content).toContain('Python 3.12.99 managed');
     expect(result.content).not.toContain('/usr/bin/python3');
+  });
+
+  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('follows fnm-style PATH and package symlinks inside the macOS shell sandbox', async () => {
+    const dependencyRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-fnm-toolchain-'));
+    const installationRoot = path.join(dependencyRoot, 'node-versions', 'v22.23.1', 'installation');
+    const installationBin = path.join(installationRoot, 'bin');
+    const packageExecutable = path.join(installationRoot, 'lib', 'node_modules', 'setsuna-tool', 'bin', 'setsuna-fnm-tool-test');
+    const defaultAlias = path.join(dependencyRoot, 'aliases', 'default');
+    const sessionRoot = path.join(dependencyRoot, 'fnm_multishells', 'session');
+    await mkdir(path.dirname(packageExecutable), { recursive: true });
+    await mkdir(installationBin, { recursive: true });
+    await mkdir(path.dirname(defaultAlias), { recursive: true });
+    await mkdir(path.dirname(sessionRoot), { recursive: true });
+    await writeFile(packageExecutable, '#!/bin/sh\necho "fnm package tool available"\n', 'utf8');
+    await chmod(packageExecutable, 0o755);
+    await symlink('../lib/node_modules/setsuna-tool/bin/setsuna-fnm-tool-test', path.join(installationBin, 'setsuna-fnm-tool-test'));
+    await symlink(installationRoot, defaultAlias);
+    await symlink(defaultAlias, sessionRoot);
+    const workspaceDependencies = stubWorkspaceDependencyManager({
+      prepareShellToolchain: async () => ({
+        commands: {
+          'setsuna-fnm-tool-test': {
+            executablePath: path.join(sessionRoot, 'bin', 'setsuna-fnm-tool-test'),
+            installationRoot,
+          },
+        },
+        environment: { PATH: [path.join(sessionRoot, 'bin'), '/usr/bin', '/bin'].join(path.delimiter) },
+        readableRoots: [path.join(sessionRoot, 'bin'), installationRoot],
+        writableCacheRoots: [],
+      }),
+    });
+    const { host } = await createHost({ workspaceDependencies });
+
+    try {
+      const result = await host.runTool('run_shell_command', {
+        command: 'setsuna-fnm-tool-test --version',
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        permissionProfile: 'workspace-write',
+        sandboxWorkspaceWrite: { networkAccess: false },
+      });
+
+      expect(result.content).toContain('fnm package tool available');
+    } finally {
+      await host.shutdown();
+      await rm(dependencyRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('grants managed toolchain read roots to the macOS shell sandbox', async () => {
+    const managedRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-managed-toolchain-'));
+    const wrapperBin = path.join(managedRoot, 'bin');
+    const target = path.join(managedRoot, 'toolchain', 'python', 'bin', 'setsuna-managed-python-test');
+    const marker = path.join(managedRoot, 'toolchain', 'python', 'lib', 'marker.txt');
+    await mkdir(wrapperBin, { recursive: true });
+    await mkdir(path.dirname(target), { recursive: true });
+    await mkdir(path.dirname(marker), { recursive: true });
+    await writeFile(marker, 'managed Python stdlib readable\n', 'utf8');
+    await writeFile(target, `#!/bin/sh\n/bin/cat ${JSON.stringify(marker)}\n`, 'utf8');
+    await chmod(target, 0o755);
+    await writeFile(path.join(wrapperBin, 'setsuna-managed-python-test'), `#!/bin/sh\nexec ${JSON.stringify(target)} "$@"\n`, 'utf8');
+    await chmod(path.join(wrapperBin, 'setsuna-managed-python-test'), 0o755);
+    const workspaceDependencies = stubWorkspaceDependencyManager({
+      prepareShellToolchain: async () => ({
+        commands: {
+          'setsuna-managed-python-test': {
+            executablePath: path.join(wrapperBin, 'setsuna-managed-python-test'),
+            installationRoot: managedRoot,
+          },
+        },
+        environment: { PATH: [wrapperBin, '/usr/bin', '/bin'].join(path.delimiter) },
+        readableRoots: [managedRoot],
+        writableCacheRoots: [],
+      }),
+    });
+    const { host } = await createHost({ workspaceDependencies });
+
+    try {
+      const result = await host.runTool('run_shell_command', {
+        command: 'setsuna-managed-python-test',
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        permissionProfile: 'workspace-write',
+        sandboxWorkspaceWrite: { networkAccess: false },
+      });
+
+      expect(result.content).toContain('managed Python stdlib readable');
+    } finally {
+      await host.shutdown();
+      await rm(managedRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(
+    process.platform !== 'darwin'
+      || !existsSync('/usr/bin/sandbox-exec')
+      || !['node', 'pnpm', 'corepack', 'python3', 'pip3', 'uv'].every(commandAvailableOnPath),
+  )('runs the baseline Node and Python toolchain through the real macOS sandbox', async () => {
+    const dependencyDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-real-toolchain-'));
+    const previousPath = process.env.PATH;
+    const runtimePackageBin = path.resolve('node_modules', '.bin');
+    process.env.PATH = String(previousPath ?? '')
+      .split(path.delimiter)
+      .filter((entry) => entry && path.resolve(entry) !== runtimePackageBin)
+      .join(path.delimiter);
+    const configStore = new FileConfigStore(dependencyDataDir);
+    await configStore.saveConfig({ desktopSettings: { workspaceDependenciesEnabled: false } });
+    const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
+    const { host } = await createHost({ workspaceDependencies });
+
+    try {
+      const result = await host.runTool('run_shell_command', {
+        command: [
+          'node --version',
+          'pnpm --version',
+          'corepack --version',
+          'python3 --version',
+          'pip3 --version',
+          'uv --version',
+        ].join(' && '),
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        permissionProfile: 'workspace-write',
+        sandboxWorkspaceWrite: { networkAccess: false },
+      });
+
+      expect(result.content).toContain('Sandbox: macos-seatbelt');
+      expect(result.content).toMatch(/v\d+\.\d+/u);
+      expect(result.content).toContain('Python');
+      expect(result.content).toContain('uv');
+    } finally {
+      process.env.PATH = previousPath;
+      await host.shutdown();
+      await rm(dependencyDataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('runs the app-owned Corepack fallback through the real macOS sandbox', async () => {
+    const dependencyDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-bundled-corepack-sandbox-'));
+    const fakeBin = path.join(dependencyDataDir, 'fake-bin');
+    const previousPath = process.env.PATH;
+    let host: PcLocalToolHost | null = null;
+    await mkdir(fakeBin, { recursive: true });
+    const fakeNode = path.join(fakeBin, 'node');
+    await writeFile(fakeNode, '#!/bin/sh\necho v22.23.1\n', 'utf8');
+    await chmod(fakeNode, 0o755);
+    process.env.PATH = fakeBin;
+
+    try {
+      const configStore = new FileConfigStore(dependencyDataDir);
+      const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
+      const created = await createHost({ workspaceDependencies });
+      host = created.host;
+      const result = await host.runTool('run_shell_command', {
+        command: 'corepack --version',
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        permissionProfile: 'workspace-write',
+        sandboxWorkspaceWrite: { networkAccess: false },
+      });
+
+      expect(result.content).toContain('Sandbox: macos-seatbelt');
+      expect(result.content).toContain('0.34.7');
+    } finally {
+      process.env.PATH = previousPath;
+      await host?.shutdown();
+      await rm(dependencyDataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('classifies a host-visible command-not-found result as sandbox denial', async () => {
+    const dependencyRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-hidden-path-tool-'));
+    const binDir = path.join(dependencyRoot, 'bin');
+    const executable = path.join(binDir, 'setsuna-hidden-path-tool-test');
+    await mkdir(binDir, { recursive: true });
+    await writeFile(executable, '#!/bin/sh\necho hidden tool\n', 'utf8');
+    await chmod(executable, 0o755);
+
+    try {
+      const session = {
+        cwd: dependencyRoot,
+        environment: { PATH: binDir },
+        exitCode: 127,
+      };
+      expect(shellCommandHiddenBySandbox(
+        '/bin/sh: line 1: setsuna-hidden-path-tool-test: command not found',
+        session,
+      )).toBe(true);
+      expect(shellCommandHiddenBySandbox('/bin/sh: missing-tool: command not found', session)).toBe(false);
+    } finally {
+      await rm(dependencyRoot, { recursive: true, force: true });
+    }
   });
 
   it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('enforces macOS shell readable roots after variable expansion', async () => {
@@ -1655,11 +1914,22 @@ function stubWorkspaceDependencyManager(
     diagnose: async () => status,
     getPromptContext: async () => ({ enabled: true, packageIndexConfigured: true }),
     getStatus: async () => status,
-    prepareShellEnvironment: async () => null,
+    prepareShellToolchain: async ({ environment }) => ({
+      commands: {},
+      environment: { PATH: process.env.PATH ?? '' },
+      readableRoots: [environment.workspaceRoot],
+      writableCacheRoots: [],
+    }),
     reinstall: async () => status,
     setEnabled: async () => status,
     ...overrides,
   };
+}
+
+function commandAvailableOnPath(command: string): boolean {
+  return String(process.env.PATH ?? '').split(path.delimiter)
+    .filter(Boolean)
+    .some((directory) => existsSync(path.join(directory, command)));
 }
 
 class StaticPolicyAmendmentStore implements PolicyAmendmentStore {
