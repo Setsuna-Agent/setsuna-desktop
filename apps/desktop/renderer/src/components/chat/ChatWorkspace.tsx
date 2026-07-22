@@ -1772,7 +1772,6 @@ function ActiveThinkingBox({ content, scrollStateKey }: { content: string; scrol
       <div className="chat-thinking-box__content" ref={scrollRef} onPointerDownCapture={handlePointerDown} onScroll={handleScroll} onTouchMoveCapture={handleTouchMove} onWheelCapture={handleWheel}>
         <MarkdownRenderer content={content} streaming />
       </div>
-      <div className="chat-thinking-box__status">正在思考</div>
     </div>
   );
 }

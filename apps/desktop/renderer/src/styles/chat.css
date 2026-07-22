@@ -2041,28 +2041,30 @@
 }
 
 .chat-thinking-box {
-  position: relative;
   width: 100%;
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-border) 64%, transparent);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--app-text) 3.8%, var(--desktop-agent-main-bg));
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--desktop-agent-accent) 32%, transparent);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--app-text) 2.8%, transparent);
 }
 
 .chat-thinking-box__content {
-  max-height: 104px;
+  box-sizing: border-box;
+  max-height: 112px;
   min-width: 0;
-  padding: 6px 8px 22px;
+  padding: 10px 12px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  color: color-mix(in srgb, var(--app-text) 46%, transparent);
-  background: color-mix(in srgb, var(--desktop-agent-main-bg) 52%, transparent);
-  font-size: 12px;
-  line-height: 1.5;
+  color: color-mix(in srgb, var(--app-text) 62%, transparent);
+  font-size: 12.5px;
+  line-height: 1.6;
   scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 10px), transparent);
   -ms-overflow-style: none;
+  mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 10px), transparent);
 }
 
 .chat-thinking-box__content::-webkit-scrollbar {
@@ -2080,18 +2082,6 @@
 .chat-thinking-box__content .chat-markdown :where(p, ul, ol, pre, blockquote) {
   margin-top: 0;
   margin-bottom: 6px;
-}
-
-.chat-thinking-box__status {
-  position: absolute;
-  right: 6px;
-  bottom: 4px;
-  padding-left: 12px;
-  color: color-mix(in srgb, var(--app-text-muted) 56%, transparent);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--app-text) 3.8%, var(--desktop-agent-main-bg)) 28%);
-  font-size: 11px;
-  line-height: 14px;
-  pointer-events: none;
 }
 
 .chat-assistant-run {
