@@ -1,6 +1,9 @@
 import type { RuntimeMessage, RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
 import { OPENAI_IMAGE_GENERATION_TOOL_NAME } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { visibleMarkdownContent } from './chatThinkingContent.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export type ChatTranscriptItem =
   | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
@@ -328,11 +331,14 @@ export function activeAssistantRunItemId(items: ChatDisplayItem[], activeTurnId:
  *
  * @param item assistant 类型的 transcript 行。
  */
-export function assistantRunCopyText(item: Extract<ChatDisplayItem, { type: 'assistant' }>): string {
+export function assistantRunCopyText(
+  item: Extract<ChatDisplayItem, { type: 'assistant' }>,
+  t: Translate = defaultTranslate,
+): string {
   return item.segments
     .flatMap((segment) => [
       visibleMarkdownContent(segment.content).trim(),
-      ...(segment.toolRuns ?? []).map((run) => `${toolRunStatusLabel(run.status)} ${run.name}`.trim()),
+      ...(segment.toolRuns ?? []).map((run) => `${toolRunStatusLabel(run.status, t)} ${run.name}`.trim()),
       segment.error?.trim() ?? '',
     ])
     .filter(Boolean)
@@ -418,11 +424,11 @@ function toolRunScrollSignal(run: NonNullable<RuntimeMessage['toolRuns']>[number
   ].join(',');
 }
 
-function toolRunStatusLabel(status: NonNullable<RuntimeMessage['toolRuns']>[number]['status']): string {
-  if (status === 'pending_approval') return '等待授权';
-  if (status === 'running') return '正在使用';
-  if (status === 'success') return '已使用';
-  if (status === 'rejected') return '已拒绝';
-  if (status === 'cancelled') return '已取消';
-  return '调用失败';
+function toolRunStatusLabel(status: NonNullable<RuntimeMessage['toolRuns']>[number]['status'], t: Translate): string {
+  if (status === 'pending_approval') return t('chat.copy.tool.awaiting');
+  if (status === 'running') return t('chat.copy.tool.running');
+  if (status === 'success') return t('chat.copy.tool.success');
+  if (status === 'rejected') return t('chat.copy.tool.rejected');
+  if (status === 'cancelled') return t('chat.copy.tool.cancelled');
+  return t('chat.copy.tool.failed');
 }

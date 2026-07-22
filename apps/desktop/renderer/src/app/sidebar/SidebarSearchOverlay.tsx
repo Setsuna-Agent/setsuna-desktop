@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
 export function SidebarSearchOverlay({
   projects,
@@ -30,6 +31,7 @@ export function SidebarSearchOverlay({
   onLoadThread: (threadId: string) => Promise<RuntimeThread>;
   onSelect: (threadId: string) => void;
 }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -54,7 +56,7 @@ export function SidebarSearchOverlay({
       return {
         isBusy: Boolean(detail?.messages.some((message) => message.status === 'streaming')),
         thread,
-        sourceLabel: thread.projectId ? projectNameById.get(thread.projectId) ?? '项目' : 'agent',
+        sourceLabel: thread.projectId ? projectNameById.get(thread.projectId) ?? t('sidebar.projectFallback') : 'agent',
         matchText: keyword && messageIncludesKeyword ? buildSearchSnippet(messageText, keyword) : undefined,
         rank: !keyword ? 3 : titleStartsWithKeyword ? 0 : titleIncludesKeyword ? 1 : messageIncludesKeyword ? 2 : 9,
         timestamp: Date.parse(thread.updatedAt || thread.createdAt || '') || 0,
@@ -64,7 +66,7 @@ export function SidebarSearchOverlay({
       .filter((item) => !keyword || item.rank < 9)
       .sort((a, b) => a.rank - b.rank || b.timestamp - a.timestamp)
       .slice(0, 30);
-  }, [detailsByThreadId, projectNameById, query, threads]);
+  }, [detailsByThreadId, projectNameById, query, t, threads]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -187,7 +189,7 @@ export function SidebarSearchOverlay({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="搜索对话"
+        aria-label={t('sidebar.searchDialog')}
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -201,13 +203,13 @@ export function SidebarSearchOverlay({
             value={query}
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={handleInputKeyDown}
-            placeholder="搜索对话"
+            placeholder={t('sidebar.searchDialog')}
           />
         </div>
         <div className="desktop-agent-search-popover__heading">
-          <span>{hasKeyword ? '搜索结果' : '近期对话'}</span>
+          <span>{hasKeyword ? t('sidebar.searchResults') : t('sidebar.recentChats')}</span>
           {detailsLoading && hasKeyword ? (
-            <span className="desktop-agent-search-popover__loading" aria-label="索引中">
+            <span className="desktop-agent-search-popover__loading" aria-label={t('sidebar.indexing')}>
               <LoaderCircle className="is-spinning" size={13} />
             </span>
           ) : null}
@@ -238,7 +240,7 @@ export function SidebarSearchOverlay({
             ))
           ) : (
             <div className="desktop-agent-search-popover__empty">
-              {detailsLoading && hasKeyword ? '正在索引会话内容' : hasKeyword ? '未找到对话' : '暂无近期对话'}
+              {detailsLoading && hasKeyword ? t('sidebar.indexingContent') : hasKeyword ? t('sidebar.noResults') : t('sidebar.noRecentChats')}
             </div>
           )}
         </div>

@@ -14,6 +14,8 @@ import {
   WrapText,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import { ActionTooltip, EmptyState, IconButton } from '../../shared/ui/primitives.js';
 import type {
   DesktopDiffSummary,
@@ -35,38 +37,38 @@ import { canCompareReviewBranch } from './reviewChanges.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
 
 export type { BranchCompareRefOption, DesktopReviewSource, ReviewPathContext } from './review-types.js';
-const reviewSourceLabels: Record<DesktopReviewSource, string> = {
-  branch: '分支',
-  latest: '上轮对话',
-  staged: '已暂存',
-  unstaged: '未暂存',
+const reviewSourceLabelKeys: Record<DesktopReviewSource, MessageKey> = {
+  branch: 'workspace.review.source.branch',
+  latest: 'workspace.review.source.latest',
+  staged: 'workspace.review.source.staged',
+  unstaged: 'workspace.review.source.unstaged',
 };
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
-const reviewEmptyText: Record<DesktopReviewSource, { title: string; description: string }> = {
+export function reviewSourceLabel(source: DesktopReviewSource, t: Translate = defaultTranslate): string {
+  return t(reviewSourceLabelKeys[source]);
+}
+
+const reviewEmptyTextKeys: Record<DesktopReviewSource, { title: MessageKey; description: MessageKey }> = {
   branch: {
-    title: '无分支更改',
-    description: '当前分支暂无可审核内容',
+    title: 'workspace.review.empty.branch.title',
+    description: 'workspace.review.empty.branch.description',
   },
   latest: {
-    title: '无可审核更改',
-    description: '接受编辑内容后可在这里查看',
+    title: 'workspace.review.empty.latest.title',
+    description: 'workspace.review.empty.latest.description',
   },
   staged: {
-    title: '无暂存更改',
-    description: '接受编辑内容并暂存',
+    title: 'workspace.review.empty.staged.title',
+    description: 'workspace.review.empty.staged.description',
   },
   unstaged: {
-    title: '无未暂存更改',
-    description: '当前工作区暂无未暂存内容',
+    title: 'workspace.review.empty.unstaged.title',
+    description: 'workspace.review.empty.unstaged.description',
   },
 };
 
-const reviewSourceOptions: Array<{ key: DesktopReviewSource; label: string }> = [
-  { key: 'unstaged', label: '未暂存' },
-  { key: 'staged', label: '已暂存' },
-  { key: 'branch', label: '分支' },
-  { key: 'latest', label: '上轮对话' },
-];
+const reviewSourceOptions: DesktopReviewSource[] = ['unstaged', 'staged', 'branch', 'latest'];
 const REVIEW_REFRESH_FEEDBACK_MS = 650;
 const DEFAULT_REVIEW_LINE_WRAP = true;
 const noopWorkspaceFileAction = () => undefined;
@@ -104,6 +106,7 @@ export function DesktopReviewPanel({
   onRefresh: (options?: DesktopReviewLoadOptions) => void;
   onRevealFile?: (filePath: string) => void;
 }) {
+  const { t } = useI18n();
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
   const [branchBaseRefByKey, setBranchBaseRefByKey] = useState<Record<string, string>>({});
   const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
@@ -140,13 +143,13 @@ export function DesktopReviewPanel({
     ? pendingBranchBaseRef ?? reviewState?.baseRef ?? ''
     : reviewState?.baseRef ?? '';
   const reviewLayoutToggleTip = reviewDiffLayout === 'split'
-    ? '当前：左右对比，点击切换为单列对比'
-    : '当前：单列对比，点击切换为左右对比';
+    ? t('workspace.review.layout.split')
+    : t('workspace.review.layout.unified');
   const reviewLineWrapToggleTip = reviewLineWrap
-    ? '当前：自动换行已开启，点击关闭'
-    : '当前：自动换行已关闭，点击开启';
+    ? t('workspace.review.wrap.on')
+    : t('workspace.review.wrap.off');
   const reviewRefreshing = loading || refreshFeedbackVisible;
-  const reviewRefreshTip = reviewRefreshing ? '正在刷新审查信息' : '刷新审查信息';
+  const reviewRefreshTip = t(reviewRefreshing ? 'workspace.review.refreshing' : 'workspace.review.refresh');
   const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
   const focusTargetSource = useMemo(
     () => focusRequest?.path ? reviewSourceForFocusPath(focusRequest.path, {
@@ -201,39 +204,39 @@ export function DesktopReviewPanel({
   if (!activeProject) {
     return (
       <section className="desktop-review-panel">
-        <EmptyState title="未选择项目" body="先在左侧添加项目目录。" />
+        <EmptyState title={t('workspace.review.noProject')} body={t('workspace.review.addProject')} />
       </section>
     );
   }
   if (loading && !reviewState && !latestSummary?.files.length) {
     return (
       <section className="desktop-review-panel">
-        <EmptyState title="正在加载审查信息" body={activeProject.path} />
+        <EmptyState title={t('workspace.review.loading')} body={activeProject.path} />
       </section>
     );
   }
   if (error && !latestSummary?.files.length) {
     return (
       <section className="desktop-review-panel">
-        <EmptyState title="无法加载审查信息" body={error} />
+        <EmptyState title={t('workspace.review.loadFailed')} body={error} />
       </section>
     );
   }
 
   const hasReviewFiles = Boolean(activeSummary?.files.length);
-  const reviewFileExpansionTip = fileExpansionRequest.expanded ? '折叠所有文件改动' : '展开所有文件改动';
+  const reviewFileExpansionTip = t(fileExpansionRequest.expanded ? 'workspace.review.collapseAll' : 'workspace.review.expandAll');
   const pathContext: ReviewPathContext = {
     source: activeSource,
     workspaceRoot: reviewState?.workspaceRoot ?? activeProject.path,
     gitRoot: reviewState?.gitRoot ?? null,
   };
-  const sourceMenuItems: MenuProps['items'] = reviewSourceOptions.map((item) => ({
-    disabled: item.key === 'branch' && !branchComparisonAvailable,
-    key: item.key,
+  const sourceMenuItems: MenuProps['items'] = reviewSourceOptions.map((source) => ({
+    disabled: source === 'branch' && !branchComparisonAvailable,
+    key: source,
     label: (
       <span className="chat-file-review-panel__source-menu-item">
-        <span>{item.label}</span>
-        <span className="chat-file-review-panel__source-menu-check">{activeSource === item.key ? <Check size={13} /> : null}</span>
+        <span>{reviewSourceLabel(source, t)}</span>
+        <span className="chat-file-review-panel__source-menu-check">{activeSource === source ? <Check size={13} /> : null}</span>
       </span>
     ),
   }));
@@ -303,17 +306,17 @@ export function DesktopReviewPanel({
               }}
             >
               <Button className="chat-file-review-panel__source-button" type="text" size="small">
-                <span>{reviewSourceLabels[activeSource]}</span>
+                <span>{reviewSourceLabel(activeSource, t)}</span>
                 <ChevronDown className="chat-file-review-panel__source-caret" size={12} />
               </Button>
             </Dropdown>
           ) : (
-            <span className="chat-file-review-panel__source-title">最新改动</span>
+            <span className="chat-file-review-panel__source-title">{t('workspace.review.source.latestChanges')}</span>
           )}
           <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
         </div>
         <div className="desktop-review-panel__actions">
-          <div className="desktop-review-panel__action-group" role="group" aria-label="差异显示">
+          <div className="desktop-review-panel__action-group" role="group" aria-label={t('workspace.review.diffDisplay')}>
             <ActionTooltip title={reviewFileExpansionTip}>
               <IconButton
                 aria-pressed={!fileExpansionRequest.expanded}
@@ -352,7 +355,7 @@ export function DesktopReviewPanel({
               </IconButton>
             </ActionTooltip>
           </div>
-          <div className="desktop-review-panel__action-group" role="group" aria-label="审查操作">
+          <div className="desktop-review-panel__action-group" role="group" aria-label={t('workspace.review.actions')}>
             <ActionTooltip title={reviewRefreshTip}>
               <IconButton
                 aria-disabled={reviewRefreshing}
@@ -379,7 +382,10 @@ export function DesktopReviewPanel({
       ) : null}
       <div className="desktop-review-panel__sections">
         <ReviewSummarySection
-          emptyText={reviewEmptyText[activeSource]}
+          emptyText={{
+            title: t(reviewEmptyTextKeys[activeSource].title),
+            description: t(reviewEmptyTextKeys[activeSource].description),
+          }}
           diffLayout={reviewDiffLayout}
           fileExpansionRequest={fileExpansionRequest}
           focusRequest={focusTargetSource === activeSource ? focusRequest : null}
@@ -544,7 +550,7 @@ function writeReviewLineWrapPreference(key: string, lineWrap: boolean): void {
 }
 
 function isDesktopReviewSource(value: unknown): value is DesktopReviewSource {
-  return typeof value === 'string' && reviewSourceOptions.some((item) => item.key === value);
+  return typeof value === 'string' && reviewSourceOptions.some((source) => source === value);
 }
 
 function isDesktopReviewDiffLayout(value: unknown): value is DesktopReviewDiffLayout {
@@ -578,6 +584,7 @@ function BranchCompareBar({
   currentBranch?: string | null;
   onBaseRefChange: (baseRef: string) => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const selectableBaseRefs = useMemo(() => {
     if (!baseRef || baseRefs.includes(baseRef)) return baseRefs;
@@ -585,7 +592,7 @@ function BranchCompareBar({
   }, [baseRef, baseRefs]);
   const selectableOptions = useMemo(() => branchCompareRefOptions(selectableBaseRefs, baseRef), [selectableBaseRefs, baseRef]);
   const selectedBaseValue = preferredBranchCompareRef(baseRef ?? '', selectableBaseRefs);
-  const selectedBaseLabel = branchCompareDisplayName(selectedBaseValue) || '未设置';
+  const selectedBaseLabel = branchCompareDisplayName(selectedBaseValue) || t('workspace.review.branch.unset');
   const filteredBaseRefs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return selectableOptions;
@@ -608,7 +615,7 @@ function BranchCompareBar({
     : [{
       key: '__empty',
       disabled: true,
-      label: <span className="desktop-review-branch-menu__empty">无匹配分支</span>,
+      label: <span className="desktop-review-branch-menu__empty">{t('workspace.review.branch.noMatch')}</span>,
     }];
   const handleMenuClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
     if (key === '__empty') return;
@@ -630,14 +637,14 @@ function BranchCompareBar({
               <Search size={13} />
               <input
                 value={query}
-                placeholder="搜索分支"
+                placeholder={t('workspace.review.branch.search')}
                 onChange={(event) => setQuery(event.target.value)}
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
               />
             </label>
-            <div className="desktop-review-branch-menu__label">分支</div>
+            <div className="desktop-review-branch-menu__label">{t('workspace.review.branch.label')}</div>
             {menu}
           </div>
         )}

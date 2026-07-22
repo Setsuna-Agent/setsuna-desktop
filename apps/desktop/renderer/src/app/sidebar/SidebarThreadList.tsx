@@ -1,5 +1,6 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { useState } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarThreadRow } from './SidebarThreadRow.js';
 
 const THREAD_BATCH_SIZE = 5;
@@ -25,6 +26,7 @@ export function SidebarThreadList({
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
 }) {
+  const { t } = useI18n();
   const [visibleCount, setVisibleCount] = useState(THREAD_BATCH_SIZE);
   const visibleThreads = threads.slice(0, visibleCount);
   const remainingCount = threads.length - visibleThreads.length;
@@ -49,10 +51,10 @@ export function SidebarThreadList({
         <button
           className="desktop-agent-thread-list__show-more"
           type="button"
-          aria-label={`再显示 ${Math.min(THREAD_BATCH_SIZE, remainingCount)} 个对话`}
+          aria-label={t('sidebar.showMoreLabel', { count: Math.min(THREAD_BATCH_SIZE, remainingCount) })}
           onClick={() => setVisibleCount((current) => Math.min(current + THREAD_BATCH_SIZE, threads.length))}
         >
-          展开显示
+          {t('sidebar.showMore')}
         </button>
       ) : null}
     </div>

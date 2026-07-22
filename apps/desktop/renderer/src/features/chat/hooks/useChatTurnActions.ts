@@ -8,6 +8,7 @@ import {
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 
 export function useChatTurnActions({
@@ -41,6 +42,7 @@ export function useChatTurnActions({
   setError: Dispatch<SetStateAction<string | null>>;
   terminalTurnIdsRef: MutableRefObject<Set<string>>;
 }) {
+  const { t } = useI18n();
   const actionRequests = useIdentityRequestGuard(composerKey);
   const sendInput = useCallback(
     async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
@@ -103,6 +105,7 @@ export function useChatTurnActions({
               thinking: options.thinking,
               thinkingEffort: options.thinkingEffort,
               threadId,
+              t,
             })
           : await startTurn();
         if (isCurrentRequest() && !terminalTurnIdsRef.current.has(response.turnId)) {
@@ -118,7 +121,7 @@ export function useChatTurnActions({
         return false;
       }
     },
-    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
+    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, t, terminalTurnIdsRef],
   );
 
   const cancelActiveTurn = useCallback(async () => {
@@ -141,13 +144,13 @@ export function useChatTurnActions({
         if (isCurrentRequest()) setCurrentThread(updated);
         await reloadThreads();
       } catch (unknownError) {
-        const message = normalizeRuntimeActionError(unknownError, '删除消息失败：当前运行时还没有加载消息删除接口，请重启 Electron 窗口后再试。');
+        const message = normalizeRuntimeActionError(unknownError, t('chat.action.deleteUnavailable'));
         if (!isCurrentRequest()) return;
         setError(message);
         throw new Error(message);
       }
     },
-    [actionRequests, activeTurnId, client, currentThread, reloadThreads, setCurrentThread, setError],
+    [actionRequests, activeTurnId, client, currentThread, reloadThreads, setCurrentThread, setError, t],
   );
 
   const editUserMessage = useCallback(
@@ -155,7 +158,7 @@ export function useChatTurnActions({
       if (!currentThread || activeTurnId) return;
       const nextContent = content.trim();
       if (!nextContent) {
-        setError('消息内容不能为空');
+        setError(t('chat.action.emptyMessage'));
         return;
       }
       const isCurrentRequest = actionRequests.begin();
@@ -169,13 +172,13 @@ export function useChatTurnActions({
           setActiveTurnId(response.turnId);
         }
       } catch (unknownError) {
-        const message = normalizeRuntimeActionError(unknownError, '编辑消息失败：当前运行时还没有加载编辑重跑接口，请重启 Electron 窗口后再试。');
+        const message = normalizeRuntimeActionError(unknownError, t('chat.action.editUnavailable'));
         if (!isCurrentRequest()) return;
         setError(message);
         throw new Error(message);
       }
     },
-    [actionRequests, activeTurnId, client, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, terminalTurnIdsRef],
+    [actionRequests, activeTurnId, client, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, t, terminalTurnIdsRef],
   );
 
   return { cancelActiveTurn, deleteMessages, editUserMessage, sendInput };
@@ -236,6 +239,7 @@ async function steerActiveTurn({
   thinking,
   thinkingEffort,
   threadId,
+  t,
 }: {
   activeTurnId: string;
   attachments: RuntimeInputMessageAttachment[];
@@ -245,6 +249,7 @@ async function steerActiveTurn({
   thinking?: boolean;
   thinkingEffort?: string;
   threadId: string;
+  t: Translate;
 }) {
   try {
     return await client.steerTurn(threadId, activeTurnId, {
@@ -269,7 +274,7 @@ async function steerActiveTurn({
       });
     }
     if (isExpiredSteerError(message)) {
-      throw new Error('当前对话已经结束，未插入引导。请重新发送这条消息。');
+      throw new Error(t('chat.action.turnEnded'));
     }
     throw error;
   }

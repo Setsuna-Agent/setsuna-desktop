@@ -4,6 +4,7 @@ import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock.js';
 import { useMarkdownNavigation } from './MarkdownNavigationProvider.js';
 import { WorkspaceFileLink } from './WorkspaceFileLink.js';
@@ -103,6 +104,7 @@ function MarkdownLink({ children, href, node: _node, onClick, ...props }: Markdo
 }
 
 function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElementProps<'img'>) {
+  const { t } = useI18n();
   const { onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(src, workspaceRoot);
 
@@ -126,13 +128,13 @@ function MarkdownImage({ alt = '', node: _node, src, ...props }: MarkdownElement
         type="button"
         onClick={() => onOpenWorkspaceFile(target.path, target.line)}
       >
-        <span aria-hidden="true">图片</span>
+        <span aria-hidden="true">{t('chat.markdown.image')}</span>
         <span>{alt || target.path}</span>
       </button>
     );
   }
 
-  return <span className="chat-markdown__image-alt">{alt || '无法显示的图片'}</span>;
+  return <span className="chat-markdown__image-alt">{alt || t('chat.markdown.imageUnavailable')}</span>;
 }
 
 function MarkdownInlineCode({ children, node: _node, ...props }: MarkdownElementProps<'code'>) {
@@ -169,8 +171,14 @@ function MarkdownPre({ children, node: _node, ...props }: MarkdownElementProps<'
 }
 
 function MarkdownTable({ children, node: _node, ...props }: MarkdownElementProps<'table'>) {
+  const { t } = useI18n();
   return (
-    <div className="chat-markdown__table-scroll" role="region" aria-label="Markdown 表格" tabIndex={0}>
+    <div
+      className="chat-markdown__table-scroll"
+      role="region"
+      aria-label={t('chat.markdown.table')}
+      tabIndex={0}
+    >
       <table {...props}>{children}</table>
     </div>
   );

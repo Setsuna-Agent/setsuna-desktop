@@ -6,6 +6,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MainView } from '../types.js';
 
 type DesktopNavigationOptions = {
@@ -41,6 +42,7 @@ export function useDesktopNavigation({
   setProjects,
   threadsByProjectId,
 }: DesktopNavigationOptions) {
+  const { t } = useI18n();
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchValue, setSidebarSearchValue] = useState('');
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
@@ -270,19 +272,19 @@ export function useDesktopNavigation({
     if (selectingProjectDirectory) return;
     const api = window.setsunaDesktop?.desktop;
     if (!api?.selectDirectory) {
-      setError('Desktop directory picker is unavailable.');
+      setError(t('sidebar.directoryPickerUnavailable'));
       return;
     }
     setSelectingProjectDirectory(true);
     try {
-      const selectedPath = await api.selectDirectory();
+      const selectedPath = await api.selectDirectory({ title: t('sidebar.chooseProject') });
       if (selectedPath) await addProjectByPath(selectedPath);
     } catch (unknownError) {
       setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     } finally {
       setSelectingProjectDirectory(false);
     }
-  }, [addProjectByPath, selectingProjectDirectory, setError]);
+  }, [addProjectByPath, selectingProjectDirectory, setError, t]);
 
   const hideProjectFromNavigation = useCallback(
     async (project: WorkspaceProject, persist: () => Promise<void>) => {

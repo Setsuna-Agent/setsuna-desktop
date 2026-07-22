@@ -86,8 +86,14 @@ const imageActionHarness = vi.hoisted(() => vi.fn());
 
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>();
+  const i18nContext = {
+    locale: 'zh-CN',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  };
   return {
     ...actual,
+    useContext: () => i18nContext,
     useEffect: hookHarness.useEffect,
     useRef: hookHarness.useRef,
     useState: hookHarness.useState,

@@ -1,5 +1,6 @@
 import type { RuntimeSkillDetail, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Boxes, Check, FileText, Loader2, LogIn, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { Button, EmptyState, PageHeader } from '../../shared/ui/primitives.js';
 
 export function CapabilitiesSkillDetail({
@@ -27,6 +28,7 @@ export function CapabilitiesSkillDetail({
   onAuthenticateMcpDependency: (skill: RuntimeSkillSummary, serverKey: string) => Promise<void>;
   pendingDependencyKeys: Set<string>;
 }) {
+  const { t } = useI18n();
   const activeSkill = detail ?? summary;
   const selectedByDefault = activeSkill.enabled && activeSkill.selected;
   const updateEnabled = (enabled: boolean) => {
@@ -39,31 +41,31 @@ export function CapabilitiesSkillDetail({
     <section className="desktop-capabilities-detail desktop-capabilities-skill-detail">
       <PageHeader
         onBack={onBack}
-        title={activeSkill.name || 'Skill 详情'}
-        subtitle={activeSkill.kind === 'user' ? '个人 Skill' : '系统 Skill'}
+        title={activeSkill.name || t('capabilities.skill.detailFallback')}
+        subtitle={t(activeSkill.kind === 'user' ? 'capabilities.skill.personal' : 'capabilities.skill.system')}
         actions={
           <>
             <Button
               type="button"
               variant={selectedByDefault ? 'secondary' : 'primary'}
               icon={selectedByDefault ? <Check size={14} /> : <Boxes size={14} />}
-              title="默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文"
+              title={t('capabilities.skill.defaultHint')}
               disabled={!activeSkill.enabled || selectedByDefault}
               onClick={() => void onUpdateSkill(activeSkill, { selected: true })}
             >
-              {selectedByDefault ? '已默认使用' : '设为默认使用'}
+              {t(selectedByDefault ? 'capabilities.skill.defaultActive' : 'capabilities.skill.setDefault')}
             </Button>
-            <label className="sd-check" title="启用后可在对话中选择这个 Skill">
+            <label className="sd-check" title={t('capabilities.skill.enableHint')}>
               <input type="checkbox" checked={activeSkill.enabled} onChange={(event) => updateEnabled(event.currentTarget.checked)} />
-              <span>启用</span>
+              <span>{t('capabilities.skill.enabled')}</span>
             </label>
             {activeSkill.kind === 'user' ? (
               <>
                 <Button type="button" variant="ghost" icon={<Pencil size={14} />} onClick={onEdit}>
-                  编辑
+                  {t('capabilities.skill.edit')}
                 </Button>
                 <Button type="button" variant="danger" icon={<Trash2 size={14} />} onClick={() => onDelete?.(activeSkill)}>
-                  删除
+                  {t('capabilities.skill.delete')}
                 </Button>
               </>
             ) : null}
@@ -74,23 +76,23 @@ export function CapabilitiesSkillDetail({
       <div className="desktop-capabilities-skill-meta">
         <span>{activeSkill.id}</span>
         <span>{activeSkill.kind}</span>
-        <span>{detail?.references.length ?? 0} files</span>
+        <span>{t('capabilities.skill.referenceCount', { count: detail?.references.length ?? 0 })}</span>
       </div>
 
       {activeSkill.description ? <p className="desktop-capabilities-skill-description">{activeSkill.description}</p> : null}
 
       <p className="desktop-capabilities-skill-usage-help">
-        默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文；对话输入框里的 Skill 词槽只影响当前这次发送。
+        {t('capabilities.skill.defaultDescription')}
       </p>
 
       {loading ? (
         <div className="desktop-capabilities-skill-loading">
           <RefreshCw className="is-spinning" size={14} />
-          正在加载 Skill 详情
+          {t('capabilities.skill.loading')}
         </div>
       ) : null}
 
-      {error ? <EmptyState title="Skill 详情加载失败" body={error} /> : null}
+      {error ? <EmptyState title={t('capabilities.skill.loadFailed')} body={error} /> : null}
 
       {detail ? (
         <>
@@ -98,7 +100,7 @@ export function CapabilitiesSkillDetail({
             <section className="desktop-capabilities-skill-section">
               <header>
                 <Plug size={14} />
-                <span>MCP 依赖</span>
+                <span>{t('capabilities.skill.mcpDependencies')}</span>
               </header>
               {detail.mcpDependencies?.length ? (
                 <div className="desktop-capabilities-skill-reference-list">
@@ -108,14 +110,14 @@ export function CapabilitiesSkillDetail({
                     return (
                       <div className="desktop-capabilities-skill-dependency" key={dependency.value}>
                         <code>{dependency.value}</code>
-                        <span>{skillDependencyStatusLabel(dependency.status)}</span>
+                        <span>{skillDependencyStatusLabel(dependency.status, t)}</span>
                         {(dependency.status === 'missing' || dependency.status === 'disabled' || dependency.status === 'unchecked') ? (
                           <Button type="button" variant="secondary" icon={installPending ? <Loader2 className="is-spinning" size={14} /> : <Plug size={14} />} disabled={installPending} onClick={() => void onInstallMcpDependencies(detail)}>
-                            {installPending ? '处理中' : '安装并启用'}
+                            {installPending ? t('common.processing') : t('capabilities.skill.installAndEnable')}
                           </Button>
                         ) : dependency.status === 'authRequired' || dependency.status === 'error' ? (
                           <Button type="button" variant="secondary" icon={authPending ? <Loader2 className="is-spinning" size={14} /> : <LogIn size={14} />} disabled={authPending} onClick={() => void onAuthenticateMcpDependency(detail, dependency.value)}>
-                            {authPending ? '等待授权' : '登录'}
+                            {t(authPending ? 'capabilities.skill.awaitingAuthorization' : 'capabilities.skill.login')}
                           </Button>
                         ) : null}
                         {dependency.error ? <small>{dependency.error}</small> : null}
@@ -134,12 +136,12 @@ export function CapabilitiesSkillDetail({
               <FileText size={14} />
               <span>SKILL.md</span>
             </header>
-            <pre className="desktop-capabilities-skill-content">{detail.content || 'No content'}</pre>
+            <pre className="desktop-capabilities-skill-content">{detail.content || t('capabilities.skill.noContent')}</pre>
           </section>
           <section className="desktop-capabilities-skill-section">
             <header>
               <FileText size={14} />
-              <span>资料文件</span>
+              <span>{t('capabilities.skill.referenceFiles')}</span>
             </header>
             {detail.references.length ? (
               <div className="desktop-capabilities-skill-reference-list">
@@ -148,7 +150,7 @@ export function CapabilitiesSkillDetail({
                 ))}
               </div>
             ) : (
-              <div className="desktop-capabilities-skill-empty">暂无资料文件</div>
+              <div className="desktop-capabilities-skill-empty">{t('capabilities.skill.noReferenceFiles')}</div>
             )}
           </section>
         </>
@@ -157,12 +159,12 @@ export function CapabilitiesSkillDetail({
   );
 }
 
-function skillDependencyStatusLabel(status: NonNullable<RuntimeSkillDetail['mcpDependencies']>[number]['status']): string {
-  if (status === 'ready') return '已就绪';
-  if (status === 'missing') return '未安装';
-  if (status === 'disabled') return '已停用';
-  if (status === 'authRequired') return '需要登录';
-  if (status === 'conflict') return '配置冲突';
-  if (status === 'error') return '连接或登录失败';
-  return '待检查';
+function skillDependencyStatusLabel(status: NonNullable<RuntimeSkillDetail['mcpDependencies']>[number]['status'], t: Translate): string {
+  if (status === 'ready') return t('capabilities.skill.dependency.ready');
+  if (status === 'missing') return t('capabilities.skill.dependency.missing');
+  if (status === 'disabled') return t('capabilities.skill.dependency.disabled');
+  if (status === 'authRequired') return t('capabilities.skill.dependency.authRequired');
+  if (status === 'conflict') return t('capabilities.skill.dependency.conflict');
+  if (status === 'error') return t('capabilities.skill.dependency.error');
+  return t('capabilities.skill.dependency.pending');
 }

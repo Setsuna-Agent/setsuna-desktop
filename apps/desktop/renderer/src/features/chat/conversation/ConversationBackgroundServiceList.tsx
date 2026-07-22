@@ -1,5 +1,6 @@
 import type { RuntimeBackgroundShellProcess } from '@setsuna-desktop/contracts';
 import { LoaderCircle, Square, Terminal } from 'lucide-react';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 
 export function ConversationBackgroundServiceList({
   error,
@@ -12,16 +13,17 @@ export function ConversationBackgroundServiceList({
   terminatingIds: ReadonlySet<string>;
   onTerminate: (processId: string) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   if (!processes.length) return null;
   return (
-    <section className="chat-conversation-background-services" aria-label="后台服务">
+    <section className="chat-conversation-background-services" aria-label={t('conversation.overview.background.title')}>
       <div className="chat-conversation-background-services__title">
-        <span>后台服务</span>
+        <span>{t('conversation.overview.background.title')}</span>
       </div>
       <div className="chat-conversation-background-services__list">
         {processes.map((process) => {
           const terminating = terminatingIds.has(process.id);
-          const command = singleLineCommand(process.command);
+          const command = singleLineCommand(process.command, t);
           return (
             <div className="chat-conversation-background-service" key={process.id}>
               <span className="chat-conversation-background-service__icon" aria-hidden="true">
@@ -30,8 +32,8 @@ export function ConversationBackgroundServiceList({
               <strong title={process.command}>{command}</strong>
               <button
                 type="button"
-                aria-label={`终止后台服务：${command}`}
-                title={terminating ? '正在终止服务' : '终止服务'}
+                aria-label={t('conversation.overview.background.terminate', { command })}
+                title={t(terminating ? 'conversation.overview.background.terminating' : 'conversation.overview.background.stop')}
                 disabled={terminating}
                 onClick={() => void onTerminate(process.id)}
               >
@@ -41,11 +43,11 @@ export function ConversationBackgroundServiceList({
           );
         })}
       </div>
-      {error ? <div className="chat-conversation-background-services__error" role="status" title={error}>刷新失败：{error}</div> : null}
+      {error ? <div className="chat-conversation-background-services__error" role="status" title={error}>{t('conversation.overview.background.refreshFailed', { error })}</div> : null}
     </section>
   );
 }
 
-function singleLineCommand(command: string): string {
-  return command.replace(/\s+/gu, ' ').trim() || '未命名命令';
+function singleLineCommand(command: string, t: Translate): string {
+  return command.replace(/\s+/gu, ' ').trim() || t('conversation.overview.background.unnamedCommand');
 }

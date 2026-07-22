@@ -1,5 +1,6 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
+import { interfaceLanguageFromConfig, useI18n } from '../shared/i18n/I18nProvider.js';
 import { useDesktopAppController } from './controller/useDesktopAppController.js';
 import { AppReadyLayout } from './layout/AppReadyLayout.js';
 import { ShellFrame } from './layout/ShellFrame.js';
@@ -20,6 +21,20 @@ export function App() {
 
 function AppContent() {
   const controller = useDesktopAppController();
+  const { locale, setLocale, t } = useI18n();
+  const runtimeConfig = controller.runtime?.config ?? null;
+
+  useEffect(() => {
+    if (runtimeConfig) {
+      setLocale(interfaceLanguageFromConfig(runtimeConfig));
+    }
+  }, [runtimeConfig, setLocale]);
+
+  useEffect(() => {
+    const setInterfaceLanguage = window.setsunaDesktop?.desktop.setInterfaceLanguage;
+    if (!setInterfaceLanguage) return;
+    void setInterfaceLanguage(locale).catch(() => undefined);
+  }, [locale]);
 
   if (controller.loadState === 'loading') {
     return <AppBlankSurface />;
@@ -27,11 +42,11 @@ function AppContent() {
 
   if (controller.loadState === 'error') {
     return (
-      <ShellFrame status={<StatusBadge tone="danger">Runtime error</StatusBadge>}>
+      <ShellFrame status={<StatusBadge tone="danger">{t('app.error.runtime')}</StatusBadge>}>
         <EmptyState
-          title="Local runtime failed to start"
-          body={controller.runtime.error ?? 'Unknown error'}
-          action={<Button variant="primary" onClick={() => void controller.runtime.refresh().catch(() => undefined)}>重试</Button>}
+          title={t('app.error.runtimeTitle')}
+          body={controller.runtime.error ?? t('common.unknownError')}
+          action={<Button variant="primary" onClick={() => void controller.runtime.refresh().catch(() => undefined)}>{t('common.retry')}</Button>}
         />
       </ShellFrame>
     );
@@ -57,12 +72,17 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 
   render() {
     if (this.state.error) {
-      return (
-        <ShellFrame status={<StatusBadge tone="danger">Renderer error</StatusBadge>}>
-          <EmptyState title="页面渲染异常" body={this.state.error.message} />
-        </ShellFrame>
-      );
+      return <AppErrorFallback error={this.state.error} />;
     }
     return this.props.children;
   }
+}
+
+function AppErrorFallback({ error }: { error: Error }) {
+  const { t } = useI18n();
+  return (
+    <ShellFrame status={<StatusBadge tone="danger">{t('app.error.renderer')}</StatusBadge>}>
+      <EmptyState title={t('app.error.rendererTitle')} body={error.message} />
+    </ShellFrame>
+  );
 }

@@ -1,6 +1,7 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { Archive, LoaderCircle, Pencil } from 'lucide-react';
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ActionTooltip } from '../../shared/ui/primitives.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 
@@ -25,6 +26,7 @@ export function SidebarThreadRow({
   onSelect: (threadId: string) => void;
   onToggleMenu: (threadId: string) => void;
 }) {
+  const { t } = useI18n();
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
   // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
@@ -59,7 +61,7 @@ export function SidebarThreadRow({
     <SidebarFloatingMenu anchorPoint={menuAnchorPoint} open={menuOpen} triggerRef={rowRef} onClose={() => onToggleMenu(thread.id)}>
       <button type="button" role="menuitem" onClick={() => onRename(thread)}>
         <Pencil size={13} />
-        <span>重命名</span>
+        <span>{t('sidebar.rename')}</span>
       </button>
     </SidebarFloatingMenu>
   );
@@ -69,15 +71,15 @@ export function SidebarThreadRow({
   const meta = (
     <span className="desktop-agent-session__meta">
       {isRunning ? (
-        <span className="desktop-agent-session__running" aria-label="对话进行中" title="对话进行中">
+        <span className="desktop-agent-session__running" aria-label={t('sidebar.chatRunning')} title={t('sidebar.chatRunning')}>
           <LoaderCircle className="is-spinning" size={13} />
         </span>
       ) : null}
-      <ActionTooltip title="归档对话">
+      <ActionTooltip title={t('sidebar.archiveChat')}>
         <button
           className="desktop-agent-session__archive-button"
           type="button"
-          aria-label="归档对话"
+          aria-label={t('sidebar.archiveChat')}
           onClick={handleArchiveClick}
           onKeyDown={(event) => event.stopPropagation()}
         >

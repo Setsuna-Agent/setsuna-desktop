@@ -1,10 +1,13 @@
+import type { DesktopUpdateDownloadSource } from '@setsuna-desktop/contracts';
 import { Popconfirm } from 'antd';
 import { Info, Monitor, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import type { DesktopUpdaterBridgeState, DesktopUpdaterStateView } from '../../../app/controller/useDesktopUpdater.js';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, SelectField, StatusBadge, TextField } from '../../../shared/ui/primitives.js';
 
 export function AboutSettings({ updater }: { updater: DesktopUpdaterStateView }) {
+  const { t } = useI18n();
   const state = updater.state;
   const updatePercent = updater.ready ? 100 : Math.round(state?.progress?.percent ?? 0);
   const updateBusy = updater.checking || state?.status === 'checking' || state?.status === 'available' || state?.status === 'downloading';
@@ -18,19 +21,19 @@ export function AboutSettings({ updater }: { updater: DesktopUpdaterStateView })
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__about-section">
       <div className="chat-user-settings__section-block">
-        <div className="chat-user-settings__group-title">应用信息</div>
+        <div className="chat-user-settings__group-title">{t('settings.about.appInfo')}</div>
         <div className="chat-user-settings__group">
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Info size={14} />
-              <span>当前版本</span>
+              <span>{t('settings.about.currentVersion')}</span>
             </span>
             <strong className="chat-user-settings__value">v{updater.currentVersion}</strong>
           </div>
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Monitor size={14} />
-              <span>平台</span>
+              <span>{t('settings.about.platform')}</span>
             </span>
             <code>
               {platform} / {arch}
@@ -40,7 +43,7 @@ export function AboutSettings({ updater }: { updater: DesktopUpdaterStateView })
       </div>
 
       <div className="chat-user-settings__section-block">
-        <div className="chat-user-settings__group-title">更新</div>
+        <div className="chat-user-settings__group-title">{t('settings.about.updates')}</div>
         <div className="chat-user-settings__group chat-user-settings__update-panel">
           <div className="chat-user-settings__update-main">
             {showProgress ? (
@@ -51,14 +54,14 @@ export function AboutSettings({ updater }: { updater: DesktopUpdaterStateView })
             <div className="chat-user-settings__update-copy">
               <strong>
                 {updater.statusTitle}
-                <StatusBadge tone={updateBadgeTone(state)}>{updateBadgeText(state)}</StatusBadge>
+                <StatusBadge tone={updateBadgeTone(state)}>{updateBadgeText(state, t)}</StatusBadge>
               </strong>
               <span>{updater.statusText}</span>
-              {updater.updateVersion ? <span>目标版本：v{updater.updateVersion.replace(/^v/u, '')}</span> : null}
-              {state?.assetName ? <span>安装包：{state.assetName}</span> : null}
+              {updater.updateVersion ? <span>{t('settings.about.targetVersion', { version: updater.updateVersion.replace(/^v/u, '') })}</span> : null}
+              {state?.assetName ? <span>{t('settings.about.package', { name: state.assetName })}</span> : null}
               {releaseUrl ? (
                 <button className="chat-user-settings__release-link" type="button" title={releaseUrl} onClick={() => void window.setsunaDesktop?.links.openExternal(releaseUrl)}>
-                  更新内容：<span>{releaseUrl}</span>
+                  {t('settings.about.releaseNotes')}<span>{releaseUrl}</span>
                 </button>
               ) : null}
             </div>
@@ -67,7 +70,7 @@ export function AboutSettings({ updater }: { updater: DesktopUpdaterStateView })
           <div className="chat-user-settings__update-actions">
             {showCheckButton ? (
               <Button className="chat-user-settings__update-action" icon={<RefreshCw size={14} />} disabled={updateBusy || updateUnsupported} onClick={() => void updater.checkForUpdates()}>
-                {updateBusy ? '检查中' : '检查更新'}
+                {updateBusy ? t('settings.about.checking') : t('settings.about.check')}
               </Button>
             ) : null}
             {updater.ready ? (
@@ -84,6 +87,7 @@ export function AboutSettings({ updater }: { updater: DesktopUpdaterStateView })
 }
 
 function UpdateDownloadSourceSettings({ updater }: { updater: DesktopUpdaterStateView }) {
+  const { t } = useI18n();
   const [adding, setAdding] = useState(false);
   const [sourceName, setSourceName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -130,24 +134,24 @@ function UpdateDownloadSourceSettings({ updater }: { updater: DesktopUpdaterStat
     <div className="chat-user-settings__group chat-user-settings__download-source-panel">
       <div className="chat-user-settings__download-source-main">
         <div className="chat-user-settings__download-source-copy">
-          <strong>下载源</strong>
-          <span>版本检查仍使用 GitHub API，安装包和校验文件从所选源下载。</span>
+          <strong>{t('settings.about.downloadSource')}</strong>
+          <span>{t('settings.about.downloadSourceDescription')}</span>
         </div>
         <div className="chat-user-settings__download-source-actions">
-          <SelectField aria-label="下载源" className="settings-local-control" disabled={sourceBusy || sources.length === 0} value={activeSourceId} onValueChange={(nextValue) => void selectSource(nextValue)}>
+          <SelectField aria-label={t('settings.about.downloadSource')} className="settings-local-control" disabled={sourceBusy || sources.length === 0} value={activeSourceId} onValueChange={(nextValue) => void selectSource(nextValue)}>
             {sources.map((source) => (
-              <option key={source.id} value={source.id}>{source.name}</option>
+              <option key={source.id} value={source.id}>{updateDownloadSourceName(source, t)}</option>
             ))}
           </SelectField>
           <Button icon={<Plus size={14} />} disabled={sourceBusy || !updater.api} onClick={() => {
             setAdding((current) => !current);
             setSourceError(null);
           }}>
-            添加源
+            {t('settings.about.addSource')}
           </Button>
           {activeSource && !activeSource.builtIn ? (
-            <Popconfirm title={`删除“${activeSource.name}”？`} description="删除当前源后会自动切回 GitHub 直连。" placement="topRight" okText="删除" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={() => void removeActiveSource()}>
-              <IconButton label={`删除下载源 ${activeSource.name}`} variant="danger" disabled={sourceBusy}>
+            <Popconfirm title={t('settings.about.deleteSourceTitle', { name: activeSource.name })} description={t('settings.about.deleteSourceDescription')} placement="topRight" okText={t('common.delete')} cancelText={t('common.cancel')} okButtonProps={{ danger: true }} onConfirm={() => void removeActiveSource()}>
+              <IconButton label={t('settings.about.deleteSourceLabel', { name: activeSource.name })} variant="danger" disabled={sourceBusy}>
                 <Trash2 size={14} />
               </IconButton>
             </Popconfirm>
@@ -157,19 +161,19 @@ function UpdateDownloadSourceSettings({ updater }: { updater: DesktopUpdaterStat
 
       {activeSource ? (
         <div className="chat-user-settings__download-source-current" title={activeSource.urlTemplate}>
-          当前规则：<code>{activeSource.urlTemplate === '{url}' ? 'GitHub 原始下载地址' : activeSource.urlTemplate}</code>
+          {t('settings.about.currentRule')}<code>{activeSource.urlTemplate === '{url}' ? t('settings.about.githubOriginalUrl') : activeSource.urlTemplate}</code>
         </div>
       ) : null}
 
       {adding ? (
         <form className="chat-user-settings__download-source-form" onSubmit={(event) => void addSource(event)}>
-          <TextField aria-label="下载源名称" disabled={sourceBusy} maxLength={40} placeholder="名称，例如：公司镜像" value={sourceName} onChange={(event) => setSourceName(event.currentTarget.value)} />
-          <TextField aria-label="下载源地址" disabled={sourceBusy} placeholder="地址或模板，例如：https://ghfast.example/" value={sourceUrl} onChange={(event) => setSourceUrl(event.currentTarget.value)} />
+          <TextField aria-label={t('settings.about.sourceName')} disabled={sourceBusy} maxLength={40} placeholder={t('settings.about.sourceNamePlaceholder')} value={sourceName} onChange={(event) => setSourceName(event.currentTarget.value)} />
+          <TextField aria-label={t('settings.about.sourceUrl')} disabled={sourceBusy} placeholder={t('settings.about.sourceUrlPlaceholder')} value={sourceUrl} onChange={(event) => setSourceUrl(event.currentTarget.value)} />
           <div className="chat-user-settings__download-source-form-actions">
-            <Button type="submit" variant="primary" disabled={sourceBusy || !sourceName.trim() || !sourceUrl.trim()}>添加并使用</Button>
-            <Button disabled={sourceBusy} onClick={() => setAdding(false)}>取消</Button>
+            <Button type="submit" variant="primary" disabled={sourceBusy || !sourceName.trim() || !sourceUrl.trim()}>{t('settings.about.addAndUse')}</Button>
+            <Button disabled={sourceBusy} onClick={() => setAdding(false)}>{t('common.cancel')}</Button>
           </div>
-          <span className="chat-user-settings__download-source-help">只填地址时会自动追加原始下载 URL；高级用法可在模板中使用 {'{url}'} 或 {'{encodedUrl}'}。</span>
+          <span className="chat-user-settings__download-source-help">{t('settings.about.sourceHelp')}</span>
         </form>
       ) : null}
 
@@ -183,6 +187,15 @@ function formatUpdaterError(error: unknown): string {
   return error.message.replace(/^Error invoking remote method '[^']+':\s*/u, '');
 }
 
+export function updateDownloadSourceName(
+  source: Pick<DesktopUpdateDownloadSource, 'builtIn' | 'id' | 'name'>,
+  t: Translate,
+): string {
+  return source.builtIn && source.id === 'github-direct'
+    ? t('settings.about.githubDirect')
+    : source.name;
+}
+
 function updateBadgeTone(state: DesktopUpdaterBridgeState | null): 'neutral' | 'success' | 'warning' | 'danger' {
   if (state?.status === 'downloaded') return 'warning';
   if (state?.status === 'not-available') return 'success';
@@ -190,12 +203,12 @@ function updateBadgeTone(state: DesktopUpdaterBridgeState | null): 'neutral' | '
   return 'neutral';
 }
 
-function updateBadgeText(state: DesktopUpdaterBridgeState | null): string {
-  if (state?.status === 'downloaded') return '待安装';
-  if (state?.status === 'downloading') return '下载中';
-  if (state?.status === 'checking') return '检查中';
-  if (state?.status === 'not-available') return '最新';
-  if (state?.status === 'error') return '失败';
-  if (state?.status === 'unsupported') return '不可用';
-  return '自动';
+function updateBadgeText(state: DesktopUpdaterBridgeState | null, t: Translate): string {
+  if (state?.status === 'downloaded') return t('settings.about.badge.pending');
+  if (state?.status === 'downloading') return t('settings.about.badge.downloading');
+  if (state?.status === 'checking') return t('settings.about.badge.checking');
+  if (state?.status === 'not-available') return t('settings.about.badge.latest');
+  if (state?.status === 'error') return t('settings.about.badge.failed');
+  if (state?.status === 'unsupported') return t('settings.about.badge.unavailable');
+  return t('settings.about.badge.automatic');
 }

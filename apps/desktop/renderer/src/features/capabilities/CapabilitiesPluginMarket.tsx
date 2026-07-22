@@ -1,4 +1,5 @@
 import type { RuntimePluginMarketplaceItem, RuntimePluginSummary } from '@setsuna-desktop/contracts';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { CapabilitiesInstalledPluginListItem } from './CapabilitiesInstalledPluginListItem.js';
 import { CapabilitiesPluginEditorial } from './CapabilitiesPluginEditorial.js';
 import { CapabilitiesPluginListItem } from './CapabilitiesPluginListItem.js';
@@ -21,12 +22,13 @@ export function CapabilitiesPluginMarket({
   onOpenMarketplace: (plugin: RuntimePluginMarketplaceItem) => void;
   searching: boolean;
 }) {
-  const presentation = pluginMarketplacePresentation(marketplacePlugins, searching);
+  const { t } = useI18n();
+  const presentation = pluginMarketplacePresentation(marketplacePlugins, searching, t);
 
   return (
     <div className="desktop-plugin-market">
       {presentation.editorials.length ? (
-        <section className="desktop-plugin-market__editorials" aria-label="编辑精选">
+        <section className="desktop-plugin-market__editorials" aria-label={t('capabilities.market.editorial')}>
           {presentation.editorials.map((plugin) => (
             <CapabilitiesPluginEditorial
               key={`editorial:${plugin.id}`}
@@ -62,8 +64,8 @@ export function CapabilitiesPluginMarket({
       {localPlugins.length ? (
         <section className="desktop-plugin-market__section">
           <header>
-            <h3>本地插件</h3>
-            <p>不属于当前精选市场的已安装内容</p>
+            <h3>{t('capabilities.market.local')}</h3>
+            <p>{t('capabilities.market.localDescription')}</p>
           </header>
           <div className="desktop-plugin-market__list">
             {localPlugins.map((plugin) => (

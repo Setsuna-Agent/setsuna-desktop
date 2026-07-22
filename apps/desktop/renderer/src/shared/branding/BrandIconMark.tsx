@@ -1,5 +1,6 @@
 import type { ProviderBrandAsset } from './providerBranding.js';
-import { providerInitials } from './providerBranding.js';
+import { useI18n } from '../i18n/I18nProvider.js';
+import { localizedProviderBrandLabel, providerInitials } from './providerBranding.js';
 
 type BrandIconMarkProps = {
   brand: ProviderBrandAsset | null;
@@ -8,6 +9,7 @@ type BrandIconMarkProps = {
 };
 
 export function BrandIconMark({ brand, fallbackName, size = 'default' }: BrandIconMarkProps) {
+  const { t } = useI18n();
   const classes = [
     'brand-icon-mark',
     size === 'default' ? '' : `is-${size}`,
@@ -16,7 +18,11 @@ export function BrandIconMark({ brand, fallbackName, size = 'default' }: BrandIc
   ].filter(Boolean).join(' ');
 
   return (
-    <span className={classes} aria-hidden="true" title={brand?.label}>
+    <span
+      className={classes}
+      aria-hidden="true"
+      title={brand ? localizedProviderBrandLabel(brand, t) : undefined}
+    >
       {brand ? (
         <>
           <img alt="" className={brand.darkSrc ? 'is-light-variant' : undefined} draggable={false} src={brand.src} />

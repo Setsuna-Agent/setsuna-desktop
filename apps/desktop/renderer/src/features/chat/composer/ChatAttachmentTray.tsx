@@ -1,6 +1,7 @@
 import { isRuntimeInlineMessageAttachment } from '@setsuna-desktop/contracts';
 import { Image } from 'antd';
 import { LoaderCircle, TriangleAlert, X } from 'lucide-react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { formatAttachmentTypeLabel, type ChatComposerAttachmentItem } from './chatAttachments.js';
 
@@ -13,11 +14,13 @@ export function ChatAttachmentTray({
   items: ChatComposerAttachmentItem[];
   onRemove: (key: string) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className={`chat-attachment-tray ${items.length ? 'is-open' : ''}`}>
       <div className="chat-attachment-tray__clip">
         <Image.PreviewGroup>
-          <div className="chat-attachments" aria-label="附件">
+          <div className="chat-attachments" aria-label={t('chat.attachments.label')}>
             {items.map((item) => (
               <ComposerAttachmentCard disabled={disabled} item={item} key={item.key} onRemove={onRemove} />
             ))}
@@ -37,6 +40,7 @@ function ComposerAttachmentCard({
   item: ChatComposerAttachmentItem;
   onRemove: (key: string) => void;
 }) {
+  const { t } = useI18n();
   const inlineImage = item.attachment
     && isRuntimeInlineMessageAttachment(item.attachment)
     && item.attachment.type.startsWith('image/')
@@ -64,7 +68,7 @@ function ComposerAttachmentCard({
           <span className="chat-attachment__file-copy">
             <span className="chat-attachment__file-name">{item.name}</span>
             <span className="chat-attachment__file-meta">
-              {item.status === 'uploading' ? '上传中' : item.status === 'error' ? item.error : formatAttachmentTypeLabel(item.name, item.type)}
+              {item.status === 'uploading' ? t('chat.attachments.uploading') : item.status === 'error' ? item.error : formatAttachmentTypeLabel(item.name, item.type)}
             </span>
           </span>
         </>
@@ -72,7 +76,7 @@ function ComposerAttachmentCard({
       <button
         className="chat-attachment__remove"
         type="button"
-        aria-label={`移除 ${item.name}`}
+        aria-label={t('chat.attachments.remove', { name: item.name })}
         disabled={disabled || removing}
         onClick={() => onRemove(item.key)}
       >

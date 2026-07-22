@@ -8,6 +8,7 @@ import {
 import { Dropdown, Image, type MenuProps } from 'antd';
 import { Copy, FolderOpen } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useDesktopImageAction, type DesktopImageAction } from '../../workspace/hooks/useDesktopImageAction.js';
 
 type ChatImageAttachment = RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment;
@@ -29,6 +30,7 @@ export function ChatMessageImageGallery({
   attachments: ChatImageAttachment[];
   variant: 'user' | 'assistant';
 }) {
+  const { t } = useI18n();
   const runDesktopImageAction = useDesktopImageAction();
   if (!attachments.length) return null;
   const columns = chatImageGalleryColumns(attachments.length);
@@ -47,7 +49,7 @@ export function ChatMessageImageGallery({
         <div
           className={`chat-image-gallery chat-image-gallery--${variant} ${multiple ? 'chat-image-gallery--multiple' : 'chat-image-gallery--single'}`}
           style={style}
-          aria-label={`${attachments.length} 张图片`}
+          aria-label={t('chat.image.count', { count: attachments.length })}
         >
           {attachments.map((attachment) => (
             <ChatMessageImage
@@ -69,6 +71,7 @@ function ChatMessageImage({
   attachment: ChatImageAttachment;
   onAction: (action: DesktopImageAction) => void;
 }) {
+  const { t } = useI18n();
   const imageRef = useRef<HTMLDivElement>(null);
   const { loadError, reservedAspectRatio, source } = useChatImageSource(attachment, imageRef);
   const reservesLayout = !source && reservedAspectRatio !== null;
@@ -77,12 +80,12 @@ function ChatMessageImage({
     {
       key: 'copy',
       icon: <Copy size={14} />,
-      label: '复制图片',
+      label: t('chat.image.copy'),
     },
     {
       key: 'reveal',
       icon: <FolderOpen size={14} />,
-      label: '在文件夹中显示',
+      label: t('chat.image.reveal'),
     },
   ];
 
@@ -111,7 +114,7 @@ function ChatMessageImage({
           />
         ) : (
           <div className="chat-message-image__placeholder" role={loadError ? 'alert' : 'status'}>
-            {loadError ? '图片不可用' : '正在加载图片'}
+            {t(loadError ? 'chat.image.unavailable' : 'chat.image.loading')}
           </div>
         )}
       </div>
@@ -123,6 +126,7 @@ function useChatImageSource(
   attachment: ChatImageAttachment,
   targetRef: RefObject<HTMLDivElement | null>,
 ): { loadError: string | null; reservedAspectRatio: number | null; source: string | null } {
+  const { t } = useI18n();
   const inlineSource = isRuntimeInlineMessageAttachment(attachment) ? attachment.url : null;
   const generatedAssetId = isRuntimeGeneratedMessageAttachment(attachment) ? attachment.assetId : null;
   const [shouldLoad, setShouldLoad] = useState(false);
@@ -166,7 +170,7 @@ function useChatImageSource(
     }
     const desktop = window.setsunaDesktop?.desktop;
     if (!desktop) {
-      setLoadError('当前环境无法读取图片');
+      setLoadError(t('chat.image.readUnavailable'));
       return;
     }
     let cancelled = false;
@@ -185,13 +189,13 @@ function useChatImageSource(
         setGeneratedSource(objectUrl);
       })
       .catch((error: unknown) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : '图片读取失败');
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : t('chat.image.readFailed'));
       });
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [generatedAssetId, shouldLoad]);
+  }, [generatedAssetId, shouldLoad, t]);
 
   return { loadError, reservedAspectRatio, source: inlineSource ?? generatedSource };
 }

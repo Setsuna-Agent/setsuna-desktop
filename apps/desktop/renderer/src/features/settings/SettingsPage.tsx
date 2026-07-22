@@ -21,6 +21,8 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import type { DesktopUpdaterStateView } from '../../app/controller/useDesktopUpdater.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import {
   AutoSaveStatus,
   LocalModelSettings,
@@ -37,29 +39,29 @@ import { UsageSettings } from './usage/UsageSettings.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 
-const settingsSections: Array<{ id: SettingsSectionId; label: string; icon: ReactNode }> = [
-  { id: 'general', label: '通用', icon: <SlidersHorizontal size={14} /> },
-  { id: 'personalization', label: '个性化', icon: <Sparkles size={14} /> },
-  { id: 'localLlm', label: '模型服务', icon: <HardDrive size={14} /> },
-  { id: 'usage', label: '用量统计', icon: <CircleGauge size={14} /> },
-  { id: 'archives', label: '归档对话', icon: <Archive size={14} /> },
-  { id: 'runtime', label: '高级设置', icon: <Wrench size={14} /> },
-  { id: 'about', label: '关于', icon: <Info size={14} /> },
+const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; icon: ReactNode }> = [
+  { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} /> },
+  { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
+  { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
+  { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
+  { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
+  { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
+  { id: 'about', labelKey: 'settings.section.about', icon: <Info size={14} /> },
 ];
 
-const settingsSectionLabels: Record<SettingsSectionId, string> = {
-  general: '通用',
-  personalization: '个性化',
-  localLlm: '模型服务',
-  usage: '用量统计',
-  archives: '归档对话',
-  runtime: '高级设置',
-  about: '关于',
+const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
+  general: 'settings.section.general',
+  personalization: 'settings.section.personalization',
+  localLlm: 'settings.section.localLlm',
+  usage: 'settings.section.usage',
+  archives: 'settings.section.archives',
+  runtime: 'settings.section.runtime',
+  about: 'settings.section.about',
 };
 
-const settingsSectionDescriptions: Partial<Record<SettingsSectionId, string>> = {
-  localLlm: '接入并管理用于对话与自动化任务的模型服务。',
-  usage: '追踪模型调用、Token 消耗与过去一年的活跃趋势。',
+const settingsSectionDescriptionKeys: Partial<Record<SettingsSectionId, MessageKey>> = {
+  localLlm: 'settings.section.localLlmDescription',
+  usage: 'settings.section.usageDescription',
 };
 
 const EMPTY_PROVIDER_CONFIGS: ProviderConfigState[] = [];
@@ -108,6 +110,7 @@ export function SettingsPage({
   onRestoreArchivedThread: (threadId: string) => Promise<RuntimeThread>;
   onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
   const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
 
@@ -127,7 +130,7 @@ export function SettingsPage({
           onSaveStateChange={setLocalModelSaveState}
         />
       ) : (
-        <EmptyState title="Config unavailable" />
+        <EmptyState title={t('settings.configUnavailable')} />
       )
     ) : activeSection === 'usage' ? (
       <UsageSettings providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS} usage={usage} />
@@ -151,7 +154,7 @@ export function SettingsPage({
           onReset={onResetMemories}
         />
       ) : (
-        <EmptyState title="Config unavailable" />
+        <EmptyState title={t('settings.configUnavailable')} />
       )
     ) : activeSection === 'about' ? (
       <AboutSettings updater={updater} />
@@ -163,7 +166,7 @@ export function SettingsPage({
         onSetSkillExtraRoots={onSetSkillExtraRoots}
       />
     ) : (
-      <EmptyState title="Config unavailable" />
+      <EmptyState title={t('settings.configUnavailable')} />
     );
 
   return (
@@ -177,9 +180,9 @@ export function SettingsPage({
         >
           <header className="chat-user-settings__page-heading">
             <div className="chat-user-settings__page-heading-copy">
-              <h1>{settingsSectionLabels[activeSection]}</h1>
-              {settingsSectionDescriptions[activeSection] ? (
-                <p>{settingsSectionDescriptions[activeSection]}</p>
+              <h1>{t(settingsSectionLabelKeys[activeSection])}</h1>
+              {settingsSectionDescriptionKeys[activeSection] ? (
+                <p>{t(settingsSectionDescriptionKeys[activeSection])}</p>
               ) : null}
             </div>
             {activeSection === 'localLlm' && localModelSaveState.message ? (
@@ -202,15 +205,16 @@ export function SettingsSidebar({
   onBack: () => void;
   onSelectSection: (section: SettingsSectionId) => void;
 }) {
+  const { t } = useI18n();
   return (
     <nav className="app-sidebar desktop-settings-sidebar chat-user-settings__nav">
       <PageBackButton
         block
         className="chat-user-settings__page-back"
-        label="返回应用"
+        label={t('settings.back')}
         onClick={onBack}
       />
-      <div className="chat-user-settings__title">设置</div>
+      <div className="chat-user-settings__title">{t('settings.title')}</div>
       <div className="chat-user-settings__tabs">
         {settingsSections.map((section) => (
           <button
@@ -220,7 +224,7 @@ export function SettingsSidebar({
             onClick={() => onSelectSection(section.id)}
           >
             {section.icon}
-            <span>{section.label}</span>
+            <span>{t(section.labelKey)}</span>
           </button>
         ))}
       </div>

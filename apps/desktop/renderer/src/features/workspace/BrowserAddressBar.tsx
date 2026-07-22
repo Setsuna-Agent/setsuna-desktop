@@ -1,4 +1,5 @@
 import { ExternalLink } from 'lucide-react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
 export function BrowserAddressBar({
   externalUrl,
@@ -13,6 +14,7 @@ export function BrowserAddressBar({
   onOpenExternal: (url: string) => void;
   value: string;
 }) {
+  const { t } = useI18n();
   return (
     <form
       onSubmit={(event) => {
@@ -22,7 +24,7 @@ export function BrowserAddressBar({
     >
       <span className="desktop-browser-address-bar">
         <input
-          aria-label="网址或搜索内容"
+          aria-label={t('workspace.browser.address')}
           spellCheck={false}
           value={value}
           onChange={(event) => onChange(event.currentTarget.value)}
@@ -30,9 +32,9 @@ export function BrowserAddressBar({
         />
         {externalUrl ? (
           <button
-            aria-label="在系统浏览器中打开"
+            aria-label={t('workspace.browser.openExternal')}
             className="desktop-browser-address-bar__external"
-            title="在系统浏览器中打开"
+            title={t('workspace.browser.openExternal')}
             type="button"
             onClick={() => onOpenExternal(externalUrl)}
           >

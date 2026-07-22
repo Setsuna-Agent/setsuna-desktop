@@ -1,5 +1,6 @@
 import { EllipsisVertical, Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
 const minimumBrowserZoomFactor = 0.5;
 const maximumBrowserZoomFactor = 3;
@@ -33,6 +34,7 @@ export function BrowserWindowMenu({
   onZoomReset: () => void;
   zoomFactor: number;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -66,22 +68,22 @@ export function BrowserWindowMenu({
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="浏览器菜单"
+        aria-label={t('workspace.browser.menu')}
         className={`desktop-browser-navigation__button ${open ? 'is-active' : ''}`}
         disabled={disabled}
         ref={triggerRef}
-        title="浏览器菜单"
+        title={t('workspace.browser.menu')}
         type="button"
         onClick={() => setOpen((current) => !current)}
       >
         <EllipsisVertical size={16} />
       </button>
-      <span className="desktop-browser-window-menu__popover" hidden={!open} role="menu" aria-label="浏览器窗口设置">
+      <span className="desktop-browser-window-menu__popover" hidden={!open} role="menu" aria-label={t('workspace.browser.menuSettings')}>
         <button type="button" role="menuitem" onClick={() => runAndClose(onReload)}>
-          {loading ? '停止加载' : '重新加载页面'}
+          {t(loading ? 'workspace.browser.stop' : 'workspace.browser.reload')}
         </button>
         <button type="button" role="menuitem" onClick={() => runAndClose(onPrint)}>
-          打印页面
+          {t('workspace.browser.print')}
         </button>
         <button
           aria-busy={capturingScreenshot}
@@ -90,17 +92,17 @@ export function BrowserWindowMenu({
           role="menuitem"
           onClick={() => runAndClose(onCaptureScreenshot)}
         >
-          {capturingScreenshot ? '正在获取屏幕截图…' : '获取屏幕截图'}
+          {t(capturingScreenshot ? 'workspace.browser.capturingScreenshot' : 'workspace.browser.captureScreenshot')}
         </button>
         <button type="button" role="menuitem" onClick={() => runAndClose(onToggleDeviceToolbar)}>
-          {deviceToolbarVisible ? '隐藏设备工具栏' : '显示设备工具栏'}
+          {t(deviceToolbarVisible ? 'workspace.browser.hideDeviceToolbar' : 'workspace.browser.showDeviceToolbar')}
         </button>
         <span className="desktop-browser-window-menu__separator" role="separator" />
-        <span className="desktop-browser-window-menu__zoom" role="group" aria-label="页面缩放">
-          <span>缩放</span>
+        <span className="desktop-browser-window-menu__zoom" role="group" aria-label={t('workspace.browser.pageZoom')}>
+          <span>{t('workspace.browser.zoom')}</span>
           <span className="desktop-browser-window-menu__zoom-controls">
             <button
-              aria-label="缩小页面"
+              aria-label={t('workspace.browser.zoomOut')}
               disabled={zoomFactor <= minimumBrowserZoomFactor}
               role="menuitem"
               type="button"
@@ -108,11 +110,11 @@ export function BrowserWindowMenu({
             >
               <Minus size={13} />
             </button>
-            <button aria-label="恢复默认缩放" role="menuitem" title="恢复默认缩放" type="button" onClick={onZoomReset}>
+            <button aria-label={t('workspace.browser.zoomReset')} role="menuitem" title={t('workspace.browser.zoomReset')} type="button" onClick={onZoomReset}>
               {Math.round(zoomFactor * 100)}%
             </button>
             <button
-              aria-label="放大页面"
+              aria-label={t('workspace.browser.zoomIn')}
               disabled={zoomFactor >= maximumBrowserZoomFactor}
               role="menuitem"
               type="button"
@@ -124,7 +126,7 @@ export function BrowserWindowMenu({
         </span>
         <span className="desktop-browser-window-menu__separator" role="separator" />
         <button type="button" role="menuitem" onClick={() => runAndClose(onOpenDevTools)}>
-          打开开发者工具
+          {t('workspace.browser.openDevTools')}
         </button>
       </span>
     </span>

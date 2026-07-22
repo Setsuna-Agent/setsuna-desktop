@@ -1,5 +1,8 @@
 import { isRuntimeInlineMessageAttachment, type RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
 import type { ChatImageAttachmentOutcome } from '../../../app/types.js';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export const maxChatImageAttachments = 8;
 export const maxChatImageSize = 8 * 1024 * 1024;
@@ -16,14 +19,14 @@ export function rejectedChatImageAttachment(
   return null;
 }
 
-export function readChatImageAttachment(file: File): Promise<RuntimeMessageAttachment> {
+export function readChatImageAttachment(file: File, t: Translate = defaultTranslate): Promise<RuntimeMessageAttachment> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error('图片读取失败'));
+    reader.onerror = () => reject(reader.error ?? new Error(t('chat.composer.imageReadFailed')));
     reader.onload = () => {
       const url = typeof reader.result === 'string' ? reader.result : '';
       if (!url) {
-        reject(new Error('图片读取失败'));
+        reject(new Error(t('chat.composer.imageReadFailed')));
         return;
       }
       resolve({

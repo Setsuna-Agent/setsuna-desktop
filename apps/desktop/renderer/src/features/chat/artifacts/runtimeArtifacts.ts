@@ -5,6 +5,9 @@ import {
   type RuntimeArtifact,
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 type WorkspaceArtifactOpener = (workspaceRoot: string, filePath: string) => Promise<DesktopOpenPathResult>;
 type WorkspaceArtifactPreviewCreator = (
@@ -47,28 +50,32 @@ export function runtimeArtifactsFromToolRuns(runs: readonly RuntimeToolRun[]): R
   return [...artifactsByLocation.values()];
 }
 
-export function runtimeArtifactTypeLabel(artifact: RuntimeArtifact): string {
+export function runtimeArtifactTypeLabel(
+  artifact: RuntimeArtifact,
+  t: Translate = defaultTranslate,
+): string {
   const extension = fileExtension(artifact.name || artifact.path);
-  if (!extension) return '文件';
+  if (!extension) return t('chat.artifact.type.file');
   const format = extension === 'jpeg' ? 'JPG' : extension.toUpperCase();
-  if (documentExtensions.has(extension)) return `文档 · ${format}`;
-  if (spreadsheetExtensions.has(extension)) return `表格 · ${format}`;
-  if (presentationExtensions.has(extension)) return `演示文稿 · ${format}`;
-  if (imageExtensions.has(extension)) return `图片 · ${format}`;
-  if (archiveExtensions.has(extension)) return `压缩包 · ${format}`;
-  if (audioExtensions.has(extension)) return `音频 · ${format}`;
-  if (videoExtensions.has(extension)) return `视频 · ${format}`;
-  if (dataExtensions.has(extension)) return `数据 · ${format}`;
-  if (extension === 'html' || extension === 'htm') return `网页 · ${format}`;
-  return `文件 · ${format}`;
+  if (documentExtensions.has(extension)) return t('chat.artifact.type.document', { format });
+  if (spreadsheetExtensions.has(extension)) return t('chat.artifact.type.spreadsheet', { format });
+  if (presentationExtensions.has(extension)) return t('chat.artifact.type.presentation', { format });
+  if (imageExtensions.has(extension)) return t('chat.artifact.type.image', { format });
+  if (archiveExtensions.has(extension)) return t('chat.artifact.type.archive', { format });
+  if (audioExtensions.has(extension)) return t('chat.artifact.type.audio', { format });
+  if (videoExtensions.has(extension)) return t('chat.artifact.type.video', { format });
+  if (dataExtensions.has(extension)) return t('chat.artifact.type.data', { format });
+  if (extension === 'html' || extension === 'htm') return t('chat.artifact.type.webpage', { format });
+  return t('chat.artifact.type.generic', { format });
 }
 
 export async function openRuntimeArtifactWithDefaultApp(
   artifact: RuntimeArtifact,
   openWorkspaceFile: WorkspaceArtifactOpener,
+  t: Translate = defaultTranslate,
 ): Promise<string | null> {
   const result = await openWorkspaceFile(artifact.workspaceRoot, artifact.path);
-  return result.ok ? null : result.error ?? '无法打开文件。';
+  return result.ok ? null : result.error ?? t('chat.artifact.openFailed');
 }
 
 export function runtimeArtifactSupportsBrowserPreview(artifact: RuntimeArtifact): boolean {

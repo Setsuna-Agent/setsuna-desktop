@@ -19,6 +19,7 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from 'react';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
 import type {
@@ -181,31 +182,33 @@ function ToolRunDisplayPanel({
   group: ToolRunDisplayGroup;
   onAnswerApproval: AnswerApprovalHandler;
 }): JSX.Element {
+  const { t } = useI18n();
   // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
   // 展开状态只在本地保存；新的待授权请求会自动展开，普通流式更新不会覆盖用户选择。
   if (group.type === 'mixed') {
-    return mixedToolRunGroupPanelNode(group, onAnswerApproval);
+    return mixedToolRunGroupPanelNode(group, onAnswerApproval, t);
   }
   if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
     if (fileOperationEntries([group.run]).length > 1) {
       return toolRunGroupPanelNode(
         { type: 'group', id: `${group.run.id}:files`, kind: 'fileMutation', runs: [group.run] },
         onAnswerApproval,
+        t,
       );
     }
     return <FileMutationRunRow run={group.run} onAnswerApproval={onAnswerApproval} />;
   }
   if (group.type === 'single' && isFlatInspectionRun(group.run) && !hasHookRuns(group.run)) return <FlatToolRunRow run={group.run} />;
   if (group.type === 'single') {
-    return toolRunPanelNode(group.run, onAnswerApproval);
+    return toolRunPanelNode(group.run, onAnswerApproval, t);
   }
-  return toolRunGroupPanelNode(group, onAnswerApproval);
+  return toolRunGroupPanelNode(group, onAnswerApproval, t);
 }
 
-function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalHandler): JSX.Element {
+function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalHandler, t: Translate): JSX.Element {
   const pendingApproval = isPendingApprovalRun(run);
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
-  const summary = toolRunSummary(run);
+  const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
   if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
@@ -234,16 +237,17 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
 function toolRunGroupPanelNode(
   group: Extract<ToolRunGroup, { type: 'group' }>,
   onAnswerApproval: AnswerApprovalHandler,
+  t: Translate,
 ): JSX.Element {
   const status = toolRunGroupStatus(group.runs);
-  const summary = toolRunGroupSummary(group);
+  const summary = toolRunGroupSummary(group, t);
   const activeRuns = group.runs.filter(isActiveRuntimeToolRun);
   const visibleRuns = activeRuns.length ? activeRuns : group.runs;
   const focusedActiveRun = activeRuns.length === 1 ? activeRuns[0] : undefined;
   const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
   const shellGroup = group.kind === 'shell';
   const fileOperationGroup = group.kind === 'fileMutation';
-  const fileOperationSummary = fileOperationGroup ? fileOperationGroupSummary(group.runs) : null;
+  const fileOperationSummary = fileOperationGroup ? fileOperationGroupSummary(group.runs, t) : null;
   const summaryInspectionRun = group.kind === 'inspection' ? activeToolRunOrLast(group.runs) : undefined;
   const summaryInspectionKind = summaryInspectionRun ? inspectionEntryFromRun(summaryInspectionRun)?.kind : undefined;
   const fileOperationSummaryChangeCounts = fileOperationSummary?.target && isConcreteFileOperationTarget(fileOperationSummary.target)
@@ -309,7 +313,7 @@ function toolRunGroupPanelNode(
           visibleRuns.map((run) => {
             const pendingApproval = isPendingApprovalRun(run);
             const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
-            const runSummary = toolRunSummary(run);
+            const runSummary = toolRunSummary(run, t);
             return (
               <div className="chat-tool-run__group-item" key={run.id}>
                 {showRunTitles ? (
@@ -331,13 +335,14 @@ function toolRunGroupPanelNode(
 function mixedToolRunGroupPanelNode(
   group: Extract<ToolRunDisplayGroup, { type: 'mixed' }>,
   onAnswerApproval: AnswerApprovalHandler,
+  t: Translate,
 ): JSX.Element {
   const runs = group.groups.flatMap(toolRunGroupRuns);
   const status = toolRunGroupStatus(runs);
   const activeRuns = runs.filter(isActiveRuntimeToolRun);
   const focusedActiveRun = activeRuns.length === 1 ? activeRuns[0] : undefined;
   const visibleGroups = activeRuns.length ? group.groups.map(onlyActiveToolGroup).filter(isToolRunGroup) : group.groups;
-  const compactSummary = mixedToolRunGroupSummary(group.groups, group.summaryMode);
+  const compactSummary = mixedToolRunGroupSummary(group.groups, group.summaryMode, t);
   const compactSummaryChangeCounts = compactSummary.target && isConcreteFileOperationTarget(compactSummary.target)
     ? compactSummary.changeCounts
     : undefined;
@@ -424,7 +429,8 @@ function isToolRunGroup(group: ToolRunGroup | null): group is ToolRunGroup {
 }
 
 function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
-  const summary = toolRunSummary(run);
+  const { t } = useI18n();
+  const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
   return (
     <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}>
@@ -451,8 +457,9 @@ function FileMutationRunRow({
   run: RuntimeToolRun;
   onAnswerApproval: AnswerApprovalHandler;
 }) {
+  const { t } = useI18n();
   const pendingApprovalId = isPendingApprovalRun(run) ? run.approvalId : undefined;
-  const target = fileOperationTarget(run);
+  const target = fileOperationTarget(run, t);
   const error = run.status === 'error' ? formatPreview(run.resultPreview ?? '') : '';
   const totals = fileOperationChangeTotals(run);
   return (
@@ -461,7 +468,7 @@ function FileMutationRunRow({
         <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
         <span className="chat-tool-run__summary-text">
           <span className="chat-tool-run__file-status">
-            <span>{fileOperationVerb(run)}</span>
+            <span>{fileOperationVerb(run, t)}</span>
             {target ? (
               <>
                 <FileOperationTarget target={target} />
@@ -487,6 +494,7 @@ export function FileChangesSummaryCard({
   onDiscardChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenReview?: (filePath?: string) => void;
 }) {
+  const { t } = useI18n();
   const [discarding, setDiscarding] = useState(false);
   const [discarded, setDiscarded] = useState(false);
   const [discardError, setDiscardError] = useState<string | null>(null);
@@ -516,14 +524,16 @@ export function FileChangesSummaryCard({
     }
   };
   return (
-    <section className="chat-file-changes" aria-label="本轮文件改动">
+    <section className="chat-file-changes" aria-label={t('toolRun.changes.label')}>
       <div className="chat-file-changes__header">
         <span className="chat-file-changes__icon" aria-hidden="true">
           <FileText size={14} />
         </span>
         <span className="chat-file-changes__summary">
           <span className="chat-file-changes__title">
-            {singleFile ? `${completedFileOperationActionLabel(normalizeFileOperationAction(singleFile.action))} ${pathBaseName(singleFile.path)}` : `已编辑 ${fileCount} 个文件`}
+            {singleFile
+              ? `${completedFileOperationActionLabel(normalizeFileOperationAction(singleFile.action), t)} ${pathBaseName(singleFile.path, t)}`
+              : t('toolRun.changes.filesEdited', { count: fileCount })}
           </span>
           {singleFile ? <ChangeCounts additions={singleFile.additions} deletions={singleFile.deletions} showZero /> : null}
         </span>
@@ -537,12 +547,16 @@ export function FileChangesSummaryCard({
                 onClick={() => void discardChanges()}
               >
                 <Undo2 size={13} />
-                <span>{discarding ? '撤销中' : discarded ? '已撤销' : '撤销'}</span>
+                <span>{t(discarding
+                  ? 'toolRun.changes.undoing'
+                  : discarded
+                    ? 'toolRun.changes.undone'
+                    : 'toolRun.changes.undo')}</span>
               </button>
             ) : null}
             {onOpenReview ? (
               <button className="chat-file-changes__action chat-file-changes__action--review" type="button" onClick={() => onOpenReview()}>
-                <span>审核</span>
+                <span>{t('toolRun.changes.review')}</span>
               </button>
             ) : null}
           </span>
@@ -574,7 +588,9 @@ export function FileChangesSummaryCard({
             aria-expanded={showAllFiles}
             onClick={() => setShowAllFiles((current) => !current)}
           >
-            <span>{showAllFiles ? '收起文件列表' : `再显示 ${hiddenFileCount} 个文件`}</span>
+            <span>{showAllFiles
+              ? t('toolRun.changes.collapse')
+              : t('toolRun.changes.showMore', { count: hiddenFileCount })}</span>
             <ChevronDown className="chat-file-changes__more-chevron" size={13} />
           </button>
         ) : null}
@@ -584,11 +600,12 @@ export function FileChangesSummaryCard({
 }
 
 function ChangeCounts({ additions, deletions, showZero = false }: { additions?: number; deletions?: number; showZero?: boolean }) {
+  const { t } = useI18n();
   const add = Number.isFinite(additions) ? Math.max(0, Number(additions)) : null;
   const del = Number.isFinite(deletions) ? Math.max(0, Number(deletions)) : null;
   if (!showZero && (add || 0) === 0 && (del || 0) === 0) return null;
   return (
-    <span className="chat-change-counts" aria-label={`新增 ${add || 0} 行，删除 ${del || 0} 行`}>
+    <span className="chat-change-counts" aria-label={t('toolRun.changes.lineCounts', { additions: add || 0, deletions: del || 0 })}>
       <RollingChangeCount className="chat-change-counts__add" prefix="+" value={add || 0} />
       <RollingChangeCount className="chat-change-counts__del" prefix="-" value={del || 0} />
     </span>
@@ -649,13 +666,14 @@ function RollingChangeCount({ className, prefix, value }: { className: string; p
 }
 
 function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
+  const { t } = useI18n();
   const entries = inspectionEntries(runs);
   if (!entries.length) return null;
   return (
     <ul className="chat-tool-run__inspection-list">
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.kind}:${entry.target}`}>
-          <span>{inspectionEntryLabel(entry.kind)}</span>
+          <span>{inspectionEntryLabel(entry.kind, t)}</span>
           <InspectionTarget className="chat-tool-run__file-list-target" entry={entry} />
         </li>
       ))}
@@ -664,15 +682,16 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
 }
 
 function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
+  const { t } = useI18n();
   const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
   if (!entries.length) return null;
   return (
     <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.action}:${entry.path}`}>
-          <span>{fileOperationActionLabel(entry.action)}</span>
+          <span>{fileOperationActionLabel(entry.action, t)}</span>
           <WorkspaceFileLink className="chat-tool-run__file-list-target" filePath={entry.path} linkKind="workspace-tool">
-            {pathBaseName(entry.path)}
+            {pathBaseName(entry.path, t)}
           </WorkspaceFileLink>
           <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.hasChangeCounts} />
         </li>
@@ -690,6 +709,7 @@ function ToolRunDetails({
   onAnswerApproval: AnswerApprovalHandler;
   pendingApprovalId?: string;
 }) {
+  const { t } = useI18n();
   const execPolicySummary = execPolicyApprovalSummary(run);
   const permissionSummary = permissionApprovalSummary(run);
   const networkSummary = networkApprovalSummary(run);
@@ -705,9 +725,9 @@ function ToolRunDetails({
     return (
       <>
         <ShellTerminalResult run={run} />
-        {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
-        {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
-        {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
+        {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
+        {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
+        {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
         {hookRuns}
         {approvalActions}
       </>
@@ -717,9 +737,9 @@ function ToolRunDetails({
     return (
       <>
         <InspectionTargetList runs={[run]} />
-        {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
-        {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
-        {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
+        {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
+        {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
+        {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
         {hookRuns}
         {approvalActions}
       </>
@@ -729,9 +749,9 @@ function ToolRunDetails({
     return (
       <>
         {run.status === 'error' && run.resultPreview ? <div className="chat-tool-run__file-error">{formatPreview(run.resultPreview)}</div> : null}
-        {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
-        {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
-        {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
+        {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
+        {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
+        {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
         {hookRuns}
         {approvalActions}
       </>
@@ -740,10 +760,14 @@ function ToolRunDetails({
   const diagnostic = genericToolRunDiagnostic(run);
   return (
     <>
-      {execPolicySummary ? <ToolPreview label="命令策略" value={execPolicySummary} /> : null}
-      {networkSummary ? <ToolPreview label="网络访问" value={networkSummary} /> : null}
-      {permissionSummary ? <ToolPreview label="请求权限" value={permissionSummary} /> : null}
-      {diagnostic ? <ToolPreview label={run.status === 'cancelled' ? '已取消' : run.status === 'rejected' ? '已拒绝' : '错误'} value={diagnostic} /> : null}
+      {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
+      {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
+      {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}
+      {diagnostic ? <ToolPreview label={t(run.status === 'cancelled'
+        ? 'toolRun.preview.cancelled'
+        : run.status === 'rejected'
+          ? 'toolRun.preview.rejected'
+          : 'toolRun.preview.error')} value={diagnostic} /> : null}
       {hookRuns}
       {approvalActions}
     </>
@@ -751,12 +775,13 @@ function ToolRunDetails({
 }
 
 function GroupedHookRunList({ runs }: { runs: RuntimeToolRun[] }) {
+  const { t } = useI18n();
   const runsWithHooks = runs.filter(hasHookRuns);
   if (!runsWithHooks.length) return null;
   return (
     <div className="chat-tool-run__hook-groups">
       {runsWithHooks.map((run) => {
-        const summary = toolRunSummary(run);
+        const summary = toolRunSummary(run, t);
         const kind = toolRunGroupKind(run);
         return (
           <div className="chat-tool-run__hook-group" key={`${run.id}:hooks`}>
@@ -777,6 +802,7 @@ function GroupedHookRunList({ runs }: { runs: RuntimeToolRun[] }) {
 }
 
 function HookRunList({ runs }: { runs?: RuntimeHookRun[] }) {
+  const { t } = useI18n();
   if (!runs?.length) return null;
   return (
     <div className="chat-tool-run__hooks">
@@ -784,11 +810,11 @@ function HookRunList({ runs }: { runs?: RuntimeHookRun[] }) {
         <div className={`chat-tool-run__hook chat-tool-run__hook--${run.status}`} key={run.id}>
           <span className="chat-tool-run__hook-dot" />
           <span className="chat-tool-run__hook-main">
-            <span className="chat-tool-run__hook-title">{hookRunTitle(run)}</span>
+            <span className="chat-tool-run__hook-title">{hookRunTitle(run, t)}</span>
             {run.message ? <span className="chat-tool-run__hook-message">{run.message}</span> : null}
             <HookOutputEntryList entries={run.entries} />
           </span>
-          {hookRunStatusText(run.status) ? <span className="chat-tool-run__hook-status">{hookRunStatusText(run.status)}</span> : null}
+          {hookRunStatusText(run.status, t) ? <span className="chat-tool-run__hook-status">{hookRunStatusText(run.status, t)}</span> : null}
         </div>
       ))}
     </div>
@@ -796,52 +822,53 @@ function HookRunList({ runs }: { runs?: RuntimeHookRun[] }) {
 }
 
 function HookOutputEntryList({ entries }: { entries?: RuntimeHookRun['entries'] }) {
+  const { t } = useI18n();
   if (!entries?.length) return null;
   return (
     <span className="chat-tool-run__hook-entries">
       {entries.map((entry, index) => (
         <span className={`chat-tool-run__hook-entry chat-tool-run__hook-entry--${entry.kind}`} key={`${entry.kind}:${index}`}>
-          {hookOutputEntryLabel(entry.kind)} {entry.text}
+          {hookOutputEntryLabel(entry.kind, t)} {entry.text}
         </span>
       ))}
     </span>
   );
 }
 
-function hookOutputEntryLabel(kind: NonNullable<RuntimeHookRun['entries']>[number]['kind']): string {
-  if (kind === 'warning') return '警告';
-  if (kind === 'stop') return '停止';
-  if (kind === 'feedback') return '反馈';
-  if (kind === 'context') return '上下文';
-  return '错误';
+function hookOutputEntryLabel(kind: NonNullable<RuntimeHookRun['entries']>[number]['kind'], t: Translate): string {
+  if (kind === 'warning') return t('toolRun.hook.output.warning');
+  if (kind === 'stop') return t('toolRun.hook.output.stop');
+  if (kind === 'feedback') return t('toolRun.hook.output.feedback');
+  if (kind === 'context') return t('toolRun.hook.output.context');
+  return t('toolRun.hook.output.error');
 }
 
-function hookRunTitle(run: RuntimeHookRun): string {
-  const label = hookEventLabel(run.eventName);
+function hookRunTitle(run: RuntimeHookRun, t: Translate): string {
+  const label = hookEventLabel(run.eventName, t);
   if (run.statusMessage) return `${label}：${run.statusMessage}`;
   if (run.matcher) return `${label} · ${run.matcher}`;
   return label;
 }
 
-function hookEventLabel(eventName: RuntimeHookRun['eventName']): string {
-  if (eventName === 'PreToolUse') return '执行前 hook';
-  if (eventName === 'PermissionRequest') return '授权 hook';
-  if (eventName === 'PostToolUse') return '执行后 hook';
-  if (eventName === 'PreCompact') return '压缩前 hook';
-  if (eventName === 'PostCompact') return '压缩后 hook';
-  if (eventName === 'SessionStart') return '会话开始 hook';
-  if (eventName === 'SubagentStart') return '子任务开始 hook';
-  if (eventName === 'UserPromptSubmit') return '消息提交 hook';
-  if (eventName === 'SubagentStop') return '子任务结束 hook';
-  if (eventName === 'Stop') return '结束 hook';
+function hookEventLabel(eventName: RuntimeHookRun['eventName'], t: Translate): string {
+  if (eventName === 'PreToolUse') return t('toolRun.hook.event.preToolUse');
+  if (eventName === 'PermissionRequest') return t('toolRun.hook.event.permissionRequest');
+  if (eventName === 'PostToolUse') return t('toolRun.hook.event.postToolUse');
+  if (eventName === 'PreCompact') return t('toolRun.hook.event.preCompact');
+  if (eventName === 'PostCompact') return t('toolRun.hook.event.postCompact');
+  if (eventName === 'SessionStart') return t('toolRun.hook.event.sessionStart');
+  if (eventName === 'SubagentStart') return t('toolRun.hook.event.subagentStart');
+  if (eventName === 'UserPromptSubmit') return t('toolRun.hook.event.userPromptSubmit');
+  if (eventName === 'SubagentStop') return t('toolRun.hook.event.subagentStop');
+  if (eventName === 'Stop') return t('toolRun.hook.event.stop');
   return 'hook';
 }
 
-function hookRunStatusText(status: RuntimeHookRun['status']): string {
-  if (status === 'running') return '运行中';
-  if (status === 'blocked') return '已拦截';
-  if (status === 'stopped') return '已停止';
-  if (status === 'failed') return '失败';
+function hookRunStatusText(status: RuntimeHookRun['status'], t: Translate): string {
+  if (status === 'running') return t('toolRun.hook.status.running');
+  if (status === 'blocked') return t('toolRun.hook.status.blocked');
+  if (status === 'stopped') return t('toolRun.hook.status.stopped');
+  if (status === 'failed') return t('toolRun.hook.status.failed');
   return '';
 }
 
@@ -926,6 +953,7 @@ function ApprovalActions({
   availableDecisions?: RuntimeApprovalAvailableDecision[];
   onAnswerApproval: AnswerApprovalHandler;
 }) {
+  const { t } = useI18n();
   const [submittingDecisionKey, setSubmittingDecisionKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const submit = async (decision: RuntimeApprovalAvailableDecision) => {
@@ -951,7 +979,9 @@ function ApprovalActions({
             disabled={Boolean(submittingDecisionKey)}
             onClick={() => void submit(decision)}
           >
-            {submittingDecisionKey === approvalDecisionKey(decision) ? `${approvalDecisionLabel(decision)}中` : approvalDecisionLabel(decision)}
+            {submittingDecisionKey === approvalDecisionKey(decision)
+              ? t('toolRun.approval.submitting', { decision: approvalDecisionLabel(decision, t) })
+              : approvalDecisionLabel(decision, t)}
           </button>
         ))}
       </div>
@@ -969,6 +999,7 @@ function McpElicitationActions({
   run: RuntimeToolRun;
   onAnswerApproval: AnswerApprovalHandler;
 }) {
+  const { t } = useI18n();
   const elicitation = run.elicitation;
   const [values, setValues] = useState<Record<string, RuntimeStructuredInputValue>>(() =>
     elicitation?.mode === 'form' ? structuredInputDefaults(elicitation.requestedSchema.properties) : {},
@@ -1007,7 +1038,7 @@ function McpElicitationActions({
       }}
     >
       <div className="chat-tool-run__elicitation-header">
-        <strong>{elicitation.mode === 'form' ? 'MCP Server 请求输入' : 'MCP Server 请求打开外部页面'}</strong>
+        <strong>{t(elicitation.mode === 'form' ? 'toolRun.elicitation.formTitle' : 'toolRun.elicitation.urlTitle')}</strong>
         <span>{elicitation.serverKey}</span>
       </div>
       <p className="chat-tool-run__elicitation-message">{elicitation.message}</p>
@@ -1029,13 +1060,17 @@ function McpElicitationActions({
       )}
       <div className="chat-tool-run__actions">
         <button type="submit" disabled={Boolean(submittingAction)}>
-          {submittingAction === 'accept' ? '提交中' : elicitation.mode === 'form' ? '提交' : '允许并打开'}
+          {t(submittingAction === 'accept'
+            ? 'toolRun.elicitation.submitting'
+            : elicitation.mode === 'form'
+              ? 'toolRun.elicitation.submit'
+              : 'toolRun.elicitation.opening')}
         </button>
         <button type="button" disabled={Boolean(submittingAction)} onClick={() => void submit('decline')}>
-          {submittingAction === 'decline' ? '拒绝中' : '拒绝'}
+          {t(submittingAction === 'decline' ? 'toolRun.elicitation.declining' : 'toolRun.elicitation.decline')}
         </button>
         <button type="button" disabled={Boolean(submittingAction)} onClick={() => void submit('cancel')}>
-          {submittingAction === 'cancel' ? '取消中' : '取消本轮'}
+          {t(submittingAction === 'cancel' ? 'toolRun.elicitation.cancelling' : 'toolRun.elicitation.cancelTurn')}
         </button>
       </div>
       {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
@@ -1057,15 +1092,17 @@ function approvalDecisionKey(decision: RuntimeApprovalAvailableDecision): string
   return decision.type;
 }
 
-function approvalDecisionLabel(decision: RuntimeApprovalAvailableDecision): string {
-  if (decision.type === 'approve') return '允许';
-  if (decision.type === 'approve_for_turn_with_strict_auto_review') return '本轮允许并严格复核';
-  if (decision.type === 'approve_for_session') return '本会话允许';
-  if (decision.type === 'approve_persistently') return '永久允许';
-  if (decision.type === 'approve_exec_policy_amendment') return '允许命令前缀';
-  if (decision.type === 'approve_network_policy_amendment') return decision.networkPolicyAmendment.action === 'deny' ? '拒绝并记住网络策略' : '允许网络策略';
-  if (decision.type === 'cancel') return '取消本轮';
-  return '拒绝';
+function approvalDecisionLabel(decision: RuntimeApprovalAvailableDecision, t: Translate): string {
+  if (decision.type === 'approve') return t('toolRun.approval.approve');
+  if (decision.type === 'approve_for_turn_with_strict_auto_review') return t('toolRun.approval.strictReview');
+  if (decision.type === 'approve_for_session') return t('toolRun.approval.session');
+  if (decision.type === 'approve_persistently') return t('toolRun.approval.persistent');
+  if (decision.type === 'approve_exec_policy_amendment') return t('toolRun.approval.execPolicy');
+  if (decision.type === 'approve_network_policy_amendment') return t(decision.networkPolicyAmendment.action === 'deny'
+    ? 'toolRun.approval.networkDeny'
+    : 'toolRun.approval.networkAllow');
+  if (decision.type === 'cancel') return t('toolRun.approval.cancelTurn');
+  return t('toolRun.approval.reject');
 }
 
 function approvalInputFromDecision(decision: RuntimeApprovalAvailableDecision): AnswerRuntimeApprovalInput {

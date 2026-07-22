@@ -2,6 +2,7 @@ import type { RuntimeArtifact } from '@setsuna-desktop/contracts';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import { ChevronDown, ExternalLink, Globe2 } from 'lucide-react';
 import { useState } from 'react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { useMarkdownNavigation } from '../markdown/MarkdownNavigationProvider.js';
 import {
@@ -12,6 +13,7 @@ import {
 } from './runtimeArtifacts.js';
 
 export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact }) {
+  const { t } = useI18n();
   const { onOpenInAppBrowser } = useMarkdownNavigation();
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,12 +22,12 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
     ...(canOpenInBrowser ? [{
       key: 'built-in-browser',
       icon: <Globe2 size={14} />,
-      label: '在内置浏览器打开',
+      label: t('chat.artifact.openInBrowser'),
     }] : []),
     {
       key: 'system-default',
       icon: <ExternalLink size={14} />,
-      label: '使用系统默认应用打开',
+      label: t('chat.artifact.openDefault'),
     },
   ];
 
@@ -33,16 +35,16 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
     if (opening) return;
     const openWorkspaceFile = window.setsunaDesktop?.desktop?.openWorkspaceFile;
     if (!openWorkspaceFile) {
-      setError('当前环境不支持打开本地文件。');
+      setError(t('chat.artifact.localUnsupported'));
       return;
     }
     setOpening(true);
     setError(null);
     try {
-      const openError = await openRuntimeArtifactWithDefaultApp(artifact, openWorkspaceFile);
+      const openError = await openRuntimeArtifactWithDefaultApp(artifact, openWorkspaceFile, t);
       setError(openError);
     } catch (openError) {
-      setError(openError instanceof Error ? openError.message : '无法打开文件。');
+      setError(openError instanceof Error ? openError.message : t('chat.artifact.openFailed'));
     } finally {
       setOpening(false);
     }
@@ -52,7 +54,7 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
     if (opening || !onOpenInAppBrowser) return;
     const createPreview = window.setsunaDesktop?.desktop?.createWorkspaceFilePreview;
     if (!createPreview) {
-      setError('当前环境不支持内置浏览器预览。');
+      setError(t('chat.artifact.browserUnsupported'));
       return;
     }
     setOpening(true);
@@ -61,7 +63,7 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
       const openError = await openRuntimeArtifactInBrowser(artifact, createPreview, onOpenInAppBrowser);
       setError(openError);
     } catch (openError) {
-      setError(openError instanceof Error ? openError.message : '无法在内置浏览器中打开文件。');
+      setError(openError instanceof Error ? openError.message : t('chat.artifact.browserOpenFailed'));
     } finally {
       setOpening(false);
     }
@@ -75,7 +77,7 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
         </span>
         <span className="chat-artifact-card__metadata">
           <span className="chat-artifact-card__name" title={artifact.path}>{artifact.name}</span>
-          <span className="chat-artifact-card__type">{runtimeArtifactTypeLabel(artifact)}</span>
+          <span className="chat-artifact-card__type">{runtimeArtifactTypeLabel(artifact, t)}</span>
         </span>
         <Dropdown
           rootClassName="chat-artifact-open-menu"
@@ -93,14 +95,18 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
           <Button
             className="chat-artifact-card__open"
             loading={opening}
-            aria-label={`${artifact.name} 打开方式`}
+            aria-label={t('chat.artifact.openMode', { name: artifact.name })}
           >
-            <span>打开方式</span>
+            <span>{t('chat.artifact.openWith')}</span>
             <ChevronDown size={13} />
           </Button>
         </Dropdown>
       </div>
-      {error ? <div className="chat-artifact-card__error" role="alert">打开失败：{error}</div> : null}
+      {error ? (
+        <div className="chat-artifact-card__error" role="alert">
+          {t('chat.artifact.error', { error })}
+        </div>
+      ) : null}
     </article>
   );
 }

@@ -12,6 +12,7 @@ import {
   type WheelEvent as ReactWheelEvent,
   type UIEvent,
 } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import type { DesktopDiffFile, DesktopDiffSummary, DesktopReviewFocusRequest, DesktopWorkspaceApp } from './model.js';
@@ -145,6 +146,7 @@ function ReviewFileCard({
   onOpenProjectFile: (filePath: string) => void;
   onRevealFile: (filePath: string) => void;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
   const [focusHighlightVersion, setFocusHighlightVersion] = useState<number | null>(null);
   const [lineContextMenu, setLineContextMenu] = useState<WorkspaceFileContextTarget | null>(null);
@@ -239,7 +241,10 @@ function ReviewFileCard({
             className="desktop-review-file-card__path-main"
             type="button"
             aria-expanded={expanded}
-            aria-label={`${expanded ? '折叠' : '展开'} ${file.path}，${file.action}`}
+            aria-label={t(expanded ? 'workspace.review.file.collapse' : 'workspace.review.file.expand', {
+              path: file.path,
+              action: file.action,
+            })}
             onClick={() => setExpanded((value) => !value)}
           >
             <WorkspaceFileIcon path={file.path} type="file" />
@@ -249,7 +254,7 @@ function ReviewFileCard({
           <div className="desktop-review-file-card__meta">
             <IconButton
               disabled={!canOpenFile}
-              label={canOpenFile ? 'Open file in panel' : '文件不在当前项目目录内'}
+              label={canOpenFile ? t('workspace.review.file.openPanel') : t('workspace.review.file.outsideProject')}
               variant="ghost"
               onClick={() => {
                 if (workspaceFilePath) onOpenProjectFile(workspaceFilePath);
@@ -259,7 +264,11 @@ function ReviewFileCard({
             </IconButton>
             <IconButton
               disabled={!workspaceApp || !canOpenFile}
-              label={!canOpenFile ? '文件不在当前项目目录内' : workspaceApp ? `Open in ${workspaceApp.label}` : '未检测到打开方式'}
+              label={!canOpenFile
+                ? t('workspace.review.file.outsideProject')
+                : workspaceApp
+                  ? t('workspace.review.file.openInApp', { app: workspaceApp.label })
+                  : t('workspace.review.file.noApp')}
               variant="ghost"
               onClick={() => {
                 if (workspaceFilePath) onExternalOpenFile(workspaceFilePath);
@@ -287,7 +296,7 @@ function ReviewFileCard({
             wholeFileChange={splitWholeFileChange}
             onLineContextMenu={openDiffLineContextMenu}
           >
-            {file.truncated ? <div className="desktop-review-truncated">diff 过大，已截断展示。</div> : null}
+            {file.truncated ? <div className="desktop-review-truncated">{t('workspace.review.file.truncated')}</div> : null}
           </ReviewDiffContent>
         ) : null}
       </article>

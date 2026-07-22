@@ -2,6 +2,7 @@ import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } fro
 import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
 import type { RuntimeEvent } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
+import type { RuntimeInterfaceLanguage } from './config.js';
 import type {
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSourceInput,
@@ -168,6 +169,7 @@ export type SetsunaDesktopBridge = {
   };
   desktop: {
     platform: string;
+    setInterfaceLanguage(locale: RuntimeInterfaceLanguage): Promise<boolean>;
     selectDirectory(options?: { title?: string }): Promise<string | null>;
     getUserProfile(): Promise<DesktopUserProfile>;
     copyImageToClipboard(input: DesktopImageInput): Promise<DesktopImageActionResult>;

@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
 export function CapabilitiesPluginItemButton({
   badges,
@@ -14,11 +15,12 @@ export function CapabilitiesPluginItemButton({
   onClick: () => void;
   title: string;
 }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       className="desktop-capabilities-plugin-detail__item"
-      aria-label={`查看 ${title} 详情`}
+      aria-label={t('capabilities.detail.viewItem', { title })}
       onClick={onClick}
     >
       <span className="desktop-capabilities-plugin-detail__item-icon">{icon}</span>

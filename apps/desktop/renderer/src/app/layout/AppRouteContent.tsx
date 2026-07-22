@@ -17,6 +17,7 @@ import { latestBrowserOpenRequest } from '../../features/workspace/browser/runti
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type { RuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { DesktopUpdaterStateView } from '../controller/useDesktopUpdater.js';
 import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../types.js';
 import { AppChatSurface } from './AppChatSurface.js';
@@ -84,6 +85,7 @@ export function AppRouteContent({
   workspaceMinWidth: number;
   workspaceWidth: number;
 }) {
+  const { t } = useI18n();
   const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
   const [reviewFocusRequest, setReviewFocusRequest] = useState<{ path: string; version: number } | null>(null);
   const handledBrowserOpenRequestIdRef = useRef<string | null>(null);
@@ -132,9 +134,9 @@ export function AppRouteContent({
   };
   const discardFileChanges = async (filePaths: string[]) => {
     const workspaceRoot = activeWorkspace?.path;
-    if (!workspaceRoot) throw new Error('当前工作区不可用。');
+    if (!workspaceRoot) throw new Error(t('workspace.error.unavailable'));
     const reviewApi = window.setsunaDesktop?.desktopReview;
-    if (!reviewApi) throw new Error('当前环境不支持撤销文件改动。');
+    if (!reviewApi) throw new Error(t('workspace.error.discardUnsupported'));
     await reviewApi.discardUnstaged(workspaceRoot, filePaths);
     await workspacePanels.loadReviewState();
   };

@@ -7,17 +7,19 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
 
 export type DesktopPanelPlacement = 'side' | 'bottom';
 
-const panelLauncherItems: Array<{ key: DesktopPanelType; label: string; icon: JSX.Element }> = [
-  { key: 'chat', label: '侧边对话', icon: <MessageSquare size={14} /> },
-  { key: 'browser', label: '浏览器', icon: <Globe2 size={14} /> },
-  { key: 'review', label: '审查', icon: <FileText size={14} /> },
-  { key: 'files', label: '文件', icon: <FolderOpen size={14} /> },
-  { key: 'terminal', label: '终端', icon: <Terminal size={14} /> },
+const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; icon: JSX.Element }> = [
+  { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
+  { key: 'browser', labelKey: 'workspace.panel.launcher.browser', icon: <Globe2 size={14} /> },
+  { key: 'review', labelKey: 'workspace.panel.launcher.review', icon: <FileText size={14} /> },
+  { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
+  { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <Terminal size={14} /> },
 ];
 
 type PanelPointerDrag = {
@@ -72,6 +74,7 @@ export function DesktopPanelHeader({
   panels?: DesktopPanelTab[];
   placement: DesktopPanelPlacement;
 }) {
+  const { t } = useI18n();
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [launcherPosition, setLauncherPosition] = useState({ left: 0, top: 0 });
   const [dragOverlay, setDragOverlay] = useState<PanelDragOverlay | null>(null);
@@ -243,7 +246,7 @@ export function DesktopPanelHeader({
   const renderTabLabel = (panel: DesktopPanelTab) => (
     <>
       <DesktopPanelIcon panel={panel} />
-      <span className="chat-file-review-panel__tab-label">{desktopPanelTitle(panel)}</span>
+      <span className="chat-file-review-panel__tab-label">{desktopPanelTitle(panel, t)}</span>
     </>
   );
 
@@ -272,7 +275,7 @@ export function DesktopPanelHeader({
               <button
                 className="chat-file-review-panel__tab-button"
                 type="button"
-                title={desktopPanelTitle(panel)}
+                title={desktopPanelTitle(panel, t)}
                 onClick={(event) => handleTabClick(event, panel.id)}
               >
                 {renderTabLabel(panel)}
@@ -281,7 +284,7 @@ export function DesktopPanelHeader({
                 <button
                   className="chat-file-review-panel__tab-close"
                   type="button"
-                  aria-label={`关闭${desktopPanelTitle(panel)}`}
+                  aria-label={t('workspace.panel.closeNamed', { title: desktopPanelTitle(panel, t) })}
                   onClick={(event) => {
                     event.stopPropagation();
                     onClosePanel(panel.id);
@@ -298,7 +301,7 @@ export function DesktopPanelHeader({
                 ref={launcherButtonRef}
                 aria-expanded={launcherOpen}
                 aria-haspopup="menu"
-                aria-label="添加面板"
+                aria-label={t('workspace.panel.add')}
                 className="chat-file-review-panel__heading-action"
                 type="button"
                 onClick={() => {
@@ -327,7 +330,7 @@ export function DesktopPanelHeader({
                           }}
                         >
                           {item.icon}
-                          {item.label}
+                          {t(item.labelKey)}
                         </button>
                       ))}
                     </span>,
@@ -349,7 +352,7 @@ export function DesktopPanelHeader({
                 .filter(Boolean)
                 .join(' ')}
               type="button"
-              aria-label={bottomBarActive ? '关闭底栏' : '打开底栏终端'}
+              aria-label={t(bottomBarActive ? 'workspace.panel.closeBottom' : 'workspace.panel.openBottomTerminal')}
               onClick={onToggleBottomTerminal}
             >
               <Terminal size={14} />
@@ -364,8 +367,8 @@ export function DesktopPanelHeader({
               .filter(Boolean)
               .join(' ')}
             type="button"
-            aria-label={placement === 'side' ? '收起右侧栏' : '关闭面板'}
-            title={placement === 'side' ? '收起右侧栏' : '关闭面板'}
+            aria-label={t(placement === 'side' ? 'workspace.panel.collapseSide' : 'workspace.panel.close')}
+            title={t(placement === 'side' ? 'workspace.panel.collapseSide' : 'workspace.panel.close')}
             onClick={onClose}
           >
             {placement === 'side' ? <PanelRight size={14} /> : <X size={14} />}

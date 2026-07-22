@@ -45,6 +45,7 @@ import {
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { createDesktopRuntimeClient } from './client.js';
 import { applyRuntimeEvent, isActivityEvent } from './runtimeEvents.js';
 
@@ -67,6 +68,7 @@ type RuntimeClientStateOptions = {
  * @param setActiveProjectId 更新当前项目 ID 的 React setter。
  */
 export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: RuntimeClientStateOptions) {
+  const { t } = useI18n();
   const client = useMemo(() => createDesktopRuntimeClient(), []);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -555,8 +557,8 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
     await reloadThreads();
 
     const failureCount = results.filter((result) => result.status === 'rejected').length;
-    if (failureCount) throw new Error(`${failureCount} 个归档对话删除失败，请重试。`);
-  }, [client, reloadThreads]);
+    if (failureCount) throw new Error(t('settings.archives.deleteSomeError', { count: failureCount }));
+  }, [client, reloadThreads, t]);
 
   const startCurrentThreadReview = useCallback(async (
     target: RuntimeReviewTarget,
@@ -577,11 +579,12 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
         }
         await reloadThreads();
       },
+      t,
       target,
     });
     if (isCurrentRequest()) setActiveTurnId(started.turnId);
     return started;
-  }, [activeProjectId, client, currentThread, reloadThreads]);
+  }, [activeProjectId, client, currentThread, reloadThreads, t]);
 
   const selectProviderModel = useCallback(
     async (providerId: string, modelId: string) => {

@@ -2,6 +2,7 @@ import { Bubble } from '@ant-design/x';
 import type { RuntimeMessage, RuntimePlanDecision } from '@setsuna-desktop/contracts';
 import { BookOpen, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useI18n, type AppLocale, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
 import { ActionTooltip } from '../../../shared/ui/primitives.js';
 import { RuntimeArtifactList } from '../artifacts/RuntimeArtifactList.js';
@@ -91,6 +92,7 @@ export function MessageItem({
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
 }) {
+  const { t } = useI18n();
   if (item.type === 'assistant') {
     return (
       <AssistantRunItem
@@ -129,7 +131,7 @@ export function MessageItem({
   const hasAttachments = Boolean(message.attachments?.length);
   return (
     <article className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
-      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label="选择这条消息" onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
+      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectMessage')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <div className="chat-user-turn">
         <Bubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
@@ -189,6 +191,7 @@ function AssistantRunItem({
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
 }) {
+  const { t } = useI18n();
   const status = assistantRunStatus(item);
   const belongsToActiveTurn = assistantRunIsActive(item, activeTurnId);
   const active = belongsToActiveTurn && item.id === activeAssistantItemId;
@@ -196,11 +199,11 @@ function AssistantRunItem({
   const lastSegment = item.segments[item.segments.length - 1];
   const footerMessage = {
     ...(lastSegment ?? item.segments[0]),
-    content: assistantRunCopyText(item),
+    content: assistantRunCopyText(item, t),
   } as RuntimeMessage;
   return (
     <article className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
-      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label="选择这条回复" onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
+      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
         content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onPlanDecision={onPlanDecision} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} />}
@@ -214,6 +217,7 @@ function AssistantRunItem({
 }
 
 function UserMessageEditor({ disabled, message, onCancel, onChange, onSubmit, submitting, value }: { disabled: boolean; message: RuntimeMessage; onCancel: () => void; onChange: (value: string) => void; onSubmit: () => void; submitting: boolean; value: string }) {
+  const { locale, t } = useI18n();
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -225,13 +229,13 @@ function UserMessageEditor({ disabled, message, onCancel, onChange, onSubmit, su
       <form className="chat-user-edit" onSubmit={submit}>
         <textarea autoFocus disabled={disabled} value={value} rows={Math.min(8, Math.max(2, value.split('\n').length))} onChange={(event) => onChange(event.currentTarget.value)} />
         <div className="chat-user-edit__footer">
-          <time>{formatTime(message.createdAt)}</time>
+          <time>{formatTime(message.createdAt, locale)}</time>
           <span className="chat-user-edit__actions">
             <button type="button" disabled={disabled} onClick={onCancel}>
-              取消
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={disabled || !value.trim()}>
-              {submitting ? '发送中' : '发送'}
+              {submitting ? t('chat.message.sending') : t('chat.composer.send')}
             </button>
           </span>
         </div>
@@ -249,9 +253,12 @@ function MessageSelectionControl({ checked, label, onChange }: { checked: boolea
 }
 
 function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
+  const { t } = useI18n();
   const notice = message.reviewMode;
   if (!notice) return null;
-  const label = notice.kind === 'entered' ? `开始代码审查：${notice.review}` : '代码审查完成';
+  const label = notice.kind === 'entered'
+    ? t('chat.review.started', { review: notice.review })
+    : t('chat.review.completed');
   return (
     <div className="chat-review-mode-marker" aria-label={label}>
       <span className="chat-review-mode-marker__line" />
@@ -261,8 +268,15 @@ function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
 }
 
 export function TranscriptWindowDivider({ hiddenMessageCount, onShowAll }: { hiddenMessageCount: number; onShowAll: () => void }) {
+  const { t } = useI18n();
   const count = Math.max(0, hiddenMessageCount);
-  return <ChatTimelineDivider accessibilityLabel="较早记录已折叠" label={count > 0 ? `已折叠较早的 ${count} 条消息` : '已折叠较早的消息'} onClick={onShowAll} />;
+  return (
+    <ChatTimelineDivider
+      accessibilityLabel={t('chat.history.collapsedLabel')}
+      label={count > 0 ? t('chat.history.collapsedCount', { count }) : t('chat.history.collapsed')}
+      onClick={onShowAll}
+    />
+  );
 }
 
 export function DeleteSelectionBar({
@@ -286,6 +300,7 @@ export function DeleteSelectionBar({
   selectedCount: number;
   totalCount: number;
 }) {
+  const { t } = useI18n();
   const checkboxRef = useRef<HTMLInputElement | null>(null);
   useLayoutEffect(() => {
     if (checkboxRef.current) checkboxRef.current.indeterminate = indeterminate;
@@ -296,14 +311,14 @@ export function DeleteSelectionBar({
       <div className="chat-delete-bar__inner">
         <label className="chat-delete-bar__select-all">
           <input ref={checkboxRef} type="checkbox" checked={allChecked} disabled={loading || totalCount === 0} onChange={(event) => onToggleAll(event.currentTarget.checked)} />
-          <span>全选</span>
+          <span>{t('chat.delete.selectAll')}</span>
         </label>
-        <span className="chat-delete-bar__count">已选 {selectedCount}</span>
+        <span className="chat-delete-bar__count">{t('chat.delete.selected', { count: selectedCount })}</span>
         <button type="button" className="chat-delete-bar__cancel" disabled={loading} onClick={onCancel}>
-          取消
+          {t('common.cancel')}
         </button>
         <button type="button" className="chat-delete-bar__confirm" disabled={disabled} onClick={onConfirm}>
-          {loading ? '删除中' : '删除'}
+          {loading ? t('chat.delete.deleting') : t('common.delete')}
         </button>
       </div>
     </div>
@@ -329,6 +344,7 @@ function AssistantRunContent({
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
 }) {
+  const { t } = useI18n();
   const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
   const planSegment = useMemo(() => [...displaySegments].reverse().find((segment) => segment.planMode), [displaySegments]);
   const status = assistantRunStatus(item);
@@ -378,7 +394,7 @@ function AssistantRunContent({
         <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder>
       </div>
     ) : (
-      <AssistantLoadingIndicator label="思考中" />
+      <AssistantLoadingIndicator label={t('chat.assistant.thinking')} />
     );
   }
   if (planSegment) {
@@ -404,13 +420,14 @@ function AssistantRunContent({
         onWorkHistoryExpandedChange,
         plan: timelinePlan,
         workHistoryDefaultExpanded: workHistoryState.expanded,
+        t,
       })}
       {toolAttachments.length ? (
         <div className="chat-assistant-run__segment chat-assistant-run__attachments">
           <ChatMessageAttachments attachments={toolAttachments} variant="assistant" />
         </div>
       ) : null}
-      {showTrailingLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
+      {showTrailingLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
       {fileChangeSummary ? (
         <div className="chat-assistant-run__segment">
           <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
@@ -427,11 +444,13 @@ function AssistantRunContent({
 }
 
 function MemoryCitationCard({ entries }: { entries: NonNullable<RuntimeMessage['memoryCitation']>['entries'] }) {
+  const { t } = useI18n();
+
   return (
     <details className="chat-memory-citations">
       <summary>
         <BookOpen size={13} />
-        <span>本回答使用了 {entries.length} 条记忆</span>
+        <span>{t('chat.memory.used', { count: entries.length })}</span>
       </summary>
       <div className="chat-memory-citations__list">
         {entries.map((entry) => (
@@ -449,28 +468,37 @@ function MemoryCitationCard({ entries }: { entries: NonNullable<RuntimeMessage['
 }
 
 function PlanCard({ message, active, onPlanDecision }: { message: RuntimeMessage; active: boolean; onPlanDecision: (decision: RuntimePlanDecision) => void }) {
+  const { t } = useI18n();
   const planMode = message.planMode;
   if (!planMode) return null;
   const status = planMode.status;
   const streaming = message.status === 'streaming';
   const awaiting = status === 'awaiting_confirmation';
   const canDecide = awaiting && !active;
-  const statusLabel = awaiting ? '待确认' : status === 'accepted' ? '已接受' : '已放弃';
-  const body = message.content.trim() ? <MarkdownRenderer content={message.content} streaming={streaming} /> : streaming ? <AssistantLoadingIndicator label="正在拟定计划" /> : null;
+  const statusLabel = awaiting
+    ? t('chat.plan.awaiting')
+    : status === 'accepted'
+      ? t('chat.plan.accepted')
+      : t('chat.plan.dismissed');
+  const body = message.content.trim()
+    ? <MarkdownRenderer content={message.content} streaming={streaming} />
+    : streaming
+      ? <AssistantLoadingIndicator label={t('chat.plan.drafting')} />
+      : null;
   return (
     <section className={`chat-plan-card chat-plan-card--${status}${streaming ? ' is-streaming' : ''}`}>
       <header className="chat-plan-card__header">
-        <span className="chat-plan-card__title">计划</span>
+        <span className="chat-plan-card__title">{t('chat.plan.title')}</span>
         <span className={`chat-plan-card__status chat-plan-card__status--${status}`}>{statusLabel}</span>
       </header>
       <div className="chat-plan-card__body">{body}</div>
       {canDecide ? (
         <footer className="chat-plan-card__actions">
           <button type="button" className="chat-plan-card__action chat-plan-card__action--accept" onClick={() => onPlanDecision('accepted')}>
-            接受并执行
+            {t('chat.plan.accept')}
           </button>
           <button type="button" className="chat-plan-card__action chat-plan-card__action--dismiss" onClick={() => onPlanDecision('dismissed')}>
-            放弃
+            {t('chat.plan.dismiss')}
           </button>
         </footer>
       ) : null}
@@ -503,9 +531,11 @@ function GuidanceMessage({ message }: { message: RuntimeMessage }) {
 }
 
 function GuidanceProcessedMarker() {
+  const { t } = useI18n();
+
   return (
-    <div className="chat-guidance-marker" aria-label="已引导对话">
-      已引导对话
+    <div className="chat-guidance-marker" aria-label={t('chat.guidance.processed')}>
+      {t('chat.guidance.processed')}
     </div>
   );
 }
@@ -517,6 +547,7 @@ function renderAssistantTimelinePlan({
   onAnswerApproval,
   onWorkHistoryExpandedChange,
   plan,
+  t,
   workHistoryDefaultExpanded,
 }: {
   active: boolean;
@@ -525,6 +556,7 @@ function renderAssistantTimelinePlan({
   onAnswerApproval: AnswerApprovalHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   plan: AssistantGuidanceTimelinePlan;
+  t: Translate;
   workHistoryDefaultExpanded: boolean;
 }): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -545,7 +577,7 @@ function renderAssistantTimelinePlan({
       return;
     }
 
-    nodes.push(assistantTimelineNode(node.block, active));
+    nodes.push(assistantTimelineNode(node.block, active, t));
     if (active && node.guidanceAfter.length) {
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={`${node.block.id}:guidance`} markerMode="handled" messages={node.guidanceAfter} />);
     }
@@ -587,7 +619,7 @@ function assistantWorkHistoryNode({
   );
 }
 
-function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>, runActive: boolean): ReactNode {
+function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>, runActive: boolean, t: Translate): ReactNode {
   if (block.type === 'content') {
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
@@ -599,7 +631,7 @@ function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type:
     if (runActive) return null;
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
-        <AssistantLoadingIndicator label="正在处理" />
+        <AssistantLoadingIndicator label={t('chat.assistant.processing')} />
       </div>
     );
   }
@@ -677,12 +709,14 @@ export function ActiveWorkPlaceholder({
   segments: RuntimeMessage[];
   showLoading?: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
     <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || pluginUses.length > 0 || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
       <RuntimePluginUses active plugins={pluginUses} />
       {children}
       {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
-      {showLoading ? <AssistantLoadingIndicator label="正在处理" showLabel={false} /> : null}
+      {showLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
     </WorkHistoryPanel>
   );
 }
@@ -747,10 +781,11 @@ function parseDateMs(value?: string | null): number | null {
 }
 
 function ActiveThinkingBox({ content, scrollStateKey }: { content: string; scrollStateKey: string }): JSX.Element {
+  const { t } = useI18n();
   const { handlePointerDown, handleScroll, handleTouchMove, handleWheel, scrollRef } = useStreamingScrollPin(content, scrollStateKey);
 
   return (
-    <div className="chat-thinking-box" aria-live="polite" aria-label="正在思考">
+    <div className="chat-thinking-box" aria-live="polite" aria-label={t('chat.thinking.active')}>
       <div className="chat-thinking-box__content" ref={scrollRef} onPointerDownCapture={handlePointerDown} onScroll={handleScroll} onTouchMoveCapture={handleTouchMove} onWheelCapture={handleWheel}>
         <MarkdownRenderer content={content} streaming />
       </div>
@@ -777,6 +812,7 @@ function WorkHistoryPanel({
   panelId?: string;
   startedAtMs?: number | null;
 }) {
+  const { t } = useI18n();
   const wasActiveRef = useRef(active);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
@@ -815,9 +851,14 @@ function WorkHistoryPanel({
     onExpandedChange?.(panelId, expanded);
   }, [expanded, onExpandedChange, panelId]);
 
-  const title = active ? '工作中' : '已处理';
+  const title = active ? t('chat.work.active') : t('chat.work.completed');
   const durationEndMs = active ? nowMs : (capturedCompletedAtMs ?? completedAtMs ?? null);
-  const durationLabel = formatDurationMs(startedAtMs !== null && startedAtMs !== undefined && durationEndMs !== null ? Math.max(0, durationEndMs - startedAtMs) : null);
+  const durationLabel = formatDurationMs(
+    startedAtMs !== null && startedAtMs !== undefined && durationEndMs !== null
+      ? Math.max(0, durationEndMs - startedAtMs)
+      : null,
+    t,
+  );
   const summaryContent = (
     <>
       <span className="chat-work-history__title">{title}</span>
@@ -832,7 +873,7 @@ function WorkHistoryPanel({
   return (
     <div className={`chat-work-history ${expanded ? 'is-expanded' : ''} ${canToggle ? 'is-toggleable' : ''}`}>
       {canToggle ? (
-        <button className="chat-work-history__summary" type="button" aria-expanded={expanded} title={expanded ? '收起工作详情' : '展开工作详情'} onClick={toggleExpanded}>
+        <button className="chat-work-history__summary" type="button" aria-expanded={expanded} title={expanded ? t('chat.work.collapse') : t('chat.work.expand')} onClick={toggleExpanded}>
           {summaryContent}
         </button>
       ) : (
@@ -857,6 +898,7 @@ function AssistantLoadingIndicator({ label, showLabel = true }: { label: string;
 }
 
 function MessageFooter({ actionsDisabled = false, message, align = 'start', onDelete, onEdit, timePosition = 'before-actions' }: { actionsDisabled?: boolean; message: RuntimeMessage; align?: 'start' | 'end'; onDelete?: () => void; onEdit?: () => void; timePosition?: 'before-actions' | 'after-actions' | 'none' }) {
+  const { locale, t } = useI18n();
   const [copied, setCopied] = useState(false);
   const copyMessage = async () => {
     if (!message.content) return;
@@ -869,22 +911,22 @@ function MessageFooter({ actionsDisabled = false, message, align = 'start', onDe
     }
   };
   const timeNode = (
-    <time className="chat-message-footer__time" dateTime={message.createdAt} title={formatTime(message.createdAt)}>
-      {formatTime(message.createdAt)}
+    <time className="chat-message-footer__time" dateTime={message.createdAt} title={formatTime(message.createdAt, locale)}>
+      {formatTime(message.createdAt, locale)}
     </time>
   );
   const actionNodes = (
     <>
-      <MessageFooterAction active={copied} disabled={!message.content} label={copied ? '已复制' : '复制'} onClick={() => void copyMessage()}>
+      <MessageFooterAction active={copied} disabled={!message.content} label={copied ? t('chat.message.copied') : t('chat.message.copy')} onClick={() => void copyMessage()}>
         <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
       </MessageFooterAction>
       {onDelete ? (
-        <MessageFooterAction disabled={actionsDisabled} label="删除" onClick={onDelete}>
+        <MessageFooterAction disabled={actionsDisabled} label={t('common.delete')} onClick={onDelete}>
           <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
         </MessageFooterAction>
       ) : null}
       {onEdit ? (
-        <MessageFooterAction disabled={actionsDisabled} label="编辑" onClick={onEdit}>
+        <MessageFooterAction disabled={actionsDisabled} label={t('chat.message.edit')} onClick={onEdit}>
           <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
         </MessageFooterAction>
       ) : null}
@@ -919,19 +961,25 @@ function MessageFooterAction({ active = false, children, disabled = false, label
   );
 }
 
-function formatTime(value: string): string {
-  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatTime(value: string, locale: AppLocale): string {
+  return new Date(value).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDurationMs(value: number | null): string {
+function formatDurationMs(value: number | null, t: Translate): string {
   if (value === null || value < 0) return '';
   const roundedSeconds = Math.round(value / 1000);
   const totalSeconds = value > 0 && roundedSeconds === 0 ? 1 : Math.max(0, roundedSeconds);
-  if (totalSeconds < 60) return `${totalSeconds}秒`;
+  if (totalSeconds < 60) return t('chat.duration.seconds', { seconds: totalSeconds });
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (minutes < 60) return seconds ? `${minutes}分${seconds}秒` : `${minutes}分`;
+  if (minutes < 60) {
+    return seconds
+      ? t('chat.duration.minutesSeconds', { minutes, seconds })
+      : t('chat.duration.minutes', { minutes });
+  }
   const hours = Math.floor(minutes / 60);
   const restMinutes = minutes % 60;
-  return restMinutes ? `${hours}小时${restMinutes}分` : `${hours}小时`;
+  return restMinutes
+    ? t('chat.duration.hoursMinutes', { hours, minutes: restMinutes })
+    : t('chat.duration.hours', { hours });
 }

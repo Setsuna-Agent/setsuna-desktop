@@ -6,6 +6,9 @@ import type {
   RuntimeMcpTransport,
   RuntimeMcpTrustLevel,
 } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export type McpDraft = {
   key: string;
@@ -61,7 +64,12 @@ export const emptyMcpDraft: McpDraft = {
   tools: [],
 };
 
-export function mcpDraftToInput(draft: McpDraft, key: string, existing?: RuntimeMcpServer | null): RuntimeMcpServerInput {
+export function mcpDraftToInput(
+  draft: McpDraft,
+  key: string,
+  existing?: RuntimeMcpServer | null,
+  t: Translate = defaultTranslate,
+): RuntimeMcpServerInput {
   return {
     key,
     label: draft.label.trim() || key,
@@ -74,13 +82,13 @@ export function mcpDraftToInput(draft: McpDraft, key: string, existing?: Runtime
     timeoutMs: optionalNumber(draft.timeoutMs),
     startupTimeoutMs: optionalNumber(draft.startupTimeoutMs),
     toolTimeoutMs: optionalNumber(draft.toolTimeoutMs),
-    allowedTools: splitList(draft.allowedTools),
-    disabledTools: splitList(draft.disabledTools),
+    allowedTools: splitList(draft.allowedTools, t),
+    disabledTools: splitList(draft.disabledTools, t),
     tools: draft.tools,
     ...(draft.transport === 'stdio'
       ? {
           command: draft.command.trim(),
-          args: splitList(draft.args),
+          args: splitList(draft.args, t),
           cwd: optionalText(draft.cwd),
           ...(!existing || draft.env.trim() ? { env: keyValueLines(draft.env) } : {}),
         }
@@ -95,12 +103,12 @@ export function mcpDraftToInput(draft: McpDraft, key: string, existing?: Runtime
   };
 }
 
-export function splitList(value: string): string[] {
+export function splitList(value: string, t: Translate = defaultTranslate): string[] {
   const text = value.trim();
   if (!text) return [];
   if (text.startsWith('[')) {
     const parsed = JSON.parse(text) as unknown;
-    if (!Array.isArray(parsed)) throw new Error('启动参数必须是 JSON 数组');
+    if (!Array.isArray(parsed)) throw new Error(t('capabilities.mcp.invalidArgs'));
     return parsed.map((item) => String(item));
   }
   return text.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
@@ -127,23 +135,23 @@ export function mcpToolStats(tools: RuntimeMcpToolInfo[], allowedTools: string[]
   };
 }
 
-export function mcpAuthStatusLabel(status: RuntimeMcpServer['authStatus']): string {
+export function mcpAuthStatusLabel(status: RuntimeMcpServer['authStatus'], t: Translate = defaultTranslate): string {
   switch (status) {
     case 'bearerToken':
       return 'Bearer Token';
     case 'oAuth':
-      return 'OAuth 已登录';
+      return t('capabilities.mcp.auth.oauthReady');
     case 'oAuthLoggingIn':
-      return 'OAuth 登录中';
+      return t('capabilities.mcp.auth.oauthLoggingIn');
     case 'oAuthExpired':
-      return 'OAuth 已过期';
+      return t('capabilities.mcp.auth.oauthExpired');
     case 'oAuthError':
-      return 'OAuth 异常';
+      return t('capabilities.mcp.auth.oauthError');
     case 'notLoggedIn':
-      return 'OAuth 未登录';
+      return t('capabilities.mcp.auth.notLoggedIn');
     case 'unsupported':
     default:
-      return '无需鉴权';
+      return t('capabilities.mcp.auth.notRequired');
   }
 }
 

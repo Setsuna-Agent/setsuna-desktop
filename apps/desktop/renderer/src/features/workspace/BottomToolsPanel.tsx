@@ -1,5 +1,6 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
 import { TerminalPane } from './TerminalPane.js';
@@ -76,6 +77,7 @@ export function BottomToolsPanel({
   resizeMin: number;
   resizeValue: number;
 }) {
+  const { t } = useI18n();
   const availablePanelTypes: DesktopPanelType[] = [activeProject ? 'review' : null, 'terminal'].filter(Boolean) as DesktopPanelType[];
   const handleOpenPanel = (panel: DesktopPanelType) => {
     if (panel === 'review') {
@@ -86,17 +88,17 @@ export function BottomToolsPanel({
   };
 
   return (
-    <section className="bottom-panel" aria-label="Runtime tools">
+    <section className="bottom-panel" aria-label={t('workspace.bottom.tools')}>
       <button
         className="bottom-panel__resize-handle"
         type="button"
         role="separator"
         aria-orientation="horizontal"
-        aria-label="调整终端高度"
+        aria-label={t('workspace.bottom.resize')}
         aria-valuemin={resizeMin}
         aria-valuemax={resizeMax}
         aria-valuenow={resizeValue}
-        title="拖拽调整底部面板高度"
+        title={t('workspace.bottom.resizeHint')}
         onPointerDown={onResizeStart}
         onKeyDown={(event) => {
           if (event.key === 'ArrowUp') {

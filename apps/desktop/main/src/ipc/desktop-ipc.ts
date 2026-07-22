@@ -1,8 +1,9 @@
-import type { DesktopUserProfile } from '@setsuna-desktop/contracts';
+import type { DesktopUserProfile, RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import { clipboard, dialog, ipcMain, nativeImage, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
+import { normalizeNativeInterfaceLanguage } from '../i18n/native-messages.js';
 import {
   copyWorkspaceFilePath,
   createWorkspaceFilePreviewUrl,
@@ -15,11 +16,13 @@ import { isDesktopRendererSender } from './sender.js';
 type DesktopIpcOptions = {
   mainWindow: BrowserWindow;
   nativeBridge: DesktopNativeBridgeServer;
+  onInterfaceLanguageChange: (locale: RuntimeInterfaceLanguage) => void;
   userDataPath: string;
 };
 
-export function registerDesktopIpc({ mainWindow, nativeBridge, userDataPath }: DesktopIpcOptions): void {
+export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLanguageChange, userDataPath }: DesktopIpcOptions): void {
   const channels = [
+    'desktop:set-interface-language',
     'desktop:select-directory',
     'desktop:get-user-profile',
     'desktop:open-external',
@@ -34,6 +37,13 @@ export function registerDesktopIpc({ mainWindow, nativeBridge, userDataPath }: D
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
 
+  ipcMain.handle('desktop:set-interface-language', (event, value) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    const locale = normalizeNativeInterfaceLanguage(value);
+    if (!locale) return false;
+    onInterfaceLanguageChange(locale);
+    return true;
+  });
   ipcMain.handle('desktop:select-directory', async (_event, input) => {
     const options: OpenDialogOptions = {
       title: String(input?.title || '选择项目目录'),

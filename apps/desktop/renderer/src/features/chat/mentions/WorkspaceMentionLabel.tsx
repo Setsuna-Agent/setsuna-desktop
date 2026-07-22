@@ -1,5 +1,6 @@
 import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
 import { memo } from 'react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceEntryIcon } from '../../workspace/WorkspaceEntryIcon.js';
 import { composerCursorOffsetAdjustment } from '../composer/chatComposerCursorOffset.js';
 
@@ -18,6 +19,7 @@ export const WorkspaceMentionLabel = memo(function WorkspaceMentionLabel({
   serializedText,
   type,
 }: WorkspaceMentionLabelProps) {
+  const { t } = useI18n();
   const displayText = workspaceMentionDisplayText(name, path, type);
   const cursorOffsetAdjustment = serializedText === undefined
     ? undefined
@@ -32,7 +34,7 @@ export const WorkspaceMentionLabel = memo(function WorkspaceMentionLabel({
   if (onOpen && type === 'file') {
     return (
       <button
-        aria-label={`使用默认打开方式打开 ${path}`}
+        aria-label={t('chat.mention.openDefault', { path })}
         className="chat-workspace-mention chat-workspace-mention--action"
         title={path}
         type="button"

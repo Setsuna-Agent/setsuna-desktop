@@ -9,6 +9,7 @@ import {
   consumeReviewFocusRequest,
   highlightedReviewDiffLines,
   reviewFilePathParts,
+  reviewSourceLabel,
   reviewVirtualRange,
   reviewWholeFileChangeType,
   reviewWorkspaceFilePath,
@@ -16,6 +17,7 @@ import {
   shouldWrapReviewDiffLine,
 } from '../../../../src/features/workspace/ReviewPanel.js';
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
+import { I18nProvider, translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('DesktopReviewPanel', () => {
   it('renders compact file diffs with inline counts, gap bars, and syntax highlighting', () => {
@@ -37,7 +39,7 @@ describe('DesktopReviewPanel', () => {
     expect(html).toContain('desktop-review-file-card__path-directory">src/domain/agent/drawer/</span>');
     expect(html).toContain('desktop-review-file-card__path-filename">ChatLogDrawer.vue</span>');
     expect(html).not.toContain('desktop-review-file-card__path-button');
-    expect(html).toContain('aria-label="Open file in panel"');
+    expect(html).toContain('aria-label="在面板中打开文件"');
     expect(html).toContain('desktop-review-change-counts__addition">+1</span>');
     expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
     expect(html).toContain('aria-label="折叠所有文件改动"');
@@ -112,6 +114,35 @@ describe('DesktopReviewPanel', () => {
       expect(html).toContain('已暂存');
       expect(html).toContain('desktop-review-change-counts__addition">+3</span>');
       expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
+    });
+  });
+
+  it('renders review sources and the empty state in English', () => {
+    withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': 'latest' }, () => {
+      const html = renderToStaticMarkup(createElement(
+        I18nProvider,
+        { initialLocale: 'en-US' },
+        createElement(DesktopReviewPanel, {
+          activeProject: project,
+          error: null,
+          latestSummary: { additions: 0, deletions: 0, files: [] },
+          loading: false,
+          reviewState,
+          onExternalOpenFile: () => undefined,
+          onOpenProjectFile: () => undefined,
+          onRefresh: () => undefined,
+        }),
+      ));
+
+      expect(html).toContain('Previous turn');
+      expect(html).toContain('No reviewable changes');
+      expect(html).toContain('Accepted edits will appear here');
+      expect(html).not.toContain('无可审核更改');
+
+      const t: Translate = (key, params) => translate('en-US', key, params);
+      expect((['unstaged', 'staged', 'branch', 'latest'] as const).map((source) => (
+        reviewSourceLabel(source, t)
+      ))).toEqual(['Unstaged', 'Staged', 'Branch', 'Previous turn']);
     });
   });
 

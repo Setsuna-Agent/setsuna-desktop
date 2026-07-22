@@ -4,6 +4,7 @@ import { Check, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
 import { resolveModelBrand } from '../../../shared/branding/providerBranding.js';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { formatTokenCount, type ChatContextTokenUsage } from '../conversation/chatContextUsage.js';
 import { useOutsideClose } from './chatComposerControlUtils.js';
 import {
@@ -29,6 +30,7 @@ export function ChatModelPicker({
   openSignal?: number;
   onSelect: (providerId: string, modelId: string) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -42,8 +44,12 @@ export function ChatModelPicker({
     () => (normalizedQuery ? options.filter((option) => chatModelSearchText(option).includes(normalizedQuery)) : options),
     [normalizedQuery, options],
   );
-  const modelUsage = modelContextUsage(contextUsage);
-  const modelSelectorTitle = activeModel ? modelUsage.tooltipLabel ? `切换模型 · ${modelUsage.tooltipLabel}` : '切换模型' : '选择模型';
+  const modelUsage = modelContextUsage(contextUsage, t);
+  const modelSelectorTitle = activeModel
+    ? modelUsage.tooltipLabel
+      ? t('chat.model.switchWithUsage', { usage: modelUsage.tooltipLabel })
+      : t('chat.model.switch')
+    : t('chat.model.select');
   const focusedOptionKey = visibleOptions[activeIndex]?.key;
   const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(focusedOptionKey, open);
 
@@ -104,13 +110,13 @@ export function ChatModelPicker({
   return (
     <span ref={rootRef} className="chat-model-picker">
       {open ? (
-        <div className="chat-command-menu chat-skill-command-menu chat-model-command-menu" role="listbox" aria-label="模型选择">
+        <div className="chat-command-menu chat-skill-command-menu chat-model-command-menu" role="listbox" aria-label={t('chat.model.dialog')}>
           <div className="chat-skill-command-menu__header chat-model-command-menu__header">
             <Input
               allowClear
               autoFocus
               className="chat-model-command-menu__search"
-              placeholder="搜索"
+              placeholder={t('chat.model.search')}
               size="small"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -149,14 +155,14 @@ export function ChatModelPicker({
                       {option.model.contextWindowTokens ? <span className="chat-model-command-menu__ctx">{formatTokenCount(option.model.contextWindowTokens)}</span> : null}
                     </span>
                     <span className="chat-command-menu__item-scope chat-model-command-menu__provider">
-                      {option.provider.name || '未命名厂商'}
+                      {option.provider.name || t('chat.model.unnamedProvider')}
                     </span>
                     <span className="chat-model-command-menu__check">{selected ? <Check size={13} /> : null}</span>
                   </button>
                 );
               })
             ) : (
-              <div className="chat-command-menu__state">{config ? '没有匹配模型' : '模型未配置'}</div>
+              <div className="chat-command-menu__state">{config ? t('chat.model.noMatch') : t('chat.model.notConfigured')}</div>
             )}
           </div>
         </div>
@@ -185,10 +191,10 @@ export function ChatModelPicker({
               <Zap className="chat-model-selector__placeholder-icon" fill="currentColor" size={13} strokeWidth={0} />
             )}
           </span>
-          <span className="chat-model-selector__name">{activeModel?.name ?? '未选择模型'}</span>
+          <span className="chat-model-selector__name">{activeModel?.name ?? t('chat.model.noneSelected')}</span>
           {modelUsage.visible ? (
             <Progress
-              aria-label={`当前上下文用量 ${modelUsage.percentLabel}`}
+              aria-label={t('chat.model.contextUsage', { usage: modelUsage.percentLabel })}
               className="chat-token-progress chat-model-selector__progress"
               percent={modelUsage.percentValue}
               showInfo={false}
@@ -212,7 +218,7 @@ function activeProviderFromConfig(config: RuntimeConfigState | null): ProviderCo
     ?? null;
 }
 
-function modelContextUsage(usage?: ChatContextTokenUsage): {
+function modelContextUsage(usage: ChatContextTokenUsage | undefined, t: Translate): {
   percentLabel: string;
   percentValue: number;
   tooltipLabel: string;
@@ -226,7 +232,7 @@ function modelContextUsage(usage?: ChatContextTokenUsage): {
   const totalTokens = Math.round(Number(usage?.totalTokens || 0));
   const rawPercent = Number(usage?.visiblePercent || usage?.percent || 0);
   const percentValue = Math.min(100, Math.max(0, rawPercent > 0 && rawPercent < 0.1 ? 0.1 : rawPercent));
-  const percentLabel = percentValue > 0 ? `${percentValue.toFixed(percentValue > 0 && percentValue < 1 ? 1 : 0)}%` : '已用';
+  const percentLabel = percentValue > 0 ? `${percentValue.toFixed(percentValue > 0 && percentValue < 1 ? 1 : 0)}%` : t('chat.model.used');
   const tokenLabel = totalTokens > 0
     ? `${formatTokenCount(usedTokens)}/${formatTokenCount(totalTokens)}`
     : `${formatTokenCount(usedTokens)} tokens`;

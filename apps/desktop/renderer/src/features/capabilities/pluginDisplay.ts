@@ -6,6 +6,9 @@ import type {
   RuntimePluginSkill,
   RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 type SearchablePlugin = {
   name: string;
@@ -30,14 +33,15 @@ export type PluginMarketplaceSection = {
 export function pluginMarketplacePresentation(
   plugins: RuntimePluginMarketplaceItem[],
   searching: boolean,
+  t: Translate = defaultTranslate,
 ): { editorials: RuntimePluginMarketplaceItem[]; sections: PluginMarketplaceSection[] } {
   if (searching) {
     return {
       editorials: [],
       sections: plugins.length ? [{
         id: 'results',
-        title: '搜索结果',
-        description: `找到 ${plugins.length} 个匹配插件`,
+        title: t('capabilities.market.searchResults'),
+        description: t('capabilities.market.searchFound', { count: plugins.length }),
         plugins,
       }] : [],
     };
@@ -52,33 +56,33 @@ export function pluginMarketplacePresentation(
   if (creation.length) {
     sections.push({
       id: 'creation',
-      title: '创作与知识',
-      description: '文档、内容处理与开发知识',
+      title: t('capabilities.market.creation'),
+      description: t('capabilities.market.creationDescription'),
       plugins: creation,
     });
   }
   if (automation.length) {
     sections.push({
       id: 'automation',
-      title: '安全与自动化',
-      description: '按需安装的本地 Hook 工作流',
+      title: t('capabilities.market.automation'),
+      description: t('capabilities.market.automationDescription'),
       plugins: automation,
     });
   }
   return { editorials, sections };
 }
 
-export function pluginCapabilitySummary(plugin: RuntimePluginMarketplaceItem): string {
+export function pluginCapabilitySummary(plugin: RuntimePluginMarketplaceItem, t: Translate = defaultTranslate): string {
   const labels = [
-    plugin.capabilities.skills ? `${plugin.capabilities.skills} 个技能` : null,
-    plugin.capabilities.mcpServers ? `${plugin.capabilities.mcpServers} 个服务` : null,
-    plugin.capabilities.hooks ? `${plugin.capabilities.hooks} 项自动化` : null,
-    plugin.capabilities.resources ? `${plugin.capabilities.resources} 个资源` : null,
+    plugin.capabilities.skills ? capabilityCountLabel('skill', plugin.capabilities.skills, t) : null,
+    plugin.capabilities.mcpServers ? capabilityCountLabel('service', plugin.capabilities.mcpServers, t) : null,
+    plugin.capabilities.hooks ? capabilityCountLabel('automation', plugin.capabilities.hooks, t) : null,
+    plugin.capabilities.resources ? capabilityCountLabel('resource', plugin.capabilities.resources, t) : null,
   ].filter((label): label is string => Boolean(label));
-  return labels.join(' · ') || 'Setsuna 插件';
+  return labels.join(' · ') || t('capabilities.market.pluginSummary');
 }
 
-export function pluginMatchesQuery(plugin: SearchablePlugin, normalizedQuery: string): boolean {
+export function pluginMatchesQuery(plugin: SearchablePlugin, normalizedQuery: string, aliases: readonly string[] = []): boolean {
   if (!normalizedQuery) return true;
   const searchText = [
     plugin.name,
@@ -89,8 +93,17 @@ export function pluginMatchesQuery(plugin: SearchablePlugin, normalizedQuery: st
     ...plugin.mcpServers.flatMap((server) => [server.label, server.description]),
     ...(plugin.hooks ?? []).flatMap((hook) => [hook.name, hook.description, hook.eventName, hook.matcher]),
     ...(plugin.resources ?? []).flatMap((resource) => [resource.label, resource.path]),
+    ...aliases,
   ].filter(Boolean).join(' ').toLowerCase();
   return searchText.includes(normalizedQuery);
+}
+
+function capabilityCountLabel(
+  kind: 'automation' | 'resource' | 'service' | 'skill',
+  count: number,
+  t: Translate,
+): string {
+  return t(`capabilities.market.${kind}.${count === 1 ? 'one' : 'many'}`, { count });
 }
 
 export function formatPluginFileSize(size: number): string {

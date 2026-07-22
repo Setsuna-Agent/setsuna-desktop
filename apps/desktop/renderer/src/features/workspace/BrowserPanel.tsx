@@ -8,6 +8,7 @@ import type {
 } from 'electron';
 import { ArrowLeft, ArrowRight, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
 import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
@@ -68,8 +69,9 @@ export function BrowserPanel({
   resizeMin: number;
   resizeValue: number;
 }) {
+  const { t } = useI18n();
   const webviewRef = useRef<WebviewTag | null>(null);
-  const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel));
+  const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, t));
   const {
     captureScreenshot,
     capturing: screenshotCapturing,
@@ -200,16 +202,16 @@ export function BrowserPanel({
   };
 
   return (
-    <aside className="desktop-workspace-panel desktop-browser-panel" aria-label="浏览器" hidden={hidden}>
+    <aside className="desktop-workspace-panel desktop-browser-panel" aria-label={t('workspace.browser.label')} hidden={hidden}>
       <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
       <div className="desktop-browser-navigation">
-        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label="后退" onClick={() => navigateHistory('back')}>
+        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label={t('workspace.browser.back')} onClick={() => navigateHistory('back')}>
           <ArrowLeft size={14} />
         </button>
-        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label="前进" onClick={() => navigateHistory('forward')}>
+        <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label={t('workspace.browser.forward')} onClick={() => navigateHistory('forward')}>
           <ArrowRight size={14} />
         </button>
-        <button className="desktop-browser-navigation__button" type="button" aria-label={tab.loading ? '停止加载' : '刷新'} onClick={reload}>
+        <button className="desktop-browser-navigation__button" type="button" aria-label={t(tab.loading ? 'workspace.browser.stop' : 'workspace.browser.refresh')} onClick={reload}>
           {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
         </button>
         <BrowserAddressBar
@@ -241,7 +243,7 @@ export function BrowserPanel({
       ) : null}
       <div className={`desktop-browser-content ${tab.deviceEmulation.enabled ? 'is-device-emulation' : ''}`}>
         <BrowserWebview active={!hidden} tab={tab} onRef={setWebview} onUpdate={updateTab} />
-        {tab.error ? <div className="desktop-browser-error"><strong>网页加载失败</strong><span>{tab.error}</span></div> : null}
+        {tab.error ? <div className="desktop-browser-error"><strong>{t('workspace.browser.loadFailed')}</strong><span>{tab.error}</span></div> : null}
       </div>
     </aside>
   );
@@ -258,6 +260,7 @@ function BrowserWebview({
   onUpdate: (tabId: string, patch: Partial<BrowserTab>) => void;
   tab: BrowserTab;
 }) {
+  const { t } = useI18n();
   const nodeRef = useRef<WebviewTag | null>(null);
   const deviceEmulationRef = useRef(tab.deviceEmulation);
   deviceEmulationRef.current = tab.deviceEmulation;
@@ -288,11 +291,11 @@ function BrowserWebview({
       onUpdate(tab.id, { loading: false });
       faviconCoordinator.loadingStopped();
     };
-    const handleTitle = (event: PageTitleUpdatedEvent) => onUpdate(tab.id, { title: event.title || browserHostLabel(node.getURL()) });
+    const handleTitle = (event: PageTitleUpdatedEvent) => onUpdate(tab.id, { title: event.title || browserHostLabel(node.getURL(), t) });
     const handleFavicon = (event: PageFaviconUpdatedEvent) => faviconCoordinator.faviconUpdated(resolveBrowserFaviconUrls(event.favicons));
     const handleFailure = (event: DidFailLoadEvent) => {
       if (event.errorCode === -3) return;
-      onUpdate(tab.id, { error: event.errorDescription || '无法加载网页', loading: false });
+      onUpdate(tab.id, { error: event.errorDescription || t('workspace.browser.cannotLoad'), loading: false });
     };
     node.addEventListener('did-start-navigation', handleNavigationStart);
     node.addEventListener('did-start-loading', handleStart);
@@ -313,7 +316,7 @@ function BrowserWebview({
       node.removeEventListener('page-favicon-updated', handleFavicon);
       node.removeEventListener('did-fail-load', handleFailure);
     };
-  }, [onUpdate, tab.id, tab.initialUrl]);
+  }, [onUpdate, t, tab.id, tab.initialUrl]);
 
   useEffect(() => {
     const node = nodeRef.current;
@@ -376,7 +379,7 @@ function BrowserWebview({
   );
 }
 
-function createBrowserTab(panel: DesktopPanelTab): BrowserTab {
+function createBrowserTab(panel: DesktopPanelTab, t: Translate): BrowserTab {
   const url = panel.browser?.url ?? DEFAULT_BROWSER_URL;
   return {
     canGoBack: false,
@@ -388,7 +391,7 @@ function createBrowserTab(panel: DesktopPanelTab): BrowserTab {
     id: panel.id,
     initialUrl: url,
     loading: panel.browser?.loading ?? true,
-    title: panel.title ?? '新标签页',
+    title: !panel.title || panel.title === '新标签页' ? t('workspace.panel.newTab') : panel.title,
     url,
     zoomFactor: 1,
   };
@@ -443,10 +446,10 @@ export function normalizeBrowserInput(input: string): string {
   return `https://www.bing.com/search?q=${encodeURIComponent(value)}`;
 }
 
-function browserHostLabel(rawUrl: string): string {
+function browserHostLabel(rawUrl: string, t: Translate): string {
   try {
-    return new URL(rawUrl).hostname || '新标签页';
+    return new URL(rawUrl).hostname || t('workspace.panel.newTab');
   } catch {
-    return '新标签页';
+    return t('workspace.panel.newTab');
   }
 }

@@ -28,6 +28,7 @@ import type {
   ChatSkillSelectionRequest,
   ChatWorkspaceMentionRequest,
 } from '../../app/types.js';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { ChatApprovalPolicyMenu } from './composer/ChatApprovalPolicyMenu.js';
 import { ChatAttachmentTray } from './composer/ChatAttachmentTray.js';
@@ -74,7 +75,7 @@ export function ChatComposer({
   skills,
   threadUsage,
   starter = false,
-  placeholder = '输入消息（输入 / 唤起命令）',
+  placeholder,
   onCancelActiveTurn,
   onAccessModeChange,
   onCompactContext,
@@ -127,6 +128,7 @@ export function ChatComposer({
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
+  const { t } = useI18n();
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
   const [dismissedCommandValue, setDismissedCommandValue] = useState('');
@@ -189,116 +191,130 @@ export function ChatComposer({
       {
         key: 'model',
         kind: 'model',
-        title: '模型',
-        description: activeModelName(config) ?? '选择本地配置模型',
-        scope: '本地',
+        title: t('chat.composer.model'),
+        description: activeModelName(config) ?? t('chat.composer.selectConfiguredModel'),
+        scope: t('chat.composer.scope.local'),
       },
       {
         key: 'plan',
         kind: 'action',
         type: 'plan',
-        title: '计划模式',
+        title: t('chat.composer.planMode'),
         description: activeTurnId
           ? planModeEnabled
-            ? '已开启：下一轮先给出计划，待确认后执行'
-            : '为当前回复结束后的下一轮开启计划模式'
+            ? t('chat.composer.planEnabledNext')
+            : t('chat.composer.planEnableNext')
           : planModeEnabled
-            ? '已开启：模型先给出计划，待确认后执行'
-            : '模型先给出计划，待确认后再执行',
+            ? t('chat.composer.planEnabled')
+            : t('chat.composer.planDescription'),
         checked: planModeEnabled,
-        scope: activeTurnId ? '下一轮' : planModeEnabled ? '已开启' : '本地',
+        scope: activeTurnId ? t('chat.composer.scope.nextTurn') : planModeEnabled ? t('chat.composer.scope.enabled') : t('chat.composer.scope.local'),
       },
       {
         key: 'collaboration',
         kind: 'action',
         type: 'collaboration',
-        title: '协作模式',
-        description: multiAgentEnabled ? '已开启：允许 Agent 创建和调度子 Agent' : '允许 Agent 把任务拆给子 Agent 并汇总结果',
+        title: t('chat.composer.collaborationMode'),
+        description: multiAgentEnabled ? t('chat.composer.collaborationEnabled') : t('chat.composer.collaborationDescription'),
         checked: multiAgentEnabled,
-        scope: multiAgentEnabled ? '已开启' : '本地',
+        scope: multiAgentEnabled ? t('chat.composer.scope.enabled') : t('chat.composer.scope.local'),
       },
       {
         key: 'goal',
         kind: 'action',
         type: 'goal',
-        title: '目标模式',
+        title: t('chat.composer.goalMode'),
         description: !activeGoal && hasComposerAttachments
-          ? '请先移除附件；新目标暂不支持携带附件'
+          ? t('chat.composer.goalAttachmentBlocked')
           : activeGoal
-          ? `已开启：${activeGoal.objective}`
+          ? t('chat.composer.goalActive', { objective: activeGoal.objective })
           : activeTurnId
             ? goalModeEnabled
-              ? '已开启：下一轮将设为线程目标'
-              : '把当前回复结束后的下一轮设为持续目标'
+              ? t('chat.composer.goalEnabledNext')
+              : t('chat.composer.goalEnableNext')
           : goalModeEnabled
-            ? '已开启：下一条消息将设为线程目标'
-            : '把下一条消息设为持续目标并开始执行',
+            ? t('chat.composer.goalEnabled')
+            : t('chat.composer.goalDescription'),
         checked: goalEnabled,
         disabled: !activeGoal && hasComposerAttachments,
-        scope: activeGoal || (!activeTurnId && goalEnabled) ? '已开启' : activeTurnId ? '下一轮' : '当前线程',
+        scope: activeGoal || (!activeTurnId && goalEnabled)
+          ? t('chat.composer.scope.enabled')
+          : activeTurnId
+            ? t('chat.composer.scope.nextTurn')
+            : t('chat.composer.scope.currentThread'),
       },
       {
         key: 'usage',
         kind: 'action',
         type: 'usage',
-        title: '用量与诊断',
-        description: currentThread ? '查看当前线程的 Token、调用次数和最近一轮诊断' : '请先打开一个对话',
+        title: t('chat.composer.usage'),
+        description: currentThread ? t('chat.composer.usageDescription') : t('chat.composer.openChatFirst'),
         disabled: !currentThread,
-        scope: '当前线程',
+        scope: t('chat.composer.scope.currentThread'),
       },
       {
         key: 'side-chat',
         kind: 'action',
         type: 'side-chat',
-        title: '侧边任务',
-        description: '新建一个独立的侧边对话任务',
+        title: t('chat.composer.sideTask'),
+        description: t('chat.composer.sideTaskDescription'),
         disabled: !onOpenSideChat,
-        scope: '右侧栏',
+        scope: t('chat.composer.scope.rightSidebar'),
       },
       {
         key: 'review',
         kind: 'action',
         type: 'review',
-        title: '审查当前改动',
-        description: activeTurnId ? '请等待当前回复结束后再开始审查' : activeProject ? '让 Agent 审查当前项目的未提交改动' : '请先选择项目',
+        title: t('chat.composer.reviewChanges'),
+        description: activeTurnId
+          ? t('chat.composer.reviewWait')
+          : activeProject
+            ? t('chat.composer.reviewDescription')
+            : t('chat.composer.selectProjectFirst'),
         disabled: Boolean(activeTurnId) || !activeProject,
-        scope: '当前项目',
+        scope: t('chat.composer.scope.currentProject'),
       },
       {
         key: 'memory-mode',
         kind: 'action',
         type: 'memory-mode',
-        title: '记忆',
-        description: threadMemoryModeDescription(memoryMode, memoryGenerationEnabled),
+        title: t('chat.composer.memory'),
+        description: threadMemoryModeDescription(memoryMode, memoryGenerationEnabled, t),
         disabled: !memoryGenerationEnabled,
         checked: memoryGenerationEnabled && memoryMode === 'enabled',
-        scope: threadMemoryModeScope(memoryMode, memoryGenerationEnabled),
+        scope: threadMemoryModeScope(memoryMode, memoryGenerationEnabled, t),
       },
       {
         key: 'compact-context',
         kind: 'action',
         type: 'compact-context',
-        title: '压缩上下文',
+        title: t('chat.composer.compactContext'),
         description: activeTurnId
-          ? '请等待当前回复结束后再压缩上下文'
+          ? t('chat.composer.compactWait')
           : contextCompacting
-            ? '正在压缩上下文'
+            ? t('chat.composer.compacting')
             : canClearContext
-              ? `压缩此会话的上下文${contextCompactPercent > 0 ? `（已使用 ${contextCompactPercent}%）` : ''}`
-              : '当前对话暂无可压缩内容',
+              ? contextCompactPercent > 0
+                ? t('chat.composer.compactDescriptionUsed', { percent: contextCompactPercent })
+                : t('chat.composer.compactDescription')
+              : t('chat.composer.nothingToCompact'),
         disabled: Boolean(activeTurnId) || !canClearContext || contextCompacting,
         loading: contextCompacting,
         progressPercent: contextCompactPercent,
-        scope: '本地',
+        scope: t('chat.composer.scope.local'),
       },
       {
         key: 'clear-context',
         kind: 'action',
         type: 'clear-context',
-        title: '清空上下文',
-        description: activeTurnId ? '请等待当前回复结束后再清空上下文' : canClearContext ? '清除当前对话上下文' : '当前对话暂无上下文',
+        title: t('chat.composer.clearContext'),
+        description: activeTurnId
+          ? t('chat.composer.clearWait')
+          : canClearContext
+            ? t('chat.composer.clearDescription')
+            : t('chat.composer.noContext'),
         disabled: Boolean(activeTurnId) || !canClearContext,
-        scope: '本地',
+        scope: t('chat.composer.scope.local'),
       },
     ];
     const visibleActions = actions.filter((action) => {
@@ -314,7 +330,7 @@ export function ChatComposer({
       .slice(0, Math.max(0, 8 - visibleActions.length))
       .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
     return [...visibleActions, ...visibleSkills];
-  }, [activeGoal, activeProject, activeTurnId, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, hasComposerAttachments, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills]);
+  }, [activeGoal, activeProject, activeTurnId, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, hasComposerAttachments, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills, t]);
 
   useEffect(() => {
     if (!commandOpen || !activeProject) {
@@ -332,12 +348,12 @@ export function ChatComposer({
       .then((result) => {
         if (cancelled) return;
         setEntries(result.entries);
-        if (result.truncated) setLoadError('仅显示部分匹配结果，请继续输入以缩小范围。');
+        if (result.truncated) setLoadError(t('chat.composer.searchTruncated'));
       })
       .catch((unknownError) => {
         if (cancelled) return;
         setEntries([]);
-        setLoadError(unknownError instanceof Error ? unknownError.message : '项目文件加载失败');
+        setLoadError(unknownError instanceof Error ? unknownError.message : t('chat.composer.projectLoadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -346,7 +362,7 @@ export function ChatComposer({
     return () => {
       cancelled = true;
     };
-  }, [commandOpen, mentionQuery, onSearchProjectEntries]);
+  }, [activeProject, commandOpen, mentionQuery, onSearchProjectEntries, t]);
 
   useEffect(() => {
     if (!focused) return undefined;
@@ -722,7 +738,7 @@ export function ChatComposer({
         disabled={submitting}
         slotConfig={initialSlotConfigRef.current}
         loading={Boolean(activeTurnId)}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('chat.composer.placeholder')}
         autoSize={{ minRows: 2, maxRows: 6 }}
         suffix={false}
         onBlur={() => {
@@ -751,8 +767,8 @@ export function ChatComposer({
               <button
                 className={`chat-sender-icon-button chat-sender-command-button ${slashMenuForcedOpen ? 'is-active' : ''}`}
                 type="button"
-                aria-label="打开命令菜单"
-                title="打开命令菜单"
+                aria-label={t('chat.composer.openCommands')}
+                title={t('chat.composer.openCommands')}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={openSlashMenu}
               >
@@ -773,10 +789,17 @@ export function ChatComposer({
                 onChange={onAccessModeChange}
               />
               {planModeEnabled ? (
-                <ChatModeBadge label={activeTurnId ? '计划（下一轮）' : '计划'} onClose={() => setPlanModeEnabled(false)} />
+                <ChatModeBadge
+                  label={activeTurnId ? t('chat.composer.badge.planNext') : t('chat.composer.badge.plan')}
+                  onClose={() => setPlanModeEnabled(false)}
+                />
               ) : null}
-              {multiAgentEnabled ? <ChatModeBadge label="协作" onClose={() => void onSetMultiAgentEnabled(false)} /> : null}
-              {goalEnabled ? <ChatModeBadge label={activeGoal && activeTurnId ? '目标进行中' : activeTurnId ? '目标（下一轮）' : '目标已开启'} onClose={() => {
+              {multiAgentEnabled ? <ChatModeBadge label={t('chat.composer.badge.collaboration')} onClose={() => void onSetMultiAgentEnabled(false)} /> : null}
+              {goalEnabled ? <ChatModeBadge label={activeGoal && activeTurnId
+                ? t('chat.composer.badge.goalRunning')
+                : activeTurnId
+                  ? t('chat.composer.badge.goalNext')
+                  : t('chat.composer.badge.goalEnabled')} onClose={() => {
                 if (activeGoal) void onClearThreadGoal();
                 setGoalModeEnabled(false);
               }} /> : null}
@@ -785,8 +808,8 @@ export function ChatComposer({
               <button
                 className="chat-sender-icon-button"
                 type="button"
-                aria-label="上传附件"
-                title="上传图片、PDF 或 DOCX"
+                aria-label={t('chat.composer.uploadAttachment')}
+                title={t('chat.composer.uploadAttachmentHint')}
                 disabled={attachmentLimitReached || submitting}
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -802,15 +825,15 @@ export function ChatComposer({
               />
               <span className="chat-sender-divider" aria-hidden="true" />
               {activeSteerReady ? (
-                <button className="chat-sender-attachment-submit" type="button" aria-label="插入引导" title="插入引导" disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
+                <button className="chat-sender-attachment-submit" type="button" aria-label={t('chat.composer.steer')} title={t('chat.composer.steer')} disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
                   <ArrowUp size={16} />
                 </button>
               ) : activeTurnId ? (
-                <button className="chat-sender-stop" type="button" aria-label="停止生成" title="停止生成" onClick={onCancelActiveTurn}>
+                <button className="chat-sender-stop" type="button" aria-label={t('chat.composer.stop')} title={t('chat.composer.stop')} onClick={onCancelActiveTurn}>
                   <Square size={11} />
                 </button>
               ) : attachmentOnlyReady ? (
-                <button className="chat-sender-attachment-submit" type="button" aria-label="发送" disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
+                <button className="chat-sender-attachment-submit" type="button" aria-label={t('chat.composer.send')} disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
                   <ArrowUp size={16} />
                 </button>
               ) : (
@@ -825,8 +848,10 @@ export function ChatComposer({
 }
 
 function ChatModeBadge({ label, onClose }: { label: string; onClose: () => void }) {
+  const { t } = useI18n();
+
   return (
-    <button className="chat-sender-plan-badge" type="button" aria-label={`关闭${label}`} title={`关闭${label}`} onClick={onClose}>
+    <button className="chat-sender-plan-badge" type="button" aria-label={t('chat.composer.closeBadge', { label })} title={t('chat.composer.closeBadge', { label })} onClick={onClose}>
       <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
       <span className="chat-sender-plan-badge__label">{label}</span>
       <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
@@ -841,18 +866,19 @@ function ChatUsagePanel({
   threadUsage: RuntimeUsageResponse | null;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const summary = threadUsage?.summary;
   return (
-    <section className="chat-usage-panel" aria-label="当前线程用量与诊断">
+    <section className="chat-usage-panel" aria-label={t('chat.usage.current')}>
       <header>
-        <span><CircleGauge size={14} /> 用量与诊断</span>
-        <button type="button" aria-label="关闭用量面板" onClick={onClose}><X size={13} /></button>
+        <span><CircleGauge size={14} /> {t('chat.composer.usage')}</span>
+        <button type="button" aria-label={t('chat.usage.close')} onClick={onClose}><X size={13} /></button>
       </header>
       <div className="chat-usage-panel__metrics">
-        <span>总计<strong>{formatUsageTokens(summary?.totalTokens ?? 0)}</strong></span>
-        <span>输入<strong>{formatUsageTokens(summary?.inputTokens ?? 0)}</strong></span>
-        <span>输出<strong>{formatUsageTokens(summary?.outputTokens ?? 0)}</strong></span>
-        <span>调用<strong>{summary?.recordCount ?? 0}</strong></span>
+        <span>{t('chat.usage.total')}<strong>{formatUsageTokens(summary?.totalTokens ?? 0)}</strong></span>
+        <span>{t('chat.usage.input')}<strong>{formatUsageTokens(summary?.inputTokens ?? 0)}</strong></span>
+        <span>{t('chat.usage.output')}<strong>{formatUsageTokens(summary?.outputTokens ?? 0)}</strong></span>
+        <span>{t('chat.usage.calls')}<strong>{summary?.recordCount ?? 0}</strong></span>
       </div>
     </section>
   );
@@ -868,15 +894,15 @@ function nextThreadMemoryMode(mode: RuntimeThreadMemoryMode): RuntimeThreadMemor
   return mode === 'enabled' ? 'disabled' : 'enabled';
 }
 
-function threadMemoryModeDescription(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean): string {
-  if (!globalGenerationEnabled) return '全局记忆生成已关闭';
-  if (mode === 'polluted') return '已因外部上下文暂停，选择后重新启用';
-  return mode === 'enabled' ? '对话结束后允许提炼长期记忆' : '当前对话不会写入新的长期记忆';
+function threadMemoryModeDescription(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean, t: Translate): string {
+  if (!globalGenerationEnabled) return t('chat.composer.memoryGlobalOff');
+  if (mode === 'polluted') return t('chat.composer.memoryPolluted');
+  return mode === 'enabled' ? t('chat.composer.memoryEnabled') : t('chat.composer.memoryDisabled');
 }
 
-function threadMemoryModeScope(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean): string {
-  if (!globalGenerationEnabled) return '全局关闭';
-  return mode === 'enabled' ? '已开启' : '已暂停';
+function threadMemoryModeScope(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean, t: Translate): string {
+  if (!globalGenerationEnabled) return t('chat.composer.scope.globalOff');
+  return mode === 'enabled' ? t('chat.composer.scope.enabled') : t('chat.composer.scope.paused');
 }
 
 function ChatThinkingMenu({
@@ -898,12 +924,13 @@ function ChatThinkingMenu({
   onMenuOpenChange: (open: boolean) => void;
   onValueChange: (value: string) => void;
 }) {
+  const { t } = useI18n();
   const hasEfforts = thinkingConfig.efforts.length > 0;
   const currentEffort = value && thinkingConfig.efforts.includes(value) ? value : thinkingConfig.defaultEffort;
 
   if (!thinkingConfig.supported) return null;
 
-  const thinkingLabel = enabled ? (currentEffort ? formatThinkingEffort(currentEffort) : '思考') : '';
+  const thinkingLabel = enabled ? (currentEffort ? formatThinkingEffort(currentEffort, t('chat.composer.thinking')) : t('chat.composer.thinking')) : '';
   const selectedThinkingKey = enabled && currentEffort ? currentEffort : 'off';
   const renderThinkingMenuItem = (label: string, active: boolean) => (
     <span className="chat-thinking-menu__item">
@@ -915,11 +942,11 @@ function ChatThinkingMenu({
   const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = [
     {
       key: 'off',
-      label: renderThinkingMenuItem('关闭', !enabled),
+      label: renderThinkingMenuItem(t('chat.composer.thinkingOff'), !enabled),
     },
     ...thinkingConfig.efforts.map((effort) => ({
       key: effort,
-      label: renderThinkingMenuItem(formatThinkingEffort(effort), enabled && currentEffort === effort),
+      label: renderThinkingMenuItem(formatThinkingEffort(effort, t('chat.composer.thinking')), enabled && currentEffort === effort),
     })),
   ];
   const thinkingSwitch = (
@@ -967,9 +994,9 @@ function ChatThinkingMenu({
   );
 }
 
-function formatThinkingEffort(effort: string): string {
+function formatThinkingEffort(effort: string, fallback = 'Thinking'): string {
   const value = effort.trim();
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : '思考';
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : fallback;
 }
 
 const selectedSkillSlotPrefix = 'skill:';

@@ -9,8 +9,10 @@ import {
   resolveBrowserFaviconUrl,
   resolveBrowserFaviconUrls,
 } from '../../../../src/features/workspace/BrowserPanel.js';
+import { BrowserWindowMenu } from '../../../../src/features/workspace/BrowserWindowMenu.js';
 import { createBrowserPanel } from '../../../../src/features/workspace/model.js';
 import { browserScreenshotOutcomeFeedback } from '../../../../src/features/workspace/useBrowserScreenshot.js';
+import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('normalizeBrowserInput', () => {
   it('keeps absolute web URLs', () => {
@@ -117,5 +119,36 @@ describe('BrowserPanel', () => {
 
     expect(html).toContain('src="https://www.baidu.com/"');
     expect(html).not.toContain('src="https://www.bing.com/"');
+  });
+});
+
+describe('BrowserWindowMenu', () => {
+  it('renders every browser action in English', () => {
+    const html = renderToStaticMarkup(createElement(
+      I18nProvider,
+      { initialLocale: 'en-US' },
+      createElement(BrowserWindowMenu, {
+        capturingScreenshot: false,
+        deviceToolbarVisible: false,
+        disabled: false,
+        loading: false,
+        onCaptureScreenshot: () => undefined,
+        onOpenDevTools: () => undefined,
+        onPrint: () => undefined,
+        onReload: () => undefined,
+        onToggleDeviceToolbar: () => undefined,
+        onZoomIn: () => undefined,
+        onZoomOut: () => undefined,
+        onZoomReset: () => undefined,
+        zoomFactor: 1,
+      }),
+    ));
+
+    expect(html).toContain('Reload page');
+    expect(html).toContain('Print page');
+    expect(html).toContain('Capture screenshot');
+    expect(html).toContain('Show device toolbar');
+    expect(html).toContain('Open developer tools');
+    expect(html).not.toContain('重新加载页面');
   });
 });

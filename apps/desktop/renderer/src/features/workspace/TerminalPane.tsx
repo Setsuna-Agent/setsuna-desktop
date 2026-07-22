@@ -3,6 +3,7 @@ import { Terminal as XTermTerminal, type ILink, type ILinkProvider, type ITheme 
 import '@xterm/xterm/css/xterm.css';
 import { Terminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { CODE_APPEARANCE_CHANGE_EVENT_NAME } from '../../shared/preferences/useCodeAppearancePreferences.js';
 import type { DesktopTerminalEvent, DesktopTerminalSession } from './model.js';
 
@@ -26,6 +27,7 @@ function appendTerminalRestoreBuffer(sessionId: string, text: string): void {
 }
 
 export function TerminalPane({ session }: { session: DesktopTerminalSession | null }) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<XTermTerminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -98,17 +100,17 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
         return;
       }
       if (event.event === 'error') {
-        writeTerminalSystemLine(terminal, String(event.data.message ?? '终端错误'), session.sessionId);
+        writeTerminalSystemLine(terminal, String(event.data.message ?? t('workspace.terminal.error')), session.sessionId);
         return;
       }
       if (event.event === 'exit') {
         const exitCode = event.data.exitCode ?? event.data.signal ?? 'unknown';
-        writeTerminalSystemLine(terminal, `进程已退出：${exitCode}`, session.sessionId);
+        writeTerminalSystemLine(terminal, t('workspace.terminal.exited', { code: String(exitCode) }), session.sessionId);
         exitedTerminalSessionIds.add(session.sessionId);
         setExited(true);
         return;
       }
-      if (event.event === 'closed') writeTerminalSystemLine(terminal, '终端已关闭', session.sessionId);
+      if (event.event === 'closed') writeTerminalSystemLine(terminal, t('workspace.terminal.closed'), session.sessionId);
     };
 
     const unsubscribe = terminalApi.onEvent(session.sessionId, handleEvent);
@@ -124,7 +126,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [session]);
+  }, [session, t]);
 
   const restartTerminal = async () => {
     if (!session || restarting) return;
@@ -135,7 +137,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     try {
       const terminal = terminalRef.current;
       const restarted = await terminalApi.restart(session.sessionId, terminal?.cols, terminal?.rows);
-      if (!restarted) throw new Error('终端仍在运行，无法重新启动。');
+      if (!restarted) throw new Error(t('workspace.terminal.restartBlocked'));
       terminal?.focus();
     } catch (error) {
       setRestarting(false);
@@ -147,7 +149,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     return (
       <div className="terminal-placeholder">
         <Terminal size={15} />
-        <span>终端正在启动...</span>
+        <span>{t('workspace.terminal.starting')}</span>
       </div>
     );
   }
@@ -157,9 +159,9 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       <div ref={containerRef} className="desktop-terminal-xterm__frame" />
       {exited ? (
         <div className="desktop-terminal-xterm__restart" role="status">
-          <span>{restartError ?? 'Shell 已退出'}</span>
+          <span>{restartError ?? t('workspace.terminal.shellExited')}</span>
           <button type="button" disabled={restarting} onClick={() => void restartTerminal()}>
-            {restarting ? '正在重启...' : '重新启动'}
+            {t(restarting ? 'workspace.terminal.restarting' : 'workspace.terminal.restart')}
           </button>
         </div>
       ) : null}

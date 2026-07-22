@@ -628,6 +628,9 @@ function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   if (settings.markdownLinkOpenMode !== 'in-app' && settings.markdownLinkOpenMode !== 'external') {
     delete settings.markdownLinkOpenMode;
   }
+  if (settings.interfaceLanguage !== 'zh-CN' && settings.interfaceLanguage !== 'en-US') {
+    delete settings.interfaceLanguage;
+  }
   const npmRegistryUrl = normalizeNpmRegistryUrl(settings.npmRegistryUrl);
   if (npmRegistryUrl) settings.npmRegistryUrl = npmRegistryUrl;
   else delete settings.npmRegistryUrl;

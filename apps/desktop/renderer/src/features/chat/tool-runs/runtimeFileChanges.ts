@@ -1,5 +1,8 @@
 import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { buildChatTranscript } from '../conversation/chatMessageDisplay.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export type RuntimeFileDiffLine = {
   type: 'added' | 'removed' | 'context' | 'gap';
@@ -88,13 +91,13 @@ export function isRuntimeFileMutationRun(run: RuntimeToolRun): boolean {
   return fileMutationToolNames.has(run.name);
 }
 
-export function fileMutationDisplayPath(run: RuntimeToolRun): string {
+export function fileMutationDisplayPath(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
   const changes = fileChangesFromToolRun(run);
   if (changes.length === 1 && changes[0]?.path) return changes[0].path;
   const args = recordFromJson(run.argumentsPreview);
   return (
     stringField(args.path ?? args.file_path ?? args.target_path ?? args.file) ||
-    (changes.length > 1 ? `${changes.length} 个文件` : '') ||
+    (changes.length > 1 ? t('toolRun.file.count', { count: changes.length }) : '') ||
     fileMutationPathFromResult(run.resultPreview)
   );
 }

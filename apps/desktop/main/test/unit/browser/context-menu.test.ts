@@ -94,6 +94,37 @@ describe('browser context menu', () => {
     expect(template.find((item) => item.label === '重做')?.enabled).toBe(false);
   });
 
+  it('localizes native browser actions in English', () => {
+    const contents = new FakeWebContents();
+    const template = createBrowserContextMenuTemplate(asWebContents(contents), contextParams({
+      linkURL: 'https://example.com/docs',
+      selectionText: 'selected',
+      editFlags: {
+        canCopy: true,
+        canCut: false,
+        canDelete: false,
+        canEditRichly: false,
+        canPaste: false,
+        canRedo: false,
+        canSelectAll: false,
+        canUndo: false,
+      },
+    }), {
+      ...noOpOptions(),
+      canOpenInNewTab: () => true,
+      locale: 'en-US',
+    });
+
+    expect(labels(template)).toEqual([
+      'Open link in new tab',
+      'Copy link address',
+      'Copy',
+      'Back',
+      'Forward',
+      'Reload',
+    ]);
+  });
+
   it('does not execute a stale menu command after the guest is destroyed', () => {
     const contents = new FakeWebContents();
     const template = createBrowserContextMenuTemplate(

@@ -6,6 +6,8 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import {
   browserDeviceViewportSize,
   dragResizeBrowserDevice,
@@ -25,12 +27,12 @@ type BrowserDeviceResizeDrag = {
 };
 
 const browserDeviceResizeHandles = [
-  { handle: 'left', label: '拖动左侧调整视口宽度' },
-  { handle: 'right', label: '拖动右侧调整视口宽度' },
-  { handle: 'bottom', label: '拖动底部调整视口高度' },
-  { handle: 'bottom-left', label: '拖动左下角调整视口尺寸' },
-  { handle: 'bottom-right', label: '拖动右下角调整视口尺寸' },
-] as const satisfies ReadonlyArray<{ handle: BrowserDeviceResizeHandle; label: string }>;
+  { handle: 'left', labelKey: 'workspace.browser.resize.left' },
+  { handle: 'right', labelKey: 'workspace.browser.resize.right' },
+  { handle: 'bottom', labelKey: 'workspace.browser.resize.bottom' },
+  { handle: 'bottom-left', labelKey: 'workspace.browser.resize.bottomLeft' },
+  { handle: 'bottom-right', labelKey: 'workspace.browser.resize.bottomRight' },
+] as const satisfies ReadonlyArray<{ handle: BrowserDeviceResizeHandle; labelKey: MessageKey }>;
 
 export function BrowserDeviceViewport({
   active,
@@ -43,6 +45,7 @@ export function BrowserDeviceViewport({
   deviceEmulation: BrowserDeviceEmulationState;
   onChange: (value: BrowserDeviceEmulationState) => void;
 }) {
+  const { t } = useI18n();
   const animationFrameRef = useRef<number | null>(null);
   const dragRef = useRef<BrowserDeviceResizeDrag | null>(null);
   const onChangeRef = useRef(onChange);
@@ -158,12 +161,12 @@ export function BrowserDeviceViewport({
       style={viewportStyle}
     >
       {children}
-      {resizable ? browserDeviceResizeHandles.map(({ handle, label }) => (
+      {resizable ? browserDeviceResizeHandles.map(({ handle, labelKey }) => (
         <button
-          aria-label={label}
+          aria-label={t(labelKey)}
           className={`desktop-browser-device-resize-handle desktop-browser-device-resize-handle--${handle}`}
           key={handle}
-          title={label}
+          title={t(labelKey)}
           type="button"
           onKeyDown={(event) => handleKeyDown(event, handle)}
           onPointerCancel={handlePointerCancel}

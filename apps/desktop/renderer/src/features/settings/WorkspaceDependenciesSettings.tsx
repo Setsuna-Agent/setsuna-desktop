@@ -18,6 +18,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { Button, StatusBadge, TextField } from '../../shared/ui/primitives.js';
 import { useWorkspaceDependencies } from '../workspace/hooks/useWorkspaceDependencies.js';
 
@@ -36,6 +37,7 @@ export function WorkspaceDependenciesSettings({
   onPythonPackageIndexUrlPersist,
   pythonPackageIndexUrl,
 }: WorkspaceDependenciesSettingsProps) {
+  const { locale, t } = useI18n();
   const dependencies = useWorkspaceDependencies();
   const [persistError, setPersistError] = useState<string | null>(null);
   const busy = dependencies.busyAction !== null;
@@ -59,21 +61,21 @@ export function WorkspaceDependenciesSettings({
 
   return (
     <div className="chat-user-settings__section-block workspace-dependencies-settings">
-      <div className="chat-user-settings__group-title">工作空间依赖项</div>
+      <div className="chat-user-settings__group-title">{t('settings.dependencies.title')}</div>
       <div className="chat-user-settings__group chat-user-settings__runtime-card workspace-dependencies-settings__card">
         <div className="chat-user-settings__row chat-user-settings__runtime-policy-row workspace-dependencies-settings__toggle-row">
           <span className="chat-user-settings__runtime-policy-copy">
             <Code2 className="workspace-dependencies-settings__leading-icon" aria-hidden="true" />
             <span>
-              <strong>Node.js 与 Python 工具</strong>
-              <small>优先复用本机 Node.js、Python 和 uv，必要时使用应用提供的版本。</small>
+              <strong>{t('settings.dependencies.tools')}</strong>
+              <small>{t('settings.dependencies.toolsDescription')}</small>
             </span>
           </span>
           <div className="workspace-dependencies-settings__toggle-control">
-            <span>{status ? (status.enabled ? '自动管理' : '已关闭') : '读取中'}</span>
-            <label className="sd-check" title="自动管理工作空间工具链">
+            <span>{status ? (status.enabled ? t('settings.dependencies.automatic') : t('settings.dependencies.disabled')) : t('settings.dependencies.reading')}</span>
+            <label className="sd-check" title={t('settings.dependencies.automaticLabel')}>
               <input
-                aria-label="自动管理工作空间工具链"
+                aria-label={t('settings.dependencies.automaticLabel')}
                 checked={status?.enabled === true}
                 disabled={busy}
                 type="checkbox"
@@ -85,10 +87,10 @@ export function WorkspaceDependenciesSettings({
 
         <PackageSourceForm
           defaultValue={DEFAULT_NPM_REGISTRY_URL}
-          description="用于 npm、pnpm 与 Corepack。"
+          description={t('settings.dependencies.npmSourceDescription')}
           id="workspace-npm-registry"
           icon="npm"
-          label="npm 包源"
+          label={t('settings.dependencies.npmSource')}
           normalize={normalizeNpmRegistryUrl}
           placeholder={DEFAULT_NPM_REGISTRY_URL}
           value={npmRegistryUrl}
@@ -96,10 +98,10 @@ export function WorkspaceDependenciesSettings({
         />
         <PackageSourceForm
           defaultValue={DEFAULT_PYTHON_PACKAGE_INDEX_URL}
-          description="用于 pip 与 uv。"
+          description={t('settings.dependencies.pythonSourceDescription')}
           id="workspace-python-package-index"
           icon="python"
-          label="Python 包源"
+          label={t('settings.dependencies.pythonSource')}
           normalize={normalizePythonPackageIndexUrl}
           placeholder={DEFAULT_PYTHON_PACKAGE_INDEX_URL}
           value={pythonPackageIndexUrl}
@@ -110,14 +112,14 @@ export function WorkspaceDependenciesSettings({
           <span className="chat-user-settings__runtime-policy-copy">
             <CircleGauge className="workspace-dependencies-settings__leading-icon" aria-hidden="true" />
             <span>
-              <strong>环境状态</strong>
-              <small>{environmentStatusCopy(status)}</small>
+              <strong>{t('settings.dependencies.environment')}</strong>
+              <small>{environmentStatusCopy(status, t)}</small>
             </span>
           </span>
           <div className="workspace-dependencies-settings__status-actions">
             <span className="workspace-dependencies-settings__state">
-              <StatusBadge tone={statusTone(status)}>{statusLabel(status)}</StatusBadge>
-              {status?.updatedAt ? <small>{formatDate(status.updatedAt)}</small> : null}
+              <StatusBadge tone={statusTone(status)}>{statusLabel(status, t)}</StatusBadge>
+              {status?.updatedAt ? <small>{formatDate(status.updatedAt, locale)}</small> : null}
             </span>
             <div className="workspace-dependencies-settings__action-buttons">
               <Button
@@ -127,7 +129,7 @@ export function WorkspaceDependenciesSettings({
                 disabled={busy}
                 onClick={() => void dependencies.diagnose()}
               >
-                {dependencies.busyAction === 'diagnose' ? '检查中' : '检查'}
+                {dependencies.busyAction === 'diagnose' ? t('settings.dependencies.checking') : t('settings.dependencies.check')}
               </Button>
               <Button
                 icon={dependencies.busyAction === 'reinstall'
@@ -136,7 +138,7 @@ export function WorkspaceDependenciesSettings({
                 disabled={busy || status?.enabled !== true}
                 onClick={() => void dependencies.reinstall()}
               >
-                {dependencies.busyAction === 'reinstall' ? '安装中' : '重新安装'}
+                {dependencies.busyAction === 'reinstall' ? t('settings.dependencies.installing') : t('settings.dependencies.reinstall')}
               </Button>
             </div>
           </div>
@@ -144,7 +146,7 @@ export function WorkspaceDependenciesSettings({
 
         {showEnvironmentDetails && status ? (
           <div className="workspace-dependencies-settings__diagnostics">
-            <div className="workspace-dependencies-settings__tool-grid" aria-label="工具链状态">
+            <div className="workspace-dependencies-settings__tool-grid" aria-label={t('settings.dependencies.toolchainStatus')}>
               {dependencyToolItems(status).map((item) => (
                 <DependencyToolCard
                   check={status.checks.find((check) => check.id === item.id)}
@@ -190,6 +192,7 @@ function PackageSourceForm({
   placeholder,
   value,
 }: PackageSourceFormProps) {
+  const { t } = useI18n();
   const effectiveValue = value || defaultValue;
   const [draft, setDraft] = useState(effectiveValue);
   const [error, setError] = useState<string | null>(null);
@@ -207,7 +210,7 @@ function PackageSourceForm({
   const save = async (nextValue: string) => {
     const normalized = normalize(nextValue);
     if (normalized === null) {
-      setError('请输入有效的 HTTP 或 HTTPS 包源地址。');
+      setError(t('settings.dependencies.invalidSource'));
       return;
     }
     setSaving(true);
@@ -252,7 +255,7 @@ function PackageSourceForm({
           }}
         />
         <Button className="workspace-dependencies-settings__source-save" variant={dirty ? 'primary' : 'secondary'} disabled={saving || !dirty} type="submit">
-          {saving ? '保存中' : dirty ? '保存' : '已保存'}
+          {saving ? t('settings.dependencies.saving') : dirty ? t('common.save') : t('settings.dependencies.saved')}
         </Button>
         {customized ? (
           <Button
@@ -262,7 +265,7 @@ function PackageSourceForm({
             disabled={saving}
             onClick={() => void save(defaultValue)}
           >
-            默认
+            {t('settings.dependencies.default')}
           </Button>
         ) : null}
       </div>
@@ -320,36 +323,37 @@ function DependencyToolCard({
   label: string;
   tool: RuntimeWorkspaceDependencyToolStatus;
 }) {
+  const { t } = useI18n();
   const state = check?.status ?? (tool.available ? 'ok' : 'error');
   return (
     <div className="workspace-dependencies-settings__tool-item" data-status={state}>
       <div className="workspace-dependencies-settings__tool-heading">
         <span aria-hidden="true" />
         <strong>{label}</strong>
-        <span className="workspace-dependencies-settings__tool-source">{dependencySourceLabel(tool.source)}</span>
+        <span className="workspace-dependencies-settings__tool-source">{dependencySourceLabel(tool.source, t)}</span>
       </div>
       <span className="workspace-dependencies-settings__tool-version">
-        {tool.version ?? (tool.available ? '版本未知' : '尚未安装')}
+        {tool.version ?? (tool.available ? t('settings.dependencies.versionUnknown') : t('settings.dependencies.notInstalled'))}
       </span>
-      <code title={tool.path}>{tool.path ?? '未找到可执行文件'}</code>
+      <code title={tool.path}>{tool.path ?? t('settings.dependencies.executableNotFound')}</code>
     </div>
   );
 }
 
-function environmentStatusCopy(status: RuntimeWorkspaceDependenciesStatus | null): string {
-  if (!status) return '正在读取工具链状态。';
-  if (status.state === 'ready') return 'Node.js、Python 与 uv 均已就绪。';
-  if (status.state === 'installing') return '正在准备隔离工具链，请稍候。';
-  if (status.state === 'error') return status.error || '工具链需要处理。';
-  if (status.state === 'not-installed') return '部分工具尚未就绪，可尝试重新安装。';
-  return '启用后自动复用并补齐工作区工具。';
+function environmentStatusCopy(status: RuntimeWorkspaceDependenciesStatus | null, t: Translate): string {
+  if (!status) return t('settings.dependencies.status.reading');
+  if (status.state === 'ready') return t('settings.dependencies.status.ready');
+  if (status.state === 'installing') return t('settings.dependencies.status.installing');
+  if (status.state === 'error') return status.error || t('settings.dependencies.status.error');
+  if (status.state === 'not-installed') return t('settings.dependencies.status.notInstalled');
+  return t('settings.dependencies.status.disabled');
 }
 
-function dependencySourceLabel(source: RuntimeWorkspaceDependencySource | undefined): string {
-  if (source === 'system') return '本机';
-  if (source === 'bundled') return '应用内置';
-  if (source === 'managed') return '应用托管';
-  return '未就绪';
+function dependencySourceLabel(source: RuntimeWorkspaceDependencySource | undefined, t: Translate): string {
+  if (source === 'system') return t('settings.dependencies.source.system');
+  if (source === 'bundled') return t('settings.dependencies.source.bundled');
+  if (source === 'managed') return t('settings.dependencies.source.managed');
+  return t('settings.dependencies.source.unavailable');
 }
 
 function statusTone(status: RuntimeWorkspaceDependenciesStatus | null): 'neutral' | 'success' | 'warning' | 'danger' {
@@ -359,16 +363,16 @@ function statusTone(status: RuntimeWorkspaceDependenciesStatus | null): 'neutral
   return 'neutral';
 }
 
-function statusLabel(status: RuntimeWorkspaceDependenciesStatus | null): string {
-  if (!status) return '加载中';
-  if (status.state === 'ready') return '可用';
-  if (status.state === 'installing') return '安装中';
-  if (status.state === 'error') return '异常';
-  if (status.state === 'not-installed') return '待安装';
-  return '未启用';
+function statusLabel(status: RuntimeWorkspaceDependenciesStatus | null, t: Translate): string {
+  if (!status) return t('settings.dependencies.badge.loading');
+  if (status.state === 'ready') return t('settings.dependencies.badge.ready');
+  if (status.state === 'installing') return t('settings.dependencies.badge.installing');
+  if (status.state === 'error') return t('settings.dependencies.badge.error');
+  if (status.state === 'not-installed') return t('settings.dependencies.badge.pending');
+  return t('settings.dependencies.badge.disabled');
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, locale: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
 }

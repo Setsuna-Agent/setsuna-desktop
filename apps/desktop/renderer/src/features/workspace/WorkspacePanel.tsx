@@ -15,6 +15,7 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { EmptyState, IconButton } from '../../shared/ui/primitives.js';
 import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
 import type {
@@ -103,6 +104,7 @@ export function WorkspacePanel({
   resizeMin: number;
   resizeValue: number;
 }) {
+  const { t } = useI18n();
   const [treeEntries, setTreeEntries] = useState<WorkspaceEntry[]>([]);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [loadedDirectoryPaths, setLoadedDirectoryPaths] = useState<Set<string>>(() => new Set(['']));
@@ -286,7 +288,7 @@ export function WorkspacePanel({
         onRevealFile={onRevealFile}
       />
     ) : activePanel.type === 'terminal' ? (
-      <section className="desktop-workspace-terminal-panel" aria-label={desktopPanelTitle(activePanel)}>
+      <section className="desktop-workspace-terminal-panel" aria-label={desktopPanelTitle(activePanel, t)}>
         <TerminalPane session={terminalSession} />
       </section>
     ) : (
@@ -306,12 +308,12 @@ export function WorkspacePanel({
       >
         <div className="desktop-editor__crumb">
           <span className="desktop-editor__crumb-path">
-            <span>{activeProject?.name ?? 'No project'}</span>
+            <span>{activeProject?.name ?? t('workspace.files.noProject')}</span>
             {filePreview ? <span>{filePreview.path}</span> : null}
           </span>
           <IconButton
             className="app-shell-icon-control desktop-editor__tree-toggle"
-            label={treeVisible ? '收起文件目录' : '展开文件目录'}
+            label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
             aria-pressed={treeVisible}
             onClick={() => setTreeVisible((current) => !current)}
           >
@@ -321,7 +323,7 @@ export function WorkspacePanel({
         {filePreview ? (
           <WorkspaceFilePreviewContent file={filePreview} />
         ) : (
-          <EmptyState title="未打开文件" body="从右侧文件树选择文件后会在这里预览。" />
+          <EmptyState title={t('workspace.files.noneOpen')} body={t('workspace.files.noneOpenDescription')} />
         )}
       </section>
     );
@@ -349,11 +351,11 @@ export function WorkspacePanel({
                   type="button"
                   role="separator"
                   aria-orientation="vertical"
-                  aria-label="调整文件目录宽度"
+                  aria-label={t('workspace.files.resizeTree')}
                   aria-valuemin={FILE_TREE_MIN_WIDTH}
                   aria-valuemax={FILE_TREE_MAX_WIDTH}
                   aria-valuenow={treeWidth}
-                  title="拖拽调整文件目录宽度"
+                  title={t('workspace.files.resizeTreeHint')}
                   onPointerDown={startTreeResize}
                   onKeyDown={(event) => {
                     if (event.key === 'ArrowLeft') {
@@ -370,28 +372,28 @@ export function WorkspacePanel({
                   <input
                     value={treeQuery}
                     onChange={(event) => updateTreeQuery(event.target.value)}
-                    placeholder="筛选文件..."
+                    placeholder={t('workspace.files.filter')}
                   />
                 </div>
                 {activeProject ? (
                   <div className="desktop-file-list">
-                    {treeSearching ? <div className="desktop-file-tree__empty">正在搜索...</div> : null}
+                    {treeSearching ? <div className="desktop-file-tree__empty">{t('workspace.files.searching')}</div> : null}
                     {treeError ? <div className="desktop-file-tree__empty">{treeError}</div> : null}
                     {!treeSearching && !treeError && tree.length ? (
                       tree.map((node) => renderTreeNode(node))
                     ) : !treeSearching && !treeError && query ? (
-                      <div className="desktop-file-tree__empty">暂无匹配文件</div>
+                      <div className="desktop-file-tree__empty">{t('workspace.files.noMatch')}</div>
                     ) : !treeSearching && !treeError ? (
-                      <EmptyState title="暂无文件" />
+                      <EmptyState title={t('workspace.files.empty')} />
                     ) : null}
                     {!treeSearching && !treeError && treeTruncated ? (
                       <div className="desktop-file-tree__empty">
-                        {query ? '匹配结果已达到上限，请缩小筛选范围。' : '目录内容过多，仅显示已扫描部分。'}
+                        {t(query ? 'workspace.files.searchLimit' : 'workspace.files.scanLimit')}
                       </div>
                     ) : null}
                   </div>
                 ) : (
-                  <EmptyState title="未选择项目" body="先在左侧添加项目目录。" />
+                  <EmptyState title={t('workspace.review.noProject')} body={t('workspace.review.addProject')} />
                 )}
               </div>
             </section>
@@ -429,14 +431,17 @@ export function WorkspaceOverviewPanel({
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
 }) {
+  const { t } = useI18n();
   const temporaryWorkspace = activeProject ? isTemporaryWorkspaceProjectId(activeProject.id) : false;
   const reviewMeta = latestReviewSummary?.files.length
-    ? `${latestReviewSummary.files.length} 个文件`
-    : '查看代码变更';
+    ? t(latestReviewSummary.files.length === 1
+      ? 'workspace.overview.reviewFiles.one'
+      : 'workspace.overview.reviewFiles.many', { count: latestReviewSummary.files.length })
+    : t('workspace.overview.reviewDescription');
   const actions = [
     {
       key: 'review',
-      label: '审查',
+      label: t('workspace.overview.review'),
       meta: reviewMeta,
       icon: <FileText size={15} />,
       disabled: !activeProject || !onOpenReviewPanel,
@@ -444,32 +449,34 @@ export function WorkspaceOverviewPanel({
     },
     {
       key: 'files',
-      label: '文件目录',
-      meta: activeProject?.name ?? '未选择项目',
+      label: t('workspace.overview.files'),
+      meta: activeProject?.name ?? t('workspace.overview.noProject'),
       icon: <FolderOpen size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenFilesPanel,
     },
     {
       key: 'terminal',
-      label: '终端',
-      meta: activeProject?.path ? (temporaryWorkspace ? '临时目录 Shell' : '项目 Shell') : '未选择项目',
+      label: t('workspace.overview.terminal'),
+      meta: activeProject?.path
+        ? t(temporaryWorkspace ? 'workspace.overview.temporaryShell' : 'workspace.overview.projectShell')
+        : t('workspace.overview.noProject'),
       icon: <Terminal size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenTerminalPanel,
     },
     {
       key: 'side-chat',
-      label: '侧边对话',
-      meta: '打开独立对话任务',
+      label: t('workspace.overview.sideChat'),
+      meta: t('workspace.overview.sideChatDescription'),
       icon: <MessageSquare size={15} />,
       disabled: false,
       onClick: onOpenSideChat,
     },
     {
       key: 'browser',
-      label: '浏览器',
-      meta: '在右侧打开网页',
+      label: t('workspace.overview.browser'),
+      meta: t('workspace.overview.browserDescription'),
       icon: <Globe2 size={15} />,
       disabled: false,
       onClick: () => onOpenBrowser(),
@@ -477,7 +484,7 @@ export function WorkspaceOverviewPanel({
   ];
 
   return (
-    <section className="desktop-workspace-overview" aria-label="汇总目录">
+    <section className="desktop-workspace-overview" aria-label={t('workspace.overview.label')}>
       <div className="desktop-workspace-overview__actions">
         {actions.map((action) => (
           <button
@@ -504,13 +511,14 @@ export function WorkspaceFilePreviewContent({
 }: {
   file: WorkspaceFileRead;
 }) {
+  const { t } = useI18n();
   if (file.preview?.kind === 'image') {
     return (
       <div className="desktop-file-preview desktop-file-preview--image">
         <img
           className="desktop-file-preview__image"
           src={`data:${file.preview.mimeType};base64,${file.preview.base64}`}
-          alt={`预览 ${file.path}`}
+          alt={t('workspace.files.previewAlt', { path: file.path })}
           draggable={false}
         />
       </div>
@@ -521,19 +529,21 @@ export function WorkspaceFilePreviewContent({
     return (
       <div className="desktop-file-preview desktop-file-preview--unsupported">
         <EmptyState
-          title={imageTooLarge ? '图片过大，暂时无法预览' : '暂不支持预览二进制文件'}
-          body="请使用其他应用打开此文件查看。"
+          title={t(imageTooLarge ? 'workspace.files.imageTooLarge' : 'workspace.files.binaryUnsupported')}
+          body={t('workspace.files.openExternally')}
         />
       </div>
     );
   }
-  return <CodeEditorPreview file={file} />;
+  return <CodeEditorPreview file={file} t={t} />;
 }
 
 function CodeEditorPreview({
   file,
+  t,
 }: {
   file: WorkspaceFileRead;
+  t: Translate;
 }) {
   const content = useMemo(() => file.content.replace(/\r\n/g, '\n'), [file.content]);
   const language = fileLanguage(file.path);
@@ -558,7 +568,7 @@ function CodeEditorPreview({
           </div>
         );
       })}
-      {file.truncated ? <div className="desktop-code-truncated">文件过大，已截断预览。</div> : null}
+      {file.truncated ? <div className="desktop-code-truncated">{t('workspace.files.previewTruncated')}</div> : null}
     </div>
   );
 }

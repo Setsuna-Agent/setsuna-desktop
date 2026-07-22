@@ -40,13 +40,12 @@ describe('ConversationBackgroundServiceList', () => {
     expect(html).toContain('aria-label="终止后台服务：pnpm dev --host 127.0.0.1"');
     expect(html).toContain('title="终止服务"');
 
-    const view = ConversationBackgroundServiceList({
+    const view = captureBackgroundServiceList({
       error: null,
       processes: [process],
       terminatingIds: new Set<string>(),
       onTerminate,
     });
-    if (!view) throw new Error('Expected a populated background service list.');
     const service = view.props.children[1].props.children[0];
     service.props.children[2].props.onClick();
     expect(onTerminate).toHaveBeenCalledWith(process.id);
@@ -71,6 +70,18 @@ describe('ConversationBackgroundServiceList', () => {
     expect(terminatingHtml).toContain('disabled=""');
   });
 });
+
+function captureBackgroundServiceList(props: Parameters<typeof ConversationBackgroundServiceList>[0]) {
+  const captured: { view?: NonNullable<ReturnType<typeof ConversationBackgroundServiceList>> } = {};
+  function Capture() {
+    const view = ConversationBackgroundServiceList(props);
+    if (view) captured.view = view;
+    return view;
+  }
+  renderToStaticMarkup(createElement(Capture));
+  if (!captured.view) throw new Error('Expected a populated background service list.');
+  return captured.view;
+}
 
 const process: RuntimeBackgroundShellProcess = {
   id: 'shell_1',

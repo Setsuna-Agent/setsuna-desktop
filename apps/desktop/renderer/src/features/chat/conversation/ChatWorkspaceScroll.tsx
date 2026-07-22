@@ -11,6 +11,7 @@ import {
   type WheelEvent as ReactWheelEvent,
   type RefObject,
 } from 'react';
+import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import {
   canFitConversationOverviewPanel,
@@ -438,11 +439,15 @@ export function useConversationOverviewContentCollision(
   return overlapsContent;
 }
 
-export function conversationOverviewContextLabel(usage: ChatContextTokenUsage, compactionStatus?: NonNullable<RuntimeThread['contextCompaction']>['status']): string {
-  if (compactionStatus === 'running') return '压缩中';
+export function conversationOverviewContextLabel(
+  usage: ChatContextTokenUsage,
+  compactionStatus: NonNullable<RuntimeThread['contextCompaction']>['status'] | undefined,
+  t: Translate,
+): string {
+  if (compactionStatus === 'running') return t('conversation.overview.context.compacting');
   const percent = usage.visiblePercent || usage.percent;
   if (percent > 0) return `${formatPercent(percent)}%`;
-  return '就绪';
+  return t('conversation.overview.context.ready');
 }
 
 function formatPercent(value: number): string {

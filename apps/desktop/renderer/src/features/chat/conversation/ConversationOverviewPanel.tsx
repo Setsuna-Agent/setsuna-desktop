@@ -7,6 +7,7 @@ import type {
 import { ChevronsRightLeft, CircleGauge, FileText } from 'lucide-react';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationBackgroundServices, type BackgroundShellProcessClient } from './ConversationBackgroundServices.js';
@@ -50,6 +51,7 @@ export function ConversationOverviewPanel({
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   reviewError: string | null;
 }) {
+  const { t } = useI18n();
   const changeStats = reviewState?.isGitRepository
     ? localReviewChangeStats(reviewState)
     : {
@@ -63,16 +65,17 @@ export function ConversationOverviewPanel({
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
   const usageSummary = threadUsage?.summary;
   const latestTurn = currentThread.turns?.at(-1);
-  // 分叉是独立对话；只有派生的子代理属于协作任务。
+  // Forks are independent conversations; only derived sub-agents are collaboration tasks.
   const childThreads = threads.filter((thread) => thread.parentThreadId === currentThread.id);
-  const diagnosticLabel = turnDiagnosticLabel(latestTurn);
-  const usageDiagnosticLabel = `${formatUsageTokens(usageSummary?.totalTokens ?? 0)} · ${usageSummary?.recordCount ?? 0} 次 · ${diagnosticLabel}`;
+  const diagnosticLabel = turnDiagnosticLabel(latestTurn, t);
+  const callCount = usageSummary?.recordCount ?? 0;
+  const usageDiagnosticLabel = `${formatUsageTokens(usageSummary?.totalTokens ?? 0)} · ${t(callCount === 1 ? 'conversation.overview.callCount.one' : 'conversation.overview.callCount.many', { count: callCount })} · ${diagnosticLabel}`;
 
   if (compact) {
     return (
-      <button className="chat-conversation-overview-chip" type="button" aria-label="展开对话环境信息" onClick={onExpand}>
+      <button className="chat-conversation-overview-chip" type="button" aria-label={t('conversation.overview.expand')} onClick={onExpand}>
         <FileText size={13} />
-        <span>{hasFileChanges ? '变更' : '环境'}</span>
+        <span>{hasFileChanges ? t('conversation.overview.changes') : t('conversation.overview.environment')}</span>
         {hasFileChanges ? (
           <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
         ) : (
@@ -83,10 +86,10 @@ export function ConversationOverviewPanel({
   }
 
   return (
-    <section className="chat-conversation-overview-panel" aria-label="环境信息">
+    <section className="chat-conversation-overview-panel" aria-label={t('conversation.overview.title')}>
       <div className="chat-conversation-overview-panel__header">
-        <span>环境信息</span>
-        <button type="button" aria-label="折叠环境信息" title="折叠环境信息" onClick={onCollapse}>
+        <span>{t('conversation.overview.title')}</span>
+        <button type="button" aria-label={t('conversation.overview.collapse')} title={t('conversation.overview.collapse')} onClick={onCollapse}>
           <ChevronsRightLeft size={13} />
         </button>
       </div>
@@ -100,11 +103,11 @@ export function ConversationOverviewPanel({
           <span className="chat-conversation-overview-panel__icon">
             <FileText size={14} />
           </span>
-          <span className="chat-conversation-overview-panel__label">变更</span>
+          <span className="chat-conversation-overview-panel__label">{t('conversation.overview.changes')}</span>
           <span className="chat-conversation-overview-panel__meta" title={reviewFailed ? reviewError ?? undefined : undefined}>
             {hasFileChanges ? (
               <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
-            ) : reviewPending ? '加载中' : reviewFailed ? '加载失败' : '无变更'}
+            ) : reviewPending ? t('conversation.overview.loading') : reviewFailed ? t('conversation.overview.loadFailed') : t('conversation.overview.noChanges')}
           </span>
         </button>
         <ConversationGitControls
@@ -118,12 +121,12 @@ export function ConversationOverviewPanel({
           <span className="chat-conversation-overview-panel__icon">
             <ContextProgressIcon percent={contextPercent} />
           </span>
-          <span className="chat-conversation-overview-panel__label">上下文</span>
+          <span className="chat-conversation-overview-panel__label">{t('conversation.overview.context')}</span>
           <span className="chat-conversation-overview-panel__meta">{contextLabel}</span>
         </div>
         <div className="chat-conversation-overview-panel__row chat-conversation-overview-panel__row--static">
           <span className="chat-conversation-overview-panel__icon"><CircleGauge size={14} /></span>
-          <span className="chat-conversation-overview-panel__label">用量与诊断</span>
+          <span className="chat-conversation-overview-panel__label">{t('conversation.overview.usageDiagnostics')}</span>
           <span className="chat-conversation-overview-panel__meta" title={usageDiagnosticLabel}>{usageDiagnosticLabel}</span>
         </div>
       </div>
@@ -133,13 +136,13 @@ export function ConversationOverviewPanel({
           <div className="chat-conversation-overview-panel__divider" />
           <div className="chat-conversation-overview-panel__agents">
             <div className="chat-conversation-overview-panel__agents-title">
-              <span>协作任务</span>
-              <span aria-label={`${childThreads.length} 个协作任务`}>{childThreads.length}</span>
+              <span>{t('conversation.overview.collaborationTasks')}</span>
+              <span aria-label={t(childThreads.length === 1 ? 'conversation.overview.collaborationCount.one' : 'conversation.overview.collaborationCount.many', { count: childThreads.length })}>{childThreads.length}</span>
             </div>
             {childThreads.map((thread) => (
               <button type="button" key={thread.id} onClick={() => void onOpenThread(thread.id)}>
                 <span className={thread.activeTurnId ? 'is-running' : undefined} aria-hidden="true" />
-                <strong title={thread.title}>{thread.title || '未命名任务'}</strong>
+                <strong title={thread.title}>{thread.title || t('conversation.overview.unnamedTask')}</strong>
               </button>
             ))}
           </div>
@@ -161,12 +164,24 @@ function formatUsageTokens(value: number): string {
   return String(value);
 }
 
-function turnDiagnosticLabel(turn: NonNullable<RuntimeThread['turns']>[number] | undefined): string {
-  if (!turn) return '暂无运行记录';
-  const status = turn.status === 'in_progress' ? '运行中' : turn.status === 'completed' ? '已完成' : turn.status === 'failed' ? '失败' : turn.status === 'cancelled' ? '已取消' : '状态未知';
+function turnDiagnosticLabel(turn: NonNullable<RuntimeThread['turns']>[number] | undefined, t: Translate): string {
+  if (!turn) return t('conversation.overview.diagnostic.none');
+  const status = turn.status === 'in_progress'
+    ? t('conversation.overview.diagnostic.running')
+    : turn.status === 'completed'
+      ? t('conversation.overview.diagnostic.completed')
+      : turn.status === 'failed'
+        ? t('conversation.overview.diagnostic.failed')
+        : turn.status === 'cancelled'
+          ? t('conversation.overview.diagnostic.cancelled')
+          : t('conversation.overview.diagnostic.unknown');
   const signals = [
-    turn.modelVerifications?.length ? `${turn.modelVerifications.length} 次验证` : null,
-    turn.safetyBuffering ? '安全缓冲' : null,
+    turn.modelVerifications?.length
+      ? t(turn.modelVerifications.length === 1
+        ? 'conversation.overview.diagnostic.verifications.one'
+        : 'conversation.overview.diagnostic.verifications.many', { count: turn.modelVerifications.length })
+      : null,
+    turn.safetyBuffering ? t('conversation.overview.diagnostic.safetyBuffer') : null,
   ].filter(Boolean);
   return signals.length ? `${status} · ${signals.join(' · ')}` : status;
 }

@@ -10,6 +10,7 @@ import {
   type Ref,
 } from 'react';
 import { usesCustomFrameLayout } from '../../shared/lib/desktopPlatform.js';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 
 type WindowMenuKey = 'file' | 'edit' | 'view' | 'help';
@@ -27,13 +28,6 @@ type WindowMenuItem = {
   disabled?: boolean;
   action: () => void;
 };
-
-const windowMenuLabels: Array<{ key: WindowMenuKey; label: string }> = [
-  { key: 'file', label: '文件' },
-  { key: 'edit', label: '编辑' },
-  { key: 'view', label: '视图' },
-  { key: 'help', label: '帮助' },
-];
 
 export function ShellFrame({
   children,
@@ -158,11 +152,12 @@ function TitlebarNavigation({
   showSidebarToggle: boolean;
   onToggleSidebar?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="app-topbar__nav">
       {showSidebarToggle && onToggleSidebar ? (
         <IconButton
-          label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+          label={sidebarCollapsed ? t('shell.sidebar.expand') : t('shell.sidebar.collapse')}
           className="app-shell-icon-control"
           onClick={onToggleSidebar}
         >
@@ -170,7 +165,7 @@ function TitlebarNavigation({
         </IconButton>
       ) : null}
       {onNewChat ? (
-        <IconButton label="新对话" className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
+        <IconButton label={t('app.newChat')} className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
           <Plus size={15} />
         </IconButton>
       ) : null}
@@ -179,9 +174,16 @@ function TitlebarNavigation({
 }
 
 function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
+  const { t } = useI18n();
   const [openMenu, setOpenMenu] = useState<WindowMenuKey | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const menus = useMemo(() => windowMenuDefinitions(actions), [actions]);
+  const menus = useMemo(() => windowMenuDefinitions(actions, t), [actions, t]);
+  const windowMenuLabels: Array<{ key: WindowMenuKey; label: string }> = [
+    { key: 'file', label: t('shell.menu.file') },
+    { key: 'edit', label: t('shell.menu.edit') },
+    { key: 'view', label: t('shell.menu.view') },
+    { key: 'help', label: t('shell.menu.help') },
+  ];
 
   useEffect(() => {
     if (!openMenu) return undefined;
@@ -201,7 +203,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
   }, [openMenu]);
 
   return (
-    <nav className="app-topbar__menu" aria-label="窗口菜单" ref={rootRef}>
+    <nav className="app-topbar__menu" aria-label={t('shell.window.menu')} ref={rootRef}>
       {windowMenuLabels.map((item) => (
         <span className="app-topbar__menu-group" key={item.key}>
           <button
@@ -244,24 +246,24 @@ function preventMouseFocus(event: MouseEvent<HTMLButtonElement>) {
   event.preventDefault();
 }
 
-function windowMenuDefinitions(actions: WindowMenuActions): Record<WindowMenuKey, WindowMenuItem[]> {
+function windowMenuDefinitions(actions: WindowMenuActions, t: Translate): Record<WindowMenuKey, WindowMenuItem[]> {
   return {
     file: [
-      menuItem('new-chat', '新对话', actions.onNewChat),
-      menuItem('settings', '设置', actions.onOpenSettings),
+      menuItem('new-chat', t('app.newChat'), actions.onNewChat),
+      menuItem('settings', t('shell.menu.settings'), actions.onOpenSettings),
     ],
     edit: [
-      commandMenuItem('cut', '剪切'),
-      commandMenuItem('copy', '复制'),
-      commandMenuItem('paste', '粘贴'),
-      commandMenuItem('select-all', '全选', 'selectAll'),
+      commandMenuItem('cut', t('shell.menu.cut')),
+      commandMenuItem('copy', t('shell.menu.copy')),
+      commandMenuItem('paste', t('shell.menu.paste')),
+      commandMenuItem('select-all', t('shell.menu.selectAll'), 'selectAll'),
     ],
     view: [
-      menuItem('toggle-sidebar', '切换侧栏', actions.onToggleSidebar),
-      menuItem('capabilities', '插件', actions.onOpenCapabilities),
+      menuItem('toggle-sidebar', t('shell.menu.toggleSidebar'), actions.onToggleSidebar),
+      menuItem('capabilities', t('shell.menu.capabilities'), actions.onOpenCapabilities),
     ],
     help: [
-      menuItem('about', '关于 Setsuna Desktop', () => {
+      menuItem('about', t('shell.menu.about'), () => {
         window.alert('Setsuna Desktop');
       }),
     ],
@@ -285,16 +287,17 @@ function commandMenuItem(key: string, label: string, command = key): WindowMenuI
 
 function WindowControls() {
   const controls = window.setsunaDesktop?.windowControls;
+  const { t } = useI18n();
 
   return (
-    <div className="app-window-controls" aria-label="窗口控制">
-      <button type="button" aria-label="最小化" title="最小化" onClick={() => void controls?.minimize()}>
+    <div className="app-window-controls" aria-label={t('shell.window.controls')}>
+      <button type="button" aria-label={t('shell.window.minimize')} title={t('shell.window.minimize')} onClick={() => void controls?.minimize()}>
         <Minus size={14} />
       </button>
-      <button type="button" aria-label="最大化" title="最大化" onClick={() => void controls?.toggleMaximize()}>
+      <button type="button" aria-label={t('shell.window.maximize')} title={t('shell.window.maximize')} onClick={() => void controls?.toggleMaximize()}>
         <WindowMaximizeIcon />
       </button>
-      <button className="app-window-controls__close" type="button" aria-label="关闭" title="关闭" onClick={() => void controls?.close()}>
+      <button className="app-window-controls__close" type="button" aria-label={t('shell.window.close')} title={t('shell.window.close')} onClick={() => void controls?.close()}>
         <X size={14} />
       </button>
     </div>

@@ -6,6 +6,7 @@ import { RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS } from '@setsuna-desktop
 import { Image } from 'antd';
 import { Copy, FolderOpen, Loader2, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { Button, TextArea } from '../../shared/ui/primitives.js';
 import { useDesktopImageAction, type DesktopImageAction } from '../workspace/hooks/useDesktopImageAction.js';
 
@@ -16,6 +17,7 @@ export function ImageGenerationPluginTest({
   generating: boolean;
   onGenerate: (prompt: string) => Promise<RuntimeImageGenerationTestResult>;
 }) {
+  const { t } = useI18n();
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RuntimeImageGenerationTestResult | null>(null);
@@ -23,7 +25,7 @@ export function ImageGenerationPluginTest({
   async function generate() {
     const normalizedPrompt = prompt.trim();
     if (!normalizedPrompt) {
-      setError('请先输入用于测试的生图提示词。');
+      setError(t('capabilities.image.test.promptRequired'));
       return;
     }
     setError(null);
@@ -38,19 +40,19 @@ export function ImageGenerationPluginTest({
     <section className="desktop-image-generation-test" aria-labelledby="image-generation-test-title">
       <header>
         <div>
-          <h4 id="image-generation-test-title">快速测试</h4>
-          <p>会先保存上方配置，再由本机 runtime 直连 Images API；测试请求只携带提示词。</p>
+          <h4 id="image-generation-test-title">{t('capabilities.image.test.title')}</h4>
+          <p>{t('capabilities.image.test.description')}</p>
         </div>
-        <span>直连 API</span>
+        <span>{t('capabilities.image.test.directApi')}</span>
       </header>
 
       <label className="desktop-image-generation-test__prompt">
-        <span>提示词</span>
+        <span>{t('capabilities.image.test.prompt')}</span>
         <TextArea
           rows={4}
           maxLength={RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS}
           value={prompt}
-          placeholder="例如：一只戴着飞行员护目镜的橘猫，坐在复古双翼飞机里，电影感光影"
+          placeholder={t('capabilities.image.test.promptPlaceholder')}
           disabled={generating}
           onChange={(event) => {
             setPrompt(event.currentTarget.value);
@@ -68,14 +70,14 @@ export function ImageGenerationPluginTest({
       <div className="desktop-image-generation-test__controls">
         <div className="desktop-image-generation-test__status" aria-live="polite">
           {error ? <span className="is-error">{error}</span> : null}
-          {!error && generating ? <span>正在调用图片生成服务，最长可能需要几分钟…</span> : null}
+          {!error && generating ? <span>{t('capabilities.image.test.generatingStatus')}</span> : null}
           {!error && !generating && result ? (
             <span className="is-success">
-              连接成功 · {result.images.length} 张 · {formatDuration(result.durationMs)}
+              {t('capabilities.image.test.success', { count: result.images.length, duration: formatDuration(result.durationMs, t) })}
               {result.model ? ` · ${result.model}` : ''}
             </span>
           ) : null}
-          {!error && !generating && !result ? <span>Ctrl/⌘ + Enter 也可以开始生成</span> : null}
+          {!error && !generating && !result ? <span>{t('capabilities.image.test.shortcut')}</span> : null}
         </div>
         <Button
           type="button"
@@ -84,13 +86,13 @@ export function ImageGenerationPluginTest({
           disabled={generating || !prompt.trim()}
           onClick={() => void generate()}
         >
-          {generating ? '生成中' : '保存配置并生成'}
+          {t(generating ? 'capabilities.image.test.generating' : 'capabilities.image.test.generate')}
         </Button>
       </div>
 
       {result?.images.length ? (
         <Image.PreviewGroup>
-          <div className="desktop-image-generation-test__results" aria-label={`${result.images.length} 张测试图片`}>
+          <div className="desktop-image-generation-test__results" aria-label={t('capabilities.image.test.results', { count: result.images.length })}>
             {result.images.map((attachment) => (
               <QuickTestImage attachment={attachment} key={attachment.assetId} />
             ))}
@@ -102,6 +104,7 @@ export function ImageGenerationPluginTest({
 }
 
 function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAttachment }) {
+  const { t } = useI18n();
   const runDesktopImageAction = useDesktopImageAction();
   const [source, setSource] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -109,7 +112,7 @@ function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAtt
   useEffect(() => {
     const desktop = window.setsunaDesktop?.desktop;
     if (!desktop) {
-      setLoadError('当前环境无法读取生成图片。');
+      setLoadError(t('capabilities.image.test.readUnavailable'));
       return;
     }
     let cancelled = false;
@@ -129,14 +132,14 @@ function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAtt
       })
       .catch((unknownError: unknown) => {
         if (!cancelled) {
-          setLoadError(unknownError instanceof Error ? unknownError.message : '图片读取失败。');
+          setLoadError(unknownError instanceof Error ? unknownError.message : t('capabilities.image.test.readFailed'));
         }
       });
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [attachment.assetId]);
+  }, [attachment.assetId, t]);
 
   const runAction = (action: DesktopImageAction) => runDesktopImageAction(action, {
     assetId: attachment.assetId,
@@ -147,19 +150,19 @@ function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAtt
     <article className="desktop-image-generation-test__image">
       <div className="desktop-image-generation-test__preview">
         {source ? (
-          <Image src={source} alt={attachment.name} preview={{ mask: '查看大图' }} />
+          <Image src={source} alt={attachment.name} preview={{ mask: t('capabilities.image.test.preview') }} />
         ) : (
-          <div role={loadError ? 'alert' : 'status'}>{loadError ?? '正在加载图片…'}</div>
+          <div role={loadError ? 'alert' : 'status'}>{loadError ?? t('capabilities.image.test.loading')}</div>
         )}
       </div>
       <div className="desktop-image-generation-test__image-footer">
         <span title={attachment.name}>{attachment.name}</span>
         <div>
           <Button type="button" variant="ghost" icon={<Copy size={13} />} onClick={() => void runAction('copy')}>
-            复制
+            {t('capabilities.image.test.copy')}
           </Button>
           <Button type="button" variant="ghost" icon={<FolderOpen size={13} />} onClick={() => void runAction('reveal')}>
-            定位
+            {t('capabilities.image.test.reveal')}
           </Button>
         </div>
       </div>
@@ -167,7 +170,7 @@ function QuickTestImage({ attachment }: { attachment: RuntimeGeneratedMessageAtt
   );
 }
 
-function formatDuration(durationMs: number): string {
+function formatDuration(durationMs: number, t: Translate): string {
   if (durationMs < 1_000) return `${durationMs} ms`;
-  return `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)} 秒`;
+  return t('capabilities.image.test.seconds', { seconds: (durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0) });
 }

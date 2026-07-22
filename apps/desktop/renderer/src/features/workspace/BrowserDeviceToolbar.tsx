@@ -1,5 +1,7 @@
 import { RotateCw } from 'lucide-react';
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import { SelectField } from '../../shared/ui/primitives.js';
 import {
   browserDeviceProfiles,
@@ -11,6 +13,10 @@ import {
 } from './browserDeviceEmulation.js';
 
 const browserDeviceScales = [0.25, 0.5, 0.75, 0.9, 1, 1.25] as const;
+const browserDeviceProfileLabelKeys: Partial<Record<BrowserDeviceProfileId, MessageKey>> = {
+  responsive: 'workspace.browser.device.responsive',
+  laptop: 'workspace.browser.device.laptop',
+};
 
 export function BrowserDeviceToolbar({
   onChange,
@@ -19,6 +25,7 @@ export function BrowserDeviceToolbar({
   onChange: (value: BrowserDeviceEmulationState) => void;
   value: BrowserDeviceEmulationState;
 }) {
+  const { t } = useI18n();
   const [heightDraft, setHeightDraft] = useState(() => String(value.height));
   const [widthDraft, setWidthDraft] = useState(() => String(value.width));
 
@@ -38,19 +45,26 @@ export function BrowserDeviceToolbar({
   };
 
   return (
-    <div aria-label="设备工具栏" className="desktop-browser-device-toolbar" role="toolbar">
-      <span className="desktop-browser-device-toolbar__label">尺寸:</span>
+    <div aria-label={t('workspace.browser.deviceToolbar')} className="desktop-browser-device-toolbar" role="toolbar">
+      <span className="desktop-browser-device-toolbar__label">{t('workspace.browser.size')}</span>
       <SelectField
-        aria-label="设备预设"
+        aria-label={t('workspace.browser.devicePreset')}
         className="desktop-browser-device-toolbar__profile"
         value={value.profileId}
         onValueChange={(profileId) => onChange(selectBrowserDeviceProfile(value, profileId as BrowserDeviceProfileId))}
       >
-        {browserDeviceProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
+        {browserDeviceProfiles.map((profile) => {
+          const labelKey = browserDeviceProfileLabelKeys[profile.id];
+          return (
+            <option key={profile.id} value={profile.id}>
+              {labelKey ? t(labelKey) : profile.label}
+            </option>
+          );
+        })}
       </SelectField>
       <span className="desktop-browser-device-toolbar__dimensions">
         <input
-          aria-label="视口宽度"
+          aria-label={t('workspace.browser.viewportWidth')}
           inputMode="numeric"
           max={5120}
           min={240}
@@ -62,7 +76,7 @@ export function BrowserDeviceToolbar({
         />
         <span aria-hidden="true">×</span>
         <input
-          aria-label="视口高度"
+          aria-label={t('workspace.browser.viewportHeight')}
           inputMode="numeric"
           max={5120}
           min={240}
@@ -74,16 +88,16 @@ export function BrowserDeviceToolbar({
         />
       </span>
       <button
-        aria-label="旋转设备"
+        aria-label={t('workspace.browser.rotateDevice')}
         className="desktop-browser-device-toolbar__rotate"
-        title="旋转设备"
+        title={t('workspace.browser.rotateDevice')}
         type="button"
         onClick={() => onChange(rotateBrowserDevice(value))}
       >
         <RotateCw size={14} />
       </button>
       <SelectField
-        aria-label="设备缩放"
+        aria-label={t('workspace.browser.deviceZoom')}
         className="desktop-browser-device-toolbar__scale"
         value={String(value.scale)}
         onValueChange={(scale) => onChange({ ...value, scale: Number(scale) })}

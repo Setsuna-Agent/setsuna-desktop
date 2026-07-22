@@ -24,6 +24,8 @@ import type {
   ConversationOverviewVisibility,
 } from '../../app/types.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import { ChatComposer } from './ChatComposer.js';
@@ -66,34 +68,34 @@ import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js
 type StarterSuggestion = {
   accent: 'blue' | 'green' | 'orange' | 'purple';
   icon: LucideIcon;
-  label: string;
-  prompt: string;
+  labelKey: MessageKey;
+  promptKey: MessageKey;
 };
 
 const starterSuggestions: StarterSuggestion[] = [
   {
     accent: 'blue',
     icon: SearchCode,
-    label: '探索并理解代码',
-    prompt: '请帮我探索并理解当前项目的代码结构、核心模块和主要运行流程。',
+    labelKey: 'chat.starter.explore',
+    promptKey: 'chat.starter.explorePrompt',
   },
   {
     accent: 'purple',
     icon: Hammer,
-    label: '构建新功能、应用或工具',
-    prompt: '请帮我在当前项目中构建一个新功能：',
+    labelKey: 'chat.starter.build',
+    promptKey: 'chat.starter.buildPrompt',
   },
   {
     accent: 'green',
     icon: ShieldCheck,
-    label: '审查代码并提出修改建议',
-    prompt: '请审查当前项目的代码，并提出具体、可执行的修改建议。',
+    labelKey: 'chat.starter.review',
+    promptKey: 'chat.starter.reviewPrompt',
   },
   {
     accent: 'orange',
     icon: Bug,
-    label: '修复问题和失败',
-    prompt: '请帮我定位并修复当前项目中的这个问题：',
+    labelKey: 'chat.starter.fix',
+    promptKey: 'chat.starter.fixPrompt',
   },
 ];
 
@@ -194,6 +196,7 @@ export function ChatWorkspace({
   plugins?: RuntimePluginSummary[];
   variant?: 'main' | 'side';
 }) {
+  const { t } = useI18n();
   const messages = currentThread?.messages ?? [];
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
@@ -234,7 +237,10 @@ export function ChatWorkspace({
     compact: overviewCompact,
     needsShift: overviewLayout.needsContentShift,
   });
-  const overviewContextLabel = useMemo(() => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status), [contextUsage, currentThread?.contextCompaction?.status]);
+  const overviewContextLabel = useMemo(
+    () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status, t),
+    [contextUsage, currentThread?.contextCompaction?.status, t],
+  );
   const showEmptyStarter = variant === 'main' && displayItems.length === 0 && !activeTurnId;
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
@@ -423,7 +429,7 @@ export function ChatWorkspace({
   const confirmDeleteSelection = useCallback(async () => {
     const isCurrentOperation = localOperationRequests.begin();
     if (!selectedDeleteMessageIds.length) {
-      setActionError('请选择要删除的消息');
+      setActionError(t('chat.delete.selectFirst'));
       return;
     }
     setDeletingMessages(true);
@@ -439,7 +445,7 @@ export function ChatWorkspace({
     } finally {
       commitChatWorkspaceOperation(isCurrentOperation, () => setDeletingMessages(false));
     }
-  }, [cancelDeleteSelection, localOperationRequests, onDeleteMessages, selectedDeleteMessageIds]);
+  }, [cancelDeleteSelection, localOperationRequests, onDeleteMessages, selectedDeleteMessageIds, t]);
 
   const composer = (starter = false) => (
     <ChatComposer
@@ -460,7 +466,7 @@ export function ChatWorkspace({
       threadUsage={displayedThreadUsage}
       starter={starter}
       threadMemoryMode={currentThread?.memoryMode}
-      placeholder={variant === 'side' ? '给侧边任务发送消息' : undefined}
+      placeholder={variant === 'side' ? t('chat.composer.sidePlaceholder') : undefined}
       onCancelActiveTurn={onCancelActiveTurn}
       onAccessModeChange={onAccessModeChange}
       onCompactContext={onCompactContext}
@@ -479,7 +485,9 @@ export function ChatWorkspace({
       onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
     />
   );
-  const starterTitle = activeProject ? `我们应该在 ${activeProject.name} 中构建什么？` : '我们该做什么？';
+  const starterTitle = activeProject
+    ? t('chat.starter.projectTitle', { project: activeProject.name })
+    : t('chat.starter.title');
   const startEditingMessage = useCallback((message: RuntimeMessage) => {
     setActionError(null);
     setDeleteMode(false);
@@ -611,7 +619,7 @@ export function ChatWorkspace({
           ) : null}
           {showScrollBottom && !showEmptyStarter ? (
             <div className="chat-scroll-bottom-anchor">
-              <button className="chat-scroll-bottom" type="button" aria-label="滚动到底部" onClick={() => scrollToBottom()}>
+              <button className="chat-scroll-bottom" type="button" aria-label={t('chat.scrollBottom')} onClick={() => scrollToBottom()}>
                 <ArrowDown size={16} />
               </button>
             </div>
@@ -639,6 +647,8 @@ export function ChatWorkspace({
 }
 
 function ChatStarter({ composer, title, onSelectSuggestion }: { composer: ReactNode; title: string; onSelectSuggestion: (prompt: string) => void }) {
+  const { t } = useI18n();
+
   return (
     <div className="chat-starter">
       <div className="chat-starter__intro">
@@ -646,13 +656,13 @@ function ChatStarter({ composer, title, onSelectSuggestion }: { composer: ReactN
           <img className="chat-starter__system-icon" src={setsunaAppIconUrl} alt="" aria-hidden="true" />
           <h1>{title}</h1>
         </div>
-        <div className="chat-starter__suggestions" role="group" aria-label="快捷建议">
+        <div className="chat-starter__suggestions" role="group" aria-label={t('chat.starter.suggestions')}>
           {starterSuggestions.map((suggestion) => {
             const Icon = suggestion.icon;
             return (
-              <button key={suggestion.label} className={`chat-starter-suggestion chat-starter-suggestion--${suggestion.accent}`} type="button" onClick={() => onSelectSuggestion(suggestion.prompt)}>
+              <button key={suggestion.labelKey} className={`chat-starter-suggestion chat-starter-suggestion--${suggestion.accent}`} type="button" onClick={() => onSelectSuggestion(t(suggestion.promptKey))}>
                 <Icon size={16} strokeWidth={1.8} aria-hidden="true" />
-                <span>{suggestion.label}</span>
+                <span>{t(suggestion.labelKey)}</span>
               </button>
             );
           })}

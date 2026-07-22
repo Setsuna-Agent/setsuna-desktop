@@ -13,6 +13,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 export type SlashCommandMenuItem =
@@ -52,11 +53,12 @@ export function ChatSlashCommandMenu({
   onHover: (index: number) => void;
   onSelect: (item: SlashCommandMenuItem) => void;
 }) {
+  const { t } = useI18n();
   const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(items[activeIndex]?.key);
 
   return (
-    <div ref={scrollContainerRef} className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label="命令">
-      <div className="chat-command-menu__title">{menuTitle(items[activeIndex] ?? items[0])}</div>
+    <div ref={scrollContainerRef} className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label={t('chat.command.label')}>
+      <div className="chat-command-menu__title">{menuTitle(items[activeIndex] ?? items[0], t)}</div>
       {items.length ? (
         items.map((item, index) => (
           <button
@@ -82,7 +84,7 @@ export function ChatSlashCommandMenu({
                 (item.skill.description || unresolvedSkillMcpDependencyCount(item.skill)) ? (
                   <span className="chat-command-menu__item-desc">
                     {unresolvedSkillMcpDependencyCount(item.skill)
-                      ? `需要配置 ${unresolvedSkillMcpDependencyCount(item.skill)} 个 MCP 依赖${item.skill.description ? ` · ${item.skill.description}` : ''}`
+                      ? `${t('chat.command.mcpRequired', { count: unresolvedSkillMcpDependencyCount(item.skill) })}${item.skill.description ? ` · ${item.skill.description}` : ''}`
                       : item.skill.description}
                   </span>
                 ) : null
@@ -96,15 +98,19 @@ export function ChatSlashCommandMenu({
               <span className="chat-command-menu__item-scope">
                 {item.kind === 'skill'
                   ? unresolvedSkillMcpDependencyCount(item.skill)
-                    ? '需配置'
-                    : item.skill.kind === 'user' ? '个人' : item.skill.kind === 'plugin' ? '插件' : '内置'
+                    ? t('chat.command.needsConfiguration')
+                    : item.skill.kind === 'user'
+                      ? t('chat.command.personal')
+                      : item.skill.kind === 'plugin'
+                        ? t('chat.command.plugin')
+                        : t('chat.command.builtIn')
                   : item.scope}
               </span>
             )}
           </button>
         ))
       ) : (
-        <div className="chat-command-menu__state">没有匹配的命令或 Skill</div>
+        <div className="chat-command-menu__state">{t('chat.command.noMatch')}</div>
       )}
     </div>
   );
@@ -150,18 +156,18 @@ function MemoryCommandSwitch({ checked, disabled }: { checked: boolean; disabled
   );
 }
 
-function menuTitle(item?: SlashCommandMenuItem): string {
-  if (!item) return '命令';
-  if (item.kind === 'skill') return '技能';
-  if (item.kind === 'model') return '模型选择';
-  if (item.type === 'plan') return '计划';
-  if (item.type === 'collaboration') return '协作';
-  if (item.type === 'goal') return '目标';
-  if (item.type === 'usage') return '用量与诊断';
-  if (item.type === 'review') return '审查';
-  if (item.type === 'side-chat') return '侧边任务';
-  if (item.type === 'memory-mode') return '记忆';
-  return '命令';
+function menuTitle(item: SlashCommandMenuItem | undefined, t: Translate): string {
+  if (!item) return t('chat.command.label');
+  if (item.kind === 'skill') return t('chat.command.skill');
+  if (item.kind === 'model') return t('chat.command.model');
+  if (item.type === 'plan') return t('chat.command.plan');
+  if (item.type === 'collaboration') return t('chat.command.collaboration');
+  if (item.type === 'goal') return t('chat.command.goal');
+  if (item.type === 'usage') return t('chat.composer.usage');
+  if (item.type === 'review') return t('chat.command.review');
+  if (item.type === 'side-chat') return t('chat.composer.sideTask');
+  if (item.type === 'memory-mode') return t('chat.command.memory');
+  return t('chat.command.label');
 }
 
 function isSwitchAction(type: Extract<SlashCommandMenuItem, { kind: 'action' }>['type']): boolean {

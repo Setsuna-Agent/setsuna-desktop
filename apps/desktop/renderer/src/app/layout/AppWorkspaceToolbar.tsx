@@ -4,6 +4,7 @@ import { WorkspaceTopbar } from '../../features/workspace/WorkspaceTopbar.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type { DesktopPanelType } from '../../features/workspace/model.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
 export function AppWorkspaceToolbar({
   activeProject,
@@ -91,6 +92,8 @@ function WorkspaceOverviewToolbar({
   onToggleTerminal: () => void;
   onToggleWorkspace: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="desktop-workspace-toolbar desktop-workspace-toolbar--overview">
       <div className="chat-file-review-panel__header">
@@ -107,8 +110,8 @@ function WorkspaceOverviewToolbar({
                 .filter(Boolean)
                 .join(' ')}
               type="button"
-              aria-label={terminalOpen ? '关闭底栏' : '打开底栏终端'}
-              title={terminalOpen ? '关闭底栏' : '打开底栏终端'}
+              aria-label={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
+              title={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
               onClick={onToggleTerminal}
             >
               <Terminal size={14} />
@@ -116,8 +119,8 @@ function WorkspaceOverviewToolbar({
             <button
               className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close"
               type="button"
-              aria-label="收起右侧栏"
-              title="收起右侧栏"
+              aria-label={t('topbar.collapseRightSidebar')}
+              title={t('topbar.collapseRightSidebar')}
               onClick={onToggleWorkspace}
             >
               <PanelRight size={14} />

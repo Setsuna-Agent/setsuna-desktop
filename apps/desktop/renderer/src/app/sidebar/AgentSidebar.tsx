@@ -19,6 +19,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type Ref,
 } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 import { SidebarUserMenu } from './SidebarUserMenu.js';
@@ -109,20 +110,22 @@ export function AgentSidebar({
   onToggleThreadActions: (threadId: string) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <aside className="app-sidebar desktop-agent-sidebar" aria-hidden={collapsed || undefined}>
       <div className="desktop-agent-sidebar__top-actions">
         <button className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>
           <Plus className="desktop-agent-command__icon" size={15} />
-          <span className="desktop-agent-command__label">新对话</span>
+          <span className="desktop-agent-command__label">{t('app.newChat')}</span>
         </button>
         <button ref={searchTriggerRef} className={`desktop-agent-command ${searchOpen ? 'is-active' : ''}`} type="button" onClick={onToggleSearch}>
           <Search className="desktop-agent-command__icon" size={15} />
-          <span className="desktop-agent-command__label">搜索</span>
+          <span className="desktop-agent-command__label">{t('sidebar.search')}</span>
         </button>
         <button className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
           <Blocks className="desktop-agent-command__icon" size={15} />
-          <span className="desktop-agent-command__label">插件</span>
+          <span className="desktop-agent-command__label">{t('sidebar.plugins')}</span>
         </button>
       </div>
       <div className="desktop-agent-sidebar__body">
@@ -172,11 +175,11 @@ export function AgentSidebar({
         type="button"
         role="separator"
         aria-orientation="vertical"
-        aria-label="调整侧栏宽度"
+        aria-label={t('sidebar.resize')}
         aria-valuemin={minWidth}
         aria-valuemax={maxWidth}
         aria-valuenow={width}
-        title="拖拽调整侧栏宽度"
+        title={t('sidebar.resizeHint')}
         onPointerDown={onResizeStart}
         onKeyDown={(event) => {
           if (event.key === 'ArrowLeft') {
@@ -239,20 +242,22 @@ function ProjectSection({
   onToggleProjectsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="desktop-agent-sidebar__group">
       <div className="desktop-agent-sidebar__section-head">
         <button className="desktop-agent-sidebar__section-title-button" type="button" onClick={onToggleProjectsCollapsed}>
-          <span>项目</span>
+          <span>{t('sidebar.projects')}</span>
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${projectsCollapsed ? 'is-collapsed' : ''}`} size={13} />
         </button>
         <div className="desktop-agent-sidebar__section-actions">
           <button
             className={`agent-sidebar-icon-button ${selectingProjectDirectory ? 'is-active' : ''}`}
             type="button"
-            aria-label="选择项目目录"
+            aria-label={t('sidebar.chooseProject')}
             disabled={selectingProjectDirectory}
-            title="选择项目目录"
+            title={t('sidebar.chooseProject')}
             onClick={onSelectDirectory}
           >
             {selectingProjectDirectory ? <RefreshCw className="is-spinning" size={14} /> : <FolderPlus size={14} />}
@@ -327,7 +332,7 @@ function ProjectSection({
                           onToggleMenu={onToggleThreadActions}
                         />
                       ) : (
-                        <div className="desktop-agent-sidebar__empty-session">暂无对话</div>
+                        <div className="desktop-agent-sidebar__empty-session">{t('sidebar.emptyChats')}</div>
                       )
                     ) : null}
                   </div>
@@ -335,7 +340,7 @@ function ProjectSection({
               })
             ) : (
               <button className="desktop-agent-sidebar__empty-project" type="button" disabled={selectingProjectDirectory} onClick={onSelectDirectory}>
-                {selectingProjectDirectory ? '正在选择项目目录...' : '选择项目目录'}
+                {selectingProjectDirectory ? t('sidebar.choosingProject') : t('sidebar.chooseProject')}
               </button>
             )}
           </div>
@@ -360,6 +365,7 @@ function ProjectActionMenu({
   onRemoveProject: (project: WorkspaceProject) => void;
   onToggleProjectActions: (projectId: string) => void;
 }) {
+  const { t } = useI18n();
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const toggleMenu = () => onToggleProjectActions(project.id);
   const handleTriggerClick = (event: ReactMouseEvent<HTMLSpanElement>) => {
@@ -397,7 +403,7 @@ function ProjectActionMenu({
         ref={triggerRef}
         role="button"
         tabIndex={0}
-        aria-label="项目操作"
+        aria-label={t('sidebar.projectActions')}
         aria-expanded={open}
         onClick={handleTriggerClick}
         onKeyDown={handleTriggerKeyDown}
@@ -409,31 +415,31 @@ function ProjectActionMenu({
           type="button"
           role="menuitem"
           onClick={() => {
-            const confirmed = window.confirm(`确认归档项目「${project.name}」？项目下的全部对话也会归档，本地文件不会被删除。`);
+            const confirmed = window.confirm(t('sidebar.archiveProjectTitle', { project: project.name }));
             if (confirmed) onArchiveProject(project);
           }}
         >
           <Archive size={13} />
-          归档项目
+          {t('sidebar.archiveProject')}
         </button>
         <button
           type="button"
           role="menuitem"
           className="is-danger"
           onClick={() => {
-            const confirmed = window.confirm(`确认从侧栏移除项目「${project.name}」？本地文件不会被删除。`);
+            const confirmed = window.confirm(t('sidebar.removeProjectTitle', { project: project.name }));
             if (confirmed) onRemoveProject(project);
           }}
         >
           <Trash2 size={13} />
-          移除
+          {t('common.remove')}
         </button>
       </SidebarFloatingMenu>
       <button
         className="desktop-agent-project__action desktop-agent-project__new-thread"
         type="button"
-        aria-label={`在 ${project.name} 中新建会话`}
-        title="新建会话"
+        aria-label={t('sidebar.newProjectChat', { project: project.name })}
+        title={t('sidebar.newChat')}
         onClick={() => onCreateProjectThread(project.id)}
       >
         <Plus size={14} />
@@ -471,6 +477,8 @@ function GlobalThreadSection({
   onToggleSessionsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="desktop-agent-sidebar__group desktop-agent-sidebar__group--sessions">
       <div className="desktop-agent-sidebar__section-head">
@@ -479,11 +487,11 @@ function GlobalThreadSection({
           type="button"
           onClick={activeProjectId ? onEnterChatMode : onToggleSessionsCollapsed}
         >
-          <span>对话</span>
+          <span>{t('sidebar.chats')}</span>
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${sessionsCollapsed ? 'is-collapsed' : ''}`} size={13} />
         </button>
         <div className="desktop-agent-sidebar__section-actions">
-          <button className="agent-sidebar-icon-button" type="button" aria-label="新对话" onClick={onCreateGlobalThread}>
+          <button className="agent-sidebar-icon-button" type="button" aria-label={t('app.newChat')} onClick={onCreateGlobalThread}>
             <Plus size={14} />
           </button>
         </div>
@@ -503,7 +511,7 @@ function GlobalThreadSection({
           />
         ) : (
           <div className="app-sidebar__list">
-            <div className="desktop-agent-sidebar__empty-session">暂无聊天</div>
+            <div className="desktop-agent-sidebar__empty-session">{t('sidebar.emptyGlobalChats')}</div>
           </div>
         )
       ) : null}

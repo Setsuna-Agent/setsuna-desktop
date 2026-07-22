@@ -1,4 +1,5 @@
 import { Bell, CircleGauge, PanelRight, Terminal } from 'lucide-react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import type { DesktopUpdaterStateView } from '../controller/useDesktopUpdater.js';
 import type { MainView } from '../types.js';
@@ -24,11 +25,13 @@ export function AppTopbarActions({
   onToggleSidePanel: () => void;
   onToggleBottomTerminal: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <>
       {updater.ready ? (
         <IconButton
-          label={updater.state?.manualInstall ? '打开更新安装包' : '重启安装更新'}
+          label={updater.state?.manualInstall ? t('topbar.openInstaller') : t('topbar.restartUpdate')}
           className="app-topbar-update-alert"
           disabled={updater.installing}
           onClick={() => void updater.promptReadyUpdate()}
@@ -39,7 +42,7 @@ export function AppTopbarActions({
       ) : null}
       {activeView === 'chat' && conversationOverviewAvailable ? (
         <IconButton
-          label={conversationOverviewVisible ? '隐藏环境信息' : '显示环境信息'}
+          label={conversationOverviewVisible ? t('topbar.hideEnvironment') : t('topbar.showEnvironment')}
           aria-pressed={conversationOverviewVisible}
           className={`app-shell-icon-control ${conversationOverviewVisible ? 'is-active' : ''}`}
           onClick={onToggleConversationOverview}
@@ -49,7 +52,7 @@ export function AppTopbarActions({
       ) : null}
       {activeView === 'chat' && !sidePanelVisible ? (
         <IconButton
-          label={bottomTerminalPanelOpen ? '关闭终端' : '打开终端'}
+          label={bottomTerminalPanelOpen ? t('topbar.closeTerminal') : t('topbar.openTerminal')}
           className={`app-shell-icon-control ${bottomTerminalPanelOpen ? 'is-active' : ''}`}
           onClick={onToggleBottomTerminal}
         >
@@ -57,7 +60,7 @@ export function AppTopbarActions({
         </IconButton>
       ) : null}
       {activeView === 'chat' && !sidePanelVisible ? (
-        <IconButton label="打开右侧栏" className="app-shell-icon-control" onClick={onToggleSidePanel}>
+        <IconButton label={t('topbar.openRightSidebar')} className="app-shell-icon-control" onClick={onToggleSidePanel}>
           <PanelRight size={16} />
         </IconButton>
       ) : null}

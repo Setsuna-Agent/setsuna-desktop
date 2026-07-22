@@ -1,4 +1,7 @@
 import type { DesktopOpenPathResult, DesktopWorkspaceApp, SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 type SideWorkspaceFileOpeningOptions = {
   filePath: string;
@@ -6,6 +9,7 @@ type SideWorkspaceFileOpeningOptions = {
   openInWorkspaceApp?: SetsunaDesktopBridge['workspaceApps']['open'];
   openWithDefaultApp?: (workspaceRoot: string, filePath: string) => Promise<DesktopOpenPathResult>;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
+  t?: Translate;
   workspaceRoot: string;
 };
 
@@ -16,15 +20,16 @@ export async function openSideWorkspaceFileAtRoot({
   openInWorkspaceApp,
   openWithDefaultApp,
   selectedWorkspaceApp,
+  t = defaultTranslate,
   workspaceRoot,
 }: SideWorkspaceFileOpeningOptions): Promise<string | null> {
   if (selectedWorkspaceApp) {
-    if (!openInWorkspaceApp) return '当前环境不支持使用工作区应用打开文件。';
+    if (!openInWorkspaceApp) return t('chat.mention.workspaceAppUnsupported');
     await openInWorkspaceApp(workspaceRoot, selectedWorkspaceApp.id, filePath, line ?? null);
     return null;
   }
 
-  if (!openWithDefaultApp) return '当前环境不支持打开工作区文件。';
+  if (!openWithDefaultApp) return t('chat.mention.openUnsupported');
   const result = await openWithDefaultApp(workspaceRoot, filePath);
   return result.ok ? null : result.error;
 }

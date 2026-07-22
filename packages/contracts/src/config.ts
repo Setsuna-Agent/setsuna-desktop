@@ -84,8 +84,13 @@ export type RuntimeSetsunaStyle = 'developer' | 'daily';
 
 export type RuntimeMarkdownLinkOpenMode = 'in-app' | 'external';
 
+export const RUNTIME_INTERFACE_LANGUAGES = ['zh-CN', 'en-US'] as const;
+
+export type RuntimeInterfaceLanguage = typeof RUNTIME_INTERFACE_LANGUAGES[number];
+
 export type RuntimeDesktopSettings = {
   [key: string]: unknown;
+  interfaceLanguage?: RuntimeInterfaceLanguage;
   markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
   npmRegistryUrl?: string;
   pythonPackageIndexUrl?: string;

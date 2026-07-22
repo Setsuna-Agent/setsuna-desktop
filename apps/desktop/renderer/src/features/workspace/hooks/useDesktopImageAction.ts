@@ -1,16 +1,20 @@
 import type { DesktopImageInput } from '@setsuna-desktop/contracts';
 import { useCallback } from 'react';
 import { useToast } from '../../../app/providers/ToastProvider.js';
+import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export type DesktopImageAction = 'copy' | 'reveal';
 
 export function useDesktopImageAction() {
   const toast = useToast();
+  const { t } = useI18n();
 
   return useCallback(async (action: DesktopImageAction, input: DesktopImageInput): Promise<boolean> => {
     const desktop = window.setsunaDesktop?.desktop;
     if (!desktop) {
-      toast.error('当前环境无法执行图片操作。');
+      toast.error(t('workspace.image.unsupported'));
       return false;
     }
     try {
@@ -21,15 +25,15 @@ export function useDesktopImageAction() {
         toast.error(result.error);
         return false;
       }
-      toast.success(desktopImageActionSuccessMessage(action));
+      toast.success(desktopImageActionSuccessMessage(action, t));
       return true;
     } catch (unknownError) {
-      toast.error(unknownError instanceof Error ? unknownError.message : '图片操作失败。');
+      toast.error(unknownError instanceof Error ? unknownError.message : t('workspace.image.failed'));
       return false;
     }
-  }, [toast]);
+  }, [t, toast]);
 }
 
-export function desktopImageActionSuccessMessage(action: DesktopImageAction): string {
-  return action === 'copy' ? '图片已复制' : '已在文件夹中显示图片';
+export function desktopImageActionSuccessMessage(action: DesktopImageAction, t: Translate = defaultTranslate): string {
+  return t(action === 'copy' ? 'workspace.image.copied' : 'workspace.image.revealed');
 }

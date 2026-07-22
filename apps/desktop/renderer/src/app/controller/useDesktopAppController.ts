@@ -18,6 +18,7 @@ import { useProjectWorkspace } from '../../features/workspace/hooks/useProjectWo
 import { useThreadWorkspace } from '../../features/workspace/hooks/useThreadWorkspace.js';
 import { useRuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
@@ -26,6 +27,7 @@ import { useDesktopUpdater } from './useDesktopUpdater.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 
 export function useDesktopAppController() {
+  const { t } = useI18n();
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<MainView>('chat');
   const [sidebarManuallyCollapsed, setSidebarManuallyCollapsed] = useState(false);
@@ -239,7 +241,7 @@ export function useDesktopAppController() {
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
   ].filter(Boolean).join(' ');
 
-  const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? '新对话' : undefined;
+  const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? t('app.newChat') : undefined;
 
   return {
     activeProject: effectiveProject,

@@ -12,6 +12,7 @@ import {
   markdownPreviewBody,
 } from '../../../../src/features/capabilities/CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginListItem } from '../../../../src/features/capabilities/CapabilitiesPluginListItem.js';
+import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('capabilities plugin components', () => {
   it('renders an installed local plugin as a lightweight list row', () => {
@@ -76,6 +77,43 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('desktop-capability-card');
     expect(html).not.toContain('目录');
     expect(html).not.toContain('plugin.json');
+  });
+
+  it('localizes built-in plugin metadata and marketplace actions in English', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider initialLocale="en-US">
+        <CapabilitiesPluginListItem
+          plugin={{
+            id: 'openai-docs',
+            name: 'OpenAI 官方文档',
+            icon: 'openai-docs',
+            version: '1.0.0',
+            description: '查询最新官方开发文档。',
+            publisher: 'OpenAI',
+            tags: ['官方', '开发文档'],
+            featured: true,
+            skills: [{ id: 'openai-docs.openai-docs', name: 'OpenAI 官方文档' }],
+            mcpServers: [{ key: 'openai_docs', label: 'OpenAI Developer Docs', transport: 'streamableHttp' }],
+            hooks: [],
+            resources: [],
+            capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
+            installed: false,
+            updateAvailable: false,
+          }}
+          installing={false}
+          onInstall={async () => undefined}
+          onOpen={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(html).toContain('OpenAI Official Documentation');
+    expect(html).toContain('latest official documentation');
+    expect(html).toContain('1 skill');
+    expect(html).toContain('1 service');
+    expect(html).toContain('>Get<');
+    expect(html).not.toContain('OpenAI 官方文档');
+    expect(html).not.toContain('个技能');
   });
 
   it('offers an update for an installed marketplace plugin with a newer bundled version', () => {

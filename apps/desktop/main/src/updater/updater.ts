@@ -6,11 +6,13 @@ import type {
   DesktopUpdateInstallMode,
   DesktopUpdateProgress,
   DesktopUpdateState,
+  RuntimeInterfaceLanguage,
 } from '@setsuna-desktop/contracts';
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { createNativeTranslate } from '../i18n/native-messages.js';
 import {
   GITHUB_DIRECT_DOWNLOAD_SOURCE,
   resolveUpdateDownloadUrl,
@@ -127,12 +129,15 @@ export class DesktopUpdater {
     return this.getState();
   }
 
-  async promptReady(window: BrowserWindow | null): Promise<DesktopUpdateActionResult> {
+  async promptReady(
+    window: BrowserWindow | null,
+    locale: RuntimeInterfaceLanguage = 'zh-CN',
+  ): Promise<DesktopUpdateActionResult> {
     if (this.state.status !== 'downloaded' || !this.state.downloadedFilePath) {
       return { ok: false, action: 'none', state: this.getState(), error: 'No downloaded update is ready.' };
     }
 
-    const prompt = promptOptionsForState(this.state);
+    const prompt = promptOptionsForState(this.state, locale);
     const result = window ? await dialog.showMessageBox(window, prompt) : await dialog.showMessageBox(prompt);
 
     if (result.response !== 0) {
@@ -374,36 +379,43 @@ function updateInfoFromRelease(release: ReleaseInfo): DesktopUpdateInfo {
   };
 }
 
-function promptOptionsForState(state: DesktopUpdateState): Electron.MessageBoxOptions {
+function promptOptionsForState(
+  state: DesktopUpdateState,
+  locale: RuntimeInterfaceLanguage,
+): Electron.MessageBoxOptions {
+  const t = createNativeTranslate(locale);
   if (state.platform === 'darwin') {
+    const packageName = state.assetName ?? t('updater.ready.macPackage');
     return {
       type: 'info',
-      buttons: ['打开访达', '稍后'],
+      buttons: [t('updater.ready.openFinder'), t('updater.ready.later')],
       defaultId: 0,
       cancelId: 1,
-      message: '更新已经准备完成',
-      detail: `已下载 ${state.assetName ?? '新的 macOS 安装包'}。打开访达后请手动安装。`,
+      message: t('updater.ready.title'),
+      detail: t('updater.ready.macDetail', { name: packageName }),
     };
   }
 
   if (state.platform === 'win32') {
+    const packageName = state.assetName ?? t('updater.ready.windowsPackage');
     return {
       type: 'info',
-      buttons: ['重启更新', '稍后'],
+      buttons: [t('updater.ready.restart'), t('updater.ready.later')],
       defaultId: 0,
       cancelId: 1,
-      message: '更新已经准备完成',
-      detail: `已下载 ${state.assetName ?? '新的 Windows 安装包'}。继续后会打开安装程序并退出当前版本。`,
+      message: t('updater.ready.title'),
+      detail: t('updater.ready.windowsDetail', { name: packageName }),
     };
   }
 
+  const packageName = state.assetName ?? t('updater.ready.package');
   return {
     type: 'info',
-    buttons: ['打开下载目录', '稍后'],
+    buttons: [t('updater.ready.openDownloads'), t('updater.ready.later')],
     defaultId: 0,
     cancelId: 1,
-    message: '更新已经准备完成',
-    detail: `已下载 ${state.assetName ?? '新的安装包'}。`,
+    message: t('updater.ready.title'),
+    detail: t('updater.ready.detail', { name: packageName }),
   };
 }
 

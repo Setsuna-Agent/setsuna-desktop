@@ -1,6 +1,7 @@
 import type { RuntimeSkillDetail, RuntimeSkillInput } from '@setsuna-desktop/contracts';
 import { Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, PageHeader, TextArea, TextField } from '../../shared/ui/primitives.js';
 
 type SkillEditorDraft = {
@@ -25,6 +26,7 @@ export function CapabilitiesSkillEditor({
   onBack: () => void;
   onSave: (input: RuntimeSkillInput) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<SkillEditorDraft>(() => createDraft(skill));
 
   useEffect(() => {
@@ -43,8 +45,8 @@ export function CapabilitiesSkillEditor({
     <section className="desktop-capabilities-detail desktop-capabilities-skill-editor">
       <PageHeader
         onBack={onBack}
-        title={creating ? '新建 Skill' : skill?.name || '编辑 Skill'}
-        subtitle={creating ? '保存到本地 user-skills，不请求外部接口。' : '只支持编辑本地个人 Skill。'}
+        title={creating ? t('capabilities.skill.editor.create') : skill?.name || t('capabilities.skill.editor.edit')}
+        subtitle={t(creating ? 'capabilities.skill.editor.createSubtitle' : 'capabilities.skill.editor.editSubtitle')}
         actions={
           <Button
             type="button"
@@ -53,28 +55,28 @@ export function CapabilitiesSkillEditor({
             disabled={saving || !draft.name.trim() || !draft.content.trim()}
             onClick={() => void onSave(toInput(draft, creating))}
           >
-            {saving ? '保存中' : '保存'}
+            {saving ? t('capabilities.common.saving') : t('common.save')}
           </Button>
         }
       />
 
       <div className="desktop-capabilities-skill-form">
         <label>
-          <span>名称</span>
-          <TextField value={draft.name} onChange={(event) => setDraftField(setDraft, 'name', event.target.value)} placeholder="Skill 名称" />
+          <span>{t('capabilities.skill.editor.name')}</span>
+          <TextField value={draft.name} onChange={(event) => setDraftField(setDraft, 'name', event.target.value)} placeholder={t('capabilities.skill.editor.namePlaceholder')} />
         </label>
         <label>
-          <span>标识</span>
+          <span>{t('capabilities.skill.editor.id')}</span>
           <TextField
             value={draft.id}
             disabled={!creating}
             onChange={(event) => setDraftField(setDraft, 'id', event.target.value)}
-            placeholder="留空则按名称生成"
+            placeholder={t('capabilities.skill.editor.idPlaceholder')}
           />
         </label>
         <label className="desktop-capabilities-skill-form__full">
-          <span>简介</span>
-          <TextArea value={draft.description} onChange={(event) => setDraftField(setDraft, 'description', event.target.value)} placeholder="一句话说明这个 Skill 适合做什么" />
+          <span>{t('capabilities.skill.editor.description')}</span>
+          <TextArea value={draft.description} onChange={(event) => setDraftField(setDraft, 'description', event.target.value)} placeholder={t('capabilities.skill.editor.descriptionPlaceholder')} />
         </label>
         <label className="desktop-capabilities-skill-form__full">
           <span>SKILL.md</span>
@@ -82,22 +84,22 @@ export function CapabilitiesSkillEditor({
             className="desktop-capabilities-skill-form__content"
             value={draft.content}
             onChange={(event) => setDraftField(setDraft, 'content', event.target.value)}
-            placeholder="# Skill\n\n写下使用时机、工作流程和约束。"
+            placeholder={t('capabilities.skill.editor.contentPlaceholder')}
             spellCheck={false}
           />
         </label>
         <div className="desktop-capabilities-skill-form__checks">
-          <label className="sd-check" title="启用后可在对话中选择这个 Skill">
+          <label className="sd-check" title={t('capabilities.skill.enableHint')}>
             <input type="checkbox" checked={draft.enabled} onChange={(event) => setEnabled(event.currentTarget.checked)} />
-            <span>启用</span>
+            <span>{t('capabilities.skill.enabled')}</span>
           </label>
-          <label className="sd-check" title="默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文">
+          <label className="sd-check" title={t('capabilities.skill.defaultHint')}>
             <input type="checkbox" checked={draft.selected} disabled={!draft.enabled} onChange={(event) => setDraftField(setDraft, 'selected', event.currentTarget.checked)} />
-            <span>默认使用</span>
+            <span>{t('capabilities.skill.editor.default')}</span>
           </label>
         </div>
         <p className="desktop-capabilities-skill-usage-help desktop-capabilities-skill-form__full">
-          默认使用会在每轮对话自动注入这个 Skill 的 SKILL.md 正文；只建议给常用且内容较短的 Skill 开启。手动词槽只影响当前这次发送。
+          {t('capabilities.skill.editor.defaultDescription')}
         </p>
       </div>
     </section>

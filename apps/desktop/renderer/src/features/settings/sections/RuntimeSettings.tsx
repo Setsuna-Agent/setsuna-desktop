@@ -1,10 +1,11 @@
 import type { RuntimeConfigState, RuntimeDesktopSettings } from '@setsuna-desktop/contracts';
 import { ChevronRight, Database, FileCog, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { localizedRuntimeAccessModeOptions } from '../../../shared/i18n/runtimeAccessModeCopy.js';
 import {
   runtimeAccessModeSelection as accessModeSelection,
   runtimeAccessModeForConfig,
-  runtimeAccessModeOptions,
 } from '../../../shared/lib/runtimeAccessMode.js';
 import { RuntimeAccessModeMenu } from '../../../shared/ui/RuntimeAccessModeMenu.js';
 import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/primitives.js';
@@ -24,27 +25,28 @@ export function RuntimePolicySettings({
   onSave: (input: RuntimePreferenceInput) => Promise<void>;
   onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [localPathError, setLocalPathError] = useState<string | null>(null);
 
   const openRuntimePath = async (targetPath: string, label: string) => {
     const normalizedPath = targetPath.trim();
     if (!normalizedPath) {
-      setLocalPathError(`${label}路径为空。`);
+      setLocalPathError(t('settings.runtime.pathEmpty', { label }));
       return;
     }
     const api = window.setsunaDesktop?.desktop;
     if (!api?.openPath) {
-      setLocalPathError('当前环境不支持打开本地路径。');
+      setLocalPathError(t('settings.runtime.openUnsupported'));
       return;
     }
     setOpeningPath(normalizedPath);
     setLocalPathError(null);
     try {
       const result = await api.openPath(normalizedPath);
-      if (!result.ok) setLocalPathError(result.error || `${label}打开失败。`);
+      if (!result.ok) setLocalPathError(result.error || t('settings.runtime.openError', { label }));
     } catch (unknownError) {
-      setLocalPathError(errorMessage(unknownError, `${label}打开失败。`));
+      setLocalPathError(errorMessage(unknownError, t('settings.runtime.openError', { label })));
     } finally {
       setOpeningPath(null);
     }
@@ -54,7 +56,8 @@ export function RuntimePolicySettings({
   const isOpeningData = openingPath === config.dataPath;
   const pathActionDisabled = Boolean(openingPath);
   const accessMode = runtimeAccessModeForConfig(config);
-  const accessModeOption = runtimeAccessModeOptions.find((option) => option.value === accessMode) ?? runtimeAccessModeOptions[1];
+  const accessModeOptions = localizedRuntimeAccessModeOptions(t);
+  const accessModeOption = accessModeOptions.find((option) => option.value === accessMode) ?? accessModeOptions[1];
   const persistWorkspaceDependencySettings = (
     settings: Partial<Pick<RuntimeDesktopSettings, 'npmRegistryUrl' | 'pythonPackageIndexUrl' | 'workspaceDependenciesEnabled'>>,
   ) => onSave({
@@ -67,13 +70,13 @@ export function RuntimePolicySettings({
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__runtime-section">
       <div className="chat-user-settings__section-block">
-        <div className="chat-user-settings__group-title">权限</div>
+        <div className="chat-user-settings__group-title">{t('settings.runtime.permissions')}</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
           <label className="chat-user-settings__row chat-user-settings__runtime-policy-row">
             <span className="chat-user-settings__runtime-policy-copy">
               <ShieldCheck size={14} />
               <span>
-                <strong>权限策略</strong>
+                <strong>{t('settings.runtime.permissionPolicy')}</strong>
                 <small>{accessModeOption.description}</small>
               </span>
             </span>
@@ -95,29 +98,29 @@ export function RuntimePolicySettings({
       />
 
       <div className="chat-user-settings__section-block">
-        <div className="chat-user-settings__group-title">本地存储</div>
+        <div className="chat-user-settings__group-title">{t('settings.runtime.localStorage')}</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <FileCog size={14} />
-              <span>配置文件</span>
+              <span>{t('settings.runtime.configFile')}</span>
             </span>
             <div className="chat-user-settings__path-control">
               <code title={config.configPath}>{config.configPath}</code>
-              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.configPath, '配置文件')}>
-                {isOpeningConfig ? '打开中' : '打开'}
+              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.configPath, t('settings.runtime.configFile'))}>
+                {isOpeningConfig ? t('common.opening') : t('common.open')}
               </Button>
             </div>
           </div>
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Database size={14} />
-              <span>数据目录</span>
+              <span>{t('settings.runtime.dataDirectory')}</span>
             </span>
             <div className="chat-user-settings__path-control">
               <code title={config.dataPath}>{config.dataPath}</code>
-              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.dataPath, '数据目录')}>
-                {isOpeningData ? '打开中' : '打开'}
+              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.dataPath, t('settings.runtime.dataDirectory'))}>
+                {isOpeningData ? t('common.opening') : t('common.open')}
               </Button>
             </div>
           </div>
@@ -146,6 +149,7 @@ function RuntimeAdvancedSettings({
   onSave: (input: RuntimePreferenceInput) => Promise<void>;
   onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [featureFlagsDraft, setFeatureFlagsDraft] = useState(() => JSON.stringify(config.features ?? {}, null, 2));
   const [advancedError, setAdvancedError] = useState<string | null>(null);
 
@@ -160,8 +164,8 @@ function RuntimeAdvancedSettings({
           <ShieldCheck size={16} />
         </span>
         <span className="chat-user-settings__advanced-copy">
-          <strong>高级安全与实验功能</strong>
-          <small>沙箱目录、Hook 信任、额外 Skill 与实验开关</small>
+          <strong>{t('settings.runtime.advanced')}</strong>
+          <small>{t('settings.runtime.advancedDescription')}</small>
         </span>
         <span className="chat-user-settings__advanced-toggle" aria-hidden="true">
           <ChevronRight className="chat-user-settings__advanced-chevron" size={15} />
@@ -170,80 +174,80 @@ function RuntimeAdvancedSettings({
       <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
         <MemorySettingToggle
           checked={config.sandboxWorkspaceWrite?.networkAccess === true}
-          description="允许 workspace-write 沙箱中的工具访问网络。"
-          label="沙箱网络访问"
+          description={t('settings.runtime.sandboxNetworkDescription')}
+          label={t('settings.runtime.sandboxNetwork')}
           onChange={(networkAccess) => void onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), networkAccess } })}
         />
         <MemorySettingToggle
           checked={config.bypassHookTrust === true}
-          description="跳过本地 Hook hash 信任检查，仅应在受控环境中开启。"
-          label="绕过 Hook 信任"
+          description={t('settings.runtime.bypassHookTrustDescription')}
+          label={t('settings.runtime.bypassHookTrust')}
           onChange={(bypassHookTrust) => void onSave({ bypassHookTrust })}
         />
         <RuntimeDirectoryListField
-          description="允许 workspace-write 沙箱额外读取这些目录。"
-          label="额外可读目录"
+          description={t('settings.runtime.readableRootsDescription')}
+          label={t('settings.runtime.readableRoots')}
           value={config.sandboxWorkspaceWrite?.readableRoots ?? []}
           onSave={(readableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), readableRoots } })}
         />
         <RuntimeDirectoryListField
-          description="允许 workspace-write 沙箱额外写入这些目录。"
-          label="额外可写目录"
+          description={t('settings.runtime.writableRootsDescription')}
+          label={t('settings.runtime.writableRoots')}
           value={config.sandboxWorkspaceWrite?.writableRoots ?? []}
           onSave={(writableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), writableRoots } })}
         />
         <RuntimeDirectoryListField
-          description="无论其他权限如何，都禁止访问这些目录。"
-          label="拒绝访问目录"
+          description={t('settings.runtime.deniedRootsDescription')}
+          label={t('settings.runtime.deniedRoots')}
           value={config.sandboxWorkspaceWrite?.deniedRoots ?? []}
           onSave={(deniedRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedRoots } })}
         />
         <RuntimeTextListField
-          description="逐条添加需要拒绝的 Glob 表达式。"
-          label="拒绝 Glob"
+          description={t('settings.runtime.deniedGlobDescription')}
+          label={t('settings.runtime.deniedGlob')}
           value={config.sandboxWorkspaceWrite?.deniedGlobPatterns ?? []}
           onSave={(deniedGlobPatterns) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedGlobPatterns } })}
         />
         <RuntimeDirectoryListField
-          description="从默认位置之外加载 Skill；仅当前 runtime 会话有效。"
-          label="额外 Skill 目录"
+          description={t('settings.runtime.skillRootsDescription')}
+          label={t('settings.runtime.skillRoots')}
           value={skillExtraRoots}
           onSave={onSetSkillExtraRoots}
         />
         <div className="chat-user-settings__runtime-json-field">
-          <span>Feature flags（JSON）</span>
+          <span>{t('settings.runtime.featureFlags')}</span>
           <TextArea rows={6} value={featureFlagsDraft} onChange={(event) => setFeatureFlagsDraft(event.currentTarget.value)} />
           <Button onClick={() => {
             try {
               const parsed = JSON.parse(featureFlagsDraft) as unknown;
-              if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Feature flags 必须是 JSON 对象。');
+              if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(t('settings.runtime.featureFlagsObject'));
               const flags = Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
               setAdvancedError(null);
               void onSave({ features: flags });
             } catch (unknownError) {
-              setAdvancedError(errorMessage(unknownError, 'Feature flags 格式无效。'));
+              setAdvancedError(errorMessage(unknownError, t('settings.runtime.featureFlagsInvalid')));
             }
-          }}>保存 Feature flags</Button>
+          }}>{t('settings.runtime.saveFeatureFlags')}</Button>
         </div>
         <div className="chat-user-settings__runtime-memory-tuning">
-          <strong>记忆整理参数</strong>
+          <strong>{t('settings.runtime.memoryTuning')}</strong>
           <TextField
             defaultValue={config.memory.consolidationModel ?? ''}
-            placeholder="整理模型（留空跟随当前模型）"
+            placeholder={t('settings.runtime.consolidationModel')}
             onBlur={(event) => void onSave({ memory: { consolidationModel: event.currentTarget.value.trim() || undefined } })}
           />
           <TextField
             type="number"
             min="1"
             defaultValue={config.memory.maxRolloutsPerStartup ?? ''}
-            placeholder="每次启动最多处理 Rollouts"
+            placeholder={t('settings.runtime.maxRollouts')}
             onBlur={(event) => void onSave({ memory: { maxRolloutsPerStartup: optionalPositiveNumber(event.currentTarget.value) } })}
           />
           <TextField
             type="number"
             min="1"
             defaultValue={config.memory.maxRawMemoriesForConsolidation ?? ''}
-            placeholder="整理前最大原始记忆数"
+            placeholder={t('settings.runtime.maxRawMemories')}
             onBlur={(event) => void onSave({ memory: { maxRawMemoriesForConsolidation: optionalPositiveNumber(event.currentTarget.value) } })}
           />
         </div>
@@ -264,6 +268,7 @@ function RuntimeDirectoryListField({
   value: string[];
   onSave: (items: string[]) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -274,7 +279,7 @@ function RuntimeDirectoryListField({
       await onSave(items);
       return true;
     } catch (unknownError) {
-      setError(errorMessage(unknownError, `${label}保存失败。`));
+      setError(errorMessage(unknownError, t('settings.runtime.saveError', { label })));
       return false;
     } finally {
       setBusy(false);
@@ -284,16 +289,16 @@ function RuntimeDirectoryListField({
   const addDirectory = async () => {
     const api = window.setsunaDesktop?.desktop;
     if (!api?.selectDirectory) {
-      setError('当前环境不支持选择目录。');
+      setError(t('settings.runtime.selectUnsupported'));
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const selected = await api.selectDirectory({ title: `选择${label}` });
+      const selected = await api.selectDirectory({ title: t('settings.runtime.selectLabel', { label }) });
       if (selected && !value.includes(selected)) await onSave([...value, selected]);
     } catch (unknownError) {
-      setError(errorMessage(unknownError, `${label}添加失败。`));
+      setError(errorMessage(unknownError, t('settings.runtime.addError', { label })));
     } finally {
       setBusy(false);
     }
@@ -301,7 +306,7 @@ function RuntimeDirectoryListField({
 
   return (
     <RuntimeListEditor
-      action={<Button icon={<FolderOpen size={14} />} disabled={busy} onClick={() => void addDirectory()}>{busy ? '处理中' : '添加目录'}</Button>}
+      action={<Button icon={<FolderOpen size={14} />} disabled={busy} onClick={() => void addDirectory()}>{busy ? t('common.processing') : t('settings.runtime.addDirectory')}</Button>}
       busy={busy}
       description={description}
       error={error}
@@ -323,6 +328,7 @@ function RuntimeTextListField({
   value: string[];
   onSave: (items: string[]) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -334,7 +340,7 @@ function RuntimeTextListField({
       await onSave(items);
       return true;
     } catch (unknownError) {
-      setError(errorMessage(unknownError, `${label}保存失败。`));
+      setError(errorMessage(unknownError, t('settings.runtime.saveError', { label })));
       return false;
     } finally {
       setBusy(false);
@@ -352,8 +358,8 @@ function RuntimeTextListField({
     <RuntimeListEditor
       action={(
         <form className="chat-user-settings__runtime-list-add" onSubmit={(event) => void addItem(event)}>
-          <TextField aria-label={`添加${label}`} disabled={busy} placeholder="输入一条规则" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
-          <Button icon={<Plus size={14} />} disabled={busy || !draft.trim()} type="submit">添加</Button>
+          <TextField aria-label={t('settings.runtime.addLabel', { label })} disabled={busy} placeholder={t('settings.runtime.rulePlaceholder')} value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
+          <Button icon={<Plus size={14} />} disabled={busy || !draft.trim()} type="submit">{t('common.add')}</Button>
         </form>
       )}
       busy={busy}
@@ -383,6 +389,7 @@ function RuntimeListEditor({
   label: string;
   onRemove: (item: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="chat-user-settings__runtime-list-editor">
       <div className="chat-user-settings__runtime-list-head">
@@ -397,12 +404,12 @@ function RuntimeListEditor({
           {items.map((item) => (
             <div className="chat-user-settings__runtime-list-item" key={item}>
               <code title={item}>{item}</code>
-              <IconButton label={`移除 ${item}`} disabled={busy} onClick={() => onRemove(item)}><X size={14} /></IconButton>
+              <IconButton label={t('settings.runtime.removeLabel', { item })} disabled={busy} onClick={() => onRemove(item)}><X size={14} /></IconButton>
             </div>
           ))}
         </div>
       ) : (
-        <span className="chat-user-settings__runtime-list-empty">暂未添加</span>
+        <span className="chat-user-settings__runtime-list-empty">{t('common.noneAdded')}</span>
       )}
       {error ? <span className="chat-user-settings__runtime-list-error" role="alert">{error}</span> : null}
     </div>

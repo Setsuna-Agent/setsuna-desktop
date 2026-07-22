@@ -16,6 +16,7 @@ import {
   TextArea,
   TextField,
 } from '../../../shared/ui/primitives.js';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { MemorySettingToggle, SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
 import { memoryExtractModelOptions } from '../providers/provider-model.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
@@ -23,11 +24,6 @@ import { errorMessage, formatSettingsDate } from '../settings-utils.js';
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
 const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
-const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsunaStyle']>> = [
-  { value: 'developer', label: '开发', icon: <Cpu size={14} /> },
-  { value: 'daily', label: '日常', icon: <Sun size={14} /> },
-];
-
 export function PersonalizationSettings({
   config,
   projects,
@@ -47,6 +43,11 @@ export function PersonalizationSettings({
   onDelete: (memoryId: string) => Promise<void>;
   onReset: () => Promise<void>;
 }) {
+  const { locale, t } = useI18n();
+  const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsunaStyle']>> = [
+    { value: 'developer', label: t('settings.personalization.styleDeveloper'), icon: <Cpu size={14} /> },
+    { value: 'daily', label: t('settings.personalization.styleDaily'), icon: <Sun size={14} /> },
+  ];
   const [personalizationView, setPersonalizationView] = useState<'overview' | 'memoryPreview'>('overview');
   const [globalPromptDraft, setGlobalPromptDraft] = useState(config.globalPrompt);
   const [selectingStorage, setSelectingStorage] = useState(false);
@@ -71,16 +72,16 @@ export function PersonalizationSettings({
   const selectMemoryStoragePath = async () => {
     const api = window.setsunaDesktop?.desktop;
     if (!api?.selectDirectory) {
-      setMemoryError('当前环境不支持选择目录。');
+      setMemoryError(t('settings.personalization.selectUnsupported'));
       return;
     }
     setSelectingStorage(true);
     setMemoryError(null);
     try {
-      const selectedPath = await api.selectDirectory({ title: '选择记忆存储目录' });
+      const selectedPath = await api.selectDirectory({ title: t('settings.personalization.selectDirectory') });
       if (selectedPath) await onSavePreferences({ storagePath: selectedPath });
     } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, '选择存储位置失败'));
+      setMemoryError(errorMessage(unknownError, t('settings.personalization.selectError')));
     } finally {
       setSelectingStorage(false);
     }
@@ -91,7 +92,7 @@ export function PersonalizationSettings({
     try {
       return await onPreview();
     } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, '记忆预览加载失败'));
+      setMemoryError(errorMessage(unknownError, t('settings.personalization.previewError')));
       return null;
     }
   };
@@ -107,7 +108,7 @@ export function PersonalizationSettings({
     try {
       await onDelete(item.id);
     } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, '删除记忆失败'));
+      setMemoryError(errorMessage(unknownError, t('settings.personalization.deleteError')));
     } finally {
       setMemoryDeletingId(null);
     }
@@ -119,7 +120,7 @@ export function PersonalizationSettings({
     try {
       await onReset();
     } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, '重置记忆失败'));
+      setMemoryError(errorMessage(unknownError, t('settings.personalization.resetError')));
     } finally {
       setMemoryResetting(false);
     }
@@ -134,17 +135,17 @@ export function PersonalizationSettings({
         <PageHeader
           className="chat-user-settings__memory-preview-header"
           onBack={() => setPersonalizationView('overview')}
-          title="记忆预览"
+          title={t('settings.personalization.preview')}
           actions={
             <Button className="chat-user-settings__tiny-action" icon={<RefreshCw size={14} />} disabled={memoryPreviewLoading || memoryResetting || Boolean(memoryDeletingId)} onClick={() => void loadMemoryPreview()}>
-              {memoryPreviewLoading ? '刷新中' : '刷新'}
+              {memoryPreviewLoading ? t('settings.personalization.refreshing') : t('settings.personalization.refresh')}
             </Button>
           }
         />
         <div className="chat-user-settings__memory-preview-summary">
           <div>
-            <strong>{memoryPreview?.total ?? 0} 条记忆</strong>
-            <span>包含主动沉淀和后台沉淀的长期偏好、规则、事实或流程</span>
+            <strong>{t('settings.personalization.previewCount', { count: memoryPreview?.total ?? 0 })}</strong>
+            <span>{t('settings.personalization.previewDescription')}</span>
           </div>
           <code title={previewStoragePath}>{previewStoragePath}</code>
         </div>
@@ -152,14 +153,20 @@ export function PersonalizationSettings({
         <div className="chat-user-settings__memory-list" aria-busy={memoryPreviewLoading}>
           {items.length ? (
             items.map((item) => {
-              const meta = [item.origin === 'active' ? '主动沉淀' : '后台沉淀', memoryScopeLabel(item, projects), item.source, formatSettingsDate(item.updatedAt), `${Number(item.chars || 0).toLocaleString()} 字符`].filter(Boolean);
+              const meta = [
+                item.origin === 'active' ? t('settings.personalization.originActive') : t('settings.personalization.originBackground'),
+                memoryScopeLabel(item, projects, t),
+                item.source,
+                formatSettingsDate(item.updatedAt, locale),
+                t('settings.personalization.characters', { count: Number(item.chars || 0).toLocaleString(locale) }),
+              ].filter(Boolean);
 
               return (
                 <div className="chat-user-settings__memory-item" key={item.id}>
                   <div className="chat-user-settings__memory-item-head">
                     <FileText size={14} />
                     <span title={item.workspaceRoot || item.title}>{item.title}</span>
-                    <IconButton label="删除记忆" variant="danger" disabled={memoryResetting || memoryPreviewLoading || memoryDeletingId === item.id} onClick={() => void deleteMemoryItem(item)}>
+                    <IconButton label={t('settings.personalization.deleteMemory')} variant="danger" disabled={memoryResetting || memoryPreviewLoading || memoryDeletingId === item.id} onClick={() => void deleteMemoryItem(item)}>
                       <Trash2 size={14} />
                     </IconButton>
                   </div>
@@ -180,7 +187,7 @@ export function PersonalizationSettings({
               );
             })
           ) : (
-            <EmptyState title={memoryPreviewLoading ? '正在加载记忆' : '暂无沉淀下来的记忆'} />
+            <EmptyState title={memoryPreviewLoading ? t('settings.personalization.loadingMemories') : t('settings.personalization.emptyMemories')} />
           )}
         </div>
       </div>
@@ -190,14 +197,14 @@ export function PersonalizationSettings({
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__personalization-section">
       <div className="chat-user-settings__section-block">
-        <div className="chat-user-settings__group-title">风格</div>
+        <div className="chat-user-settings__group-title">{t('settings.personalization.style')}</div>
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Pencil size={14} />
-              <span>Setsuna 风格</span>
+              <span>{t('settings.personalization.setsunaStyle')}</span>
             </span>
-            <SettingsChoiceGroup ariaLabel="Setsuna 风格" options={setsunaStyleOptions} value={config.setsunaStyle} onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })} />
+            <SettingsChoiceGroup ariaLabel={t('settings.personalization.setsunaStyle')} options={setsunaStyleOptions} value={config.setsunaStyle} onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })} />
           </div>
         </div>
       </div>
@@ -207,9 +214,9 @@ export function PersonalizationSettings({
           <div className="chat-user-settings__prompt-stack">
             <div className="chat-user-settings__prompt-heading">
               <div className="chat-user-settings__prompt-title">
-                <span>全局 prompt</span>
+                <span>{t('settings.personalization.prompt')}</span>
               </div>
-              <p>会作为桌面端对话的长期偏好放入上下文，适合写固定口吻、工作习惯和长期约束。</p>
+              <p>{t('settings.personalization.promptDescription')}</p>
             </div>
             <div className="chat-user-settings__prompt-control">
               <div className="chat-user-settings__prompt-input-shell">
@@ -217,7 +224,7 @@ export function PersonalizationSettings({
                   className="chat-user-settings__prompt-input"
                   value={globalPromptDraft}
                   maxLength={PERSONALIZATION_PROMPT_MAX_LENGTH}
-                  placeholder="写给 Setsuna 的长期偏好，会放入桌面端对话上下文。"
+                  placeholder={t('settings.personalization.promptPlaceholder')}
                   onBlur={() => {
                     if (globalPromptDraft === config.globalPrompt) return;
                     void onSavePreferences({ globalPrompt: globalPromptDraft });
@@ -235,45 +242,45 @@ export function PersonalizationSettings({
 
       <div className="chat-user-settings__section-block chat-user-settings__memory-settings-block">
         <div className="chat-user-settings__memory-heading">
-          <div className="chat-user-settings__group-title">记忆</div>
-          <p>记忆用于保存你希望长期生效的偏好、项目规则、固定流程和事实信息。开启后，后续对话会按当前项目或全局范围自动召回相关记忆，帮助模型延续你的工作习惯；自定义位置会在所选目录内使用 .setsuna-memory 专属子目录，不会改动同级文件。</p>
+          <div className="chat-user-settings__group-title">{t('settings.personalization.memory')}</div>
+          <p>{t('settings.personalization.memoryDescription')}</p>
         </div>
         {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
-          <MemorySettingToggle checked={config.memory.useMemories} description="允许对话开始时读取本地记忆，并把相关偏好、项目规则和历史经验放进模型上下文。" label="使用记忆" onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
-          <MemorySettingToggle checked={config.memory.generateMemories} description="允许运行时在对话结束后提炼新的长期记忆；关闭后只会读取已有记忆，不再自动新增。" label="生成记忆" onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
+          <MemorySettingToggle checked={config.memory.useMemories} description={t('settings.personalization.useMemoriesDescription')} label={t('settings.personalization.useMemories')} onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
+          <MemorySettingToggle checked={config.memory.generateMemories} description={t('settings.personalization.generateMemoriesDescription')} label={t('settings.personalization.generateMemories')} onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
           <MemoryExtractModelField config={config} onSavePreferences={onSavePreferences} />
-          <MemorySettingToggle checked={config.memory.disableOnExternalContext} description="当本轮内容包含网页、MCP、外部工具等临时资料时，禁止把这类上下文沉淀成长期记忆。" label="外部上下文禁写" onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
-          <MemorySettingToggle checked={config.memory.dedicatedTools} description="把读取、搜索和写入记忆的专用工具暴露给模型；适合需要模型主动管理记忆时开启。" label="专用记忆工具" onChange={(checked) => void onSavePreferences({ memory: { dedicatedTools: checked } })} />
+          <MemorySettingToggle checked={config.memory.disableOnExternalContext} description={t('settings.personalization.externalContextDescription')} label={t('settings.personalization.externalContext')} onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
+          <MemorySettingToggle checked={config.memory.dedicatedTools} description={t('settings.personalization.memoryToolsDescription')} label={t('settings.personalization.memoryTools')} onChange={(checked) => void onSavePreferences({ memory: { dedicatedTools: checked } })} />
           <div className="chat-user-settings__row chat-user-settings__local-field">
             <span className="chat-user-settings__row-label">
               <FolderOpen size={14} />
-              <span>存储容器</span>
+              <span>{t('settings.personalization.storage')}</span>
             </span>
             <div className="chat-user-settings__local-storage-control">
               <TextField className="settings-local-control" value={storagePath} readOnly />
               <Button icon={<FolderOpen size={14} />} disabled={selectingStorage} onClick={() => void selectMemoryStoragePath()}>
-                {selectingStorage ? '选择中' : '选择'}
+                {selectingStorage ? t('settings.personalization.selecting') : t('settings.personalization.select')}
               </Button>
             </div>
           </div>
           <div className="chat-user-settings__row chat-user-settings__local-action-row">
             <span className="chat-user-settings__row-label">
               <Eye size={14} />
-              <span>记忆预览</span>
+              <span>{t('settings.personalization.preview')}</span>
             </span>
             <Button className="chat-user-settings__preview-open" icon={<ChevronRight size={14} />} onClick={() => void openMemoryPreview()}>
-              查看
+              {t('settings.personalization.view')}
             </Button>
           </div>
           <div className="chat-user-settings__row chat-user-settings__local-action-row chat-user-settings__memory-reset-row">
             <span className="chat-user-settings__row-label">
               <RefreshCw size={14} />
-              <span>重置记忆</span>
+              <span>{t('settings.personalization.resetMemory')}</span>
             </span>
-            <Popconfirm title="重置全部记忆？" description="只会清空 Setsuna 管理的记忆子目录，不影响所选目录内其他文件；该操作无法撤销。" placement="topRight" okText="重置" cancelText="取消" okButtonProps={{ danger: true, loading: memoryResetting }} onConfirm={() => void resetMemoryItems()}>
+            <Popconfirm title={t('settings.personalization.resetTitle')} description={t('settings.personalization.resetDescription')} placement="topRight" okText={t('settings.personalization.reset')} cancelText={t('common.cancel')} okButtonProps={{ danger: true, loading: memoryResetting }} onConfirm={() => void resetMemoryItems()}>
               <Button variant="danger" icon={<RefreshCw size={14} />} disabled={memoryPreviewLoading || Boolean(memoryDeletingId) || memoryResetting}>
-                {memoryResetting ? '重置中' : '重置'}
+                {memoryResetting ? t('settings.personalization.resetting') : t('settings.personalization.reset')}
               </Button>
             </Popconfirm>
           </div>
@@ -284,6 +291,7 @@ export function PersonalizationSettings({
 }
 
 function MemoryExtractModelField({ config, onSavePreferences }: { config: RuntimeConfigState; onSavePreferences: (input: RuntimePreferenceInput) => Promise<void> }) {
+  const { t } = useI18n();
   if (!config.memory.generateMemories) return null;
 
   const options = memoryExtractModelOptions(config);
@@ -294,8 +302,8 @@ function MemoryExtractModelField({ config, onSavePreferences }: { config: Runtim
     <label className="chat-user-settings__row chat-user-settings__memory-model-row">
       <span className="chat-user-settings__row-label chat-user-settings__memory-model-label">
         <span className="chat-user-settings__memory-toggle-copy">
-          <span>提取模型</span>
-          <small>用于对话后的记忆提炼，不影响当前回答；留空跟随当前模型。</small>
+          <span>{t('settings.personalization.extractModel')}</span>
+          <small>{t('settings.personalization.extractModelDescription')}</small>
         </span>
       </span>
       <SelectField
@@ -306,10 +314,10 @@ function MemoryExtractModelField({ config, onSavePreferences }: { config: Runtim
           void onSavePreferences({ memory: { extractModel } });
         }}
       >
-        <option value="">跟随当前对话模型</option>
+        <option value="">{t('settings.personalization.followCurrentModel')}</option>
         {!currentOptionExists ? (
           <option value={value} disabled>
-            {`${value}（当前厂商未配置）`}
+            {t('settings.personalization.providerNotConfigured', { model: value })}
           </option>
         ) : null}
         {options.map((option) => (
@@ -322,8 +330,9 @@ function MemoryExtractModelField({ config, onSavePreferences }: { config: Runtim
   );
 }
 
-function memoryScopeLabel(item: RuntimeMemoryPreviewItem, projects: WorkspaceProject[]): string {
-  if (item.scope === 'global') return '全局';
+function memoryScopeLabel(item: RuntimeMemoryPreviewItem, projects: WorkspaceProject[], t: Translate): string {
+  if (item.scope === 'global') return t('settings.personalization.scopeGlobal');
   const projectName = projects.find((project) => project.id === item.projectId)?.name;
-  return projectName ? `项目：${projectName}` : item.projectId ? `项目：${item.projectId}` : '项目范围';
+  const project = projectName || item.projectId;
+  return project ? t('settings.personalization.scopeProject', { project }) : t('settings.personalization.scopeProjectFallback');
 }

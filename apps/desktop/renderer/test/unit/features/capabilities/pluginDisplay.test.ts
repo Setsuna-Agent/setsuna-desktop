@@ -9,6 +9,9 @@ import {
   pluginMarketplacePresentation,
   pluginMatchesQuery,
 } from '../../../../src/features/capabilities/pluginDisplay.js';
+import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
+
+const en: Translate = (key, params) => translate('en-US', key, params);
 
 describe('plugin display helpers', () => {
   it('matches plugin searches against included skill and MCP details', () => {
@@ -92,6 +95,23 @@ describe('plugin display helpers', () => {
       title: '搜索结果',
       plugins: [{ id: 'pdf' }],
     }]);
+  });
+
+  it('builds marketplace section copy and capability counts in English', () => {
+    const documents = marketplacePlugin({ id: 'documents', name: 'Word', featured: true });
+    const guard = marketplacePlugin({
+      id: 'guard',
+      name: 'Guard',
+      capabilities: { skills: 0, mcpServers: 0, hooks: 2, resources: 0 },
+    });
+    const presentation = pluginMarketplacePresentation([documents, guard], false, en);
+
+    expect(presentation.sections).toMatchObject([
+      { title: 'Creation & knowledge', description: 'Documents, content workflows, and developer knowledge' },
+      { title: 'Safety & automation', description: 'Local hook workflows you can install as needed' },
+    ]);
+    expect(pluginCapabilitySummary(documents, en)).toBe('1 skill');
+    expect(pluginCapabilitySummary(guard, en)).toBe('2 automations');
   });
 });
 

@@ -2,6 +2,9 @@ import type { RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
 import { useCallback, useRef, useState } from 'react';
 import { useToast, type ToastTone } from '../../app/providers/ToastProvider.js';
 import type { ChatImageAttachmentOutcome } from '../../app/types.js';
+import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export type BrowserScreenshotAttachmentHandler = (
   attachment: RuntimeMessageAttachment,
@@ -20,6 +23,7 @@ export function useBrowserScreenshot({
   onAttachment?: BrowserScreenshotAttachmentHandler;
 }) {
   const toast = useToast();
+  const { t } = useI18n();
   const [capturing, setCapturing] = useState(false);
   const capturingRef = useRef(false);
 
@@ -42,31 +46,34 @@ export function useBrowserScreenshot({
             url: screenshot.dataUrl,
           })
         : 'unavailable';
-      const feedback = browserScreenshotOutcomeFeedback(outcome);
+      const feedback = browserScreenshotOutcomeFeedback(outcome, t);
       toast.show(feedback.message, { tone: feedback.tone });
     } catch {
-      if (copiedToClipboard) toast.warning('截图已复制到剪切板，但未能添加到输入框');
-      else toast.error('截图失败，请重试');
+      if (copiedToClipboard) toast.warning(t('workspace.browser.screenshot.unavailable'));
+      else toast.error(t('workspace.browser.screenshot.failed'));
     } finally {
       capturingRef.current = false;
       setCapturing(false);
     }
-  }, [activeTabId, onAttachment, toast]);
+  }, [activeTabId, onAttachment, t, toast]);
 
   return { captureScreenshot, capturing };
 }
 
-export function browserScreenshotOutcomeFeedback(outcome: ChatImageAttachmentOutcome): BrowserScreenshotFeedback {
+export function browserScreenshotOutcomeFeedback(
+  outcome: ChatImageAttachmentOutcome,
+  t: Translate = defaultTranslate,
+): BrowserScreenshotFeedback {
   switch (outcome) {
     case 'added':
-      return { tone: 'success', message: '截图已添加到输入框，并复制到剪切板' };
+      return { tone: 'success', message: t('workspace.browser.screenshot.added') };
     case 'unsupported':
-      return { tone: 'warning', message: '当前模型不支持图片，截图已复制到剪切板' };
+      return { tone: 'warning', message: t('workspace.browser.screenshot.unsupported') };
     case 'limit-reached':
-      return { tone: 'warning', message: '输入框图片已达上限，截图已复制到剪切板' };
+      return { tone: 'warning', message: t('workspace.browser.screenshot.limitReached') };
     case 'too-large':
-      return { tone: 'warning', message: '截图文件过大，已复制到剪切板' };
+      return { tone: 'warning', message: t('workspace.browser.screenshot.tooLarge') };
     case 'unavailable':
-      return { tone: 'warning', message: '截图已复制到剪切板，但未能添加到输入框' };
+      return { tone: 'warning', message: t('workspace.browser.screenshot.unavailable') };
   }
 }

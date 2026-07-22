@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
+import { useI18n } from '../i18n/I18nProvider.js';
 export { SelectField } from './SelectField.js';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -77,15 +78,16 @@ export function PageBackButton({
   block = false,
   className = '',
   icon = <ArrowLeft size={14} />,
-  label = '返回',
+  label,
   type = 'button',
   ...props
 }: PageBackButtonProps) {
+  const { t } = useI18n();
   const classes = ['sd-page-back', block ? 'sd-page-back--block' : '', className].filter(Boolean).join(' ');
   return (
     <button className={classes} type={type} {...props}>
       {icon ? <span className="sd-page-back__icon">{icon}</span> : null}
-      <span className="sd-page-back__label">{label}</span>
+      <span className="sd-page-back__label">{label ?? t('common.back')}</span>
     </button>
   );
 }
@@ -93,7 +95,7 @@ export function PageBackButton({
 export function PageHeader({
   actions,
   backIcon,
-  backLabel = '返回',
+  backLabel,
   className = '',
   onBack,
   subtitle,
@@ -107,10 +109,16 @@ export function PageHeader({
   subtitle?: ReactNode;
   title: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <header className={`sd-page-header ${className}`}>
       {onBack ? (
-        <PageBackButton className="sd-page-header__back" icon={backIcon} label={backLabel} onClick={onBack} />
+        <PageBackButton
+          className="sd-page-header__back"
+          icon={backIcon}
+          label={backLabel ?? t('common.back')}
+          onClick={onBack}
+        />
       ) : null}
       <div className="sd-page-header__body">
         <div className="sd-page-header__title-group">

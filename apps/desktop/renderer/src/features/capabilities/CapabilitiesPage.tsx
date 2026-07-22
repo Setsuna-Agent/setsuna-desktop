@@ -40,6 +40,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import { Button, IconButton, PageHeader, SelectField, TextArea, TextField } from '../../shared/ui/primitives.js';
 import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
 import { CapabilitiesPluginMarket } from './CapabilitiesPluginMarket.js';
@@ -55,6 +57,7 @@ import {
   type McpDraft,
 } from './mcp/mcp-editor-model.js';
 import { pluginMatchesQuery } from './pluginDisplay.js';
+import { localizedPluginSearchAliases } from './pluginLocalization.js';
 
 type HookDraft = {
   eventName: RuntimeHookEventName;
@@ -74,18 +77,20 @@ const emptyHookDraft: HookDraft = {
   statusMessage: '',
 };
 
-const hookEventOptions: Array<{ value: RuntimeHookEventName; label: string; matcher: boolean }> = [
-  { value: 'PreToolUse', label: 'PreToolUse · 工具执行前', matcher: true },
-  { value: 'PermissionRequest', label: 'PermissionRequest · 权限请求时', matcher: true },
-  { value: 'PostToolUse', label: 'PostToolUse · 工具成功后', matcher: true },
-  { value: 'PreCompact', label: 'PreCompact · 压缩前', matcher: true },
-  { value: 'PostCompact', label: 'PostCompact · 压缩后', matcher: true },
-  { value: 'SessionStart', label: 'SessionStart · 会话开始', matcher: true },
-  { value: 'UserPromptSubmit', label: 'UserPromptSubmit · 用户提交消息', matcher: false },
-  { value: 'SubagentStart', label: 'SubagentStart · 子任务开始', matcher: true },
-  { value: 'SubagentStop', label: 'SubagentStop · 子任务结束', matcher: true },
-  { value: 'Stop', label: 'Stop · 回合结束', matcher: false },
+const hookEventOptions: Array<{ value: RuntimeHookEventName; labelKey: MessageKey; matcher: boolean }> = [
+  { value: 'PreToolUse', labelKey: 'capabilities.hook.event.preToolUse', matcher: true },
+  { value: 'PermissionRequest', labelKey: 'capabilities.hook.event.permissionRequest', matcher: true },
+  { value: 'PostToolUse', labelKey: 'capabilities.hook.event.postToolUse', matcher: true },
+  { value: 'PreCompact', labelKey: 'capabilities.hook.event.preCompact', matcher: true },
+  { value: 'PostCompact', labelKey: 'capabilities.hook.event.postCompact', matcher: true },
+  { value: 'SessionStart', labelKey: 'capabilities.hook.event.sessionStart', matcher: true },
+  { value: 'UserPromptSubmit', labelKey: 'capabilities.hook.event.userPromptSubmit', matcher: false },
+  { value: 'SubagentStart', labelKey: 'capabilities.hook.event.subagentStart', matcher: true },
+  { value: 'SubagentStop', labelKey: 'capabilities.hook.event.subagentStop', matcher: true },
+  { value: 'Stop', labelKey: 'capabilities.hook.event.stop', matcher: false },
 ];
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 const chatCreateSkillIds = {
   mcp: 'create-mcp-in-chat',
@@ -163,6 +168,7 @@ export function CapabilitiesPage({
   onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
   const [saving, setSaving] = useState(false);
@@ -207,8 +213,16 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${hook.key} ${hook.eventName} ${hook.matcher ?? ''} ${hook.command ?? ''} ${hook.sourcePath}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
-  const visiblePlugins = plugins.filter((plugin) => pluginMatchesQuery(plugin, normalizedCapabilityQuery));
-  const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) => pluginMatchesQuery(plugin, normalizedCapabilityQuery));
+  const visiblePlugins = plugins.filter((plugin) => pluginMatchesQuery(
+    plugin,
+    normalizedCapabilityQuery,
+    localizedPluginSearchAliases(plugin, t),
+  ));
+  const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) => pluginMatchesQuery(
+    plugin,
+    normalizedCapabilityQuery,
+    localizedPluginSearchAliases(plugin, t),
+  ));
   const marketplacePluginIds = new Set(pluginMarketplace.map((plugin) => plugin.id));
   const visibleLocalPlugins = visiblePlugins.filter((plugin) => !marketplacePluginIds.has(plugin.id));
   const selectedMarketplacePlugin = selectedPluginId
@@ -357,7 +371,7 @@ export function CapabilitiesPage({
   }
 
   async function deleteSkill(skill: RuntimeSkillSummary) {
-    const confirmed = window.confirm(`确认删除本地 Skill「${skill.name}」？`);
+    const confirmed = window.confirm(t('capabilities.page.confirmDeleteSkill', { name: skill.name }));
     if (!confirmed) return;
     await onDeleteSkill(skill);
     setSkillDetailSummary(null);
@@ -391,7 +405,7 @@ export function CapabilitiesPage({
     if (!key) return;
     setSaving(true);
     try {
-      await onSaveMcpServer(mcpDraftToInput(draft, key, editingMcpServer));
+      await onSaveMcpServer(mcpDraftToInput(draft, key, editingMcpServer, t));
       resetMcpDraft();
     } finally {
       setSaving(false);
@@ -415,20 +429,20 @@ export function CapabilitiesPage({
   }
 
   async function deleteHook(hook: RuntimeHookMetadata) {
-    const confirmed = window.confirm(`确认删除这个 ${hookConfigEventName(hook)} Hook？`);
+    const confirmed = window.confirm(t('capabilities.page.confirmDeleteHook', { event: hookConfigEventName(hook) }));
     if (!confirmed) return;
     await updateHook(hook, () => onDeleteHook(hook));
   }
 
   async function removePlugin(plugin: RuntimePluginSummary) {
-    const confirmed = window.confirm(`确认卸载「${plugin.name}」？插件添加的技能、服务连接和自动化会一并移除。你的对话和项目不会受影响。`);
+    const confirmed = window.confirm(t('capabilities.page.confirmRemovePlugin', { name: plugin.name }));
     if (!confirmed) return;
     setRemovingPluginIds((items) => new Set(items).add(plugin.id));
     setPluginError(null);
     try {
       await onRemovePlugin(plugin.id);
     } catch (unknownError) {
-      setPluginError(pluginActionError(unknownError, '卸载插件失败，请重试。'));
+      setPluginError(pluginActionError(unknownError, t('capabilities.plugin.error.remove'), t));
     } finally {
       setRemovingPluginIds((items) => {
         const next = new Set(items);
@@ -447,7 +461,11 @@ export function CapabilitiesPage({
       if (updating) await onUpdateMarketplacePlugin(plugin.id);
       else await onInstallMarketplacePlugin(plugin.id);
     } catch (unknownError) {
-      setPluginError(pluginActionError(unknownError, updating ? '更新插件失败，请重试。' : '安装插件失败，请重试。'));
+      setPluginError(pluginActionError(
+        unknownError,
+        t(updating ? 'capabilities.plugin.error.update' : 'capabilities.plugin.error.install'),
+        t,
+      ));
     } finally {
       setInstallingPluginIds((items) => {
         const next = new Set(items);
@@ -488,8 +506,8 @@ export function CapabilitiesPage({
         <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
           <div className="desktop-capabilities-detail desktop-capabilities-hook-editor">
             <PageHeader
-              title={editingHook ? '编辑 Hook' : '创建 Hook'}
-              subtitle={editingHook ? '保存修改后会重新计算 hash；命令发生变化时需要重新信任。' : 'Hook 保存后会出现在列表里。新建或改动后的命令默认不会执行，需要在列表中信任当前 hash。'}
+              title={t(editingHook ? 'capabilities.hook.editor.edit' : 'capabilities.hook.editor.create')}
+              subtitle={t(editingHook ? 'capabilities.hook.editor.editSubtitle' : 'capabilities.hook.editor.createSubtitle')}
               onBack={() => {
                 setEditingHook(null);
                 setHookEditorOpen(false);
@@ -504,7 +522,7 @@ export function CapabilitiesPage({
                       setHookEditorOpen(false);
                     }}
                   >
-                    取消
+                    {t('common.cancel')}
                   </Button>
                   <Button
                     type="button"
@@ -513,47 +531,51 @@ export function CapabilitiesPage({
                     disabled={hookSaving || !hookDraft.command.trim()}
                     onClick={() => void submitHook()}
                   >
-                    {editingHook ? '保存修改' : '保存 Hook'}
+                    {t(editingHook ? 'capabilities.hook.editor.saveChanges' : 'capabilities.hook.editor.save')}
                   </Button>
                 </>
               }
             />
             <div className="desktop-capabilities-hook-form">
-              <McpFormField className="desktop-capabilities-hook-form__full" label="触发时机">
+              <McpFormField className="desktop-capabilities-hook-form__full" label={t('capabilities.hook.editor.trigger')}>
                 <SelectField
                   value={hookDraft.eventName}
                   onValueChange={(nextValue) => setHookDraftField(setHookDraft, 'eventName', nextValue as RuntimeHookEventName)}
                 >
                   {hookEventOptions.map((item) => (
-                    <option key={item.value} value={item.value}>{item.label}</option>
+                    <option key={item.value} value={item.value}>{t(item.labelKey)}</option>
                   ))}
                 </SelectField>
               </McpFormField>
-              <McpFormField className="desktop-capabilities-hook-form__full" label="Matcher" help={selectedEvent.matcher ? '正则匹配工具名或事件目标；留空表示全部匹配。' : '这个触发时机不使用 matcher，保存时会忽略。'}>
+              <McpFormField
+                className="desktop-capabilities-hook-form__full"
+                label="Matcher"
+                help={t(selectedEvent.matcher ? 'capabilities.hook.editor.matcherHelp' : 'capabilities.hook.editor.matcherUnused')}
+              >
                 <TextField
                   value={hookDraft.matcher}
                   disabled={!selectedEvent.matcher}
-                  placeholder={selectedEvent.matcher ? '例如 Bash|apply_patch' : '不适用'}
+                  placeholder={t(selectedEvent.matcher ? 'capabilities.hook.editor.matcherPlaceholder' : 'capabilities.hook.editor.notApplicable')}
                   onChange={(event) => setHookDraftField(setHookDraft, 'matcher', event.currentTarget.value)}
                 />
               </McpFormField>
-              <McpFormField className="desktop-capabilities-skill-form__full" label="macOS / Linux 命令">
+              <McpFormField className="desktop-capabilities-skill-form__full" label={t('capabilities.hook.editor.unixCommand')}>
                 <TextArea
                   rows={3}
                   value={hookDraft.command}
-                  placeholder="例如 node .codex/hooks/pre-tool-use.js"
+                  placeholder={t('capabilities.hook.editor.unixPlaceholder')}
                   onChange={(event) => setHookDraftField(setHookDraft, 'command', event.currentTarget.value)}
                 />
               </McpFormField>
-              <McpFormField className="desktop-capabilities-skill-form__full" label="Windows 命令" help="留空时 Windows 也使用上面的命令。">
+              <McpFormField className="desktop-capabilities-skill-form__full" label={t('capabilities.hook.editor.windowsCommand')} help={t('capabilities.hook.editor.windowsHelp')}>
                 <TextArea
                   rows={2}
                   value={hookDraft.commandWindows}
-                  placeholder="例如 powershell -File .codex/hooks/pre-tool-use.ps1"
+                  placeholder={t('capabilities.hook.editor.windowsPlaceholder')}
                   onChange={(event) => setHookDraftField(setHookDraft, 'commandWindows', event.currentTarget.value)}
                 />
               </McpFormField>
-              <McpFormField label="超时秒数">
+              <McpFormField label={t('capabilities.hook.editor.timeout')}>
                 <TextField
                   type="number"
                   min="1"
@@ -561,10 +583,10 @@ export function CapabilitiesPage({
                   onChange={(event) => setHookDraftField(setHookDraft, 'timeoutSec', event.currentTarget.value)}
                 />
               </McpFormField>
-              <McpFormField label="状态文案">
+              <McpFormField label={t('capabilities.hook.editor.statusMessage')}>
                 <TextField
                   value={hookDraft.statusMessage}
-                  placeholder="运行 hook 时显示"
+                  placeholder={t('capabilities.hook.editor.statusPlaceholder')}
                   onChange={(event) => setHookDraftField(setHookDraft, 'statusMessage', event.currentTarget.value)}
                 />
               </McpFormField>
@@ -660,14 +682,14 @@ export function CapabilitiesPage({
     );
   }
 
-  const createConversationTitle = createCapabilityKind === 'mcp' ? '用对话安装 MCP' : '用对话创建技能';
+  const createConversationTitle = t(createCapabilityKind === 'mcp' ? 'capabilities.create.chatMcp' : 'capabilities.create.chatSkill');
   const createConversationDescription = createCapabilityKind === 'mcp'
-    ? '打开对话并选中 MCP 创建向导。'
-    : '打开对话并选中 Skill 创建向导。';
-  const createFormTitle = createCapabilityKind === 'mcp' ? '手动配置 MCP' : '手动编写技能';
+    ? t('capabilities.create.chatMcpDescription')
+    : t('capabilities.create.chatSkillDescription');
+  const createFormTitle = t(createCapabilityKind === 'mcp' ? 'capabilities.create.formMcp' : 'capabilities.create.formSkill');
   const createFormDescription = createCapabilityKind === 'mcp'
-    ? '直接填写命令、参数和环境变量。'
-    : '直接填写名称、简介和 SKILL.md。';
+    ? t('capabilities.create.formMcpDescription')
+    : t('capabilities.create.formSkillDescription');
   const createFormIcon = createCapabilityKind === 'mcp' ? <Plug size={14} /> : <FilePlus2 size={14} />;
   const openFormCreate = createCapabilityKind === 'mcp' ? openMcpFormCreate : openSkillFormCreate;
   const marketplaceNoticeVisible = capabilityFilter === 'plugins' && Boolean(pluginError || pluginMarketplaceErrors.length);
@@ -703,7 +725,7 @@ export function CapabilitiesPage({
       <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}`}>
         <header className="desktop-capabilities-header">
           <div className="desktop-capabilities-title">
-            <h2>{capabilityFilter === 'plugins' ? '插件市场' : '能力'}</h2>
+            <h2>{t(capabilityFilter === 'plugins' ? 'capabilities.title.marketplace' : 'capabilities.title.capabilities')}</h2>
           </div>
           <div className="desktop-capabilities-actions">
             <div className="desktop-capabilities-search">
@@ -711,20 +733,20 @@ export function CapabilitiesPage({
               <input
                 value={capabilityQuery}
                 onChange={(event) => setCapabilityQuery(event.target.value)}
-                placeholder={capabilityFilter === 'plugins' ? '搜索插件...' : '搜索能力...'}
+                placeholder={t(capabilityFilter === 'plugins' ? 'capabilities.search.plugins' : 'capabilities.search.capabilities')}
               />
             </div>
-            <IconButton label="Refresh capabilities" onClick={() => void (capabilityFilter === 'hooks' ? onRefreshHooks() : onRefresh())}>
+            <IconButton label={t('capabilities.refresh')} onClick={() => void (capabilityFilter === 'hooks' ? onRefreshHooks() : onRefresh())}>
               <RefreshCw size={15} />
             </IconButton>
             {capabilityFilter === 'hooks' ? (
               <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={openHookFormCreate}>
-                创建
+                {t('capabilities.create.action')}
               </Button>
             ) : capabilityFilter === 'plugins' ? null : (
             <div className="desktop-capabilities-create">
               <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={() => setCreateMenuOpen((value) => !value)}>
-                创建
+                {t('capabilities.create.action')}
               </Button>
               {createMenuOpen ? (
                 <div className="desktop-capabilities-create-menu">
@@ -751,21 +773,28 @@ export function CapabilitiesPage({
 
         <div className="desktop-capabilities-tabs">
           <button className={capabilityFilter === 'plugins' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('plugins')}>
-            插件
+            {t('capabilities.tab.plugins')}
           </button>
           <button className={capabilityFilter === 'mcp' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('mcp')}>
             MCP
           </button>
           <button className={capabilityFilter === 'skills' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('skills')}>
-            技能
+            {t('capabilities.tab.skills')}
           </button>
           <button className={capabilityFilter === 'hooks' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('hooks')}>
             Hooks
           </button>
           <span>
             {capabilityFilter === 'plugins'
-              ? `${pluginMarketplace.length} 个插件 · ${plugins.length} 个已安装`
-              : `${servers.length} MCP · ${enabledSkillCount}/${skills.length} 技能启用 · ${selectedSkillCount} 默认 · ${executableHookCount}/${hooks.length} Hooks 可执行`}
+              ? t('capabilities.market.count', { plugins: pluginMarketplace.length, installed: plugins.length })
+              : t('capabilities.summary', {
+                  mcp: servers.length,
+                  enabledSkills: enabledSkillCount,
+                  skills: skills.length,
+                  defaultSkills: selectedSkillCount,
+                  executableHooks: executableHookCount,
+                  hooks: hooks.length,
+                })}
           </span>
         </div>
 
@@ -778,7 +807,7 @@ export function CapabilitiesPage({
                 role="status"
                 title={pluginMarketplaceErrors.join('\n')}
               >
-                部分插件暂时无法显示，请稍后重试。
+                {t('capabilities.market.partialUnavailable')}
               </div>
             ) : null}
           </div>
@@ -788,11 +817,11 @@ export function CapabilitiesPage({
           <div className="desktop-capabilities-usage-note">
             <Info size={14} />
             <span>
-              {capabilityFilter === 'mcp'
-                ? '启用表示运行时会加载这个 MCP；必需是关键依赖标记，一般服务不建议开启。授权策略控制调用 MCP 工具前是否确认；可用工具和禁用工具在表单里配置。'
+              {t(capabilityFilter === 'mcp'
+                ? 'capabilities.usage.mcp'
                 : capabilityFilter === 'skills'
-                  ? '启用表示可在对话中选择；默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文。输入框里的 Skill 词槽只影响当前这次发送。'
-                  : 'Hook 是本地命令触发器。这里仅展示已配置的 Hook；推荐自动化从插件市场按需安装，也可以手动创建。新命令需要信任当前 hash 才会执行。'}
+                  ? 'capabilities.usage.skills'
+                  : 'capabilities.usage.hooks')}
             </span>
           </div>
         ) : null}
@@ -813,7 +842,7 @@ export function CapabilitiesPage({
                         <span className="desktop-capability-card__icon"><Plug size={20} /></span>
                         <div className="desktop-capability-card__mcp-heading">
                           <h2>{server.label}</h2>
-                          <p title={endpoint || undefined}>{endpoint || server.description || '未配置入口'}</p>
+                          <p title={endpoint || undefined}>{endpoint || server.description || t('capabilities.mcp.noEndpoint')}</p>
                         </div>
                       </div>
                       <span className="desktop-capability-card__head-actions">
@@ -831,35 +860,37 @@ export function CapabilitiesPage({
                         <span>{server.transport}</span>
                       </div>
                       <div className="desktop-capability-card__tool-policy">
-                        <span>{toolStats.total ? `${toolStats.enabled}/${toolStats.total} 工具启用` : '未获取工具'}</span>
-                        <span title={server.authError}>{mcpAuthStatusLabel(server.authStatus)}</span>
+                        <span>{toolStats.total
+                          ? t('capabilities.mcp.toolsEnabled', { enabled: toolStats.enabled, total: toolStats.total })
+                          : t('capabilities.mcp.toolsNotFetched')}</span>
+                        <span title={server.authError}>{mcpAuthStatusLabel(server.authStatus, t)}</span>
                       </div>
                     </div>
                     <div className="desktop-capability-card__actions desktop-capability-card__actions--mcp">
                       <div className="desktop-capability-card__mcp-setting">
-                        <span className="desktop-capability-card__mcp-setting-label">服务状态</span>
+                        <span className="desktop-capability-card__mcp-setting-label">{t('capabilities.mcp.serviceStatus')}</span>
                         <div className="desktop-capability-card__mcp-switches">
-                          <label className="sd-check" title="启用后运行时会加载这个 MCP 服务">
+                          <label className="sd-check" title={t('capabilities.mcp.enableHint')}>
                             <input type="checkbox" checked={server.enabled} disabled={server.readOnly} onChange={(event) => void onUpdateMcpServer(server, { enabled: event.currentTarget.checked })} />
-                            <span>启用</span>
+                            <span>{t('capabilities.mcp.enabled')}</span>
                           </label>
-                          <label className="sd-check" title="必需是关键依赖标记，一般服务不建议开启">
+                          <label className="sd-check" title={t('capabilities.mcp.requiredHint')}>
                             <input type="checkbox" checked={server.required} disabled={server.readOnly} onChange={(event) => void onUpdateMcpServer(server, { required: event.currentTarget.checked })} />
-                            <span>必需</span>
+                            <span>{t('capabilities.mcp.required')}</span>
                           </label>
                         </div>
                       </div>
                       <div className="desktop-capability-card__mcp-setting desktop-capability-card__mcp-approval">
-                        <span className="desktop-capability-card__mcp-setting-label">调用确认</span>
+                        <span className="desktop-capability-card__mcp-setting-label">{t('capabilities.mcp.callApproval')}</span>
                         <SelectField
-                          aria-label="调用确认"
+                          aria-label={t('capabilities.mcp.callApproval')}
                           value={server.requireApproval}
                           disabled={server.readOnly}
                           onValueChange={(nextValue) => void onUpdateMcpServer(server, { requireApproval: nextValue as RuntimeMcpRequireApproval })}
                         >
-                          <option value="auto">自动判断</option>
-                          <option value="prompt">每次确认</option>
-                          <option value="approve">无需确认</option>
+                          <option value="auto">{t('capabilities.mcp.approval.auto')}</option>
+                          <option value="prompt">{t('capabilities.mcp.approval.prompt')}</option>
+                          <option value="approve">{t('capabilities.mcp.approval.approve')}</option>
                         </SelectField>
                       </div>
                       {canUseOAuth ? (
@@ -867,11 +898,11 @@ export function CapabilitiesPage({
                           <span className="desktop-capability-card__mcp-setting-label">OAuth</span>
                           {server.authStatus === 'oAuth' ? (
                             <Button type="button" variant="secondary" icon={<LogOut size={14} />} disabled={authPending} onClick={() => void updateMcpAuth(server, () => onLogoutMcpServer(server))}>
-                              {authPending ? '处理中' : '退出登录'}
+                              {authPending ? t('common.processing') : t('capabilities.mcp.logout')}
                             </Button>
                           ) : (
                             <Button type="button" variant="secondary" icon={authPending ? <Loader2 className="is-spinning" size={14} /> : <LogIn size={14} />} disabled={authPending} onClick={() => void updateMcpAuth(server, () => onLoginMcpServer(server))}>
-                              {authPending ? '等待授权' : '登录'}
+                              {t(authPending ? 'capabilities.mcp.awaitingAuthorization' : 'capabilities.mcp.login')}
                             </Button>
                           )}
                         </div>
@@ -894,7 +925,11 @@ export function CapabilitiesPage({
                   <div className="desktop-capability-card__head">
                     <span className="desktop-capability-card__icon"><BookOpen size={14} /></span>
                     <span className={`desktop-capability-card__status ${selectedByDefault ? 'is-on' : ''}`}>
-                      {selectedByDefault ? '默认使用' : skill.enabled ? '已启用' : '停用'}
+                      {t(selectedByDefault
+                        ? 'capabilities.skill.list.default'
+                        : skill.enabled
+                          ? 'capabilities.skill.list.enabled'
+                          : 'capabilities.skill.list.disabled')}
                     </span>
                   </div>
                   <h2>{skill.name}</h2>
@@ -902,13 +937,16 @@ export function CapabilitiesPage({
                   <div className="desktop-capability-card__meta">
                     <span>{skill.id}</span>
                     {dependencies.length ? (
-                      <span>{dependencies.filter((dependency) => dependency.status === 'ready').length}/{dependencies.length} MCP 就绪</span>
+                      <span>{t('capabilities.skill.list.mcpReady', {
+                        ready: dependencies.filter((dependency) => dependency.status === 'ready').length,
+                        total: dependencies.length,
+                      })}</span>
                     ) : null}
-                    {skill.dependencyErrors?.length ? <span>依赖声明错误</span> : null}
+                    {skill.dependencyErrors?.length ? <span>{t('capabilities.skill.list.dependencyError')}</span> : null}
                   </div>
                   <div className="desktop-capability-card__actions">
                     <Button type="button" variant="ghost" icon={<BookOpen size={14} />} onClick={() => void openSkillDetail(skill, 'view')}>
-                      查看
+                      {t('capabilities.skill.list.view')}
                     </Button>
                     {skill.kind === 'user' ? (
                       <IconButton label="Edit Skill" variant="ghost" onClick={() => void openSkillDetail(skill, 'edit')}>
@@ -927,7 +965,7 @@ export function CapabilitiesPage({
                           () => onInstallSkillMcpDependencies(skill),
                         )}
                       >
-                        {dependencyPending ? '处理中' : '安装 MCP 依赖'}
+                        {dependencyPending ? t('common.processing') : t('capabilities.skill.list.installDependencies')}
                       </Button>
                     ) : authDependency ? (
                       <Button
@@ -941,21 +979,23 @@ export function CapabilitiesPage({
                           () => onAuthenticateSkillMcpDependency(skill, authDependency.value),
                         )}
                       >
-                        {dependencyPending ? '等待授权' : `登录 ${authDependency.value}`}
+                        {dependencyPending
+                          ? t('capabilities.skill.awaitingAuthorization')
+                          : t('capabilities.skill.list.loginDependency', { name: authDependency.value })}
                       </Button>
                     ) : null}
-                    <label className="sd-check" title="启用后可在对话中选择这个 Skill">
+                    <label className="sd-check" title={t('capabilities.skill.enableHint')}>
                       <input type="checkbox" checked={skill.enabled} onChange={(event) => updateSkillEnabled(skill, event.currentTarget.checked)} />
-                      <span>启用</span>
+                      <span>{t('capabilities.skill.enabled')}</span>
                     </label>
-                    <label className="sd-check" title="默认使用会把该 Skill 的 SKILL.md 正文自动加入每轮对话上下文">
+                    <label className="sd-check" title={t('capabilities.skill.defaultHint')}>
                       <input
                         type="checkbox"
                         checked={selectedByDefault}
                         disabled={!skill.enabled}
                         onChange={(event) => void onUpdateSkill(skill, { selected: event.currentTarget.checked })}
                       />
-                      <span>默认使用</span>
+                      <span>{t('capabilities.skill.editor.default')}</span>
                     </label>
                   </div>
                 </article>
@@ -973,7 +1013,11 @@ export function CapabilitiesPage({
                       <span className="desktop-capability-card__head-main">
                         <span className="desktop-capability-card__icon">{canRun ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}</span>
                         <span className={`desktop-capability-card__status ${canRun ? 'is-on' : ''}`}>
-                          {canRun ? '可执行' : hook.enabled ? trustStatusLabel(hook.trustStatus) : '已停用'}
+                          {canRun
+                            ? t('capabilities.hook.executable')
+                            : hook.enabled
+                              ? trustStatusLabel(hook.trustStatus, t)
+                              : t('capabilities.hook.disabled')}
                         </span>
                       </span>
                       <span className="desktop-capability-card__head-actions">
@@ -986,9 +1030,9 @@ export function CapabilitiesPage({
                       </span>
                     </div>
                     <h2>{hook.eventName}</h2>
-                    <p className="desktop-capability-card__command" title={hook.command ?? undefined}>{hook.command || '未配置命令'}</p>
+                    <p className="desktop-capability-card__command" title={hook.command ?? undefined}>{hook.command || t('capabilities.hook.noCommand')}</p>
                     <div className="desktop-capability-card__meta">
-                      <span>{hook.matcher ? `matcher: ${hook.matcher}` : '所有匹配'}</span>
+                      <span>{hook.matcher ? `matcher: ${hook.matcher}` : t('capabilities.hook.allMatches')}</span>
                       <span>{hook.source}</span>
                       <span>{hook.timeoutSec}s</span>
                     </div>
@@ -1000,16 +1044,16 @@ export function CapabilitiesPage({
                         disabled={updating || hook.trustStatus === 'trusted' || hook.trustStatus === 'managed'}
                         onClick={() => void updateHook(hook, () => onTrustHook(hook))}
                       >
-                        信任
+                        {t('capabilities.hook.trust')}
                       </Button>
-                      <label className="sd-check" title="停用后这个 Hook 不会参与工具调用">
+                      <label className="sd-check" title={t('capabilities.hook.disableHint')}>
                         <input
                           type="checkbox"
                           checked={hook.enabled}
                           disabled={updating}
                           onChange={(event) => void updateHook(hook, () => onUpdateHookEnabled(hook, event.currentTarget.checked))}
                         />
-                        <span>启用</span>
+                        <span>{t('capabilities.hook.enabled')}</span>
                       </label>
                     </div>
                   </article>
@@ -1034,15 +1078,15 @@ export function CapabilitiesPage({
             capabilityFilter === 'hooks' && !normalizedCapabilityQuery ? (
               <div className="desktop-capabilities-empty desktop-capabilities-empty--hooks">
                 <Puzzle size={24} />
-                <strong>还没有 Hook</strong>
-                <span>从插件市场按需安装自动化，或使用右上角“创建”添加自己的 Hook。</span>
-                <Button type="button" variant="secondary" onClick={() => setCapabilityFilter('plugins')}>去插件市场</Button>
+                <strong>{t('capabilities.hook.emptyTitle')}</strong>
+                <span>{t('capabilities.hook.emptyDescription')}</span>
+                <Button type="button" variant="secondary" onClick={() => setCapabilityFilter('plugins')}>{t('capabilities.hook.openMarketplace')}</Button>
               </div>
             ) : (
               <div className="desktop-capabilities-empty">
                 {capabilityFilter === 'plugins'
-                  ? normalizedCapabilityQuery ? '没有找到匹配的插件' : '插件市场暂时没有可用内容'
-                  : capabilityFilter === 'hooks' ? '没有找到匹配的 Hook' : '暂无匹配能力'}
+                  ? normalizedCapabilityQuery ? t('capabilities.market.noMatch') : t('capabilities.market.empty')
+                  : capabilityFilter === 'hooks' ? t('capabilities.hook.noMatch') : t('capabilities.empty')}
               </div>
             )
           )}
@@ -1069,29 +1113,30 @@ export function CapabilitiesPage({
   );
 }
 
-function trustStatusLabel(status: RuntimeHookMetadata['trustStatus']): string {
+function trustStatusLabel(status: RuntimeHookMetadata['trustStatus'], t: Translate): string {
   switch (status) {
     case 'managed':
-      return '受管';
+      return t('capabilities.hook.managed');
     case 'trusted':
-      return '已信任';
+      return t('capabilities.hook.trusted');
     case 'modified':
-      return '已变更';
+      return t('capabilities.hook.modified');
     case 'untrusted':
     default:
-      return '待信任';
+      return t('capabilities.hook.untrusted');
   }
 }
 
-export function pluginActionError(error: unknown, fallback: string): string {
+export function pluginActionError(error: unknown, fallback: string, t: Translate = defaultTranslate): string {
   const message = error instanceof Error ? error.message : String(error);
   console.error('[plugins] action failed', error);
-  if (/already installed/iu.test(message)) return '这个插件已经安装。';
-  if (/conflict/iu.test(message)) return '这个插件与现有能力冲突，暂时无法安装。';
-  if (/not found/iu.test(message)) return '这个插件已不在当前市场中，请刷新后重试。';
+  if (/already installed/iu.test(message)) return t('capabilities.plugin.error.installed');
+  if (/conflict/iu.test(message)) return t('capabilities.plugin.error.conflict');
+  if (/not found/iu.test(message)) return t('capabilities.plugin.error.notFound');
   const detail = message.replace(/\s+\((?:DELETE|GET|PATCH|POST|PUT)\s+\/[^)]+\)$/u, '').trim();
   if (!detail || detail === '[object Object]') return fallback;
-  return `${fallback.replace(/，?请重试。$/u, '')}：${detail}`;
+  const conciseFallback = fallback.replace(/[，,.]?\s*(?:请重试|Try again)[。.]*$/iu, '');
+  return t('capabilities.plugin.error.withDetail', { fallback: conciseFallback, detail });
 }
 
 function setHookDraftField<TKey extends keyof HookDraft>(

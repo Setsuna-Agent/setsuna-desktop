@@ -35,10 +35,11 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 59 total files
-├── src/ — 1 direct / 36 total files
+apps/desktop/main/ — 0 direct / 60 total files
+├── src/ — 1 direct / 37 total files
 │   ├── browser/ — 5 direct / 8 total files
 │   │   └── cdp/ — 3 direct / 3 total files
+│   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 9 direct / 9 total files
 │   ├── review/ — 1 direct / 1 total files
 │   ├── runtime/ — 4 direct / 4 total files
@@ -73,16 +74,16 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 388 total files
-├── src/ — 2 direct / 283 total files
+apps/desktop/renderer/ — 0 direct / 400 total files
+├── src/ — 2 direct / 293 total files
 │   ├── app/ — 2 direct / 29 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 10 direct / 10 total files
 │   │   ├── providers/ — 1 direct / 1 total files
 │   │   ├── sidebar/ — 7 direct / 7 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 206 files
-│   │   ├── capabilities/ — 16 direct / 23 total files
+│   ├── features/ — 207 files
+│   │   ├── capabilities/ — 17 direct / 24 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
@@ -109,24 +110,25 @@ apps/desktop/renderer/ — 0 direct / 388 total files
 │   │       └── styles/ — 7 direct / 7 total files
 │   ├── services/ — 3 files
 │   │   └── runtime-client/ — 3 direct / 3 total files
-│   └── shared/ — 43 files
+│   └── shared/ — 52 files
 │       ├── assets/ — 20 files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
 │       ├── hooks/ — 2 direct / 2 total files
+│       ├── i18n/ — 9 direct / 9 total files
 │       ├── lib/ — 4 direct / 4 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 3 direct / 3 total files
-└── test/ — 105 files
-    └── unit/ — 105 files
+└── test/ — 107 files
+    └── unit/ — 107 files
         ├── app/ — 1 direct / 9 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 2 direct / 2 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 3 direct / 3 total files
-        ├── features/ — 83 files
-        │   ├── capabilities/ — 3 direct / 4 total files
+        ├── features/ — 84 files
+        │   ├── capabilities/ — 4 direct / 5 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 48 files
         │   │   ├── artifacts/ — 4 direct / 4 total files
@@ -144,9 +146,10 @@ apps/desktop/renderer/ — 0 direct / 388 total files
         │       └── model/ — 1 direct / 1 total files
         ├── services/ — 3 files
         │   └── runtime-client/ — 3 direct / 3 total files
-        └── shared/ — 10 files
+        └── shared/ — 11 files
             ├── branding/ — 1 direct / 1 total files
             ├── hooks/ — 2 direct / 2 total files
+            ├── i18n/ — 1 direct / 1 total files
             ├── lib/ — 2 direct / 2 total files
             ├── preferences/ — 4 direct / 4 total files
             └── ui/ — 1 direct / 1 total files

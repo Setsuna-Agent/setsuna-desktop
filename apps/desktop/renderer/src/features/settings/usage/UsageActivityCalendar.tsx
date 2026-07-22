@@ -1,5 +1,6 @@
 import type { RuntimeUsageBucket } from '@setsuna-desktop/contracts';
 import { CalendarDays } from 'lucide-react';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { formatTokens } from '../../workspace/model.js';
 import { buildUsageCalendar } from './usageCalendar.js';
 
@@ -7,14 +8,14 @@ type UsageActivityCalendarProps = {
   buckets: RuntimeUsageBucket[];
 };
 
-const calendarDateFormatter = new Intl.DateTimeFormat('zh-CN', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-});
-
 export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
-  const calendar = buildUsageCalendar(buckets);
+  const { locale, t } = useI18n();
+  const calendar = buildUsageCalendar(buckets, new Date(), locale);
+  const calendarDateFormatter = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 
   return (
     <section className="settings-usage-card settings-usage-calendar" aria-labelledby="settings-usage-calendar-title">
@@ -23,12 +24,12 @@ export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
           <CalendarDays size={16} strokeWidth={1.8} />
         </span>
         <div>
-          <strong id="settings-usage-calendar-title">Token 活动</strong>
-          <span>过去一年的每日消耗</span>
+          <strong id="settings-usage-calendar-title">{t('settings.usage.activity')}</strong>
+          <span>{t('settings.usage.activitySubtitle')}</span>
         </div>
-        <div className="settings-usage-calendar__summary" aria-label="过去一年统计">
-          <span><strong>{calendar.activeDays}</strong> 个活跃日</span>
-          <span><strong>{formatTokens(calendar.averageTokensPerActiveDay)}</strong> 活跃日均</span>
+        <div className="settings-usage-calendar__summary" aria-label={t('settings.usage.yearStats')}>
+          <span>{t('settings.usage.activeDays', { count: calendar.activeDays })}</span>
+          <span>{t('settings.usage.averageActiveDay', { tokens: formatTokens(calendar.averageTokensPerActiveDay) })}</span>
         </div>
       </header>
       <div className="settings-usage-calendar__scroller">
@@ -41,12 +42,12 @@ export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
           <div
             className="settings-usage-calendar__grid"
             role="img"
-            aria-label={`过去一年的每日 Token 活动图，共 ${calendar.activeDays} 个活跃日`}
+            aria-label={t('settings.usage.activityChart', { count: calendar.activeDays })}
           >
             {calendar.weeks.map((week) => (
               <div className="settings-usage-calendar__week" aria-hidden="true" key={week[0].dateKey}>
                 {week.map((day) => {
-                  const label = calendarDayLabel(day.dateKey, day.totalTokens, day.cachedInputTokens, day.recordCount, day.isInRange);
+                  const label = calendarDayLabel(day.dateKey, day.totalTokens, day.cachedInputTokens, day.recordCount, day.isInRange, calendarDateFormatter, t);
                   return (
                     <span
                       className={`settings-usage-calendar__day${day.isInRange ? '' : ' is-outside'}`}
@@ -62,22 +63,22 @@ export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
         </div>
       </div>
       <footer className="settings-usage-calendar__footer">
-        <span>过去一年共 {formatTokens(calendar.periodTokens)} Token</span>
-        <div className="settings-usage-calendar__legend" aria-label="活动强度由低到高">
-          <span>少</span>
+        <span>{t('settings.usage.periodTotal', { tokens: formatTokens(calendar.periodTokens) })}</span>
+        <div className="settings-usage-calendar__legend" aria-label={t('settings.usage.intensity')}>
+          <span>{t('settings.usage.less')}</span>
           {[0, 1, 2, 3, 4].map((level) => <i data-level={level} key={level} />)}
-          <span>多</span>
+          <span>{t('settings.usage.more')}</span>
         </div>
       </footer>
     </section>
   );
 }
 
-function calendarDayLabel(dateKey: string, totalTokens: number, cachedInputTokens: number, recordCount: number, isInRange: boolean): string {
-  if (!isInRange) return '不在统计周期内';
+function calendarDayLabel(dateKey: string, totalTokens: number, cachedInputTokens: number, recordCount: number, isInRange: boolean, formatter: Intl.DateTimeFormat, t: Translate): string {
+  if (!isInRange) return t('settings.usage.outsidePeriod');
   const [year, month, day] = dateKey.split('-').map(Number);
-  const label = calendarDateFormatter.format(new Date(year, month - 1, day));
-  if (!recordCount && !totalTokens) return `${label}，无调用`;
-  const cacheLabel = cachedInputTokens > 0 ? `，缓存命中 ${formatTokens(cachedInputTokens)}` : '';
-  return `${label}，${formatTokens(totalTokens)} Token${cacheLabel}，${recordCount} 次调用`;
+  const label = formatter.format(new Date(year, month - 1, day));
+  if (!recordCount && !totalTokens) return t('settings.usage.noCallsOnDate', { date: label });
+  const cacheLabel = cachedInputTokens > 0 ? t('settings.usage.cacheOnDate', { tokens: formatTokens(cachedInputTokens) }) : '';
+  return t('settings.usage.dayDetails', { date: label, tokens: formatTokens(totalTokens), cache: cacheLabel, count: recordCount });
 }

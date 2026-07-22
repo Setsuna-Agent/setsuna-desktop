@@ -9,6 +9,15 @@ import {
 
 const DEFAULT_PROVIDER_KIND: ProviderConfigState['provider'] = 'openai-compatible';
 const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+type ProviderFallbackNames = {
+  model: string;
+  provider: string;
+};
+
+const defaultProviderFallbackNames: ProviderFallbackNames = {
+  model: '新模型',
+  provider: '模型服务',
+};
 export const providerProtocolOptions: Array<{ value: ProviderConfigState['provider']; label: string; meta: string; placeholder: string }> = [
   {
     value: 'openai-compatible',
@@ -63,33 +72,46 @@ export function hasProviderModel(providers: ProviderConfigState[], providerId: s
   return providers.some((provider) => provider.id === providerId && provider.models.some((model) => model.id === modelId));
 }
 
-export function normalizeSettingsProviders(providers: ProviderConfigState[]): ProviderConfigState[] {
-  const normalized = (providers.length ? providers : [defaultProviderConfig()]).map((provider) => {
+export function normalizeSettingsProviders(
+  providers: ProviderConfigState[],
+  createDefaultProvider: () => ProviderConfigState = defaultProviderConfig,
+  fallbackNames: ProviderFallbackNames = defaultProviderFallbackNames,
+): ProviderConfigState[] {
+  const normalized = (providers.length ? providers : [createDefaultProvider()]).map((provider) => {
     const providerKind = normalizeProviderKind(provider.provider);
     return {
       ...provider,
       provider: providerKind,
-      name: provider.name || '模型服务',
-      models: normalizeProviderModels(provider.models, providerKind),
+      name: provider.name || fallbackNames.provider,
+      models: normalizeProviderModels(provider.models, providerKind, fallbackNames.model),
     };
   });
-  return normalized.length ? normalized : [defaultProviderConfig()];
+  return normalized.length ? normalized : [createDefaultProvider()];
 }
 
-export function normalizeProviderModels(models: ProviderModelConfig[], provider: ProviderConfigState['provider']): ProviderModelConfig[] {
-  const normalized = (models.length ? models : [defaultProviderModel('', true, provider)])
-    .map((model, index) => normalizeProviderModel(model, index === 0, provider));
+export function normalizeProviderModels(
+  models: ProviderModelConfig[],
+  provider: ProviderConfigState['provider'],
+  fallbackName = defaultProviderFallbackNames.model,
+): ProviderModelConfig[] {
+  const normalized = (models.length ? models : [defaultProviderModel('', true, provider, fallbackName)])
+    .map((model, index) => normalizeProviderModel(model, index === 0, provider, fallbackName));
   const activeModelId = normalized.find((model) => model.enabled)?.id ?? normalized[0]?.id;
   return normalized.map((model) => ({ ...model, enabled: model.id === activeModelId }));
 }
 
-export function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabled = false, provider: ProviderConfigState['provider'] = DEFAULT_PROVIDER_KIND): ProviderModelConfig {
+export function normalizeProviderModel(
+  model: ProviderModelConfig,
+  fallbackEnabled = false,
+  provider: ProviderConfigState['provider'] = DEFAULT_PROVIDER_KIND,
+  fallbackName = defaultProviderFallbackNames.model,
+): ProviderModelConfig {
   const code = model.code?.trim() ?? '';
   const thinkingEfforts = normalizeThinkingEfforts([...model.thinkingEfforts, model.defaultThinkingEffort]);
   return {
     ...model,
     id: model.id || modelIdFromCode(code),
-    name: model.name || code || '新模型',
+    name: model.name || code || fallbackName,
     code,
     enabled: model.enabled ?? fallbackEnabled,
     maxOutputTokens: positiveInt(model.maxOutputTokens, defaultModelMaxOutputTokens(provider)),
@@ -101,23 +123,28 @@ export function normalizeProviderModel(model: ProviderModelConfig, fallbackEnabl
   };
 }
 
-export function defaultProviderConfig(): ProviderConfigState {
+export function defaultProviderConfig(name = '新模型服务', modelName = '新模型'): ProviderConfigState {
   return {
     id: uniqueLocalId('provider'),
-    name: '新模型服务',
+    name,
     provider: DEFAULT_PROVIDER_KIND,
     baseUrl: 'http://127.0.0.1:11434/v1',
     enabled: true,
     apiKeySet: false,
     apiKeyPreview: '',
-    models: [defaultProviderModel('', true, DEFAULT_PROVIDER_KIND)],
+    models: [defaultProviderModel('', true, DEFAULT_PROVIDER_KIND, modelName)],
   };
 }
 
-export function defaultProviderModel(code: string, enabled = true, provider: ProviderConfigState['provider'] = DEFAULT_PROVIDER_KIND): ProviderModelConfig {
+export function defaultProviderModel(
+  code: string,
+  enabled = true,
+  provider: ProviderConfigState['provider'] = DEFAULT_PROVIDER_KIND,
+  fallbackName = '新模型',
+): ProviderModelConfig {
   return {
     id: modelIdFromCode(code),
-    name: code || '新模型',
+    name: code || fallbackName,
     code,
     enabled,
     maxOutputTokens: defaultModelMaxOutputTokens(provider),
@@ -172,16 +199,19 @@ function providerProtocolOption(provider: ProviderConfigState['provider']) {
   return providerProtocolOptions.find((option) => option.value === provider) ?? providerProtocolOptions[0];
 }
 
-export function providerApiKeyPlaceholder(provider: ProviderConfigState): string {
-  if (provider.apiKeySet) return '留空则保留当前密钥';
-  return provider.provider === 'openai-compatible' ? '本地服务可留空' : '本地兼容服务可留空';
+export function ensureProviderActiveModel(
+  provider: ProviderConfigState,
+  fallbackName = defaultProviderFallbackNames.model,
+): ProviderConfigState {
+  return { ...provider, models: normalizeProviderModels(provider.models, provider.provider, fallbackName) };
 }
 
-export function ensureProviderActiveModel(provider: ProviderConfigState): ProviderConfigState {
-  return { ...provider, models: normalizeProviderModels(provider.models, provider.provider) };
-}
-
-export function mergeFetchedModels(previousModels: ProviderModelConfig[], fetchedModels: RuntimeAvailableModel[], provider: ProviderConfigState['provider']): ProviderModelConfig[] {
+export function mergeFetchedModels(
+  previousModels: ProviderModelConfig[],
+  fetchedModels: RuntimeAvailableModel[],
+  provider: ProviderConfigState['provider'],
+  fallbackName = defaultProviderFallbackNames.model,
+): ProviderModelConfig[] {
   const previousByCode = new Map(previousModels.map((model) => [model.code, model]));
   const previousByName = new Map(previousModels.map((model) => [model.name, model]));
   const previousActiveCode = previousModels.find((model) => model.enabled)?.code;
@@ -205,9 +235,10 @@ export function mergeFetchedModels(previousModels: ProviderModelConfig[], fetche
       },
       code === activeCode,
       provider,
+      fallbackName,
     );
   });
-  return normalizeProviderModels(merged, provider);
+  return normalizeProviderModels(merged, provider, fallbackName);
 }
 
 export function updateModelCode(model: ProviderModelConfig, code: string): ProviderModelConfig {

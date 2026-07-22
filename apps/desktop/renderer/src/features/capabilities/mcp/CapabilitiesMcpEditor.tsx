@@ -8,6 +8,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { Loader2, RefreshCw, Save } from 'lucide-react';
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button, PageHeader, SelectField, TextArea, TextField } from '../../../shared/ui/primitives.js';
 import {
   mcpDraftToInput,
@@ -33,6 +34,7 @@ export function CapabilitiesMcpEditor({
   onFetchTools: (input: RuntimeMcpServerInput) => Promise<{ tools: RuntimeMcpToolInfo[]; errors: string[] }>;
   onSave: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [toolFetchLoading, setToolFetchLoading] = useState(false);
   const [toolFetchError, setToolFetchError] = useState<string | null>(null);
 
@@ -40,12 +42,12 @@ export function CapabilitiesMcpEditor({
     setToolFetchLoading(true);
     setToolFetchError(null);
     try {
-      const input = mcpDraftToInput(draft, draft.key.trim() || 'preview', editingMcpServer);
+      const input = mcpDraftToInput(draft, draft.key.trim() || 'preview', editingMcpServer, t);
       const result = await onFetchTools(input);
       if (result.errors.length) setToolFetchError(result.errors.join('\n'));
       const toolNames = result.tools.map((tool) => tool.name);
-      const existingAllowed = splitList(draft.allowedTools);
-      const existingDisabled = splitList(draft.disabledTools);
+      const existingAllowed = splitList(draft.allowedTools, t);
+      const existingDisabled = splitList(draft.disabledTools, t);
       setDraft((current) => ({
         ...current,
         tools: result.tools,
@@ -64,11 +66,11 @@ export function CapabilitiesMcpEditor({
 
   function setToolEnabled(toolName: string, enabled: boolean) {
     setDraft((current) => {
-      const currentAllowed = splitList(current.allowedTools);
+      const currentAllowed = splitList(current.allowedTools, t);
       const toolNames = current.tools.map((tool) => tool.name);
       const disabled = new Set(currentAllowed.length
         ? toolNames.filter((name) => !currentAllowed.includes(name))
-        : splitList(current.disabledTools));
+        : splitList(current.disabledTools, t));
       if (enabled) disabled.delete(toolName);
       else disabled.add(toolName);
       return { ...current, allowedTools: '', disabledTools: [...disabled].sort((left, right) => left.localeCompare(right)).join('\n') };
@@ -83,15 +85,15 @@ export function CapabilitiesMcpEditor({
     }));
   }
 
-  const allowedTools = new Set(splitList(draft.allowedTools));
-  const disabledTools = new Set(splitList(draft.disabledTools));
+  const allowedTools = new Set(splitList(draft.allowedTools, t));
+  const disabledTools = new Set(splitList(draft.disabledTools, t));
   const toolStats = mcpToolStats(draft.tools, [...allowedTools], [...disabledTools]);
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-mcp-editor">
       <PageHeader
         onBack={onBack}
-        title={editingMcpServer ? editingMcpServer.label || editingMcpServer.key : '新增 MCP 服务'}
-        subtitle={editingMcpServer?.readOnly ? '此配置只读，可查看但不能覆盖。' : '配置会写入本地运行时，不经过远端。'}
+        title={editingMcpServer ? editingMcpServer.label || editingMcpServer.key : t('capabilities.mcp.editor.new')}
+        subtitle={t(editingMcpServer?.readOnly ? 'capabilities.mcp.editor.readOnly' : 'capabilities.mcp.editor.localOnly')}
         actions={
           <Button
             variant="primary"
@@ -99,18 +101,18 @@ export function CapabilitiesMcpEditor({
             disabled={saving || !draft.key.trim() || editingMcpServer?.readOnly}
             onClick={() => void onSave()}
           >
-            {saving ? '保存中' : editingMcpServer ? '保存修改' : '保存'}
+            {saving ? t('capabilities.common.saving') : editingMcpServer ? t('capabilities.mcp.editor.saveChanges') : t('common.save')}
           </Button>
         }
       />
       <div className="mcp-form desktop-capabilities-mcp-form desktop-capabilities-mcp-form--page">
-        <McpFormField label="标识" help="稳定 key，保存后不可改。">
+        <McpFormField label={t('capabilities.mcp.key')} help={t('capabilities.mcp.keyHelp')}>
           <TextField value={draft.key} disabled={Boolean(editingMcpServer)} onChange={(event) => setDraftField(setDraft, 'key', event.target.value)} placeholder="server-key" />
         </McpFormField>
-        <McpFormField label="名称">
+        <McpFormField label={t('capabilities.mcp.name')}>
           <TextField value={draft.label} onChange={(event) => setDraftField(setDraft, 'label', event.target.value)} placeholder="Search MCP" />
         </McpFormField>
-        <McpFormField label="传输方式">
+        <McpFormField label={t('capabilities.mcp.transport')}>
           <SelectField
             value={draft.transport}
             onValueChange={(nextValue) => setDraftField(setDraft, 'transport', nextValue as RuntimeMcpTransport)}
@@ -119,51 +121,51 @@ export function CapabilitiesMcpEditor({
             <option value="streamableHttp">streamable HTTP</option>
           </SelectField>
         </McpFormField>
-        <McpFormField label="授权策略" help="自动判断会根据 MCP 工具注解判断；每次确认会在每次调用前请求确认；无需确认会直接调用。">
+        <McpFormField label={t('capabilities.mcp.approval')} help={t('capabilities.mcp.approvalHelp')}>
           <SelectField
             value={draft.requireApproval}
             onValueChange={(nextValue) => setDraftField(setDraft, 'requireApproval', nextValue as RuntimeMcpRequireApproval)}
           >
-            <option value="auto">自动判断</option>
-            <option value="prompt">每次确认</option>
-            <option value="approve">无需确认</option>
+            <option value="auto">{t('capabilities.mcp.approval.auto')}</option>
+            <option value="prompt">{t('capabilities.mcp.approval.prompt')}</option>
+            <option value="approve">{t('capabilities.mcp.approval.approve')}</option>
           </SelectField>
         </McpFormField>
-        <McpFormField label="信任级别" help="默认不信任；只有明确可信的服务才允许只读工具依据 annotation 免确认。">
+        <McpFormField label={t('capabilities.mcp.trust')} help={t('capabilities.mcp.trustHelp')}>
           <SelectField
             value={draft.trustLevel}
             onValueChange={(nextValue) => setDraftField(setDraft, 'trustLevel', nextValue as RuntimeMcpTrustLevel)}
           >
-            <option value="untrusted">不信任（推荐）</option>
-            <option value="trusted">已信任</option>
+            <option value="untrusted">{t('capabilities.mcp.trust.untrusted')}</option>
+            <option value="trusted">{t('capabilities.mcp.trust.trusted')}</option>
           </SelectField>
         </McpFormField>
-        <McpFormField className="desktop-capabilities-mcp-form__full" label="描述">
-          <TextField value={draft.description} onChange={(event) => setDraftField(setDraft, 'description', event.target.value)} placeholder="这个 MCP 提供什么能力" />
+        <McpFormField className="desktop-capabilities-mcp-form__full" label={t('capabilities.mcp.description')}>
+          <TextField value={draft.description} onChange={(event) => setDraftField(setDraft, 'description', event.target.value)} placeholder={t('capabilities.mcp.descriptionPlaceholder')} />
         </McpFormField>
         <div className="desktop-capabilities-mcp-form__switches">
-          <label className="sd-check" title="启用后运行时会加载这个 MCP 服务">
+          <label className="sd-check" title={t('capabilities.mcp.enableHint')}>
             <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraftField(setDraft, 'enabled', event.currentTarget.checked)} />
-            <span>启用</span>
+            <span>{t('capabilities.mcp.enabled')}</span>
           </label>
-          <label className="sd-check" title="必需是关键依赖标记，一般服务不建议开启">
+          <label className="sd-check" title={t('capabilities.mcp.requiredHint')}>
             <input type="checkbox" checked={draft.required} onChange={(event) => setDraftField(setDraft, 'required', event.currentTarget.checked)} />
-            <span>必需</span>
+            <span>{t('capabilities.mcp.required')}</span>
           </label>
-          <p>启用表示运行时加载；必需表示关键依赖标记，普通可选服务保持关闭即可。</p>
+          <p>{t('capabilities.mcp.flagsHelp')}</p>
         </div>
         {draft.transport === 'stdio' ? (
           <>
-            <McpFormField label="命令">
+            <McpFormField label={t('capabilities.mcp.command')}>
               <TextField value={draft.command} onChange={(event) => setDraftField(setDraft, 'command', event.target.value)} placeholder="npx" />
             </McpFormField>
-            <McpFormField className="desktop-capabilities-mcp-form__wide" label="参数" help="支持 JSON 数组、逗号或逐行填写。">
+            <McpFormField className="desktop-capabilities-mcp-form__wide" label={t('capabilities.mcp.args')} help={t('capabilities.mcp.argsHelp')}>
               <TextArea value={draft.args} onChange={(event) => setDraftField(setDraft, 'args', event.target.value)} placeholder={'-y\n@example/mcp'} />
             </McpFormField>
-            <McpFormField label="工作目录">
+            <McpFormField label={t('capabilities.mcp.cwd')}>
               <TextField value={draft.cwd} onChange={(event) => setDraftField(setDraft, 'cwd', event.target.value)} placeholder="/path/to/project" />
             </McpFormField>
-            <McpFormField className="desktop-capabilities-mcp-form__wide" label="环境变量" help={editingMcpServer?.envKeys.length ? `已有 ${editingMcpServer.envKeys.join(', ')}；值不回显，留空会保留。` : '一行一个 KEY=value，值会写入系统安全存储。'}>
+            <McpFormField className="desktop-capabilities-mcp-form__wide" label={t('capabilities.mcp.env')} help={editingMcpServer?.envKeys.length ? t('capabilities.mcp.envExisting', { keys: editingMcpServer.envKeys.join(', ') }) : t('capabilities.mcp.envHelp')}>
               <TextArea value={draft.env} onChange={(event) => setDraftField(setDraft, 'env', event.target.value)} placeholder="API_KEY=value" />
             </McpFormField>
           </>
@@ -172,13 +174,13 @@ export function CapabilitiesMcpEditor({
             <McpFormField className="desktop-capabilities-mcp-form__full" label="URL">
               <TextField value={draft.url} onChange={(event) => setDraftField(setDraft, 'url', event.target.value)} placeholder="https://example.com/mcp" />
             </McpFormField>
-            <McpFormField className="desktop-capabilities-mcp-form__full" label="请求头" help={editingMcpServer?.headerKeys.length ? `已有 ${editingMcpServer.headerKeys.join(', ')}；值不回显，留空会保留。` : '一行一个 Header=value，值会写入系统安全存储。'}>
+            <McpFormField className="desktop-capabilities-mcp-form__full" label={t('capabilities.mcp.headers')} help={editingMcpServer?.headerKeys.length ? t('capabilities.mcp.envExisting', { keys: editingMcpServer.headerKeys.join(', ') }) : t('capabilities.mcp.headersHelp')}>
               <TextArea value={draft.headers} onChange={(event) => setDraftField(setDraft, 'headers', event.target.value)} placeholder="Authorization=Bearer ..." />
             </McpFormField>
-            <McpFormField className="desktop-capabilities-mcp-form__full" label="环境变量请求头" help="一行一个 Header=ENV_VAR；发送时从环境变量读取值。">
+            <McpFormField className="desktop-capabilities-mcp-form__full" label={t('capabilities.mcp.envHeaders')} help={t('capabilities.mcp.envHeadersHelp')}>
               <TextArea value={draft.envHttpHeaders} onChange={(event) => setDraftField(setDraft, 'envHttpHeaders', event.target.value)} placeholder="X-API-Key=API_KEY" />
             </McpFormField>
-            <McpFormField label="Bearer Token 环境变量">
+            <McpFormField label={t('capabilities.mcp.bearerEnv')}>
               <TextField value={draft.bearerTokenEnvVar} onChange={(event) => setDraftField(setDraft, 'bearerTokenEnvVar', event.target.value)} placeholder="MCP_ACCESS_TOKEN" />
             </McpFormField>
             <McpFormField label="OAuth Client ID">
@@ -189,32 +191,32 @@ export function CapabilitiesMcpEditor({
             </McpFormField>
           </>
         )}
-        <McpFormField label="请求超时 ms">
+        <McpFormField label={t('capabilities.mcp.requestTimeout')}>
           <TextField value={draft.timeoutMs} onChange={(event) => setDraftField(setDraft, 'timeoutMs', event.target.value)} placeholder="120000" inputMode="numeric" />
         </McpFormField>
-        <McpFormField label="启动超时 ms">
+        <McpFormField label={t('capabilities.mcp.startupTimeout')}>
           <TextField value={draft.startupTimeoutMs} onChange={(event) => setDraftField(setDraft, 'startupTimeoutMs', event.target.value)} placeholder="120000" inputMode="numeric" />
         </McpFormField>
-        <McpFormField label="工具超时 ms">
+        <McpFormField label={t('capabilities.mcp.toolTimeout')}>
           <TextField value={draft.toolTimeoutMs} onChange={(event) => setDraftField(setDraft, 'toolTimeoutMs', event.target.value)} placeholder="120000" inputMode="numeric" />
         </McpFormField>
         <section className="desktop-capabilities-mcp-tools">
           <header>
             <div>
-              <strong>工具权限</strong>
-              <span>自动读取 MCP 的 tools/list，然后勾选允许使用的工具。</span>
+              <strong>{t('capabilities.mcp.toolPermissions')}</strong>
+              <span>{t('capabilities.mcp.toolPermissionsDescription')}</span>
             </div>
             <Button type="button" variant="secondary" icon={toolFetchLoading ? <Loader2 className="is-spinning" size={14} /> : <RefreshCw size={14} />} disabled={toolFetchLoading} onClick={() => void fetchTools()}>
-              {toolFetchLoading ? '获取中' : '获取工具'}
+              {t(toolFetchLoading ? 'capabilities.mcp.fetchingTools' : 'capabilities.mcp.fetchTools')}
             </Button>
           </header>
           {toolFetchError ? <div className="desktop-capabilities-mcp-tools__error">{toolFetchError}</div> : null}
           {draft.tools.length ? (
             <>
               <div className="desktop-capabilities-mcp-tools__toolbar">
-                <button type="button" onClick={() => setAllToolsEnabled(true)}>全选</button>
-                <button type="button" onClick={() => setAllToolsEnabled(false)}>全不选</button>
-                <span>{toolStats.enabled}/{toolStats.total} 可用</span>
+                <button type="button" onClick={() => setAllToolsEnabled(true)}>{t('capabilities.mcp.selectAll')}</button>
+                <button type="button" onClick={() => setAllToolsEnabled(false)}>{t('capabilities.mcp.selectNone')}</button>
+                <span>{t('capabilities.mcp.toolsAvailable', { enabled: toolStats.enabled, total: toolStats.total })}</span>
               </div>
               <div className="desktop-capabilities-mcp-tools__list">
                 {draft.tools.map((tool) => {
@@ -232,7 +234,7 @@ export function CapabilitiesMcpEditor({
               </div>
             </>
           ) : (
-            <div className="desktop-capabilities-mcp-tools__empty">填写 URL 或命令后点击获取工具。</div>
+            <div className="desktop-capabilities-mcp-tools__empty">{t('capabilities.mcp.fetchToolsHint')}</div>
           )}
         </section>
       </div>

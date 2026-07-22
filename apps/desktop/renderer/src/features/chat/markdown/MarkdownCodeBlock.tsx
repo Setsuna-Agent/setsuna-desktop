@@ -1,6 +1,7 @@
 import { CodeHighlighter } from '@ant-design/x';
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
 
 type MarkdownCodeBlockProps = {
@@ -98,6 +99,7 @@ function CodeBlockHeader({ code, language }: { code: string; language: string })
 }
 
 function CodeCopyButton({ code }: { code: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const resetTimerRef = useRef<number | null>(null);
 
@@ -120,13 +122,15 @@ function CodeCopyButton({ code }: { code: string }) {
     <button
       className={copied ? 'chat-code-highlighter__copy is-copied' : 'chat-code-highlighter__copy'}
       type="button"
-      aria-label={copied ? '代码已复制' : '复制代码'}
+      aria-label={copied ? t('chat.markdown.codeCopied') : t('chat.markdown.copyCode')}
       onClick={() => void copyCode()}
     >
       {copied
         ? <Check aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />
         : <Copy aria-hidden="true" className="chat-code-highlighter__copy-icon" size={14} />}
-      <span className="chat-code-highlighter__copy-label">{copied ? '已复制' : '复制'}</span>
+      <span className="chat-code-highlighter__copy-label">
+        {copied ? t('chat.markdown.copied') : t('chat.markdown.copy')}
+      </span>
     </button>
   );
 }

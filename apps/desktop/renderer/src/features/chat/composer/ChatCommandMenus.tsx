@@ -1,5 +1,6 @@
 import type { RuntimeSkillSummary, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { Boxes, LoaderCircle, X } from 'lucide-react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceEntryIcon } from '../../workspace/WorkspaceEntryIcon.js';
 import { skillDisplayText } from './chatCommandUtils.js';
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
@@ -21,19 +22,20 @@ export function ProjectEntryCommandMenu({
   onHover: (index: number) => void;
   onSelect: (entry: WorkspaceEntrySearchItem) => void;
 }) {
+  const { t } = useI18n();
   const activeEntry = entries[activeIndex];
   const activeEntryKey = activeEntry ? `${activeEntry.kind}:${activeEntry.path}` : null;
   const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(activeEntryKey);
 
   return (
-    <div ref={scrollContainerRef} className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label="项目文件">
-      <div className="chat-command-menu__title">项目文件</div>
+    <div ref={scrollContainerRef} className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.projectFiles')}>
+      <div className="chat-command-menu__title">{t('chat.command.projectFiles')}</div>
       {!hasProject ? (
-        <div className="chat-command-menu__state">请先选择项目目录</div>
+        <div className="chat-command-menu__state">{t('chat.command.chooseProject')}</div>
       ) : loading && !entries.length ? (
         <div className="chat-command-menu__state">
           <LoaderCircle className="chat-command-menu__state-icon is-spinning" size={14} />
-          <span>正在搜索项目文件</span>
+          <span>{t('chat.command.searchingFiles')}</span>
         </div>
       ) : loadError && !entries.length ? (
         <div className="chat-command-menu__state">{loadError}</div>
@@ -58,13 +60,13 @@ export function ProjectEntryCommandMenu({
                 <span className="chat-command-menu__item-title">{entry.kind === 'directory' ? `${entry.name}/` : entry.name}</span>
                 {entry.parent ? <span className="chat-command-menu__item-desc">{entry.parent}</span> : null}
               </span>
-              <span className="chat-command-menu__item-scope">{entry.kind === 'directory' ? '文件夹' : '文件'}</span>
+              <span className="chat-command-menu__item-scope">{entry.kind === 'directory' ? t('chat.command.folder') : t('chat.command.file')}</span>
             </button>
           ))}
           {loadError ? <div className="chat-command-menu__state">{loadError}</div> : null}
         </>
       ) : (
-        <div className="chat-command-menu__state">没有匹配的文件或文件夹</div>
+        <div className="chat-command-menu__state">{t('chat.command.noFiles')}</div>
       )}
     </div>
   );
@@ -77,13 +79,15 @@ export function SelectedSkillChips({
   skills: RuntimeSkillSummary[];
   onRemove: (skill: RuntimeSkillSummary) => void;
 }) {
+  const { t } = useI18n();
+
   return (
-    <div className="chat-selected-skills" aria-label="已选技能">
+    <div className="chat-selected-skills" aria-label={t('chat.command.selectedSkills')}>
       {skills.map((skill) => (
         <span className="chat-selected-skill" key={skill.id} title={skill.description || skill.id}>
           <Boxes size={13} />
           <span>{skillDisplayText(skill)}</span>
-          <button type="button" aria-label={`移除 ${skill.name}`} onClick={() => onRemove(skill)}>
+          <button type="button" aria-label={t('chat.command.removeSkill', { name: skill.name })} onClick={() => onRemove(skill)}>
             <X size={12} />
           </button>
         </span>

@@ -11,6 +11,7 @@ import { Brain, Globe2, Image as ImageIcon, Library, Pencil, Plus, RefreshCw, Tr
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import {
   resolveAutomaticModelBrand,
   resolveAutomaticProviderBrand,
@@ -36,7 +37,6 @@ import {
   normalizeThinkingEfforts,
   positiveInt,
   prepareProviderForSave,
-  providerApiKeyPlaceholder,
   providerBaseUrlPlaceholder,
   providerProtocolLabel,
   providerProtocolMeta,
@@ -80,7 +80,18 @@ function ProviderSettings({
   onSave: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
   onSaveStateChange: (state: SaveState) => void;
 }) {
-  const [providers, setProviders] = useState<ProviderConfigState[]>(() => normalizeSettingsProviders(config.providers));
+  const { t } = useI18n();
+  const createDefaultProvider = () => defaultProviderConfig(
+    t('settings.providers.newService'),
+    t('settings.providers.newModel'),
+  );
+  const providerFallbackNames = {
+    model: t('settings.providers.newModel'),
+    provider: t('settings.providers.newService'),
+  };
+  const [providers, setProviders] = useState<ProviderConfigState[]>(() => (
+    normalizeSettingsProviders(config.providers, createDefaultProvider, providerFallbackNames)
+  ));
   const [selectedProviderId, setSelectedProviderId] = useState(() => selectedProviderIdFromConfig(config));
   const [editingModel, setEditingModel] = useState<EditingModelState | null>(null);
   const [editingModelIcon, setEditingModelIcon] = useState<ModelIconTarget | null>(null);
@@ -104,7 +115,7 @@ function ProviderSettings({
   onSaveRef.current = onSave;
 
   useEffect(() => {
-    const nextProviders = normalizeSettingsProviders(config.providers);
+    const nextProviders = normalizeSettingsProviders(config.providers, createDefaultProvider, providerFallbackNames);
     setProviders(nextProviders);
     setSelectedProviderId((current) => (nextProviders.some((provider) => provider.id === current) ? current : selectedProviderIdFromProviders(config.activeProviderId, nextProviders)));
     setApiKeysByProviderId((current) => {
@@ -124,7 +135,7 @@ function ProviderSettings({
     ));
     setPendingModelReplacement((current) => (current && nextProviders.some((provider) => provider.id === current.providerId) ? current : null));
     setFetchStateByProviderId({});
-  }, [config.activeProviderId, config.providers]);
+  }, [config.activeProviderId, config.providers, t]);
 
   useEffect(() => {
     onSaveStateChange(saveState);
@@ -134,11 +145,11 @@ function ProviderSettings({
     lastStartedRevisionRef.current = Math.max(lastStartedRevisionRef.current, revision);
     const requestId = saveRequestIdRef.current + 1;
     saveRequestIdRef.current = requestId;
-    if (mountedRef.current) setSaveState({ status: 'saving', message: '生效中' });
+    if (mountedRef.current) setSaveState({ status: 'saving', message: t('settings.providers.applying') });
     return onSaveRef.current(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
       .then(() => {
         if (mountedRef.current && saveRequestIdRef.current === requestId && latestDirtyRevisionRef.current === revision) {
-          setSaveState({ status: 'saved', message: '已生效' });
+          setSaveState({ status: 'saved', message: t('settings.providers.applied') });
         }
       })
       .catch((error) => {
@@ -146,7 +157,7 @@ function ProviderSettings({
           setSaveState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
         }
       });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!dirtyRevision) return undefined;
@@ -181,7 +192,7 @@ function ProviderSettings({
   }, []);
 
   const markDirty = () => {
-    setSaveState({ status: 'saving', message: '生效中' });
+    setSaveState({ status: 'saving', message: t('settings.providers.applying') });
     setDirtyRevision((current) => current + 1);
   };
 
@@ -196,7 +207,7 @@ function ProviderSettings({
   };
 
   const addProvider = () => {
-    const nextProvider = defaultProviderConfig();
+    const nextProvider = createDefaultProvider();
     markDirty();
     setProviders((current) => [...current, nextProvider]);
     setSelectedProviderId(nextProvider.id);
@@ -212,7 +223,7 @@ function ProviderSettings({
         current.findIndex((provider) => provider.id === providerId)
       );
       const next = current.filter((provider) => provider.id !== providerId);
-      const normalizedNext = next.length ? next : [defaultProviderConfig()];
+      const normalizedNext = next.length ? next : [createDefaultProvider()];
       setSelectedProviderId((selected) => (selected === providerId ? normalizedNext[Math.min(removedIndex, normalizedNext.length - 1)]?.id ?? normalizedNext[0]?.id ?? '' : selected));
       return normalizedNext;
     });
@@ -228,7 +239,7 @@ function ProviderSettings({
     setEditingModel({
       mode: 'create',
       providerId,
-      model: defaultProviderModel('', !provider?.models.length, provider?.provider),
+      model: defaultProviderModel('', !provider?.models.length, provider?.provider, t('settings.providers.newModel')),
     });
   };
 
@@ -239,7 +250,7 @@ function ProviderSettings({
       ensureProviderActiveModel({
         ...provider,
         models: provider.models.filter((model) => model.id !== modelId),
-      })
+      }, t('settings.providers.newModel'))
     );
   };
 
@@ -250,15 +261,32 @@ function ProviderSettings({
       updateProvider(current.providerId, (provider) =>
         ensureProviderActiveModel({
           ...provider,
-          models: [...provider.models, normalizeProviderModel(nextModel, provider.models.length === 0, provider.provider)],
-        })
+          models: [
+            ...provider.models,
+            normalizeProviderModel(
+              nextModel,
+              provider.models.length === 0,
+              provider.provider,
+              t('settings.providers.newModel'),
+            ),
+          ],
+        }, t('settings.providers.newModel'))
       );
     } else {
       updateProvider(current.providerId, (provider) =>
         ensureProviderActiveModel({
           ...provider,
-          models: provider.models.map((model) => (model.id === current.modelId ? normalizeProviderModel({ ...nextModel, id: current.modelId }, model.enabled, provider.provider) : model)),
-        })
+          models: provider.models.map((model) => (
+            model.id === current.modelId
+              ? normalizeProviderModel(
+                  { ...nextModel, id: current.modelId },
+                  model.enabled,
+                  provider.provider,
+                  t('settings.providers.newModel'),
+                )
+              : model
+          )),
+        }, t('settings.providers.newModel'))
       );
     }
     setEditingModel(null);
@@ -278,7 +306,12 @@ function ProviderSettings({
       .then((result) => {
         const currentProvider = providersRef.current.find((item) => item.id === provider.id);
         if (!currentProvider) return;
-        const nextModels = mergeFetchedModels(currentProvider.models, result.models, currentProvider.provider);
+        const nextModels = mergeFetchedModels(
+          currentProvider.models,
+          result.models,
+          currentProvider.provider,
+          t('settings.providers.newModel'),
+        );
         const decision = providerModelReplacementDecision(currentProvider.models, nextModels);
         if (decision === 'confirm') {
           setPendingModelReplacement({
@@ -295,7 +328,7 @@ function ProviderSettings({
           [provider.id]: {
             error: '',
             fetching: false,
-            message: modelFetchSuccessMessage(decision, result.models.length),
+            message: modelFetchSuccessMessage(decision, result.models.length, t),
           },
         }));
       })
@@ -320,7 +353,7 @@ function ProviderSettings({
       ...current,
       [pending.providerId]: {
         ...(current[pending.providerId] ?? emptyModelFetchState()),
-        message: '已取消替换，当前模型配置未修改。',
+        message: t('settings.providers.replacementCanceled'),
       },
     }));
   };
@@ -334,7 +367,7 @@ function ProviderSettings({
       ...current,
       [pending.providerId]: {
         ...(current[pending.providerId] ?? emptyModelFetchState()),
-        message: `已确认替换为 ${pending.nextModels.length} 个模型。`,
+        message: t('settings.providers.replacementConfirmed', { count: pending.nextModels.length }),
       },
     }));
   };
@@ -342,6 +375,7 @@ function ProviderSettings({
   const enabledProviderCount = providers.filter((provider) => provider.enabled).length;
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0];
   const selectedProviderIndex = selectedProvider ? providers.findIndex((provider) => provider.id === selectedProvider.id) : -1;
+  const selectedProviderName = selectedProvider?.name || t('settings.providers.serviceIndex', { index: selectedProviderIndex + 1 });
   const selectedFetchState = selectedProvider ? fetchStateByProviderId[selectedProvider.id] ?? emptyModelFetchState() : emptyModelFetchState();
   const editingProvider = editingModel ? providers.find((provider) => provider.id === editingModel.providerId) : undefined;
   const editingModelConfig = editingModel?.mode === 'create' ? editingModel.model : editingProvider?.models.find((model) => model.id === editingModel?.modelId);
@@ -355,14 +389,14 @@ function ProviderSettings({
         <aside className="chat-user-settings__local-provider-rail">
           <div className="chat-user-settings__local-provider-rail-head">
             <div>
-              <span>服务列表</span>
-              <strong>{`${providers.length} 个服务 · ${enabledProviderCount} 个启用`}</strong>
+              <span>{t('settings.providers.serviceList')}</span>
+              <strong>{t('settings.providers.serviceSummary', { total: providers.length, enabled: enabledProviderCount })}</strong>
             </div>
             <Button className="chat-user-settings__add-provider" icon={<Plus size={13} />} onClick={addProvider}>
-              添加
+              {t('common.add')}
             </Button>
           </div>
-          <nav className="chat-user-settings__local-provider-list" aria-label="模型服务">
+          <nav className="chat-user-settings__local-provider-list" aria-label={t('settings.providers.modelServices')}>
             {providers.map((provider, providerIndex) => (
               <ProviderRailItem
                 key={provider.id}
@@ -381,26 +415,26 @@ function ProviderSettings({
                 <button
                   className="chat-user-settings__provider-brand-trigger"
                   type="button"
-                  aria-label={`配置“${selectedProvider.name || `服务 ${selectedProviderIndex + 1}`}”的图标`}
-                  title="配置服务图标"
+                  aria-label={t('settings.providers.configureIcon', { name: selectedProviderName })}
+                  title={t('settings.providers.configureServiceIcon')}
                   onClick={() => setEditingProviderIconId(selectedProvider.id)}
                 >
                   <BrandIconMark brand={resolveProviderBrand(selectedProvider)} fallbackName={selectedProvider.name} size="large" />
                   <span className="chat-user-settings__provider-brand-trigger-edit" aria-hidden="true"><Pencil size={8} /></span>
                 </button>
                 <span className="chat-user-settings__local-provider-title-copy">
-                  <strong>{selectedProvider.name || `服务 ${selectedProviderIndex + 1}`}</strong>
-                  <span>{`${providerProtocolLabel(selectedProvider.provider)} · ${selectedProvider.models.length} 个模型`}</span>
+                  <strong>{selectedProviderName}</strong>
+                  <span>{`${providerProtocolLabel(selectedProvider.provider)} · ${t('settings.providers.modelCount', { count: selectedProvider.models.length })}`}</span>
                 </span>
               </div>
               <div className="chat-user-settings__local-provider-actions">
                 <label className="sd-check chat-user-settings__provider-toggle">
                   <span className={selectedProvider.enabled ? 'is-enabled' : ''}>
                     <i aria-hidden="true" />
-                    {selectedProvider.enabled ? '服务已启用' : '服务已停用'}
+                    {selectedProvider.enabled ? t('settings.providers.serviceEnabled') : t('settings.providers.serviceDisabled')}
                   </span>
                   <input
-                    aria-label={selectedProvider.enabled ? '停用服务' : '启用服务'}
+                    aria-label={selectedProvider.enabled ? t('settings.providers.disableService') : t('settings.providers.enableService')}
                     type="checkbox"
                     checked={selectedProvider.enabled}
                     onChange={(event) => {
@@ -411,15 +445,15 @@ function ProviderSettings({
                 </label>
                 {providers.length > 1 ? (
                   <Popconfirm
-                    title={`删除服务“${selectedProvider.name || `服务 ${selectedProviderIndex + 1}`}”？`}
-                    description={`将同时删除该服务的 ${selectedProvider.models.length} 个模型和已保存的 API Key，此操作无法撤销。`}
+                    title={t('settings.providers.deleteServiceTitle', { name: selectedProviderName })}
+                    description={t('settings.providers.deleteServiceDescription', { count: selectedProvider.models.length })}
                     placement="bottomRight"
-                    okText="删除服务"
-                    cancelText="取消"
+                    okText={t('settings.providers.deleteService')}
+                    cancelText={t('common.cancel')}
                     okButtonProps={DANGER_CONFIRM_BUTTON_PROPS}
                     onConfirm={() => removeProvider(selectedProvider.id)}
                   >
-                    <IconButton className="chat-user-settings__delete-provider" label="删除服务" variant="danger">
+                    <IconButton className="chat-user-settings__delete-provider" label={t('settings.providers.deleteService')} variant="danger">
                       <Trash2 size={14} />
                     </IconButton>
                   </Popconfirm>
@@ -434,15 +468,15 @@ function ProviderSettings({
                       <Globe2 size={15} />
                     </span>
                     <span>
-                      <strong>连接配置</strong>
-                      <small>设置协议、接口地址与访问凭据</small>
+                      <strong>{t('settings.providers.connection')}</strong>
+                      <small>{t('settings.providers.connectionDescription')}</small>
                     </span>
                   </div>
                   <code>{providerProtocolMeta(selectedProvider.provider)}</code>
                 </header>
                 <div className="settings-provider-fields">
                   <label className="settings-provider-field">
-                    <span className="settings-provider-field__label">协议</span>
+                    <span className="settings-provider-field__label">{t('settings.providers.protocol')}</span>
                     <SelectField
                       className="settings-local-control"
                       value={selectedProvider.provider}
@@ -460,7 +494,7 @@ function ProviderSettings({
                     </SelectField>
                   </label>
                   <label className="settings-provider-field">
-                    <span className="settings-provider-field__label">显示名称</span>
+                    <span className="settings-provider-field__label">{t('settings.providers.displayName')}</span>
                     <TextField
                       className="settings-local-control"
                       value={selectedProvider.name}
@@ -471,7 +505,7 @@ function ProviderSettings({
                     />
                   </label>
                   <label className="settings-provider-field">
-                    <span className="settings-provider-field__label">服务地址</span>
+                    <span className="settings-provider-field__label">{t('settings.providers.serviceUrl')}</span>
                     <TextField
                       className="settings-local-control"
                       value={selectedProvider.baseUrl}
@@ -484,8 +518,8 @@ function ProviderSettings({
                     />
                   </label>
                   <label className="settings-provider-field">
-                    <span className="settings-provider-field__label">API 密钥 {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
-                    <TextField className="settings-local-control" type="password" value={apiKeysByProviderId[selectedProvider.id] ?? ''} onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)} placeholder={providerApiKeyPlaceholder(selectedProvider)} />
+                    <span className="settings-provider-field__label">{t('settings.providers.apiKey')} {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
+                    <TextField className="settings-local-control" type="password" value={apiKeysByProviderId[selectedProvider.id] ?? ''} onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)} placeholder={selectedProvider.apiKeySet ? t('settings.providers.keepApiKey') : t('settings.providers.optionalApiKey')} />
                   </label>
                 </div>
               </section>
@@ -497,26 +531,26 @@ function ProviderSettings({
                         <Library size={15} />
                       </span>
                       <span>
-                        <strong>模型目录</strong>
-                        <small>{`${selectedProvider.models.length} 个模型 · 可自动同步或手动添加`}</small>
+                        <strong>{t('settings.providers.models')}</strong>
+                        <small>{t('settings.providers.modelsDescription', { count: selectedProvider.models.length })}</small>
                       </span>
                     </div>
                     <div className="settings-model-list__actions">
                       <Button icon={<RefreshCw className={selectedFetchState.fetching ? 'is-spinning' : undefined} size={14} />} disabled={selectedFetchState.fetching} onClick={() => fetchModels(selectedProvider)}>
-                        {selectedFetchState.fetching ? '同步中' : '同步模型'}
+                        {selectedFetchState.fetching ? t('settings.providers.syncing') : t('settings.providers.syncModels')}
                       </Button>
                       <Button icon={<Plus size={14} />} variant="primary" onClick={() => addModel(selectedProvider.id)}>
-                        添加模型
+                        {t('settings.providers.addModel')}
                       </Button>
                     </div>
                   </div>
                   <div className="settings-model-browser">
                     <div className="settings-model-browser__head" aria-hidden="true">
-                      <span>模型</span>
-                      <span>能力与限制</span>
-                      <span>操作</span>
+                      <span>{t('settings.providers.model')}</span>
+                      <span>{t('settings.providers.capabilities')}</span>
+                      <span>{t('settings.providers.actions')}</span>
                     </div>
-                    <div className="settings-model-browser__body" role="list" aria-label="模型列表">
+                    <div className="settings-model-browser__body" role="list" aria-label={t('settings.providers.modelList')}>
                       {selectedProvider.models.map((model) => (
                         <ProviderModelRow
                           key={model.id}
@@ -539,7 +573,7 @@ function ProviderSettings({
           </div>
         ) : (
           <div className="chat-user-settings__local-provider-card">
-            <EmptyState title="暂无模型服务" />
+            <EmptyState title={t('settings.providers.empty')} />
           </div>
         )}
       </div>
@@ -600,13 +634,14 @@ function ProviderRailItem({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const name = provider.name || `服务 ${index + 1}`;
+  const { t } = useI18n();
+  const name = provider.name || t('settings.providers.serviceIndex', { index: index + 1 });
   return (
     <button
       className={`chat-user-settings__local-provider-item ${selected ? 'is-active' : ''}`}
       type="button"
       aria-current={selected ? 'true' : undefined}
-      title={`${name} · ${providerProtocolLabel(provider.provider)} · ${provider.models.length} 个模型`}
+      title={`${name} · ${providerProtocolLabel(provider.provider)} · ${t('settings.providers.modelCount', { count: provider.models.length })}`}
       onClick={onSelect}
     >
       <BrandIconMark brand={resolveProviderBrand(provider)} fallbackName={provider.name} />
@@ -615,13 +650,13 @@ function ProviderRailItem({
           <span className="chat-user-settings__local-provider-item-name">{name}</span>
           <span className={`chat-user-settings__local-provider-item-status ${provider.enabled ? 'is-enabled' : ''}`}>
             <i aria-hidden="true" />
-            {provider.enabled ? '启用' : '停用'}
+            {provider.enabled ? t('settings.providers.enabled') : t('settings.providers.disabled')}
           </span>
         </span>
         <span className="chat-user-settings__local-provider-item-meta">
           <span>{providerProtocolLabel(provider.provider)}</span>
           <i aria-hidden="true" />
-          <span>{`${provider.models.length} 个模型`}</span>
+          <span>{t('settings.providers.modelCount', { count: provider.models.length })}</span>
         </span>
       </span>
     </button>
@@ -643,15 +678,16 @@ function ProviderModelRow({
   onEdit: () => void;
   onEditIcon: () => void;
 }) {
-  const name = model.name || model.code || '未命名模型';
+  const { t } = useI18n();
+  const name = model.name || model.code || t('settings.providers.unnamedModel');
   return (
     <div className="settings-model-option" role="listitem">
       <div className="settings-model-option__body">
         <button
           className="settings-model-option__icon"
           type="button"
-          aria-label={`配置“${name}”的图标`}
-          title="配置模型图标"
+          aria-label={t('settings.providers.configureIcon', { name })}
+          title={t('settings.providers.configureModelIcon')}
           onClick={onEditIcon}
         >
           <BrandIconMark brand={resolveModelBrand(model, provider)} fallbackName={name} />
@@ -659,20 +695,20 @@ function ProviderModelRow({
         </button>
         <span className="settings-model-option__copy">
           <span className="settings-model-option__name">{name}</span>
-          <code>{model.code || '未填写模型 ID'}</code>
+          <code>{model.code || t('settings.providers.missingModelId')}</code>
         </span>
       </div>
       <span className="settings-model-option__meta">
-        {model.contextWindowTokens ? <span title="上下文窗口">{`${formatTokens(model.contextWindowTokens)} 上下文`}</span> : null}
-        <span title="最大输出 Token">{`${formatTokens(model.maxOutputTokens)} 输出`}</span>
-        {model.thinkingEnabled ? <span>思考</span> : null}
-        {model.supportsImages ? <span>视觉</span> : null}
+        {model.contextWindowTokens ? <span title={t('settings.providers.contextWindow')}>{t('settings.providers.contextValue', { tokens: formatTokens(model.contextWindowTokens) })}</span> : null}
+        <span title={t('settings.providers.maxOutput')}>{t('settings.providers.outputValue', { tokens: formatTokens(model.maxOutputTokens) })}</span>
+        {model.thinkingEnabled ? <span>{t('settings.providers.thinking')}</span> : null}
+        {model.supportsImages ? <span>{t('settings.providers.vision')}</span> : null}
       </span>
       <div className="settings-model-option__actions">
-        <IconButton label="编辑模型" onClick={onEdit}>
+        <IconButton label={t('settings.providers.editModel')} onClick={onEdit}>
           <Pencil size={14} />
         </IconButton>
-        <IconButton label="删除模型" variant="danger" disabled={!canDelete} onClick={onDelete}>
+        <IconButton label={t('settings.providers.deleteModel')} variant="danger" disabled={!canDelete} onClick={onDelete}>
           <Trash2 size={14} />
         </IconButton>
       </div>
@@ -713,10 +749,10 @@ function emptyModelFetchState(): ModelFetchState {
   return { error: '', fetching: false, message: '' };
 }
 
-function modelFetchSuccessMessage(decision: ReturnType<typeof providerModelReplacementDecision>, modelCount: number): string {
-  if (decision === 'confirm') return `已获取 ${modelCount} 个模型，确认后才会替换当前配置。`;
-  if (decision === 'unchanged') return `已获取 ${modelCount} 个模型，与当前配置一致。`;
-  return `已获取并应用 ${modelCount} 个模型。`;
+function modelFetchSuccessMessage(decision: ReturnType<typeof providerModelReplacementDecision>, modelCount: number, t: Translate): string {
+  if (decision === 'confirm') return t('settings.providers.fetchConfirm', { count: modelCount });
+  if (decision === 'unchanged') return t('settings.providers.fetchUnchanged', { count: modelCount });
+  return t('settings.providers.fetchApplied', { count: modelCount });
 }
 
 export function idleSaveState(): SaveState {
@@ -733,6 +769,7 @@ export function AutoSaveStatus({ state }: { state: SaveState }) {
 }
 
 function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm }: { defaultMaxOutputTokens: number; model: ProviderModelConfig; onClose: () => void; onConfirm: (model: ProviderModelConfig) => void }) {
+  const { t } = useI18n();
   const [draftModel, setDraftModel] = useState(model);
   const thinkingEfforts = normalizeThinkingEfforts([...draftModel.thinkingEfforts, draftModel.defaultThinkingEffort]);
   const customThinkingEffortsText = draftModel.thinkingEnabled ? customThinkingEfforts(thinkingEfforts).join(', ') : '';
@@ -751,25 +788,25 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
 
   return createPortal(
     <div className="desktop-agent-modal-backdrop settings-model-modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="desktop-agent-modal settings-model-modal" role="dialog" aria-modal="true" aria-label="编辑模型" onMouseDown={(event) => event.stopPropagation()}>
+      <section className="desktop-agent-modal settings-model-modal" role="dialog" aria-modal="true" aria-label={t('settings.providers.editModel')} onMouseDown={(event) => event.stopPropagation()}>
         <header className="settings-model-modal__header">
           <div>
-            <strong>{draftModel.name || draftModel.code || '未命名模型'}</strong>
-            <code>{draftModel.code || '未填写模型 ID'}</code>
+            <strong>{draftModel.name || draftModel.code || t('settings.providers.unnamedModel')}</strong>
+            <code>{draftModel.code || t('settings.providers.missingModelId')}</code>
           </div>
-          <IconButton label="关闭" onClick={onClose}>
+          <IconButton label={t('common.close')} onClick={onClose}>
             <X size={15} />
           </IconButton>
         </header>
         <div className="settings-model-modal__body">
           <div className="settings-model-modal__grid">
             <label className="settings-model-field">
-              <span className="settings-model-label">显示名称</span>
+              <span className="settings-model-label">{t('settings.providers.displayName')}</span>
               <TextField
                 autoFocus
                 className="settings-local-control"
                 value={draftModel.name}
-                placeholder="显示名称"
+                placeholder={t('settings.providers.displayName')}
                 onChange={(event) => {
                   const name = event.target.value;
                   updateDraft((item) => ({ ...item, name }));
@@ -777,7 +814,7 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
               />
             </label>
             <label className="settings-model-field">
-              <span className="settings-model-label">模型 ID</span>
+              <span className="settings-model-label">Model ID</span>
               <TextField
                 className="settings-local-control settings-model-code-control"
                 value={draftModel.code}
@@ -789,7 +826,7 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
               />
             </label>
             <label className="settings-model-field">
-              <span className="settings-model-label">输出</span>
+              <span className="settings-model-label">{t('settings.providers.output')}</span>
               <TextField
                 className="settings-local-control settings-model-output-control"
                 type="number"
@@ -802,12 +839,12 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
               />
             </label>
             <label className="settings-model-field">
-              <span className="settings-model-label">上下文窗口</span>
+              <span className="settings-model-label">{t('settings.providers.contextWindow')}</span>
               <TextField
                 className="settings-local-control settings-model-context-control"
                 type="number"
                 min={0}
-                placeholder="未设置"
+                placeholder={t('settings.providers.notSet')}
                 value={draftModel.contextWindowTokens ?? ''}
                 onChange={(event) => {
                   const contextWindowTokens = positiveInt(Number(event.target.value), 0) || undefined;
@@ -817,7 +854,7 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
             </label>
           </div>
           <div className="settings-model-modal__section">
-            <span className="settings-model-label">能力</span>
+            <span className="settings-model-label">{t('settings.providers.capability')}</span>
             <div className="settings-model-inline-checks">
               <label className={`sd-check settings-model-check ${draftModel.thinkingEnabled ? 'is-active' : ''}`}>
                 <input
@@ -829,7 +866,7 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
                   }}
                 />
                 <Brain size={13} />
-                <span>思考</span>
+                <span>{t('settings.providers.thinking')}</span>
               </label>
               <label className={`sd-check settings-model-check ${draftModel.supportsImages ? 'is-active' : ''}`}>
                 <input
@@ -841,14 +878,14 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
                   }}
                 />
                 <ImageIcon size={13} />
-                <span>图片</span>
+                <span>{t('settings.providers.images')}</span>
               </label>
             </div>
           </div>
           <div className="settings-model-modal__section">
-            <span className="settings-model-label">思考等级</span>
+            <span className="settings-model-label">{t('settings.providers.thinkingLevels')}</span>
             <div className="settings-thinking-levels__content">
-              <div className="settings-thinking-presets" aria-label="常用思考等级">
+              <div className="settings-thinking-presets" aria-label={t('settings.providers.commonThinkingLevels')}>
                 {thinkingPresetOptionsForModel().map((effort) => {
                   const selected = thinkingEfforts.includes(effort);
                   return (
@@ -859,10 +896,10 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
                 })}
               </div>
               <TextField
-                aria-label="自定义思考等级"
+                aria-label={t('settings.providers.customThinkingLevel')}
                 className="settings-thinking-input"
                 disabled={!draftModel.thinkingEnabled}
-                placeholder="自定义档位"
+                placeholder={t('settings.providers.customLevelPlaceholder')}
                 value={customThinkingEffortsText}
                 onChange={(event) => {
                   const efforts = event.target.value;
@@ -875,10 +912,10 @@ function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm
         <footer className="settings-model-modal__footer">
           <div className="settings-model-modal__footer-actions">
             <Button type="button" onClick={onClose}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button type="button" variant="primary" onClick={() => onConfirm(draftModel)}>
-              确定
+              {t('settings.providers.confirm')}
             </Button>
           </div>
         </footer>

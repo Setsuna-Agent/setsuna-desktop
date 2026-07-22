@@ -7,6 +7,7 @@ import {
   runtimeArtifactSupportsBrowserPreview,
   runtimeArtifactTypeLabel,
 } from '../../../../../src/features/chat/artifacts/runtimeArtifacts.js';
+import { translate, type Translate } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 const pdfArtifact: RuntimeArtifact = {
   id: 'artifact_1',
@@ -46,6 +47,10 @@ describe('runtime artifacts', () => {
     expect(runtimeArtifactTypeLabel({ ...pdfArtifact, name: '预算.xlsx' })).toBe('表格 · XLSX');
     expect(runtimeArtifactTypeLabel({ ...pdfArtifact, name: 'preview.png' })).toBe('图片 · PNG');
     expect(runtimeArtifactTypeLabel({ ...pdfArtifact, name: 'bundle.unknown' })).toBe('文件 · UNKNOWN');
+
+    const t: Translate = (key, params) => translate('en-US', key, params);
+    expect(runtimeArtifactTypeLabel(pdfArtifact, t)).toBe('Document · PDF');
+    expect(runtimeArtifactTypeLabel({ ...pdfArtifact, name: '预算.xlsx' }, t)).toBe('Spreadsheet · XLSX');
   });
 
   it('opens the workspace-relative artifact with the desktop bridge', async () => {

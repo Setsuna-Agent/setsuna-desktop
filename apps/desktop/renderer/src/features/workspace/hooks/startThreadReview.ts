@@ -4,6 +4,9 @@ import type {
   RuntimeThread,
   SendTurnResponse,
 } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 type ThreadReviewClient = Pick<DesktopRuntimeClient, 'createThread' | 'startReview'>;
 
@@ -12,6 +15,7 @@ type StartThreadReviewOptions = {
   client: ThreadReviewClient;
   currentThread: RuntimeThread | null;
   onThreadCreated: (thread: RuntimeThread) => void | Promise<unknown>;
+  t?: Translate;
   target: RuntimeReviewTarget;
 };
 
@@ -24,11 +28,12 @@ export async function startThreadReview({
   client,
   currentThread,
   onThreadCreated,
+  t = defaultTranslate,
   target,
 }: StartThreadReviewOptions): Promise<SendTurnResponse> {
   let thread = currentThread;
   if (!thread) {
-    if (!activeProjectId) throw new Error('请先选择项目');
+    if (!activeProjectId) throw new Error(t('chat.composer.selectProjectFirst'));
     thread = await client.createThread({ projectId: activeProjectId });
     await onThreadCreated(thread);
   }

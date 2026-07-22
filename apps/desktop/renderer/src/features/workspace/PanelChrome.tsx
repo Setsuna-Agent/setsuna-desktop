@@ -1,18 +1,27 @@
 import { Code2, FileText, FolderOpen, MessageSquare, PanelRight, Terminal } from 'lucide-react';
+import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../shared/i18n/messages.js';
 import { BrowserFavicon } from './BrowserFavicon.js';
 import { fileName, type DesktopPanelTab, type DesktopPanelType, type DesktopWorkspaceApp } from './model.js';
 import { workspaceAppIconAssets } from './workspaceAppIcons.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 
-export function desktopPanelTitle(panel: DesktopPanelTab): string {
-  if (panel.title) return panel.title;
-  if (panel.type === 'overview') return '汇总目录';
-  if (panel.type === 'chat') return '侧边任务';
-  if (panel.type === 'browser') return '新标签页';
-  if (panel.type === 'review') return '审查';
-  if (panel.type === 'terminal') return '终端';
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
+
+const panelTitleCopy: Partial<Record<DesktopPanelType, { key: MessageKey; legacyTitle: string }>> = {
+  overview: { key: 'workspace.panel.overview', legacyTitle: '汇总目录' },
+  chat: { key: 'workspace.panel.sideTask', legacyTitle: '侧边任务' },
+  browser: { key: 'workspace.panel.newTab', legacyTitle: '新标签页' },
+  review: { key: 'workspace.panel.review', legacyTitle: '审查' },
+  terminal: { key: 'workspace.panel.terminal', legacyTitle: '终端' },
+  files: { key: 'workspace.panel.openFile', legacyTitle: '打开文件' },
+};
+
+export function desktopPanelTitle(panel: DesktopPanelTab, t: Translate = defaultTranslate): string {
   if (panel.type === 'file' && panel.filePath) return fileName(panel.filePath);
-  return '打开文件';
+  const copy = panelTitleCopy[panel.type];
+  if (copy && (!panel.title || panel.title === copy.legacyTitle)) return t(copy.key);
+  return panel.title || t('workspace.panel.openFile');
 }
 
 export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; type?: DesktopPanelType }) {

@@ -2,6 +2,7 @@ import type {
   RuntimeStructuredInputField as RuntimeStructuredInputFieldSchema,
   RuntimeStructuredInputValue,
 } from '@setsuna-desktop/contracts';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 
 export function RuntimeStructuredInputField({
   field,
@@ -16,6 +17,7 @@ export function RuntimeStructuredInputField({
   required: boolean;
   value: RuntimeStructuredInputValue | undefined;
 }) {
+  const { t } = useI18n();
   const label = field.title || name;
   const choices: Array<{ const: string; title: string; description?: string }> | undefined = field.oneOf
     ?? field.enum?.map((item, index) => ({ const: item, title: field.enumNames?.[index] ?? item }));
@@ -28,7 +30,7 @@ export function RuntimeStructuredInputField({
 
   return (
     <label className={`chat-tool-run__elicitation-field${field.type === 'boolean' ? ' chat-tool-run__elicitation-field--boolean' : ''}`}>
-      <span>{label}{required ? <em>必填</em> : null}</span>
+      <span>{label}{required ? <em>{t('toolRun.input.required')}</em> : null}</span>
       {field.description ? <small>{field.description}</small> : null}
       {field.type === 'boolean' ? (
         <input name={name} type="checkbox" checked={value === true} onChange={(event) => onChange(event.currentTarget.checked)} />
@@ -55,7 +57,7 @@ export function RuntimeStructuredInputField({
         </select>
       ) : choices?.length ? (
         <select name={name} required={required} value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)}>
-          <option value="" disabled={required}>{required ? '请选择' : '未选择'}</option>
+          <option value="" disabled={required}>{t(required ? 'toolRun.input.choose' : 'toolRun.input.notSelected')}</option>
           {choices.map((choice) => <option key={choice.const} value={choice.const}>{choice.title}</option>)}
         </select>
       ) : field.multiline ? (
@@ -80,7 +82,7 @@ export function RuntimeStructuredInputField({
           onChange={(event) => onChange(event.currentTarget.value)}
         />
       )}
-      {selectedDescriptions?.length ? <small>{selectedDescriptions.join('；')}</small> : null}
+      {selectedDescriptions?.length ? <small>{selectedDescriptions.join(t('toolRun.input.descriptionJoiner'))}</small> : null}
     </label>
   );
 }

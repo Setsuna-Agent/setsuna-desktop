@@ -20,6 +20,7 @@ import './features/workspace/styles/bottom-panel.css';
 import './features/workspace/styles/panel-chrome.css';
 import './features/workspace/styles/workspace.css';
 import { applyDesktopPlatformAttribute } from './shared/lib/desktopPlatform.js';
+import { I18nProvider, initializeLocalePreference } from './shared/i18n/I18nProvider.js';
 import { initializeAccentColorPreference } from './shared/preferences/useAccentColorPreference.js';
 import { initializeAppearancePreference } from './shared/preferences/useAppearancePreferences.js';
 import { initializeCodeAppearancePreference } from './shared/preferences/useCodeAppearancePreferences.js';
@@ -33,6 +34,7 @@ import './shared/styles/primitives.css';
 import './shared/styles/tokens.css';
 
 applyDesktopPlatformAttribute();
+initializeLocalePreference();
 initializeThemePreference();
 initializeAccentColorPreference();
 initializeAppearancePreference();
@@ -41,6 +43,8 @@ initializeSidebarBackgroundPreference();
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <I18nProvider>
+      <App />
+    </I18nProvider>
   </React.StrictMode>
 );

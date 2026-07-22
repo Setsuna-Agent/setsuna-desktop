@@ -106,6 +106,20 @@ describe('file config store', () => {
     });
   });
 
+  it('persists only supported interface languages', async () => {
+    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
+
+    await expect(store.saveConfig({ desktopSettings: { interfaceLanguage: 'en-US' } })).resolves.toMatchObject({
+      desktopSettings: { interfaceLanguage: 'en-US' },
+    });
+    const invalidDesktopSettings = { interfaceLanguage: 'fr-FR' } as unknown as RuntimeConfigInput['desktopSettings'];
+    const normalized = await store.saveConfig({ desktopSettings: invalidDesktopSettings });
+    expect(normalized).toMatchObject({
+      desktopSettings: { workspaceDependenciesEnabled: true },
+    });
+    expect(normalized.desktopSettings?.interfaceLanguage).toBeUndefined();
+  });
+
   it('persists only valid HTTP package source URLs', async () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
 

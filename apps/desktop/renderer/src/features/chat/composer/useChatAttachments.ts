@@ -5,6 +5,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatImageAttachmentOutcome } from '../../../app/types.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatAttachmentValidationError,
   createChatMessageAttachment,
@@ -34,6 +35,7 @@ export function useChatAttachments({
   client: Pick<DesktopRuntimeClient, 'deleteAttachment' | 'uploadAttachment'>;
   supportsImageInput: boolean;
 }) {
+  const { t } = useI18n();
   const [items, setItems] = useState<ChatComposerAttachmentItem[]>([]);
   const itemsRef = useRef<ChatComposerAttachmentItem[]>([]);
   const cancelledKeysRef = useRef(new Set<string>());
@@ -60,7 +62,7 @@ export function useChatAttachments({
     if (available <= 0) return;
     const selected = files.slice(0, available);
     const pending = selected.map((file): ChatComposerAttachmentItem => {
-      const error = chatAttachmentValidationError(file, supportsImageInput);
+      const error = chatAttachmentValidationError(file, supportsImageInput, t);
       return {
         key: attachmentKey(),
         name: file.name || 'attachment',
@@ -75,7 +77,7 @@ export function useChatAttachments({
     await Promise.all(pending.map(async (item, index) => {
       if (item.status === 'error') return;
       try {
-        const attachment = await createChatMessageAttachment(selected[index], client);
+        const attachment = await createChatMessageAttachment(selected[index], client, t);
         if (cancelledKeysRef.current.has(item.key)) {
           discardStoredAttachment(attachment);
           return;
@@ -86,13 +88,13 @@ export function useChatAttachments({
         replaceItem(item.key, {
           ...item,
           status: 'error',
-          error: error instanceof Error ? error.message : '附件上传失败',
+          error: error instanceof Error ? error.message : t('chat.composer.uploadFailed'),
         });
       } finally {
         cancelledKeysRef.current.delete(item.key);
       }
     }));
-  }, [client, commitItems, discardStoredAttachment, replaceItem, supportsImageInput]);
+  }, [client, commitItems, discardStoredAttachment, replaceItem, supportsImageInput, t]);
 
   const addExistingImage = useCallback((attachment: RuntimeMessageAttachment): ChatImageAttachmentOutcome => {
     const currentCount = itemsRef.current.filter((item) => item.status !== 'removing').length;

@@ -1,4 +1,6 @@
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type { ContextMenuParams, MenuItemConstructorOptions, WebContents } from 'electron';
+import { createNativeTranslate, type NativeTranslate } from '../i18n/native-messages.js';
 
 type BrowserContextMenuParams = Pick<
   ContextMenuParams,
@@ -16,6 +18,7 @@ type BrowserContextMenuParams = Pick<
 type BrowserContextMenuOptions = {
   canOpenInNewTab(url: string): boolean;
   copyText(value: string): void;
+  locale?: RuntimeInterfaceLanguage;
   openInNewTab(url: string): void;
 };
 
@@ -25,11 +28,12 @@ export function createBrowserContextMenuTemplate(
   options: BrowserContextMenuOptions,
 ): MenuItemConstructorOptions[] {
   const items: MenuItemConstructorOptions[] = [];
+  const t = createNativeTranslate(options.locale ?? 'zh-CN');
 
-  appendMenuGroup(items, linkMenuItems(params, options));
-  appendMenuGroup(items, imageMenuItems(contents, params, options));
-  appendMenuGroup(items, editMenuItems(contents, params));
-  appendMenuGroup(items, navigationMenuItems(contents));
+  appendMenuGroup(items, linkMenuItems(params, options, t));
+  appendMenuGroup(items, imageMenuItems(contents, params, options, t));
+  appendMenuGroup(items, editMenuItems(contents, params, t));
+  appendMenuGroup(items, navigationMenuItems(contents, t));
 
   return items;
 }
@@ -37,16 +41,17 @@ export function createBrowserContextMenuTemplate(
 function linkMenuItems(
   params: BrowserContextMenuParams,
   options: BrowserContextMenuOptions,
+  t: NativeTranslate,
 ): MenuItemConstructorOptions[] {
   if (!params.linkURL) return [];
   return [
     ...(options.canOpenInNewTab(params.linkURL) ? [{
       click: () => options.openInNewTab(params.linkURL),
-      label: '在新标签页中打开链接',
+      label: t('browser.openLinkInNewTab'),
     }] : []),
     {
       click: () => options.copyText(params.linkURL),
-      label: '复制链接地址',
+      label: t('browser.copyLinkAddress'),
     },
   ];
 }
@@ -55,24 +60,25 @@ function imageMenuItems(
   contents: WebContents,
   params: BrowserContextMenuParams,
   options: BrowserContextMenuOptions,
+  t: NativeTranslate,
 ): MenuItemConstructorOptions[] {
   if (params.mediaType !== 'image' && !params.hasImageContents) return [];
   const srcURL = params.srcURL.trim();
   return [
     ...(srcURL && options.canOpenInNewTab(srcURL) ? [{
       click: () => options.openInNewTab(srcURL),
-      label: '在新标签页中打开图片',
+      label: t('browser.openImageInNewTab'),
     }] : []),
     ...(params.hasImageContents ? [{
       click: () => runGuestAction(contents, () => contents.copyImageAt(params.x, params.y)),
-      label: '复制图片',
+      label: t('browser.copyImage'),
     }] : []),
     ...(srcURL ? [{
       click: () => options.copyText(srcURL),
-      label: '复制图片地址',
+      label: t('browser.copyImageAddress'),
     }, {
       click: () => runGuestAction(contents, () => contents.downloadURL(srcURL)),
-      label: '下载图片',
+      label: t('browser.downloadImage'),
     }] : []),
   ];
 }
@@ -80,30 +86,31 @@ function imageMenuItems(
 function editMenuItems(
   contents: WebContents,
   params: BrowserContextMenuParams,
+  t: NativeTranslate,
 ): MenuItemConstructorOptions[] {
   const { editFlags } = params;
   if (params.isEditable) {
     return [
-      guestCommand(contents, '撤销', editFlags.canUndo, () => contents.undo()),
-      guestCommand(contents, '重做', editFlags.canRedo, () => contents.redo()),
+      guestCommand(contents, t('browser.undo'), editFlags.canUndo, () => contents.undo()),
+      guestCommand(contents, t('browser.redo'), editFlags.canRedo, () => contents.redo()),
       { type: 'separator' },
-      guestCommand(contents, '剪切', editFlags.canCut, () => contents.cut()),
-      guestCommand(contents, '复制', editFlags.canCopy, () => contents.copy()),
-      guestCommand(contents, '粘贴', editFlags.canPaste, () => contents.paste()),
-      guestCommand(contents, '删除', editFlags.canDelete, () => contents.delete()),
+      guestCommand(contents, t('browser.cut'), editFlags.canCut, () => contents.cut()),
+      guestCommand(contents, t('browser.copy'), editFlags.canCopy, () => contents.copy()),
+      guestCommand(contents, t('browser.paste'), editFlags.canPaste, () => contents.paste()),
+      guestCommand(contents, t('browser.delete'), editFlags.canDelete, () => contents.delete()),
       { type: 'separator' },
-      guestCommand(contents, '全选', editFlags.canSelectAll, () => contents.selectAll()),
+      guestCommand(contents, t('browser.selectAll'), editFlags.canSelectAll, () => contents.selectAll()),
     ];
   }
   if (!params.selectionText) return [];
-  return [guestCommand(contents, '复制', editFlags.canCopy, () => contents.copy())];
+  return [guestCommand(contents, t('browser.copy'), editFlags.canCopy, () => contents.copy())];
 }
 
-function navigationMenuItems(contents: WebContents): MenuItemConstructorOptions[] {
+function navigationMenuItems(contents: WebContents, t: NativeTranslate): MenuItemConstructorOptions[] {
   return [
-    guestCommand(contents, '后退', contents.canGoBack(), () => contents.goBack()),
-    guestCommand(contents, '前进', contents.canGoForward(), () => contents.goForward()),
-    guestCommand(contents, '重新加载', true, () => contents.reload()),
+    guestCommand(contents, t('browser.back'), contents.canGoBack(), () => contents.goBack()),
+    guestCommand(contents, t('browser.forward'), contents.canGoForward(), () => contents.goForward()),
+    guestCommand(contents, t('browser.reload'), true, () => contents.reload()),
   ];
 }
 

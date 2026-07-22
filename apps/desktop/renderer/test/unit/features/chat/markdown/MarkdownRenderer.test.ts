@@ -11,15 +11,20 @@ import {
   estimateMarkdownBlockHeight,
   shouldVirtualizeMarkdownBlocks,
 } from '../../../../../src/features/chat/markdown/MarkdownVirtualBlock.js';
+import { I18nProvider, type AppLocale } from '../../../../../src/shared/i18n/I18nProvider.js';
 
-function renderMarkdown(content: string, streaming = false): string {
+function renderMarkdown(content: string, streaming = false, locale: AppLocale = 'zh-CN'): string {
   const children = createElement(MarkdownRenderer, { content, streaming });
   return renderToStaticMarkup(
-    createElement(MarkdownNavigationProvider, {
-      children,
-      onOpenWorkspaceFile: () => undefined,
-      workspaceRoot: '/Users/dev/project',
-    }),
+    createElement(
+      I18nProvider,
+      { initialLocale: locale },
+      createElement(MarkdownNavigationProvider, {
+        children,
+        onOpenWorkspaceFile: () => undefined,
+        workspaceRoot: '/Users/dev/project',
+      }),
+    ),
   );
 }
 
@@ -97,6 +102,19 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('const answer = 42;');
     expect(normalizeMarkdownCodeLanguage('TSX')).toBe('typescript');
     expect(normalizeMarkdownCodeLanguage('')).toBe('');
+  });
+
+  it('localizes Markdown controls and accessibility labels in English', () => {
+    const html = renderMarkdown(
+      '![diagram](./diagram.png)\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```ts\nconst answer = 42;\n```',
+      false,
+      'en-US',
+    );
+
+    expect(html).toContain('<span aria-hidden="true">Image</span>');
+    expect(html).toContain('aria-label="Markdown table"');
+    expect(html).toContain('aria-label="Copy code"');
+    expect(html).not.toContain('aria-label="复制代码"');
   });
 
   it('renders unlabelled fenced code as a contained plain code block', () => {

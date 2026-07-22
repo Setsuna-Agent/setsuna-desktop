@@ -1,3 +1,4 @@
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import {
   app,
   BrowserWindow,
@@ -54,6 +55,7 @@ let browserControlServer: BrowserControlServer | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
+let interfaceLanguage: RuntimeInterfaceLanguage = 'zh-CN';
 let isAppQuitting = false;
 let desktopServicesShutdownPromise: Promise<void> | null = null;
 let appQuitAfterShutdown = false;
@@ -170,9 +172,10 @@ async function createWindow(): Promise<void> {
   registerDesktopIpc({
     mainWindow: currentMainWindow,
     nativeBridge: currentDesktopNativeBridgeServer,
+    onInterfaceLanguageChange: (locale) => { interfaceLanguage = locale; },
     userDataPath: app.getPath('userData'),
   });
-  registerUpdaterIpc(desktopUpdater, currentMainWindow);
+  registerUpdaterIpc(desktopUpdater, currentMainWindow, () => interfaceLanguage);
   registerWindowIpc({ macTrafficLightPosition: getMacTrafficLightPosition });
   registerReviewIpc(currentRuntimeHost);
   registerWorkspaceIpc();
@@ -221,6 +224,7 @@ async function createWindow(): Promise<void> {
       Menu.buildFromTemplate(createBrowserContextMenuTemplate(guestContents, params, {
         canOpenInNewTab: isAllowedEmbeddedBrowserUrl,
         copyText: (value) => clipboard.writeText(value),
+        locale: interfaceLanguage,
         openInNewTab: (url) => { requestNewBrowserTab(url); },
       })).popup({ window: currentMainWindow });
     });

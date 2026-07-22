@@ -13,6 +13,7 @@ import type {
 import { OPENAI_IMAGE_GENERATION_PLUGIN_ID } from '@setsuna-desktop/contracts';
 import { BookOpen, Check, Download, FileText, Loader2, Plug, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, PageHeader } from '../../shared/ui/primitives.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
@@ -20,6 +21,7 @@ import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js'
 import { CapabilitiesPluginItemDialog, type CapabilitiesPluginItem } from './CapabilitiesPluginItemDialog.js';
 import { ImageGenerationPluginSettings } from './ImageGenerationPluginSettings.js';
 import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills } from './pluginDisplay.js';
+import { localizedPluginCopy } from './pluginLocalization.js';
 
 export function CapabilitiesPluginDetail({
   error,
@@ -52,9 +54,11 @@ export function CapabilitiesPluginDetail({
   removing: boolean;
   runtimeHooks?: RuntimeHookMetadata[];
 }) {
+  const { t } = useI18n();
   const [selectedItem, setSelectedItem] = useState<CapabilitiesPluginItem | null>(null);
   const plugin = installedPlugin ?? marketplacePlugin;
   if (!plugin) return null;
+  const copy = localizedPluginCopy(plugin, t);
 
   const skills = mergePluginSkills(marketplacePlugin?.skills ?? [], installedPlugin?.skills ?? []);
   const mcpServers = mergePluginMcpServers(marketplacePlugin?.mcpServers ?? [], installedPlugin?.mcpServers ?? []);
@@ -63,15 +67,15 @@ export function CapabilitiesPluginDetail({
   const hookCount = Math.max(hooks.length, installedPlugin?.hookCount ?? marketplacePlugin?.capabilities.hooks ?? 0);
   const resourceCount = Math.max(resources.length, marketplacePlugin?.capabilities.resources ?? 0);
   const installed = Boolean(installedPlugin ?? marketplacePlugin?.installed);
-  const subtitle = [plugin.publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || 'Setsuna 插件';
+  const subtitle = [plugin.publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
   const tags = plugin.tags ?? [];
 
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
       <PageHeader
-        title={plugin.name}
+        title={copy.name}
         subtitle={subtitle}
-        backLabel="返回插件"
+        backLabel={t('capabilities.detail.back')}
         onBack={onBack}
         actions={installedPlugin ? (
           <>
@@ -83,7 +87,11 @@ export function CapabilitiesPluginDetail({
                 disabled={installing || removing}
                 onClick={() => void onInstall(marketplacePlugin)}
               >
-                {installing ? '更新中' : marketplacePlugin.version ? `更新到 v${marketplacePlugin.version}` : '更新插件'}
+                {installing
+                  ? t('capabilities.market.updating')
+                  : marketplacePlugin.version
+                    ? t('capabilities.detail.updateTo', { version: marketplacePlugin.version })
+                    : t('capabilities.detail.updatePlugin')}
               </Button>
             ) : null}
             <Button
@@ -93,7 +101,7 @@ export function CapabilitiesPluginDetail({
               disabled={installing || removing}
               onClick={() => void onRemove(installedPlugin)}
             >
-              {removing ? '卸载中' : '卸载'}
+              {t(removing ? 'capabilities.detail.uninstalling' : 'capabilities.detail.uninstall')}
             </Button>
           </>
         ) : marketplacePlugin && !installed ? (
@@ -104,11 +112,11 @@ export function CapabilitiesPluginDetail({
             disabled={installing}
             onClick={() => void onInstall(marketplacePlugin)}
           >
-            {installing ? '安装中' : '安装插件'}
+            {t(installing ? 'capabilities.detail.installing' : 'capabilities.detail.install')}
           </Button>
         ) : (
           <Button type="button" variant="ghost" icon={<Check size={14} />} disabled>
-            已安装
+            {t('capabilities.market.installed')}
           </Button>
         )}
       />
@@ -119,12 +127,12 @@ export function CapabilitiesPluginDetail({
         <CapabilitiesPluginIcon name={marketplacePlugin?.icon ?? installedPlugin?.icon} variant="detail" />
         <div className="desktop-capabilities-plugin-detail__intro">
           <div className="desktop-capabilities-plugin-detail__badges">
-            <span className={installed ? 'is-installed' : ''}>{installed ? '已安装' : '可安装'}</span>
-            {marketplacePlugin?.featured ? <span>精选</span> : null}
+            <span className={installed ? 'is-installed' : ''}>{t(installed ? 'capabilities.market.installed' : 'capabilities.detail.available')}</span>
+            {marketplacePlugin?.featured ? <span>{t('capabilities.detail.featured')}</span> : null}
             {tags.map((tag) => <span key={tag}>{tag}</span>)}
           </div>
-          <p>{plugin.description || '为 Setsuna 添加新的技能、服务连接和自动化能力。'}</p>
-          <small>安装后可在技能、MCP 和 Hooks 分区继续查看与管理插件提供的能力。</small>
+          <p>{copy.description || t('capabilities.market.listFallback')}</p>
+          <small>{t('capabilities.detail.manageHint')}</small>
         </div>
       </div>
 
@@ -141,15 +149,15 @@ export function CapabilitiesPluginDetail({
 
       <CapabilitiesPluginDetailSection
         icon={<BookOpen size={15} />}
-        title="技能"
+        title={t('capabilities.detail.skills')}
         count={skills.length}
-        empty="这个插件不包含技能。"
+        empty={t('capabilities.detail.skillsEmpty')}
       >
         {skills.map((skill) => (
           <CapabilitiesPluginItemButton
             key={skill.id}
             title={skill.name}
-            description={skill.description || '插件提供的只读 Skill，安装后可在技能页启用或选择。'}
+            description={skill.description || t('capabilities.detail.skillFallback')}
             icon={<BookOpen size={16} />}
             onClick={() => setSelectedItem({ kind: 'skill', value: skill })}
           />
@@ -158,19 +166,19 @@ export function CapabilitiesPluginDetail({
 
       <CapabilitiesPluginDetailSection
         icon={<Plug size={15} />}
-        title="MCP 服务"
+        title={t('capabilities.detail.mcp')}
         count={mcpServers.length}
-        empty="这个插件不包含 MCP 服务。"
+        empty={t('capabilities.detail.mcpEmpty')}
       >
         {mcpServers.map((server) => (
           <CapabilitiesPluginItemButton
             key={server.key}
             title={server.label}
-            description={server.description || '插件声明的 MCP 服务，安装后仍遵循 Setsuna 的授权与信任策略。'}
+            description={server.description || t('capabilities.detail.mcpFallback')}
             icon={<Plug size={16} />}
             badges={[
-              server.transport === 'streamableHttp' ? '远程 MCP' : '本地 MCP',
-              ...(server.owned === false ? ['复用现有配置'] : []),
+              t(server.transport === 'streamableHttp' ? 'capabilities.detail.remoteMcp' : 'capabilities.detail.localMcp'),
+              ...(server.owned === false ? [t('capabilities.detail.reuseExisting')] : []),
             ]}
             onClick={() => setSelectedItem({ kind: 'mcp', value: server })}
           />
@@ -181,29 +189,29 @@ export function CapabilitiesPluginDetail({
         icon={<Workflow size={15} />}
         title="Hooks"
         count={hookCount}
-        empty="这个插件不包含 Hook。"
+        empty={t('capabilities.detail.hooksEmpty')}
       >
         {hooks.map((hook) => (
           <CapabilitiesPluginItemButton
             key={hook.id}
             title={hook.name}
             description={hook.description || hook.statusMessage || (marketplacePlugin
-              ? '应用内置自动化，安装插件时会自动信任当前命令 hash。'
-              : '本地插件自动化，安装后仍需信任当前命令 hash 才会执行。')}
+              ? t('capabilities.detail.managedHookFallback')
+              : t('capabilities.detail.localHookFallback'))}
             icon={<Workflow size={16} />}
             onClick={() => setSelectedItem({ kind: 'hook', value: hook })}
           />
         ))}
         {hookCount > hooks.length ? (
-          <p className="desktop-capabilities-plugin-detail__empty">另有 {hookCount - hooks.length} 项旧版自动化未保存展示详情，可在 Hooks 分区查看。</p>
+          <p className="desktop-capabilities-plugin-detail__empty">{t('capabilities.detail.legacyHooks', { count: hookCount - hooks.length })}</p>
         ) : null}
       </CapabilitiesPluginDetailSection>
 
       <CapabilitiesPluginDetailSection
         icon={<FileText size={15} />}
-        title="资源"
+        title={t('capabilities.detail.resources')}
         count={resourceCount}
-        empty="这个插件不包含资源。"
+        empty={t('capabilities.detail.resourcesEmpty')}
       >
         {resources.map((resource) => (
           <CapabilitiesPluginItemButton
@@ -216,7 +224,7 @@ export function CapabilitiesPluginDetail({
           />
         ))}
         {resourceCount > resources.length ? (
-          <p className="desktop-capabilities-plugin-detail__empty">安装插件后可查看 {resourceCount} 个资源的文件详情。</p>
+          <p className="desktop-capabilities-plugin-detail__empty">{t('capabilities.detail.resourcesAfterInstall', { count: resourceCount })}</p>
         ) : null}
       </CapabilitiesPluginDetailSection>
 

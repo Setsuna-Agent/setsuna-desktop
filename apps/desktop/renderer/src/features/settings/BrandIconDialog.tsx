@@ -3,8 +3,10 @@ import { Check, ImagePlus, Sparkles, Upload, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BrandIconMark } from '../../shared/branding/BrandIconMark.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import {
   PROVIDER_BRAND_CATALOG,
+  localizedProviderBrandLabel,
   resolveBrandIcon,
   type ProviderBrandAsset,
 } from '../../shared/branding/providerBranding.js';
@@ -25,6 +27,7 @@ type BrandIconDialogProps = {
 };
 
 export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, onConfirm }: BrandIconDialogProps) {
+  const { t } = useI18n();
   const titleId = useId();
   const descriptionId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -37,8 +40,15 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
   const [uploadError, setUploadError] = useState('');
   const [uploading, setUploading] = useState(false);
   const customBrand = customIcon ? resolveBrandIcon(customIcon, null) : null;
-  const subjectLabel = subject === 'provider' ? '服务' : '模型';
-  const displayName = name || `未命名${subjectLabel}`;
+  const subjectLabel = t(subject === 'provider' ? 'settings.brand.provider' : 'settings.brand.model');
+  const displayName = name || t('settings.brand.unnamed', { subject: subjectLabel });
+  const uploadCopy = {
+    emptyFile: t('settings.brand.emptyFile'),
+    invalidContent: t('settings.brand.invalidContent'),
+    invalidType: t('settings.brand.invalidType'),
+    readError: t('settings.brand.readError'),
+    tooLarge: t('settings.brand.tooLarge', { size: brandIconMaxSizeLabel }),
+  };
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -60,7 +70,7 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
     if (!file) return;
     setUploading(true);
     setUploadError('');
-    void readBrandIconFile(file)
+    void readBrandIconFile(file, uploadCopy)
       .then((icon) => {
         if (!isMountedRef.current) return;
         setCustomIcon(icon);
@@ -88,22 +98,22 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
           <div className="settings-provider-icon-dialog__title">
             <span><ImagePlus size={16} /></span>
             <div>
-              <strong id={titleId}>{`配置${subjectLabel}图标`}</strong>
+              <strong id={titleId}>{t('settings.brand.title', { subject: subjectLabel })}</strong>
               <small>{displayName}</small>
             </div>
           </div>
-          <IconButton autoFocus label="关闭图标配置" onClick={onClose}><X size={15} /></IconButton>
+          <IconButton autoFocus label={t('settings.brand.close')} onClick={onClose}><X size={15} /></IconButton>
         </header>
 
         <div className="settings-provider-icon-dialog__body">
-          <p id={descriptionId}>{`选择内置厂商品牌，或上传自己的图片。${subjectLabel}图标只保存在本机配置中。`}</p>
+          <p id={descriptionId}>{t('settings.brand.description', { subject: subjectLabel })}</p>
 
           <section className="settings-provider-icon-section" aria-labelledby={`${titleId}-presets`}>
             <div className="settings-provider-icon-section__head">
-              <strong id={`${titleId}-presets`}>内置图标</strong>
-              <span>{`${PROVIDER_BRAND_CATALOG.length} 个品牌`}</span>
+              <strong id={`${titleId}-presets`}>{t('settings.brand.presets')}</strong>
+              <span>{t('settings.brand.brandCount', { count: PROVIDER_BRAND_CATALOG.length })}</span>
             </div>
-            <div className="settings-provider-icon-grid" role="radiogroup" aria-label={`${subjectLabel}图标`}>
+            <div className="settings-provider-icon-grid" role="radiogroup" aria-label={t('settings.brand.iconLabel', { subject: subjectLabel })}>
               <button
                 className={`settings-provider-icon-option ${draftIcon === undefined ? 'is-selected' : ''}`}
                 type="button"
@@ -115,11 +125,12 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
                   <BrandIconMark brand={automaticBrand} fallbackName={displayName} size="large" />
                   <Sparkles size={10} />
                 </span>
-                <span>自动匹配</span>
+                <span>{t('settings.brand.automatic')}</span>
                 {draftIcon === undefined ? <Check className="settings-provider-icon-option__check" size={12} /> : null}
               </button>
               {PROVIDER_BRAND_CATALOG.map((brand) => {
                 const selected = draftIcon?.type === 'preset' && draftIcon.key === brand.key;
+                const brandLabel = localizedProviderBrandLabel(brand, t);
                 return (
                   <button
                     className={`settings-provider-icon-option ${selected ? 'is-selected' : ''}`}
@@ -130,9 +141,9 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
                     onClick={() => setDraftIcon({ type: 'preset', key: brand.key })}
                   >
                     <span className="settings-provider-icon-option__mark">
-                      <BrandIconMark brand={brand} fallbackName={brand.label} size="large" />
+                      <BrandIconMark brand={brand} fallbackName={brandLabel} size="large" />
                     </span>
-                    <span title={brand.label}>{brand.label}</span>
+                    <span title={brandLabel}>{brandLabel}</span>
                     {selected ? <Check className="settings-provider-icon-option__check" size={12} /> : null}
                   </button>
                 );
@@ -142,8 +153,8 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
 
           <section className="settings-provider-icon-section" aria-labelledby={`${titleId}-custom`}>
             <div className="settings-provider-icon-section__head">
-              <strong id={`${titleId}-custom`}>自定义上传</strong>
-              <span>{`PNG、JPEG、WebP · 最大 ${brandIconMaxSizeLabel}`}</span>
+              <strong id={`${titleId}-custom`}>{t('settings.brand.customUpload')}</strong>
+              <span>{t('settings.brand.uploadLimits', { size: brandIconMaxSizeLabel })}</span>
             </div>
             <div className={`settings-provider-icon-upload ${draftIcon?.type === 'custom' ? 'is-selected' : ''}`}>
               <input
@@ -173,15 +184,15 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
                 )}
               </button>
               <div className="settings-provider-icon-upload__copy">
-                <strong>{customIcon ? '自定义图片' : '上传你的品牌图标'}</strong>
-                <span>{customIcon ? '点击预览可重新选中该图片' : '建议使用透明背景的正方形图片'}</span>
+                <strong>{customIcon ? t('settings.brand.customImage') : t('settings.brand.uploadTitle')}</strong>
+                <span>{customIcon ? t('settings.brand.reselect') : t('settings.brand.uploadHint')}</span>
               </div>
               <Button
                 disabled={uploading}
                 icon={<Upload size={13} />}
                 onClick={() => fileInputRef.current?.click()}
               >
-                {uploading ? '读取中' : customIcon ? '更换图片' : '选择图片'}
+                {uploading ? t('settings.brand.reading') : customIcon ? t('settings.brand.replaceImage') : t('settings.brand.chooseImage')}
               </Button>
             </div>
             {uploadError ? <p className="settings-provider-icon-upload__error" role="alert">{uploadError}</p> : null}
@@ -189,8 +200,8 @@ export function BrandIconDialog({ automaticBrand, icon, name, subject, onClose, 
         </div>
 
         <footer className="settings-provider-icon-dialog__footer">
-          <Button onClick={onClose}>取消</Button>
-          <Button variant="primary" disabled={uploading} onClick={() => onConfirm(draftIcon)}>应用图标</Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" disabled={uploading} onClick={() => onConfirm(draftIcon)}>{t('settings.brand.apply')}</Button>
         </footer>
       </section>
     </div>

@@ -1,4 +1,6 @@
 import type { BrandIconConfig, ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
+import type { Translate } from '../i18n/I18nProvider.js';
+import type { MessageKey } from '../i18n/messages.js';
 import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
 import anthropicLogoUrl from '../assets/provider-logos/anthropic.svg';
 import bailianLogoUrl from '../assets/provider-logos/bailian.svg';
@@ -109,7 +111,21 @@ const modelBrandRules: readonly ModelBrandRule[] = [
   modelBrandRule('sakana', /(^|[^a-z0-9])sakana(?=$|[^a-z0-9])/),
 ];
 
+const localizedBrandLabelKeys: Partial<Record<string, MessageKey>> = {
+  bailian: 'settings.brand.catalog.bailian',
+  custom: 'settings.brand.customImage',
+  doubao: 'settings.brand.catalog.doubao',
+  glm: 'settings.brand.catalog.glm',
+  siliconcloud: 'settings.brand.catalog.siliconcloud',
+  volcengine: 'settings.brand.catalog.volcengine',
+};
+
 export const PROVIDER_BRAND_CATALOG: readonly ProviderBrandAsset[] = providerBrandRules.map(providerBrandAsset);
+
+export function localizedProviderBrandLabel(brand: ProviderBrandAsset, t: Translate): string {
+  const key = localizedBrandLabelKeys[brand.key];
+  return key ? t(key) : brand.label;
+}
 
 export function resolveProviderBrand(provider: ProviderBrandInput): ProviderBrandAsset | null {
   return resolveBrandIcon(provider.icon, resolveAutomaticProviderBrand(provider));

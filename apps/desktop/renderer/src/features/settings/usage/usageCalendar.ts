@@ -33,6 +33,7 @@ export type UsageCalendarModel = {
 export function buildUsageCalendar(
   buckets: RuntimeUsageBucket[],
   currentDate: Date = new Date(),
+  locale = 'zh-CN',
 ): UsageCalendarModel {
   const today = localCalendarDate(currentDate);
   const periodStart = addCalendarDays(today, -364);
@@ -56,7 +57,7 @@ export function buildUsageCalendar(
       const bucket = isInRange ? byDate.get(dateKey) : undefined;
 
       if (isInRange && (date.getDate() === 1 || dateKey === localDateKey(periodStart))) {
-        months.set(weekIndex, `${date.getMonth() + 1}月`);
+        months.set(weekIndex, new Intl.DateTimeFormat(locale, { month: 'short' }).format(date));
       }
 
       week.push({

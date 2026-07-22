@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useToast } from '../../../app/providers/ToastProvider.js';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
 import { ChangeCountText } from './ChangeCountText.js';
@@ -34,6 +35,7 @@ export function ConversationGitControls({
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
 }) {
   const toast = useToast();
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const commitModalRef = useRef<HTMLDivElement | null>(null);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
@@ -52,15 +54,15 @@ export function ConversationGitControls({
   const hasGit = Boolean(reviewState?.isGitRepository);
   const currentBranch = reviewState?.currentBranch || 'HEAD';
   const currentBranchLabel = reviewLoading
-    ? '加载中'
+    ? t('conversation.overview.loading')
     : reviewState
       ? currentBranch
       : reviewError
-        ? '加载失败'
-        : '加载中';
+        ? t('conversation.overview.loadFailed')
+        : t('conversation.overview.loading');
   const changeStats = useMemo(() => localReviewChangeStats(reviewState), [reviewState]);
   const unstagedFileCount = fileCount(reviewState?.unstagedSummary);
-  const createBranchDisabledReason = unstagedFileCount > 0 ? '请先暂存或丢弃当前工作区的未暂存更改。' : null;
+  const createBranchDisabledReason = unstagedFileCount > 0 ? t('conversation.git.unstagedBranchBlocked') : null;
   const commitableFileCount = includeUnstaged ? changeStats.fileCount : fileCount(reviewState?.stagedSummary);
   const filteredBranches = useMemo(() => {
     const branches = reviewState?.branches ?? [];
@@ -128,7 +130,7 @@ export function ConversationGitControls({
     if (!workspaceRoot || busyAction) return;
     const api = window.setsunaDesktop?.desktopReview;
     if (!api) {
-      setError('当前环境不支持 Git 操作。');
+      setError(t('conversation.git.unsupported'));
       return;
     }
     setBusyAction(action);
@@ -137,7 +139,7 @@ export function ConversationGitControls({
       await task();
       await refreshReview();
     } catch (unknownError) {
-      setError(gitControlErrorMessage(unknownError));
+      setError(gitControlErrorMessage(unknownError, t));
     } finally {
       setBusyAction(null);
       if (isCommitAction(action)) setCommitPhase(null);
@@ -155,7 +157,7 @@ export function ConversationGitControls({
     event.preventDefault();
     const branchName = branchDraft.trim();
     if (!branchName) {
-      setError('分支名称不能为空。');
+      setError(t('conversation.git.branchRequired'));
       return;
     }
     void runGitAction('create', async () => {
@@ -168,13 +170,13 @@ export function ConversationGitControls({
     const action = push ? 'commit-and-push' : 'commit';
     void runGitAction(action, async () => {
       const api = window.setsunaDesktop?.desktopReview;
-      if (!api) throw new Error('当前环境不支持 Git 操作。');
+      if (!api) throw new Error(t('conversation.git.unsupported'));
       let message = commitMessage.trim();
       if (!message) {
         setCommitPhase('generating');
         const generated = await api.generateCommitMessage(workspaceRoot, { includeUnstaged });
         message = generated.message.trim();
-        if (!message) throw new Error('提交信息生成失败。');
+        if (!message) throw new Error(t('conversation.git.messageGenerationFailed'));
         setCommitMessage(message);
       }
       setCommitPhase('committing');
@@ -182,10 +184,13 @@ export function ConversationGitControls({
       closeFloatingMenus();
       if (result.pushError) {
         setCommitMessage('');
-        setError(`提交 ${result.commitHash || '已完成'}，但推送失败：${result.pushError}`);
+        setError(t('conversation.git.pushAfterCommitFailed', {
+          hash: result.commitHash || t('conversation.git.commitFinished'),
+          error: result.pushError,
+        }));
       } else {
         resetCommitPanel();
-        toast.success(commitSuccessMessage(result, push));
+        toast.success(commitSuccessMessage(result, push, t));
       }
     });
   };
@@ -194,7 +199,7 @@ export function ConversationGitControls({
     void runGitAction('push', async () => {
       await window.setsunaDesktop?.desktopReview.push(workspaceRoot);
       resetCommitPanel();
-      toast.success(`推送成功 · ${currentBranch}`);
+      toast.success(t('conversation.git.pushSuccess', { branch: currentBranch }));
     });
   };
 
@@ -218,7 +223,7 @@ export function ConversationGitControls({
         closeCommitPanel();
       }}
     >
-      <div className="chat-git-commit-popover" role="dialog" aria-modal="true" aria-label="提交或推送">
+      <div className="chat-git-commit-popover" role="dialog" aria-modal="true" aria-label={t('conversation.git.commitOrPush')}>
         <div className="chat-git-commit-popover__head">
           <div className="chat-git-commit-popover__branch-wrap">
             <button
@@ -249,6 +254,7 @@ export function ConversationGitControls({
                   setCreatingBranch(true);
                   setError(null);
                 }}
+                t={t}
               />
             ) : null}
           </div>
@@ -258,7 +264,7 @@ export function ConversationGitControls({
           className="chat-git-commit-popover__message"
           value={commitMessage}
           rows={3}
-          placeholder="提交信息（留空将自动生成）..."
+          placeholder={t('conversation.git.messagePlaceholder')}
           disabled={Boolean(busyAction)}
           onChange={(event) => setCommitMessage(event.currentTarget.value)}
         />
@@ -269,7 +275,7 @@ export function ConversationGitControls({
             disabled={Boolean(busyAction)}
             onChange={(event) => setIncludeUnstaged(event.currentTarget.checked)}
           />
-          <span>包含未暂存的更改</span>
+          <span>{t('conversation.git.includeUnstaged')}</span>
         </label>
         <div className="chat-git-commit-popover__divider" />
         <div className="chat-git-commit-popover__actions">
@@ -278,8 +284,8 @@ export function ConversationGitControls({
             icon={<GitCommitHorizontal size={14} />}
             loading={busyAction === 'commit'}
             title={busyAction === 'commit'
-              ? commitPhase === 'generating' ? '正在生成提交信息...' : '提交中...'
-              : '提交'}
+              ? commitPhase === 'generating' ? t('conversation.git.generatingMessage') : t('conversation.git.committing')
+              : t('conversation.git.commit')}
             onClick={() => commitChanges(false)}
           />
           <GitActionButton
@@ -287,15 +293,15 @@ export function ConversationGitControls({
             icon={<GitPullRequestArrow size={14} />}
             loading={busyAction === 'commit-and-push'}
             title={busyAction === 'commit-and-push'
-              ? commitPhase === 'generating' ? '正在生成提交信息...' : '提交并推送中...'
-              : '提交并推送'}
+              ? commitPhase === 'generating' ? t('conversation.git.generatingMessage') : t('conversation.git.commitAndPushing')
+              : t('conversation.git.commitAndPush')}
             onClick={() => commitChanges(true)}
           />
           <GitActionButton
             disabled={Boolean(busyAction)}
             icon={<UploadCloud size={14} />}
             loading={busyAction === 'push'}
-            title="推送"
+            title={t('conversation.git.push')}
             onClick={pushBranch}
           />
         </div>
@@ -319,7 +325,7 @@ export function ConversationGitControls({
         <span className="chat-conversation-overview-panel__icon">
           <GitBranch size={14} />
         </span>
-        <span className="chat-conversation-overview-panel__label">分支</span>
+        <span className="chat-conversation-overview-panel__label">{t('conversation.git.branch')}</span>
         <span className="chat-conversation-overview-panel__meta" title={!reviewState && reviewError ? reviewError : undefined}>
           {currentBranchLabel}
           <ChevronDown size={12} />
@@ -334,7 +340,7 @@ export function ConversationGitControls({
         <span className="chat-conversation-overview-panel__icon">
           <GitCommitHorizontal size={14} />
         </span>
-        <span className="chat-conversation-overview-panel__label">提交或推送</span>
+        <span className="chat-conversation-overview-panel__label">{t('conversation.git.commitOrPush')}</span>
       </button>
 
       {branchMenuOpen ? (
@@ -356,6 +362,7 @@ export function ConversationGitControls({
             setError(null);
           }}
           onQueryChange={setBranchQuery}
+          t={t}
         />
       ) : null}
 
@@ -379,6 +386,7 @@ function BranchMenu({
   onCreate,
   onCreateStart,
   onQueryChange,
+  t,
 }: {
   branchDraft: string;
   busyAction: GitBusyAction;
@@ -394,6 +402,7 @@ function BranchMenu({
   onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
   onQueryChange: (value: string) => void;
+  t: Translate;
 }) {
   return (
     <div className="chat-git-branch-menu">
@@ -401,11 +410,11 @@ function BranchMenu({
         <Search size={13} />
         <input
           value={query}
-          placeholder="搜索分支"
+          placeholder={t('conversation.git.searchBranches')}
           onChange={(event) => onQueryChange(event.currentTarget.value)}
         />
       </label>
-      <div className="chat-git-branch-menu__label">分支</div>
+      <div className="chat-git-branch-menu__label">{t('conversation.git.branch')}</div>
       <div className="chat-git-branch-menu__list">
         {filteredBranches.length ? filteredBranches.map((branch) => (
           <button
@@ -418,11 +427,15 @@ function BranchMenu({
             <GitBranch size={14} />
             <span className="chat-git-branch-menu__item-body">
               <span>{branch.name}</span>
-              {branch.uncommittedFiles > 0 ? <small>{`未提交：${branch.uncommittedFiles} 个文件`}</small> : null}
+              {branch.uncommittedFiles > 0 ? (
+                <small>{t(branch.uncommittedFiles === 1
+                  ? 'conversation.git.uncommittedFiles.one'
+                  : 'conversation.git.uncommittedFiles.many', { count: branch.uncommittedFiles })}</small>
+              ) : null}
             </span>
             <span className="chat-git-branch-menu__check">{branch.current ? <Check size={13} /> : null}</span>
           </button>
-        )) : <div className="chat-git-branch-menu__empty">无匹配分支</div>}
+        )) : <div className="chat-git-branch-menu__empty">{t('conversation.git.noMatchingBranches')}</div>}
       </div>
       <div className="chat-git-branch-menu__divider" />
       <CreateBranchControl
@@ -434,6 +447,7 @@ function BranchMenu({
         onCancelCreate={onCancelCreate}
         onCreate={onCreate}
         onCreateStart={onCreateStart}
+        t={t}
       />
       {error ? <div className="chat-git-branch-menu__error">{error}</div> : null}
     </div>
@@ -450,6 +464,7 @@ function CommitBranchMenu({
   onCancelCreate,
   onCreate,
   onCreateStart,
+  t,
 }: {
   branchDraft: string;
   busyAction: GitBusyAction;
@@ -460,10 +475,11 @@ function CommitBranchMenu({
   onCancelCreate: () => void;
   onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
+  t: Translate;
 }) {
   return (
     <div className="chat-git-commit-branch-menu">
-      <div className="chat-git-commit-branch-menu__label">提交到</div>
+      <div className="chat-git-commit-branch-menu__label">{t('conversation.git.commitTo')}</div>
       <div className="chat-git-commit-branch-menu__item is-current">
         <GitBranch size={14} />
         <span>{currentBranch}</span>
@@ -478,6 +494,7 @@ function CommitBranchMenu({
         onCancelCreate={onCancelCreate}
         onCreate={onCreate}
         onCreateStart={onCreateStart}
+        t={t}
       />
       {error ? <div className="chat-git-branch-menu__error">{error}</div> : null}
     </div>
@@ -494,6 +511,7 @@ function CreateBranchControl({
   onCancelCreate,
   onCreate,
   onCreateStart,
+  t,
 }: {
   branchDraft: string;
   busyAction: GitBusyAction;
@@ -504,6 +522,7 @@ function CreateBranchControl({
   onCancelCreate: () => void;
   onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
+  t: Translate;
 }) {
   const createDisabled = Boolean(busyAction) || Boolean(disabledReason);
   if (!creatingBranch) {
@@ -517,7 +536,7 @@ function CreateBranchControl({
       >
         <Plus size={14} />
         <span className="chat-git-branch-menu__create-body">
-          <span>{compact ? '新分支' : '创建并检出新分支...'}</span>
+          <span>{t(compact ? 'conversation.git.newBranch' : 'conversation.git.createAndCheckout')}</span>
           {disabledReason ? <small>{disabledReason}</small> : null}
         </span>
       </button>
@@ -528,15 +547,15 @@ function CreateBranchControl({
       <input
         autoFocus
         value={branchDraft}
-        placeholder="新分支名称"
+        placeholder={t('conversation.git.branchNamePlaceholder')}
         disabled={createDisabled}
         onChange={(event) => onBranchDraftChange(event.currentTarget.value)}
       />
-      <button type="submit" disabled={createDisabled} aria-label="创建分支" title={disabledReason ?? undefined}>
-        {busyAction === 'create' ? <Loader2 className="chat-git-loading-icon" size={13} /> : compact ? '创建' : <Check size={13} />}
+      <button type="submit" disabled={createDisabled} aria-label={t('conversation.git.createBranch')} title={disabledReason ?? undefined}>
+        {busyAction === 'create' ? <Loader2 className="chat-git-loading-icon" size={13} /> : compact ? t('conversation.git.create') : <Check size={13} />}
       </button>
       <button type="button" disabled={Boolean(busyAction)} onClick={onCancelCreate}>
-        取消
+        {t('common.cancel')}
       </button>
     </form>
   );
@@ -569,8 +588,10 @@ export function GitActionButton({
   );
 }
 
-export function commitSuccessMessage(result: Pick<DesktopReviewCommitResult, 'commitHash'>, pushed: boolean): string {
-  const action = pushed ? '提交并推送成功' : '提交成功';
+export function commitSuccessMessage(result: Pick<DesktopReviewCommitResult, 'commitHash'>, pushed: boolean, t?: Translate): string {
+  const action = t
+    ? t(pushed ? 'conversation.git.commitPushSuccess' : 'conversation.git.commitSuccess')
+    : pushed ? '提交并推送成功' : '提交成功';
   return result.commitHash ? `${action} · ${result.commitHash}` : action;
 }
 
@@ -582,9 +603,9 @@ function fileCount(summary: DesktopDiffSummary | null | undefined): number {
   return summary?.files.length ?? 0;
 }
 
-function gitControlErrorMessage(error: unknown): string {
+function gitControlErrorMessage(error: unknown, t: Translate): string {
   const rawMessage = error instanceof Error ? error.message : String(error);
   const withoutIpcPrefix = rawMessage.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/u, '');
   const withoutRuntimePath = withoutIpcPrefix.replace(/\s*\((?:GET|POST|PUT|PATCH|DELETE)\s+\/v\d+\/[^)]+\)\s*$/u, '');
-  return withoutRuntimePath.trim() || 'Git 操作失败。';
+  return withoutRuntimePath.trim() || t('conversation.git.operationFailed');
 }

@@ -1,6 +1,7 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatComposerTargetIdentity,
   type ChatComposerTargetIdentity,
@@ -65,6 +66,7 @@ export function useDesktopWorkspacePanels({
   targetIdentity,
   workspaceStatus,
 }: WorkspacePanelsOptions) {
+  const { t } = useI18n();
   const {
     bottomPanelSlot,
     claimForThread,
@@ -241,18 +243,22 @@ export function useDesktopWorkspacePanels({
     return {
       id: `terminal-${Date.now()}-${terminalPanelSeqRef.current}`,
       type: 'terminal',
-      title: terminalPanelSeqRef.current === 1 ? '终端' : `终端 ${terminalPanelSeqRef.current}`,
+      title: terminalPanelSeqRef.current === 1
+        ? t('workspace.panel.terminal')
+        : t('workspace.panels.terminalNumbered', { sequence: terminalPanelSeqRef.current }),
     };
-  }, []);
+  }, [t]);
 
   const createSideChatPanel = useCallback((): DesktopPanelTab => {
     sideChatPanelSeqRef.current += 1;
     const sequence = sideChatPanelSeqRef.current;
     return createSideChatPanelTab(
       `side-chat-${Date.now()}-${sequence}`,
-      sequence === 1 ? '侧边任务' : `侧边任务 ${sequence}`,
+      sequence === 1
+        ? t('workspace.panel.sideTask')
+        : t('workspace.panels.sideTaskNumbered', { sequence }),
     );
-  }, []);
+  }, [t]);
 
   const createBrowserPanelTab = useCallback((url?: string): DesktopPanelTab => {
     browserPanelSeqRef.current += 1;
@@ -430,18 +436,18 @@ export function useDesktopWorkspacePanels({
     async (appId: string, filePath?: string | null, line?: number) => {
       if (!activeProject?.path) return;
       if (!workspaceApps.some((app) => app.id === appId)) {
-        setError('所选打开方式当前不可用。');
+        setError(t('workspace.panels.appUnavailable'));
         return;
       }
       try {
         const api = window.setsunaDesktop?.workspaceApps;
-        if (!api) throw new Error('当前环境不支持外部应用打开。');
+        if (!api) throw new Error(t('workspace.panels.externalOpenUnsupported'));
         await api.open(activeProject.path, appId, filePath ?? null, line ?? null);
       } catch (unknownError) {
         setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       }
     },
-    [activeProject?.path, setError, workspaceApps],
+    [activeProject?.path, setError, t, workspaceApps],
   );
 
   const openFileInWorkspaceApp = useCallback(
@@ -456,7 +462,7 @@ export function useDesktopWorkspacePanels({
     if (!activeProject?.path) return;
     const api = window.setsunaDesktop?.desktop;
     if (!api) {
-      setError('当前环境不支持复制文件路径。');
+      setError(t('workspace.panels.copyPathUnsupported'));
       return;
     }
     try {
@@ -465,13 +471,13 @@ export function useDesktopWorkspacePanels({
     } catch (unknownError) {
       setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     }
-  }, [activeProject?.path, setError]);
+  }, [activeProject?.path, setError, t]);
 
   const revealWorkspaceFile = useCallback(async (filePath: string) => {
     if (!activeProject?.path) return;
     const api = window.setsunaDesktop?.desktop;
     if (!api) {
-      setError('当前环境不支持在文件夹中定位文件。');
+      setError(t('workspace.panels.revealUnsupported'));
       return;
     }
     try {
@@ -480,7 +486,7 @@ export function useDesktopWorkspacePanels({
     } catch (unknownError) {
       setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     }
-  }, [activeProject?.path, setError]);
+  }, [activeProject?.path, setError, t]);
 
   const openSelectedWorkspaceApp = useCallback(async () => {
     await openFileInWorkspaceApp(null);

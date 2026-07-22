@@ -1,5 +1,6 @@
 import type { ProviderConfigState, RuntimeUsageResponse } from '@setsuna-desktop/contracts';
 import { ArrowDownToLine, ArrowUpFromLine, Database, Hash, Zap } from 'lucide-react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { formatTokens } from '../../workspace/model.js';
 import { UsageActivityCalendar } from './UsageActivityCalendar.js';
 import { UsageBreakdownCard } from './UsageBreakdownCard.js';
@@ -12,46 +13,47 @@ type UsageSettingsProps = {
 };
 
 export function UsageSettings({ providers, usage }: UsageSettingsProps) {
+  const { locale, t } = useI18n();
   const summary = usage?.summary;
   const totalTokens = summary?.totalTokens ?? 0;
   const recordCount = summary?.recordCount ?? 0;
   return (
     <div className="chat-user-settings__section chat-user-settings__usage-section">
-      <div className="settings-usage-summary" aria-label="用量概览">
+      <div className="settings-usage-summary" aria-label={t('settings.usage.overview')}>
         <UsageMetricCard
-          detail={`${summary?.byProvider.length ?? 0} 个厂商 · ${summary?.byModel.length ?? 0} 个模型`}
+          detail={t('settings.usage.providersAndModels', { providers: summary?.byProvider.length ?? 0, models: summary?.byModel.length ?? 0 })}
           icon={Database}
-          label="总 Token"
+          label={t('settings.usage.totalTokens')}
           tone="total"
           value={formatTokens(totalTokens)}
         />
         <UsageMetricCard
-          detail={`${formatRatio(summary?.inputTokens ?? 0, totalTokens)} 占总用量`}
+          detail={t('settings.usage.shareOfTotal', { ratio: formatRatio(summary?.inputTokens ?? 0, totalTokens) })}
           icon={ArrowDownToLine}
-          label="输入 Token"
+          label={t('settings.usage.inputTokens')}
           tone="input"
           value={formatTokens(summary?.inputTokens ?? 0)}
         />
         <UsageMetricCard
-          detail={`${formatRatio(summary?.cachedInputTokens ?? 0, summary?.inputTokens ?? 0)} 输入命中率`}
+          detail={t('settings.usage.inputHitRate', { ratio: formatRatio(summary?.cachedInputTokens ?? 0, summary?.inputTokens ?? 0) })}
           icon={Zap}
-          label="缓存命中"
+          label={t('settings.usage.cacheHit')}
           tone="cache"
           value={formatTokens(summary?.cachedInputTokens ?? 0)}
         />
         <UsageMetricCard
-          detail={`${formatRatio(summary?.outputTokens ?? 0, totalTokens)} 占总用量`}
+          detail={t('settings.usage.shareOfTotal', { ratio: formatRatio(summary?.outputTokens ?? 0, totalTokens) })}
           icon={ArrowUpFromLine}
-          label="输出 Token"
+          label={t('settings.usage.outputTokens')}
           tone="output"
           value={formatTokens(summary?.outputTokens ?? 0)}
         />
         <UsageMetricCard
-          detail={`平均 ${formatTokens(recordCount ? totalTokens / recordCount : 0)} / 次`}
+          detail={t('settings.usage.averagePerCall', { tokens: formatTokens(recordCount ? totalTokens / recordCount : 0) })}
           icon={Hash}
-          label="调用次数"
+          label={t('settings.usage.calls')}
           tone="calls"
-          value={recordCount.toLocaleString()}
+          value={recordCount.toLocaleString(locale)}
         />
       </div>
 

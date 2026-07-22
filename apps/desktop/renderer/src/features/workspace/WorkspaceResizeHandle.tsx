@@ -1,4 +1,5 @@
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
 export function WorkspaceResizeHandle({
   max,
@@ -13,6 +14,7 @@ export function WorkspaceResizeHandle({
   onResizeStep: (delta: number) => void;
   value: number;
 }) {
+  const { t } = useI18n();
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
@@ -29,11 +31,11 @@ export function WorkspaceResizeHandle({
       type="button"
       role="separator"
       aria-orientation="vertical"
-      aria-label="调整右侧面板宽度"
+      aria-label={t('workspace.resize.side')}
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={value}
-      title="拖拽调整右侧面板宽度"
+      title={t('workspace.resize.sideHint')}
       onKeyDown={handleKeyDown}
       onPointerDown={onResizeStart}
     />

@@ -1,6 +1,7 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import {
   pageScaleInverse,
   zoomedPortalPosition,
@@ -27,6 +28,7 @@ export function WorkspaceAppLauncher({
   onSelectWorkspaceApp: (app: DesktopWorkspaceApp) => void;
   onToggleWorkspaceAppMenu: () => void;
 }) {
+  const { t } = useI18n();
   const launcherRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuPosition, setMenuPosition] = useState<ZoomedPortalPosition>({ left: 8, top: 8 });
@@ -75,17 +77,17 @@ export function WorkspaceAppLauncher({
   }, [onToggleWorkspaceAppMenu, updateMenuPosition, workspaceAppMenuOpen, workspaceApps.length]);
 
   return (
-    <div className="desktop-workspace-launcher" ref={launcherRef} role="group" aria-label="用本地应用打开工作区">
+    <div className="desktop-workspace-launcher" ref={launcherRef} role="group" aria-label={t('workspace.launcher.label')}>
       <button
         className="desktop-workspace-launcher__main"
         type="button"
         disabled={!selectedWorkspaceApp}
-        aria-label={selectedWorkspaceApp ? `用 ${selectedWorkspaceApp.label} 打开工作区` : '用本地应用打开工作区'}
+        aria-label={selectedWorkspaceApp ? t('workspace.launcher.openWith', { app: selectedWorkspaceApp.label }) : t('workspace.launcher.label')}
         title={selectedWorkspaceApp?.label}
         onClick={onOpenCurrentWorkspaceApp}
       >
         <WorkspaceAppGlyph app={selectedWorkspaceApp} />
-        <span className="desktop-workspace-launcher__label">{selectedWorkspaceApp?.label ?? '打开'}</span>
+        <span className="desktop-workspace-launcher__label">{selectedWorkspaceApp?.label ?? t('workspace.launcher.open')}</span>
       </button>
       <button
         className={`desktop-workspace-launcher__trigger ${workspaceAppMenuOpen ? 'is-active' : ''}`}
@@ -93,7 +95,7 @@ export function WorkspaceAppLauncher({
         disabled={!workspaceApps.length}
         aria-expanded={workspaceAppMenuOpen}
         aria-haspopup="menu"
-        aria-label="选择打开应用"
+        aria-label={t('workspace.launcher.choose')}
         onClick={() => {
           updateMenuPosition();
           onToggleWorkspaceAppMenu();
@@ -120,7 +122,7 @@ export function WorkspaceAppLauncher({
                   </button>
                 ))
               ) : (
-                <span>未检测到可打开的应用</span>
+                <span>{t('workspace.launcher.noApps')}</span>
               )}
             </div>,
             document.body,

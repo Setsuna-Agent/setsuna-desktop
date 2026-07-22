@@ -4,6 +4,7 @@ import type {
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 import { useEffect, useState } from 'react';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   compactStructuredInputValues,
   RuntimeStructuredInputField,
@@ -19,6 +20,7 @@ export function RuntimeUserInputActions({
   run: RuntimeToolRun;
   onAnswerApproval: (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   const request = run.userInput;
   const expiresAt = request?.expiresAt;
   const [values, setValues] = useState<Record<string, RuntimeStructuredInputValue>>(() =>
@@ -65,10 +67,12 @@ export function RuntimeUserInputActions({
       }}
     >
       <div className="chat-tool-run__elicitation-header">
-        <strong>{request.title || '需要你的输入'}</strong>
+        <strong>{request.title || t('toolRun.input.title')}</strong>
         {request.autoResolutionMs ? (
-          <span>{timedOut ? '正在自动继续' : `${remainingSeconds ?? Math.ceil(request.autoResolutionMs / 1_000)} 秒后自动继续`}</span>
-        ) : <span>等待回答</span>}
+          <span>{timedOut
+            ? t('toolRun.input.autoContinuing')
+            : t('toolRun.input.autoContinueSeconds', { seconds: remainingSeconds ?? Math.ceil(request.autoResolutionMs / 1_000) })}</span>
+        ) : <span>{t('toolRun.input.awaiting')}</span>}
       </div>
       <p className="chat-tool-run__elicitation-message">{request.message}</p>
       <div className="chat-tool-run__elicitation-fields">
@@ -83,13 +87,13 @@ export function RuntimeUserInputActions({
           />
         ))}
       </div>
-      <div className="chat-tool-run__user-input-note">请勿在此填写密码、API Key 或访问令牌。</div>
+      <div className="chat-tool-run__user-input-note">{t('toolRun.input.secretWarning')}</div>
       <div className="chat-tool-run__actions">
         <button type="submit" disabled={Boolean(submittingAction) || timedOut}>
-          {submittingAction === 'submit' ? '提交中' : '提交'}
+          {t(submittingAction === 'submit' ? 'toolRun.input.submitting' : 'toolRun.input.submit')}
         </button>
         <button type="button" disabled={Boolean(submittingAction) || timedOut} onClick={() => void submit('decline')}>
-          {submittingAction === 'decline' ? '跳过中' : '跳过'}
+          {t(submittingAction === 'decline' ? 'toolRun.input.skipping' : 'toolRun.input.skip')}
         </button>
       </div>
       {error ? <div className="chat-tool-run__action-error" role="alert">{error}</div> : null}

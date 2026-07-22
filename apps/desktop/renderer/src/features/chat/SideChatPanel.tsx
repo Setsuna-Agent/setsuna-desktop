@@ -9,6 +9,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { useCallback, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { useThreadWorkspace } from '../workspace/hooks/useThreadWorkspace.js';
 import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
@@ -66,6 +67,7 @@ export function SideChatPanel({
   workspaceMinWidth: number;
   workspaceWidth: number;
 }) {
+  const { t } = useI18n();
   const sideChat = useSideChat({
     activeProjectId,
     client,
@@ -100,16 +102,17 @@ export function SideChatPanel({
       openInWorkspaceApp: window.setsunaDesktop?.workspaceApps.open,
       openWithDefaultApp: window.setsunaDesktop?.desktop?.openWorkspaceFile,
       selectedWorkspaceApp,
+      t,
       workspaceRoot: sideWorkspace.path,
     }).then((openError) => {
       if (openError) onError(openError);
     }).catch((error: unknown) => {
       onError(error instanceof Error ? error.message : String(error));
     });
-  }, [activeWorkspace?.id, onError, onOpenWorkspaceFile, selectedWorkspaceApp, sideWorkspace]);
+  }, [activeWorkspace?.id, onError, onOpenWorkspaceFile, selectedWorkspaceApp, sideWorkspace, t]);
 
   return (
-    <aside className="desktop-workspace-panel desktop-side-chat-panel" aria-label="侧边任务" hidden={hidden}>
+    <aside className="desktop-workspace-panel desktop-side-chat-panel" aria-label={t('chat.sideTask.label')} hidden={hidden}>
       <WorkspaceResizeHandle
         max={workspaceMaxWidth}
         min={workspaceMinWidth}

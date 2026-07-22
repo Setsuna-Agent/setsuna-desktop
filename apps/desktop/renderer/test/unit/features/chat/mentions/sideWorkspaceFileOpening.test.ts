@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { openSideWorkspaceFileAtRoot } from '../../../../../src/features/chat/mentions/sideWorkspaceFileOpening.js';
+import { translate, type Translate } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 describe('openSideWorkspaceFileAtRoot', () => {
   it('preserves the selected editor, isolated root, and line number', async () => {
@@ -35,5 +36,16 @@ describe('openSideWorkspaceFileAtRoot', () => {
     })).resolves.toBe('outside workspace');
 
     expect(openWithDefaultApp).toHaveBeenCalledWith('/temporary/thread_side', '../other/file.ts');
+  });
+
+  it('returns localized bridge errors in English', async () => {
+    const t: Translate = (key, params) => translate('en-US', key, params);
+
+    await expect(openSideWorkspaceFileAtRoot({
+      filePath: 'src/main.ts',
+      selectedWorkspaceApp: null,
+      t,
+      workspaceRoot: '/temporary/thread_side',
+    })).resolves.toBe('Opening workspace files is not supported in this environment.');
   });
 });

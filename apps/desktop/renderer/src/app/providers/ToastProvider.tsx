@@ -10,6 +10,7 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
 export type ToastTone = 'error' | 'info' | 'success' | 'warning';
 
@@ -39,6 +40,7 @@ const MAX_VISIBLE_TOASTS = 4;
 const ToastContext = createContext<ToastApi | null>(null);
 
 export function ToastProvider({ children }: PropsWithChildren) {
+  const { t } = useI18n();
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const nextToastIdRef = useRef(0);
 
@@ -72,7 +74,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
 
   const viewport = toasts.length && typeof document !== 'undefined'
     ? createPortal(
-        <div className="app-toast-region" aria-label="操作通知">
+        <div className="app-toast-region" aria-label={t('toast.region')}>
           {toasts.map((toast) => <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />)}
         </div>,
         document.body,
@@ -99,6 +101,8 @@ export function enqueueToast(current: ToastEntry[], entry: ToastEntry): ToastEnt
 }
 
 function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: number) => void }) {
+  const { t } = useI18n();
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => onDismiss(toast.id), toast.durationMs);
     return () => window.clearTimeout(timeoutId);
@@ -111,7 +115,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: nu
     >
       <span className="app-toast__icon" aria-hidden="true">{toastIcon(toast.tone)}</span>
       <span className="app-toast__message">{toast.message}</span>
-      <button type="button" aria-label="关闭提示" onClick={() => onDismiss(toast.id)}>
+      <button type="button" aria-label={t('toast.close')} onClick={() => onDismiss(toast.id)}>
         <X aria-hidden="true" size={14} />
       </button>
     </div>

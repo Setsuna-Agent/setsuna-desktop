@@ -12,8 +12,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useState, type ComponentProps } from 'react';
+import { useI18n } from '../i18n/I18nProvider.js';
+import { localizedRuntimeAccessModeOptions } from '../i18n/runtimeAccessModeCopy.js';
 import {
-  runtimeAccessModeOptions,
   type RuntimeAccessMode,
 } from '../lib/runtimeAccessMode.js';
 import { Button } from './primitives.js';
@@ -35,7 +36,9 @@ export function RuntimeAccessModeMenu({
   onChange: (mode: RuntimeAccessMode) => void;
   variant?: 'chat' | 'settings';
 }) {
+  const { t } = useI18n();
   const [fullAccessConfirmationOpen, setFullAccessConfirmationOpen] = useState(false);
+  const runtimeAccessModeOptions = localizedRuntimeAccessModeOptions(t);
   const activeOption = runtimeAccessModeOptions.find((option) => option.value === mode) ?? runtimeAccessModeOptions[1];
   const ActiveIcon = modeIcons[activeOption.value];
   const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = runtimeAccessModeOptions.map((option) => {
@@ -100,7 +103,7 @@ export function RuntimeAccessModeMenu({
         </AntButton>
       </Dropdown>
       <Modal
-        aria-label="确认切换到完全访问权限模式"
+        aria-label={t('accessMode.confirm.label')}
         centered
         className="runtime-access-mode-confirm"
         closable={false}
@@ -115,10 +118,10 @@ export function RuntimeAccessModeMenu({
         <div className="runtime-access-mode-confirm__dialog">
           <header className="runtime-access-mode-confirm__header">
             <TriangleAlert size={17} aria-hidden="true" />
-            <h2>确定要切换到完全访问权限模式吗？</h2>
+            <h2>{t('accessMode.confirm.title')}</h2>
           </header>
           <p className="runtime-access-mode-confirm__intro">
-            完全访问权限可让 Setsuna 在不征求你批准的情况下访问互联网，并编辑你电脑上的任意文件。
+            {t('accessMode.confirm.intro')}
           </p>
           <div className="runtime-access-mode-confirm__capabilities">
             <div className="runtime-access-mode-confirm__capability">
@@ -126,8 +129,8 @@ export function RuntimeAccessModeMenu({
                 <Folder size={17} />
               </span>
               <span className="runtime-access-mode-confirm__capability-copy">
-                <strong>任意文件</strong>
-                <small>读取、创建、修改或删除电脑上的文件</small>
+                <strong>{t('accessMode.confirm.files')}</strong>
+                <small>{t('accessMode.confirm.filesDescription')}</small>
               </span>
             </div>
             <div className="runtime-access-mode-confirm__capability">
@@ -135,8 +138,8 @@ export function RuntimeAccessModeMenu({
                 <SquareTerminal size={15} />
               </span>
               <span className="runtime-access-mode-confirm__capability-copy">
-                <strong>终端命令</strong>
-                <small>运行命令、安装软件和更改系统设置</small>
+                <strong>{t('accessMode.confirm.terminal')}</strong>
+                <small>{t('accessMode.confirm.terminalDescription')}</small>
               </span>
             </div>
             <div className="runtime-access-mode-confirm__capability">
@@ -144,13 +147,13 @@ export function RuntimeAccessModeMenu({
                 <Globe2 size={17} />
               </span>
               <span className="runtime-access-mode-confirm__capability-copy">
-                <strong>互联网与已连接应用</strong>
-                <small>访问网站、发送数据并使用已启用的连接能力</small>
+                <strong>{t('accessMode.confirm.internet')}</strong>
+                <small>{t('accessMode.confirm.internetDescription')}</small>
               </span>
             </div>
           </div>
           <p className="runtime-access-mode-confirm__risk">
-            这会带来数据丢失、敏感数据泄露和提示注入等风险。请仅在信任当前任务时启用。
+            {t('accessMode.confirm.risk')}
           </p>
           <footer className="runtime-access-mode-confirm__actions">
             <Button
@@ -158,7 +161,7 @@ export function RuntimeAccessModeMenu({
               className="runtime-access-mode-confirm__cancel"
               onClick={() => setFullAccessConfirmationOpen(false)}
             >
-              取消
+              {t('common.cancel')}
             </Button>
             <Button
               className="runtime-access-mode-confirm__enable"
@@ -166,7 +169,7 @@ export function RuntimeAccessModeMenu({
               variant="danger"
               onClick={confirmFullAccess}
             >
-              开启完全访问权限
+              {t('accessMode.confirm.enable')}
             </Button>
           </footer>
         </div>

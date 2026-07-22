@@ -1,6 +1,7 @@
 import type { ProviderConfigState, RuntimeUsageBucket } from '@setsuna-desktop/contracts';
 import { Boxes, Building2 } from 'lucide-react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { formatTokens } from '../../workspace/model.js';
 import { usageModelBrand, usageProviderBrand } from './usageBranding.js';
 
@@ -11,23 +12,21 @@ type UsageBreakdownCardProps = {
   variant: 'provider' | 'model';
 };
 
-const breakdownCopy = {
-  provider: {
-    countUnit: '个厂商',
-    empty: '暂无厂商用量',
-    subtitle: '不同模型服务的用量占比',
-    title: '厂商分布',
-  },
-  model: {
-    countUnit: '个模型',
-    empty: '暂无模型用量',
-    subtitle: '按 Token 消耗从高到低',
-    title: '模型排行',
-  },
-} as const;
-
 export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }: UsageBreakdownCardProps) {
-  const copy = breakdownCopy[variant];
+  const { t } = useI18n();
+  const copy = variant === 'provider'
+    ? {
+        count: t('settings.usage.providerCount', { count: buckets.length }),
+        empty: t('settings.usage.noProviderUsage'),
+        subtitle: t('settings.usage.providerSubtitle'),
+        title: t('settings.usage.providerTitle'),
+      }
+    : {
+        count: t('settings.usage.modelCount', { count: buckets.length }),
+        empty: t('settings.usage.noModelUsage'),
+        subtitle: t('settings.usage.modelSubtitle'),
+        title: t('settings.usage.modelTitle'),
+      };
   const Icon = variant === 'provider' ? Building2 : Boxes;
   const visibleBuckets = buckets.slice(0, 6);
   const maximumTokens = Math.max(1, ...visibleBuckets.map((bucket) => bucket.totalTokens));
@@ -42,7 +41,7 @@ export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }:
           <strong id={`settings-usage-${variant}-title`}>{copy.title}</strong>
           <span>{copy.subtitle}</span>
         </div>
-        <span className="settings-usage-card__count">{buckets.length ? `${buckets.length} ${copy.countUnit}` : copy.empty}</span>
+        <span className="settings-usage-card__count">{buckets.length ? copy.count : copy.empty}</span>
       </header>
       {visibleBuckets.length ? (
         <ol className="settings-usage-breakdown__list">
@@ -62,14 +61,14 @@ export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }:
                 </span>
                 <div className="settings-usage-breakdown__main">
                   <div className="settings-usage-breakdown__label-row">
-                    <strong title={bucket.key}>{bucket.key || 'unknown'}</strong>
+                    <strong title={bucket.key}>{bucket.key || t(variant === 'provider' ? 'settings.usage.unknownProvider' : 'settings.usage.unknownModel')}</strong>
                     <span>{formatShare(share)}</span>
                   </div>
                   <progress aria-label={`${bucket.key} ${formatShare(share)}`} max={maximumTokens} value={bucket.totalTokens} />
                 </div>
                 <div className="settings-usage-breakdown__value">
                   <strong>{formatTokens(bucket.totalTokens)}</strong>
-                  <span>{bucket.recordCount} 次</span>
+                  <span>{t('settings.usage.callCount', { count: bucket.recordCount })}</span>
                 </div>
               </li>
             );

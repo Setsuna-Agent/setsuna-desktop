@@ -13,6 +13,7 @@ import {
   isThreadContextCompacting,
 } from '../../../services/runtime-client/useRuntimeClientState.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
 import { startThreadReview } from '../../workspace/hooks/startThreadReview.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from './useChatComposerSession.js';
@@ -34,6 +35,7 @@ export function useSideChat({
   reloadThreads,
   setError,
 }: SideChatOptions) {
+  const { t } = useI18n();
   const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
@@ -241,11 +243,12 @@ export function useSideChat({
         }
         await reloadThreads();
       },
+      t,
       target,
     });
     if (isCurrentRequest()) setActiveTurnId(started.turnId);
     return started;
-  }, [activeProjectId, claimComposerForThread, client, currentThread, reloadThreads, reviewRequests]);
+  }, [activeProjectId, claimComposerForThread, client, currentThread, reloadThreads, reviewRequests, t]);
 
   return useMemo(() => ({
     actions,

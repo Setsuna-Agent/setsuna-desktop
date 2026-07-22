@@ -2,6 +2,7 @@ import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { Check, ChevronRight, Code2, Copy, FolderOpen, MessageSquare } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../shared/lib/zoomedPortalPosition.js';
 import { WorkspaceAppGlyph } from './PanelChrome.js';
 import type { DesktopWorkspaceApp } from './model.js';
@@ -12,6 +13,8 @@ export type WorkspaceFileContextTarget = {
   x: number;
   y: number;
 };
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export function WorkspaceFileContextMenu({
   selectedWorkspaceApp,
@@ -32,6 +35,7 @@ export function WorkspaceFileContextMenu({
   onOpenWithApp: (appId: string, filePath: string, line?: number) => void;
   onReveal: (filePath: string) => void;
 }) {
+  const { t } = useI18n();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [openWithMenuVisible, setOpenWithMenuVisible] = useState(false);
 
@@ -106,7 +110,7 @@ export function WorkspaceFileContextMenu({
         }}
       >
         {selectedWorkspaceApp ? <WorkspaceAppGlyph app={selectedWorkspaceApp} /> : <Code2 size={14} />}
-        <span>{selectedWorkspaceApp ? openInAppLabel(selectedWorkspaceApp, target.line) : '未检测到打开方式'}</span>
+        <span>{selectedWorkspaceApp ? openInAppLabel(selectedWorkspaceApp, target.line, t) : t('workspace.fileMenu.noApp')}</span>
       </button>
       <div
         className="desktop-file-context-menu__submenu-host"
@@ -127,11 +131,11 @@ export function WorkspaceFileContextMenu({
           }}
         >
           <Code2 size={14} />
-          <span>打开方式</span>
+          <span>{t('workspace.fileMenu.openWith')}</span>
           <ChevronRight className="desktop-file-context-menu__submenu-chevron" size={13} />
         </button>
         {openWithMenuVisible ? (
-          <div className={submenuClasses} role="menu" aria-label="选择打开方式">
+          <div className={submenuClasses} role="menu" aria-label={t('workspace.fileMenu.chooseApp')}>
             {workspaceApps.map((app) => (
               <button
                 type="button"
@@ -150,25 +154,25 @@ export function WorkspaceFileContextMenu({
       <div className="desktop-file-context-menu__divider" role="separator" />
       <button type="button" role="menuitem" onClick={() => runAndClose(() => onCopyPath(target.filePath))}>
         <Copy size={14} />
-        <span>复制文件路径</span>
+        <span>{t('workspace.fileMenu.copyPath')}</span>
       </button>
       <button type="button" role="menuitem" onClick={() => runAndClose(() => onReveal(target.filePath))}>
         <FolderOpen size={14} />
-        <span>{workspaceFileRevealLabel(window.setsunaDesktop?.desktop.platform)}</span>
+        <span>{workspaceFileRevealLabel(window.setsunaDesktop?.desktop.platform, t)}</span>
       </button>
       <button type="button" role="menuitem" onClick={() => runAndClose(() => onAddToConversation(target.filePath))}>
         <MessageSquare size={14} />
-        <span>添加到对话</span>
+        <span>{t('workspace.fileMenu.addToChat')}</span>
       </button>
     </div>,
     document.body,
   );
 }
 
-export function workspaceFileRevealLabel(platform?: string): string {
-  if (platform === 'darwin') return '在访达中显示';
-  if (platform === 'win32') return '在文件资源管理器中显示';
-  return '在文件夹中显示';
+export function workspaceFileRevealLabel(platform?: string, t: Translate = defaultTranslate): string {
+  if (platform === 'darwin') return t('workspace.fileMenu.reveal.finder');
+  if (platform === 'win32') return t('workspace.fileMenu.reveal.explorer');
+  return t('workspace.fileMenu.reveal.folder');
 }
 
 export function workspaceFileMentionEntry(filePath: string): WorkspaceEntrySearchItem {
@@ -182,7 +186,9 @@ export function workspaceFileMentionEntry(filePath: string): WorkspaceEntrySearc
   };
 }
 
-function openInAppLabel(app: DesktopWorkspaceApp, line?: number): string {
+function openInAppLabel(app: DesktopWorkspaceApp, line: number | undefined, t: Translate): string {
   const supportsLine = ['cursor', 'intellij-idea', 'pycharm', 'vscode', 'webstorm'].includes(app.id);
-  return line && supportsLine ? `在 ${app.label} 中打开第 ${line} 行` : `在 ${app.label} 中打开`;
+  return line && supportsLine
+    ? t('workspace.fileMenu.openLineInApp', { app: app.label, line })
+    : t('workspace.fileMenu.openInApp', { app: app.label });
 }

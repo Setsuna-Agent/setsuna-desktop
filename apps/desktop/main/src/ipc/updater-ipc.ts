@@ -1,7 +1,12 @@
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import { ipcMain, type BrowserWindow } from 'electron';
 import type { DesktopUpdater } from '../updater/updater.js';
 
-export function registerUpdaterIpc(updater: DesktopUpdater, mainWindow: BrowserWindow): void {
+export function registerUpdaterIpc(
+  updater: DesktopUpdater,
+  mainWindow: BrowserWindow,
+  getInterfaceLanguage: () => RuntimeInterfaceLanguage,
+): void {
   const channels = [
     'desktop-updater:get-state',
     'desktop-updater:check',
@@ -23,6 +28,6 @@ export function registerUpdaterIpc(updater: DesktopUpdater, mainWindow: BrowserW
   }));
   ipcMain.handle('desktop-updater:select-download-source', async (_event, sourceId) => updater.selectDownloadSource(String(sourceId ?? '')));
   ipcMain.handle('desktop-updater:remove-download-source', async (_event, sourceId) => updater.removeDownloadSource(String(sourceId ?? '')));
-  ipcMain.handle('desktop-updater:prompt-ready', async () => updater.promptReady(mainWindow));
+  ipcMain.handle('desktop-updater:prompt-ready', async () => updater.promptReady(mainWindow, getInterfaceLanguage()));
   ipcMain.handle('desktop-updater:quit-and-install', async () => updater.installReady());
 }

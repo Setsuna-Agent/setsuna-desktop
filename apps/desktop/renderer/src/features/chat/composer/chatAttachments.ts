@@ -6,7 +6,10 @@ import {
   type DesktopRuntimeClient,
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
+import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { maxChatImageAttachments, maxChatImageSize, readChatImageAttachment } from './chatImageAttachments.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export const maxChatAttachments = maxChatImageAttachments;
 export const chatAttachmentAccept = [
@@ -32,23 +35,24 @@ export type ChatComposerAttachmentItem = {
   error?: string;
 };
 
-export function chatAttachmentValidationError(file: File, supportsImageInput: boolean): string | null {
-  if (!file.size) return '文件不能为空';
+export function chatAttachmentValidationError(file: File, supportsImageInput: boolean, t: Translate = defaultTranslate): string | null {
+  if (!file.size) return t('chat.composer.fileEmpty');
   if (file.type.startsWith('image/')) {
-    if (!supportsImageInput) return '当前模型未启用图片输入';
-    if (file.size > maxChatImageSize) return '图片不能超过 8 MB';
+    if (!supportsImageInput) return t('chat.composer.imageUnsupported');
+    if (file.size > maxChatImageSize) return t('chat.composer.imageTooLarge');
     return null;
   }
-  if (!isSupportedDocumentName(file.name)) return '目前仅支持图片、PDF 和 DOCX 文件';
-  if (file.size > RUNTIME_FILE_ATTACHMENT_MAX_BYTES) return '文档不能超过 20 MB';
+  if (!isSupportedDocumentName(file.name)) return t('chat.composer.fileUnsupported');
+  if (file.size > RUNTIME_FILE_ATTACHMENT_MAX_BYTES) return t('chat.composer.documentTooLarge');
   return null;
 }
 
 export async function createChatMessageAttachment(
   file: File,
   client: Pick<DesktopRuntimeClient, 'uploadAttachment'>,
+  t: Translate = defaultTranslate,
 ): Promise<RuntimeMessageAttachment> {
-  if (file.type.startsWith('image/')) return readChatImageAttachment(file);
+  if (file.type.startsWith('image/')) return readChatImageAttachment(file, t);
   return client.uploadAttachment({
     name: file.name,
     type: file.type,
@@ -60,13 +64,13 @@ export function isImageMessageAttachment(attachment: RuntimeMessageAttachment): 
   return isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/');
 }
 
-export function formatAttachmentTypeLabel(name: string, mimeType: string): string {
+export function formatAttachmentTypeLabel(name: string, mimeType: string, t: Translate = defaultTranslate): string {
   const normalizedName = name.trim().toLowerCase();
   const extension = RUNTIME_FILE_ATTACHMENT_EXTENSIONS.find((value) => normalizedName.endsWith(value));
   if (extension) return extension.slice(1).toUpperCase();
 
   const normalizedMimeType = mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
-  return attachmentTypeLabelsByMime[normalizedMimeType] ?? '文件';
+  return attachmentTypeLabelsByMime[normalizedMimeType] ?? t('chat.composer.fileType');
 }
 
 function isSupportedDocumentName(name: string): boolean {

@@ -15,6 +15,7 @@ import {
   Wrench,
   XCircle
 } from 'lucide-react';
+import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from '../markdown/WorkspaceFileLink.js';
 import type {
   ToolRunDisplayGroup,
@@ -29,6 +30,8 @@ import {
   fileMutationDisplayPath,
   isRuntimeFileMutationRun
 } from './runtimeFileChanges.js';
+
+const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export function fileMutationChangeTotals(run: RuntimeToolRun): { additions: number; deletions: number } | null {
   const changes = fileChangesFromToolRun(run);
@@ -173,35 +176,39 @@ export type CompactToolRunSummary = {
   changeCounts?: { additions: number; deletions: number; showZero: boolean };
 };
 
-export function mixedToolRunGroupSummary(groups: ToolRunGroup[], summaryMode: ToolRunSummaryMode): CompactToolRunSummary {
-  if (summaryMode === 'latest') return compactToolRunGroupSummary(groups.at(-1));
-  return { title: mixedToolRunGroupAggregateTitle(groups) };
+export function mixedToolRunGroupSummary(
+  groups: ToolRunGroup[],
+  summaryMode: ToolRunSummaryMode,
+  t: Translate = defaultTranslate,
+): CompactToolRunSummary {
+  if (summaryMode === 'latest') return compactToolRunGroupSummary(groups.at(-1), t);
+  return { title: mixedToolRunGroupAggregateTitle(groups, t) };
 }
 
-export function compactToolRunGroupSummary(group: ToolRunGroup | undefined): CompactToolRunSummary {
+export function compactToolRunGroupSummary(group: ToolRunGroup | undefined, t: Translate = defaultTranslate): CompactToolRunSummary {
   if (!group) return { title: '' };
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
-  if (kind === 'fileMutation') return { ...fileOperationGroupSummary(runs), targetKind: kind };
+  if (kind === 'fileMutation') return { ...fileOperationGroupSummary(runs, t), targetKind: kind };
   if (group.type === 'single') {
     return {
-      ...toolRunSummary(group.run),
+      ...toolRunSummary(group.run, t),
       targetKind: kind,
       inspectionKind: kind === 'inspection' ? inspectionEntryKind(group.run) : undefined,
     };
   }
-  if (kind === 'shell' && runs.length === 1) return { ...toolRunSummary(runs[0]), targetKind: kind };
-  return { title: mixedToolRunGroupPart(group) };
+  if (kind === 'shell' && runs.length === 1) return { ...toolRunSummary(runs[0], t), targetKind: kind };
+  return { title: mixedToolRunGroupPart(group, t) };
 }
 
-export function mixedToolRunGroupAggregateTitle(groups: ToolRunGroup[]): string {
+export function mixedToolRunGroupAggregateTitle(groups: ToolRunGroup[], t: Translate = defaultTranslate): string {
   const buckets: Array<{ key: string; kind: ToolRunGroupKind | 'webContent'; runs: RuntimeToolRun[] }> = [];
   const bucketByKey = new Map<string, { key: string; kind: ToolRunGroupKind | 'webContent'; runs: RuntimeToolRun[] }>();
 
   for (const group of groups) {
     const runs = toolRunGroupRuns(group);
     const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
-    const webContent = kind === 'generic' && webContentGroupSummary(runs);
+    const webContent = kind === 'generic' && webContentGroupSummary(runs, t);
     const key = webContent ? 'webContent' : kind === 'generic' ? `generic:${runs[0]?.name ?? 'tool'}` : kind;
     const bucketKind = webContent ? 'webContent' : kind;
     let bucket = bucketByKey.get(key);
@@ -214,57 +221,61 @@ export function mixedToolRunGroupAggregateTitle(groups: ToolRunGroup[]): string 
   }
 
   return buckets
-    .map((bucket) => mixedToolRunBucketSummary(bucket.kind, bucket.runs))
+    .map((bucket) => mixedToolRunBucketSummary(bucket.kind, bucket.runs, t))
     .filter(Boolean)
-    .join('，');
+    .join(t('toolRun.joiner'));
 }
 
-export function mixedToolRunBucketSummary(kind: ToolRunGroupKind | 'webContent', runs: RuntimeToolRun[]): string {
+export function mixedToolRunBucketSummary(
+  kind: ToolRunGroupKind | 'webContent',
+  runs: RuntimeToolRun[],
+  t: Translate = defaultTranslate,
+): string {
   const status = toolRunGroupStatus(runs);
-  if (kind === 'fileMutation') return fileOperationAggregateTitle(runs);
+  if (kind === 'fileMutation') return fileOperationAggregateTitle(runs, t);
   if (kind === 'inspection') {
-    const parts = inspectionSummaryParts(inspectionEntries(runs));
-    return parts.length ? parts.join('，') : inspectionGroupSummary(runs).title;
+    const parts = inspectionSummaryParts(inspectionEntries(runs), t);
+    return parts.length ? parts.join(t('toolRun.joiner')) : inspectionGroupSummary(runs, t).title;
   }
-  if (kind === 'shell') return shellCountSummary(runs, status);
-  if (kind === 'search') return searchCountSummary(runs, status);
-  if (kind === 'webContent') return webContentGroupSummary(runs)?.title ?? '';
-  const name = toolDisplayName(runs[0]?.name ?? '工具');
-  if (status === 'running' || status === 'pending_approval') return `正在使用 ${name}`;
-  if (status === 'cancelled') return `已取消 ${name}`;
-  if (status === 'rejected') return `已拒绝 ${name}`;
-  return `已使用 ${runs.length} 次 ${name}`;
+  if (kind === 'shell') return shellCountSummary(runs, status, t);
+  if (kind === 'search') return searchCountSummary(runs, status, t);
+  if (kind === 'webContent') return webContentGroupSummary(runs, t)?.title ?? '';
+  const name = toolDisplayName(runs[0]?.name ?? t('toolRun.tool'), t);
+  if (status === 'running' || status === 'pending_approval') return t('toolRun.generic.running', { name });
+  if (status === 'cancelled') return t('toolRun.generic.cancelled', { name });
+  if (status === 'rejected') return t('toolRun.generic.rejected', { name });
+  return t('toolRun.generic.used', { count: runs.length, name });
 }
 
-export function mixedToolRunGroupPart(group: ToolRunGroup): string {
+export function mixedToolRunGroupPart(group: ToolRunGroup, t: Translate = defaultTranslate): string {
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
   const status = toolRunGroupStatus(runs);
-  if (kind === 'fileMutation') return fileOperationAggregateTitle(runs);
-  if (kind === 'shell') return shellCountSummary(runs, status);
-  if (kind === 'inspection') return inspectionGroupSummary(runs).title;
-  if (kind === 'search') return searchCountSummary(runs, status);
-  const webContentSummary = webContentGroupSummary(runs);
+  if (kind === 'fileMutation') return fileOperationAggregateTitle(runs, t);
+  if (kind === 'shell') return shellCountSummary(runs, status, t);
+  if (kind === 'inspection') return inspectionGroupSummary(runs, t).title;
+  if (kind === 'search') return searchCountSummary(runs, status, t);
+  const webContentSummary = webContentGroupSummary(runs, t);
   if (webContentSummary) return webContentSummary.title;
-  const name = toolDisplayName(runs[0]?.name ?? '工具');
-  if (status === 'running' || status === 'pending_approval') return `正在使用 ${name}`;
-  if (status === 'cancelled') return `已取消 ${name}`;
-  if (status === 'rejected') return `已拒绝 ${name}`;
-  return `已使用 ${runs.length} 次 ${name}`;
+  const name = toolDisplayName(runs[0]?.name ?? t('toolRun.tool'), t);
+  if (status === 'running' || status === 'pending_approval') return t('toolRun.generic.running', { name });
+  if (status === 'cancelled') return t('toolRun.generic.cancelled', { name });
+  if (status === 'rejected') return t('toolRun.generic.rejected', { name });
+  return t('toolRun.generic.used', { count: runs.length, name });
 }
 
-export function shellCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status']): string {
-  if (status === 'running' || status === 'pending_approval') return `正在运行 ${runs.length} 条命令`;
-  if (status === 'cancelled') return `已取消 ${runs.length} 条命令`;
-  if (status === 'rejected') return `已拒绝 ${runs.length} 条命令`;
-  return `已运行 ${runs.length} 条命令`;
+export function shellCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status'], t: Translate = defaultTranslate): string {
+  if (status === 'running' || status === 'pending_approval') return t('toolRun.shell.runningCount', { count: runs.length });
+  if (status === 'cancelled') return t('toolRun.shell.cancelledCount', { count: runs.length });
+  if (status === 'rejected') return t('toolRun.shell.rejectedCount', { count: runs.length });
+  return t('toolRun.shell.completedCount', { count: runs.length });
 }
 
-export function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status']): string {
-  if (status === 'running' || status === 'pending_approval') return `正在搜索 ${runs.length} 次代码`;
-  if (status === 'cancelled') return `已取消 ${runs.length} 次搜索`;
-  if (status === 'rejected') return `已拒绝 ${runs.length} 次搜索`;
-  return `已搜索 ${runs.length} 次代码`;
+export function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRun['status'], t: Translate = defaultTranslate): string {
+  if (status === 'running' || status === 'pending_approval') return t('toolRun.search.runningCount', { count: runs.length });
+  if (status === 'cancelled') return t('toolRun.search.cancelledCount', { count: runs.length });
+  if (status === 'rejected') return t('toolRun.search.rejectedCount', { count: runs.length });
+  return t('toolRun.search.completedCount', { count: runs.length });
 }
 
 export function mixedToolRunGroupIcon(status: RuntimeToolRun['status']) {
@@ -328,23 +339,26 @@ export function activeToolRunOrLast(runs: RuntimeToolRun[]): RuntimeToolRun | un
   return runs.at(-1);
 }
 
-export function toolRunGroupSummary(group: Extract<ToolRunGroup, { type: 'group' }>): { title: string; target?: string } {
-  if (group.kind === 'inspection') return inspectionGroupSummary(group.runs);
-  if (group.kind === 'shell') return shellGroupSummary(group.runs);
-  if (group.kind === 'search') return searchGroupSummary(group.runs);
-  if (group.kind === 'fileMutation') return fileOperationGroupSummary(group.runs);
-  const webContentSummary = webContentGroupSummary(group.runs);
+export function toolRunGroupSummary(
+  group: Extract<ToolRunGroup, { type: 'group' }>,
+  t: Translate = defaultTranslate,
+): { title: string; target?: string } {
+  if (group.kind === 'inspection') return inspectionGroupSummary(group.runs, t);
+  if (group.kind === 'shell') return shellGroupSummary(group.runs, t);
+  if (group.kind === 'search') return searchGroupSummary(group.runs, t);
+  if (group.kind === 'fileMutation') return fileOperationGroupSummary(group.runs, t);
+  const webContentSummary = webContentGroupSummary(group.runs, t);
   if (webContentSummary) return webContentSummary;
   const status = toolRunGroupStatus(group.runs);
-  const name = toolDisplayName(group.runs[0]?.name ?? '工具');
-  if (status === 'running' || status === 'pending_approval') return { title: `正在使用 ${name}` };
-  if (status === 'error') return { title: `${name} 调用失败` };
-  if (status === 'cancelled') return { title: `已取消 ${name}` };
-  if (status === 'rejected') return { title: `已拒绝 ${name}` };
-  return { title: `已使用 ${group.runs.length} 次 ${name}` };
+  const name = toolDisplayName(group.runs[0]?.name ?? t('toolRun.tool'), t);
+  if (status === 'running' || status === 'pending_approval') return { title: t('toolRun.generic.running', { name }) };
+  if (status === 'error') return { title: t('toolRun.generic.failed', { name }) };
+  if (status === 'cancelled') return { title: t('toolRun.generic.cancelled', { name }) };
+  if (status === 'rejected') return { title: t('toolRun.generic.rejected', { name }) };
+  return { title: t('toolRun.generic.used', { count: group.runs.length, name }) };
 }
 
-export function inspectionGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
+export function inspectionGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const activeEntry = active ? inspectionEntryFromRun(active) : null;
@@ -352,56 +366,56 @@ export function inspectionGroupSummary(runs: RuntimeToolRun[]): { title: string;
   if (status === 'running' || status === 'pending_approval') {
     return {
       title: active && isPreparingToolRun(active)
-        ? '正在准备查看文件/目录'
-        : activeEntry ? inspectionRunningTitle(activeEntry.kind) : '正在查看文件/目录',
+        ? t('toolRun.inspection.preparing')
+        : activeEntry ? inspectionRunningTitle(activeEntry.kind, t) : t('toolRun.inspection.running'),
       target: activeTarget,
     };
   }
-  if (status === 'error') return { title: '查看文件/目录失败', target: activeTarget };
-  if (status === 'cancelled') return { title: '已取消查看文件/目录', target: activeTarget };
-  if (status === 'rejected') return { title: '已拒绝查看文件/目录', target: activeTarget };
-  const parts = inspectionSummaryParts(inspectionEntries(runs));
-  if (parts.length) return { title: parts.join('，') };
-  return { title: activeEntry ? inspectionCompleteTitle(activeEntry.kind) : '已查看文件/目录', target: activeTarget };
+  if (status === 'error') return { title: t('toolRun.inspection.failed'), target: activeTarget };
+  if (status === 'cancelled') return { title: t('toolRun.inspection.cancelled'), target: activeTarget };
+  if (status === 'rejected') return { title: t('toolRun.inspection.rejected'), target: activeTarget };
+  const parts = inspectionSummaryParts(inspectionEntries(runs), t);
+  if (parts.length) return { title: parts.join(t('toolRun.joiner')) };
+  return { title: activeEntry ? inspectionCompleteTitle(activeEntry.kind, t) : t('toolRun.inspection.completed'), target: activeTarget };
 }
 
-export function shellGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
+export function shellGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const command = active ? shellCommand(active) : '';
   if (status === 'running' || status === 'pending_approval') {
-    if (active && isPreparingToolRun(active)) return { title: command ? `正在准备运行 ${command}` : '正在生成命令' };
-    return { title: command ? `正在运行 ${command}` : '正在运行命令' };
+    if (active && isPreparingToolRun(active)) return { title: command ? t('toolRun.shell.preparingCommand', { command }) : t('toolRun.shell.generatingCommand') };
+    return { title: command ? t('toolRun.shell.runningCommand', { command }) : t('toolRun.shell.running') };
   }
-  if (status === 'error') return { title: command ? `命令运行失败 ${command}` : '命令运行失败' };
-  if (status === 'cancelled') return { title: command ? `已取消运行 ${command}` : '已取消运行命令' };
-  if (status === 'rejected') return { title: command ? `已拒绝运行 ${command}` : '已拒绝运行命令' };
-  return { title: `已运行 ${runs.length} 条命令` };
+  if (status === 'error') return { title: command ? t('toolRun.shell.failedCommand', { command }) : t('toolRun.shell.failed') };
+  if (status === 'cancelled') return { title: command ? t('toolRun.shell.cancelledCommand', { command }) : t('toolRun.shell.cancelled') };
+  if (status === 'rejected') return { title: command ? t('toolRun.shell.rejectedCommand', { command }) : t('toolRun.shell.rejected') };
+  return { title: t('toolRun.shell.completedCount', { count: runs.length }) };
 }
 
-export function searchGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } {
+export function searchGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } {
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const query = active ? toolRunTarget(active) : '';
-  if (status === 'running' || status === 'pending_approval') return { title: active && isPreparingToolRun(active) ? '正在准备搜索代码' : '正在搜索代码', target: query };
-  if (status === 'error') return { title: '搜索代码失败', target: query };
-  if (status === 'cancelled') return { title: '已取消搜索代码', target: query };
-  if (status === 'rejected') return { title: '已拒绝搜索代码', target: query };
-  if (runs.length > 1) return { title: `已搜索 ${runs.length} 次代码` };
-  return { title: '已搜索代码', target: query };
+  if (status === 'running' || status === 'pending_approval') return { title: t(active && isPreparingToolRun(active) ? 'toolRun.search.preparing' : 'toolRun.search.running'), target: query };
+  if (status === 'error') return { title: t('toolRun.search.failed'), target: query };
+  if (status === 'cancelled') return { title: t('toolRun.search.cancelled'), target: query };
+  if (status === 'rejected') return { title: t('toolRun.search.rejected'), target: query };
+  if (runs.length > 1) return { title: t('toolRun.search.completedCount', { count: runs.length }) };
+  return { title: t('toolRun.search.completed'), target: query };
 }
 
-export function webContentGroupSummary(runs: RuntimeToolRun[]): { title: string; target?: string } | null {
+export function webContentGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): { title: string; target?: string } | null {
   if (!runs.length || runs.some((run) => !isWebContentRun(run))) return null;
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const target = active ? toolRunTarget(active) : '';
-  if (status === 'running' || status === 'pending_approval') return { title: active && isPreparingToolRun(active) ? '正在准备获取网页' : '正在获取网页', target };
-  if (status === 'error') return { title: '获取网页失败', target };
-  if (status === 'cancelled') return { title: '已取消获取网页', target };
-  if (status === 'rejected') return { title: '已拒绝获取网页', target };
-  if (runs.length > 1) return { title: `已获取 ${runs.length} 个网页` };
-  return { title: '已获取网页', target };
+  if (status === 'running' || status === 'pending_approval') return { title: t(active && isPreparingToolRun(active) ? 'toolRun.web.preparing' : 'toolRun.web.running'), target };
+  if (status === 'error') return { title: t('toolRun.web.failed'), target };
+  if (status === 'cancelled') return { title: t('toolRun.web.cancelled'), target };
+  if (status === 'rejected') return { title: t('toolRun.web.rejected'), target };
+  if (runs.length > 1) return { title: t('toolRun.web.completedCount', { count: runs.length }) };
+  return { title: t('toolRun.web.completed'), target };
 }
 
 export type InspectionEntryKind = 'file' | 'directory' | 'fileSearch' | 'gitStatus';
@@ -434,42 +448,42 @@ export function inspectionEntryKind(run: RuntimeToolRun): InspectionEntryKind {
   return 'file';
 }
 
-export function inspectionSummaryParts(entries: InspectionEntry[]): string[] {
+export function inspectionSummaryParts(entries: InspectionEntry[], t: Translate = defaultTranslate): string[] {
   const counts = new Map<InspectionEntryKind, number>();
   const order: InspectionEntryKind[] = [];
   for (const entry of entries) {
     if (!counts.has(entry.kind)) order.push(entry.kind);
     counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
   }
-  return order.map((kind) => inspectionSummaryPart(kind, counts.get(kind) ?? 0)).filter(Boolean);
+  return order.map((kind) => inspectionSummaryPart(kind, counts.get(kind) ?? 0, t)).filter(Boolean);
 }
 
-export function inspectionSummaryPart(kind: InspectionEntryKind, count: number): string {
-  if (kind === 'directory') return `已查看 ${count} 个目录`;
-  if (kind === 'fileSearch') return `已查找 ${count} 次文件`;
-  if (kind === 'gitStatus') return '已查看 Git 状态';
-  return `已读取 ${count} 个文件`;
+export function inspectionSummaryPart(kind: InspectionEntryKind, count: number, t: Translate = defaultTranslate): string {
+  if (kind === 'directory') return t('toolRun.inspection.directories', { count });
+  if (kind === 'fileSearch') return t('toolRun.inspection.fileSearches', { count });
+  if (kind === 'gitStatus') return t('toolRun.inspection.gitStatus');
+  return t('toolRun.inspection.files', { count });
 }
 
-export function inspectionEntryLabel(kind: InspectionEntryKind): string {
-  if (kind === 'directory') return '已查看目录';
-  if (kind === 'fileSearch') return '已查找文件';
-  if (kind === 'gitStatus') return '已查看状态';
-  return '已读取文件';
+export function inspectionEntryLabel(kind: InspectionEntryKind, t: Translate = defaultTranslate): string {
+  if (kind === 'directory') return t('toolRun.inspection.directoryLabel');
+  if (kind === 'fileSearch') return t('toolRun.inspection.fileSearchLabel');
+  if (kind === 'gitStatus') return t('toolRun.inspection.statusLabel');
+  return t('toolRun.inspection.fileLabel');
 }
 
-export function inspectionRunningTitle(kind: InspectionEntryKind): string {
-  if (kind === 'directory') return '正在查看目录';
-  if (kind === 'fileSearch') return '正在查找文件';
-  if (kind === 'gitStatus') return '正在查看 Git 状态';
-  return '正在读取文件';
+export function inspectionRunningTitle(kind: InspectionEntryKind, t: Translate = defaultTranslate): string {
+  if (kind === 'directory') return t('toolRun.inspection.directoryRunning');
+  if (kind === 'fileSearch') return t('toolRun.inspection.fileSearchRunning');
+  if (kind === 'gitStatus') return t('toolRun.inspection.gitStatusRunning');
+  return t('toolRun.inspection.fileRunning');
 }
 
-export function inspectionCompleteTitle(kind: InspectionEntryKind): string {
-  if (kind === 'directory') return '已查看目录';
-  if (kind === 'fileSearch') return '已查找文件';
-  if (kind === 'gitStatus') return '已查看 Git 状态';
-  return '已读取文件';
+export function inspectionCompleteTitle(kind: InspectionEntryKind, t: Translate = defaultTranslate): string {
+  if (kind === 'directory') return t('toolRun.inspection.directoryLabel');
+  if (kind === 'fileSearch') return t('toolRun.inspection.fileSearchLabel');
+  if (kind === 'gitStatus') return t('toolRun.inspection.gitStatus');
+  return t('toolRun.inspection.fileLabel');
 }
 
 export function toolRunTarget(run: RuntimeToolRun): string {
@@ -479,10 +493,10 @@ export function toolRunTarget(run: RuntimeToolRun): string {
   return stringField(args.command ?? args.cmd ?? args.query ?? args.path ?? args.file_path ?? args.target_path ?? args.file ?? args.process_id ?? args.processId);
 }
 
-export function fileOperationTarget(run: RuntimeToolRun): string {
+export function fileOperationTarget(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
   const args = recordFromJson(run.argumentsPreview);
   if (hasIncompleteFileOperationPath(args)) return '';
-  return fileMutationDisplayPath(run) || fileOperationTargetFromArguments(run) || toolRunTarget(run) || fileMutationPathFromReason(run.approvalReason);
+  return fileMutationDisplayPath(run, t) || fileOperationTargetFromArguments(run, t) || toolRunTarget(run) || fileMutationPathFromReason(run.approvalReason);
 }
 
 export function hasIncompleteFileOperationPath(args: Record<string, unknown>): boolean {
@@ -494,7 +508,7 @@ export function hasIncompleteFileOperationPath(args: Record<string, unknown>): b
   ].some(([pathKey, closedKey]) => Boolean(stringField(args[pathKey])) && args[closedKey] === false);
 }
 
-export function fileOperationTargetFromArguments(run: RuntimeToolRun): string {
+export function fileOperationTargetFromArguments(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
   const args = recordFromJson(run.argumentsPreview);
   const direct = stringField(args.path ?? args.file_path ?? args.target_path ?? args.file);
   if (direct) return direct;
@@ -504,22 +518,22 @@ export function fileOperationTargetFromArguments(run: RuntimeToolRun): string {
     .map((item) => (isRecord(item) ? stringField(item.file_path ?? item.path) : ''))
     .filter(Boolean);
   if (argumentPaths.length === 1) return argumentPaths[0];
-  if (argumentPaths.length > 1) return `${argumentPaths.length} 个文件`;
+  if (argumentPaths.length > 1) return t('toolRun.file.count', { count: argumentPaths.length });
   return '';
 }
 
-export function fileOperationVerb(run: RuntimeToolRun): string {
+export function fileOperationVerb(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
   const action = fileOperationAction(run);
   const created = action === 'created';
   const deleted = action === 'deleted';
-  if (run.status === 'pending_approval') return '等待授权：写入';
-  if (run.status === 'running') return isPreparingToolRun(run) ? '正在生成修改' : '正在写入';
-  if (run.status === 'error') return created ? '生成失败' : deleted ? '删除失败' : '编辑失败';
-  if (run.status === 'cancelled') return '已取消文件操作';
-  if (run.status === 'rejected') return '已拒绝写入';
-  if (created) return '已生成';
-  if (deleted) return '已删除';
-  return '已编辑';
+  if (run.status === 'pending_approval') return t('toolRun.file.awaitingWrite');
+  if (run.status === 'running') return t(isPreparingToolRun(run) ? 'toolRun.file.generatingChanges' : 'toolRun.file.writing');
+  if (run.status === 'error') return t(created ? 'toolRun.file.createFailed' : deleted ? 'toolRun.file.deleteFailed' : 'toolRun.file.editFailed');
+  if (run.status === 'cancelled') return t('toolRun.file.cancelled');
+  if (run.status === 'rejected') return t('toolRun.file.rejectedWrite');
+  if (created) return t('toolRun.file.generated');
+  if (deleted) return t('toolRun.file.deleted');
+  return t('toolRun.file.edited');
 }
 
 export type FileOperationRunSummary = {
@@ -528,25 +542,25 @@ export type FileOperationRunSummary = {
   changeCounts?: { additions: number; deletions: number; showZero: boolean };
 };
 
-export function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperationRunSummary {
+export function fileOperationGroupSummary(runs: RuntimeToolRun[], t: Translate = defaultTranslate): FileOperationRunSummary {
   const status = toolRunGroupStatus(runs);
   const active = activeToolRunOrLast(runs);
   const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
-  const activeTarget = active ? fileOperationTarget(active) : '';
-  const fallbackTarget = activeTarget || (entries.length === 1 ? entries[0]?.path : entries.length > 1 ? `${entries.length} 个文件` : '');
+  const activeTarget = active ? fileOperationTarget(active, t) : '';
+  const fallbackTarget = activeTarget || (entries.length === 1 ? entries[0]?.path : entries.length > 1 ? t('toolRun.file.count', { count: entries.length }) : '');
   const changeCounts = fileOperationGroupChangeTotals(runs) ?? undefined;
   if (status === 'running' || status === 'pending_approval') {
-    return { title: active ? fileOperationVerb(active) : '正在处理文件', target: fallbackTarget, changeCounts };
+    return { title: active ? fileOperationVerb(active, t) : t('toolRun.file.processing'), target: fallbackTarget, changeCounts };
   }
-  if (status === 'error') return { title: '文件操作失败', target: fallbackTarget, changeCounts };
-  if (status === 'cancelled') return { title: '已取消文件操作', target: fallbackTarget, changeCounts };
-  if (status === 'rejected') return { title: '已拒绝文件操作', target: fallbackTarget, changeCounts };
+  if (status === 'error') return { title: t('toolRun.file.failed'), target: fallbackTarget, changeCounts };
+  if (status === 'cancelled') return { title: t('toolRun.file.cancelled'), target: fallbackTarget, changeCounts };
+  if (status === 'rejected') return { title: t('toolRun.file.rejected'), target: fallbackTarget, changeCounts };
 
   const appliedEntries = entries.filter((entry) => entry.applied);
   const singleEntry = appliedEntries.length === 1 ? appliedEntries[0] : undefined;
   if (singleEntry) {
     return {
-      title: completedFileOperationActionLabel(singleEntry.action),
+      title: completedFileOperationActionLabel(singleEntry.action, t),
       target: singleEntry.path,
       changeCounts: singleEntry.hasChangeCounts
         ? {
@@ -558,19 +572,23 @@ export function fileOperationGroupSummary(runs: RuntimeToolRun[]): FileOperation
     };
   }
 
-  return { title: completedFileOperationAggregateTitle(appliedEntries, runs.length) };
+  return { title: completedFileOperationAggregateTitle(appliedEntries, runs.length, t) };
 }
 
-export function fileOperationAggregateTitle(runs: RuntimeToolRun[]): string {
+export function fileOperationAggregateTitle(runs: RuntimeToolRun[], t: Translate = defaultTranslate): string {
   const status = toolRunGroupStatus(runs);
   const hasAppliedMutation = runs.some(isRuntimeFileMutationRun);
   if (status === 'success' && hasAppliedMutation) {
-    return completedFileOperationAggregateTitle(fileOperationEntries(runs).filter((entry) => entry.applied), runs.length);
+    return completedFileOperationAggregateTitle(fileOperationEntries(runs).filter((entry) => entry.applied), runs.length, t);
   }
-  return fileOperationGroupSummary(runs).title;
+  return fileOperationGroupSummary(runs, t).title;
 }
 
-export function completedFileOperationAggregateTitle(entries: FileOperationEntry[], runCount: number): string {
+export function completedFileOperationAggregateTitle(
+  entries: FileOperationEntry[],
+  runCount: number,
+  t: Translate = defaultTranslate,
+): string {
   const counts = entries.reduce(
     (result, entry) => {
       result[entry.action] += 1;
@@ -579,11 +597,11 @@ export function completedFileOperationAggregateTitle(entries: FileOperationEntry
     { created: 0, modified: 0, deleted: 0 },
   );
   const parts = [
-    counts.created ? `已创建 ${counts.created} 个文件` : '',
-    counts.modified ? `已编辑 ${counts.modified} 个文件` : '',
-    counts.deleted ? `已删除 ${counts.deleted} 个文件` : '',
+    counts.created ? t('toolRun.file.createdCount', { count: counts.created }) : '',
+    counts.modified ? t('toolRun.file.editedCount', { count: counts.modified }) : '',
+    counts.deleted ? t('toolRun.file.deletedCount', { count: counts.deleted }) : '',
   ].filter(Boolean);
-  return parts.length ? parts.join('，') : `已处理 ${runCount} 个文件操作`;
+  return parts.length ? parts.join(t('toolRun.joiner')) : t('toolRun.file.processedCount', { count: runCount });
 }
 
 export type FileOperationAction = 'created' | 'modified' | 'deleted';
@@ -687,7 +705,7 @@ export function normalizeFileOperationPath(value: string): string {
 
 export function isConcreteFileOperationTarget(value: string): boolean {
   const target = value.trim();
-  return Boolean(target && !/^\d+\s*个文件$/u.test(target));
+  return Boolean(target && !/^\d+\s*(?:个文件|files?)$/iu.test(target));
 }
 
 export function ToolRunSummaryTarget({
@@ -710,46 +728,48 @@ export function ToolRunSummaryTarget({
 }
 
 export function FileOperationTarget({ target }: { target: string }) {
+  const { t } = useI18n();
   return (
     <WorkspaceFileLink className="chat-tool-run__file-target" filePath={target} linkKind="workspace-tool">
-      {pathBaseName(target)}
+      {pathBaseName(target, t)}
     </WorkspaceFileLink>
   );
 }
 
 export function InspectionTarget({ className, entry }: { className: string; entry: InspectionEntry }) {
+  const { t } = useI18n();
   if (entry.kind === 'file') {
     return (
       <WorkspaceFileLink className={className} filePath={entry.target} linkKind="workspace-tool">
-        {pathBaseName(entry.target)}
+        {pathBaseName(entry.target, t)}
       </WorkspaceFileLink>
     );
   }
   if (entry.kind === 'directory') {
     return (
       <WorkspacePathLabel className={className} path={entry.target} type="directory">
-        {pathBaseName(entry.target)}
+        {pathBaseName(entry.target, t)}
       </WorkspacePathLabel>
     );
   }
   return <code title={entry.target}>{entry.target}</code>;
 }
 
-export function fileOperationActionLabel(action: FileOperationAction): string {
-  if (action === 'created') return '创建';
-  if (action === 'deleted') return '删除';
-  return '编辑';
+export function fileOperationActionLabel(action: FileOperationAction, t: Translate = defaultTranslate): string {
+  if (action === 'created') return t('toolRun.file.action.create');
+  if (action === 'deleted') return t('toolRun.file.action.delete');
+  return t('toolRun.file.action.edit');
 }
 
-export function completedFileOperationActionLabel(action: FileOperationAction): string {
-  if (action === 'created') return '已创建';
-  if (action === 'deleted') return '已删除';
-  return '已编辑';
+export function completedFileOperationActionLabel(action: FileOperationAction, t: Translate = defaultTranslate): string {
+  if (action === 'created') return t('toolRun.file.action.created');
+  if (action === 'deleted') return t('toolRun.file.action.deleted');
+  return t('toolRun.file.action.edited');
 }
 
-export function pathBaseName(path: string): string {
+export function pathBaseName(path: string, t: Translate = defaultTranslate): string {
   const normalized = path.trim().replace(/\\/g, '/').replace(/\/+$/u, '');
-  if (!normalized || normalized === '.') return '项目根目录';
+  if (!normalized || normalized === '.') return t('toolRun.projectRoot');
   return normalized.split('/').filter(Boolean).pop() ?? normalized;
 }
 
@@ -758,9 +778,10 @@ export function fileMutationPathFromReason(value: string | undefined): string {
 }
 
 export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
+  const { t } = useI18n();
   const command = shellCommand(run);
   const segments = shellOutputSegments(shellResultPreviewForDisplay(run));
-  const status = shellStatusLabel(run);
+  const status = shellStatusLabel(run, t);
   const diagnostic = shellDiagnosticText(run);
   return (
     <div className={`chat-mcp-terminal chat-mcp-terminal--${shellTerminalStatus(run)}`}>
@@ -806,14 +827,14 @@ export function shellResultPreviewForDisplay(run: RuntimeToolRun): string | unde
   return legacySandboxRetry ? undefined : run.resultPreview;
 }
 
-export function shellStatusLabel(run: RuntimeToolRun): string {
-  if (run.status === 'running' || run.status === 'pending_approval') return '运行中';
-  if (run.status === 'error') return '失败';
-  if (run.status === 'cancelled') return '已取消';
-  if (run.status === 'rejected') return '已拒绝';
+export function shellStatusLabel(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
+  if (run.status === 'running' || run.status === 'pending_approval') return t('toolRun.shell.status.running');
+  if (run.status === 'error') return t('toolRun.shell.status.failed');
+  if (run.status === 'cancelled') return t('toolRun.shell.status.cancelled');
+  if (run.status === 'rejected') return t('toolRun.shell.status.rejected');
   const exit = shellContentLine(run.resultPreview ?? '', /^exit:\s*(.+)$/im);
-  if (exit && exit !== '0') return '失败';
-  return '成功';
+  if (exit && exit !== '0') return t('toolRun.shell.status.failed');
+  return t('toolRun.shell.status.success');
 }
 
 export function shellTerminalStatus(run: RuntimeToolRun): string {
@@ -897,7 +918,7 @@ export function shellMetadataLine(line: string): boolean {
   );
 }
 
-export function toolRunSummary(run: RuntimeToolRun): { title: string; target?: string } {
+export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTranslate): { title: string; target?: string } {
   const args = recordFromJson(run.argumentsPreview);
   const name = run.name;
   const path = stringField(args.path ?? args.file_path ?? args.target_path ?? args.file);
@@ -905,57 +926,64 @@ export function toolRunSummary(run: RuntimeToolRun): { title: string; target?: s
   const command = stringField(args.command ?? args.cmd);
   const url = stringField(args.url ?? args.uri ?? args.href);
 
-  if (isWebContentRun(run, url)) return { title: runningAware(run, '获取网页', '已获取网页'), target: compactUrlTarget(url) };
-  if (name === 'workspace_read_file' || name === 'read_file') return { title: runningAware(run, '读取文件', '已读取文件'), target: path };
-  if (name === 'workspace_list_directory' || name === 'list_directory') return { title: runningAware(run, '查看目录', '已查看目录'), target: path || '.' };
-  if (name === 'find_files') return { title: runningAware(run, '查找文件', '已查找文件'), target: query || path };
-  if (name === 'workspace_search_text' || name === 'search_text') return searchRunSummary(run, path, query);
-  if (isFileOperationRun(run)) return { title: fileOperationVerb(run), target: fileOperationTarget(run) || path };
-  if (name === 'run_shell_command' || name === 'exec_command') return shellRunSummary(run, command);
-  if (name === 'read_shell_process') return { title: runningAware(run, '读取命令输出', '已读取命令输出'), target: stringField(args.process_id ?? args.processId) };
-  if (name === 'remember_memory') return { title: runningAware(run, '保存记忆', '已保存记忆') };
-  if (name === 'recall_memory') return { title: runningAware(run, '检索记忆', '已检索记忆'), target: query };
-  if (name === PUBLISH_ARTIFACT_TOOL_NAME) return { title: runningAware(run, '发布产物', '已发布产物'), target: path };
-  return { title: runningAware(run, toolDisplayName(name), `已使用 ${toolDisplayName(name)}`) };
+  if (isWebContentRun(run, url)) return { title: runningAware(run, t('toolRun.action.fetchWeb'), t('toolRun.action.fetchedWeb'), t), target: compactUrlTarget(url) };
+  if (name === 'workspace_read_file' || name === 'read_file') return { title: runningAware(run, t('toolRun.action.readFile'), t('toolRun.action.readFileDone'), t), target: path };
+  if (name === 'workspace_list_directory' || name === 'list_directory') return { title: runningAware(run, t('toolRun.action.listDirectory'), t('toolRun.action.listDirectoryDone'), t), target: path || '.' };
+  if (name === 'find_files') return { title: runningAware(run, t('toolRun.action.findFiles'), t('toolRun.action.findFilesDone'), t), target: query || path };
+  if (name === 'workspace_search_text' || name === 'search_text') return searchRunSummary(run, path, query, t);
+  if (isFileOperationRun(run)) return { title: fileOperationVerb(run, t), target: fileOperationTarget(run, t) || path };
+  if (name === 'run_shell_command' || name === 'exec_command') return shellRunSummary(run, command, t);
+  if (name === 'read_shell_process') return { title: runningAware(run, t('toolRun.action.readShell'), t('toolRun.action.readShellDone'), t), target: stringField(args.process_id ?? args.processId) };
+  if (name === 'remember_memory') return { title: runningAware(run, t('toolRun.action.saveMemory'), t('toolRun.action.saveMemoryDone'), t) };
+  if (name === 'recall_memory') return { title: runningAware(run, t('toolRun.action.recallMemory'), t('toolRun.action.recallMemoryDone'), t), target: query };
+  if (name === PUBLISH_ARTIFACT_TOOL_NAME) return { title: runningAware(run, t('toolRun.action.publishArtifact'), t('toolRun.action.publishArtifactDone'), t), target: path };
+  const displayName = toolDisplayName(name, t);
+  return { title: runningAware(run, displayName, t('toolRun.action.used', { name: displayName }), t) };
 }
 
-export function searchRunSummary(run: RuntimeToolRun, path: string, query: string): { title: string; target?: string } {
-  if (!path) return { title: runningAware(run, '搜索代码', '已搜索代码'), target: query };
+export function searchRunSummary(
+  run: RuntimeToolRun,
+  path: string,
+  query: string,
+  t: Translate = defaultTranslate,
+): { title: string; target?: string } {
+  if (!path) return { title: runningAware(run, t('toolRun.action.searchCode'), t('toolRun.action.searchCodeDone'), t), target: query };
 
-  const scope = pathBaseName(path);
+  const scope = pathBaseName(path, t);
   const target = query ? `“${query}”` : undefined;
-  if (run.status === 'pending_approval') return { title: `等待授权：在 ${scope} 中搜索`, target };
+  if (run.status === 'pending_approval') return { title: t('toolRun.search.scope.awaiting', { scope }), target };
   if (run.status === 'running') {
     return {
-      title: isPreparingToolRun(run) ? `正在准备在 ${scope} 中搜索` : `正在 ${scope} 中搜索`,
+      title: t(isPreparingToolRun(run) ? 'toolRun.search.scope.preparing' : 'toolRun.search.scope.running', { scope }),
       target,
     };
   }
-  if (run.status === 'error') return { title: `在 ${scope} 中搜索失败`, target };
-  if (run.status === 'cancelled') return { title: `已取消在 ${scope} 中搜索`, target };
-  if (run.status === 'rejected') return { title: `已拒绝在 ${scope} 中搜索`, target };
-  return { title: `已在 ${scope} 中搜索`, target };
+  if (run.status === 'error') return { title: t('toolRun.search.scope.failed', { scope }), target };
+  if (run.status === 'cancelled') return { title: t('toolRun.search.scope.cancelled', { scope }), target };
+  if (run.status === 'rejected') return { title: t('toolRun.search.scope.rejected', { scope }), target };
+  return { title: t('toolRun.search.scope.completed', { scope }), target };
 }
 
-export function shellRunSummary(run: RuntimeToolRun, command: string): { title: string; target?: string } {
+export function shellRunSummary(run: RuntimeToolRun, command: string, t: Translate = defaultTranslate): { title: string; target?: string } {
   const displayCommand = command || shellCommand(run);
-  if (run.status === 'pending_approval') return { title: displayCommand ? `等待授权：运行 ${displayCommand}` : '等待授权：运行命令' };
+  if (run.status === 'pending_approval') return { title: displayCommand ? t('toolRun.shell.awaitingCommand', { command: displayCommand }) : t('toolRun.shell.awaiting') };
   if (run.status === 'running') {
-    if (isPreparingToolRun(run)) return { title: displayCommand ? `正在准备运行 ${displayCommand}` : '正在生成命令' };
-    return { title: displayCommand ? `正在运行 ${displayCommand}` : '正在运行命令' };
+    if (isPreparingToolRun(run)) return { title: displayCommand ? t('toolRun.shell.preparingCommand', { command: displayCommand }) : t('toolRun.shell.generatingCommand') };
+    return { title: displayCommand ? t('toolRun.shell.runningCommand', { command: displayCommand }) : t('toolRun.shell.running') };
   }
-  if (run.status === 'error') return { title: displayCommand ? `命令运行失败 ${displayCommand}` : '命令运行失败' };
-  if (run.status === 'cancelled') return { title: displayCommand ? `已取消运行 ${displayCommand}` : '已取消运行命令' };
-  if (run.status === 'rejected') return { title: displayCommand ? `已拒绝运行 ${displayCommand}` : '已拒绝运行命令' };
-  return { title: displayCommand ? `已运行 ${displayCommand}` : '已运行命令' };
+  if (run.status === 'error') return { title: displayCommand ? t('toolRun.shell.failedCommand', { command: displayCommand }) : t('toolRun.shell.failed') };
+  if (run.status === 'cancelled') return { title: displayCommand ? t('toolRun.shell.cancelledCommand', { command: displayCommand }) : t('toolRun.shell.cancelled') };
+  if (run.status === 'rejected') return { title: displayCommand ? t('toolRun.shell.rejectedCommand', { command: displayCommand }) : t('toolRun.shell.rejected') };
+  return { title: displayCommand ? t('toolRun.shell.completedCommand', { command: displayCommand }) : t('toolRun.shell.completed') };
 }
 
-export function runningAware(run: RuntimeToolRun, running: string, complete: string) {
-  if (run.status === 'pending_approval') return `等待授权：${running}`;
-  if (run.status === 'running') return `${isPreparingToolRun(run) ? '正在准备' : '正在'}${running.replace(/^已?/, '')}`;
-  if (run.status === 'error') return `${running.replace(/^已?/, '')}失败`;
-  if (run.status === 'cancelled') return `${running.replace(/^已?/, '')}已取消`;
-  if (run.status === 'rejected') return `${running.replace(/^已?/, '')}已拒绝`;
+export function runningAware(run: RuntimeToolRun, running: string, complete: string, t: Translate = defaultTranslate) {
+  const action = running.replace(/^已?/u, '');
+  if (run.status === 'pending_approval') return t('toolRun.aware.awaiting', { action });
+  if (run.status === 'running') return t(isPreparingToolRun(run) ? 'toolRun.aware.preparing' : 'toolRun.aware.running', { action });
+  if (run.status === 'error') return t('toolRun.aware.failed', { action });
+  if (run.status === 'cancelled') return t('toolRun.aware.cancelled', { action });
+  if (run.status === 'rejected') return t('toolRun.aware.rejected', { action });
   return complete;
 }
 
@@ -966,15 +994,20 @@ export function ToolRunStatus({
   status: RuntimeToolRun['status'];
   summaryTitle?: string;
 }) {
-  const text = statusTextFromStatus(status, summaryTitle);
+  const { t } = useI18n();
+  const text = statusTextFromStatus(status, summaryTitle, t);
   return text ? <span className="chat-tool-run__status">{text}</span> : null;
 }
 
-export function statusTextFromStatus(status: RuntimeToolRun['status'], summaryTitle = '') {
-  if (status === 'pending_approval') return summaryTitle.trim().startsWith('等待授权') ? '' : '待确认';
-  if (status === 'cancelled') return '已取消';
-  if (status === 'rejected') return '已拒绝';
-  if (status === 'error') return '失败';
+export function statusTextFromStatus(
+  status: RuntimeToolRun['status'],
+  summaryTitle = '',
+  t: Translate = defaultTranslate,
+) {
+  if (status === 'pending_approval') return summaryTitle.trim().startsWith(t('toolRun.status.awaitingPrefix')) ? '' : t('toolRun.status.confirm');
+  if (status === 'cancelled') return t('toolRun.status.cancelled');
+  if (status === 'rejected') return t('toolRun.status.rejected');
+  if (status === 'error') return t('toolRun.status.failed');
   return '';
 }
 
@@ -1037,8 +1070,8 @@ export function countTextLines(value: string): number {
   return lines.length;
 }
 
-export function toolDisplayName(name: string): string {
-  return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || '工具';
+export function toolDisplayName(name: string, t: Translate = defaultTranslate): string {
+  return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || t('toolRun.tool');
 }
 
 export function formatPreview(value: string): string {

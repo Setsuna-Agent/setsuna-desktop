@@ -7,6 +7,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import { KeyRound, Loader2, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, TextField } from '../../shared/ui/primitives.js';
 import { ImageGenerationPluginTest } from './ImageGenerationPluginTest.js';
 
@@ -19,6 +20,7 @@ export function ImageGenerationPluginSettings({
   onSave: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTest: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
 }) {
+  const { t } = useI18n();
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl ?? '');
   const [model, setModel] = useState(config?.model ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -38,14 +40,14 @@ export function ImageGenerationPluginSettings({
   function configInput(requireUsableKey: boolean): RuntimeImageGenerationConfigInput {
     const normalizedUrl = normalizeImageGenerationServiceUrl(baseUrl);
     if (baseUrl.trim() && normalizedUrl === null) {
-      throw new Error('服务地址必须是有效的 HTTP 或 HTTPS URL，且不能在 URL 中包含用户名或密码。');
+      throw new Error(t('capabilities.image.validation.url'));
     }
     if (!normalizedUrl) {
-      throw new Error('请填写图片生成服务地址。');
+      throw new Error(t('capabilities.image.validation.baseUrl'));
     }
     const hasUsableKey = Boolean(apiKey.trim()) || Boolean(config?.apiKeySet && !clearApiKey);
     if ((requireUsableKey || !clearApiKey) && !hasUsableKey) {
-      throw new Error('请填写图片生成服务的 API key。');
+      throw new Error(t('capabilities.image.validation.apiKey'));
     }
     return {
       baseUrl: normalizedUrl,
@@ -96,32 +98,32 @@ export function ImageGenerationPluginSettings({
       <header>
         <span className="desktop-image-generation-settings__icon"><KeyRound size={16} /></span>
         <div>
-          <h3 id="image-generation-settings-title">服务配置</h3>
-          <p>安装插件后自动启用；兼容 OpenAI Images API，密钥只保存在本机 runtime 的私密配置中。</p>
+          <h3 id="image-generation-settings-title">{t('capabilities.image.settings.title')}</h3>
+          <p>{t('capabilities.image.settings.description')}</p>
         </div>
       </header>
 
       <div className="desktop-image-generation-settings__form">
         <label className="desktop-image-generation-settings__field desktop-image-generation-settings__field--wide">
-          <span>服务地址</span>
+          <span>{t('capabilities.image.settings.baseUrl')}</span>
           <TextField
             type="url"
             value={baseUrl}
-            placeholder="http://127.0.0.1:8000 或 https://api.example.com/v1"
+            placeholder={t('capabilities.image.settings.baseUrlPlaceholder')}
             spellCheck={false}
             onChange={(event) => {
               setBaseUrl(event.target.value);
               setSaved(false);
             }}
           />
-          <small>可填写服务根地址、以 /v1 结尾的地址，或完整的 /v1/images/generations 端点。</small>
+          <small>{t('capabilities.image.settings.baseUrlHelp')}</small>
         </label>
 
         <label className="desktop-image-generation-settings__field">
-          <span>默认模型（可选）</span>
+          <span>{t('capabilities.image.settings.model')}</span>
           <TextField
             value={model}
-            placeholder="例如 gpt-image-1"
+            placeholder={t('capabilities.image.settings.modelPlaceholder')}
             spellCheck={false}
             onChange={(event) => {
               setModel(event.target.value);
@@ -136,7 +138,7 @@ export function ImageGenerationPluginSettings({
             type="password"
             value={apiKey}
             autoComplete="new-password"
-            placeholder={hasSavedKey ? config?.apiKeyPreview || '已保存' : '输入 API key'}
+            placeholder={hasSavedKey ? config?.apiKeyPreview || t('capabilities.image.settings.keySaved') : t('capabilities.image.settings.keyPlaceholder')}
             spellCheck={false}
             onChange={(event) => {
               setApiKey(event.target.value);
@@ -149,16 +151,16 @@ export function ImageGenerationPluginSettings({
 
       {usesPlainHttp ? (
         <p className="desktop-image-generation-settings__warning" role="note">
-          当前使用 HTTP，API key 和请求内容在网络传输中不会被 TLS 加密。仅建议用于可信内网或本机服务。
+          {t('capabilities.image.settings.httpWarning')}
         </p>
       ) : null}
 
       <footer>
         <div className="desktop-image-generation-settings__status" aria-live="polite">
           {error ? <span className="is-error">{error}</span> : null}
-          {!error && saved ? <span className="is-success">配置已保存</span> : null}
-          {!error && !saved && clearApiKey ? <span>保存后将清除密钥；重新填写密钥后即可继续使用</span> : null}
-          {!error && !saved && hasSavedKey ? <span>已保存密钥 {config?.apiKeyPreview}</span> : null}
+          {!error && saved ? <span className="is-success">{t('capabilities.image.settings.saved')}</span> : null}
+          {!error && !saved && clearApiKey ? <span>{t('capabilities.image.settings.clearPending')}</span> : null}
+          {!error && !saved && hasSavedKey ? <span>{t('capabilities.image.settings.savedKey', { key: config?.apiKeyPreview ?? '' })}</span> : null}
         </div>
         {hasSavedKey ? (
           <Button
@@ -172,7 +174,7 @@ export function ImageGenerationPluginSettings({
               setSaved(false);
             }}
           >
-            清除密钥
+            {t('capabilities.image.settings.clearKey')}
           </Button>
         ) : null}
         <Button
@@ -182,7 +184,7 @@ export function ImageGenerationPluginSettings({
           disabled={busy}
           onClick={() => void submit()}
         >
-          {saving ? '保存中' : '保存配置'}
+          {saving ? t('capabilities.common.saving') : t('capabilities.image.settings.save')}
         </Button>
       </footer>
 

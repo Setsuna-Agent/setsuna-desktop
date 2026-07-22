@@ -12,6 +12,7 @@ import type {
 import { BookOpen, FileText, Loader2, Plug, Workflow, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton } from '../../shared/ui/primitives.js';
 import { MarkdownContentBlock } from '../chat/markdown/MarkdownContentBlock.js';
 import { formatPluginFileSize } from './pluginDisplay.js';
@@ -41,6 +42,7 @@ export function CapabilitiesPluginItemDialog({
   runtimeHooks: RuntimeHookMetadata[];
   trustHooksOnInstall: boolean;
 }) {
+  const { t } = useI18n();
   const [content, setContent] = useState<RuntimePluginItemContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(onGetContent));
@@ -102,36 +104,36 @@ export function CapabilitiesPluginItemDialog({
         <header className="desktop-plugin-item-dialog__header">
           <span className="desktop-plugin-item-dialog__icon">{pluginItemIcon(item.kind)}</span>
           <span className="desktop-plugin-item-dialog__title">
-            <small>{pluginItemKindLabel(item.kind)}</small>
+            <small>{pluginItemKindLabel(item.kind, t)}</small>
             <strong id="desktop-plugin-item-dialog-title">{title}</strong>
           </span>
-          <IconButton autoFocus label="关闭详情" onClick={onClose}><X size={16} /></IconButton>
+          <IconButton autoFocus label={t('capabilities.item.closeDetail')} onClick={onClose}><X size={16} /></IconButton>
         </header>
 
         <div className="desktop-plugin-item-dialog__body">
           {description ? <p className="desktop-plugin-item-dialog__description">{description}</p> : null}
           <dl className="desktop-plugin-item-dialog__metadata">
-            {pluginItemMetadata(item, activeMcpServer, activeHook, trustHooksOnInstall).map(([label, value]) => (
+            {pluginItemMetadata(item, activeMcpServer, activeHook, trustHooksOnInstall, t).map(([label, value]) => (
               <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
             ))}
           </dl>
 
           {configPreview ? (
             <section className="desktop-plugin-item-dialog__section">
-              <header><strong>配置详情</strong></header>
+              <header><strong>{t('capabilities.item.config')}</strong></header>
               <pre>{configPreview}</pre>
             </section>
           ) : null}
 
           <section className="desktop-plugin-item-dialog__section">
             <header>
-              <strong>内容预览</strong>
-              {content?.files.length ? <small>{content.files.length} 个文件</small> : null}
+              <strong>{t('capabilities.item.preview')}</strong>
+              {content?.files.length ? <small>{t('capabilities.item.fileCount', { count: content.files.length })}</small> : null}
             </header>
             {loading ? (
-              <div className="desktop-plugin-item-dialog__status"><Loader2 className="is-spinning" size={14} />正在读取插件内容</div>
+              <div className="desktop-plugin-item-dialog__status"><Loader2 className="is-spinning" size={14} />{t('capabilities.item.reading')}</div>
             ) : error ? (
-              <div className="desktop-plugin-item-dialog__status is-error">当前内容无法预览：{error}</div>
+              <div className="desktop-plugin-item-dialog__status is-error">{t('capabilities.item.previewError', { error })}</div>
             ) : content?.files.length ? (
               <div className="desktop-plugin-item-dialog__files">
                 {content.files.map((file) => (
@@ -139,12 +141,12 @@ export function CapabilitiesPluginItemDialog({
                 ))}
               </div>
             ) : (
-              <div className="desktop-plugin-item-dialog__status">这项能力没有关联可安全预览的本地文件。</div>
+              <div className="desktop-plugin-item-dialog__status">{t('capabilities.item.noSafeFiles')}</div>
             )}
           </section>
         </div>
 
-        <footer><Button type="button" variant="secondary" onClick={onClose}>关闭</Button></footer>
+        <footer><Button type="button" variant="secondary" onClick={onClose}>{t('common.close')}</Button></footer>
       </section>
     </div>
   );
@@ -153,6 +155,7 @@ export function CapabilitiesPluginItemDialog({
 }
 
 export function CapabilitiesPluginFilePreview({ file }: { file: RuntimePluginFilePreview }) {
+  const { t } = useI18n();
   const [markdownView, setMarkdownView] = useState<'preview' | 'source'>('preview');
   const markdown = file.text !== undefined && isMarkdownFile(file);
   const markdownBody = markdown ? markdownPreviewBody(file.text ?? '') : '';
@@ -166,14 +169,14 @@ export function CapabilitiesPluginFilePreview({ file }: { file: RuntimePluginFil
           <small>{file.mimeType} · {formatPluginFileSize(file.size)}</small>
         </span>
         {markdown ? (
-          <span className="desktop-plugin-item-dialog__view-switch" role="group" aria-label={`${name} 显示方式`}>
+          <span className="desktop-plugin-item-dialog__view-switch" role="group" aria-label={t('capabilities.item.displayMode', { name })}>
             <button
               className={markdownView === 'preview' ? 'is-active' : undefined}
               type="button"
               aria-pressed={markdownView === 'preview'}
               onClick={() => setMarkdownView('preview')}
             >
-              预览
+              {t('capabilities.item.previewMode')}
             </button>
             <button
               className={markdownView === 'source' ? 'is-active' : undefined}
@@ -181,7 +184,7 @@ export function CapabilitiesPluginFilePreview({ file }: { file: RuntimePluginFil
               aria-pressed={markdownView === 'source'}
               onClick={() => setMarkdownView('source')}
             >
-              源码
+              {t('capabilities.item.sourceMode')}
             </button>
           </span>
         ) : null}
@@ -198,14 +201,14 @@ export function CapabilitiesPluginFilePreview({ file }: { file: RuntimePluginFil
             </div>
           </div>
         ) : (
-          <div className="desktop-plugin-item-dialog__status">Markdown 正文为空。</div>
+          <div className="desktop-plugin-item-dialog__status">{t('capabilities.item.emptyMarkdown')}</div>
         )
       ) : file.text !== undefined ? (
         file.text ? (
-          <pre aria-label={`${name} 文件内容`} tabIndex={0}>{file.text}</pre>
-        ) : <div className="desktop-plugin-item-dialog__status">这是一个空文件。</div>
+          <pre aria-label={t('capabilities.item.fileContent', { name })} tabIndex={0}>{file.text}</pre>
+        ) : <div className="desktop-plugin-item-dialog__status">{t('capabilities.item.emptyFile')}</div>
       ) : (
-        <div className="desktop-plugin-item-dialog__status">这个文件格式暂不支持内嵌预览。</div>
+        <div className="desktop-plugin-item-dialog__status">{t('capabilities.item.unsupportedPreview')}</div>
       )}
     </article>
   );
@@ -245,11 +248,11 @@ function pluginItemIcon(kind: RuntimePluginItemKind) {
   return <FileText size={17} />;
 }
 
-function pluginItemKindLabel(kind: RuntimePluginItemKind): string {
-  if (kind === 'skill') return 'Skill';
-  if (kind === 'mcp') return 'MCP 服务';
-  if (kind === 'hook') return 'Hook';
-  return '资源文件';
+function pluginItemKindLabel(kind: RuntimePluginItemKind, t: Translate): string {
+  if (kind === 'skill') return t('capabilities.item.kind.skill');
+  if (kind === 'mcp') return t('capabilities.item.kind.mcp');
+  if (kind === 'hook') return t('capabilities.item.kind.hook');
+  return t('capabilities.item.kind.resource');
 }
 
 function pluginItemMetadata(
@@ -257,27 +260,30 @@ function pluginItemMetadata(
   activeMcpServer: RuntimeMcpServer | undefined,
   activeHook: RuntimeHookMetadata | undefined,
   trustHooksOnInstall: boolean,
+  t: Translate,
 ): Array<[string, string]> {
-  if (item.kind === 'skill') return [['ID', item.value.id], ['文件', 'SKILL.md']];
+  if (item.kind === 'skill') return [['ID', item.value.id], [t('capabilities.item.meta.file'), 'SKILL.md']];
   if (item.kind === 'mcp') {
     return [
       ['Key', item.value.key],
-      ['传输', item.value.transport === 'streamableHttp' ? '远程 HTTP' : '本地 stdio'],
-      ['状态', activeMcpServer ? (activeMcpServer.enabled ? '已启用' : '已停用') : '安装后可用'],
-      ...(item.value.owned === false ? [['来源', '复用现有配置'] as [string, string]] : []),
+      [t('capabilities.item.meta.transport'), t(item.value.transport === 'streamableHttp' ? 'capabilities.item.remoteHttp' : 'capabilities.item.localStdio')],
+      [t('capabilities.item.meta.status'), activeMcpServer
+        ? t(activeMcpServer.enabled ? 'capabilities.item.enabled' : 'capabilities.item.disabled')
+        : t('capabilities.item.availableAfterInstall')],
+      ...(item.value.owned === false ? [[t('capabilities.item.meta.source'), t('capabilities.detail.reuseExisting')] as [string, string]] : []),
     ];
   }
   if (item.kind === 'hook') {
     return [
       ['ID', item.value.id],
-      ['事件', item.value.eventName],
-      ['Matcher', item.value.matcher || '全部'],
-      ['状态', activeHook
-        ? (activeHook.enabled ? hookTrustLabel(activeHook.trustStatus) : '已停用')
-        : trustHooksOnInstall ? '安装时自动信任' : '安装后需信任'],
+      [t('capabilities.item.meta.event'), item.value.eventName],
+      ['Matcher', item.value.matcher || t('capabilities.item.meta.all')],
+      [t('capabilities.item.meta.status'), activeHook
+        ? (activeHook.enabled ? hookTrustLabel(activeHook.trustStatus, t) : t('capabilities.item.disabled'))
+        : t(trustHooksOnInstall ? 'capabilities.item.autoTrustOnInstall' : 'capabilities.item.trustAfterInstall')],
     ];
   }
-  return [['ID', item.value.id], ['路径', item.value.path], ['大小', formatPluginFileSize(item.value.size)]];
+  return [['ID', item.value.id], [t('capabilities.item.meta.path'), item.value.path], [t('capabilities.item.meta.size'), formatPluginFileSize(item.value.size)]];
 }
 
 function pluginItemConfig(
@@ -324,10 +330,10 @@ function matchingRuntimeHook(
     && (hook.matcher ?? '') === (item.matcher ?? ''));
 }
 
-function hookTrustLabel(status: RuntimeHookMetadata['trustStatus']): string {
-  if (status === 'trusted' || status === 'managed') return '已信任';
-  if (status === 'modified') return '命令已变更';
-  return '等待信任';
+function hookTrustLabel(status: RuntimeHookMetadata['trustStatus'], t: Translate): string {
+  if (status === 'trusted' || status === 'managed') return t('capabilities.item.trusted');
+  if (status === 'modified') return t('capabilities.item.commandChanged');
+  return t('capabilities.item.awaitingTrust');
 }
 
 function removeUndefined(input: Record<string, unknown>): Record<string, unknown> {
