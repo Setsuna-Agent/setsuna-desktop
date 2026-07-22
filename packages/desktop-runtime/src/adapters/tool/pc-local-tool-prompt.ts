@@ -3,7 +3,6 @@ import type { RuntimeToolDefinition } from '@setsuna-desktop/contracts';
 export type PcLocalToolPromptOptions = {
   workspaceDependencies?: {
     enabled: boolean;
-    packageIndexConfigured: boolean;
   };
 };
 
@@ -107,9 +106,8 @@ export function pcLocalToolPrompt(
     if (options.workspaceDependencies?.enabled) {
       lines.push(
         '- The desktop runtime manages and prepends Node.js, Python 3, pip, and uv for shell commands. Use python3 or uv directly; do not run which, command -v, or version probes first unless a command actually fails and you are diagnosing it.',
-        options.workspaceDependencies.packageIndexConfigured
-          ? '- The configured Python package index is already applied to both pip and uv. Do not add a different --index-url or bypass it.'
-          : '- Python package commands use their default package index because no custom Python package index is configured.',
+        '- The configured npm registry is already applied to npm, pnpm, and Corepack. Do not add a different --registry or bypass it.',
+        '- The configured Python package index is already applied to both pip and uv. Do not add a different --index-url or bypass it.',
         '- The managed pip and pip3 commands are uv-backed compatibility shims and require an active virtual environment. Do not run a bare pip install for one-off work.',
         '- Never install into the system Python or user site. For one-off dependencies, run the complete task in an isolated command such as uv run --with <package> -- python <script>; for a declared Python project, follow its existing uv or virtual-environment workflow.',
       );

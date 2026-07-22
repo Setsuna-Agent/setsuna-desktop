@@ -15,6 +15,10 @@ import {
 } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import {
+  DEFAULT_NPM_REGISTRY_URL,
+  DEFAULT_PYTHON_PACKAGE_INDEX_URL,
+} from '@setsuna-desktop/contracts';
 import type {
   RuntimeEnvironment,
   RuntimeWorkspaceDependenciesStatus,
@@ -139,7 +143,6 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     const config = await this.configStore.getConfig();
     return {
       enabled: config.desktopSettings?.workspaceDependenciesEnabled === true,
-      packageIndexConfigured: Boolean(config.desktopSettings?.pythonPackageIndexUrl?.trim()),
     };
   }
 
@@ -172,9 +175,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   async prepareShellToolchain({ command, environment }: PrepareShellToolchainInput): Promise<ShellToolchain> {
     const config = await this.configStore.getConfig();
     const enabled = config.desktopSettings?.workspaceDependenciesEnabled === true;
-    const packageIndexUrl = typeof config.desktopSettings?.pythonPackageIndexUrl === 'string'
-      ? config.desktopSettings.pythonPackageIndexUrl
-      : '';
+    const packageIndexUrl = config.desktopSettings?.pythonPackageIndexUrl?.trim()
+      || DEFAULT_PYTHON_PACKAGE_INDEX_URL;
+    const npmRegistryUrl = config.desktopSettings?.npmRegistryUrl?.trim()
+      || DEFAULT_NPM_REGISTRY_URL;
     const hints = await projectToolchainHints(environment);
     const hostNode = await this.findSystemNode();
     const bundledNode = await this.resolveNode();
@@ -222,6 +226,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       ...(enabled && packageIndexUrl ? {
         PIP_INDEX_URL: packageIndexUrl,
         UV_DEFAULT_INDEX: packageIndexUrl,
+      } : {}),
+      ...(enabled && npmRegistryUrl ? {
+        COREPACK_NPM_REGISTRY: npmRegistryUrl,
+        npm_config_registry: npmRegistryUrl,
       } : {}),
       ...(manifest ? {
         UV_PYTHON: manifest.python.path,

@@ -865,7 +865,7 @@ function RuntimePolicySettings({
   const accessMode = runtimeAccessModeForConfig(config);
   const accessModeOption = runtimeAccessModeOptions.find((option) => option.value === accessMode) ?? runtimeAccessModeOptions[1];
   const persistWorkspaceDependencySettings = (
-    settings: Partial<Pick<RuntimeDesktopSettings, 'pythonPackageIndexUrl' | 'workspaceDependenciesEnabled'>>,
+    settings: Partial<Pick<RuntimeDesktopSettings, 'npmRegistryUrl' | 'pythonPackageIndexUrl' | 'workspaceDependenciesEnabled'>>,
   ) => onSave({
     desktopSettings: {
       ...(config.desktopSettings ?? {}),
@@ -896,9 +896,11 @@ function RuntimePolicySettings({
       </div>
 
       <WorkspaceDependenciesSettings
-        packageIndexUrl={typeof config.desktopSettings?.pythonPackageIndexUrl === 'string' ? config.desktopSettings.pythonPackageIndexUrl : ''}
+        npmRegistryUrl={typeof config.desktopSettings?.npmRegistryUrl === 'string' ? config.desktopSettings.npmRegistryUrl : ''}
+        pythonPackageIndexUrl={typeof config.desktopSettings?.pythonPackageIndexUrl === 'string' ? config.desktopSettings.pythonPackageIndexUrl : ''}
         onEnabledPersist={(enabled) => persistWorkspaceDependencySettings({ workspaceDependenciesEnabled: enabled })}
-        onPackageIndexUrlPersist={(pythonPackageIndexUrl) => persistWorkspaceDependencySettings({ pythonPackageIndexUrl })}
+        onNpmRegistryUrlPersist={(npmRegistryUrl) => persistWorkspaceDependencySettings({ npmRegistryUrl })}
+        onPythonPackageIndexUrlPersist={(pythonPackageIndexUrl) => persistWorkspaceDependencySettings({ pythonPackageIndexUrl })}
       />
 
       <div className="chat-user-settings__section-block">

@@ -3,6 +3,7 @@ import { access, chmod, copyFile, link, mkdir, mkdtemp, readlink, realpath, rm, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { DEFAULT_NPM_REGISTRY_URL, DEFAULT_PYTHON_PACKAGE_INDEX_URL } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../store/file-config-store.js';
 import { ManagedWorkspaceDependencyManager, runtimeExecutableReadRoot } from './managed-workspace-dependency-manager.js';
@@ -62,11 +63,13 @@ describe('managed workspace dependency manager', () => {
       const configStore = new FileConfigStore(dataDir);
       await configStore.saveConfig({
         desktopSettings: {
+          npmRegistryUrl: 'https://registry.example/npm/',
           pythonPackageIndexUrl: 'https://mirror.example/simple',
           workspaceDependenciesEnabled: true,
         },
       });
       const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
+      await expect(manager.getPromptContext()).resolves.toEqual({ enabled: true });
       const status = await manager.setEnabled({ enabled: true });
 
       expect(status).toMatchObject({
@@ -84,10 +87,12 @@ describe('managed workspace dependency manager', () => {
       const installBin = path.join(dependencyRoot, 'toolchain', 'bin');
       expect(shell).toMatchObject({
         environment: {
+          COREPACK_NPM_REGISTRY: 'https://registry.example/npm/',
           PIP_INDEX_URL: 'https://mirror.example/simple',
           PIP_REQUIRE_VIRTUALENV: '1',
           UV_DEFAULT_INDEX: 'https://mirror.example/simple',
           UV_PYTHON: path.join(fakeBin, 'python3'),
+          npm_config_registry: 'https://registry.example/npm/',
         },
         readableRoots: expect.arrayContaining([dependencyRoot]),
         writableCacheRoots: [path.join(dependencyRoot, 'cache')],
@@ -182,8 +187,12 @@ describe('managed workspace dependency manager', () => {
       expect(shell.environment.PATH.split(path.delimiter)).toEqual(
         expect.arrayContaining([...new Set(String(process.env.PATH ?? '').split(path.delimiter).filter(Boolean))]),
       );
-      expect(shell.environment).not.toHaveProperty('PIP_INDEX_URL');
-      expect(shell.environment).not.toHaveProperty('UV_DEFAULT_INDEX');
+      expect(shell.environment).toMatchObject({
+        COREPACK_NPM_REGISTRY: DEFAULT_NPM_REGISTRY_URL,
+        PIP_INDEX_URL: DEFAULT_PYTHON_PACKAGE_INDEX_URL,
+        UV_DEFAULT_INDEX: DEFAULT_PYTHON_PACKAGE_INDEX_URL,
+        npm_config_registry: DEFAULT_NPM_REGISTRY_URL,
+      });
       expect(shell.commands.node?.executablePath).not.toBe(path.join(dataDir, 'workspace-dependencies', 'bin', 'node'));
       await expect(manager.getStatus()).resolves.toMatchObject({ enabled: true });
       await expect(access(path.join(dataDir, 'workspace-dependencies', 'toolchain', 'manifest.json')))

@@ -1912,7 +1912,7 @@ function stubWorkspaceDependencyManager(
   };
   return {
     diagnose: async () => status,
-    getPromptContext: async () => ({ enabled: true, packageIndexConfigured: true }),
+    getPromptContext: async () => ({ enabled: true }),
     getStatus: async () => status,
     prepareShellToolchain: async ({ environment }) => ({
       commands: {},

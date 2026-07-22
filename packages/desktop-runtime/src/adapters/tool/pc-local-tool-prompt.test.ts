@@ -34,12 +34,13 @@ describe('pcLocalToolPrompt', () => {
   it('tells the model to use runtime-managed Python directly with the configured index', () => {
     const prompt = pcLocalToolPrompt(
       [tool('run_shell_command')],
-      { workspaceDependencies: { enabled: true, packageIndexConfigured: true } },
+      { workspaceDependencies: { enabled: true } },
     );
 
     expect(prompt).toContain('manages and prepends Node.js, Python 3, pip, and uv');
     expect(prompt).toContain('Use python3 or uv directly');
     expect(prompt).toContain('do not run which, command -v, or version probes first');
+    expect(prompt).toContain('configured npm registry is already applied');
     expect(prompt).toContain('configured Python package index is already applied');
     expect(prompt).toContain('Do not run a bare pip install');
     expect(prompt).toContain('uv run --with <package>');

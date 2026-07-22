@@ -82,6 +82,7 @@ export type RuntimeMarkdownLinkOpenMode = 'in-app' | 'external';
 export type RuntimeDesktopSettings = {
   [key: string]: unknown;
   markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
+  npmRegistryUrl?: string;
   pythonPackageIndexUrl?: string;
   workspaceDependenciesEnabled?: boolean;
 };
@@ -116,8 +117,11 @@ export function normalizeImageGenerationServiceUrl(value: unknown): string | nul
   }
 }
 
-/** 默认索引返回空字符串，无效 URL 返回 null。 */
-export function normalizePythonPackageIndexUrl(value: unknown): string | null {
+export const DEFAULT_NPM_REGISTRY_URL = 'https://registry.npmmirror.com';
+export const DEFAULT_PYTHON_PACKAGE_INDEX_URL = 'https://pypi.tuna.tsinghua.edu.cn/simple';
+
+/** 空值返回空字符串，无效 URL 返回 null。 */
+function normalizePackageSourceUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   if (!normalized) return '';
@@ -129,6 +133,14 @@ export function normalizePythonPackageIndexUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+export function normalizeNpmRegistryUrl(value: unknown): string | null {
+  return normalizePackageSourceUrl(value);
+}
+
+export function normalizePythonPackageIndexUrl(value: unknown): string | null {
+  return normalizePackageSourceUrl(value);
 }
 
 export type RuntimeMemorySettings = {

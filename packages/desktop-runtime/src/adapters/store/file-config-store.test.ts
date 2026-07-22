@@ -106,19 +106,26 @@ describe('file config store', () => {
     });
   });
 
-  it('persists only valid HTTP package index URLs', async () => {
+  it('persists only valid HTTP package source URLs', async () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
 
     await expect(store.saveConfig({
-      desktopSettings: { pythonPackageIndexUrl: '  https://mirror.example/simple  ' },
+      desktopSettings: {
+        npmRegistryUrl: '  https://registry.example/npm/  ',
+        pythonPackageIndexUrl: '  https://mirror.example/simple  ',
+      },
     })).resolves.toMatchObject({
       desktopSettings: {
+        npmRegistryUrl: 'https://registry.example/npm/',
         pythonPackageIndexUrl: 'https://mirror.example/simple',
         workspaceDependenciesEnabled: true,
       },
     });
     await expect(store.saveConfig({
-      desktopSettings: { pythonPackageIndexUrl: 'file:///tmp/simple' },
+      desktopSettings: {
+        npmRegistryUrl: 'file:///tmp/registry',
+        pythonPackageIndexUrl: 'file:///tmp/simple',
+      },
     })).resolves.toMatchObject({
       desktopSettings: { workspaceDependenciesEnabled: true },
     });

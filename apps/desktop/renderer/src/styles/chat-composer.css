@@ -1114,7 +1114,7 @@
   .chat-authorization-switch__label,
   .chat-authorization-switch__arrow
 ) {
-  color: color-mix(in srgb, var(--app-primary) 88%, var(--app-text)) !important;
+  color: var(--app-warning) !important;
 }
 
 .chat-thinking-menu-root .ant-dropdown-menu,
@@ -1215,7 +1215,7 @@
 .runtime-access-mode-trigger__icon,
 .runtime-access-mode-trigger__arrow {
   flex: 0 0 auto;
-  color: var(--app-text-muted);
+  color: currentColor;
 }
 
 .runtime-access-mode-trigger__label {
@@ -1233,66 +1233,139 @@
   color: var(--app-warning) !important;
 }
 
-.runtime-access-mode-confirm__content {
-  display: grid;
-  gap: 12px;
-  color: var(--app-text-secondary);
+.runtime-access-mode-confirm .ant-modal-container {
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-modal);
 }
 
-.runtime-access-mode-confirm__content p {
+.runtime-access-mode-confirm .ant-modal-body {
+  padding: 0;
+}
+
+.runtime-access-mode-confirm__dialog {
+  padding: 22px 20px 18px;
+}
+
+.runtime-access-mode-confirm__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.runtime-access-mode-confirm__header > svg {
+  flex: 0 0 17px;
+  color: var(--app-text);
+}
+
+.runtime-access-mode-confirm__header h2 {
   margin: 0;
+  color: var(--app-text);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 26px;
+}
+
+.runtime-access-mode-confirm__intro,
+.runtime-access-mode-confirm__risk {
+  margin: 13px 0 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
   line-height: 20px;
 }
 
 .runtime-access-mode-confirm__capabilities {
   display: grid;
-  padding: 6px 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+  margin-top: 14px;
+  padding: 4px 14px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--app-text) 5%, var(--app-surface));
 }
 
-.runtime-access-mode-confirm__capabilities > span {
+.runtime-access-mode-confirm__capability {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 10px;
-  align-items: start;
-  padding: 9px 0;
+  align-items: center;
+  min-width: 0;
+  min-height: 48px;
   border-bottom: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
 }
 
-.runtime-access-mode-confirm__capabilities > span:last-child {
+.runtime-access-mode-confirm__capability:last-child {
   border-bottom: 0;
 }
 
-.runtime-access-mode-confirm__capabilities > span > svg {
-  margin-top: 2px;
-  color: var(--app-warning);
+.runtime-access-mode-confirm__capability-icon {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  place-items: center;
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-text) 7%, var(--app-surface));
 }
 
-.runtime-access-mode-confirm__capabilities > span > span {
+.runtime-access-mode-confirm__capability-icon.is-files {
+  color: var(--file-icon-seti-blue);
+  background: color-mix(in srgb, var(--file-icon-seti-blue) 14%, var(--app-surface));
+}
+
+.runtime-access-mode-confirm__capability-icon.is-files > svg {
+  fill: currentColor;
+  stroke-width: 1.6;
+}
+
+.runtime-access-mode-confirm__capability-icon.is-terminal {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 9%, var(--app-surface));
+}
+
+.runtime-access-mode-confirm__capability-icon.is-terminal > svg {
+  stroke-width: 1.9;
+}
+
+.runtime-access-mode-confirm__capability-icon.is-internet {
+  color: #0e9fdb;
+  background: color-mix(in srgb, #0e9fdb 13%, var(--app-surface));
+}
+
+.runtime-access-mode-confirm__capability-icon.is-internet > svg {
+  stroke-width: 2.2;
+}
+
+.runtime-access-mode-confirm__capability-copy {
   display: grid;
-  gap: 1px;
+  min-width: 0;
 }
 
-.runtime-access-mode-confirm__capabilities strong {
+.runtime-access-mode-confirm__capability-copy strong {
   color: var(--app-text);
   font-size: 13px;
+  font-weight: 600;
   line-height: 18px;
 }
 
-.runtime-access-mode-confirm__capabilities small {
+.runtime-access-mode-confirm__capability-copy small {
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 17px;
 }
 
 .runtime-access-mode-confirm__risk {
-  color: var(--app-warning);
+  margin-top: 14px;
 }
 
-.runtime-access-mode-confirm .ant-btn-dangerous.ant-btn-primary {
-  border-color: var(--app-warning);
-  background: var(--app-warning);
+.runtime-access-mode-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .chat-thinking-menu-root .ant-dropdown-menu-item,

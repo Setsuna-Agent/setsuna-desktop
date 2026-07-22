@@ -27,7 +27,6 @@ export type PrepareShellToolchainInput = {
 
 export type WorkspaceDependencyPromptContext = {
   enabled: boolean;
-  packageIndexConfigured: boolean;
 };
 
 /**

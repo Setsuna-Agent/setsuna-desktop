@@ -1,6 +1,6 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { defaultModelMaxOutputTokens, normalizeImageGenerationServiceUrl, normalizeModelIconConfig, normalizeProviderIconConfig, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
+import { defaultModelMaxOutputTokens, normalizeImageGenerationServiceUrl, normalizeModelIconConfig, normalizeNpmRegistryUrl, normalizeProviderIconConfig, normalizePythonPackageIndexUrl } from '@setsuna-desktop/contracts';
 import type {
   ProviderConfigInput,
   ProviderConfigState,
@@ -621,6 +621,9 @@ function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   if (settings.markdownLinkOpenMode !== 'in-app' && settings.markdownLinkOpenMode !== 'external') {
     delete settings.markdownLinkOpenMode;
   }
+  const npmRegistryUrl = normalizeNpmRegistryUrl(settings.npmRegistryUrl);
+  if (npmRegistryUrl) settings.npmRegistryUrl = npmRegistryUrl;
+  else delete settings.npmRegistryUrl;
   const pythonPackageIndexUrl = normalizePythonPackageIndexUrl(settings.pythonPackageIndexUrl);
   if (pythonPackageIndexUrl) settings.pythonPackageIndexUrl = pythonPackageIndexUrl;
   else delete settings.pythonPackageIndexUrl;

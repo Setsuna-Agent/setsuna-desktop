@@ -474,6 +474,13 @@
   border-color: var(--app-border-strong);
 }
 
+.sd-field:focus-visible,
+.sd-textarea:focus-visible {
+  outline: 0;
+  border-color: var(--app-primary);
+  box-shadow: var(--app-focus-ring);
+}
+
 .sd-field {
   height: var(--app-control-height);
   padding: 0 9px;
@@ -495,8 +502,8 @@
 .sd-select-field:focus-visible,
 .sd-select-field.is-open {
   outline: none;
-  border-color: var(--app-border-strong);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-text) 8%, transparent);
+  border-color: var(--app-primary);
+  box-shadow: var(--app-focus-ring);
 }
 
 .sd-select-field:disabled {

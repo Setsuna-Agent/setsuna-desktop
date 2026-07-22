@@ -1,6 +1,7 @@
-import { type ComponentProps } from 'react';
-import { Button, Dropdown, Modal } from 'antd';
-import { Check, ChevronDown, FolderOpen, Globe2, Hand, ShieldCheck, ShieldOff, SquareTerminal, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { useState, type ComponentProps } from 'react';
+import { Button as AntButton, Dropdown, Modal } from 'antd';
+import { Check, ChevronDown, Folder, Globe2, Hand, ShieldCheck, ShieldOff, SquareTerminal, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { Button } from './primitives.js';
 import {
   runtimeAccessModeOptions,
   type RuntimeAccessMode,
@@ -23,7 +24,7 @@ export function RuntimeAccessModeMenu({
   onChange: (mode: RuntimeAccessMode) => void;
   variant?: 'chat' | 'settings';
 }) {
-  const [modal, modalContextHolder] = Modal.useModal();
+  const [fullAccessConfirmationOpen, setFullAccessConfirmationOpen] = useState(false);
   const activeOption = runtimeAccessModeOptions.find((option) => option.value === mode) ?? runtimeAccessModeOptions[1];
   const ActiveIcon = modeIcons[activeOption.value];
   const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = runtimeAccessModeOptions.map((option) => {
@@ -52,30 +53,16 @@ export function RuntimeAccessModeMenu({
       onChange(nextMode);
       return;
     }
-    void modal.confirm({
-      className: 'runtime-access-mode-confirm',
-      title: '确定要切换到完全访问吗？',
-      icon: <TriangleAlert color="var(--app-warning)" size={20} />,
-      content: (
-        <div className="runtime-access-mode-confirm__content">
-          <p>完全访问会关闭 OS 沙箱，并在不请求批准的情况下开放以下能力：</p>
-          <div className="runtime-access-mode-confirm__capabilities">
-            <span><FolderOpen size={16} /><span><strong>任意文件</strong><small>读取、创建、修改或删除电脑上的文件</small></span></span>
-            <span><SquareTerminal size={16} /><span><strong>终端命令</strong><small>运行命令、安装软件和更改系统设置</small></span></span>
-            <span><Globe2 size={16} /><span><strong>互联网</strong><small>访问网站、发送数据并使用已启用的连接能力</small></span></span>
-          </div>
-          <p className="runtime-access-mode-confirm__risk">这可能造成敏感数据泄露、数据丢失或提示注入风险。仅在信任当前任务时启用。</p>
-        </div>
-      ),
-      okText: '启用完全访问',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      onOk: () => onChange(nextMode),
-    });
+    setFullAccessConfirmationOpen(true);
   };
+
+  const confirmFullAccess = () => {
+    setFullAccessConfirmationOpen(false);
+    onChange('full-access');
+  };
+
   return (
     <>
-      {modalContextHolder}
       <Dropdown
         rootClassName="runtime-access-mode-menu-root"
         trigger={['click']}
@@ -88,7 +75,7 @@ export function RuntimeAccessModeMenu({
           onClick: ({ key }) => requestModeChange(key as RuntimeAccessMode),
         }}
       >
-        <Button
+        <AntButton
           type={settingsVariant ? 'default' : 'text'}
           size="small"
           className={`${settingsVariant
@@ -99,8 +86,80 @@ export function RuntimeAccessModeMenu({
           <ActiveIcon className="runtime-access-mode-trigger__icon" size={13} />
           <span className="runtime-access-mode-trigger__label">{activeOption.label}</span>
           <ChevronDown className="runtime-access-mode-trigger__arrow" size={12} />
-        </Button>
+        </AntButton>
       </Dropdown>
+      <Modal
+        aria-label="确认切换到完全访问权限模式"
+        centered
+        className="runtime-access-mode-confirm"
+        closable={false}
+        destroyOnHidden
+        footer={null}
+        mask={{ closable: true }}
+        open={fullAccessConfirmationOpen}
+        rootClassName="runtime-access-mode-confirm-root"
+        width={520}
+        onCancel={() => setFullAccessConfirmationOpen(false)}
+      >
+        <div className="runtime-access-mode-confirm__dialog">
+          <header className="runtime-access-mode-confirm__header">
+            <TriangleAlert size={17} aria-hidden="true" />
+            <h2>确定要切换到完全访问权限模式吗？</h2>
+          </header>
+          <p className="runtime-access-mode-confirm__intro">
+            完全访问权限可让 Setsuna 在不征求你批准的情况下访问互联网，并编辑你电脑上的任意文件。
+          </p>
+          <div className="runtime-access-mode-confirm__capabilities">
+            <div className="runtime-access-mode-confirm__capability">
+              <span className="runtime-access-mode-confirm__capability-icon is-files" aria-hidden="true">
+                <Folder size={17} />
+              </span>
+              <span className="runtime-access-mode-confirm__capability-copy">
+                <strong>任意文件</strong>
+                <small>读取、创建、修改或删除电脑上的文件</small>
+              </span>
+            </div>
+            <div className="runtime-access-mode-confirm__capability">
+              <span className="runtime-access-mode-confirm__capability-icon is-terminal" aria-hidden="true">
+                <SquareTerminal size={15} />
+              </span>
+              <span className="runtime-access-mode-confirm__capability-copy">
+                <strong>终端命令</strong>
+                <small>运行命令、安装软件和更改系统设置</small>
+              </span>
+            </div>
+            <div className="runtime-access-mode-confirm__capability">
+              <span className="runtime-access-mode-confirm__capability-icon is-internet" aria-hidden="true">
+                <Globe2 size={17} />
+              </span>
+              <span className="runtime-access-mode-confirm__capability-copy">
+                <strong>互联网与已连接应用</strong>
+                <small>访问网站、发送数据并使用已启用的连接能力</small>
+              </span>
+            </div>
+          </div>
+          <p className="runtime-access-mode-confirm__risk">
+            这会带来数据丢失、敏感数据泄露和提示注入等风险。请仅在信任当前任务时启用。
+          </p>
+          <footer className="runtime-access-mode-confirm__actions">
+            <Button
+              autoFocus
+              className="runtime-access-mode-confirm__cancel"
+              onClick={() => setFullAccessConfirmationOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              className="runtime-access-mode-confirm__enable"
+              icon={<TriangleAlert size={14} />}
+              variant="danger"
+              onClick={confirmFullAccess}
+            >
+              开启完全访问权限
+            </Button>
+          </footer>
+        </div>
+      </Modal>
     </>
   );
 }
