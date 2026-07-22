@@ -1,3 +1,5 @@
+import { analyzeShellCommandStructure } from './shell-command-analysis.js';
+
 export type RuntimeNetworkApprovalProtocol = 'http' | 'https' | 'socks5-tcp' | 'socks5-udp' | 'tcp' | 'unknown';
 
 export type RuntimeNetworkApprovalContext = {
@@ -9,7 +11,11 @@ export type RuntimeNetworkApprovalContext = {
 
 export type ShellNetworkAssessment = {
   reason: string;
+  /** Informational target extracted from a simple command; not an enforcement boundary. */
   context?: RuntimeNetworkApprovalContext;
+  contexts: RuntimeNetworkApprovalContext[];
+  /** True means a host-scoped approval would understate the process capability. */
+  requiresCommandWideApproval: boolean;
 };
 
 const DIRECT_NETWORK_COMMANDS = new Set(['curl', 'wget', 'ssh', 'scp', 'sftp', 'ftp', 'rsync', 'telnet', 'nc', 'ncat']);
@@ -18,36 +24,61 @@ const PYTHON_PACKAGE_MANAGERS = new Set(['pip', 'pip3', 'uv']);
 const DEPLOY_CLIS = new Set(['vercel', 'netlify', 'firebase', 'wrangler']);
 
 export function assessShellNetworkAccess(command: string): ShellNetworkAssessment | null {
-  for (const words of shellCommandSegments(command.toLowerCase())) {
+  const structure = analyzeShellCommandStructure(command.toLowerCase());
+  const contexts: RuntimeNetworkApprovalContext[] = [];
+  let detected = false;
+  let hasUnknownTarget = false;
+  for (const segment of structure.segments) {
+    const words = parseShellWords(segment);
     const { executable, args } = shellExecutableInfo(words);
     if (!executable) continue;
-    const context = networkContextFromWords(executable, args);
+    const segmentContexts = networkContextsFromWords(executable, args);
+    let segmentDetected = false;
     if (DIRECT_NETWORK_COMMANDS.has(executable)) {
-      return { reason: '命令可能访问网络或远程系统。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
     if (executable === 'git' && ['clone', 'fetch', 'pull', 'push', 'ls-remote'].includes(args[0] ?? '')) {
-      return { reason: 'Git 命令可能访问远端仓库。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
     if (executable === 'git' && args[0] === 'submodule' && args[1] === 'update') {
-      return { reason: 'Git submodule 更新可能访问远端仓库。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
     if (JS_PACKAGE_MANAGERS.has(executable) && ['install', 'i', 'add', 'update', 'upgrade', 'publish', 'release'].includes(args[0] ?? '')) {
-      return { reason: '包管理命令可能访问软件源或发布服务。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
     if (PYTHON_PACKAGE_MANAGERS.has(executable) && ['install', 'sync', 'add', 'publish'].includes(args[0] ?? '')) {
-      return { reason: 'Python 包管理命令可能访问软件源或发布服务。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
     if (executable === 'cargo' && ['install', 'update', 'publish'].includes(args[0] ?? '')) {
-      return { reason: 'Cargo 命令可能访问软件源或发布服务。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
     if (executable === 'go' && (args[0] === 'get' || args[0] === 'install' || (args[0] === 'mod' && args[1] === 'download'))) {
-      return { reason: 'Go 命令可能访问模块代理或远端仓库。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
     if (DEPLOY_CLIS.has(executable) && ['deploy', 'publish', 'login'].includes(args[0] ?? '')) {
-      return { reason: '命令可能访问线上服务。', ...(context ? { context } : {}) };
+      segmentDetected = true;
     }
+    if (!segmentDetected) continue;
+    detected = true;
+    if (!segmentContexts.length) hasUnknownTarget = true;
+    contexts.push(...segmentContexts);
   }
-  return null;
+  if (!detected) return null;
+  const uniqueContexts = dedupeNetworkContexts(contexts);
+  const hasSingleStaticTarget = !hasUnknownTarget
+    && !structure.hasControlOperators
+    && !structure.hasDynamicSyntax
+    && structure.segments.length === 1
+    && uniqueContexts.length === 1;
+  // The OS sandbox grants network capability to the process, not a hostname.
+  // Even a single static URL can redirect or use proxy/connect-to options.
+  const requiresCommandWideApproval = true;
+  return {
+    reason: '命令需要整条进程级网络访问，不能安全地限制到单一主机。',
+    contexts: uniqueContexts,
+    requiresCommandWideApproval,
+    ...(hasSingleStaticTarget ? { context: uniqueContexts[0] } : {}),
+  };
 }
 
 export function networkApprovalContextFromTool(toolName: string, parsedArguments: unknown): RuntimeNetworkApprovalContext | null {
@@ -66,19 +97,21 @@ export function networkApprovalKeysForContext(context: RuntimeNetworkApprovalCon
   ];
 }
 
-function networkContextFromWords(executable: string, args: string[]): RuntimeNetworkApprovalContext | null {
+function networkContextsFromWords(executable: string, args: string[]): RuntimeNetworkApprovalContext[] {
   if (executable === 'ssh' || executable === 'scp' || executable === 'sftp' || executable === 'rsync') {
-    return sshLikeNetworkContext(args);
+    const context = sshLikeNetworkContext(args);
+    return context ? [context] : [];
   }
-  return firstUrlContext(args) ?? gitSshContext(args);
+  const urlContexts = allUrlContexts(args);
+  if (urlContexts.length) return urlContexts;
+  const gitContext = gitSshContext(args);
+  return gitContext ? [gitContext] : [];
 }
 
-function firstUrlContext(args: string[]): RuntimeNetworkApprovalContext | null {
-  for (const arg of args) {
-    const context = networkContextFromUrl(arg);
-    if (context) return context;
-  }
-  return null;
+function allUrlContexts(args: string[]): RuntimeNetworkApprovalContext[] {
+  return args
+    .map(networkContextFromUrl)
+    .filter((context): context is RuntimeNetworkApprovalContext => context !== null);
 }
 
 function networkContextFromUrl(value: string): RuntimeNetworkApprovalContext | null {
@@ -132,11 +165,14 @@ function normalizeHost(value: string): string {
   return value.trim().replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
 }
 
-function shellCommandSegments(command: string): string[][] {
-  return String(command || '')
-    .split(/[;&|]+/)
-    .map((segment) => parseShellWords(segment))
-    .filter((words) => words.length > 0);
+function dedupeNetworkContexts(contexts: RuntimeNetworkApprovalContext[]): RuntimeNetworkApprovalContext[] {
+  const seen = new Set<string>();
+  return contexts.filter((context) => {
+    const key = `${context.protocol}:${context.host.toLowerCase()}:${context.port}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function shellExecutableInfo(words: string[]): { executable: string; args: string[] } {

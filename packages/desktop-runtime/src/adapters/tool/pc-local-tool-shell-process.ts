@@ -209,6 +209,7 @@ export async function runShellCommand(args, state, options = {}) {
       failure_kind: 'network_denied',
       failure_stage: 'preflight',
       ...(networkBlock.context ? { network_approval_context: networkBlock.context } : {}),
+      ...(networkBlock.contexts?.length ? { network_approval_contexts: networkBlock.contexts } : {}),
       ...(networkBlock.policyDecision ? { network_policy_decision: networkBlock.policyDecision } : {}),
     });
   }
@@ -235,6 +236,12 @@ export async function runShellCommand(args, state, options = {}) {
   const persist = Boolean(args?.persist || args?.keep_alive);
   const persistTtlMs = persistentShellTtlMs(args, state);
   const timeout = shellCommandTimeoutMs(args, { persist, persistTtlMs });
+  if (options.signal?.aborted) {
+    return errorResult('Command was cancelled before it started.', {
+      failure_kind: 'cancelled',
+      failure_stage: 'execution',
+    });
+  }
   const session = startShellSession({
     command,
     cwd,
@@ -593,6 +600,7 @@ function startShellSession({ command, cwd, state, timeout, signal, onProgress })
   session.timeoutTimer.unref?.();
 
   signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
   child.stdout.on('data', (chunk) => appendShellOutput(session, 'stdout', chunk, root));
   child.stderr.on('data', (chunk) => appendShellOutput(session, 'stderr', chunk, root));
   child.on('error', (error) => {
@@ -746,8 +754,10 @@ function appendShellOutput(session, stream, chunk, root) {
   } else {
     session[bufferKey] = next;
   }
-  if (stream === 'stdout') session.pendingStdout += text;
-  else session.pendingStderr += text;
+  if (typeof session.onProgress === 'function') {
+    const pendingKey = stream === 'stdout' ? 'pendingStdout' : 'pendingStderr';
+    session[pendingKey] = boundedProgressText(`${session[pendingKey] || ''}${text}`);
+  }
   scheduleShellProgress(session, root);
 }
 
@@ -800,6 +810,26 @@ export function terminateShellSession(session, childSignal = 'SIGTERM') {
 }
 
 function killChildProcess(child, childSignal) {
+  if (process.platform === 'win32' && child.pid) {
+    try {
+      const args = windowsProcessTreeKillArgs(child.pid, childSignal);
+      const killer = spawn('taskkill', args, {
+        shell: false,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.on('error', () => {
+        try {
+          child.kill(childSignal);
+        } catch {
+          // 进程可能已经退出。
+        }
+      });
+      return;
+    } catch {
+      // 回退到直接终止包装进程。
+    }
+  }
   try {
     if (process.platform !== 'win32' && child.pid) {
       process.kill(-child.pid, childSignal);
@@ -815,29 +845,68 @@ function killChildProcess(child, childSignal) {
   }
 }
 
-function collectProcess(command, args, cwd, timeout, signal) {
+export function windowsProcessTreeKillArgs(pid, childSignal) {
+  const args = ['/pid', String(pid), '/t'];
+  if (childSignal === 'SIGKILL') args.push('/f');
+  return args;
+}
+
+export function collectProcess(command, args, cwd, timeout, signal, spawnProcess = spawn) {
   return new Promise((resolve) => {
     let child;
     let stdout = '';
     let stderr = '';
+    let stdoutOmittedChars = 0;
+    let stderrOmittedChars = 0;
     let settled = false;
     let timedOut = false;
+    let aborted = false;
+    let forceKillTimer = null;
+
+    // A pre-cancelled read-only command must never create a child process. The
+    // second check after listener registration below closes the remaining race.
+    if (signal?.aborted) {
+      resolve({
+        stdout,
+        stderr,
+        stdoutOmittedChars,
+        stderrOmittedChars,
+        timedOut,
+        aborted: true,
+        exitCode: null,
+        signal: null,
+        errorCode: '',
+      });
+      return;
+    }
 
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(forceKillTimer);
       signal?.removeEventListener('abort', abort);
-      resolve({ stdout, stderr, timedOut, ...result });
+      resolve({ stdout, stderr, stdoutOmittedChars, stderrOmittedChars, timedOut, aborted, ...result });
     };
-    const abort = () => child && killChildProcess(child, 'SIGTERM');
+    const terminate = () => {
+      if (!child) return;
+      killChildProcess(child, 'SIGTERM');
+      if (!forceKillTimer) {
+        forceKillTimer = setTimeout(() => killChildProcess(child, 'SIGKILL'), SHELL_GRACEFUL_KILL_MS);
+        forceKillTimer.unref?.();
+      }
+    };
+    const abort = () => {
+      aborted = true;
+      terminate();
+    };
     /* node:coverage ignore next 4 */
     const timer = setTimeout(() => {
       timedOut = true;
-      if (child) killChildProcess(child, 'SIGTERM');
+      terminate();
     }, timeout);
 
-    child = spawn(command, args, {
+    child = spawnProcess(command, args, {
       cwd,
       shell: false,
       detached: process.platform !== 'win32',
@@ -847,8 +916,17 @@ function collectProcess(command, args, cwd, timeout, signal) {
     });
 
     signal?.addEventListener('abort', abort, { once: true });
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    if (signal?.aborted) abort();
+    child.stdout.on('data', (chunk) => {
+      const appended = appendBoundedProcessText(stdout, stdoutOmittedChars, chunk.toString());
+      stdout = appended.text;
+      stdoutOmittedChars = appended.omittedChars;
+    });
+    child.stderr.on('data', (chunk) => {
+      const appended = appendBoundedProcessText(stderr, stderrOmittedChars, chunk.toString());
+      stderr = appended.text;
+      stderrOmittedChars = appended.omittedChars;
+    });
     child.on('error', (error) => {
       stderr += `${stderr ? '\n' : ''}${error.message || String(error)}`;
       finish({ exitCode: null, signal: null, errorCode: error.code || '' });
@@ -860,7 +938,13 @@ function collectProcess(command, args, cwd, timeout, signal) {
 }
 
 function gitProcessResult(result, { title, empty, successDisplay, failureDisplay }) {
-  const output = result.stdout || result.stderr || empty;
+  const output = formattedCollectedProcessOutput(result, empty);
+  if (result.aborted) {
+    return errorResult(`${title} cancelled.\n${output}`, {
+      failure_kind: 'cancelled',
+      failure_stage: 'execution',
+    });
+  }
   if (result.exitCode === 0 && !result.timedOut) {
     return okResult(truncateText(`${title}:\n${output}`, MAX_TEXT_BYTES), successDisplay);
   }
@@ -874,6 +958,33 @@ function gitProcessResult(result, { title, empty, successDisplay, failureDisplay
     content: truncateText(`${title} failed (${reason}):\n${output}`, MAX_TEXT_BYTES),
     display: failureDisplay,
   };
+}
+
+function boundedProgressText(value) {
+  if (value.length <= MAX_SHELL_PROGRESS_CHARS) return value;
+  return value.slice(value.length - MAX_SHELL_PROGRESS_CHARS);
+}
+
+export function appendBoundedProcessText(current, omittedChars, addition) {
+  const remaining = Math.max(0, MAX_SHELL_BUFFER_CHARS - current.length);
+  return {
+    text: remaining ? `${current}${addition.slice(0, remaining)}` : current,
+    omittedChars: omittedChars + Math.max(0, addition.length - remaining),
+  };
+}
+
+function formattedCollectedProcessOutput(result, empty) {
+  const stdout = String(result.stdout || '');
+  const stderr = String(result.stderr || '');
+  const stdoutMarker = result.stdoutOmittedChars
+    ? `\n[stdout truncated; omitted ${result.stdoutOmittedChars} later chars]`
+    : '';
+  const stderrMarker = result.stderrOmittedChars
+    ? `\n[stderr truncated; omitted ${result.stderrOmittedChars} later chars]`
+    : '';
+  if (stdout) return `${stdout}${stdoutMarker}`;
+  if (stderr) return `${stderr}${stderrMarker}`;
+  return empty;
 }
 
 function shellSpawnSpec(command, state) {

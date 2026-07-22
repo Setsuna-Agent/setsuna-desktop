@@ -17,6 +17,8 @@ export type ToolExecutionContext = {
   sandbox?: ToolSandboxAttempt;
   signal?: AbortSignal;
   onToolOutputDelta?(delta: ToolOutputDelta): void;
+  /** Opaque snapshot binding produced by previewToolCall and verified by the host before mutation. */
+  expectedPreviewIntegrityToken?: string;
 };
 
 /**
@@ -73,6 +75,7 @@ export class ToolExecutionError extends Error {
 export type ToolExecutionPreview = {
   argumentsPreview?: string;
   resultPreview?: string;
+  integrityToken?: string;
 };
 
 export type ToolExternalContext = {

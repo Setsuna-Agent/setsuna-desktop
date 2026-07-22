@@ -120,7 +120,7 @@ function isAbsoluteLikeToolPath(value: string): boolean {
 function firstProtectedWorkspaceMetadataPath(paths: string[]): string {
   for (const filePath of paths) {
     const segments = filePath.split('/').filter(Boolean);
-    if (segments.some((segment) => PROTECTED_WORKSPACE_METADATA_DIRS.has(segment))) return filePath;
+    if (segments.some((segment) => PROTECTED_WORKSPACE_METADATA_DIRS.has(segment.toLowerCase()))) return filePath;
   }
   return '';
 }

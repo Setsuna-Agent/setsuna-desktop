@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { protectedWorkspaceMetadataPathForPath } from '../../security/file-system-policy.js';
 import { assessShellNetworkAccess } from '../../security/network-approval-policy.js';
+import { reusableShellCommandWords } from '../../security/shell-command-analysis.js';
 import {
   SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS,
   SHELL_READ_COMMANDS_WITH_PATH_ARGS,
@@ -17,7 +18,9 @@ import {
 } from './pc-local-tool-utils.js';
 import {
   deniedRootsForState,
+  deniedGlobRegExpSourcesForState,
   deniedSandboxRuleForPath,
+  readableRootsForState,
   realPathIfExists,
   normalizePermissionProfile,
   isPathInsideRoot,
@@ -105,11 +108,14 @@ export function shellPolicyBlockReason(command, state) {
 }
 
 export function shellPolicyDecision(command, state) {
-  const normalized = normalizeShellCommandForRisk(command);
-  const words = parseShellWords(normalized);
+  const rawCommand = String(command || '');
+  // Reusable authorization must inspect the original shell program. Display
+  // normalization intentionally collapses newlines, which would otherwise turn
+  // a command separator into an apparent argument boundary.
+  const reusableWords = reusableShellCommandWords(rawCommand);
   const rules = Array.isArray(state?.shellPolicyRules) ? state.shellPolicyRules : [];
   for (const rule of rules) {
-    if (!shellPolicyRuleMatches(rule, normalized, words)) continue;
+    if (!shellPolicyRuleMatches(rule, rawCommand, reusableWords)) continue;
     const action = rule.action || 'ask';
     return {
       action,
@@ -176,7 +182,10 @@ function normalizeShellPolicyRule(rawRule, sourcePath) {
   const action = normalizeShellPolicyAction(rawRule.action || rawRule.effect || rawRule.decision);
   if (!action) return null;
   const prefixWords = normalizeShellPolicyPrefix(rawRule.prefix ?? rawRule.prefix_rule);
-  const command = normalizeShellCommandForRisk(rawRule.command || rawRule.exact || '');
+  // Exact rules deliberately preserve internal whitespace and shell control
+  // characters. Risk-display normalization must never change the program that
+  // a persisted authorization represents.
+  const command = String(rawRule.command ?? rawRule.exact ?? '').trim();
   const pattern = String(rawRule.pattern || rawRule.match || '').trim();
   if (!prefixWords.length && !command && !pattern) return null;
   const label = command || (prefixWords.length ? prefixWords.join(' ') : pattern);
@@ -202,62 +211,18 @@ function normalizeShellPolicyAction(value) {
 function normalizeShellPolicyPrefix(value) {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
   const text = String(value || '').trim();
-  return text ? parseShellWords(text) : [];
+  return text ? reusableShellCommandWords(text) : [];
 }
 
-function shellPolicyRuleMatches(rule, command, words) {
-  if (rule.command && command === rule.command) return true;
+function shellPolicyRuleMatches(rule, rawCommand, reusableWords) {
+  if (rule.command && rawCommand === rule.command) return true;
   if (rule.prefixWords?.length) {
-    if (words.length < rule.prefixWords.length) return false;
-    return rule.prefixWords.every((word, index) => words[index] === word);
+    if (!reusableWords.length || reusableWords.length < rule.prefixWords.length) return false;
+    return rule.prefixWords.every((word, index) => reusableWords[index] === word);
   }
   if (!rule.pattern) return false;
   const source = rule.pattern.split('*').map(escapeRegExp).join('.*');
-  return new RegExp(`^${source}$`).test(command);
-}
-
-function parseShellWords(command) {
-  const words = [];
-  let current = '';
-  let quote = '';
-  let escaped = false;
-  for (const char of String(command || '')) {
-    if (escaped) {
-      current += char;
-      escaped = false;
-      continue;
-    }
-    if (char === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (quote) {
-      if (char === quote) quote = '';
-      else current += char;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (/\s/.test(char)) {
-      if (current) {
-        words.push(current);
-        current = '';
-      }
-      continue;
-    }
-    if (';&|<>'.includes(char)) {
-      if (current) {
-        words.push(current);
-        current = '';
-      }
-      break;
-    }
-    current += char;
-  }
-  if (current) words.push(current);
-  return words;
+  return new RegExp(`^${source}$`).test(rawCommand);
 }
 
 export function _usesShellApplyPatch(text) {
@@ -285,7 +250,7 @@ export function shellPermissionBlockReason(command, state) {
     if (deniedPath) {
       return `当前权限配置不能通过 shell 修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}。`;
     }
-    if (state?.sandboxWorkspaceWrite?.networkAccess !== true && assessShellNetworkAccess(normalized)) {
+    if (state?.sandboxWorkspaceWrite?.networkAccess !== true && assessShellNetworkAccess(command)) {
       return '';
     }
     if (state?.sandboxWorkspaceWrite?.writableRoots?.length) {
@@ -315,16 +280,23 @@ export function shellNetworkBlockReason(command, state) {
   const profile = normalizePermissionProfile(state?.permissionProfile);
   if (profile === 'danger-full-access') return null;
   if (state?.sandboxWorkspaceWrite?.networkAccess === true) return null;
-  const assessment = assessShellNetworkAccess(normalizeShellCommandForRisk(command));
+  // Network target extraction is structural and must retain raw separators.
+  const assessment = assessShellNetworkAccess(String(command || ''));
   if (!assessment) return null;
-  const policy = networkPolicyDecision(assessment.context, state);
-  if (policy === 'allow') return null;
+  const deniedContext = assessment.contexts.find((context) => networkPolicyDecision(context, state) === 'deny');
+  if (deniedContext) {
+    return {
+      message: `命令访问的网络目标被持久 network policy 拒绝：${deniedContext.target}`,
+      context: deniedContext,
+      contexts: assessment.contexts,
+      policyDecision: 'deny',
+    };
+  }
   return {
-    message: policy === 'deny'
-      ? `命令访问的网络目标被持久 network policy 拒绝：${assessment.context?.target ?? assessment.reason}`
-      : `当前 sandbox_workspace_write.network_access 未开启，不能执行可能访问网络的命令：${assessment.reason}`,
+    message: `当前 sandbox_workspace_write.network_access 未开启，不能执行可能访问网络的命令：${assessment.reason}`,
     context: assessment.context,
-    policyDecision: policy,
+    contexts: assessment.contexts,
+    policyDecision: '',
   };
 }
 
@@ -630,7 +602,13 @@ function isShellNonPathToken(value) {
 
 function firstProtectedWorkspaceMetadataShellPath(command, state) {
   const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
-  const metadataMatches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\.git|\.agents|\.codex)(?:\/[^\s"'`$<>|;&]*)?)/g);
+  for (const raw of shellWritePathCandidates(command)) {
+    const candidate = resolvePolicyPath(shellCandidateToPath(raw), workspaceRoot);
+    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, state?.permissionProfile)
+      || protectedWorkspaceMetadataPathForPath(realPathIfExists(candidate), state?.permissionProfile);
+    if (protectedPath) return raw;
+  }
+  const metadataMatches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\.git|\.agents|\.codex)(?:\/[^\s"'`$<>|;&]*)?)/gi);
   for (const match of metadataMatches) {
     const raw = match[1];
     const protectedPath = protectedWorkspaceMetadataPathForPath(resolvePolicyPath(raw, workspaceRoot), state?.permissionProfile);
@@ -644,7 +622,8 @@ function firstProtectedWorkspaceMetadataShellPath(command, state) {
         : raw.startsWith('/')
           ? raw
           : resolvePolicyPath(raw, workspaceRoot);
-    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, state?.permissionProfile);
+    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, state?.permissionProfile)
+      || protectedWorkspaceMetadataPathForPath(realPathIfExists(candidate), state?.permissionProfile);
     if (protectedPath) return raw;
   }
   return '';
@@ -678,13 +657,20 @@ export function shellSandboxProfile(state, capability = shellSandboxCapability()
     '(version 1)',
     '(allow default)',
   ];
+  const readableRoots = shellSeatbeltReadableRoots(state);
+  lines.push(seatbeltDenyOutsideRoots('file-read*', readableRoots, MACOS_SEATBELT_EXACT_READ_PATHS));
   if (state?.sandboxWorkspaceWrite?.networkAccess !== true) lines.push('(deny network*)');
   if (profile === 'read-only') {
     const writableRoots = [...new Set(shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false }).map(realPathIfExists))];
     lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
     for (const root of deniedRootsForState(state)) {
+      lines.push(`(deny file-read* (literal ${seatbeltString(root)}))`);
+      lines.push(`(deny file-read* (subpath ${seatbeltString(root)}))`);
+      lines.push(`(deny file-write* (literal ${seatbeltString(root)}))`);
       lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
     }
+    lines.push(...seatbeltDeniedGlobRules(state));
+    lines.push(...seatbeltProtectedMetadataRules(state));
     return lines.join('\n');
   }
   if (profile !== 'workspace-write') return '';
@@ -694,9 +680,116 @@ export function shellSandboxProfile(state, capability = shellSandboxCapability()
   // 可写根目录之外时才拒绝写入。
   lines.push(seatbeltDenyWritesOutsideRoots(writableRoots));
   for (const root of deniedRootsForState(state)) {
+    lines.push(`(deny file-read* (literal ${seatbeltString(root)}))`);
+    lines.push(`(deny file-read* (subpath ${seatbeltString(root)}))`);
+    lines.push(`(deny file-write* (literal ${seatbeltString(root)}))`);
     lines.push(`(deny file-write* (subpath ${seatbeltString(root)}))`);
   }
+  lines.push(...seatbeltDeniedGlobRules(state));
+  lines.push(...seatbeltProtectedMetadataRules(state));
   return lines.join('\n');
+}
+
+const MACOS_SEATBELT_SYSTEM_READ_ROOTS = [
+  '/System',
+  '/usr',
+  '/bin',
+  '/sbin',
+  '/dev',
+  '/Library/Apple',
+  // Keep OS bootstrap/network data narrowly scoped; granting all of /private/etc
+  // would reintroduce an unrestricted local-config read channel.
+  '/private/etc/ssl',
+  '/private/etc/hosts',
+  '/private/etc/resolv.conf',
+  '/private/etc/services',
+  '/private/etc/protocols',
+  '/private/var/select/sh',
+  '/private/var/db/timezone',
+];
+
+const MACOS_SEATBELT_EXACT_READ_PATHS = [
+  '/private/etc/hosts',
+  '/private/etc/resolv.conf',
+  '/private/etc/services',
+  '/private/etc/protocols',
+  '/private/var/select/sh',
+];
+
+function shellSeatbeltReadableRoots(state) {
+  const roots = [
+    ...readableRootsForState(state),
+    ...shellWorkspaceWriteRoots(state),
+    ...MACOS_SEATBELT_SYSTEM_READ_ROOTS,
+  ];
+  const configuredPath = String(state?.shellEnvironment?.PATH || process.env.PATH || '');
+  for (const entry of configuredPath.split(path.delimiter)) {
+    const resolved = String(entry || '').trim();
+    if (!resolved) continue;
+    roots.push(resolved);
+    const toolRoot = shellToolInstallationRoot(resolved);
+    if (toolRoot) roots.push(toolRoot);
+  }
+  return [...new Set(roots.map(realPathIfExists).filter((root) => Boolean(root) && path.resolve(root) !== path.parse(path.resolve(root)).root))];
+}
+
+function shellToolInstallationRoot(pathEntry) {
+  const normalized = String(pathEntry || '').replace(/\\/g, '/').replace(/\/+$/u, '');
+  if (/^\/opt\/homebrew\/(?:bin|sbin)$/u.test(normalized)) return '/opt/homebrew';
+  if (normalized === '/usr/local/bin') return '/usr/local';
+  if (/\/(?:installation|current)\/bin$/u.test(normalized)) return path.dirname(pathEntry);
+  return '';
+}
+
+function seatbeltDeniedGlobRules(state) {
+  return deniedGlobRegExpSourcesForState(state).flatMap((source) => [
+    // Seatbelt's #"..." regex form is raw. Feeding it JSON-escaped text would
+    // turn `\.` into two backslashes and silently stop matching paths such as
+    // `.env`. A normal Scheme string decodes the JSON escape exactly once.
+    `(deny file-read* (regex ${seatbeltString(source)}))`,
+    `(deny file-write* (regex ${seatbeltString(source)}))`,
+  ]);
+}
+
+function seatbeltProtectedMetadataRules(state) {
+  if (normalizePermissionProfile(state?.permissionProfile) === 'danger-full-access') return [];
+  const workspaceRoot = realPathIfExists(state?.root || process.cwd());
+  return ['.git', '.agents', '.codex'].flatMap((name) => {
+    const protectedRoot = realPathIfExists(path.join(workspaceRoot, name));
+    return [
+      `(deny file-write* (literal ${seatbeltString(protectedRoot)}))`,
+      `(deny file-write* (subpath ${seatbeltString(protectedRoot)}))`,
+    ];
+  });
+}
+
+function seatbeltDenyOutsideRoots(operation, roots, exactPaths = []) {
+  const normalizedRoots = roots.filter(Boolean).map((root) => path.resolve(root));
+  const normalizedExactPaths = exactPaths.filter(Boolean).map((filePath) => path.resolve(filePath));
+  const filters = normalizedRoots.map((root) => `(require-not (subpath ${seatbeltString(root)}))`);
+  // Seatbelt's subpath filter excludes the directory itself. Shell startup and
+  // getcwd need metadata reads on each parent, so allow only those exact
+  // directory nodes without exposing sibling contents.
+  for (const traversalPath of seatbeltTraversalPaths([...normalizedRoots, ...normalizedExactPaths])) {
+    filters.push(`(require-not (literal ${seatbeltString(traversalPath)}))`);
+  }
+  if (!filters.length) return `(deny ${operation})`;
+  if (filters.length === 1) return `(deny ${operation} ${filters[0]})`;
+  return `(deny ${operation} (require-all ${filters.join(' ')}))`;
+}
+
+function seatbeltTraversalPaths(roots) {
+  const paths = new Set(['/']);
+  for (const root of roots) {
+    let current = root;
+    while (current) {
+      paths.add(current);
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  return [...paths];
 }
 
 function seatbeltDenyWritesOutsideRoots(roots) {

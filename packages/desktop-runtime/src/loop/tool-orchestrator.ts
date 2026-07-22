@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AnswerRuntimeApprovalInput, RuntimeApprovalAvailableDecision, RuntimeApprovalDecision, RuntimeHookRun, RuntimePermissionGrantResponse, RuntimeApprovalRequest, RuntimeConfigState, RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment, RuntimePluginReference, RuntimeSandboxWorkspaceWrite, RuntimeToolCall } from '@setsuna-desktop/contracts';
@@ -9,6 +10,8 @@ import { ToolExecutionError, type RuntimeToolExecutionContext, type ToolExecutio
 import type { RuntimeToolHookRunner } from '../hooks/runtime-hooks.js';
 import { assessFileMutationPolicy, FILE_MUTATION_TOOL_NAMES, protectedWorkspaceMetadataPathForPath } from '../security/file-system-policy.js';
 import { networkApprovalContextFromTool, networkApprovalKeysForContext, type RuntimeNetworkApprovalContext } from '../security/network-approval-policy.js';
+import { reusableShellCommandWords } from '../security/shell-command-analysis.js';
+import { abortReason, isAbortError, throwIfAborted } from './runtime-turn-errors.js';
 
 export { FILE_MUTATION_TOOL_NAMES };
 
@@ -141,6 +144,7 @@ export type ToolOrchestratorOptions = {
 export type ToolOrchestratorRunOptions = {
   checkApproval?: boolean;
   plugin?: RuntimePluginReference;
+  postProcessResult?(result: ToolExecutionResult): Promise<ToolExecutionResult>;
   waitsForRuntimeCancellation?: boolean;
 };
 
@@ -182,6 +186,7 @@ export class ToolOrchestrator {
     let content = '';
     let processed = false;
     let startResultPreview: string | undefined;
+    let expectedPreviewIntegrityToken: string | undefined;
     let startedAtMs: number | undefined;
     const outputDeltaPublishes: Promise<void>[] = [];
     let acceptingOutputDeltas = true;
@@ -213,6 +218,7 @@ export class ToolOrchestrator {
         ? null
         : await this.options.toolHost.previewToolCall?.(runToolCall.name, runArguments, stepContext).catch(() => null);
       startResultPreview = startPreview?.resultPreview;
+      expectedPreviewIntegrityToken = startPreview?.integrityToken;
       startedAtMs = this.options.clock.now().getTime();
       await this.options.events.publishToolStarted(runToolCall, runArguments, startResultPreview, runOptions.plugin);
 
@@ -249,6 +255,7 @@ export class ToolOrchestrator {
             : {}),
         },
         toolCallId: runToolCall.id,
+        expectedPreviewIntegrityToken,
         onToolOutputDelta: (delta) => {
           if (!acceptingOutputDeltas) return;
           const publish = this.options.events.publishToolOutputDelta(runToolCall, delta).catch(() => undefined);
@@ -259,33 +266,18 @@ export class ToolOrchestrator {
       const result = await toolRunWithCancellationProfile(toolRun, stepContext.signal, runOptions.waitsForRuntimeCancellation !== false);
       acceptingOutputDeltas = false;
       processed = true;
-      throwIfAborted(stepContext.signal);
-      content = result.content;
-      const postHookOutcome = await this.options.hookRunner?.runPostToolUse({
+      return await this.completeSuccessfulToolRun({
         approvalPolicy,
         context: stepContext,
         environment,
-        events: this.hookEvents(),
+        outputDeltaPublishes,
         parsedArguments: runArguments,
+        preHookAdditionalContexts,
         result,
+        runOptions,
+        startedAtMs,
         toolCall: runToolCall,
       });
-      const modelVisibleHookFeedback = postHookOutcome?.feedbackMessage
-        ?? (postHookOutcome?.shouldBlock ? 'PostToolUse hook blocked the tool result.' : undefined);
-      if (modelVisibleHookFeedback) {
-        content = modelVisibleHookFeedback;
-      }
-      const hookAdditionalContexts = [...preHookAdditionalContexts, ...(postHookOutcome?.additionalContexts ?? [])];
-      if (hookAdditionalContexts.length) {
-        content = appendHookAdditionalContexts(content, hookAdditionalContexts);
-      }
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(runToolCall, runArguments, 'success', result.preview ?? content, {
-        data: result.data,
-        resultPreview: result.preview,
-        startedAtMs,
-      });
-      return { content, processed, result, status: 'success' };
     } catch (error) {
       acceptingOutputDeltas = false;
       if (isAbortError(error)) throw error;
@@ -300,6 +292,9 @@ export class ToolOrchestrator {
           startedAtMs,
           toolCall: runToolCall,
           toolError: error,
+          expectedPreviewIntegrityToken,
+          preHookAdditionalContexts,
+          runOptions,
         });
         if (retry) return retry;
       }
@@ -314,6 +309,9 @@ export class ToolOrchestrator {
           startedAtMs,
           toolCall: runToolCall,
           toolError: error,
+          expectedPreviewIntegrityToken,
+          preHookAdditionalContexts,
+          runOptions,
         });
         if (retry) return retry;
       }
@@ -471,6 +469,62 @@ export class ToolOrchestrator {
     };
   }
 
+  /** All fallible success-side work must finish before the single terminal event is published. */
+  private async completeSuccessfulToolRun({
+    approvalPolicy,
+    context,
+    environment,
+    outputDeltaPublishes,
+    parsedArguments,
+    preHookAdditionalContexts,
+    result: rawResult,
+    runOptions,
+    startedAtMs,
+    toolCall,
+  }: {
+    approvalPolicy: RuntimeConfigState['approvalPolicy'];
+    context: RuntimeToolExecutionContext;
+    environment: ToolExecutionEnvironment;
+    outputDeltaPublishes: Promise<void>[];
+    parsedArguments: unknown;
+    preHookAdditionalContexts: string[];
+    result: ToolExecutionResult;
+    runOptions: ToolOrchestratorRunOptions;
+    startedAtMs?: number;
+    toolCall: RuntimeToolCall;
+  }): Promise<ToolOrchestratorRunResult> {
+    throwIfAborted(context.signal);
+    const result = runOptions.postProcessResult
+      ? await runOptions.postProcessResult(rawResult)
+      : rawResult;
+    throwIfAborted(context.signal);
+
+    let content = result.content;
+    const postHookOutcome = await this.options.hookRunner?.runPostToolUse({
+      approvalPolicy,
+      context,
+      environment,
+      events: this.hookEvents(),
+      parsedArguments,
+      result,
+      toolCall,
+    });
+    const modelVisibleHookFeedback = postHookOutcome?.feedbackMessage
+      ?? (postHookOutcome?.shouldBlock ? 'PostToolUse hook blocked the tool result.' : undefined);
+    if (modelVisibleHookFeedback) content = modelVisibleHookFeedback;
+    const hookAdditionalContexts = [...preHookAdditionalContexts, ...(postHookOutcome?.additionalContexts ?? [])];
+    if (hookAdditionalContexts.length) {
+      content = appendHookAdditionalContexts(content, hookAdditionalContexts);
+    }
+    await Promise.all(outputDeltaPublishes);
+    await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'success', result.preview ?? content, {
+      data: result.data,
+      resultPreview: result.preview,
+      startedAtMs,
+    });
+    return { content, processed: true, result, status: 'success' };
+  }
+
   private async retryAfterNetworkDenied({
     approvalPolicy,
     context,
@@ -481,6 +535,9 @@ export class ToolOrchestrator {
     startedAtMs,
     toolCall,
     toolError,
+    expectedPreviewIntegrityToken,
+    preHookAdditionalContexts,
+    runOptions,
   }: {
     approvalPolicy: RuntimeConfigState['approvalPolicy'];
     context: RuntimeToolExecutionContext;
@@ -491,8 +548,12 @@ export class ToolOrchestrator {
     startedAtMs?: number;
     toolCall: RuntimeToolCall;
     toolError: ToolExecutionError;
+    expectedPreviewIntegrityToken?: string;
+    preHookAdditionalContexts: string[];
+    runOptions: ToolOrchestratorRunOptions;
   }): Promise<ToolOrchestratorRunResult | null> {
     const networkApprovalContext = networkApprovalContextFromToolError(toolError) ?? networkApprovalContextFromTool(toolCall.name, parsedArguments);
+    const commandWideNetworkApproval = isShellCommandToolName(toolCall.name);
     if (networkPolicyDeniedError(toolError)) {
       const content = `Tool ${toolCall.name} was blocked by persistent network policy: ${toolError.message}`;
       await Promise.all(outputDeltaPublishes);
@@ -502,10 +563,21 @@ export class ToolOrchestrator {
       });
       return { content, processed: true, status: 'error' };
     }
-    const retryReason = networkApprovalContext
+    const retryReason = commandWideNetworkApproval
+      ? `Network access applies to the entire command and grants process-wide capability. Review and approve this exact command before retrying.`
+      : networkApprovalContext
       ? `Network access to "${networkApprovalContext.target}" is blocked by policy. Approve retry with network access.`
       : `Network access is blocked for ${toolCall.name}: ${toolError.message}. Approve retry with network access.`;
-    const approvalAnswer = await this.approveNetworkAccessRetry(toolCall, parsedArguments, context, approvalPolicy, retryReason, environment, networkApprovalContext);
+    const approvalAnswer = await this.approveNetworkAccessRetry(
+      toolCall,
+      parsedArguments,
+      context,
+      approvalPolicy,
+      retryReason,
+      environment,
+      networkApprovalContext,
+      commandWideNetworkApproval,
+    );
     if (approvalAnswer.decision === 'reject') {
       const content = `Tool ${toolCall.name} network retry was rejected.`;
       await Promise.all(outputDeltaPublishes);
@@ -526,6 +598,7 @@ export class ToolOrchestrator {
       return { content, processed: true, status: 'error' };
     }
 
+    let acceptingOutputDeltas = true;
     try {
       throwIfAborted(context.signal);
       const retrySandbox = requestedSandboxBypass(toolCall.name, parsedArguments)
@@ -536,22 +609,30 @@ export class ToolOrchestrator {
         sandboxWorkspaceWrite: this.sandboxWorkspaceWriteForRun(context, additionalSandboxPermissionsForTool(toolCall, parsedArguments, context, environment)?.sandboxWorkspaceWrite),
         sandbox: retrySandbox,
         toolCallId: toolCall.id,
+        expectedPreviewIntegrityToken,
         onToolOutputDelta: (delta) => {
+          if (!acceptingOutputDeltas) return;
           const publish = this.options.events.publishToolOutputDelta(toolCall, delta).catch(() => undefined);
           outputDeltaPublishes.push(publish);
         },
       };
-      const result = await this.options.toolHost.runTool(toolCall.name, parsedArguments, retryContext);
-      throwIfAborted(context.signal);
-      const content = result.content;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'success', result.preview ?? content, {
-        data: result.data,
-        resultPreview: result.preview,
+      const toolRun = this.options.toolHost.runTool(toolCall.name, parsedArguments, retryContext);
+      const result = await toolRunWithCancellationProfile(toolRun, context.signal, runOptions.waitsForRuntimeCancellation !== false);
+      acceptingOutputDeltas = false;
+      return await this.completeSuccessfulToolRun({
+        approvalPolicy,
+        context,
+        environment,
+        outputDeltaPublishes,
+        parsedArguments,
+        preHookAdditionalContexts,
+        result,
+        runOptions,
         startedAtMs,
+        toolCall,
       });
-      return { content, processed: true, result, status: 'success' };
     } catch (retryError) {
+      acceptingOutputDeltas = false;
       if (isAbortError(retryError)) throw retryError;
       const content = `Tool ${toolCall.name} failed after network retry: ${retryError instanceof Error ? retryError.message : String(retryError)}`;
       await Promise.all(outputDeltaPublishes);
@@ -573,6 +654,9 @@ export class ToolOrchestrator {
     startedAtMs,
     toolCall,
     toolError,
+    expectedPreviewIntegrityToken,
+    preHookAdditionalContexts,
+    runOptions,
   }: {
     approvalPolicy: RuntimeConfigState['approvalPolicy'];
     context: RuntimeToolExecutionContext;
@@ -583,6 +667,9 @@ export class ToolOrchestrator {
     startedAtMs?: number;
     toolCall: RuntimeToolCall;
     toolError: ToolExecutionError;
+    expectedPreviewIntegrityToken?: string;
+    preHookAdditionalContexts: string[];
+    runOptions: ToolOrchestratorRunOptions;
   }): Promise<ToolOrchestratorRunResult | null> {
     const retryReason = `Sandbox denied ${toolCall.name}: ${toolError.message}. Approve retry without the OS sandbox.`;
     const decision = await this.approveSandboxBypassRetry(toolCall, parsedArguments, context, approvalPolicy, retryReason, environment);
@@ -596,6 +683,7 @@ export class ToolOrchestrator {
       return { content, processed: false, status: 'rejected' };
     }
 
+    let acceptingOutputDeltas = true;
     try {
       throwIfAborted(context.signal);
       const retryContext: RuntimeToolExecutionContext = {
@@ -603,22 +691,30 @@ export class ToolOrchestrator {
         sandboxWorkspaceWrite: this.sandboxWorkspaceWriteForRun(context, additionalSandboxPermissionsForTool(toolCall, parsedArguments, context, environment)?.sandboxWorkspaceWrite),
         sandbox: { mode: 'bypass', retryReason },
         toolCallId: toolCall.id,
+        expectedPreviewIntegrityToken,
         onToolOutputDelta: (delta) => {
+          if (!acceptingOutputDeltas) return;
           const publish = this.options.events.publishToolOutputDelta(toolCall, delta).catch(() => undefined);
           outputDeltaPublishes.push(publish);
         },
       };
-      const result = await this.options.toolHost.runTool(toolCall.name, parsedArguments, retryContext);
-      throwIfAborted(context.signal);
-      const content = result.content;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'success', result.preview ?? content, {
-        data: result.data,
-        resultPreview: result.preview,
+      const toolRun = this.options.toolHost.runTool(toolCall.name, parsedArguments, retryContext);
+      const result = await toolRunWithCancellationProfile(toolRun, context.signal, runOptions.waitsForRuntimeCancellation !== false);
+      acceptingOutputDeltas = false;
+      return await this.completeSuccessfulToolRun({
+        approvalPolicy,
+        context,
+        environment,
+        outputDeltaPublishes,
+        parsedArguments,
+        preHookAdditionalContexts,
+        result,
+        runOptions,
         startedAtMs,
+        toolCall,
       });
-      return { content, processed: true, result, status: 'success' };
     } catch (retryError) {
+      acceptingOutputDeltas = false;
       if (isAbortError(retryError)) throw retryError;
       const content = `Tool ${toolCall.name} failed after sandbox retry: ${retryError instanceof Error ? retryError.message : String(retryError)}`;
       await Promise.all(outputDeltaPublishes);
@@ -638,6 +734,7 @@ export class ToolOrchestrator {
     reason: string,
     environment: ToolExecutionEnvironment,
     networkApprovalContext?: RuntimeNetworkApprovalContext | null,
+    commandWideNetworkApproval = false,
   ): Promise<NetworkRetryApprovalAnswer> {
     if (approvalPolicy === 'full') return { decision: 'approve' };
     const approvalKeys = networkRetryApprovalKeys(toolCall, parsedArguments, context, networkApprovalContext);
@@ -650,12 +747,12 @@ export class ToolOrchestrator {
       toolName: toolCall.name,
       environmentId: environment.id,
       reason,
-      argumentsPreview: networkApprovalContext
+      argumentsPreview: networkApprovalContext && !commandWideNetworkApproval
         ? previewArguments({ command: ['network-access', networkApprovalContext.target], network_approval_context: networkApprovalContext })
         : previewArguments(parsedArguments),
-      availableDecisions: networkApprovalAvailableDecisions(networkApprovalContext),
+      availableDecisions: networkApprovalAvailableDecisions(networkApprovalContext, commandWideNetworkApproval),
       ...(networkApprovalContext ? { networkApprovalContext } : {}),
-      proposedNetworkPolicyAmendments: proposedNetworkPolicyAmendments(networkApprovalContext),
+      proposedNetworkPolicyAmendments: proposedNetworkPolicyAmendments(networkApprovalContext, commandWideNetworkApproval),
     });
     await this.options.events.publishApprovalRequested(approval);
 
@@ -675,7 +772,7 @@ export class ToolOrchestrator {
 
     await this.options.events.publishApprovalResolved(approval.id, answer.decision, answer.message);
     throwIfApprovalCancelled(answer.decision);
-    await this.persistNetworkPolicyAmendmentDecision(answer, networkApprovalContext);
+    await this.persistNetworkPolicyAmendmentDecision(answer, networkApprovalContext, commandWideNetworkApproval);
     if (decisionGrantsSessionReuse(answer.decision) && answer.networkPolicyAmendment?.action !== 'deny') {
       this.options.approvalStore?.approveForSession(approvalKeys);
     }
@@ -846,9 +943,16 @@ export class ToolOrchestrator {
     if (amendment?.length) await this.options.policyAmendmentStore?.appendExecPolicyAmendment(amendment);
   }
 
-  private async persistNetworkPolicyAmendmentDecision(answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>, networkApprovalContext?: RuntimeNetworkApprovalContext | null): Promise<void> {
+  private async persistNetworkPolicyAmendmentDecision(
+    answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>,
+    networkApprovalContext?: RuntimeNetworkApprovalContext | null,
+    commandWideNetworkApproval = false,
+  ): Promise<void> {
     if (answer.decision !== 'approve_network_policy_amendment') return;
-    const amendment = answer.networkPolicyAmendment ?? proposedNetworkPolicyAmendments(networkApprovalContext)?.find((item) => item.action === 'allow');
+    const amendments = proposedNetworkPolicyAmendments(networkApprovalContext, commandWideNetworkApproval);
+    const fallbackAction = commandWideNetworkApproval ? 'deny' : 'allow';
+    const requested = answer.networkPolicyAmendment ?? amendments?.find((item) => item.action === fallbackAction);
+    const amendment = amendments?.find((item) => item.host === requested?.host && item.action === requested?.action);
     if (amendment) await this.options.policyAmendmentStore?.appendNetworkPolicyAmendment(amendment, networkApprovalContext?.protocol);
   }
 
@@ -876,12 +980,15 @@ function toolApprovalAvailableDecisions(requirement: Extract<ToolApprovalRequire
   return decisions;
 }
 
-function networkApprovalAvailableDecisions(networkApprovalContext?: RuntimeNetworkApprovalContext | null): RuntimeApprovalAvailableDecision[] {
+function networkApprovalAvailableDecisions(
+  networkApprovalContext?: RuntimeNetworkApprovalContext | null,
+  commandWideNetworkApproval = false,
+): RuntimeApprovalAvailableDecision[] {
   const decisions: RuntimeApprovalAvailableDecision[] = [
     { type: 'approve' },
     { type: 'approve_for_session' },
   ];
-  for (const amendment of proposedNetworkPolicyAmendments(networkApprovalContext) ?? []) {
+  for (const amendment of proposedNetworkPolicyAmendments(networkApprovalContext, commandWideNetworkApproval) ?? []) {
     decisions.push({ type: 'approve_network_policy_amendment', networkPolicyAmendment: amendment });
   }
   decisions.push({ type: 'reject' });
@@ -976,7 +1083,7 @@ function execApprovalSessionLookupKeys(toolCall: RuntimeToolCall, parsedArgument
   if (!requestedSandboxBypass(toolCall.name, parsedArguments)) return [];
   const environmentId = environmentIdForContext(context);
   const command = shellCommandForApprovalKey(parsedArguments);
-  const words = shellCommandWords(command);
+  const words = reusableShellCommandWords(command);
   const keys = command ? [execApprovalExactKey(environmentId, command)] : [];
   for (let length = 1; length <= words.length; length += 1) {
     keys.push(execApprovalPrefixKey(environmentId, words.slice(0, length)));
@@ -994,7 +1101,7 @@ function requestedExecPrefixRule(parsedArguments: unknown): string[] {
 function validRequestedExecPrefixRule(parsedArguments: unknown): string[] {
   const prefix = requestedExecPrefixRule(parsedArguments);
   if (!prefix.length || isBannedExecPrefixSuggestion(prefix)) return [];
-  const words = shellCommandWords(shellCommandForApprovalKey(parsedArguments));
+  const words = reusableShellCommandWords(shellCommandForApprovalKey(parsedArguments));
   if (!wordsStartWith(words, prefix)) return [];
   return prefix;
 }
@@ -1554,47 +1661,6 @@ function shellCommandForApprovalKey(parsedArguments: unknown): string {
   return stringArg(record.command ?? record.cmd);
 }
 
-function shellCommandWords(command: string): string[] {
-  const words: string[] = [];
-  let current = '';
-  let quote = '';
-  let escaped = false;
-  for (const char of String(command || '')) {
-    if (escaped) {
-      current += char;
-      escaped = false;
-      continue;
-    }
-    if (char === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (quote) {
-      if (char === quote) quote = '';
-      else current += char;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (/\s/.test(char)) {
-      if (current) {
-        words.push(current);
-        current = '';
-      }
-      continue;
-    }
-    if (';&|<>'.includes(char)) {
-      if (current) words.push(current);
-      break;
-    }
-    current += char;
-  }
-  if (current) words.push(current);
-  return words;
-}
-
 function mergeSandboxWorkspaceWrite(base: RuntimeSandboxWorkspaceWrite | undefined, extra: RuntimeSandboxWorkspaceWrite | undefined): RuntimeSandboxWorkspaceWrite {
   const merged: RuntimeSandboxWorkspaceWrite = { ...(base ?? {}) };
   if (!extra) return merged;
@@ -1630,21 +1696,23 @@ function networkRetryApprovalKeys(
   networkApprovalContext: RuntimeNetworkApprovalContext | null = networkApprovalContextFromTool(toolCall.name, parsedArguments),
 ): string[] {
   const environmentId = context.projectId ?? context.threadId;
-  if (networkApprovalContext) {
+  if (networkApprovalContext && !isShellCommandToolName(toolCall.name)) {
     return networkApprovalKeysForContext(networkApprovalContext, environmentId);
   }
   return [
-    ['network', environmentId, toolCall.name, previewArguments(parsedArguments)].join(':'),
+    ['network', environmentId, toolCall.name, approvalIdentityDigest(parsedArguments)].join(':'),
   ];
 }
 
-function proposedNetworkPolicyAmendments(networkApprovalContext?: RuntimeNetworkApprovalContext | null): RuntimeNetworkPolicyAmendment[] | undefined {
+function proposedNetworkPolicyAmendments(
+  networkApprovalContext?: RuntimeNetworkApprovalContext | null,
+  denyOnly = false,
+): RuntimeNetworkPolicyAmendment[] | undefined {
   if (!networkApprovalContext?.host) return undefined;
   const host = networkApprovalContext.host.toLowerCase();
-  return [
-    { host, action: 'allow' },
-    { host, action: 'deny' },
-  ];
+  return denyOnly
+    ? [{ host, action: 'deny' }]
+    : [{ host, action: 'allow' }, { host, action: 'deny' }];
 }
 
 function networkPolicyDeniedError(error: ToolExecutionError): boolean {
@@ -1655,8 +1723,12 @@ function networkPolicyDeniedError(error: ToolExecutionError): boolean {
 function sandboxRetryApprovalKeys(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext): string[] {
   const environmentId = context.projectId ?? context.threadId;
   return [
-    ['sandbox-bypass', environmentId, toolCall.name, previewArguments(parsedArguments)].join(':'),
+    ['sandbox-bypass', environmentId, toolCall.name, approvalIdentityDigest(parsedArguments)].join(':'),
   ];
+}
+
+function approvalIdentityDigest(value: unknown): string {
+  return createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 
 function networkApprovalContextFromToolError(error: ToolExecutionError): RuntimeNetworkApprovalContext | null {
@@ -1727,29 +1799,11 @@ function toolRunWithCancellationProfile<T>(promise: Promise<T>, signal: AbortSig
   return abortable(promise, signal);
 }
 
-function throwIfAborted(signal?: AbortSignal): void {
-  if (!signal) return;
-  if (!signal.aborted) return;
-  throw abortReason(signal);
-}
-
 function throwIfApprovalCancelled(decision: RuntimeApprovalDecision): void {
   if (decision !== 'cancel') return;
   const error = new Error('Turn cancelled by approval decision.');
   error.name = 'AbortError';
   throw error;
-}
-
-function abortReason(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) return signal.reason;
-  const reason = typeof signal.reason === 'string' ? signal.reason : 'Turn cancelled.';
-  const error = new Error(reason);
-  error.name = 'AbortError';
-  return error;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'AbortError' || error.message === 'This operation was aborted');
 }
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {

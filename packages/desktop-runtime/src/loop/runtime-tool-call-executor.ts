@@ -28,6 +28,7 @@ import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from '.
 import { RuntimeToolRouter } from './tool-router.js';
 import type { RuntimeMemoryCoordinator } from './runtime-memory-coordinator.js';
 import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
+import { isAbortError, throwIfAborted, TurnCancelledError } from './runtime-turn-errors.js';
 import {
   appServerDynamicToolContent,
   appServerDynamicToolErrorMessage,
@@ -227,12 +228,17 @@ export class RuntimeToolCallExecutor {
       }
       const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
         checkApproval: options.skipApproval !== true,
+        postProcessResult: async (result) => {
+          const processedResult = {
+            ...result,
+            attachments: await externalizeToolImageAttachments(result.attachments, this.options.imageStore),
+          };
+          await this.options.memory.markPollutedByExternalContext(context.threadId, context.turnId, toolCall, processedResult, runtimeConfig);
+          return processedResult;
+        },
       });
       content = execution.content;
-      attachments = await externalizeToolImageAttachments(execution.result?.attachments, this.options.imageStore);
-      if (execution.status === 'success' && execution.result) {
-        await this.options.memory.markPollutedByExternalContext(context.threadId, context.turnId, toolCall, execution.result, runtimeConfig);
-      }
+      attachments = execution.result?.attachments;
     } catch (error) {
       if (isAbortError(error)) throw error;
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -571,7 +577,9 @@ export class RuntimeToolCallExecutor {
         durationMs: metadata.startedAtMs === undefined ? undefined : Math.max(0, completedAt.getTime() - metadata.startedAtMs),
       },
     });
-    await this.publishTurnDiffFromToolPreview(threadId, turnId, toolCall.name, status, metadata.resultPreview);
+    // The completed event is the authoritative terminal state. A secondary diff
+    // projection must never make the caller publish a conflicting second state.
+    await this.publishTurnDiffFromToolPreview(threadId, turnId, toolCall.name, status, metadata.resultPreview).catch(() => undefined);
   }
 
   private async publishTurnDiffFromToolPreview(threadId: string, turnId: string, toolName: string, status: 'success' | 'error' | 'rejected', resultPreview?: string): Promise<void> {
@@ -635,27 +643,4 @@ export class RuntimeToolCallExecutor {
       },
     });
   }
-}
-
-class TurnCancelledError extends Error {
-  constructor(message = 'Turn cancelled.') {
-    super(message);
-    this.name = 'TurnCancelledError';
-  }
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (!signal?.aborted) return;
-  throw abortReason(signal);
-}
-
-function abortReason(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) return signal.reason;
-  const error = new Error(typeof signal.reason === 'string' ? signal.reason : 'Turn cancelled.');
-  error.name = 'AbortError';
-  return error;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'AbortError' || error.message === 'This operation was aborted');
 }

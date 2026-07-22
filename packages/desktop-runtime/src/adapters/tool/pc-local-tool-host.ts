@@ -19,16 +19,23 @@ import * as pcTools from './pc-local-tools.js';
 type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandboxWorkspaceWrite'> & {
   sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite;
   shellEnvironment?: Record<string, string>;
+  expectedMutationIntegrityToken?: string;
 };
 
 type ProjectToolState = {
   toolState: PcToolState;
   baseShellPolicyRules: unknown[];
+  turnFileStates: Map<string, Pick<PcToolState, 'reads' | 'readFileResults'> & { lastUsedAt: number }>;
+  lastUsedAt: number;
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 const MAX_PERSISTENT_SHELL_TTL_MS = 6 * 60 * 60 * 1_000;
+const MAX_PROJECT_TOOL_STATES = 32;
+const PROJECT_TOOL_STATE_TTL_MS = 30 * 60 * 1_000;
+const MAX_TURN_FILE_STATES_PER_PROJECT = 64;
+const TURN_FILE_STATE_TTL_MS = 30 * 60 * 1_000;
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_PATH_ARGUMENT_TOOLS = new Set(['read_file', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
@@ -271,10 +278,13 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const normalized = this.normalizeToolCall(name, input);
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) return null;
     const projectState = await this.projectStateFor(context);
-    const preview = await previewForTool(normalized.name, normalized.args, this.toolStateForContext(projectState, context));
+    const toolState = this.toolStateForContext(projectState, context);
+    assertLocalFileMutationPolicy(normalized.name, normalized.args, toolState);
+    const preview = await previewForTool(normalized.name, normalized.args, toolState);
     return {
       argumentsPreview: previewArguments(normalized.args),
       ...(preview ? { resultPreview: previewPayload(preview) } : {}),
+      ...(preview && stringArg(recordInput(preview).integrityToken) ? { integrityToken: stringArg(recordInput(preview).integrityToken) } : {}),
     };
   }
 
@@ -292,6 +302,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const toolState = this.toolStateForContext(projectState, context);
     const partialArgs = normalizePartialToolArgs(normalizedName, parsePartialArguments(normalizedName, rawArguments));
     if (!partialArgs) return null;
+    assertLocalFileMutationPolicy(normalizedName, partialArgs, toolState);
     const preview = partialArgs.preview ?? await previewForTool(normalizedName, partialArgs, toolState);
     return {
       argumentsPreview: previewArguments(partialArgs),
@@ -311,6 +322,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     if (EXCLUDED_PC_TOOLS.has(normalized.name)) throw new Error(`Unknown tool: ${name}`);
     const projectState = await this.projectStateFor(context);
     const toolState = this.toolStateForContext(projectState, context);
+    assertLocalFileMutationPolicy(normalized.name, normalized.args, toolState);
     const dependencyEnvironment = normalized.name === 'run_shell_command'
       ? await this.workspaceDependencies?.prepareShellEnvironment(stringArg(normalized.args.command))
       : null;
@@ -327,6 +339,14 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       };
     }
     const preview = await previewForTool(normalized.name, normalized.args, toolState);
+    const previewIntegrityToken = stringArg(recordInput(preview).integrityToken);
+    if (context.expectedPreviewIntegrityToken && previewIntegrityToken !== context.expectedPreviewIntegrityToken) {
+      throw new ToolExecutionError('Files changed after the approved preview. Review the updated diff and approve again.', {
+        failureKind: 'preview_changed',
+        failureStage: 'preflight',
+      });
+    }
+    toolState.expectedMutationIntegrityToken = context.expectedPreviewIntegrityToken || previewIntegrityToken;
     if (context.sandbox?.networkAccess === 'enabled') {
       toolState.sandboxWorkspaceWrite = {
         ...toolState.sandboxWorkspaceWrite,
@@ -349,6 +369,13 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
         : undefined,
     }) as Record<string, unknown>;
     if (!result?.ok) {
+      if (stringArg(result.failure_kind) === 'cancelled') {
+        const cancellation = context.signal?.reason instanceof Error
+          ? context.signal.reason
+          : new Error(typeof context.signal?.reason === 'string' ? context.signal.reason : 'Tool execution cancelled.');
+        cancellation.name = 'AbortError';
+        throw cancellation;
+      }
       // 面向界面的显示字符串有意保持简短。模型需要格式化后的命令输出，
       // 才能根据真实标准错误作出响应，而不是仅凭退出码猜测。
       throw new ToolExecutionError(stringArg(result?.content || result?.display || `Local tool failed: ${normalized.name}`), {
@@ -375,11 +402,15 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     if (!context.turnId) return;
     const states = await this.projectStatesForCleanup(context);
     await Promise.all(states.map(async (projectState) => {
-      await pcTools.cleanupLocalToolTurn(projectState.toolState, {
-        threadId: context.threadId,
-        turnId: context.turnId,
-        toolCallId: context.toolCallId,
-      });
+      try {
+        await pcTools.cleanupLocalToolTurn(projectState.toolState, {
+          threadId: context.threadId,
+          turnId: context.turnId,
+          toolCallId: context.toolCallId,
+        });
+      } finally {
+        projectState.turnFileStates.delete(`${context.threadId}\0${context.turnId}`);
+      }
     }));
   }
 
@@ -409,6 +440,8 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   }
 
   async shutdown(): Promise<void> {
+    await Promise.allSettled([...this.projectStates.values()].map((state) => pcTools.closeLocalToolState(state.toolState)));
+    this.projectStates.clear();
     await pcTools.closeShellProcessStore(this.shellProcessStore);
   }
 
@@ -422,7 +455,9 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const root = path.resolve(environment.workspaceRoot);
     const existing = this.projectStates.get(root);
     if (existing) {
+      existing.lastUsedAt = Date.now();
       await this.refreshPolicyAmendments(existing);
+      await this.evictProjectStates(root);
       return existing;
     }
     const toolState = pcTools.createLocalToolState(root, {
@@ -433,9 +468,12 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const created = {
       toolState,
       baseShellPolicyRules: [...(Array.isArray(toolState.shellPolicyRules) ? toolState.shellPolicyRules : [])],
+      turnFileStates: new Map(),
+      lastUsedAt: Date.now(),
     };
     await this.refreshPolicyAmendments(created);
     this.projectStates.set(root, created);
+    await this.evictProjectStates(root);
     return created;
   }
 
@@ -444,8 +482,19 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
    * 并发线程无法再相互覆盖实际生效的权限。
    */
   private toolStateForContext(projectState: ProjectToolState, context: ToolExecutionContext): PcToolState {
+    const turnKey = `${context.threadId}\0${context.turnId || 'no-turn'}`;
+    let turnFileState = projectState.turnFileStates.get(turnKey);
+    if (!turnFileState) {
+      turnFileState = { reads: new Map(), readFileResults: new Map(), lastUsedAt: Date.now() };
+      projectState.turnFileStates.set(turnKey, turnFileState);
+    }
+    turnFileState.lastUsedAt = Date.now();
+    this.evictTurnFileStates(projectState, turnKey);
+    projectState.lastUsedAt = Date.now();
     return {
       ...projectState.toolState,
+      reads: turnFileState.reads,
+      readFileResults: turnFileState.readFileResults,
       environmentId: context.environment?.id ?? projectState.toolState.environmentId,
       permissionProfile: context.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite: cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),
@@ -460,6 +509,31 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     if (!environment) return [];
     const existing = this.projectStates.get(path.resolve(environment.workspaceRoot));
     return existing ? [existing] : [];
+  }
+
+  private async evictProjectStates(activeRoot: string): Promise<void> {
+    const now = Date.now();
+    const candidates = [...this.projectStates.entries()]
+      .filter(([root]) => root !== activeRoot)
+      .sort((left, right) => left[1].lastUsedAt - right[1].lastUsedAt);
+    for (const [root, state] of candidates) {
+      const expired = now - state.lastUsedAt >= PROJECT_TOOL_STATE_TTL_MS;
+      if (!expired && this.projectStates.size <= MAX_PROJECT_TOOL_STATES) break;
+      await pcTools.closeLocalToolState(state.toolState);
+      this.projectStates.delete(root);
+    }
+  }
+
+  private evictTurnFileStates(projectState: ProjectToolState, activeTurnKey: string): void {
+    const now = Date.now();
+    const candidates = [...projectState.turnFileStates.entries()]
+      .filter(([turnKey]) => turnKey !== activeTurnKey)
+      .sort((left, right) => left[1].lastUsedAt - right[1].lastUsedAt);
+    for (const [turnKey, state] of candidates) {
+      const expired = now - state.lastUsedAt >= TURN_FILE_STATE_TTL_MS;
+      if (!expired && projectState.turnFileStates.size <= MAX_TURN_FILE_STATES_PER_PROJECT) break;
+      projectState.turnFileStates.delete(turnKey);
+    }
   }
 
   private async refreshPolicyAmendments(projectState: ProjectToolState): Promise<void> {
@@ -532,6 +606,16 @@ function toRuntimeToolDefinition(tool: unknown): RuntimeToolDefinition | null {
 
 function recordInput(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function assertLocalFileMutationPolicy(name: string, args: Record<string, unknown>, state: PcToolState): void {
+  const blocked = pcTools.localFileMutationPolicyError(name, args, state) as Record<string, unknown> | null;
+  if (!blocked) return;
+  throw new ToolExecutionError(stringArg(blocked.content || blocked.display || `Local tool blocked: ${name}`), {
+    data: blocked,
+    failureKind: stringArg(blocked.failure_kind),
+    failureStage: stringArg(blocked.failure_stage),
+  });
 }
 
 function normalizeDirectToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {

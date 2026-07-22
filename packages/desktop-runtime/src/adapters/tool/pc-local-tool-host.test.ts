@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
@@ -251,6 +251,61 @@ describe('pc local tool host', () => {
       .resolves.toBe('.extra { color: green; }\n');
   });
 
+  it.skipIf(process.platform === 'win32')('does not partially apply a patch when a later target cannot be staged', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    await writeFile(path.join(projectDir, 'first.txt'), 'before\n', 'utf8');
+    const lockedDirectory = path.join(projectDir, 'locked');
+    await mkdir(lockedDirectory);
+    await chmod(lockedDirectory, 0o500);
+
+    try {
+      await expect(host.runTool('apply_patch', {
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: first.txt',
+          '@@',
+          '-before',
+          '+after',
+          '*** Add File: locked/second.txt',
+          '+must not exist',
+          '*** End Patch',
+        ].join('\n'),
+      }, context)).rejects.toThrow('EACCES');
+    } finally {
+      await chmod(lockedDirectory, 0o700);
+    }
+
+    await expect(readFile(path.join(projectDir, 'first.txt'), 'utf8')).resolves.toBe('before\n');
+  });
+
+  it.skipIf(process.platform === 'win32')('keeps a move source intact when the destination cannot be staged', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    await writeFile(path.join(projectDir, 'source.txt'), 'before\n', 'utf8');
+    const lockedDirectory = path.join(projectDir, 'locked');
+    await mkdir(lockedDirectory);
+    await chmod(lockedDirectory, 0o500);
+
+    try {
+      await expect(host.runTool('apply_patch', {
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: source.txt',
+          '*** Move to: locked/destination.txt',
+          '@@',
+          '-before',
+          '+after',
+          '*** End Patch',
+        ].join('\n'),
+      }, context)).rejects.toThrow('EACCES');
+    } finally {
+      await chmod(lockedDirectory, 0o700);
+    }
+
+    await expect(readFile(path.join(projectDir, 'source.txt'), 'utf8')).resolves.toBe('before\n');
+  });
+
   it('uses pc shell risk classification for approval', async () => {
     const { host } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
@@ -413,6 +468,104 @@ describe('pc local tool host', () => {
         '*** End Patch',
       ].join('\n'),
     }, context)).rejects.toThrow('受保护的工作区元数据');
+  });
+
+  it('blocks protected metadata aliases and case variants', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    await mkdir(path.join(projectDir, '.git'), { recursive: true });
+    await writeFile(path.join(projectDir, '.git', 'config'), 'safe\n', 'utf8');
+    await symlink('.git', path.join(projectDir, 'metadata-alias'));
+
+    await expect(host.runTool('write_file', {
+      file_path: 'metadata-alias/config',
+      content: 'unsafe\n',
+    }, context)).rejects.toThrow('受保护的工作区元数据');
+    await expect(host.runTool('write_file', {
+      file_path: '.GIT/config',
+      content: 'unsafe\n',
+    }, context)).rejects.toThrow('受保护的工作区元数据');
+    await expect(host.runTool('run_shell_command', {
+      command: 'rm metadata-alias/config',
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, context)).rejects.toThrow('受保护的工作区元数据');
+    await expect(readFile(path.join(projectDir, '.git', 'config'), 'utf8')).resolves.toBe('safe\n');
+  });
+
+  it('allows writes through a symbolic link whose target stays inside the workspace', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const targetDirectory = path.join(projectDir, 'real-directory');
+    const linkedDirectory = path.join(projectDir, 'linked-directory');
+    await mkdir(targetDirectory);
+    await symlink(
+      targetDirectory,
+      linkedDirectory,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    await host.runTool('write_file', {
+      file_path: 'linked-directory/created.txt',
+      content: 'created through link\n',
+    }, context);
+
+    await expect(readFile(path.join(targetDirectory, 'created.txt'), 'utf8'))
+      .resolves.toBe('created through link\n');
+  });
+
+  it('deletes a symbolic link without deleting its target', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    await writeFile(path.join(projectDir, 'important.txt'), 'keep\n', 'utf8');
+    await symlink('important.txt', path.join(projectDir, 'link.txt'));
+
+    await host.runTool('delete_file', { file_path: 'link.txt' }, context);
+
+    await expect(lstat(path.join(projectDir, 'link.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(projectDir, 'important.txt'), 'utf8')).resolves.toBe('keep\n');
+  });
+
+  it('rejects execution when a file changed after its approved preview', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const target = path.join(projectDir, 'preview.txt');
+    await writeFile(target, 'approved base\n', 'utf8');
+    const input = { file_path: 'preview.txt', content: 'approved result\n' };
+    const preview = await host.previewToolCall('write_file', input, context);
+    expect(preview?.integrityToken).toBeTruthy();
+    await writeFile(target, 'new editor content\n', 'utf8');
+
+    await expect(host.runTool('write_file', input, {
+      ...context,
+      expectedPreviewIntegrityToken: preview?.integrityToken,
+    })).rejects.toMatchObject({ failureKind: 'preview_changed' });
+    await expect(readFile(target, 'utf8')).resolves.toBe('new editor content\n');
+  });
+
+  it.skipIf(process.platform === 'win32')('rejects a directory symlink swap after preview without writing outside the workspace', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const sourceDirectory = path.join(projectDir, 'source');
+    const movedDirectory = path.join(projectDir, 'source-original');
+    const outsideDirectory = await mkdtemp(path.join(tmpdir(), 'setsuna-preview-outside-'));
+    await mkdir(sourceDirectory);
+    await writeFile(path.join(sourceDirectory, 'target.txt'), 'workspace content\n', 'utf8');
+    await writeFile(path.join(outsideDirectory, 'target.txt'), 'outside content\n', 'utf8');
+    const input = { file_path: 'source/target.txt', content: 'approved result\n' };
+    const preview = await host.previewToolCall('write_file', input, context);
+
+    try {
+      await rename(sourceDirectory, movedDirectory);
+      await symlink(outsideDirectory, sourceDirectory);
+      await expect(host.runTool('write_file', input, {
+        ...context,
+        expectedPreviewIntegrityToken: preview?.integrityToken,
+      })).rejects.toThrow(/symbolic link|路径不在当前工作区内/u);
+      await expect(readFile(path.join(outsideDirectory, 'target.txt'), 'utf8')).resolves.toBe('outside content\n');
+    } finally {
+      await rm(outsideDirectory, { recursive: true, force: true });
+    }
   });
 
   it('blocks shell mutations against protected workspace metadata', async () => {
@@ -683,6 +836,22 @@ describe('pc local tool host', () => {
       sandbox_permissions: 'require_escalated',
       justification: 'normally high risk',
     }, { threadId: 'thread_1', turnId: 'turn_1' })).resolves.toBeNull();
+
+    await expect(host.approvalForTool('exec_command', {
+      cmd: 'git status --short; touch owned.txt',
+      sandbox_permissions: 'require_escalated',
+      justification: 'compound command must not reuse the prefix',
+    }, { threadId: 'thread_1', turnId: 'turn_1' })).resolves.toMatchObject({
+      reason: expect.any(String),
+    });
+
+    await expect(host.approvalForTool('exec_command', {
+      cmd: 'git status\ntouch owned.txt',
+      sandbox_permissions: 'require_escalated',
+      justification: 'newline-separated command must not reuse the prefix',
+    }, { threadId: 'thread_1', turnId: 'turn_1' })).resolves.toMatchObject({
+      reason: expect.any(String),
+    });
   });
 
   it('uses persisted network deny amendments during shell preflight', async () => {
@@ -704,6 +873,65 @@ describe('pc local tool host', () => {
     })).rejects.toThrow('network policy');
   });
 
+  it('does not treat a persisted host allow as process-wide shell authorization', async () => {
+    const { host } = await createHost({
+      policyAmendmentStore: new StaticPolicyAmendmentStore({
+        execPolicyAmendments: [],
+        networkPolicyAmendments: [{ host: 'example.com', action: 'allow' }],
+      }),
+    });
+
+    await expect(host.runTool('run_shell_command', {
+      command: 'curl https://example.com',
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      sandboxWorkspaceWrite: { networkAccess: false },
+    })).rejects.toMatchObject({
+      failureKind: 'network_denied',
+      message: expect.stringContaining('进程级网络访问'),
+    });
+  });
+
+  it('checks every network target in a compound shell command', async () => {
+    const { host } = await createHost({
+      policyAmendmentStore: new StaticPolicyAmendmentStore({
+        execPolicyAmendments: [],
+        networkPolicyAmendments: [{ host: 'blocked.example', action: 'deny' }],
+      }),
+    });
+
+    await expect(host.runTool('run_shell_command', {
+      command: 'curl https://allowed.example; curl https://blocked.example',
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      sandboxWorkspaceWrite: { networkAccess: false },
+    })).rejects.toMatchObject({
+      failureKind: 'network_denied',
+      data: { network_policy_decision: 'deny' },
+      message: expect.stringContaining('blocked.example'),
+    });
+
+    await expect(host.runTool('run_shell_command', {
+      command: 'curl https://allowed.example\nssh blocked.example',
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_2',
+      sandboxWorkspaceWrite: { networkAccess: false },
+    })).rejects.toMatchObject({
+      failureKind: 'network_denied',
+      data: { network_policy_decision: 'deny' },
+      message: expect.stringContaining('blocked.example'),
+    });
+  });
+
   it('builds a macOS seatbelt profile for workspace-write shell sandboxing', () => {
     const root = path.join(tmpdir(), 'setsuna seatbelt workspace');
     const writableRoot = path.join(tmpdir(), 'setsuna approved writes');
@@ -721,17 +949,27 @@ describe('pc local tool host', () => {
       sandboxWorkspaceWrite: {
         writableRoots: [writableRoot],
         deniedRoots: ['blocked'],
+        deniedGlobPatterns: [path.join(root, '**/*.env')],
         networkAccess: false,
       },
     }, capability);
 
-    expect(profile.split('\n')).toEqual([
-      '(version 1)',
-      '(allow default)',
-      '(deny network*)',
-      denyOutsideWritableRoots,
+    const lines = profile.split('\n');
+    expect(lines.slice(0, 2)).toEqual(['(version 1)', '(allow default)']);
+    expect(lines).toContain('(deny network*)');
+    expect(lines).toContain(denyOutsideWritableRoots);
+    expect(lines.some((line) => line.startsWith('(deny file-read* (require-all ')
+      && line.includes(`(require-not (subpath ${JSON.stringify(path.resolve(root))}))`)
+      && line.includes('(require-not (literal "/"))'))).toBe(true);
+    expect(lines).toEqual(expect.arrayContaining([
+      `(deny file-read* (literal ${JSON.stringify(path.resolve(deniedRoot))}))`,
+      `(deny file-read* (subpath ${JSON.stringify(path.resolve(deniedRoot))}))`,
+      `(deny file-write* (literal ${JSON.stringify(path.resolve(deniedRoot))}))`,
       `(deny file-write* (subpath ${JSON.stringify(path.resolve(deniedRoot))}))`,
-    ]);
+      `(deny file-write* (literal ${JSON.stringify(path.join(path.resolve(root), '.git'))}))`,
+    ]));
+    expect(lines.some((line) => line.startsWith('(deny file-read* (regex ') && line.includes('.env'))).toBe(true);
+    expect(lines.some((line) => line.startsWith('(deny file-write* (regex ') && line.includes('.env'))).toBe(true);
     expect(shellSandboxUnavailableReason({
       root,
       osSandbox: true,
@@ -955,6 +1193,64 @@ describe('pc local tool host', () => {
     ]));
   });
 
+  it('does not retain pending progress output after a shell command yields', async () => {
+    const { host } = await createHost();
+    const context = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'danger-full-access' as const,
+      onToolOutputDelta: () => undefined,
+    };
+    const running = await host.runTool('run_shell_command', {
+      command: `${nodeCommand()} -e "setTimeout(() => process.stdout.write('x'.repeat(500000)), 20); setInterval(() => {}, 1000)"`,
+      risk_level: 'low',
+      yield_time_ms: 1,
+    }, context);
+    const processId = String((running.data as Record<string, unknown>).process_id || '');
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const processStore = (host as unknown as {
+        shellProcessStore: { sessions: Map<string, { pendingStdout: string; pendingStderr: string; stdout: string }> };
+      }).shellProcessStore;
+      const session = processStore.sessions.get(processId);
+      expect(session?.pendingStdout).toBe('');
+      expect(session?.pendingStderr).toBe('');
+      expect(session?.stdout.length).toBeLessThanOrEqual(240_000);
+    } finally {
+      await host.runTool('terminate_shell_process', { process_id: processId }, context).catch(() => undefined);
+    }
+  });
+
+  it('propagates a pre-aborted shell invocation as cancellation', async () => {
+    const { host } = await createHost();
+    const controller = new AbortController();
+    controller.abort('cancel before spawn');
+
+    await expect(host.runTool('run_shell_command', {
+      command: `${nodeCommand()} -e "setInterval(() => {}, 1000)"`,
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'danger-full-access',
+      signal: controller.signal,
+    })).rejects.toMatchObject({ name: 'AbortError', message: 'cancel before spawn' });
+  });
+
+  it('propagates a pre-aborted Git invocation as cancellation', async () => {
+    const { host } = await createHost();
+    const controller = new AbortController();
+    controller.abort('cancel git');
+
+    await expect(host.runTool('git_status', {}, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      signal: controller.signal,
+    })).rejects.toMatchObject({ name: 'AbortError', message: 'cancel git' });
+  });
+
   it('returns complete shell output when a command fails', async () => {
     const { host } = await createHost();
 
@@ -1002,6 +1298,85 @@ describe('pc local tool host', () => {
     expect(result.content).toContain(managedPython);
     expect(result.content).toContain('Python 3.12.99 managed');
     expect(result.content).not.toContain('/usr/bin/python3');
+  });
+
+  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('enforces macOS shell readable roots after variable expansion', async () => {
+    const { host, projectDir } = await createHost();
+    const secretDir = await mkdtemp(path.join(homedir(), '.setsuna-seatbelt-secret-'));
+    const secretPath = path.join(secretDir, 'secret.txt');
+    await writeFile(secretPath, 'must stay private\n', 'utf8');
+    await writeFile(path.join(projectDir, 'visible.txt'), 'workspace visible\n', 'utf8');
+    const context = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write' as const,
+      sandboxWorkspaceWrite: { networkAccess: false },
+    };
+
+    try {
+      const visible = await host.runTool('run_shell_command', {
+        command: 'cat visible.txt',
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, context);
+      expect(visible.content).toContain('workspace visible');
+
+      await expect(host.runTool('run_shell_command', {
+        command: `cat "$HOME/${path.basename(secretDir)}/secret.txt"`,
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, context)).rejects.toMatchObject({
+        failureKind: 'sandbox_denied',
+        failureStage: 'execution',
+      });
+      await expect(host.runTool('run_shell_command', {
+        command: 'cat /etc/passwd',
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, context)).rejects.toMatchObject({
+        failureKind: 'sandbox_denied',
+        failureStage: 'execution',
+      });
+    } finally {
+      await rm(secretDir, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec'))('enforces denied globs in the macOS shell sandbox after variable expansion', async () => {
+    const { host, projectDir } = await createHost();
+    await writeFile(path.join(projectDir, '.env'), 'SECRET=blocked\n', 'utf8');
+
+    await expect(host.runTool('run_shell_command', {
+      command: 'suffix=env; cat ".${suffix}"',
+      risk_level: 'low',
+      yield_time_ms: 0,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: {
+        deniedGlobPatterns: [path.join(projectDir, '**/*.env')],
+        networkAccess: false,
+      },
+    })).rejects.toMatchObject({
+      failureKind: 'sandbox_denied',
+      failureStage: 'execution',
+    });
+  });
+
+  it('stops bounded range reads without buffering the rest of a large file', async () => {
+    const { host, projectDir } = await createHost();
+    await writeFile(path.join(projectDir, 'large.txt'), `first line\n${'x'.repeat(1_000_000)}`, 'utf8');
+
+    const result = await host.runTool('read_file', {
+      file_path: 'large.txt',
+      offset: 1,
+      limit: 1,
+    }, { threadId: 'thread_1', turnId: 'turn_1' });
+
+    expect(result.content).toContain('lines 1-1; file continues');
+    expect(result.content).toContain('1: first line');
+    expect(result.content.length).toBeLessThan(1_000);
   });
 
   it('supports Codex-compatible exec_command and write_stdin tool names', async () => {
@@ -1086,6 +1461,64 @@ describe('pc local tool host', () => {
 
     await expect(host.runTool('read_shell_process', { process_id: processId }, context))
       .rejects.toThrow('Shell process not found');
+  });
+
+  it('drops per-turn file read state during turn cleanup', async () => {
+    const { host, projectDir, projectId } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_file_state', projectId };
+    await writeFile(path.join(projectDir, 'read-state.txt'), 'state\n', 'utf8');
+    await host.runTool('read_file', { file_path: 'read-state.txt' }, context);
+    const projectStates = (host as unknown as {
+      projectStates: Map<string, { turnFileStates: Map<string, unknown> }>;
+    }).projectStates;
+    expect([...projectStates.values()][0]?.turnFileStates.size).toBe(1);
+
+    await host.cleanupTurn?.(context, { status: 'completed' });
+
+    expect([...projectStates.values()][0]?.turnFileStates.size).toBe(0);
+  });
+
+  it('bounds cached project states and per-project turn file states', async () => {
+    const { host, projectDir } = await createHost();
+    let latestEnvironment: {
+      id: string;
+      cwd: string;
+      workspaceRoot: string;
+      workspaceRoots: string[];
+    } | undefined;
+
+    for (let index = 0; index < 36; index += 1) {
+      const workspaceRoot = path.join(projectDir, `project-state-${index}`);
+      await mkdir(workspaceRoot);
+      latestEnvironment = {
+        id: `environment_${index}`,
+        cwd: workspaceRoot,
+        workspaceRoot,
+        workspaceRoots: [workspaceRoot],
+      };
+      await host.previewToolCall('read_file', { file_path: 'unused.txt' }, {
+        environment: latestEnvironment,
+        threadId: `thread_project_${index}`,
+        turnId: 'turn_1',
+      });
+    }
+
+    const projectStates = (host as unknown as {
+      projectStates: Map<string, { turnFileStates: Map<string, unknown> }>;
+    }).projectStates;
+    expect(projectStates.size).toBe(32);
+    expect(projectStates.has(path.resolve(latestEnvironment!.workspaceRoot))).toBe(true);
+
+    for (let index = 0; index < 70; index += 1) {
+      await host.previewToolCall('read_file', { file_path: 'unused.txt' }, {
+        environment: latestEnvironment,
+        threadId: 'thread_turn_cache',
+        turnId: `turn_${index}`,
+      });
+    }
+    expect(projectStates.get(path.resolve(latestEnvironment!.workspaceRoot))?.turnFileStates.size).toBe(64);
+
+    await host.shutdown();
   });
 
   it('preserves explicitly persisted shell processes across turn cleanup', async () => {

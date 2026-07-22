@@ -2,7 +2,7 @@
 
 /** Public facade and dispatcher for the modular PC local-tool implementation. */
 
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { isFileMutationToolName, protectedWorkspaceMetadataPathForTool } from '../../security/file-system-policy.js';
 import {
@@ -20,6 +20,7 @@ import {
 import {
   resolveWorkspacePath,
   deniedRootPathForFileMutationTool,
+  protectedPathForFileMutationTool,
   resolvePathForDisplay,
   formatPath,
 } from './pc-local-tool-paths.js';
@@ -54,6 +55,7 @@ import {
   readLocalFile,
   applyLocalPatch,
   writeLocalFile,
+  calculateWriteFile,
   calculateApplyPatch,
   appendLocalFile,
   deleteLocalFile,
@@ -67,7 +69,9 @@ import {
   rememberReadFileResult,
   rememberedReadFileResult,
   isEditToolName,
+  integrityTokenForCalculatedMutation,
 } from './pc-local-tool-files.js';
+import { openValidatedReadableFile } from './pc-local-tool-secure-read.js';
 import {
   shellSandboxCapability,
   normalizeShellCommandForRisk,
@@ -101,6 +105,7 @@ import {
 import {
   LOCAL_TOOL_DEFINITIONS,
 } from './pc-local-tool-definitions.js';
+import { createFileMutationCoordinator } from './pc-local-tool-file-transaction.js';
 
 export {
   parseToolArguments,
@@ -148,6 +153,7 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
     networkPolicyAmendments: [],
     reads: new Map(),
     readFileResults: new Map(),
+    fileMutationCoordinator: createFileMutationCoordinator(),
     shellProcessStore,
     shellProcesses: shellProcessStore.sessions,
     ownedShellProcessIds: new Set(),
@@ -162,13 +168,17 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
 export async function rememberContextFileRead(args, state = createLocalToolState()) {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
   const expectedContent = String(args?.content ?? '');
-  const info = await stat(filePath);
-  if (!info.isFile()) return false;
-  const currentContent = await readFile(filePath, 'utf8');
-  if (currentContent !== expectedContent) return false;
-  rememberRead(state, filePath, info);
-  rememberReadFileResult(state, filePath, info, null, 'context');
-  return true;
+  const opened = await openValidatedReadableFile(filePath, state);
+  try {
+    if (!opened.info.isFile()) return false;
+    const currentContent = await opened.handle.readFile({ encoding: 'utf8' });
+    if (currentContent !== expectedContent) return false;
+    rememberRead(state, filePath, opened.info);
+    rememberReadFileResult(state, filePath, opened.info, null, 'context');
+    return true;
+  } finally {
+    await opened.handle.close().catch(() => undefined);
+  }
 }
 
 export async function duplicateReadFileResult(args, state = createLocalToolState()) {
@@ -213,7 +223,7 @@ export function toolNeedsConfirmation(name) {
 export function shellCommandRisk(command, riskLevel = '', riskReason = '', state = null) {
   const normalized = normalizeShellCommandForRisk(command);
   if (!normalized) return { needsConfirmation: false, reason: '' };
-  const policy = shellPolicyDecision(normalized, state);
+  const policy = shellPolicyDecision(command, state);
   if (policy.action === 'allow') return { needsConfirmation: false, reason: policy.reason };
   if (policy.action === 'ask') return { needsConfirmation: true, reason: policy.reason };
   if (policy.action === 'deny') return { needsConfirmation: true, reason: policy.reason };
@@ -265,30 +275,19 @@ export function summarizeToolCall(name, args, state = createLocalToolState()) {
 }
 
 export async function previewWriteFileDiff(args, state = createLocalToolState()) {
-  const filePath = resolveWorkspacePath(args?.file_path, state.root);
-  const content = String(args?.content ?? '');
+  const result = await calculateWriteFile(args, state);
+  if (!result.ok) return null;
   const isPartial = args?.complete === false;
-  let existed = false;
-  let previousContent = '';
-
-  try {
-    const existingStats = await stat(filePath);
-    existed = true;
-    if (!existingStats.isFile()) return null;
-    previousContent = await readFile(filePath, 'utf8');
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
-
   const diff = buildFileDiff({
-    filePath,
+    filePath: result.filePath,
     root: state.root,
-    existed,
-    previousContent: isPartial && existed
-      ? previewComparablePreviousContent(previousContent, content)
-      : previousContent,
-    nextContent: content,
+    existed: result.existed,
+    previousContent: isPartial && result.existed
+      ? previewComparablePreviousContent(result.previousContent, result.nextContent)
+      : result.previousContent,
+    nextContent: result.nextContent,
   });
+  const integrityToken = await integrityTokenForCalculatedMutation(result, state);
 
   return {
     path: diff.path,
@@ -297,6 +296,7 @@ export async function previewWriteFileDiff(args, state = createLocalToolState())
     deletions: diff.deletions,
     partial: isPartial,
     diff,
+    integrityToken,
   };
 }
 
@@ -310,6 +310,7 @@ export async function previewEditFileDiff(args, state = createLocalToolState()) 
     deletions: result.diff.deletions,
     partial: false,
     diff: result.diff,
+    integrityToken: await integrityTokenForCalculatedMutation(result, state),
   };
 }
 
@@ -323,6 +324,7 @@ export async function previewAppendFileDiff(args, state = createLocalToolState()
     deletions: result.diff.deletions,
     partial: args?.complete === false,
     diff: result.diff,
+    integrityToken: await integrityTokenForCalculatedMutation(result, state),
   };
 }
 
@@ -336,6 +338,7 @@ export async function previewDeleteFileDiff(args, state = createLocalToolState()
     deletions: result.diff.deletions,
     partial: false,
     diff: result.diff,
+    integrityToken: await integrityTokenForCalculatedMutation(result, state),
   };
 }
 
@@ -351,6 +354,7 @@ export async function previewApplyPatchDiff(args, state = createLocalToolState()
         deletions: diff.deletions,
         partial: false,
         diff,
+        integrityToken: await integrityTokenForCalculatedMutation(result, state),
       }
     : null;
 }
@@ -370,28 +374,8 @@ export function previewRememberMemory(args, state = createLocalToolState()) {
 
 export async function executeLocalTool(name, args, state = createLocalToolState(), options = {}) {
   try {
-    if (isFileMutationToolName(name)) {
-      if (state.permissionProfile === 'read-only') {
-        return errorResult('当前权限配置为 read-only，不能修改工作区文件。', {
-          failure_kind: 'permission_denied',
-          failure_stage: 'preflight',
-        });
-      }
-      const protectedPath = protectedWorkspaceMetadataPathForTool(name, args, state.permissionProfile);
-      if (protectedPath) {
-        return errorResult(`不能修改受保护的工作区元数据：${protectedPath}`, {
-          failure_kind: 'permission_denied',
-          failure_stage: 'preflight',
-        });
-      }
-      const deniedPath = deniedRootPathForFileMutationTool(name, args, state);
-      if (deniedPath) {
-        return errorResult(`不能修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}`, {
-          failure_kind: 'permission_denied',
-          failure_stage: 'preflight',
-        });
-      }
-    }
+    const mutationPolicyError = localFileMutationPolicyError(name, args, state);
+    if (mutationPolicyError) return mutationPolicyError;
     if (name === 'list_directory') return await listDirectory(args, state);
     if (name === 'find_files') return await findFiles(args, state);
     if (name === 'search_text') return await searchText(args, state, options.signal);
@@ -420,6 +404,39 @@ export async function executeLocalTool(name, args, state = createLocalToolState(
   } catch (error) {
     return errorResult(error.message || String(error));
   }
+}
+
+/** Run before previews as well as execution so a denied target is never read to build a diff. */
+export function localFileMutationPolicyError(name, args, state = createLocalToolState()) {
+  if (!isFileMutationToolName(name)) return null;
+  if (state.permissionProfile === 'read-only') {
+    return errorResult('当前权限配置为 read-only，不能修改工作区文件。', {
+      failure_kind: 'permission_denied',
+      failure_stage: 'preflight',
+    });
+  }
+  const protectedPath = protectedWorkspaceMetadataPathForTool(name, args, state.permissionProfile);
+  if (protectedPath) {
+    return errorResult(`不能修改受保护的工作区元数据：${protectedPath}`, {
+      failure_kind: 'permission_denied',
+      failure_stage: 'preflight',
+    });
+  }
+  const canonicalProtectedPath = protectedPathForFileMutationTool(name, args, state);
+  if (canonicalProtectedPath) {
+    return errorResult(`不能修改受保护的工作区元数据：${canonicalProtectedPath}`, {
+      failure_kind: 'permission_denied',
+      failure_stage: 'preflight',
+    });
+  }
+  const deniedPath = deniedRootPathForFileMutationTool(name, args, state);
+  if (deniedPath) {
+    return errorResult(`不能修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}`, {
+      failure_kind: 'permission_denied',
+      failure_stage: 'preflight',
+    });
+  }
+  return null;
 }
 
 export async function closeLocalToolState(state = createLocalToolState()) {

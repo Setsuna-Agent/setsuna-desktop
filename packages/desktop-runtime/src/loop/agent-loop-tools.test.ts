@@ -1721,6 +1721,50 @@ describe('agent loop tools', () => {
     expect(saved?.messages.at(-1)?.content).toContain('tool handled');
   });
 
+  it('cancels an AppServer dynamic tool without publishing a tool error', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Cancel dynamic tool', projectId: 'project_1' });
+    let notifyStarted!: () => void;
+    const dynamicCallStarted = new Promise<void>((resolve) => { notifyStarted = resolve; });
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new SingleToolCallModelClient({
+        id: 'call_dynamic_cancel',
+        name: 'tickets__wait_for_ticket',
+        arguments: '{"id":"ABC-123"}',
+      }),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new CapturingToolHost(),
+      appServerNotificationBus: {
+        publish: (notification) => {
+          if (notification.method === 'item/tool/call') notifyStarted();
+        },
+        subscribe: () => () => undefined,
+      },
+    });
+    loop.registerAppServerDynamicTools(thread.id, [{
+      name: 'tickets__wait_for_ticket',
+      namespace: 'tickets',
+      toolName: 'wait_for_ticket',
+      description: 'Wait for a ticket response.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string' } } },
+    }], 'dynamic-connection-1');
+
+    const started = await loop.startTurn(thread.id, { input: 'wait on the dynamic tool' });
+    await dynamicCallStarted;
+    await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
+    const events = await waitForTurnCancelled(threadStore, thread.id);
+
+    expect(events.some((event) =>
+      event.type === 'tool.completed'
+      && event.payload.toolCallId === 'call_dynamic_cancel'
+    )).toBe(false);
+    expect(events.some((event) => event.type === 'runtime.error')).toBe(false);
+  });
+
   it('executes all inspection calls without injecting progress copy', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -3430,6 +3474,56 @@ describe('agent loop tools', () => {
     expect(JSON.stringify(saved)).not.toContain(png.toString('base64'));
   });
 
+  it('publishes only one terminal event when tool attachment externalization fails', async () => {
+    const dataDir = await mkDataDir();
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(path.join(dataDir, 'threads'), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Invalid tool attachment' });
+    const toolHost: ToolHost = {
+      listTools: async () => [{
+        name: 'invalid_image_tool',
+        description: 'Return a deliberately invalid test image.',
+        inputSchema: { type: 'object', properties: {} },
+      }],
+      runTool: async () => ({
+        content: 'image generation side effect completed',
+        attachments: [{
+          id: 'invalid_image',
+          name: 'invalid.png',
+          type: 'image/png',
+          size: 3,
+          url: 'data:image/png;base64,not-valid-base64!',
+        }],
+      }),
+    };
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new SingleToolCallModelClient({
+        id: 'call_invalid_image',
+        name: 'invalid_image_tool',
+        arguments: '{}',
+      }),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      imageStore: new FileGeneratedImageStore(path.join(dataDir, 'images'), ids),
+      toolHost,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'run the invalid image tool' });
+    const events = await threadStore.listEvents(thread.id, 0);
+    const terminalEvents = events.filter((event) =>
+      event.type === 'tool.completed' && event.payload.toolCallId === 'call_invalid_image');
+
+    expect(terminalEvents).toHaveLength(1);
+    expect(terminalEvents[0]).toMatchObject({
+      payload: {
+        status: 'error',
+        content: expect.stringContaining('valid Base64'),
+      },
+    });
+  });
+
   it('pauses tool execution until approval is answered', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
@@ -4231,7 +4325,7 @@ describe('agent loop tools', () => {
     expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_for_session')).toBe(true);
   });
 
-  it('caches network approvals by host context for shell commands', async () => {
+  it('scopes shell network approvals to exact commands while retaining a host deny option', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Host network approval loop', projectId: 'project_1' });
@@ -4254,8 +4348,8 @@ describe('agent loop tools', () => {
     const pendingApproval = await waitForPendingApproval(approvalGate);
 
     expect(pendingApproval.toolName).toBe('run_shell_command');
-    expect(pendingApproval.reason).toContain('https://api.example.com:443');
-    expect(pendingApproval.argumentsPreview).toContain('network-access');
+    expect(pendingApproval.reason).toContain('entire command');
+    expect(pendingApproval.argumentsPreview).toContain('curl https://api.example.com/a');
     expect(pendingApproval.networkApprovalContext).toEqual({
       host: 'api.example.com',
       protocol: 'https',
@@ -4263,13 +4357,11 @@ describe('agent loop tools', () => {
       target: 'https://api.example.com:443',
     });
     expect(pendingApproval.proposedNetworkPolicyAmendments).toEqual([
-      { host: 'api.example.com', action: 'allow' },
       { host: 'api.example.com', action: 'deny' },
     ]);
     expect(pendingApproval.availableDecisions).toEqual([
       { type: 'approve' },
       { type: 'approve_for_session' },
-      { type: 'approve_network_policy_amendment', networkPolicyAmendment: { host: 'api.example.com', action: 'allow' } },
       { type: 'approve_network_policy_amendment', networkPolicyAmendment: { host: 'api.example.com', action: 'deny' } },
       { type: 'reject' },
     ]);
@@ -4283,7 +4375,11 @@ describe('agent loop tools', () => {
     expect(approvalRun?.proposedNetworkPolicyAmendments).toEqual(pendingApproval.proposedNetworkPolicyAmendments);
     expect(approvalRun?.availableApprovalDecisions).toEqual(pendingApproval.availableDecisions);
 
-    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_network_policy_amendment' });
+    await approvalGate.answerApproval(pendingApproval.id, { decision: 'approve_for_session' });
+    const secondApproval = await waitForPendingApproval(approvalGate);
+    expect(secondApproval.id).not.toBe(pendingApproval.id);
+    expect(secondApproval.argumentsPreview).toContain('curl https://api.example.com/b');
+    await approvalGate.answerApproval(secondApproval.id, { decision: 'approve' });
     await pendingTurn;
     const approvals = await approvalGate.listApprovals();
     const events = await threadStore.listEvents(thread.id, 0);
@@ -4291,13 +4387,14 @@ describe('agent loop tools', () => {
     expect(toolHost.attempts).toEqual([
       { command: 'curl https://api.example.com/a', networkAccess: 'default' },
       { command: 'curl https://api.example.com/a', networkAccess: 'enabled' },
+      { command: 'curl https://api.example.com/b', networkAccess: 'default' },
       { command: 'curl https://api.example.com/b', networkAccess: 'enabled' },
     ]);
-    expect(approvals.approvals).toHaveLength(1);
-    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(1);
-    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_network_policy_amendment')).toBe(true);
+    expect(approvals.approvals).toHaveLength(2);
+    expect(events.filter((event) => event.type === 'approval.requested')).toHaveLength(2);
+    expect(events.some((event) => event.type === 'approval.resolved' && event.payload.decision === 'approve_for_session')).toBe(true);
     await expect(policyAmendmentStore.listPolicyAmendments()).resolves.toMatchObject({
-      networkPolicyAmendments: [{ host: 'api.example.com', action: 'allow' }],
+      networkPolicyAmendments: [],
     });
   });
 

@@ -5,6 +5,7 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { protectedWorkspaceMetadataPathForPath } from '../../security/file-system-policy.js';
 import {
   escapeRegExp,
 } from './pc-local-tool-utils.js';
@@ -37,6 +38,30 @@ export function resolveWorkspacePathFromBase(value, base, root) {
   return targetPath;
 }
 
+/** Resolve the parent canonically while preserving the final path component. */
+export function resolveWorkspaceDeletionPath(value, root) {
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error('Path is required.');
+  const workspaceRoot = realWorkspaceRoot(root);
+  const lexicalPath = path.resolve(workspaceRoot, raw);
+  return canonicalParentTargetPath(lexicalPath, workspaceRoot);
+}
+
+export function resolveWorkspaceDeletionPathFromBase(value, base, root) {
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error('Path is required.');
+  const workspaceRoot = realWorkspaceRoot(root);
+  const basePath = resolveWorkspacePath(base || '.', workspaceRoot);
+  const lexicalPath = path.resolve(basePath, raw);
+  return canonicalParentTargetPath(lexicalPath, workspaceRoot);
+}
+
+function canonicalParentTargetPath(lexicalPath, workspaceRoot) {
+  const parent = realWorkspaceTargetPath(path.dirname(lexicalPath), workspaceRoot);
+  if (!isPathInsideWorkspace(parent, workspaceRoot)) throw new Error('路径不在当前工作区内。');
+  return path.join(parent, path.basename(lexicalPath));
+}
+
 export function resolveReadablePath(value, state) {
   const raw = String(value || '').trim();
   if (!raw) throw new Error('Path is required.');
@@ -60,7 +85,7 @@ export function resolveReadablePath(value, state) {
   throw new Error('路径不在当前工作区或已批准 readable_roots 内。');
 }
 
-function readableRootsForState(state) {
+export function readableRootsForState(state) {
   const roots = [state?.root || process.cwd()];
   const configuredRoots = Array.isArray(state?.sandboxWorkspaceWrite?.readableRoots)
     ? state.sandboxWorkspaceWrite.readableRoots
@@ -86,7 +111,7 @@ export function deniedRootsForState(state) {
   return [...new Set(roots)];
 }
 
-function deniedGlobPatternsForState(state) {
+export function deniedGlobPatternsForState(state) {
   const configuredPatterns = Array.isArray(state?.sandboxWorkspaceWrite?.deniedGlobPatterns)
     ? state.sandboxWorkspaceWrite.deniedGlobPatterns
     : [];
@@ -158,6 +183,22 @@ export function deniedRootPathForFileMutationTool(name, args, state) {
   return '';
 }
 
+export function protectedPathForFileMutationTool(name, args, state) {
+  for (const rawPath of fileMutationPathCandidates(name, args)) {
+    try {
+      const base = name === 'apply_patch' && args?.workdir ? resolveWorkspacePath(args.workdir, state.root) : state.root;
+      const filePath = name === 'apply_patch'
+        ? resolveWorkspacePathFromBase(rawPath, base, state.root)
+        : resolveWorkspacePath(rawPath, state.root);
+      const protectedPath = protectedWorkspaceMetadataPathForPath(filePath, state?.permissionProfile);
+      if (protectedPath) return formatPath(filePath, state.root);
+    } catch {
+      // 常规路径校验会返回更具体的路径错误。
+    }
+  }
+  return '';
+}
+
 function globPatternMatchesPath(pattern, filePath) {
   const matcher = globPatternRegExp(pattern);
   if (!matcher) return true;
@@ -215,6 +256,10 @@ function globPatternToRegExpSource(pattern) {
     source += escapeRegExp(char);
   }
   return source;
+}
+
+export function deniedGlobRegExpSourcesForState(state) {
+  return deniedGlobPatternsForState(state).map((pattern) => `^${globPatternToRegExpSource(normalizeGlobPath(pattern))}$`);
 }
 
 function pathCandidatesForGlob(filePath) {

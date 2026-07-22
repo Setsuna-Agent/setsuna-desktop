@@ -3,7 +3,7 @@
 /** Workspace file discovery, reading, mutation, and preview calculation. */
 
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, readlink, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { buildFileMentionIndex, findFileMentionSuggestions, invalidateFileMentionIndex } from './file-mentions.js';
 import {
@@ -14,6 +14,7 @@ import {
   DEFAULT_SEARCH_RESULTS,
   MAX_SEARCH_RESULTS,
   MAX_SEARCH_CONTEXT_LINES,
+  MAX_FILE_READ_STATE_ENTRIES,
   IGNORED_DIRS,
 } from './pc-local-tool-constants.js';
 import {
@@ -31,6 +32,8 @@ import {
 import {
   resolveWorkspacePath,
   resolveWorkspacePathFromBase,
+  resolveWorkspaceDeletionPath,
+  resolveWorkspaceDeletionPathFromBase,
   resolveReadablePath,
   deniedSandboxRuleForPath,
   workspaceRelativePath,
@@ -43,6 +46,8 @@ import {
   buildFileDiff,
   buildDeletedFileDiff,
 } from './pc-local-tool-diff.js';
+import { commitFileChanges, mutationIntegrityToken } from './pc-local-tool-file-transaction.js';
+import { openValidatedReadableFile, readValidatedFileText } from './pc-local-tool-secure-read.js';
 
 export async function listDirectory(args, state) {
   const dirPath = resolveReadablePath(args?.path || '.', state);
@@ -134,43 +139,113 @@ export async function searchText(args, state, signal) {
 
 export async function readLocalFile(args, state) {
   const filePath = resolveReadablePath(args?.file_path, state);
-  const info = await stat(filePath);
-  if (!info.isFile()) return errorResult(`Path is not a file: ${formatAccessiblePath(filePath, state)}`);
+  const opened = await openValidatedReadableFile(filePath, state);
+  try {
+    const info = opened.info;
+    if (!info.isFile()) return errorResult(`Path is not a file: ${formatAccessiblePath(filePath, state)}`);
 
-  const content = await readFile(filePath, 'utf8');
-  rememberRead(state, filePath, info);
+    rememberRead(state, filePath, info);
+    const range = normalizeReadRange(args);
+    let prefix = `File: ${formatAccessiblePath(filePath, state)}`;
+    let body = '';
+    if (range) {
+      const streamed = await streamFileRange(opened.handle, range);
+      body = streamed.body;
+      prefix += streamed.reachedEof
+        ? ` (lines ${streamed.startLine}-${streamed.endLine} of ${streamed.totalLines})`
+        : ` (lines ${streamed.startLine}-${streamed.endLine}; file continues)`;
+    } else {
+      body = await streamFilePrefix(opened.handle, MAX_TEXT_BYTES);
+    }
 
-  const range = normalizeReadRange(args);
-  let body = content;
-  let prefix = `File: ${formatAccessiblePath(filePath, state)}`;
-  if (range) {
-    const lines = content.split(/\r?\n/);
-    const start = Math.max(0, range.offset - 1);
-    const end = range.limit === null ? lines.length : Math.min(lines.length, start + range.limit);
-    body = lines
-      .slice(start, end)
-      .map((line, index) => `${start + index + 1}: ${line}`)
-      .join('\n');
-    prefix += ` (lines ${start + 1}-${end} of ${lines.length})`;
+    rememberReadFileResult(state, filePath, info, range, 'runtime');
+    return okResult(`${prefix}\n${truncateText(body, MAX_TEXT_BYTES)}`, `read ${formatAccessiblePath(filePath, state)}`);
+  } finally {
+    await opened.handle.close().catch(() => undefined);
+  }
+}
+
+async function streamFilePrefix(handle, maxChars) {
+  let body = '';
+  const stream = handle.createReadStream({ encoding: 'utf8', autoClose: false });
+  for await (const chunk of stream) {
+    const remaining = Math.max(0, maxChars + 1 - body.length);
+    if (remaining) body += String(chunk).slice(0, remaining);
+    if (body.length > maxChars) break;
+  }
+  return truncateText(body, maxChars);
+}
+
+async function streamFileRange(handle, range) {
+  const startLine = Math.max(1, range.offset || 1);
+  const requestedEnd = range.limit === null ? Number.POSITIVE_INFINITY : startLine + Math.max(0, range.limit) - 1;
+  let lineNumber = 1;
+  let totalLines = 1;
+  let selectedLine = '';
+  let output = '';
+  let outputTruncated = false;
+  let reachedEof = true;
+
+  const appendSelected = (value) => {
+    if (lineNumber < startLine || lineNumber > requestedEnd || outputTruncated) return;
+    const prefix = selectedLine ? '' : `${lineNumber}: `;
+    const addition = `${prefix}${value}`;
+    const remaining = MAX_TEXT_BYTES - output.length;
+    if (remaining <= 0) {
+      outputTruncated = true;
+      return;
+    }
+    output += addition.slice(0, remaining);
+    selectedLine += value;
+    if (addition.length > remaining) outputTruncated = true;
+  };
+
+  const finishLine = () => {
+    if (lineNumber >= startLine && lineNumber <= requestedEnd && !outputTruncated) {
+      if (!selectedLine) appendSelected('');
+      if (output.length < MAX_TEXT_BYTES) output += '\n';
+      else outputTruncated = true;
+    }
+    selectedLine = '';
+    lineNumber += 1;
+    totalLines = lineNumber;
+  };
+
+  const stream = handle.createReadStream({ encoding: 'utf8', autoClose: false });
+  outer: for await (const chunkValue of stream) {
+    const pieces = String(chunkValue).split('\n');
+    for (let index = 0; index < pieces.length; index += 1) {
+      const piece = pieces[index];
+      const completesLine = index < pieces.length - 1;
+      const content = completesLine && piece.endsWith('\r') ? piece.slice(0, -1) : piece;
+      appendSelected(content);
+      if (completesLine) finishLine();
+      if ((Number.isFinite(requestedEnd) && lineNumber > requestedEnd) || outputTruncated) {
+        reachedEof = false;
+        break outer;
+      }
+    }
   }
 
-  rememberReadFileResult(state, filePath, info, range, 'runtime');
-  return okResult(`${prefix}\n${truncateText(body, MAX_TEXT_BYTES)}`, `read ${formatAccessiblePath(filePath, state)}`);
+  const endLine = Math.max(startLine - 1, Math.min(totalLines, requestedEnd));
+  const marker = outputTruncated ? '\n[output truncated]' : '';
+  return {
+    body: `${output.replace(/\n$/u, '')}${marker}`,
+    startLine,
+    endLine,
+    reachedEof,
+    totalLines,
+  };
 }
 
 export async function applyLocalPatch(args, state) {
   const result = await calculateApplyPatch(args, state);
   if (!result.ok) return errorResult(result.error);
 
+  await commitFileChanges(result.changes, state);
   for (const change of result.changes) {
-    if (change.action === 'delete') {
-      await rm(change.filePath);
-      state.reads.delete(change.filePath);
-      continue;
-    }
-    await mkdir(path.dirname(change.filePath), { recursive: true });
-    await writeFile(change.filePath, change.nextContent, 'utf8');
-    rememberRead(state, change.filePath, await stat(change.filePath));
+    if (change.action === 'delete') state.reads.delete(change.filePath);
+    else rememberRead(state, change.filePath, await stat(change.filePath));
   }
   invalidateFileMentionIndex(state.root);
 
@@ -184,6 +259,29 @@ export async function applyLocalPatch(args, state) {
 }
 
 export async function writeLocalFile(args, state) {
+  const result = await calculateWriteFile(args, state);
+  if (!result.ok) return errorResult(result.error);
+
+  await commitFileChanges([{
+    action: 'write',
+    filePath: result.filePath,
+    existed: result.existed,
+    previousContent: result.previousContent,
+    nextContent: result.nextContent,
+  }], state);
+  invalidateFileMentionIndex(state.root);
+  rememberRead(state, result.filePath, await stat(result.filePath));
+
+  return okResult(
+    result.existed
+      ? `Successfully overwrote file: ${formatPath(result.filePath, state.root)}.`
+      : `Successfully created and wrote to new file: ${formatPath(result.filePath, state.root)}.`,
+    `${result.existed ? 'wrote' : 'created'} ${formatPath(result.filePath, state.root)}`,
+    result.diff.additions || result.diff.deletions ? { diff: result.diff } : {},
+  );
+}
+
+export async function calculateWriteFile(args, state) {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
   const content = String(args?.content ?? '');
   let existed = false;
@@ -199,13 +297,8 @@ export async function writeLocalFile(args, state) {
   }
 
   if (existed) {
-    previousContent = await readFile(filePath, 'utf8');
+    previousContent = await readValidatedFileText(filePath, state);
   }
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, content, 'utf8');
-  invalidateFileMentionIndex(state.root);
-  rememberRead(state, filePath, await stat(filePath));
 
   const diff = buildFileDiff({
     filePath,
@@ -214,13 +307,7 @@ export async function writeLocalFile(args, state) {
     previousContent,
     nextContent: content,
   });
-  return okResult(
-    existed
-      ? `Successfully overwrote file: ${formatPath(filePath, state.root)}.`
-      : `Successfully created and wrote to new file: ${formatPath(filePath, state.root)}.`,
-    `${existed ? 'wrote' : 'created'} ${formatPath(filePath, state.root)}`,
-    diff.additions || diff.deletions ? { diff } : {},
-  );
+  return { ok: true, filePath, existed, previousContent, nextContent: content, diff };
 }
 
 export async function calculateApplyPatch(args, state) {
@@ -244,7 +331,9 @@ export async function calculateApplyPatch(args, state) {
   const changes = [];
   const touched = new Set();
   for (const operation of operations.operations) {
-    const filePath = resolveWorkspacePathFromBase(operation.path, patchRoot, state.root);
+    const filePath = operation.type === 'delete'
+      ? resolveWorkspaceDeletionPathFromBase(operation.path, patchRoot, state.root)
+      : resolveWorkspacePathFromBase(operation.path, patchRoot, state.root);
     if (touched.has(filePath)) return { ok: false, error: `同一个补丁中重复修改了文件：${formatPath(filePath, state.root)}` };
     touched.add(filePath);
 
@@ -266,14 +355,18 @@ export async function calculateApplyPatch(args, state) {
       touched.add(moveToPath);
       if (existsSync(moveToPath)) return { ok: false, error: `目标文件已存在，无法移动到：${formatPath(moveToPath, state.root)}` };
     }
-    const info = await stat(filePath).catch((error) => {
+    const info = await lstat(filePath).catch((error) => {
       if (error?.code === 'ENOENT') return null;
       throw error;
     });
     if (!info) return { ok: false, error: `找不到文件，无法${operation.type === 'delete' ? '删除' : '修改'}：${formatPath(filePath, state.root)}` };
-    if (!info.isFile()) return { ok: false, error: `Path is not a file: ${formatPath(filePath, state.root)}` };
+    if (!info.isFile() && !(operation.type === 'delete' && info.isSymbolicLink())) {
+      return { ok: false, error: `Path is not a file: ${formatPath(filePath, state.root)}` };
+    }
 
-    const previousContent = await readFile(filePath, 'utf8');
+    const previousContent = info.isSymbolicLink()
+      ? `[symbolic link -> ${await readlink(filePath)}]`
+      : await readValidatedFileText(filePath, state);
     if (operation.type === 'delete') {
       changes.push({
         action: 'delete',
@@ -281,6 +374,7 @@ export async function calculateApplyPatch(args, state) {
         existed: true,
         previousContent,
         nextContent: '',
+        symbolicLink: info.isSymbolicLink(),
       });
       continue;
     }
@@ -343,8 +437,13 @@ export async function appendLocalFile(args, state) {
   const result = await calculateAppendFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return errorResult(result.error);
 
-  await mkdir(path.dirname(result.filePath), { recursive: true });
-  await writeFile(result.filePath, result.nextContent, 'utf8');
+  await commitFileChanges([{
+    action: 'write',
+    filePath: result.filePath,
+    existed: result.existed,
+    previousContent: result.previousContent,
+    nextContent: result.nextContent,
+  }], state);
   invalidateFileMentionIndex(state.root);
   rememberRead(state, result.filePath, await stat(result.filePath));
 
@@ -361,7 +460,14 @@ export async function deleteLocalFile(args, state) {
   const result = await calculateDeleteFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return errorResult(result.error);
 
-  await rm(result.filePath);
+  await commitFileChanges([{
+    action: 'delete',
+    filePath: result.filePath,
+    existed: true,
+    previousContent: result.previousContent,
+    nextContent: '',
+    symbolicLink: result.symbolicLink,
+  }], state);
   invalidateFileMentionIndex(state.root);
   state.reads.delete(result.filePath);
 
@@ -376,8 +482,13 @@ export async function editLocalFile(args, state) {
   const result = await calculateEditFile(normalizeEditArgs(args), state, { enforcePriorRead: false });
   if (!result.ok) return errorResult(result.error);
 
-  await mkdir(path.dirname(result.filePath), { recursive: true });
-  await writeFile(result.filePath, result.nextContent, 'utf8');
+  await commitFileChanges([{
+    action: 'write',
+    filePath: result.filePath,
+    existed: result.existed,
+    previousContent: result.previousContent,
+    nextContent: result.nextContent,
+  }], state);
   invalidateFileMentionIndex(state.root);
   rememberRead(state, result.filePath, await stat(result.filePath));
 
@@ -418,7 +529,7 @@ export async function calculateEditFile(args, state, options = {}) {
       previousContent: '',
       nextContent: newString,
     });
-    return { ok: true, filePath, existed, nextContent: newString, diff };
+    return { ok: true, filePath, existed, previousContent: '', nextContent: newString, diff };
   }
 
   if (options.enforcePriorRead) {
@@ -426,7 +537,7 @@ export async function calculateEditFile(args, state, options = {}) {
     if (guard) return { ok: false, error: guard.display };
   }
 
-  previousContent = await readFile(filePath, 'utf8');
+  previousContent = await readValidatedFileText(filePath, state);
   if (oldString === '') return { ok: false, error: `文件已存在，无法按新建方式写入：${formatPath(filePath, state.root)}` };
   if (oldString === newString) return { ok: false, error: '没有需要应用的变化。' };
 
@@ -454,7 +565,7 @@ export async function calculateEditFile(args, state, options = {}) {
     previousContent,
     nextContent,
   });
-  return { ok: true, filePath, existed, nextContent, diff };
+  return { ok: true, filePath, existed, previousContent, nextContent, diff };
 }
 
 export async function calculateAppendFile(args, state, options = {}) {
@@ -479,7 +590,7 @@ export async function calculateAppendFile(args, state, options = {}) {
       const guard = await priorReadGuard(state, filePath, existingStats, '追加');
       if (guard) return { ok: false, error: guard.display };
     }
-    previousContent = await readFile(filePath, 'utf8');
+    previousContent = await readValidatedFileText(filePath, state);
   }
 
   const nextContent = `${previousContent}${content}`;
@@ -490,15 +601,29 @@ export async function calculateAppendFile(args, state, options = {}) {
     previousContent,
     nextContent,
   });
-  return { ok: true, filePath, existed, nextContent, diff };
+  return { ok: true, filePath, existed, previousContent, nextContent, diff };
+}
+
+export async function integrityTokenForCalculatedMutation(result, state) {
+  if (!result?.ok) return '';
+  if (Array.isArray(result.changes)) return mutationIntegrityToken(result.changes, state?.root);
+  if (!result.filePath) return '';
+  return mutationIntegrityToken([{
+    action: result.diff?.action === 'Deleted' ? 'delete' : 'write',
+    filePath: result.filePath,
+    existed: result.existed ?? true,
+    previousContent: result.previousContent ?? '',
+    nextContent: result.nextContent ?? '',
+    symbolicLink: result.symbolicLink,
+  }], state?.root);
 }
 
 export async function calculateDeleteFile(args, state, options = {}) {
-  const filePath = resolveWorkspacePath(args?.file_path, state.root);
+  const filePath = resolveWorkspaceDeletionPath(args?.file_path, state.root);
   let existingStats = null;
 
   try {
-    existingStats = await stat(filePath);
+    existingStats = await lstat(filePath);
   } catch (error) {
     if (error?.code === 'ENOENT') {
       return { ok: false, error: `找不到文件，无法删除：${formatPath(filePath, state.root)}` };
@@ -507,7 +632,7 @@ export async function calculateDeleteFile(args, state, options = {}) {
     throw error;
   }
 
-  if (!existingStats.isFile()) {
+  if (!existingStats.isFile() && !existingStats.isSymbolicLink()) {
     return { ok: false, error: `Path is not a deletable file: ${formatPath(filePath, state.root)}` };
   }
   if (options.enforcePriorRead) {
@@ -515,13 +640,15 @@ export async function calculateDeleteFile(args, state, options = {}) {
     if (guard) return { ok: false, error: guard.display };
   }
 
-  const previousContent = await readFile(filePath, 'utf8');
+  const previousContent = existingStats.isSymbolicLink()
+    ? `[symbolic link -> ${await readlink(filePath)}]`
+    : await readValidatedFileText(filePath, state);
   const diff = buildDeletedFileDiff({
     filePath,
     root: state.root,
     previousContent,
   });
-  return { ok: true, filePath, diff };
+  return { ok: true, filePath, diff, previousContent, symbolicLink: existingStats.isSymbolicLink() };
 }
 
 function filterFilesByScope(index, scopePath, root) {
@@ -578,19 +705,19 @@ async function priorReadGuard(state, filePath, currentStats, verb) {
 }
 
 export function rememberRead(state, filePath, info) {
-  state.reads?.set(filePath, {
+  boundedMapSet(state.reads, filePath, {
     mtimeMs: info.mtimeMs,
     size: info.size,
-  });
+  }, MAX_FILE_READ_STATE_ENTRIES);
 }
 
 export function rememberReadFileResult(state, filePath, info, range, source) {
   if (!state.readFileResults) state.readFileResults = new Map();
-  state.readFileResults.set(readFileResultCacheKey(filePath, range), {
+  boundedMapSet(state.readFileResults, readFileResultCacheKey(filePath, range), {
     mtimeMs: info.mtimeMs,
     size: info.size,
     source,
-  });
+  }, MAX_FILE_READ_STATE_ENTRIES);
 }
 
 export function rememberedReadFileResult(state, filePath, info, range) {
@@ -603,6 +730,17 @@ export function rememberedReadFileResult(state, filePath, info, range) {
 function readFileResultCacheKey(filePath, range) {
   if (!range) return `${filePath}\0full`;
   return `${filePath}\0${range.offset || 1}\0${range.limit ?? 'end'}`;
+}
+
+function boundedMapSet(map, key, value, maxEntries) {
+  if (!map?.set) return;
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+  while (map.size > maxEntries) {
+    const oldestKey = map.keys().next().value;
+    if (oldestKey === undefined) break;
+    map.delete(oldestKey);
+  }
 }
 
 export function isEditToolName(name) {

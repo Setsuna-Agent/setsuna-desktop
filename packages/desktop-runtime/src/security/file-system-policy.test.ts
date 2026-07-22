@@ -20,6 +20,8 @@ describe('file system policy', () => {
 
   it('protects workspace metadata unless full access is selected', () => {
     expect(protectedWorkspaceMetadataPathForTool('write_file', { file_path: '.git/config' }, 'workspace-write')).toBe('.git/config');
+    expect(protectedWorkspaceMetadataPathForTool('write_file', { file_path: '.GIT/config' }, 'workspace-write')).toBe('.GIT/config');
+    expect(protectedWorkspaceMetadataPathForTool('write_file', { file_path: '.Agents/rules.md' }, 'workspace-write')).toBe('.Agents/rules.md');
     expect(protectedWorkspaceMetadataPathForTool('write_file', { file_path: '.git/config' }, 'danger-full-access')).toBe('');
     expect(protectedWorkspaceMetadataPathForPath('/tmp/work/.codex/config.json', 'workspace-write')).toBe('/tmp/work/.codex/config.json');
   });

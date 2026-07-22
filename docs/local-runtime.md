@@ -313,6 +313,7 @@ REST 路由覆盖：
 - 维护每个项目独立 tool state，shell process store 可复用。
 - 支持 `workspace_*` 别名。
 - 文件变更通过 `apply_patch` 或单文件 write/edit/append/delete 工具直接执行，审批和预览由 tool orchestrator 统一处理。
+- 文件边界面向普通本地桌面使用场景：读写前后校验 canonical path，写入使用同目录 staging、rename、备份和失败回滚；工作区内软链接可以使用，越界目标会被拒绝。该机制用于防误操作和普通并发冲突，不承诺隔离同一用户下刻意制造竞态的恶意本机进程。
 - shell 风险由 `shellCommandRisk()` 决定是否审批。
 - `previewPartialToolCall()` 支持流式文件变更预览。
 
