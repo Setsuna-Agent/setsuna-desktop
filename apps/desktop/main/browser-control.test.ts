@@ -70,6 +70,7 @@ class FakeWebContents extends EventEmitter {
   captureCount = 0;
   readonly debugger = new FakeBrowserDebugger();
   deviceEmulation: unknown = null;
+  focusCount = 0;
   userAgent = 'Desktop Chrome/140.0.0.0';
   readonly session = { getUserAgent: () => 'Desktop Chrome/140.0.0.0' };
   private destroyed = false;
@@ -83,6 +84,7 @@ class FakeWebContents extends EventEmitter {
 
   getTitle(): string { return this.title; }
   getURL(): string { return this.url; }
+  focus(): void { this.focusCount += 1; }
   isDestroyed(): boolean { return this.destroyed; }
   isLoading(): boolean { return this.loading; }
 
@@ -197,8 +199,11 @@ describe('DesktopBrowserController', () => {
 
   it('applies validated device emulation and mobile request identity to the registered guest', async () => {
     const contents = new FakeWebContents(12);
-    const controller = new DesktopBrowserController({ createAutomation: () => new FakeAutomation() });
+    const automation = new FakeAutomation();
+    const controller = new DesktopBrowserController({ createAutomation: () => automation });
     controller.registerTab('tab-1', asWebContents(contents));
+    const snapshot = await controller.execute({ kind: 'snapshot', tabId: 'tab-1' });
+    const snapshotRef = snapshot.kind === 'snapshot' ? snapshot.elements[0]?.ref : undefined;
 
     await expect(controller.setDeviceEmulation('tab-1', {
       deviceScaleFactor: 3,
@@ -208,6 +213,8 @@ describe('DesktopBrowserController', () => {
       userAgentProfile: 'ios-phone',
       width: 393,
     })).resolves.toBe(true);
+    expect(automation.invalidated).toBe(1);
+    await expect(controller.execute({ kind: 'click', ref: snapshotRef!, tabId: 'tab-1' })).rejects.toThrow('is stale');
     expect(contents.deviceEmulation).toEqual({
       deviceScaleFactor: 3,
       scale: 0.75,
@@ -234,6 +241,7 @@ describe('DesktopBrowserController', () => {
       width: 100,
     })).resolves.toBe(false);
     await expect(controller.setDeviceEmulation('tab-1', null)).resolves.toBe(true);
+    expect(automation.invalidated).toBe(2);
     expect(contents.deviceEmulation).toBeNull();
     expect(contents.userAgent).toBe('Desktop Chrome/140.0.0.0');
     expect(contents.debugger.commands).toContainEqual({
@@ -290,6 +298,7 @@ describe('DesktopBrowserController', () => {
     await expect(controller.execute({ key: 'Tab', kind: 'key', repeat: 2 })).resolves.toMatchObject({
       message: 'pressed Tab',
     });
+    expect(contents.focusCount).toBe(4);
     await expect(controller.execute({ kind: 'wait', text: 'Mail subject', timeoutMs: 0 })).resolves.toMatchObject({
       matched: true,
     });

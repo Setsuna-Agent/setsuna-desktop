@@ -74,8 +74,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     const defaultUserAgent = contents.session.getUserAgent();
     const destroyedListener = () => this.unregisterTab(normalizedTabId, contents.id);
     const navigationListener = () => {
-      this.snapshotRevisions.set(normalizedTabId, (this.snapshotRevisions.get(normalizedTabId) ?? 0) + 1);
-      automation.invalidate();
+      this.invalidateSnapshot(normalizedTabId, automation);
     };
     contents.once('destroyed', destroyedListener);
     contents.on('did-start-navigation', navigationListener);
@@ -131,6 +130,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
         entry.contents.disableDeviceEmulation();
         entry.contents.setUserAgent(entry.defaultUserAgent);
         await entry.deviceEmulator.apply(null);
+        this.invalidateSnapshot(tabId, entry.automation);
         return true;
       }
       const normalized = normalizeDeviceEmulation(emulation);
@@ -146,9 +146,12 @@ export class DesktopBrowserController implements BrowserControlExecutor {
         viewSize: { height: normalized.height, width: normalized.width },
       });
       await entry.deviceEmulator.apply({ touch: normalized.mobile, userAgent });
+      // viewport 与节点坐标来自最近一次快照，设备模式变化后必须一起失效。
+      this.invalidateSnapshot(tabId, entry.automation);
       return true;
     } catch {
       // 应用覆盖配置期间，来宾页面可能会分离，或其 CDP 会话可能会被替换。
+      this.invalidateSnapshot(tabId, entry.automation);
       return false;
     }
   }
@@ -265,7 +268,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
   ): Promise<DesktopBrowserControlResult> {
     const [tabId, entry] = this.resolveTab(requestedTabId);
     assertCurrentSnapshotRef(this.snapshotRevisions, tabId, ref);
-    throwIfAborted(signal);
+    this.focusForInput(entry, signal);
     const message = await entry.automation.click(ref, signal);
     return { kind: 'action', message, tabId, url: entry.contents.getURL() };
   }
@@ -280,6 +283,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
   ): Promise<DesktopBrowserControlResult> {
     const [tabId, entry] = this.resolveTab(requestedTabId);
     assertCurrentSnapshotRef(this.snapshotRevisions, tabId, ref);
+    this.focusForInput(entry, signal);
     const message = await entry.automation.type(ref, {
       clear: clear ?? true,
       submit: submit ?? false,
@@ -297,7 +301,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     const [tabId, entry] = this.resolveTab(requestedTabId);
     if (ref) assertCurrentSnapshotRef(this.snapshotRevisions, tabId, ref);
     const deltaY = clampInteger(requestedDeltaY ?? 600, -4_000, 4_000);
-    throwIfAborted(signal);
+    this.focusForInput(entry, signal);
     const message = await entry.automation.scroll(ref, deltaY, signal);
     return { kind: 'action', message, tabId, url: entry.contents.getURL() };
   }
@@ -310,6 +314,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     signal?: AbortSignal,
   ): Promise<DesktopBrowserControlResult> {
     const [tabId, entry] = this.resolveTab(requestedTabId);
+    this.focusForInput(entry, signal);
     const message = await entry.automation.key({
       key: normalizeBrowserKey(rawKey),
       modifiers: normalizeKeyModifiers(rawModifiers),
@@ -326,8 +331,7 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     const [tabId, entry] = this.resolveTab(requestedTabId);
     const { contents } = entry;
     const url = normalizeBrowserUrl(rawUrl);
-    this.snapshotRevisions.set(tabId, (this.snapshotRevisions.get(tabId) ?? 0) + 1);
-    entry.automation.invalidate();
+    this.invalidateSnapshot(tabId, entry.automation);
     throwIfAborted(signal);
     await contents.loadURL(url);
     throwIfAborted(signal);
@@ -372,6 +376,19 @@ export class DesktopBrowserController implements BrowserControlExecutor {
     const entry = this.tabs.get(tabId);
     if (!entry) throw new Error(`Browser tab ${tabId} is not available.`);
     return [tabId, entry];
+  }
+
+  private invalidateSnapshot(tabId: string, automation: BrowserAutomation): void {
+    this.snapshotRevisions.set(tabId, (this.snapshotRevisions.get(tabId) ?? 0) + 1);
+    automation.invalidate();
+  }
+
+  private focusForInput(entry: RegisteredBrowserTab, signal?: AbortSignal): void {
+    throwIfAborted(signal);
+    // CDP can accept input while the Electron webview guest itself is not focused.
+    // Focus the guest first so keyboard and follow-up events reach the intended page.
+    entry.contents.focus();
+    throwIfAborted(signal);
   }
 
   private removeDestroyedTabs(): void {

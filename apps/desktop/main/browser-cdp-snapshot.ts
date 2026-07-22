@@ -154,7 +154,7 @@ export function extractCdpPageObservation(
       if (nodeTypes[nodeIndex] === 1) layoutByNode.set(nodeIndex, info);
 
       const rawText = compact(stringAt(strings, layout.text?.[layoutIndex]), 500);
-      if (!rawText) continue;
+      if (!rawText || isHiddenLayout(info)) continue;
       const elementIndex = nearestElementIndex(nodeIndex, nodeTypes, parentIndexes);
       if (elementIndex < 0) continue;
       const existing = textByElement.get(elementIndex) ?? [];
@@ -350,8 +350,9 @@ function normalizeBounds(
 
 function isHiddenLayout(layout: LayoutInfo | undefined): boolean {
   if (!layout) return false;
+  const opacity = Number.parseFloat(layout.opacity);
   return ['hidden', 'collapse'].includes(layout.visibility)
-    || Number(layout.opacity) === 0;
+    || (Number.isFinite(opacity) && opacity <= 0);
 }
 
 function rareIndexSet(data: RareData<unknown> | undefined): Set<number> {

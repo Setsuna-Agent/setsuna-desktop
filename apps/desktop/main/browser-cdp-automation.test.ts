@@ -14,6 +14,8 @@ class SnapshotFixture {
   readonly strings: string[] = [];
   private readonly indexes = new Map<string, number>();
 
+  constructor(private readonly hideRowText = false) {}
+
   string(value: string): number {
     const existing = this.indexes.get(value);
     if (existing !== undefined) return existing;
@@ -28,6 +30,7 @@ class SnapshotFixture {
     const rowText = options.clicked ? 'Opened mail' : 'Inbox subject';
     const rowY = options.scrolled ? 20 : 60;
     const style = [s('visible'), s('1'), s('auto'), s('default')];
+    const hiddenStyle = [s('hidden'), s('1'), s('auto'), s('default')];
     const pointerStyle = [s('visible'), s('1'), s('auto'), s('pointer')];
     return {
       documents: [{
@@ -45,7 +48,7 @@ class SnapshotFixture {
           ],
           nodeIndex: [3, 4, 5, 6, 7],
           paintOrders: [1, 2, 3, 4, 5],
-          styles: [style, style, pointerStyle, pointerStyle, style],
+          styles: [style, this.hideRowText ? hiddenStyle : style, pointerStyle, pointerStyle, style],
           text: [s(''), s(rowText), s(''), s('Open'), s('')],
         },
         nodes: {
@@ -99,6 +102,7 @@ class FakeDebuggerTransport extends EventEmitter implements BrowserDebuggerTrans
   constructor(
     private readonly fixture: SnapshotFixture,
     private readonly rejectChildAutoAttach = false,
+    private readonly hitTest: (point: { x: number; y: number }) => number | null = () => 5,
   ) {
     super();
   }
@@ -130,6 +134,11 @@ class FakeDebuggerTransport extends EventEmitter implements BrowserDebuggerTrans
     if (method === 'DOM.getContentQuads') {
       return { quads: [[10, 60, 510, 60, 510, 100, 10, 100]] };
     }
+    if (method === 'DOM.getNodeForLocation') {
+      const point = params as { x: number; y: number };
+      const backendNodeId = this.hitTest(point);
+      return backendNodeId === null ? {} : { backendNodeId };
+    }
     if (method === 'Input.dispatchMouseEvent') {
       const input = params as { type?: string };
       if (input.type === 'mouseReleased') this.clicked = true;
@@ -156,6 +165,17 @@ describe('extractCdpPageObservation', () => {
     ]));
     expect(observation.text).toContain('Inbox subject');
   });
+
+  it('excludes text hidden by computed visibility from page observations', () => {
+    const fixture = new SnapshotFixture(true);
+    const observation = extractCdpPageObservation(
+      fixture.snapshot(),
+      fixture.accessibility(),
+      { height: 600, width: 800 },
+    );
+
+    expect(observation.text).not.toContain('Inbox subject');
+  });
 });
 
 describe('ElectronBrowserCdpAutomation', () => {
@@ -170,11 +190,25 @@ describe('ElectronBrowserCdpAutomation', () => {
     expect(row?.ref).toBe('s1:t0:n4');
     expect(input?.ref).toBe('s1:t0:n8');
 
-    await expect(automation.click(row!.ref)).resolves.toContain('visible page state changed');
+    const clickCallStart = transport.calls.length;
+    await expect(automation.click(row!.ref)).resolves.toContain('Dispatched a real browser click');
+    expect(transport.calls.slice(clickCallStart).map((call) => call.method)).toEqual([
+      'DOM.scrollIntoViewIfNeeded',
+      'DOM.getContentQuads',
+      'Input.dispatchMouseEvent',
+      'DOM.getNodeForLocation',
+      'Input.dispatchMouseEvent',
+      'Input.dispatchMouseEvent',
+    ]);
     await expect(automation.type(input!.ref, { clear: true, submit: false, text: 'query' })).resolves.toContain(
-      'Typed 5 characters',
+      'Dispatched 5 characters',
     );
-    await expect(automation.scroll(undefined, 600)).resolves.toContain('real wheel event');
+    const scrollCallStart = transport.calls.length;
+    await expect(automation.scroll(undefined, 600)).resolves.toContain('real browser wheel scroll');
+    expect(transport.calls.slice(scrollCallStart).map((call) => call.method)).toEqual([
+      'Page.getLayoutMetrics',
+      'Input.dispatchMouseEvent',
+    ]);
     await expect(automation.key({ key: 'Tab', modifiers: ['Shift'], repeat: 2 })).resolves.toContain('Shift+Tab');
     await expect(automation.hasText('Opened mail')).resolves.toBe(true);
 
@@ -188,6 +222,86 @@ describe('ElectronBrowserCdpAutomation', () => {
     ]));
     automation.dispose();
     expect(transport.isAttached()).toBe(false);
+  });
+
+  it('dispatches independent repeats and applies Shift to character key payloads', async () => {
+    const fixture = new SnapshotFixture();
+    const transport = new FakeDebuggerTransport(fixture);
+    const automation = new ElectronBrowserCdpAutomation(transport);
+
+    await automation.key({ key: 'a', modifiers: ['Shift'], repeat: 2 });
+
+    const keyCalls = transport.calls.filter((call) => call.method === 'Input.dispatchKeyEvent');
+    expect(keyCalls).toHaveLength(4);
+    expect(keyCalls.filter((call) => (call.params as { type?: string }).type === 'keyDown')).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({
+          code: 'KeyA',
+          key: 'A',
+          modifiers: 8,
+          text: 'A',
+          unmodifiedText: 'a',
+        }),
+      }),
+      expect.objectContaining({
+        params: expect.objectContaining({
+          code: 'KeyA',
+          key: 'A',
+          modifiers: 8,
+          text: 'A',
+          unmodifiedText: 'a',
+        }),
+      }),
+    ]);
+    expect(keyCalls).not.toContainEqual(expect.objectContaining({
+      params: expect.objectContaining({ autoRepeat: true }),
+    }));
+  });
+
+  it('does not match text hidden by computed visibility while waiting', async () => {
+    const fixture = new SnapshotFixture(true);
+    const transport = new FakeDebuggerTransport(fixture);
+    const automation = new ElectronBrowserCdpAutomation(transport);
+
+    await expect(automation.hasText('Inbox subject')).resolves.toBe(false);
+    expect(transport.calls).toContainEqual(expect.objectContaining({
+      method: 'DOMSnapshot.captureSnapshot',
+      params: expect.objectContaining({ computedStyles: ['visibility', 'opacity'] }),
+    }));
+  });
+
+  it('retries another point when the center is covered', async () => {
+    const fixture = new SnapshotFixture();
+    const transport = new FakeDebuggerTransport(
+      fixture,
+      false,
+      ({ x }) => x > 200 ? 99 : 5,
+    );
+    const automation = new ElectronBrowserCdpAutomation(transport);
+    const snapshot = await automation.snapshot(1, 20);
+    const row = snapshot.elements.find((element) => element.name === 'Inbox subject');
+
+    await expect(automation.click(row!.ref)).resolves.toContain('at (110, 68)');
+
+    const pointerCalls = transport.calls.filter((call) => call.method === 'Input.dispatchMouseEvent');
+    expect(pointerCalls.filter((call) => (call.params as { type?: string }).type === 'mouseMoved')).toHaveLength(2);
+    expect(pointerCalls.find((call) => (call.params as { type?: string }).type === 'mouseReleased')).toMatchObject({
+      params: expect.objectContaining({ x: 110, y: 68 }),
+    });
+  });
+
+  it('does not send a press when every candidate point is covered', async () => {
+    const fixture = new SnapshotFixture();
+    const transport = new FakeDebuggerTransport(fixture, false, () => 99);
+    const automation = new ElectronBrowserCdpAutomation(transport);
+    const snapshot = await automation.snapshot(1, 20);
+    const row = snapshot.elements.find((element) => element.name === 'Inbox subject');
+
+    await expect(automation.click(row!.ref)).rejects.toThrow('covered, stale, or not pointer-interactable');
+    expect(transport.calls).not.toContainEqual(expect.objectContaining({
+      method: 'Input.dispatchMouseEvent',
+      params: expect.objectContaining({ type: 'mousePressed' }),
+    }));
   });
 
   it('keeps an attached OOPIF target when recursive auto-attach is unavailable', async () => {
@@ -211,5 +325,27 @@ describe('ElectronBrowserCdpAutomation', () => {
       sessionId: 'child-session',
     }));
     automation.dispose();
+  });
+
+  it('does not invalidate page refs when non-page targets attach or detach', async () => {
+    const fixture = new SnapshotFixture();
+    const transport = new FakeDebuggerTransport(fixture);
+    const automation = new ElectronBrowserCdpAutomation(transport);
+    const snapshot = await automation.snapshot(1, 20);
+    const row = snapshot.elements.find((element) => element.name === 'Inbox subject');
+
+    transport.emit('message', {}, 'Target.attachedToTarget', {
+      sessionId: 'worker-session',
+      targetInfo: { type: 'service_worker', url: 'https://mail.example.com/service-worker.js' },
+    }, '');
+    transport.emit('message', {}, 'Target.detachedFromTarget', {
+      sessionId: 'worker-session',
+    }, '');
+
+    await expect(automation.click(row!.ref)).resolves.toContain('Dispatched a real browser click');
+    expect(transport.calls).not.toContainEqual(expect.objectContaining({
+      method: 'Target.setAutoAttach',
+      sessionId: 'worker-session',
+    }));
   });
 });

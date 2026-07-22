@@ -76,7 +76,7 @@ const CONTROL_TOOLS: RuntimeToolDefinition[] = [
   },
   {
     name: BROWSER_CLICK_TOOL_NAME,
-    description: 'Click an element from the latest browser_snapshot.',
+    description: 'Click an element from the latest browser_snapshot. A successful call confirms input dispatch, not the resulting page state.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -89,7 +89,7 @@ const CONTROL_TOOLS: RuntimeToolDefinition[] = [
   },
   {
     name: BROWSER_TYPE_TOOL_NAME,
-    description: 'Enter text into an editable element, or choose a matching select option, from the latest browser_snapshot.',
+    description: 'Enter text into an editable element, or choose a matching select option, from the latest browser_snapshot. Success confirms input dispatch, not the resulting value or form state.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -105,7 +105,7 @@ const CONTROL_TOOLS: RuntimeToolDefinition[] = [
   },
   {
     name: BROWSER_SCROLL_TOOL_NAME,
-    description: 'Send a real browser wheel gesture by pixels, or scroll a snapshot element into view.',
+    description: 'Send one real browser wheel gesture by pixels, or scroll a snapshot element into view. Success confirms dispatch, not resulting page movement.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -118,7 +118,7 @@ const CONTROL_TOOLS: RuntimeToolDefinition[] = [
   },
   {
     name: BROWSER_KEY_TOOL_NAME,
-    description: 'Press a browser key such as Tab, Enter, Escape, an arrow key, or a keyboard shortcut.',
+    description: 'Focus the selected side-browser page and dispatch a key such as Tab, Enter, Escape, an arrow key, or a keyboard shortcut. Success confirms dispatch, not the page handler outcome.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -186,6 +186,13 @@ export class BrowserToolHost implements ToolHost {
     }
     if (advertised.has('browser_click') || advertised.has('browser_type')) {
       lines.push('Element interaction requires refs from the latest page snapshot; navigation and later snapshots invalidate older refs.');
+    }
+    if (advertised.has('browser_click')) {
+      lines.push('Prefer nodes marked clickable=true.');
+    }
+    if ([BROWSER_CLICK_TOOL_NAME, BROWSER_TYPE_TOOL_NAME, BROWSER_SCROLL_TOOL_NAME, BROWSER_KEY_TOOL_NAME]
+      .some((name) => advertised.has(name))) {
+      lines.push('Successful browser input calls confirm dispatch only; inspect the page again when the resulting state matters.');
     }
     if (advertised.has('browser_key')) lines.push('Use browser_key for keyboard navigation only when the page does not expose a suitable element ref.');
     if (advertised.has('browser_navigate')) lines.push('Use browser_navigate to reuse an existing tab.');

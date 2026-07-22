@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type {
   DesktopBrowserElement,
   DesktopBrowserKeyModifier,
@@ -59,30 +58,34 @@ type NodeReference = {
   backendNodeId: number;
   bounds?: DesktopBrowserElement['bounds'];
   name: string;
+  parentByBackendNodeId: ReadonlyMap<number, number>;
   role: string;
   sessionId?: string;
   tag: string;
+  viewport: CdpViewport;
 };
 
 type TargetCapture = {
-  accessibility: CdpAccessibilityResponse;
   observation: CdpPageObservation;
+  parentByBackendNodeId: ReadonlyMap<number, number>;
   sessionId?: string;
-  snapshot: CdpSnapshotResponse;
   targetIndex: number;
   url: string;
+  viewport: CdpViewport;
 };
 
 type CdpPoint = { x: number; y: number };
 
 const protocolVersion = '1.3';
-const scrollProbeRatios: ReadonlyArray<readonly [number, number]> = [
+const clickProbeRatios: ReadonlyArray<readonly [number, number]> = [
   [0.5, 0.5],
-  [0.72, 0.5],
-  [0.28, 0.5],
-  [0.5, 0.72],
-  [0.5, 0.28],
+  [0.2, 0.2],
+  [0.8, 0.2],
+  [0.2, 0.8],
+  [0.8, 0.8],
 ];
+const pageTargetTypes = new Set(['iframe', 'page', 'webview']);
+const waitTextComputedStyles = ['visibility', 'opacity'] as const;
 
 /**
  * 为浏览器工具所需的有限 CDP 能力提供可信的 Electron 主进程适配器。
@@ -108,9 +111,11 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
       const sessionId = stringValue(params.sessionId);
       const targetInfo = objectRecord(params.targetInfo);
       if (!sessionId) return;
+      const type = stringValue(targetInfo.type) || 'iframe';
+      if (!pageTargetTypes.has(type)) return;
       this.childTargets.set(sessionId, {
         sessionId,
-        type: stringValue(targetInfo.type) || 'iframe',
+        type,
         url: stringValue(targetInfo.url),
       });
       this.references.clear();
@@ -121,8 +126,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     }
     if (method === 'Target.detachedFromTarget') {
       const sessionId = stringValue(params.sessionId);
-      if (sessionId) this.childTargets.delete(sessionId);
-      this.references.clear();
+      if (sessionId && this.childTargets.delete(sessionId)) this.references.clear();
       return;
     }
     if (method === 'Page.frameNavigated' || method === 'Page.frameDetached') this.references.clear();
@@ -154,9 +158,11 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
         backendNodeId,
         bounds: node.bounds,
         name: node.name,
+        parentByBackendNodeId: capture.parentByBackendNodeId,
         role: node.role,
         sessionId: capture.sessionId,
         tag: node.tag,
+        viewport: capture.viewport,
       });
       return { ...element, ref };
     });
@@ -175,14 +181,9 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     throwIfAborted(signal);
     await this.ensureAttached();
     const reference = this.reference(ref);
-    const before = await this.visualFingerprint(signal);
-    const point = await this.pointForNode(reference);
-    throwIfAborted(signal);
-    await this.dispatchMouseClick(point, reference.sessionId);
-    await abortableDelay(80, signal);
-    const changed = before !== await this.visualFingerprint(signal);
+    const point = await this.clickablePointForNode(reference, signal);
     const label = reference.name || reference.role || reference.tag;
-    return `Clicked ${ref} (${label}) using real browser input; ${changed ? 'visible page state changed' : 'no visible state change was detected'}.`;
+    return `Dispatched a real browser click to ${ref} (${label}) at (${formatCoordinate(point.x)}, ${formatCoordinate(point.y)}).`;
   }
 
   async type(ref: string, options: BrowserTypeOptions, signal?: AbortSignal): Promise<string> {
@@ -202,7 +203,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
       }
     }
     if (options.submit) await this.dispatchKey('Enter', 0, reference.sessionId);
-    return `Typed ${options.text.length} character${options.text.length === 1 ? '' : 's'} into ${ref}${options.submit ? ' and submitted' : ''} using browser input.`;
+    return `Dispatched ${options.text.length} character${options.text.length === 1 ? '' : 's'} of browser text input to ${ref}${options.submit ? ' followed by Enter' : ''}.`;
   }
 
   async scroll(ref: string | undefined, deltaY: number, signal?: AbortSignal): Promise<string> {
@@ -210,38 +211,26 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     await this.ensureAttached();
     if (ref) {
       const reference = this.reference(ref);
-      const before = await this.visualFingerprint(signal);
       await this.scrollNodeIntoView(reference);
-      await abortableDelay(60, signal);
-      const changed = before !== await this.visualFingerprint(signal);
-      return changed ? `Scrolled ${ref} into view.` : `Element ${ref} was already in view.`;
+      return `Ensured ${ref} is in view using browser scrolling.`;
     }
     if (deltaY === 0) throw new Error('Browser scroll distance must not be 0.');
 
     const viewport = await this.viewport();
-    let fingerprint = await this.visualFingerprint(signal);
-    for (const [xRatio, yRatio] of scrollProbeRatios) {
-      throwIfAborted(signal);
-      const point = {
-        x: Math.max(1, Math.round(viewport.width * xRatio)),
-        y: Math.max(1, Math.round(viewport.height * yRatio)),
-      };
-      await this.send('Input.dispatchMouseEvent', {
-        button: 'none',
-        deltaX: 0,
-        deltaY,
-        type: 'mouseWheel',
-        x: point.x,
-        y: point.y,
-      });
-      await abortableDelay(90, signal);
-      const nextFingerprint = await this.visualFingerprint(signal);
-      if (nextFingerprint !== fingerprint) {
-        return `Scrolled by ${deltaY}px with a real wheel event at (${point.x}, ${point.y}); visible page state changed.`;
-      }
-      fingerprint = nextFingerprint;
-    }
-    throw new Error('The wheel events did not change visible page state. The page may be at a boundary or require a target ref.');
+    const point = {
+      x: Math.max(1, Math.round(viewport.width * 0.5)),
+      y: Math.max(1, Math.round(viewport.height * 0.5)),
+    };
+    throwIfAborted(signal);
+    await this.send('Input.dispatchMouseEvent', {
+      button: 'none',
+      deltaX: 0,
+      deltaY,
+      type: 'mouseWheel',
+      x: point.x,
+      y: point.y,
+    });
+    return `Dispatched a real browser wheel scroll of ${deltaY}px at (${point.x}, ${point.y}).`;
   }
 
   async key(options: BrowserKeyOptions, signal?: AbortSignal): Promise<string> {
@@ -250,10 +239,10 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     const modifiers = modifierMask(options.modifiers);
     for (let index = 0; index < options.repeat; index += 1) {
       throwIfAborted(signal);
-      await this.dispatchKey(options.key, modifiers, undefined, index > 0);
+      await this.dispatchKey(options.key, modifiers);
     }
     const chord = `${options.modifiers.length ? `${options.modifiers.join('+')}+` : ''}${options.key}`;
-    return `Pressed ${chord}${options.repeat > 1 ? ` ${options.repeat} times` : ''} using browser input.`;
+    return `Dispatched ${chord}${options.repeat > 1 ? ` ${options.repeat} times` : ''} using browser keyboard input.`;
   }
 
   async hasText(text: string, signal?: AbortSignal): Promise<boolean> {
@@ -262,7 +251,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     for (const target of this.targets()) {
       try {
         const snapshot = asSnapshotResponse(await this.send('DOMSnapshot.captureSnapshot', {
-          computedStyles: [],
+          computedStyles: [...waitTextComputedStyles],
           includeDOMRects: false,
           includePaintOrder: false,
         }, target.sessionId));
@@ -324,8 +313,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
   }
 
   private targets(): CdpTarget[] {
-    const children = [...this.childTargets.values()].filter((target) =>
-      ['iframe', 'page', 'webview'].includes(target.type));
+    const children = [...this.childTargets.values()].filter((target) => pageTargetTypes.has(target.type));
     return [{ type: 'page', url: '' }, ...children];
   }
 
@@ -360,12 +348,12 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     const accessibility = asAccessibilityResponse(accessibilityValue);
     const viewport = viewportFromMetrics(metricsValue, snapshot);
     return {
-      accessibility,
       observation: extractCdpPageObservation(snapshot, accessibility, viewport),
+      parentByBackendNodeId: snapshotParentByBackendNodeId(snapshot),
       sessionId: target.sessionId,
-      snapshot,
       targetIndex,
       url: target.url || documentUrl(snapshot),
+      viewport,
     };
   }
 
@@ -381,16 +369,31 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     }, reference.sessionId);
   }
 
-  private async pointForNode(reference: NodeReference): Promise<CdpPoint> {
+  private async clickablePointForNode(reference: NodeReference, signal?: AbortSignal): Promise<CdpPoint> {
     await this.scrollNodeIntoView(reference);
-    const viewport = await this.viewport(reference.sessionId);
+    const points = await this.candidatePointsForNode(reference);
+    for (const point of points) {
+      throwIfAborted(signal);
+      // 先移动指针再命中测试，避免 hover 后出现的遮罩截获真正的按下事件。
+      await this.dispatchMouseMove(point, reference.sessionId);
+      const hitBackendNodeId = await this.backendNodeAtPoint(point, reference.sessionId);
+      if (!referenceContainsBackendNode(reference, hitBackendNodeId)) continue;
+      throwIfAborted(signal);
+      await this.dispatchMouseClick(point, reference.sessionId);
+      return point;
+    }
+    const label = reference.name || reference.role || reference.tag;
+    throw new Error(`Browser element ${label || reference.backendNodeId} is covered, stale, or not pointer-interactable. Take a new browser snapshot.`);
+  }
+
+  private async candidatePointsForNode(reference: NodeReference): Promise<CdpPoint[]> {
     try {
       const response = objectRecord(await this.send('DOM.getContentQuads', {
         backendNodeId: reference.backendNodeId,
       }, reference.sessionId));
       const quads = Array.isArray(response.quads) ? response.quads : [];
-      const points = quads.map((quad) => quadPoint(quad, viewport)).filter((point): point is CdpPoint => Boolean(point));
-      if (points.length) return points[0];
+      const points = uniquePoints(quads.flatMap((quad) => quadCandidatePoints(quad, reference.viewport)));
+      if (points.length) return points;
     } catch {
       // 某些替换元素或文本节点不会暴露内容四边形，此时回退到盒模型。
     }
@@ -399,27 +402,35 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
         backendNodeId: reference.backendNodeId,
       }, reference.sessionId));
       const model = objectRecord(response.model);
-      const point = quadPoint(model.border, viewport);
-      if (point) return point;
+      const points = quadCandidatePoints(model.border, reference.viewport);
+      if (points.length) return points;
     } catch {
       // 对于仍然存在的节点，已保存的快照边界是最后的回退方案。
     }
     if (reference.bounds) {
-      return {
-        x: reference.bounds.x + reference.bounds.width / 2,
-        y: reference.bounds.y + reference.bounds.height / 2,
-      };
+      return boundsCandidatePoints(reference.bounds, reference.viewport);
     }
     throw new Error('Browser element no longer has a clickable layout box. Take a new snapshot.');
   }
 
-  private async dispatchMouseClick(point: CdpPoint, sessionId?: string): Promise<void> {
+  private async backendNodeAtPoint(point: CdpPoint, sessionId?: string): Promise<number | null> {
+    const response = objectRecord(await this.send('DOM.getNodeForLocation', {
+      x: Math.round(point.x),
+      y: Math.round(point.y),
+    }, sessionId));
+    return positiveSafeInteger(response.backendNodeId);
+  }
+
+  private async dispatchMouseMove(point: CdpPoint, sessionId?: string): Promise<void> {
     await this.send('Input.dispatchMouseEvent', {
       button: 'none',
       type: 'mouseMoved',
       x: point.x,
       y: point.y,
     }, sessionId);
+  }
+
+  private async dispatchMouseClick(point: CdpPoint, sessionId?: string): Promise<void> {
     await this.send('Input.dispatchMouseEvent', {
       button: 'left',
       buttons: 1,
@@ -441,7 +452,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
   private async clearFocusedElement(sessionId: string | undefined, signal?: AbortSignal): Promise<void> {
     const platformModifier = process.platform === 'darwin' ? 4 : 2;
     throwIfAborted(signal);
-    await this.dispatchKey('a', platformModifier, sessionId, false, ['selectAll']);
+    await this.dispatchKey('a', platformModifier, sessionId, ['selectAll']);
     await this.dispatchKey('Backspace', 0, sessionId);
   }
 
@@ -449,20 +460,18 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
     rawKey: string,
     modifiers: number,
     sessionId?: string,
-    autoRepeat = false,
     commands?: string[],
   ): Promise<void> {
-    const definition = keyDefinition(rawKey);
+    const definition = keyDefinition(rawKey, (modifiers & 8) !== 0);
     const sendsText = definition.text && (modifiers & (1 | 2 | 4)) === 0;
     await this.send('Input.dispatchKeyEvent', {
-      autoRepeat,
       code: definition.code,
       commands,
       key: definition.key,
       modifiers,
       text: sendsText ? definition.text : undefined,
       type: sendsText ? 'keyDown' : 'rawKeyDown',
-      unmodifiedText: sendsText ? definition.text : undefined,
+      unmodifiedText: sendsText ? definition.unmodifiedText ?? definition.text : undefined,
       windowsVirtualKeyCode: definition.virtualKeyCode,
     }, sessionId);
     await this.send('Input.dispatchKeyEvent', {
@@ -475,47 +484,7 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
   }
 
   private async viewport(sessionId?: string): Promise<CdpViewport> {
-    const snapshotPromise = this.send('DOMSnapshot.captureSnapshot', {
-      computedStyles: [],
-      includeDOMRects: false,
-      includePaintOrder: false,
-    }, sessionId);
-    const [metrics, snapshot] = await Promise.all([
-      this.send('Page.getLayoutMetrics', {}, sessionId),
-      snapshotPromise,
-    ]);
-    return viewportFromMetrics(metrics, asSnapshotResponse(snapshot));
-  }
-
-  private async visualFingerprint(signal?: AbortSignal): Promise<string> {
-    const hash = createHash('sha256');
-    for (const target of this.targets()) {
-      throwIfAborted(signal);
-      try {
-        const snapshot = asSnapshotResponse(await this.send('DOMSnapshot.captureSnapshot', {
-          computedStyles: [],
-          includeDOMRects: false,
-          includePaintOrder: false,
-        }, target.sessionId));
-        updateSnapshotHash(hash, snapshot);
-      } catch (error) {
-        if (!isTransientTargetError(error)) throw error;
-      }
-    }
-    try {
-      const screenshot = objectRecord(await this.send('Page.captureScreenshot', {
-        captureBeyondViewport: false,
-        format: 'jpeg',
-        fromSurface: true,
-        optimizeForSpeed: true,
-        quality: 15,
-      }));
-      const data = stringValue(screenshot.data);
-      if (data) hash.update(`screenshot:${data}`);
-    } catch {
-      // 无法捕获页面表面时，仍可使用 DOM 或布局哈希。
-    }
-    return hash.digest('hex');
+    return viewportFromMetrics(await this.send('Page.getLayoutMetrics', {}, sessionId));
   }
 
   private async send(method: string, params?: unknown, sessionId?: string): Promise<unknown> {
@@ -523,11 +492,11 @@ export class ElectronBrowserCdpAutomation implements BrowserAutomation {
   }
 }
 
-function viewportFromMetrics(value: unknown, snapshot: CdpSnapshotResponse): CdpViewport {
+function viewportFromMetrics(value: unknown, snapshot?: CdpSnapshotResponse): CdpViewport {
   const metrics = objectRecord(value);
   const visual = objectRecord(metrics.cssVisualViewport);
   const layout = objectRecord(metrics.cssLayoutViewport);
-  const firstDocument = snapshot.documents?.[0];
+  const firstDocument = snapshot?.documents?.[0];
   return {
     height: positiveNumber(visual.clientHeight)
       || positiveNumber(layout.clientHeight)
@@ -540,30 +509,37 @@ function viewportFromMetrics(value: unknown, snapshot: CdpSnapshotResponse): Cdp
   };
 }
 
-function updateSnapshotHash(hash: ReturnType<typeof createHash>, snapshot: CdpSnapshotResponse): void {
-  const strings = snapshot.strings ?? [];
+function snapshotParentByBackendNodeId(snapshot: CdpSnapshotResponse): ReadonlyMap<number, number> {
+  const parents = new Map<number, number>();
   for (const document of snapshot.documents ?? []) {
-    hash.update(`${finiteNumber(document.scrollOffsetX)}:${finiteNumber(document.scrollOffsetY)}|`);
-    const layout = document.layout;
-    const textIndexes = layout?.text ?? [];
-    const bounds = layout?.bounds ?? [];
-    for (let index = 0; index < textIndexes.length; index += 1) {
-      const text = strings[textIndexes[index]] ?? '';
-      const box = bounds[index] ?? [];
-      if (text) hash.update(`${text}:${box.map((value) => Math.round(finiteNumber(value))).join(',')}|`);
-    }
-    const input = document.nodes?.inputValue;
-    for (let index = 0; index < (input?.index?.length ?? 0); index += 1) {
-      hash.update(`v${input?.index?.[index]}:${strings[input?.value?.[index] ?? -1] ?? ''}|`);
+    const backendNodeIds = document.nodes?.backendNodeId ?? [];
+    const parentIndexes = document.nodes?.parentIndex ?? [];
+    for (let nodeIndex = 0; nodeIndex < backendNodeIds.length; nodeIndex += 1) {
+      const backendNodeId = positiveSafeInteger(backendNodeIds[nodeIndex]);
+      const parentIndex = parentIndexes[nodeIndex];
+      const parentBackendNodeId = Number.isSafeInteger(parentIndex) && parentIndex >= 0
+        ? positiveSafeInteger(backendNodeIds[parentIndex])
+        : null;
+      if (backendNodeId !== null && parentBackendNodeId !== null) {
+        parents.set(backendNodeId, parentBackendNodeId);
+      }
     }
   }
+  return parents;
 }
 
 function snapshotText(snapshot: CdpSnapshotResponse): string {
   const strings = snapshot.strings ?? [];
   const parts: string[] = [];
   for (const document of snapshot.documents ?? []) {
-    for (const textIndex of document.layout?.text ?? []) {
+    const layout = document.layout;
+    for (let layoutIndex = 0; layoutIndex < (layout?.text?.length ?? 0); layoutIndex += 1) {
+      const styleIndexes = layout?.styles?.[layoutIndex] ?? [];
+      const visibility = strings[styleIndexes[0]] ?? '';
+      const opacity = Number.parseFloat(strings[styleIndexes[1]] ?? '');
+      if (['hidden', 'collapse'].includes(visibility) || (Number.isFinite(opacity) && opacity <= 0)) continue;
+      const textIndex = layout?.text?.[layoutIndex];
+      if (textIndex === undefined) continue;
       const value = strings[textIndex];
       if (value) parts.push(value);
     }
@@ -576,27 +552,109 @@ function documentUrl(snapshot: CdpSnapshotResponse): string {
   return Number.isSafeInteger(index) && index !== undefined ? snapshot.strings?.[index] ?? '' : '';
 }
 
-function quadPoint(value: unknown, viewport?: CdpViewport): CdpPoint | null {
-  if (!Array.isArray(value) || value.length < 8) return null;
+function quadCandidatePoints(value: unknown, viewport: CdpViewport): CdpPoint[] {
+  if (!Array.isArray(value) || value.length < 8) return [];
   const coordinates = value.slice(0, 8);
-  if (coordinates.some((coordinate) => typeof coordinate !== 'number' || !Number.isFinite(coordinate))) return null;
+  if (coordinates.some((coordinate) => typeof coordinate !== 'number' || !Number.isFinite(coordinate))) return [];
   const numbers = coordinates as number[];
+  const corners: ReadonlyArray<CdpPoint> = [
+    { x: numbers[0], y: numbers[1] },
+    { x: numbers[2], y: numbers[3] },
+    { x: numbers[4], y: numbers[5] },
+    { x: numbers[6], y: numbers[7] },
+  ];
+  const points = clickProbeRatios
+    .map(([xRatio, yRatio]) => pointWithinQuad(corners, xRatio, yRatio))
+    .filter((point) => pointWithinViewport(point, viewport));
+
   const minimumX = Math.min(numbers[0], numbers[2], numbers[4], numbers[6]);
   const maximumX = Math.max(numbers[0], numbers[2], numbers[4], numbers[6]);
   const minimumY = Math.min(numbers[1], numbers[3], numbers[5], numbers[7]);
   const maximumY = Math.max(numbers[1], numbers[3], numbers[5], numbers[7]);
-  const left = viewport ? Math.max(1, minimumX) : minimumX;
-  const right = viewport ? Math.min(viewport.width - 1, maximumX) : maximumX;
-  const top = viewport ? Math.max(1, minimumY) : minimumY;
-  const bottom = viewport ? Math.min(viewport.height - 1, maximumY) : maximumY;
-  if (right <= left || bottom <= top) return null;
+  points.push(...rectangleCandidatePoints(
+    Math.max(1, minimumX),
+    Math.max(1, minimumY),
+    Math.min(viewport.width - 1, maximumX),
+    Math.min(viewport.height - 1, maximumY),
+  ));
+  return uniquePoints(points);
+}
+
+function boundsCandidatePoints(
+  bounds: NonNullable<DesktopBrowserElement['bounds']>,
+  viewport: CdpViewport,
+): CdpPoint[] {
+  return rectangleCandidatePoints(
+    Math.max(1, bounds.x),
+    Math.max(1, bounds.y),
+    Math.min(viewport.width - 1, bounds.x + bounds.width),
+    Math.min(viewport.height - 1, bounds.y + bounds.height),
+  );
+}
+
+function rectangleCandidatePoints(left: number, top: number, right: number, bottom: number): CdpPoint[] {
+  if (right <= left || bottom <= top) return [];
+  return clickProbeRatios.map(([xRatio, yRatio]) => ({
+    x: left + ((right - left) * xRatio),
+    y: top + ((bottom - top) * yRatio),
+  }));
+}
+
+function pointWithinQuad(
+  corners: ReadonlyArray<CdpPoint>,
+  xRatio: number,
+  yRatio: number,
+): CdpPoint {
+  const top = interpolatePoint(corners[0], corners[1], xRatio);
+  const bottom = interpolatePoint(corners[3], corners[2], xRatio);
+  return interpolatePoint(top, bottom, yRatio);
+}
+
+function interpolatePoint(start: CdpPoint, end: CdpPoint, ratio: number): CdpPoint {
   return {
-    x: (left + right) / 2,
-    y: (top + bottom) / 2,
+    x: start.x + ((end.x - start.x) * ratio),
+    y: start.y + ((end.y - start.y) * ratio),
   };
 }
 
-function keyDefinition(rawKey: string): { code: string; key: string; text?: string; virtualKeyCode: number } {
+function pointWithinViewport(point: CdpPoint, viewport: CdpViewport): boolean {
+  return point.x >= 1 && point.x <= viewport.width - 1
+    && point.y >= 1 && point.y <= viewport.height - 1;
+}
+
+function uniquePoints(points: CdpPoint[]): CdpPoint[] {
+  const seen = new Set<string>();
+  return points.filter((point) => {
+    const key = `${formatCoordinate(point.x)}:${formatCoordinate(point.y)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function referenceContainsBackendNode(reference: NodeReference, backendNodeId: number | null): boolean {
+  if (backendNodeId === null) return false;
+  const visited = new Set<number>();
+  let current: number | undefined = backendNodeId;
+  while (current !== undefined && !visited.has(current)) {
+    if (current === reference.backendNodeId) return true;
+    visited.add(current);
+    current = reference.parentByBackendNodeId.get(current);
+  }
+  return false;
+}
+
+function formatCoordinate(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function keyDefinition(rawKey: string, shift: boolean): {
+  code: string;
+  key: string;
+  text?: string;
+  unmodifiedText?: string;
+  virtualKeyCode: number;
+} {
   const key = rawKey === 'Space' ? ' ' : rawKey;
   const named: Record<string, { code: string; key?: string; text?: string; virtualKeyCode: number }> = {
     ' ': { code: 'Space', key: ' ', text: ' ', virtualKeyCode: 32 },
@@ -617,15 +675,18 @@ function keyDefinition(rawKey: string): { code: string; key: string; text?: stri
   const definition = named[key];
   if (definition) return { ...definition, key: definition.key ?? key };
   if ([...key].length !== 1) throw new Error(`Unsupported browser key: ${rawKey}`);
-  const character = [...key][0];
-  const upper = character.toUpperCase();
-  const code = /^[a-z]$/i.test(character)
+  const rawCharacter = [...key][0];
+  const unmodifiedText = /^[a-z]$/i.test(rawCharacter) ? rawCharacter.toLowerCase() : rawCharacter;
+  const character = shift && /^[a-z]$/i.test(rawCharacter) ? rawCharacter.toUpperCase() : rawCharacter;
+  const upper = unmodifiedText.toUpperCase();
+  const code = /^[a-z]$/i.test(unmodifiedText)
     ? `Key${upper}`
-    : /^\d$/.test(character) ? `Digit${character}` : '';
+    : /^\d$/.test(unmodifiedText) ? `Digit${unmodifiedText}` : '';
   return {
     code,
     key: character,
     text: character,
+    unmodifiedText,
     virtualKeyCode: upper.charCodeAt(0),
   };
 }
@@ -664,8 +725,8 @@ function positiveNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-function finiteNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function positiveSafeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
 function isTransientTargetError(error: unknown): boolean {
@@ -678,19 +739,4 @@ function errorMessage(error: unknown): string {
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('Browser operation was cancelled.');
-}
-
-async function abortableDelay(durationMs: number, signal?: AbortSignal): Promise<void> {
-  throwIfAborted(signal);
-  await new Promise<void>((resolve, reject) => {
-    const handleAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason instanceof Error ? signal.reason : new Error('Browser operation was cancelled.'));
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', handleAbort);
-      resolve();
-    }, durationMs);
-    signal?.addEventListener('abort', handleAbort, { once: true });
-  });
 }
