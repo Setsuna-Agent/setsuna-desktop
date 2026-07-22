@@ -299,24 +299,6 @@ a.chat-markdown__file-link:focus-visible {
   border-color: var(--app-border-strong);
 }
 
-.chat-markdown.is-streaming .chat-markdown__block:last-child > :last-child::after,
-.chat-markdown.is-streaming .chat-markdown__empty-tail::after {
-  display: inline-block;
-  width: 1px;
-  height: 1em;
-  margin-left: 0.2em;
-  background: currentColor;
-  content: '';
-  vertical-align: -0.12em;
-  animation: chat-markdown-caret 1s steps(1, end) infinite;
-}
-
-@keyframes chat-markdown-caret {
-  50% {
-    opacity: 0;
-  }
-}
-
 .chat-code-highlighter {
   width: 100%;
   min-width: 0;
@@ -491,9 +473,7 @@ a.chat-markdown__file-link:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-code-highlighter__copy,
-  .chat-markdown.is-streaming .chat-markdown__block:last-child > :last-child::after,
-  .chat-markdown.is-streaming .chat-markdown__empty-tail::after {
+  .chat-code-highlighter__copy {
     animation: none;
   }
 }

@@ -26,7 +26,7 @@ export function MarkdownRenderer({ content, streaming }: { content: string; stre
     <>
       {visibleSegments.map((segment) => (
         <div
-          className={`chat-markdown${segment.activeStreaming ? ' is-streaming' : ''}`}
+          className="chat-markdown"
           key={segment.key}
         >
           {/* 解析器块位置仅会追加；使用索引键可在可变尾部内容增长时保持其挂载。 */}
@@ -39,9 +39,6 @@ export function MarkdownRenderer({ content, streaming }: { content: string; stre
               virtualized={segment.virtualized}
             />
           ))}
-          {segment.activeStreaming && !segment.blocks.length ? (
-            <span className="chat-markdown__empty-tail" aria-hidden="true" />
-          ) : null}
         </div>
       ))}
     </>

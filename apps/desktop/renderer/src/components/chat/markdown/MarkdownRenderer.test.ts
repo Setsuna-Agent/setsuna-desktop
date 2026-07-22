@@ -42,7 +42,8 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('data-markdown-block="stable"');
     expect(html).toContain('data-markdown-block="mutable"');
     expect(html).toContain('<strong>bold</strong>');
-    expect(html).toContain('chat-markdown is-streaming');
+    expect(html).not.toContain('is-streaming');
+    expect(html).not.toContain('chat-markdown__empty-tail');
   });
 
   it('renders inline and display math with KaTeX', () => {
