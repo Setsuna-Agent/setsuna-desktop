@@ -4,6 +4,7 @@ import type {
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
 } from '@setsuna-desktop/contracts';
+import { normalizeRuntimeMessageProviderMetadata } from '@setsuna-desktop/contracts';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 
 export const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
@@ -74,8 +75,30 @@ export function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boole
     normalized = { ...normalized, contextCompaction: undefined };
     changed = true;
   }
+  const metadataNormalized = normalizeThreadMessageProviderMetadata(normalized);
+  normalized = metadataNormalized.thread;
+  changed ||= metadataNormalized.changed;
   const migrated = normalizeLegacyCancelledToolRuns(normalized);
   return { changed: changed || migrated !== normalized, thread: migrated };
+}
+
+function normalizeThreadMessageProviderMetadata(
+  thread: RuntimeThread,
+): { changed: boolean; thread: RuntimeThread } {
+  let changed = false;
+  const messages = thread.messages.map((message) => {
+    if (!message.providerMetadata) return message;
+    const providerMetadata = normalizeRuntimeMessageProviderMetadata(message.providerMetadata);
+    if (providerMetadata && JSON.stringify(providerMetadata) === JSON.stringify(message.providerMetadata)) {
+      return message;
+    }
+    changed = true;
+    if (providerMetadata) return { ...message, providerMetadata };
+    const normalizedMessage = { ...message };
+    delete normalizedMessage.providerMetadata;
+    return normalizedMessage;
+  });
+  return changed ? { changed, thread: { ...thread, messages } } : { changed, thread };
 }
 
 /** Migrates legacy snapshots where turn cancellation was projected as a rejected tool run. */

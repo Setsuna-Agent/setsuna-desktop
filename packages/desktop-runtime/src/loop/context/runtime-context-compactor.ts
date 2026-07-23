@@ -1,10 +1,14 @@
-import type {
-  RuntimeConfigState,
-  RuntimeMessage,
-  RuntimeModelRequestStepSnapshot,
-  RuntimeThread,
-  RuntimeToolDefinition,
-  RuntimeUsage,
+import {
+  RUNTIME_PROVIDER_METADATA_MAX_BYTES,
+  runtimeJsonByteLength,
+  sanitizeRuntimeJsonObject,
+  type RuntimeConfigState,
+  type RuntimeMessage,
+  type RuntimeMessageProviderMetadata,
+  type RuntimeModelRequestStepSnapshot,
+  type RuntimeThread,
+  type RuntimeToolDefinition,
+  type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import type { RuntimeCompactHookTrigger } from '../../hooks/runtime-hooks.js';
@@ -14,6 +18,8 @@ import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
+import { PROVIDER_METADATA_SEMANTIC_BINDING_RESERVE_BYTES } from '../../utils/runtime-message-semantic-fingerprint.js';
+import { addRuntimeUsage } from '../core/runtime-usage.js';
 import {
   createRuntimeContextCompactionCandidate,
   estimateRuntimeToolDefinitionTokens,
@@ -33,6 +39,20 @@ import {
 } from './prompt-utils.js';
 
 const CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS = 1600;
+
+type GeneratedContextCompactionSummary = {
+  source: 'local' | 'remote';
+  text: string;
+  usage?: RuntimeUsage;
+  providerMetadata?: RuntimeMessageProviderMetadata;
+  omittedProviderMetadata?: RuntimeMessageProviderMetadata;
+};
+
+type NativeContextCompactionArtifact = {
+  usage?: RuntimeUsage;
+  providerMetadata?: RuntimeMessageProviderMetadata;
+  omittedProviderMetadata?: RuntimeMessageProviderMetadata;
+};
 
 type RuntimeContextCompactorOptions = {
   clock: Clock;
@@ -76,10 +96,12 @@ export class RuntimeContextCompactor {
       candidate,
       createdAt: this.options.clock.now().toISOString(),
       id: this.options.ids.id('msg'),
+      providerMetadata: summary.providerMetadata,
       source: summary.source,
       summary: summary.text,
       turnId,
     });
+    await this.publishProviderMetadataWarning(threadId, turnId, summary.omittedProviderMetadata);
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -108,10 +130,30 @@ export class RuntimeContextCompactor {
    * @param candidate 已选出的上下文压缩候选。
    * @param signal 可选取消信号，自动压缩时跟随当前 turn。
    */
-  async generateContextCompactionSummary(candidate: RuntimeContextCompactionCandidate, signal?: AbortSignal): Promise<{ source: 'local' | 'remote'; text: string; usage?: RuntimeUsage }> {
-    const remoteSummary = await this.generateRemoteContextCompactionSummary(candidate, signal);
-    if (remoteSummary) return remoteSummary;
+  async generateContextCompactionSummary(
+    candidate: RuntimeContextCompactionCandidate,
+    signal?: AbortSignal,
+  ): Promise<GeneratedContextCompactionSummary> {
+    const portableSummary = await this.generatePortableContextCompactionSummary(candidate, signal);
+    const nativeArtifact = await this.generateNativeContextCompaction(candidate, signal);
+    const usage = addRuntimeUsage(portableSummary.usage, nativeArtifact.usage);
+    return {
+      source: nativeArtifact.providerMetadata ? 'remote' : 'local',
+      text: portableSummary.text,
+      ...(usage ? { usage } : {}),
+      ...(nativeArtifact.providerMetadata
+        ? { providerMetadata: nativeArtifact.providerMetadata }
+        : {}),
+      ...(nativeArtifact.omittedProviderMetadata
+        ? { omittedProviderMetadata: nativeArtifact.omittedProviderMetadata }
+        : {}),
+    };
+  }
 
+  private async generatePortableContextCompactionSummary(
+    candidate: RuntimeContextCompactionCandidate,
+    signal?: AbortSignal,
+  ): Promise<{ text: string; usage?: RuntimeUsage }> {
     try {
       const output = createModelStreamTextCollector();
       let usage: RuntimeUsage | undefined;
@@ -129,38 +171,50 @@ export class RuntimeContextCompactor {
         if (item.type === 'usage' || item.type === 'token_count') usage = item.usage;
       }
       const parsed = compactedSummaryFromModelText(output.text());
-      if (parsed) return { source: 'local', text: parsed, ...(usage ? { usage } : {}) };
+      if (parsed) return { text: parsed, ...(usage ? { usage } : {}) };
       const fallback = fallbackContextCompactionSummary(candidate);
-      if (fallback) return { source: 'local', text: fallback, ...(usage ? { usage } : {}) };
+      if (fallback) return { text: fallback, ...(usage ? { usage } : {}) };
     } catch (error) {
       if (signal?.aborted) throw error;
+      const fallback = fallbackContextCompactionSummary(candidate);
+      if (fallback) return { text: fallback };
       throw new Error(`Context compaction model request failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     throw new Error('Context compaction model returned an empty summary.');
   }
 
   /**
-   * 使用 provider 原生压缩能力生成摘要；不支持或失败时由调用方回落到本地 prompt 压缩。
+   * 使用 provider 原生压缩能力生成 replacement items。portable 摘要始终由独立链路生成，
+   * 避免把 provider 返回的保留消息误当成跨协议摘要。
    *
    * @param candidate 已选出的上下文压缩候选。
    * @param signal 可选取消信号，自动压缩时跟随当前 turn。
    */
-  private async generateRemoteContextCompactionSummary(candidate: RuntimeContextCompactionCandidate, signal?: AbortSignal): Promise<{ source: 'remote'; text: string; usage?: RuntimeUsage } | null> {
-    if (!this.options.modelClient.compactConversation) return null;
+  private async generateNativeContextCompaction(
+    candidate: RuntimeContextCompactionCandidate,
+    signal?: AbortSignal,
+  ): Promise<NativeContextCompactionArtifact> {
+    if (!this.options.modelClient.compactConversation) return {};
     try {
       const result = await this.options.modelClient.compactConversation({
         model: 'context-compaction',
-        messages: this.contextCompactionPromptMessages(candidate),
-        maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
-        temperature: 0,
+        // Native compact must see the real model window, including exact provider envelopes.
+        messages: candidate.olderMessages,
         signal,
       });
       throwIfAborted(signal);
-      const parsed = compactedSummaryFromModelText(result.summary);
-      return parsed ? { source: 'remote', text: parsed, ...(result.usage ? { usage: result.usage } : {}) } : null;
+      if (result.kind !== 'native') {
+        return result.usage ? { usage: result.usage } : {};
+      }
+      const metadataFits = providerMetadataFitsPersistenceLimit(result.providerMetadata);
+      return {
+        ...(result.usage ? { usage: result.usage } : {}),
+        ...(metadataFits ? { providerMetadata: result.providerMetadata } : {}),
+        ...(!metadataFits ? { omittedProviderMetadata: result.providerMetadata } : {}),
+      };
     } catch (error) {
       if (signal?.aborted) throw error;
-      return null;
+      return {};
     }
   }
 
@@ -179,6 +233,28 @@ export class RuntimeContextCompactor {
       turnId,
       createdAt: this.options.clock.now().toISOString(),
       ...usage,
+    });
+  }
+
+  async publishProviderMetadataWarning(
+    threadId: string,
+    turnId: string,
+    omittedMetadata: RuntimeMessageProviderMetadata | undefined,
+  ): Promise<void> {
+    if (!omittedMetadata) return;
+    await this.options.appendEvent(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'model.verification',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: {
+        verification: {
+          model: omittedMetadata.source?.model,
+          provider: omittedMetadata.source?.providerKind,
+          warnings: ['provider_metadata_omitted_too_large'],
+        },
+      },
     });
   }
 
@@ -407,6 +483,17 @@ function fallbackContextCompactionSummary(candidate: RuntimeContextCompactionCan
 
 function stripContextCompactionTags(value: string): string {
   return value.replace(/^<context_compaction_summary[^>]*>\n?/, '').replace(/\n?<\/context_compaction_summary>$/, '');
+}
+
+function providerMetadataFitsPersistenceLimit(
+  metadata: RuntimeMessageProviderMetadata,
+): boolean {
+  const json = sanitizeRuntimeJsonObject(metadata);
+  return Boolean(
+    json
+    && runtimeJsonByteLength(json)
+      <= RUNTIME_PROVIDER_METADATA_MAX_BYTES - PROVIDER_METADATA_SEMANTIC_BINDING_RESERVE_BYTES,
+  );
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

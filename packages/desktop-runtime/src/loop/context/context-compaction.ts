@@ -1,10 +1,13 @@
 import {
   isRuntimeInlineMessageAttachment,
   isRuntimeStoredMessageAttachment,
+  normalizeRuntimeMessageProviderMetadata,
   type RuntimeContextCompactionNotice,
   type RuntimeMessage,
+  type RuntimeMessageProviderMetadata,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import { bindProviderMetadataToSemanticMessage } from '../../utils/runtime-message-semantic-fingerprint.js';
 import { neutralizePromptClosingTags } from './prompt-utils.js';
 
 export const CONTEXT_COMPACTION_MAX_TOKENS_K = 256;
@@ -153,6 +156,7 @@ export function materializeRuntimeContextCompaction({
   candidate,
   createdAt,
   id,
+  providerMetadata,
   summary,
   source = 'local',
   turnId,
@@ -160,6 +164,7 @@ export function materializeRuntimeContextCompaction({
   candidate: RuntimeContextCompactionCandidate;
   createdAt: string;
   id: string;
+  providerMetadata?: RuntimeMessageProviderMetadata;
   summary: string;
   source?: RuntimeContextCompactionNotice['source'];
   turnId?: string;
@@ -216,6 +221,11 @@ export function materializeRuntimeContextCompaction({
     status: 'complete',
     contextCompaction: notice,
   };
+  const boundProviderMetadata = bindProviderMetadataToSemanticMessage(
+    providerMetadata ? normalizeRuntimeMessageProviderMetadata(providerMetadata) : undefined,
+    summaryMessage,
+  );
+  if (boundProviderMetadata) summaryMessage.providerMetadata = boundProviderMetadata;
 
   // 返回的 messages 是新的线程投影：旧 transcript + 摘要 + 最近原文。
   return {
@@ -263,17 +273,53 @@ function recentStartForKeepCount(eligibleIndexes: number[], keepCount: number, m
 
 /** 确保助手工具调用及其后续结果位于压缩边界的同一侧。 */
 function toolExchangeStartAtOrBefore(messages: RuntimeMessage[], requestedStart: number): number {
-  const firstRecent = messages[requestedStart];
-  if (firstRecent?.role !== 'tool') return requestedStart;
-
-  for (let index = requestedStart - 1; index >= 0; index -= 1) {
-    const candidate = messages[index];
-    if (candidate.role !== 'assistant' || !candidate.toolCalls?.length) continue;
-    if (!firstRecent.toolCallId || candidate.toolCalls.some((toolCall) => toolCall.id === firstRecent.toolCallId)) {
-      return index;
+  const exchanges = pairedToolExchanges(messages);
+  let safeStart = requestedStart;
+  // Result indexes are recorded in ascending order. Walking backwards lets a boundary moved by
+  // one exchange absorb an earlier overlapping exchange without repeatedly rescanning history.
+  for (let index = exchanges.length - 1; index >= 0; index -= 1) {
+    const exchange = exchanges[index]!;
+    if (exchange.assistantIndex < safeStart && exchange.resultIndex >= safeStart) {
+      safeStart = exchange.assistantIndex;
     }
   }
-  return requestedStart;
+  return safeStart;
+}
+
+/**
+ * Pairs each result with the nearest still-open assistant call in its transaction.
+ *
+ * Provider call IDs are not globally unique: compatible Chat providers commonly reuse values
+ * such as `call_0` across turns. Treating every equal ID as one exchange would drag unrelated,
+ * already-completed transactions across the compaction boundary.
+ */
+function pairedToolExchanges(messages: RuntimeMessage[]): Array<{
+  assistantIndex: number;
+  resultIndex: number;
+}> {
+  const exchanges: Array<{ assistantIndex: number; resultIndex: number }> = [];
+  let activeCalls = new Map<string, number>();
+
+  for (const [index, message] of messages.entries()) {
+    if (message.contextCompaction) activeCalls = new Map();
+    if (message.visibility === 'transcript') {
+      if (message.role === 'assistant') activeCalls = new Map();
+      continue;
+    }
+    if (message.role === 'assistant') {
+      activeCalls = new Map(
+        (message.toolCalls ?? []).map((call) => [call.id, index]),
+      );
+      continue;
+    }
+    if (message.role !== 'tool' || !message.toolCallId) continue;
+    const assistantIndex = activeCalls.get(message.toolCallId);
+    if (assistantIndex === undefined) continue;
+    exchanges.push({ assistantIndex, resultIndex: index });
+    activeCalls.delete(message.toolCallId);
+  }
+
+  return exchanges;
 }
 
 function compactableTailScope(messages: RuntimeMessage[], eligibleIndexes: number[], autoCompactTokenLimit: number): string | null {
@@ -405,6 +451,9 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
+    providerMetadata: message.providerMetadata
+      ? normalizeRuntimeMessageProviderMetadata(message.providerMetadata)
+      : undefined,
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),

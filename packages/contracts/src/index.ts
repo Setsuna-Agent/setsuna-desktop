@@ -10,6 +10,7 @@ export * from './events.js';
 export * from './http.js';
 export * from './mcp.js';
 export * from './memory.js';
+export * from './message-metadata.js';
 export * from './model-request.js';
 export * from './plugins.js';
 export * from './provider.js';

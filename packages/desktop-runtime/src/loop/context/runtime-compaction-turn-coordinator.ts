@@ -15,7 +15,10 @@ type RuntimeCompactionTurnCoordinatorOptions = {
   configStore?: ConfigStore;
   contextCompactor: Pick<
     RuntimeContextCompactor,
-    'generateContextCompactionSummary' | 'publishContextCompacting' | 'publishContextCompactionUsage'
+    | 'generateContextCompactionSummary'
+    | 'publishContextCompacting'
+    | 'publishContextCompactionUsage'
+    | 'publishProviderMetadataWarning'
   >;
   hooks: Pick<RuntimeHookCoordinator, 'queueSessionStartSource' | 'runCompactHooks'>;
   ids: IdGenerator;
@@ -97,10 +100,16 @@ export class RuntimeCompactionTurnCoordinator {
         candidate,
         createdAt: this.options.clock.now().toISOString(),
         id: this.options.ids.id('msg'),
+        providerMetadata: summary.providerMetadata,
         source: summary.source,
         summary: summary.text,
         turnId,
       });
+      await this.options.contextCompactor.publishProviderMetadataWarning(
+        threadId,
+        turnId,
+        summary.omittedProviderMetadata,
+      );
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,

@@ -1,4 +1,5 @@
 import type { ModelRequest, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { randomUUID } from 'node:crypto';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import { openAiCompatibleThinkingBody } from './provider-thinking.js';
@@ -50,6 +51,9 @@ export class OpenAiChatModelClient implements ModelClient {
     await assertOkResponse(response, 'OpenAI compatible request failed');
 
     const toolCallsByIndex = new Map<number, RuntimeToolCall>();
+    // Some OpenAI-compatible endpoints omit tool-call IDs. Scope the fallback to
+    // this response so index-based IDs cannot collide with another model round.
+    const fallbackToolCallNamespace = randomUUID().replaceAll('-', '');
     let usage = undefined;
     let finishReason = undefined;
     let toolCallsYielded = false;
@@ -65,7 +69,11 @@ export class OpenAiChatModelClient implements ModelClient {
         if (reasoning) yield { type: 'reasoning_delta' as const, text: reasoning };
         if (text) yield { type: 'text_delta' as const, text };
         for (const toolCallDelta of arrayValue(delta.tool_calls)) {
-          const parsed = mergeToolCallDelta(toolCallsByIndex, toolCallDelta);
+          const parsed = mergeToolCallDelta(
+            toolCallsByIndex,
+            toolCallDelta,
+            fallbackToolCallNamespace,
+          );
           if (parsed) yield { type: 'tool_call_delta' as const, call: parsed };
         }
         const reason = stringValue(choiceObject.finish_reason);
@@ -114,11 +122,15 @@ function toOpenAiChatToolChoice(toolChoice: ModelRequest['toolChoice']) {
   return { type: 'function', function: { name: toolChoice.name } };
 }
 
-function mergeToolCallDelta(toolCallsByIndex: Map<number, RuntimeToolCall>, value: unknown) {
+function mergeToolCallDelta(
+  toolCallsByIndex: Map<number, RuntimeToolCall>,
+  value: unknown,
+  fallbackNamespace: string,
+) {
   const item = objectValue(value);
   const index = toolCallIndex(toolCallsByIndex, item);
   const existing = toolCallsByIndex.get(index) ?? {
-    id: stringValue(item.id) || `tool_call_${index}`,
+    id: stringValue(item.id) || `tool_call_${fallbackNamespace}_${index}`,
     name: '',
     arguments: '',
   };

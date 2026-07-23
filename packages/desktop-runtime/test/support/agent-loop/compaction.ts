@@ -108,13 +108,24 @@ export class RemoteCompactionModelClient implements ModelClient {
   async compactConversation(request: ModelCompactionRequest) {
     this.compactRequests.push(request);
     return {
-      summary: JSON.stringify({
-        summary: 'Remote provider compacted the older history.',
-        important_constraints: ['Preserve the latest user request.'],
-        open_items: ['Continue after remote compaction.'],
-        already_said: 'Older context was compacted by the provider-native path.',
-        tool_context: 'No active tool context.',
-      }),
+      kind: 'native' as const,
+      providerMetadata: {
+        schemaVersion: 2 as const,
+        source: {
+          providerId: 'provider-1',
+          providerKind: 'openai-responses' as const,
+          model: 'gpt-compact',
+          endpointFingerprint: 'a'.repeat(64),
+        },
+        openAiResponses: {
+          kind: 'compaction' as const,
+          items: [{
+            type: 'compaction',
+            id: 'cmp_1',
+            encrypted_content: 'encrypted-compaction',
+          }],
+        },
+      },
       usage: {
         provider: 'openai-responses',
         model: 'gpt-compact',
@@ -127,6 +138,20 @@ export class RemoteCompactionModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
+    if (request.model === 'context-compaction') {
+      yield {
+        type: 'text_delta',
+        text: JSON.stringify({
+          summary: 'Remote provider compacted the older history.',
+          important_constraints: ['Preserve the latest user request.'],
+          open_items: ['Continue after remote compaction.'],
+          already_said: 'Older context was compacted by the provider-native path.',
+          tool_context: 'No active tool context.',
+        }),
+      };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
     yield { type: 'text_delta', text: 'Final answer after remote compaction.' };
     yield { type: 'done', finishReason: 'stop' };
   }

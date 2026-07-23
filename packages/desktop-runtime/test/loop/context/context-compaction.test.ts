@@ -285,6 +285,71 @@ describe('runtime context compaction', () => {
     ]);
   });
 
+  it('pairs a reused tool call id with only its nearest open transaction', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'old_user',
+        role: 'user',
+        content: 'Inspect both files.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_first',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_0', name: 'read_file', arguments: '{"file_path":"one.txt"}' }],
+      },
+      {
+        id: 'tool_first',
+        role: 'tool',
+        toolCallId: 'call_0',
+        toolName: 'read_file',
+        content: 'one',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_second',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-25T00:00:03.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_0', name: 'read_file', arguments: '{"file_path":"two.txt"}' }],
+      },
+      {
+        id: 'tool_second',
+        role: 'tool',
+        toolCallId: 'call_0',
+        toolName: 'read_file',
+        content: 'two',
+        createdAt: '2026-06-25T00:00:04.000Z',
+        status: 'complete',
+      },
+      ...Array.from({ length: 7 }, (_, index): RuntimeMessage => ({
+        id: `recent_reused_${index}`,
+        role: index % 2 ? 'assistant' : 'user',
+        content: `recent ${index}`,
+        createdAt: `2026-06-25T00:00:${String(index + 5).padStart(2, '0')}.000Z`,
+        status: 'complete',
+      })),
+    ];
+
+    const candidate = createRuntimeContextCompactionCandidate({ force: true, messages });
+
+    expect(candidate?.olderMessages.map((message) => message.id)).toEqual([
+      'old_user',
+      'assistant_first',
+      'tool_first',
+    ]);
+    expect(candidate?.recentMessages.slice(0, 2).map((message) => message.id)).toEqual([
+      'assistant_second',
+      'tool_second',
+    ]);
+  });
+
   it('counts tool-call arguments as model context', () => {
     const messages: RuntimeMessage[] = [
       {
@@ -448,6 +513,123 @@ describe('runtime context compaction', () => {
       role: 'user',
       contextCompaction: {
         triggerScopes: ['total', 'latest_input'],
+      },
+    });
+  });
+});
+
+describe('protocol-aware context compaction', () => {
+  it('does not split a tool transaction when a persisted steer sits before its results', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'old_user',
+        role: 'user',
+        content: 'Inspect both files.',
+        createdAt: '2026-07-23T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_tools',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-07-23T00:00:01.000Z',
+        status: 'complete',
+        toolCalls: [
+          { id: 'call_1', name: 'read_file', arguments: '{"path":"one"}' },
+          { id: 'call_2', name: 'read_file', arguments: '{"path":"two"}' },
+        ],
+      },
+      {
+        id: 'persisted_steer',
+        role: 'user',
+        content: 'Use the results in order.',
+        createdAt: '2026-07-23T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'tool_1',
+        role: 'tool',
+        content: 'one',
+        toolCallId: 'call_1',
+        createdAt: '2026-07-23T00:00:03.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'tool_2',
+        role: 'tool',
+        content: 'two',
+        toolCallId: 'call_2',
+        createdAt: '2026-07-23T00:00:04.000Z',
+        status: 'complete',
+      },
+      ...Array.from({ length: 5 }, (_, index): RuntimeMessage => ({
+        id: `recent_${index}`,
+        role: index % 2 ? 'assistant' : 'user',
+        content: `recent ${index}`,
+        createdAt: `2026-07-23T00:00:${String(index + 5).padStart(2, '0')}.000Z`,
+        status: 'complete',
+      })),
+    ];
+
+    const candidate = createRuntimeContextCompactionCandidate({ force: true, messages });
+
+    expect(candidate?.olderMessages.map((message) => message.id)).toEqual(['old_user']);
+    expect(candidate?.recentMessages.slice(0, 4).map((message) => message.id)).toEqual([
+      'assistant_tools',
+      'persisted_steer',
+      'tool_1',
+      'tool_2',
+    ]);
+  });
+
+  it('attaches a detached native envelope to the portable summary message', () => {
+    const messages = Array.from({ length: 10 }, (_, index): RuntimeMessage => ({
+      id: `msg_${index}`,
+      role: index % 2 ? 'assistant' : 'user',
+      content: `message ${index}`,
+      createdAt: `2026-07-23T00:00:${String(index).padStart(2, '0')}.000Z`,
+      status: 'complete',
+    }));
+    const candidate = createRuntimeContextCompactionCandidate({ force: true, messages });
+    const providerMetadata = {
+      schemaVersion: 2 as const,
+      source: {
+        providerId: 'provider-1',
+        providerKind: 'openai-responses' as const,
+        model: 'gpt-test',
+        endpointFingerprint: 'a'.repeat(64),
+      },
+      openAiResponses: {
+        kind: 'compaction' as const,
+        responseId: 'resp_compact_1',
+        items: [{
+          type: 'compaction',
+          id: 'cmp_1',
+          encrypted_content: 'encrypted-compaction',
+          created_by: 'model',
+        }],
+      },
+    };
+    const result = candidate
+      ? materializeRuntimeContextCompaction({
+          candidate,
+          createdAt: '2026-07-23T00:01:00.000Z',
+          id: 'compact_1',
+          providerMetadata,
+          summary: 'Portable summary.',
+        })
+      : null;
+
+    providerMetadata.openAiResponses.items[0]!.encrypted_content = 'mutated';
+    const summaryMessage = result?.messages.find((message) => message.id === 'compact_1');
+    expect(summaryMessage).toMatchObject({
+      role: 'user',
+      content: expect.stringContaining('Portable summary.'),
+      providerMetadata: {
+        openAiResponses: {
+          kind: 'compaction',
+          items: [{ encrypted_content: 'encrypted-compaction' }],
+        },
       },
     });
   });

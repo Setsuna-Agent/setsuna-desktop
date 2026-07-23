@@ -77,7 +77,31 @@ export class RegenerateModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    yield { type: 'text_delta', text: `answer ${this.requests.length}` };
+    const requestNumber = this.requests.length;
+    yield {
+      type: 'assistant_metadata',
+      providerMetadata: {
+        schemaVersion: 2,
+        source: {
+          providerId: 'provider-regenerate',
+          providerKind: 'openai-responses',
+          model: 'gpt-regenerate',
+          endpointFingerprint: 'b'.repeat(64),
+        },
+        openAiResponses: {
+          kind: 'response',
+          responseId: `resp_${requestNumber}`,
+          items: [{
+            type: 'message',
+            id: `native_answer_${requestNumber}`,
+            role: 'assistant',
+            phase: 'final_answer',
+            content: [{ type: 'output_text', text: `answer ${requestNumber}` }],
+          }],
+        },
+      },
+    };
+    yield { type: 'text_delta', text: `answer ${requestNumber}` };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

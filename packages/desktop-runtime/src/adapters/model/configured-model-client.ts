@@ -66,18 +66,12 @@ export class ConfiguredModelClient implements ModelClient {
     const configuredRequest: ModelCompactionRequest = {
       ...request,
       model: requestModel,
-      maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
     };
     const compact = (nextRequest: ModelCompactionRequest) => runWithModelTimeout((signal) => client.compactConversation!({
       ...nextRequest,
       signal,
     }), request.signal, this.timeoutOptions);
-    try {
-      return await compact(configuredRequest);
-    } catch (error) {
-      if (request.signal?.aborted || !shouldRetryWithoutTemperature(configuredRequest, error)) throw error;
-      return compact({ ...configuredRequest, temperature: undefined });
-    }
+    return compact(configuredRequest);
   }
 
   private streamConfiguredRequest(client: ModelClient, request: ModelRequest, parentSignal?: AbortSignal) {

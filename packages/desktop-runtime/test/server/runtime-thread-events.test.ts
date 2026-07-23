@@ -14,14 +14,20 @@ describe('runtime thread event copying', () => {
       threadStore: { appendEvent },
     } as unknown as RuntimeFactory;
 
-    await copyRuntimeMessagesToThread(runtime, 'thread_fork', [sourceMessage()]);
+    const source = sourceMessage();
+    await copyRuntimeMessagesToThread(runtime, 'thread_fork', [source]);
 
     expect(clone).toHaveBeenCalledWith('generated_source');
     const copiedEvent = appendEvent.mock.calls[0]?.[1] as { payload: { message: RuntimeMessage } };
     const copied = copiedEvent.payload.message;
+    source.providerMetadata!.openAiResponses!.items[0]!.id = 'mutated_after_fork';
     expect(copied.attachments?.[0]).toMatchObject({ source: 'generated', assetId: 'generated_clone' });
     expect(copied.attachments?.[1]).toMatchObject({ url: 'data:image/png;base64,AA==' });
     expect(copied.attachments?.[1]).not.toHaveProperty('localAssetId');
+    expect(copied.providerMetadata?.openAiResponses?.items[0]).toMatchObject({
+      type: 'message',
+      id: 'response_message_1',
+    });
     expect(deleteAsset).not.toHaveBeenCalled();
   });
 
@@ -142,6 +148,25 @@ function sourceMessage(): RuntimeMessage {
     role: 'assistant',
     content: '',
     createdAt: '2026-07-17T00:00:00.000Z',
+    providerMetadata: {
+      schemaVersion: 2,
+      source: {
+        providerId: 'provider-1',
+        providerKind: 'openai-responses',
+        model: 'gpt-test',
+        endpointFingerprint: 'a'.repeat(64),
+      },
+      openAiResponses: {
+        kind: 'response',
+        responseId: 'resp_1',
+        items: [{
+          type: 'message',
+          id: 'response_message_1',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Fork-safe answer' }],
+        }],
+      },
+    },
     attachments: [
       {
         id: 'generated_attachment',

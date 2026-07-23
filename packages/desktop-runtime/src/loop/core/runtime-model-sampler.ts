@@ -12,6 +12,7 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { RuntimeToolCallExecutor, ToolPreviewAnnouncement } from '../tools/runtime-tool-call-executor.js';
 import type { RuntimeToolRouter } from '../tools/tool-router.js';
+import { bindProviderMetadataToSemanticMessage } from '../../utils/runtime-message-semantic-fingerprint.js';
 import { toolCallFromModelStreamItem, toolsForModelRequest, upsertRuntimeToolCall } from './agent-loop-tool-utils.js';
 import {
   createAssistantItemStreamBridge,
@@ -19,6 +20,7 @@ import {
   createLegacyModelStreamMirrorState,
 } from './model-stream-output.js';
 import type { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
+import { mergeRuntimeProviderMetadata } from './runtime-provider-metadata.js';
 
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
@@ -110,7 +112,7 @@ export class RuntimeModelSampler {
     })) {
       throwIfAborted(signal);
       if (item.type === 'assistant_metadata') {
-        assistantMessage.providerMetadata = mergeProviderMetadata(
+        assistantMessage.providerMetadata = mergeRuntimeProviderMetadata(
           assistantMessage.providerMetadata,
           item.providerMetadata,
         );
@@ -170,6 +172,10 @@ export class RuntimeModelSampler {
       // as success leaves a blank assistant turn and hides the configuration failure from users.
       throw new Error('模型服务返回了空响应，请检查 API Base URL、模型 ID 和供应商协议配置。');
     }
+    assistantMessage.providerMetadata = bindProviderMetadataToSemanticMessage(
+      assistantMessage.providerMetadata,
+      { ...assistantMessage, content: text, toolCalls },
+    );
 
     return {
       assistantMessage,
@@ -180,21 +186,6 @@ export class RuntimeModelSampler {
       usage,
     };
   }
-}
-
-function mergeProviderMetadata(
-  previous: RuntimeMessage['providerMetadata'],
-  next: NonNullable<RuntimeMessage['providerMetadata']>,
-): NonNullable<RuntimeMessage['providerMetadata']> {
-  const previousBlocks = previous?.anthropic?.contentBlocks ?? [];
-  const nextBlocks = next.anthropic?.contentBlocks ?? [];
-  return {
-    ...previous,
-    ...next,
-    ...(previousBlocks.length || nextBlocks.length
-      ? { anthropic: { contentBlocks: [...previousBlocks, ...nextBlocks] } }
-      : {}),
-  };
 }
 
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {

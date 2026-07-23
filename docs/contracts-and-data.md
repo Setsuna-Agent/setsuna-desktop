@@ -7,6 +7,7 @@
 - `config.ts`：runtime preferences 与 feature flags；provider、permission 等叶子类型位于 `model-provider.ts`、`model-request.ts`、`permissions.ts`，由兼容门面重导出。
 - `environment.ts`：每次 runtime 操作共享的 cwd、workspace roots、shell 与 Git 仓库路径关系；不承载权限。
 - `provider.ts`：模型请求、工具定义、工具调用、流式模型事件。
+- `message-metadata.ts`：跨协议消息角色、JSON-safe provider metadata、版本化原生回放 envelope。
 - `threads.ts`：线程、消息、附件、toolRun、context compaction、goal、git info。
 - `events.ts`：runtime event union 和 SSE envelope。
 - `thread-events.ts`：runtime event -> thread snapshot reducer；复用的 projection helper 位于 `thread-event-projection.ts`。
@@ -82,6 +83,25 @@
 - 删除和重生成要按 message id 操作，而不是按 UI display item id。
 - context compaction 后，旧消息保留给用户看，但 visibility 降为 transcript。
 
+## Protocol-aware Model History
+
+线程状态仍以 append-only `RuntimeEvent` 为持久化真源；投影得到的 `RuntimeMessage[]` 是模型请求使用的跨协议 semantic history。`item.started` / `item.delta` / `item.completed` 只描述流式 UI 与 turn item，不参与重建模型历史，也不构成第二套可变真源。
+
+`RuntimeMessage.providerMetadata` 是 semantic message 上的可选增强：
+
+- 新 metadata 写入 `schemaVersion: 2` 和 `source`。`source` 包含 provider ID、provider kind、model，以及规范化 base URL 的 SHA-256 fingerprint；不会保存 endpoint 明文副本。
+- 只有 provider ID、协议、模型和 endpoint fingerprint 全部匹配时，adapter 才会原生回放 envelope。任一不匹配都静默回退到当前 `RuntimeMessage` 的文本、tool calls 和 tool results。
+- OpenAI-compatible Chat 是 `semantic_only`：不保存或回放未知厂商字段、`reasoning_content` 或任意原始响应 payload。
+- Anthropic envelope 保存签名 thinking/content blocks。没有 V2 source 的 legacy Anthropic blocks 仍只在 Anthropic adapter 中按旧规则回放。
+- OpenAI Responses envelope 只保存白名单内且嵌套结构也通过校验的 message、reasoning、function call、function call output（仅 native compaction replacement list）、compaction item，以及 response ID；合法 assistant message `phase` 会随 response/compact item 保留，非法值使整条 envelope 降级；encrypted reasoning 不进入普通 assistant 文本。任一原生 item 无法完整保存时，整条 envelope 省略。
+- V2 metadata 的 semantic fingerprint 绑定最终 portable message；后续 runtime 追加文本、修改 tool name/arguments 或 compact summary 变化时，同 provider 也会降级为 semantic replay。
+- Responses compaction 是双产物：`/responses/compact` 返回的完整 replacement items 只服务同协议续接，portable summary 由独立摘要请求生成并始终作为跨协议 fallback。
+- 单条消息 metadata 的 JSON 上限是 2 MiB。超限时整个原生 envelope 被省略，semantic message 正常完成，并记录 `provider_metadata_omitted_too_large` verification warning。
+
+读取使用 lazy compatibility：不会为旧消息猜测原生状态，也不会后台重写事件。无 metadata 的旧 Chat/Responses 消息走 semantic replay；旧 compaction 继续使用 portable summary。Chat 厂商跨轮复用的 tool-call ID 只在 model-facing 副本上按事务改写为稳定 wire ID；旧压缩边界留下的 orphan result 不再发送给模型，并产生 verification warning。新字段只追加在现有 JSON payload 中，不新增 event type 或 SQLite 字段，`PRAGMA user_version` 保持 `1`，因此旧版本忽略 metadata 后仍可显示并继续基础 transcript。
+
+snapshot normalization 只做 JSON-safe 深拷贝、已知 envelope 形状校验和非法 envelope 降级。合法未知 additive 字段保留，用于前向兼容。
+
 ## HTTP Client Contract
 
 `RuntimeRequestInput` 只有：
@@ -151,6 +171,7 @@ runtime/
 - MCP list 只暴露 env/header key，不返回值。
 - 结构化用户输入的待处理 schema 可以进入事件；答案不写入 approval request/resolved 事件，只随正常 tool result 进入本地线程上下文。
 - renderer 不能拿到 runtime token。
+- provider metadata 不保存完整 HTTP response、headers、API key、request metadata 或未经过白名单过滤的 provider payload。
 
 ## 变更扩散范例
 

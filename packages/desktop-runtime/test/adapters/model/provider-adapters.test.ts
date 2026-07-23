@@ -1,11 +1,18 @@
-import type { ModelRequest } from '@setsuna-desktop/contracts';
+import type {
+  ModelRequest,
+  RuntimeJsonObject,
+  RuntimeMessage,
+  RuntimeMessageProviderMetadata,
+} from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { AiSdkOpenAiCompatibleModelClient } from '../../../src/adapters/model/ai-sdk-model-client.js';
 import { AnthropicMessagesModelClient } from '../../../src/adapters/model/anthropic-messages-model-client.js';
 import { ConfiguredModelClient } from '../../../src/adapters/model/configured-model-client.js';
 import { OpenAiChatModelClient } from '../../../src/adapters/model/openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from '../../../src/adapters/model/openai-responses-model-client.js';
+import { providerEndpointFingerprint } from '../../../src/adapters/model/provider-replay-context.js';
 import { openAiCompatibleThinkingBody } from '../../../src/adapters/model/provider-thinking.js';
+import { bindProviderMetadataToSemanticMessage } from '../../../src/utils/runtime-message-semantic-fingerprint.js';
 import type { FetchImpl } from '../../../src/adapters/model/provider-utils.js';
 import type { RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
@@ -60,6 +67,109 @@ describe('provider model adapters', () => {
       usage: { providerId: 'provider-1', provider: 'Provider 1', cachedInputTokens: 1, totalTokens: 5 },
     });
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'stop' });
+  });
+
+  it('keeps Generic Chat semantic-only when history carries foreign native envelopes', async () => {
+    const captured: CapturedRequest = {};
+    const client = new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', captured),
+    );
+    const foreignSource = {
+      providerId: 'responses-provider',
+      providerKind: 'openai-responses' as const,
+      model: 'gpt-responses',
+      endpointFingerprint: 'c'.repeat(64),
+    };
+
+    await collect(client, {
+      messages: [
+        request.messages[0],
+        request.messages[1],
+        {
+          id: 'assistant-foreign',
+          role: 'assistant',
+          content: 'Portable answer',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+          providerMetadata: {
+            schemaVersion: 2,
+            source: foreignSource,
+            openAiResponses: {
+              kind: 'response',
+              responseId: 'resp_foreign',
+              items: [{
+                type: 'reasoning',
+                id: 'reasoning_foreign',
+                encrypted_content: 'encrypted-foreign-reasoning',
+                summary: [],
+              }],
+            },
+          },
+        },
+        {
+          id: 'tool-foreign',
+          role: 'tool',
+          content: 'README contents',
+          createdAt: '2026-06-25T00:00:03.000Z',
+          toolCallId: 'call_1',
+          toolName: 'workspace_read_file',
+        },
+        {
+          id: 'summary-foreign',
+          role: 'user',
+          content: '<context_compaction_summary>Portable summary.</context_compaction_summary>',
+          createdAt: '2026-06-25T00:00:04.000Z',
+          contextCompaction: {
+            compactedMessageCount: 2,
+            compactedTokens: 10,
+            keptRecentMessageCount: 1,
+            maxContextTokensK: 128,
+            originalMessageCount: 3,
+            originalTokens: 20,
+          },
+          providerMetadata: {
+            schemaVersion: 2,
+            source: foreignSource,
+            openAiResponses: {
+              kind: 'compaction',
+              responseId: 'resp_compact_foreign',
+              items: [{
+                type: 'compaction',
+                id: 'compaction_foreign',
+                encrypted_content: 'encrypted-compaction',
+              }],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(expectBody(captured).messages).toEqual([
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'Hello' },
+      {
+        role: 'assistant',
+        content: 'Portable answer',
+        tool_calls: [{
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
+        }],
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_1',
+        name: 'workspace_read_file',
+        content: 'README contents',
+      },
+      {
+        role: 'user',
+        content: '<context_compaction_summary>Portable summary.</context_compaction_summary>',
+      },
+    ]);
+    expect(JSON.stringify(expectBody(captured))).not.toContain('encrypted');
+    expect(JSON.stringify(expectBody(captured))).not.toContain('resp_foreign');
   });
 
   it('parses CRLF-delimited SSE events without collapsing the stream', async () => {
@@ -152,6 +262,28 @@ describe('provider model adapters', () => {
       type: 'tool_calls',
       toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
     });
+  });
+
+  it('generates cross-round unique fallback IDs when a Chat provider omits them', async () => {
+    const responseBody = [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}"}}]},"finish_reason":"tool_calls"}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const client = new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch(responseBody, {}),
+    );
+
+    const firstEvents = await collect(client);
+    const secondEvents = await collect(client);
+    const firstCall = firstEvents.find((event) => event.type === 'tool_calls')?.toolCalls[0];
+    const secondCall = secondEvents.find((event) => event.type === 'tool_calls')?.toolCalls[0];
+
+    expect(firstCall?.id).toMatch(/^tool_call_[a-f0-9]{32}_0$/);
+    expect(secondCall?.id).toMatch(/^tool_call_[a-f0-9]{32}_0$/);
+    expect(secondCall?.id).not.toBe(firstCall?.id);
   });
 
   it('keeps legacy tool argument fragments on the same call when later indices are omitted', async () => {
@@ -506,31 +638,69 @@ describe('provider model adapters', () => {
       provider('openai-responses', 'https://api.openai.test/v1'),
       fakeFetch(
         JSON.stringify({
-          output: [{ type: 'compaction', summary: 'Provider compact summary.' }],
+          id: 'resp_compact_1',
+          output: [
+            {
+              type: 'message',
+              id: 'retained_assistant_1',
+              role: 'assistant',
+              status: 'completed',
+              phase: 'final_answer',
+              content: [{ type: 'output_text', text: 'RETAINED FINAL ANSWER' }],
+            },
+            {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: 'ONLY ONE RETAINED USER TURN' }],
+            },
+            {
+              type: 'compaction',
+              id: 'cmp_1',
+              encrypted_content: 'encrypted-compaction',
+            },
+          ],
           usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
         }),
         captured,
       ),
     );
 
-    const result = await client.compactConversation({
-      ...request,
-      maxOutputTokens: 1600,
-      temperature: 0,
-    });
+    const result = await client.compactConversation(request);
 
     expect(captured.url).toBe('https://api.openai.test/v1/responses/compact');
     const body = expectBody(captured);
-    expect(body.model).toBe('model-code');
-    expect(body.instructions).toBe('System prompt');
-    expect(body.max_output_tokens).toBe(1600);
-    expect(body.temperature).toBe(0);
-    expect(body.input).toEqual([
-      { role: 'user', content: 'Hello' },
-      { type: 'compaction_trigger' },
-    ]);
+    expect(body).toEqual({
+      model: 'model-code',
+      input: [{ role: 'user', content: 'Hello' }],
+      instructions: 'System prompt',
+    });
     expect(result).toMatchObject({
-      summary: 'Provider compact summary.',
+      kind: 'native',
+      providerMetadata: {
+        openAiResponses: {
+          kind: 'compaction',
+          items: [
+            {
+              type: 'message',
+              id: 'retained_assistant_1',
+              role: 'assistant',
+              status: 'completed',
+              phase: 'final_answer',
+              content: [{ type: 'output_text', text: 'RETAINED FINAL ANSWER' }],
+            },
+            {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: 'ONLY ONE RETAINED USER TURN' }],
+            },
+            {
+              type: 'compaction',
+              id: 'cmp_1',
+              encrypted_content: 'encrypted-compaction',
+            },
+          ],
+        },
+      },
       usage: {
         providerId: 'provider-1',
         provider: 'Provider 1',
@@ -540,6 +710,270 @@ describe('provider model adapters', () => {
         totalTokens: 12,
       },
     });
+  });
+
+  it('sends exact compatible history items to native compact without textifying them', async () => {
+    const captured: CapturedRequest = {};
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        JSON.stringify({
+          output: [{ type: 'compaction', id: 'cmp_1', encrypted_content: 'encrypted-compaction' }],
+        }),
+        captured,
+      ),
+    );
+    const nativeItems: RuntimeJsonObject[] = [
+      {
+        type: 'reasoning',
+        id: 'reasoning_1',
+        summary: [{ type: 'summary_text', text: 'Checked context.' }],
+        encrypted_content: 'encrypted-reasoning',
+      },
+      {
+        type: 'message',
+        id: 'message_1',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'I will read it.' }],
+      },
+      {
+        type: 'function_call',
+        id: 'function_1',
+        call_id: 'call_1',
+        name: 'workspace_read_file',
+        arguments: '{"path":"README.md"}',
+      },
+    ];
+    const messages: RuntimeMessage[] = [{
+      id: 'assistant_1',
+      role: 'assistant',
+      content: '<think>Checked context.</think>I will read it.',
+      createdAt: '2026-06-25T00:00:02.000Z',
+      toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      providerMetadata: responsesMetadata(nativeItems),
+    }, {
+      id: 'tool_1',
+      role: 'tool',
+      content: 'README contents',
+      createdAt: '2026-06-25T00:00:03.000Z',
+      toolCallId: 'call_1',
+      toolName: 'workspace_read_file',
+    }];
+
+    await client.compactConversation({ model: 'context-compaction', messages });
+
+    expect(expectBody(captured).input).toEqual([
+      ...nativeItems,
+      { type: 'function_call_output', call_id: 'call_1', output: 'README contents' },
+    ]);
+    expect(JSON.stringify(expectBody(captured).input)).toContain('encrypted-reasoning');
+  });
+
+  it('replays the full native compact replacement list and falls back to the independent summary', async () => {
+    const captured: CapturedRequest = {};
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        JSON.stringify({
+          id: 'resp_compact_1',
+          output: [
+            {
+              type: 'message',
+              id: 'retained_final_1',
+              role: 'assistant',
+              status: 'completed',
+              phase: 'final_answer',
+              content: [{ type: 'output_text', text: 'Retained final answer' }],
+            },
+            {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: 'Retained native context' }],
+              request_metadata: { secret: true },
+            },
+            {
+              type: 'compaction',
+              id: 'cmp_1',
+              encrypted_content: 'encrypted-compaction',
+              created_by: 'model',
+              headers: { authorization: 'never-persist' },
+            },
+          ],
+        }),
+        captured,
+      ),
+    );
+
+    const result = await client.compactConversation(request);
+
+    expect(result).toEqual({
+      kind: 'native',
+      providerMetadata: {
+        schemaVersion: 2,
+        source: {
+          providerId: 'provider-1',
+          providerKind: 'openai-responses',
+          model: 'model-code',
+          endpointFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+        openAiResponses: {
+          kind: 'compaction',
+          responseId: 'resp_compact_1',
+          items: [
+            {
+              type: 'message',
+              id: 'retained_final_1',
+              role: 'assistant',
+              status: 'completed',
+              phase: 'final_answer',
+              content: [{ type: 'output_text', text: 'Retained final answer' }],
+            },
+            {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: 'Retained native context' }],
+            },
+            {
+              type: 'compaction',
+              id: 'cmp_1',
+              encrypted_content: 'encrypted-compaction',
+            },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('authorization');
+    expect(JSON.stringify(result)).not.toContain('request_metadata');
+
+    if (result.kind !== 'native') throw new Error('Expected native compaction metadata.');
+    const summaryMessageBase: RuntimeMessage = {
+      id: 'compact_summary',
+      role: 'user',
+      content: '<context_compaction_summary>Portable compact summary.</context_compaction_summary>',
+      createdAt: '2026-06-25T00:00:02.000Z',
+      contextCompaction: {
+        compactedMessageCount: 4,
+        compactedTokens: 20,
+        keptRecentMessageCount: 2,
+        maxContextTokensK: 128,
+        originalMessageCount: 6,
+        originalTokens: 100,
+      },
+    };
+    const summaryMessage: RuntimeMessage = {
+      ...summaryMessageBase,
+      providerMetadata: bindProviderMetadataToSemanticMessage(result.providerMetadata, summaryMessageBase),
+    };
+    const replayCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', replayCaptured),
+      ),
+      { messages: [summaryMessage] },
+    );
+    expect(expectBody(replayCaptured).input).toEqual([
+      {
+        type: 'message',
+        id: 'retained_final_1',
+        role: 'assistant',
+        status: 'completed',
+        phase: 'final_answer',
+        content: [{ type: 'output_text', text: 'Retained final answer' }],
+      },
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'Retained native context' }],
+      },
+      {
+        type: 'compaction',
+        id: 'cmp_1',
+        encrypted_content: 'encrypted-compaction',
+      },
+    ]);
+
+    const changedSummaryCaptured: CapturedRequest = {};
+    const changedSummaryMessage = {
+      ...summaryMessage,
+      content: '<context_compaction_summary>Changed after capture.</context_compaction_summary>',
+    };
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', changedSummaryCaptured),
+      ),
+      { messages: [changedSummaryMessage] },
+    );
+    expect(expectBody(changedSummaryCaptured).input).toEqual([{
+      role: 'user',
+      content: '<context_compaction_summary>Changed after capture.</context_compaction_summary>',
+    }]);
+
+    const fallbackCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v2'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', fallbackCaptured),
+      ),
+      { messages: [summaryMessage] },
+    );
+    expect(expectBody(fallbackCaptured).input).toEqual([{
+      role: 'user',
+      content: '<context_compaction_summary>Portable compact summary.</context_compaction_summary>',
+    }]);
+  });
+
+  it('rejects a partial compact envelope when the replacement list contains an unsupported item', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        JSON.stringify({
+          output: [
+            { type: 'message', role: 'user', content: 'Retained context' },
+            {
+              type: 'program',
+              id: 'program_1',
+              call_id: 'program_call_1',
+              code: 'secret()',
+              fingerprint: 'opaque',
+            },
+            { type: 'compaction', id: 'cmp_1', encrypted_content: 'encrypted-compaction' },
+          ],
+        }),
+        {},
+      ),
+    );
+
+    await expect(client.compactConversation(request)).rejects.toThrow(
+      'complete replayable replacement item list',
+    );
+  });
+
+  it('rejects the whole compact envelope when a replacement message has an invalid phase', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        JSON.stringify({
+          output: [
+            {
+              type: 'message',
+              id: 'retained_invalid_phase',
+              role: 'assistant',
+              status: 'completed',
+              phase: 'analysis',
+              content: [{ type: 'output_text', text: 'Retained answer' }],
+            },
+            { type: 'compaction', id: 'cmp_1', encrypted_content: 'encrypted-compaction' },
+          ],
+        }),
+        {},
+      ),
+    );
+
+    await expect(client.compactConversation(request)).rejects.toThrow(
+      'complete replayable replacement item list',
+    );
   });
 
   it('streams native OpenAI Responses output items', async () => {
@@ -583,6 +1017,421 @@ describe('provider model adapters', () => {
     expect(events).toContainEqual({ type: 'item_completed', item: { id: 'reasoning_1', kind: 'reasoning', content: 'Need context.', status: 'completed' } });
     expect(events.some((event) => event.type === 'text_delta')).toBe(false);
     expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { totalTokens: 6 } });
+  });
+
+  it('captures, sanitizes, and replays OpenAI Responses native output without semantic duplicates', async () => {
+    const firstCaptured: CapturedRequest = {};
+    const firstClient = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"id":"resp_1"}}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","status":"completed","summary":[{"type":"summary_text","text":"Checked context.","headers":{"authorization":"nested-secret"}}],"encrypted_content":"encrypted-reasoning","headers":{"authorization":"never-persist"},"diagnostic":{"trace":"secret"}}}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","phase":"commentary","content":[{"type":"output_text","text":"I will read it.","annotations":[],"request_metadata":{"secret":true}}],"unknown":"drop-me"}}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}","status":"completed","request_metadata":{"secret":true}}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+          '',
+        ].join('\n'),
+        firstCaptured,
+      ),
+    );
+
+    const events = await collect(firstClient);
+    const metadataEvent = events.find((event) => event.type === 'assistant_metadata');
+    if (!metadataEvent || metadataEvent.type !== 'assistant_metadata') {
+      throw new Error('Expected Responses assistant metadata.');
+    }
+    expect(expectBody(firstCaptured).include).toEqual(['reasoning.encrypted_content']);
+    expect(metadataEvent.providerMetadata).toMatchObject({
+      schemaVersion: 2,
+      source: {
+        providerId: 'provider-1',
+        providerKind: 'openai-responses',
+        model: 'model-code',
+      },
+      openAiResponses: {
+        kind: 'response',
+        responseId: 'resp_1',
+        items: [
+          {
+            type: 'reasoning',
+            id: 'reasoning_1',
+            status: 'completed',
+            summary: [{ type: 'summary_text', text: 'Checked context.' }],
+            encrypted_content: 'encrypted-reasoning',
+          },
+          {
+            type: 'message',
+            id: 'msg_1',
+            role: 'assistant',
+            status: 'completed',
+            phase: 'commentary',
+            content: [{ type: 'output_text', text: 'I will read it.', annotations: [] }],
+          },
+          {
+            type: 'function_call',
+            id: 'fc_1',
+            call_id: 'call_1',
+            name: 'workspace_read_file',
+            arguments: '{"path":"README.md"}',
+            status: 'completed',
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(metadataEvent.providerMetadata)).not.toContain('authorization');
+    expect(JSON.stringify(metadataEvent.providerMetadata)).not.toContain('diagnostic');
+    expect(JSON.stringify(metadataEvent.providerMetadata)).not.toContain('request_metadata');
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: { id: 'reasoning_1', kind: 'reasoning', content: 'Checked context.', status: 'completed' },
+    });
+
+    const replayCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', replayCaptured),
+      ),
+      {
+        messages: [
+          request.messages[1],
+          {
+            id: 'assistant-native',
+            role: 'assistant',
+            content: '<think>Checked context.</think>I will read it.',
+            createdAt: '2026-06-25T00:00:02.000Z',
+            toolCalls: [{ id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+            providerMetadata: metadataEvent.providerMetadata,
+          },
+          {
+            id: 'tool-native',
+            role: 'tool',
+            content: 'README contents',
+            createdAt: '2026-06-25T00:00:03.000Z',
+            toolCallId: 'call_1',
+            toolName: 'workspace_read_file',
+          },
+        ],
+      },
+    );
+
+    expect(expectBody(replayCaptured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      {
+        type: 'reasoning',
+        id: 'reasoning_1',
+        status: 'completed',
+        summary: [{ type: 'summary_text', text: 'Checked context.' }],
+        encrypted_content: 'encrypted-reasoning',
+      },
+      {
+        type: 'message',
+        id: 'msg_1',
+        role: 'assistant',
+        status: 'completed',
+        phase: 'commentary',
+        content: [{ type: 'output_text', text: 'I will read it.', annotations: [] }],
+      },
+      {
+        type: 'function_call',
+        id: 'fc_1',
+        call_id: 'call_1',
+        name: 'workspace_read_file',
+        arguments: '{"path":"README.md"}',
+        status: 'completed',
+      },
+      { type: 'function_call_output', call_id: 'call_1', output: 'README contents' },
+    ]);
+    expect(JSON.stringify(expectBody(replayCaptured).input)).not.toContain('<think>');
+  });
+
+  it('omits the whole Responses envelope when one output item is unsupported', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"Visible answer"}]}}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"type":"program","id":"program_1","call_id":"program_call_1","code":"secret()","fingerprint":"opaque"}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_partial","status":"completed"}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events.some((event) => event.type === 'assistant_metadata')).toBe(false);
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: { id: 'msg_1', kind: 'agent_message', content: 'Visible answer', status: 'completed' },
+    });
+  });
+
+  it('omits the whole Responses envelope when an output message has an invalid phase', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"type":"message","id":"msg_invalid_phase","role":"assistant","phase":"analysis","content":[{"type":"output_text","text":"Portable answer"}]}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_invalid_phase","status":"completed"}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events.some((event) => event.type === 'assistant_metadata')).toBe(false);
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: {
+        id: 'msg_invalid_phase',
+        kind: 'agent_message',
+        content: 'Portable answer',
+        status: 'completed',
+      },
+    });
+  });
+
+  it('ignores Responses envelopes when provider id, model, or endpoint changes', async () => {
+    const metadata = {
+      schemaVersion: 2 as const,
+      source: {
+        providerId: 'provider-1',
+        providerKind: 'openai-responses' as const,
+        model: 'model-code',
+        endpointFingerprint: providerEndpointFingerprint('https://api.openai.test/v1'),
+      },
+      openAiResponses: {
+        kind: 'response' as const,
+        responseId: 'resp_old',
+        items: [{
+          type: 'message',
+          id: 'msg_old',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Native text' }],
+        }],
+      },
+    };
+    const changedProviders = [
+      { ...provider('openai-responses', 'https://api.openai.test/v1'), id: 'provider-2' },
+      provider('openai-responses', 'https://api.openai.test/v2'),
+      provider('openai-responses', 'https://api.openai.test/v1', { ...model, id: 'model-2', code: 'model-code-2' }),
+    ];
+
+    for (const changedProvider of changedProviders) {
+      const captured: CapturedRequest = {};
+      await collect(
+        new OpenAiResponsesModelClient(
+          changedProvider,
+          fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
+        ),
+        {
+          messages: [{
+            id: 'assistant-old',
+            role: 'assistant',
+            content: '<think>Private thought.</think>Portable text',
+            createdAt: '2026-06-25T00:00:02.000Z',
+            providerMetadata: metadata,
+          }],
+        },
+      );
+      expect(expectBody(captured).input).toEqual([{ role: 'assistant', content: 'Portable text' }]);
+    }
+  });
+
+  it('falls back for the whole Responses message when any native item is invalid', async () => {
+    const captured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
+      ),
+      {
+        messages: [{
+          id: 'assistant-invalid-native',
+          role: 'assistant',
+          content: '<think>Private thought.</think>Portable text',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          providerMetadata: {
+            schemaVersion: 2,
+            source: {
+              providerId: 'provider-1',
+              providerKind: 'openai-responses',
+              model: 'model-code',
+              endpointFingerprint: providerEndpointFingerprint('https://api.openai.test/v1'),
+            },
+            openAiResponses: {
+              kind: 'response',
+              items: [
+                {
+                  type: 'message',
+                  id: 'msg_native',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'Native text' }],
+                },
+                { type: 'unsupported_item', id: 'unsupported_1' },
+              ],
+            },
+          },
+        }],
+      },
+    );
+
+    expect(expectBody(captured).input).toEqual([{ role: 'assistant', content: 'Portable text' }]);
+  });
+
+  it('falls back to semantic replay when persisted Responses phase is invalid', async () => {
+    const captured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
+      ),
+      {
+        messages: [{
+          id: 'assistant-invalid-phase',
+          role: 'assistant',
+          content: 'Portable text',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          providerMetadata: responsesMetadata([{
+            type: 'message',
+            id: 'msg_native',
+            role: 'assistant',
+            phase: 'analysis',
+            content: [{ type: 'output_text', text: 'Portable text' }],
+          }]),
+        }],
+      },
+    );
+
+    expect(expectBody(captured).input).toEqual([
+      { role: 'assistant', content: 'Portable text' },
+    ]);
+  });
+
+  it('falls back when native Responses text diverges from the semantic assistant message', async () => {
+    const captured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
+      ),
+      {
+        messages: [{
+          id: 'assistant-diverged',
+          role: 'assistant',
+          content: 'different semantic text',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          providerMetadata: responsesMetadata([{
+            type: 'message',
+            id: 'msg_native',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'native text' }],
+          }]),
+        }],
+      },
+    );
+
+    expect(expectBody(captured).input).toEqual([
+      { role: 'assistant', content: 'different semantic text' },
+    ]);
+  });
+
+  it('falls back when a native Responses tool name or arguments diverge', async () => {
+    for (const semanticCall of [
+      { id: 'call_1', name: 'different_tool', arguments: '{"path":"README.md"}' },
+      { id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"OTHER.md"}' },
+    ]) {
+      const captured: CapturedRequest = {};
+      await collect(
+        new OpenAiResponsesModelClient(
+          provider('openai-responses', 'https://api.openai.test/v1'),
+          fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
+        ),
+        {
+          messages: [{
+            id: 'assistant-tool-diverged',
+            role: 'assistant',
+            content: '',
+            createdAt: '2026-06-25T00:00:02.000Z',
+            toolCalls: [semanticCall],
+            providerMetadata: responsesMetadata([{
+              type: 'function_call',
+              id: 'fc_1',
+              call_id: 'call_1',
+              name: 'workspace_read_file',
+              arguments: '{"path":"README.md"}',
+            }]),
+          }],
+        },
+      );
+
+      expect(expectBody(captured).input).toEqual([{
+        type: 'function_call',
+        call_id: 'call_1',
+        name: semanticCall.name,
+        arguments: semanticCall.arguments,
+      }]);
+    }
+  });
+
+  it('omits oversized Responses metadata while keeping semantic output and a verification warning', async () => {
+    const encryptedContent = 'x'.repeat(2 * 1024 * 1024);
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.done',
+          `data: ${JSON.stringify({ type: 'response.output_item.done', item: { type: 'reasoning', id: 'reasoning_large', summary: [], encrypted_content: encryptedContent } })}`,
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"type":"message","id":"msg_1","content":[{"type":"output_text","text":"Portable answer"}]}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_large","status":"completed"}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events.some((event) => event.type === 'assistant_metadata')).toBe(false);
+    expect(events).toContainEqual({
+      type: 'model_verification',
+      verification: {
+        model: 'model-code',
+        provider: 'openai-responses',
+        warnings: ['provider_metadata_omitted_too_large'],
+      },
+    });
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: { id: 'msg_1', kind: 'agent_message', content: 'Portable answer', status: 'completed' },
+    });
   });
 
   it('reports usage and truncation reason from response.incomplete', async () => {
@@ -1139,6 +1988,13 @@ describe('provider model adapters', () => {
     expect(metadataEvent).toEqual({
       type: 'assistant_metadata',
       providerMetadata: {
+        schemaVersion: 2,
+        source: {
+          providerId: 'provider-1',
+          providerKind: 'anthropic',
+          model: 'model-code',
+          endpointFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
         anthropic: {
           contentBlocks: [
             { type: 'thinking', thinking: 'Need context.', signature: 'signed-thinking' },
@@ -1193,6 +2049,213 @@ describe('provider model adapters', () => {
       },
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'found it' }] },
     ]);
+  });
+
+  it('omits the whole Anthropic envelope when one content block is unsupported', async () => {
+    const client = new AnthropicMessagesModelClient(
+      provider('anthropic', 'https://api.anthropic.test'),
+      fakeFetch(
+        [
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"signed-thinking"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":0}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"server_1"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":1}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_1","name":"workspace_read_file","input":{"path":"README.md"}}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":2}',
+          '',
+          'event: message_delta',
+          'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}',
+          '',
+          'event: message_stop',
+          'data: {"type":"message_stop"}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events.some((event) => event.type === 'assistant_metadata')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'item_completed',
+      item: expect.objectContaining({
+        kind: 'tool_call',
+        toolCall: {
+          id: 'toolu_1',
+          name: 'workspace_read_file',
+          arguments: '{"path":"README.md"}',
+        },
+      }),
+    }));
+  });
+
+  it('falls back to semantic Anthropic blocks when exact blocks diverge from the message', async () => {
+    const captured: CapturedRequest = {};
+    await collect(
+      new AnthropicMessagesModelClient(
+        provider('anthropic', 'https://api.anthropic.test'),
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+      ),
+      {
+        messages: [{
+          id: 'assistant-diverged',
+          role: 'assistant',
+          content: 'Portable text with runtime note.',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          toolCalls: [{ id: 'toolu_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+          providerMetadata: {
+            schemaVersion: 2,
+            source: {
+              providerId: 'provider-1',
+              providerKind: 'anthropic',
+              model: 'model-code',
+              endpointFingerprint: providerEndpointFingerprint('https://api.anthropic.test'),
+            },
+            anthropic: {
+              contentBlocks: [
+                { type: 'thinking', thinking: 'Private thought.', signature: 'signed' },
+                { type: 'text', text: 'Native text.' },
+                { type: 'tool_use', id: 'toolu_1', name: 'workspace_read_file', input: { path: 'README.md' } },
+              ],
+            },
+          },
+        }],
+      },
+    );
+
+    expect(expectBody(captured).messages).toEqual([{
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'Portable text with runtime note.' },
+        { type: 'tool_use', id: 'toolu_1', name: 'workspace_read_file', input: { path: 'README.md' } },
+      ],
+    }]);
+  });
+
+  it('continues replaying legacy Anthropic blocks only on Anthropic', async () => {
+    const captured: CapturedRequest = {};
+    await collect(
+      new AnthropicMessagesModelClient(
+        provider('anthropic', 'https://api.anthropic.test'),
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+      ),
+      {
+        messages: [
+          request.messages[1],
+          {
+            id: 'legacy-assistant',
+            role: 'assistant',
+            content: '<think>Legacy thought.</think>I will search.',
+            createdAt: '2026-06-25T00:00:02.000Z',
+            toolCalls: [{ id: 'legacy_call', name: 'workspace_search_text', arguments: '{"query":"legacy"}' }],
+            providerMetadata: {
+              anthropic: {
+                contentBlocks: [
+                  { type: 'thinking', thinking: 'Legacy thought.', signature: 'legacy-signature' },
+                  { type: 'text', text: 'I will search.' },
+                  { type: 'tool_use', id: 'legacy_call', name: 'workspace_search_text', input: { query: 'legacy' } },
+                ],
+              },
+            },
+          },
+          {
+            id: 'legacy-result',
+            role: 'tool',
+            content: 'legacy result',
+            createdAt: '2026-06-25T00:00:03.000Z',
+            toolCallId: 'legacy_call',
+            toolName: 'workspace_search_text',
+          },
+        ],
+      },
+    );
+
+    expect(expectBody(captured).messages).toContainEqual({
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: 'Legacy thought.', signature: 'legacy-signature' },
+        { type: 'text', text: 'I will search.' },
+        { type: 'tool_use', id: 'legacy_call', name: 'workspace_search_text', input: { query: 'legacy' } },
+      ],
+    });
+  });
+
+  it('falls back to semantic Anthropic history when provider, model, or endpoint changes', async () => {
+    const metadata = {
+      schemaVersion: 2 as const,
+      source: {
+        providerId: 'provider-1',
+        providerKind: 'anthropic' as const,
+        model: 'model-code',
+        endpointFingerprint: providerEndpointFingerprint('https://api.anthropic.test'),
+      },
+      anthropic: {
+        contentBlocks: [
+          { type: 'thinking' as const, thinking: 'Private thought.', signature: 'signature' },
+          { type: 'text' as const, text: 'I will search.' },
+          { type: 'tool_use' as const, id: 'toolu_1', name: 'workspace_search_text', input: { query: 'needle' } },
+        ],
+      },
+    };
+    const messages: ModelRequest['messages'] = [
+      request.messages[1],
+      {
+        id: 'assistant-thinking-tool',
+        role: 'assistant',
+        content: '<think>Private thought.</think>I will search.',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        toolCalls: [{ id: 'toolu_1', name: 'workspace_search_text', arguments: '{"query":"needle"}' }],
+        providerMetadata: metadata,
+      },
+      {
+        id: 'tool-result',
+        role: 'tool',
+        content: 'found it',
+        createdAt: '2026-06-25T00:00:03.000Z',
+        toolCallId: 'toolu_1',
+        toolName: 'workspace_search_text',
+      },
+    ];
+    const changedProviders = [
+      { ...provider('anthropic', 'https://api.anthropic.test'), id: 'provider-2' },
+      provider('anthropic', 'https://api.anthropic.test/v2'),
+      provider('anthropic', 'https://api.anthropic.test', { ...model, id: 'model-2', code: 'model-code-2' }),
+    ];
+
+    for (const changedProvider of changedProviders) {
+      const captured: CapturedRequest = {};
+      await collect(
+        new AnthropicMessagesModelClient(
+          changedProvider,
+          fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+        ),
+        { messages },
+      );
+      expect(expectBody(captured).messages).toContainEqual({
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'I will search.' },
+          { type: 'tool_use', id: 'toolu_1', name: 'workspace_search_text', input: { query: 'needle' } },
+        ],
+      });
+      expect(JSON.stringify(expectBody(captured))).not.toContain('signature');
+      expect(JSON.stringify(expectBody(captured))).not.toContain('Private thought.');
+    }
   });
 
   it('normalizes Anthropic tool_use blocks and tool_result history', async () => {
@@ -1529,50 +2592,6 @@ describe('provider model adapters', () => {
     expect(callCount).toBe(1);
   });
 
-  it('retries provider-native compaction without a rejected temperature parameter', async () => {
-    const bodies: Record<string, unknown>[] = [];
-    let callCount = 0;
-    const fetchImpl: FetchImpl = async (_input, init) => {
-      callCount += 1;
-      bodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
-      if (callCount === 1) {
-        return new Response(JSON.stringify({
-          error: { message: 'invalid temperature: only 1 is allowed for this model' },
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ output: [{ type: 'compaction', summary: 'Provider summary.' }] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    };
-    const client = new ConfiguredModelClient(
-      {
-        getConfig: async () => {
-          throw new Error('not used');
-        },
-        saveConfig: async () => {
-          throw new Error('not used');
-        },
-        getActiveProviderConfig: async () => provider('openai-responses', 'https://api.openai.test/v1'),
-      },
-      fetchImpl,
-    );
-
-    const result = await client.compactConversation({
-      model: 'context-compaction',
-      messages: request.messages,
-      temperature: 0,
-    });
-
-    expect(callCount).toBe(2);
-    expect(bodies[0].temperature).toBe(0);
-    expect(bodies[1].temperature).toBeUndefined();
-    expect(result.summary).toBe('Provider summary.');
-  });
-
   it('uses a requested model when it exists on the active provider', async () => {
     const captured: CapturedRequest = {};
     const memoryModel = {
@@ -1830,6 +2849,22 @@ function provider(kind: RuntimeProviderConfig['provider'], baseUrl: string, acti
     apiKey: 'secret',
     models: activeModel ? [activeModel] : [],
     activeModel,
+  };
+}
+
+function responsesMetadata(items: RuntimeJsonObject[]): RuntimeMessageProviderMetadata {
+  return {
+    schemaVersion: 2,
+    source: {
+      providerId: 'provider-1',
+      providerKind: 'openai-responses',
+      model: 'model-code',
+      endpointFingerprint: providerEndpointFingerprint('https://api.openai.test/v1'),
+    },
+    openAiResponses: {
+      kind: 'response',
+      items,
+    },
   };
 }
 

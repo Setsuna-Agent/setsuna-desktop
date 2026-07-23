@@ -254,9 +254,17 @@ export class ApprovalToolModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     if (this.requests.length === 1) {
+      const historicalCallCount = request.messages.reduce(
+        (count, message) => count + (message.toolCalls?.length ?? 0),
+        0,
+      );
       yield {
         type: 'tool_calls',
-        toolCalls: [{ id: 'call_approval', name: 'dangerous_tool', arguments: '{"value":42}' }],
+        toolCalls: [{
+          id: `call_approval_${historicalCallCount + 1}`,
+          name: 'dangerous_tool',
+          arguments: '{"value":42}',
+        }],
       };
       yield { type: 'done', finishReason: 'tool_calls' };
       return;
@@ -898,4 +906,3 @@ export function stepSnapshotSkillRegistry(): SkillRegistry {
       : []),
   } as SkillRegistry;
 }
-

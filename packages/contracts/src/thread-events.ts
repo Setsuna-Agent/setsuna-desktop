@@ -227,7 +227,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       if (event.payload.toolCalls?.length) message.toolCalls = event.payload.toolCalls.map((toolCall) => ({ ...toolCall }));
       if (event.payload.memoryCitation) message.memoryCitation = cloneMemoryCitation(event.payload.memoryCitation);
       if (event.payload.planMode) message.planMode = { ...event.payload.planMode };
-      if (event.payload.providerMetadata) message.providerMetadata = cloneProviderMetadata(event.payload.providerMetadata);
+      if (event.payload.providerMetadata) {
+        const providerMetadata = cloneProviderMetadata(event.payload.providerMetadata);
+        if (providerMetadata) message.providerMetadata = providerMetadata;
+        else delete message.providerMetadata;
+      }
       if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
     }
     return next;

@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type { RuntimeEvent, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -38,6 +38,86 @@ describe('sqlite thread store', () => {
       { id: thread.id, lastMessagePreview: 'edited sqlite' },
     ]);
     await expect(reopened.listEvents(thread.id, 1)).resolves.toHaveLength(2);
+    await reopened.close();
+  });
+
+  it('keeps provider envelopes across reopen without changing SQLite schema version 1', async () => {
+    const dataDir = await temporaryDirectory();
+    const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await first.recover();
+    const thread = await first.createThread({ title: 'Protocol history' });
+    const createdAt = systemClock.now().toISOString();
+    await first.appendEvent(thread.id, {
+      id: 'event_native_created',
+      threadId: thread.id,
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_native',
+          role: 'assistant',
+          content: '',
+          createdAt,
+          status: 'streaming',
+        },
+      },
+    });
+    await first.appendEvent(thread.id, {
+      id: 'event_native_completed',
+      threadId: thread.id,
+      type: 'message.completed',
+      createdAt,
+      payload: {
+        messageId: 'msg_native',
+        content: 'Portable answer',
+        providerMetadata: {
+          schemaVersion: 2,
+          source: {
+            providerId: 'provider-1',
+            providerKind: 'openai-responses',
+            model: 'gpt-test',
+            endpointFingerprint: 'a'.repeat(64),
+          },
+          openAiResponses: {
+            kind: 'response',
+            responseId: 'resp_1',
+            items: [{
+              type: 'message',
+              id: 'output_1',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Portable answer' }],
+            }],
+          },
+        },
+      },
+    });
+    await first.close();
+
+    const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
+    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 1 });
+    database.close();
+
+    const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await reopened.recover();
+    await expect(reopened.getThread(thread.id)).resolves.toMatchObject({
+      messages: [{
+        id: 'msg_native',
+        content: 'Portable answer',
+        providerMetadata: {
+          schemaVersion: 2,
+          source: {
+            providerId: 'provider-1',
+            providerKind: 'openai-responses',
+            model: 'gpt-test',
+          },
+          openAiResponses: {
+            kind: 'response',
+            responseId: 'resp_1',
+            items: [expect.objectContaining({ type: 'message', id: 'output_1' })],
+          },
+        },
+      }],
+    });
     await reopened.close();
   });
 
@@ -154,7 +234,17 @@ describe('sqlite thread store', () => {
     const dataDir = await temporaryDirectory();
     const legacy = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
     const thread = await legacy.createThread({ title: 'Legacy import', parentThreadId: 'thread_parent' });
-    await legacy.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_legacy', 'preserve me'));
+    await legacy.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_legacy', 'preserve me', {
+      role: 'assistant',
+      providerMetadata: {
+        anthropic: {
+          contentBlocks: [
+            { type: 'thinking', thinking: 'Legacy thought', signature: 'legacy-signature' },
+            { type: 'text', text: 'preserve me' },
+          ],
+        },
+      },
+    }));
     await legacy.flush();
     const snapshotPath = path.join(dataDir, 'threads', `${thread.id}.json`);
     const eventsPath = path.join(dataDir, 'threads', `${thread.id}.jsonl`);
@@ -165,15 +255,33 @@ describe('sqlite thread store', () => {
     await sqlite.recover();
     await expect(sqlite.getThread(thread.id)).resolves.toMatchObject({
       parentThreadId: 'thread_parent',
-      messages: [expect.objectContaining({ id: 'msg_legacy', content: 'preserve me' })],
+      messages: [expect.objectContaining({
+        id: 'msg_legacy',
+        content: 'preserve me',
+        providerMetadata: {
+          anthropic: {
+            contentBlocks: [
+              { type: 'thinking', thinking: 'Legacy thought', signature: 'legacy-signature' },
+              { type: 'text', text: 'preserve me' },
+            ],
+          },
+        },
+      })],
     });
     expect(await readFile(snapshotPath, 'utf8')).toBe(beforeSnapshot);
     expect(await readFile(eventsPath, 'utf8')).toBe(beforeEvents);
+    await sqlite.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_after_import', 'continue normally'));
     await sqlite.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await expect(reopened.recover()).resolves.toBeUndefined();
     await expect(reopened.listThreads({ includeArchived: true })).resolves.toHaveLength(1);
+    await expect(reopened.getThread(thread.id)).resolves.toMatchObject({
+      messages: [
+        expect.objectContaining({ id: 'msg_legacy' }),
+        expect.objectContaining({ id: 'msg_after_import', content: 'continue normally' }),
+      ],
+    });
     await reopened.close();
   });
 
@@ -246,6 +354,7 @@ function messageCreatedEvent(
   threadId: string,
   messageId: string,
   content: string,
+  overrides: Partial<Omit<RuntimeMessage, 'id' | 'createdAt'>> = {},
 ): Omit<Extract<RuntimeEvent, { type: 'message.created' }>, 'seq'> {
   const createdAt = systemClock.now().toISOString();
   return {
@@ -255,11 +364,12 @@ function messageCreatedEvent(
     createdAt,
     payload: {
       message: {
-        id: messageId,
         role: 'user',
         content,
-        createdAt,
         status: 'complete',
+        ...overrides,
+        id: messageId,
+        createdAt,
       },
     },
   };

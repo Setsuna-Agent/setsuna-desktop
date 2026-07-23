@@ -1,3 +1,4 @@
+import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -133,6 +134,87 @@ describe('agent loop context compaction', () => {
       expect(modelClient.requests).toHaveLength(2);
       expect(modelClient.requests[1]?.messages.map((message) => message.content).join('\n')).toContain('context from compact hook');
     });
+
+  it('keeps only the nearest reused-id tool transaction across a manual compaction boundary', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Repeated tool id compaction' });
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'old_user',
+        role: 'user',
+        content: 'Inspect both files.',
+        createdAt: '2026-06-26T00:10:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_first',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-26T00:10:01.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_0', name: 'read_file', arguments: '{"file_path":"one.txt"}' }],
+      },
+      {
+        id: 'tool_first',
+        role: 'tool',
+        toolCallId: 'call_0',
+        toolName: 'read_file',
+        content: 'one',
+        createdAt: '2026-06-26T00:10:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_second',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-06-26T00:10:03.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_0', name: 'read_file', arguments: '{"file_path":"two.txt"}' }],
+      },
+      {
+        id: 'tool_second',
+        role: 'tool',
+        toolCallId: 'call_0',
+        toolName: 'read_file',
+        content: 'two',
+        createdAt: '2026-06-26T00:10:04.000Z',
+        status: 'complete',
+      },
+      ...Array.from({ length: 7 }, (_, index): RuntimeMessage => ({
+        id: `recent_reused_${index}`,
+        role: index % 2 ? 'assistant' : 'user',
+        content: `recent ${index}`,
+        createdAt: `2026-06-26T00:10:${String(index + 5).padStart(2, '0')}.000Z`,
+        status: 'complete',
+      })),
+    ];
+    for (const message of messages) {
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'message.created',
+        createdAt: message.createdAt,
+        payload: { message },
+      });
+    }
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient: new ContextCompactionModelClient(),
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const compacted = await loop.compactThreadContext(thread.id);
+    const summary = compacted.messages.find((message) => message.contextCompaction);
+
+    expect(summary?.contextCompaction?.compactedMessageCount).toBe(3);
+    expect(compacted.messages.find((message) => message.id === 'assistant_first')?.visibility).toBe('transcript');
+    expect(compacted.messages.find((message) => message.id === 'tool_first')?.visibility).toBe('transcript');
+    expect(compacted.messages.find((message) => message.id === 'assistant_second')?.visibility).not.toBe('transcript');
+    expect(compacted.messages.find((message) => message.id === 'tool_second')?.visibility).not.toBe('transcript');
+  });
   
   it('lets PreCompact hooks stop manual context compaction before the model call', async () => {
       const ids = new RandomIdGenerator();
@@ -408,11 +490,9 @@ describe('agent loop context compaction', () => {
       expect(modelClient.compactRequests).toHaveLength(1);
       expect(modelClient.compactRequests[0]).toMatchObject({
         model: 'context-compaction',
-        maxOutputTokens: 1600,
-        temperature: 0,
       });
       expect(modelClient.compactRequests[0].messages.map((message) => message.content).join('\n')).toContain(smallWindowHistory.slice(0, 200));
-      expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke']);
+      expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
       expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
         source: 'remote',
         triggerScopes: ['total'],

@@ -9,6 +9,11 @@ import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import { anthropicThinkingBody } from './provider-thinking.js';
 import {
+  providerMetadataFitsPersistenceLimit,
+  providerMetadataSource,
+  providerReplayContext,
+} from './provider-replay-context.js';
+import {
   DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS,
   anthropicApiKeyHeader,
   assertOkResponse,
@@ -37,6 +42,8 @@ export class AnthropicMessagesModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
+    const requestedModel = activeModel?.code || request.model;
+    const replayContext = providerReplayContext(this.provider, requestedModel);
     const system = systemAndDeveloperText(request.messages);
     const maxOutputTokens = request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS;
     const thinking = anthropicThinkingBody(this.provider, { ...request, maxOutputTokens });
@@ -49,8 +56,8 @@ export class AnthropicMessagesModelClient implements ModelClient {
       },
       signal: request.signal,
       body: JSON.stringify({
-        model: activeModel?.code || request.model,
-        messages: toAnthropicMessages(request.messages),
+        model: requestedModel,
+        messages: toAnthropicMessages(request.messages, replayContext),
         max_tokens: maxOutputTokens,
         stream: true,
         ...(system ? { system } : {}),
@@ -68,6 +75,8 @@ export class AnthropicMessagesModelClient implements ModelClient {
     let nativeToolItems = false;
     const blocks = new Map<number, AnthropicBlockState>();
     const completedContentBlocks: RuntimeAnthropicContentBlock[] = [];
+    let nativeEnvelopeComplete = true;
+    let messageStopped = false;
     for await (const { event, data } of parseSse(response)) {
       const payload = objectValue(parseJson(data));
       const type = stringValue(payload.type) || event || '';
@@ -75,7 +84,9 @@ export class AnthropicMessagesModelClient implements ModelClient {
         usage = mergeAnthropicUsage(usage, normalizeAnthropicUsage(objectValue(payload.message).usage));
       } else if (type === 'content_block_start') {
         const blockState = anthropicBlockState(payload);
-        if (blockState) {
+        if (!blockState || blocks.has(blockState.index)) {
+          nativeEnvelopeComplete = false;
+        } else {
           blocks.set(blockState.index, blockState);
           if (blockState.item.kind === 'tool_call') nativeToolItems = true;
           yield { type: 'item_started' as const, item: cloneRuntimeStreamItem(blockState.item) };
@@ -94,6 +105,9 @@ export class AnthropicMessagesModelClient implements ModelClient {
         const delta = objectValue(payload.delta);
         const index = typeof payload.index === 'number' ? payload.index : undefined;
         const blockState = index === undefined ? null : blocks.get(index) ?? null;
+        if (!blockState || !anthropicDeltaMatchesBlock(blockState, delta)) {
+          nativeEnvelopeComplete = false;
+        }
         const text = stringValue(delta.text);
         const thinking = stringValue(delta.thinking);
         const signature = stringValue(delta.signature);
@@ -136,9 +150,11 @@ export class AnthropicMessagesModelClient implements ModelClient {
         const blockState = index === undefined ? null : blocks.get(index) ?? null;
         if (blockState) {
           blocks.delete(blockState.index);
-          completedContentBlocks.push(completedAnthropicContentBlock(blockState));
+          const completedBlock = completedAnthropicContentBlock(blockState);
+          if (completedBlock) completedContentBlocks.push(completedBlock);
+          else nativeEnvelopeComplete = false;
           yield { type: 'item_completed' as const, item: completedAnthropicBlockItem(blockState) };
-        }
+        } else nativeEnvelopeComplete = false;
       } else if (type === 'message_delta') {
         const delta = objectValue(payload.delta);
         usage = mergeAnthropicUsage(usage, normalizeAnthropicUsage(payload.usage));
@@ -151,6 +167,8 @@ export class AnthropicMessagesModelClient implements ModelClient {
           }
         }
       } else if (type === 'message_stop') {
+        messageStopped = true;
+        if (blocks.size) nativeEnvelopeComplete = false;
         break;
       } else if (type === 'error') {
         const error = objectValue(payload.error);
@@ -161,11 +179,25 @@ export class AnthropicMessagesModelClient implements ModelClient {
       const calls = [...toolCalls.values()].filter((call) => call.name);
       if (calls.length) yield { type: 'tool_calls' as const, toolCalls: calls };
     }
-    if (shouldPreserveAnthropicContentBlocks(completedContentBlocks)) {
-      yield {
-        type: 'assistant_metadata' as const,
-        providerMetadata: { anthropic: { contentBlocks: completedContentBlocks } },
+    if (!messageStopped || blocks.size) nativeEnvelopeComplete = false;
+    if (nativeEnvelopeComplete && shouldPreserveAnthropicContentBlocks(completedContentBlocks)) {
+      const providerMetadata = {
+        schemaVersion: 2 as const,
+        source: providerMetadataSource(replayContext),
+        anthropic: { contentBlocks: completedContentBlocks },
       };
+      if (providerMetadataFitsPersistenceLimit(providerMetadata)) {
+        yield { type: 'assistant_metadata' as const, providerMetadata };
+      } else {
+        yield {
+          type: 'model_verification' as const,
+          verification: {
+            model: requestedModel,
+            provider: this.provider.provider,
+            warnings: ['provider_metadata_omitted_too_large'],
+          },
+        };
+      }
     }
     if (usage) {
       yield {
@@ -271,26 +303,53 @@ function anthropicBlockState(payload: Record<string, unknown>): AnthropicBlockSt
   return null;
 }
 
-function completedAnthropicContentBlock(blockState: AnthropicBlockState): RuntimeAnthropicContentBlock {
+function completedAnthropicContentBlock(blockState: AnthropicBlockState): RuntimeAnthropicContentBlock | undefined {
   const block = blockState.contentBlock;
-  if (block.type === 'thinking') return { ...block, thinking: blockState.content };
+  if (block.type === 'thinking') {
+    return block.signature
+      ? { ...block, thinking: blockState.content }
+      : undefined;
+  }
   if (block.type === 'text') return { ...block, text: blockState.content };
   if (block.type === 'tool_use') {
+    const input = parseAnthropicToolInput(blockState.item.toolCall?.arguments ?? '');
+    if (!block.id || !block.name || !input) return undefined;
     return {
       ...block,
-      input: parseAnthropicToolInput(blockState.item.toolCall?.arguments ?? ''),
+      input: input.value,
     };
   }
-  return { ...block };
+  return block.data ? { ...block } : undefined;
 }
 
-function parseAnthropicToolInput(argumentsText: string): unknown {
-  if (!argumentsText.trim()) return {};
+function parseAnthropicToolInput(argumentsText: string): { value: unknown } | undefined {
+  if (!argumentsText.trim()) return { value: {} };
   try {
-    return JSON.parse(argumentsText) as unknown;
+    return { value: JSON.parse(argumentsText) as unknown };
   } catch {
-    return {};
+    return undefined;
   }
+}
+
+function anthropicDeltaMatchesBlock(
+  blockState: AnthropicBlockState,
+  delta: Record<string, unknown>,
+): boolean {
+  const deltaType = stringValue(delta.type);
+  if (blockState.contentBlock.type === 'text') {
+    return (deltaType === 'text_delta' && typeof delta.text === 'string')
+      || (!deltaType && typeof delta.text === 'string');
+  }
+  if (blockState.contentBlock.type === 'thinking') {
+    return (deltaType === 'thinking_delta' && typeof delta.thinking === 'string')
+      || (deltaType === 'signature_delta' && typeof delta.signature === 'string')
+      || (!deltaType && (typeof delta.thinking === 'string' || typeof delta.signature === 'string'));
+  }
+  if (blockState.contentBlock.type === 'tool_use') {
+    return (deltaType === 'input_json_delta' && typeof delta.partial_json === 'string')
+      || (!deltaType && typeof delta.partial_json === 'string');
+  }
+  return false;
 }
 
 function shouldPreserveAnthropicContentBlocks(blocks: RuntimeAnthropicContentBlock[]): boolean {

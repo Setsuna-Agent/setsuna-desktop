@@ -3,11 +3,23 @@ import {
   DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   isRuntimeInlineMessageAttachment,
   type ModelStreamEvent,
+  type RuntimeAnthropicContentBlock,
   type RuntimeInlineMessageAttachment,
   type RuntimeMessage,
   type RuntimeToolDefinition,
   type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
+import {
+  portableRuntimeAssistantText,
+  providerMetadataMatchesSemanticMessage,
+  runtimeJsonValuesEqual,
+} from '../../utils/runtime-message-semantic-fingerprint.js';
+import { compatibleOpenAiResponsesItems } from './openai-responses-provider-metadata.js';
+import {
+  isLegacyAnthropicMetadata,
+  providerMetadataMatchesReplayContext,
+  type ProviderReplayContext,
+} from './provider-replay-context.js';
 
 export type FetchImpl = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -182,17 +194,31 @@ export function nonSystemChatMessages(messages: RuntimeMessage[]): Array<{ role:
   return output;
 }
 
-export function toOpenAiResponsesInput(messages: RuntimeMessage[]): unknown[] {
+export function toOpenAiResponsesInput(
+  messages: RuntimeMessage[],
+  replayContext: ProviderReplayContext,
+): unknown[] {
   const output: unknown[] = [];
   const toolOutputsByCallId = openAiResponsesToolOutputsByCallId(messages);
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
+    const nativeItems = compatibleOpenAiResponsesItems(message, replayContext);
+    if (nativeItems) {
+      output.push(...nativeItems);
+      for (const item of nativeItems) {
+        if (item.type !== 'function_call' || typeof item.call_id !== 'string') continue;
+        const toolOutput = toolOutputsByCallId.get(item.call_id);
+        if (toolOutput) output.push(toolOutput);
+      }
+      continue;
+    }
     if (message.role === 'developer') {
       output.push({ role: 'developer', content: message.content });
     } else if (message.role === 'user') {
       output.push({ role: 'user', content: openAiResponsesContentParts(message) });
     } else if (message.role === 'assistant') {
-      if (message.content) output.push({ role: 'assistant', content: message.content });
+      const assistantText = portableAssistantText(message.content);
+      if (assistantText) output.push({ role: 'assistant', content: assistantText });
       for (const toolCall of message.toolCalls ?? []) {
         output.push({
           type: 'function_call',
@@ -238,18 +264,21 @@ export function toOpenAiResponsesTools(tools: RuntimeToolDefinition[] = []): unk
   }));
 }
 
-export function toAnthropicMessages(messages: RuntimeMessage[]): Array<Record<string, unknown>> {
+export function toAnthropicMessages(
+  messages: RuntimeMessage[],
+  replayContext: ProviderReplayContext,
+): Array<Record<string, unknown>> {
   const output: Array<Record<string, unknown>> = [];
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
     if (message.role === 'user') {
       output.push({ role: 'user', content: anthropicUserContentParts(message) });
     } else if (message.role === 'assistant') {
-      const replayBlocks = anthropicReplayBlocks(message);
+      const replayBlocks = anthropicReplayBlocks(message, replayContext);
       const blocks = replayBlocks.length ? replayBlocks : anthropicAssistantContentParts(message);
       output.push({
         role: 'assistant',
-        content: blocks.length ? blocks : message.content,
+        content: blocks.length ? blocks : portableAssistantText(message.content),
       });
     } else if (message.role === 'tool' && message.toolCallId) {
       output.push({
@@ -271,7 +300,8 @@ export function toAnthropicMessages(messages: RuntimeMessage[]): Array<Record<st
 
 function anthropicAssistantContentParts(message: RuntimeMessage): Array<Record<string, unknown>> {
   const blocks: Array<Record<string, unknown>> = [];
-  if (message.content) blocks.push({ type: 'text', text: message.content });
+  const assistantText = portableAssistantText(message.content);
+  if (assistantText) blocks.push({ type: 'text', text: assistantText });
   for (const toolCall of message.toolCalls ?? []) {
     blocks.push({
       type: 'tool_use',
@@ -283,9 +313,21 @@ function anthropicAssistantContentParts(message: RuntimeMessage): Array<Record<s
   return blocks;
 }
 
-function anthropicReplayBlocks(message: RuntimeMessage): Array<Record<string, unknown>> {
-  const blocks = message.providerMetadata?.anthropic?.contentBlocks;
+function anthropicReplayBlocks(
+  message: RuntimeMessage,
+  replayContext: ProviderReplayContext,
+): Array<Record<string, unknown>> {
+  const metadata = message.providerMetadata;
+  const legacy = isLegacyAnthropicMetadata(metadata);
+  const canReplay = legacy
+    ? replayContext.providerKind === 'anthropic'
+    : providerMetadataMatchesReplayContext(metadata, replayContext);
+  const blocks = canReplay ? metadata?.anthropic?.contentBlocks : undefined;
   if (!blocks?.length) return [];
+  if (!legacy && (
+    !providerMetadataMatchesSemanticMessage(metadata, message)
+    || !anthropicBlocksMatchSemanticMessage(blocks, message)
+  )) return [];
   return blocks.map((block) => {
     if (block.type === 'thinking') {
       return { type: block.type, thinking: block.thinking, signature: block.signature };
@@ -293,6 +335,40 @@ function anthropicReplayBlocks(message: RuntimeMessage): Array<Record<string, un
     if (block.type === 'redacted_thinking') return { type: block.type, data: block.data };
     if (block.type === 'text') return { type: block.type, text: block.text };
     return { type: block.type, id: block.id, name: block.name, input: cloneJsonValue(block.input) };
+  });
+}
+
+function anthropicBlocksMatchSemanticMessage(
+  blocks: RuntimeAnthropicContentBlock[],
+  message: RuntimeMessage,
+): boolean {
+  const nativeText = blocks
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+  if (nativeText !== portableRuntimeAssistantText(message.content)) return false;
+
+  const nativeCalls = blocks
+    .filter((block) => block.type === 'tool_use')
+    .map((block) => ({
+      id: block.id,
+      name: block.name,
+      input: block.input,
+    }));
+  const semanticCalls = message.toolCalls ?? [];
+  if (nativeCalls.length !== semanticCalls.length) return false;
+  return nativeCalls.every((call, index) => {
+    const semanticCall = semanticCalls[index];
+    const semanticInput = semanticCall
+      ? parseToolInputForComparison(semanticCall.arguments)
+      : undefined;
+    return Boolean(
+      semanticCall
+      && semanticInput !== undefined
+      && call.id === semanticCall.id
+      && call.name === semanticCall.name
+      && runtimeJsonValuesEqual(call.input, semanticInput),
+    );
   });
 }
 
@@ -347,6 +423,17 @@ function parseToolInput(argumentsText: string): unknown {
     return {};
   }
 }
+
+function parseToolInputForComparison(argumentsText: string): unknown {
+  if (!argumentsText.trim()) return {};
+  try {
+    return JSON.parse(argumentsText) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+const portableAssistantText = portableRuntimeAssistantText;
 
 function cloneJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(cloneJsonValue);

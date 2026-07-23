@@ -22,6 +22,7 @@ import type { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js
 import { isSuccessfulRememberMemoryMessage } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import type { RuntimeModelSampler } from './runtime-model-sampler.js';
+import { assertNewToolCallBatchInvariants } from './runtime-model-message-order.js';
 import type { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { isAbortError, throwIfAborted } from './runtime-turn-errors.js';
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';
@@ -202,6 +203,7 @@ export class RuntimeAgentTurnRunner {
       };
       let memorySavedByTool = false;
       let stopHookActive = false;
+      const publishedModelHistoryWarnings = new Set<string>();
 
       // 一个 turn 可能包含多段 assistant：工具调用会结束当前段，把 tool 消息补回上下文后再问模型。
       while (true) {
@@ -222,6 +224,23 @@ export class RuntimeAgentTurnRunner {
         cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;
         runtimeConfig = stepContext.runtimeConfig;
+        const newModelHistoryWarnings = (stepContext.modelHistoryWarnings ?? [])
+          .filter((warning) => !publishedModelHistoryWarnings.has(warning));
+        if (newModelHistoryWarnings.length) {
+          newModelHistoryWarnings.forEach((warning) => publishedModelHistoryWarnings.add(warning));
+          await this.options.appendEvent(threadId, {
+            id: this.options.ids.id('event'),
+            threadId,
+            turnId,
+            type: 'model.verification',
+            createdAt: this.options.clock.now().toISOString(),
+            payload: {
+              verification: {
+                warnings: newModelHistoryWarnings,
+              },
+            },
+          });
+        }
 
         const sampled = await this.options.modelSampler.sample({
           captureProtocolUsage: true,
@@ -247,6 +266,7 @@ export class RuntimeAgentTurnRunner {
 
         if (toolCalls.length) {
           throwIfAborted(signal);
+          assertNewToolCallBatchInvariants(toolCalls);
           // 先把 toolCalls 挂到 assistant 消息上，再执行工具，UI 才能把后续 toolRuns 归到正确气泡。
           await this.options.completeMessage(threadId, turnId, assistantMessageId, {
             toolCalls,

@@ -6,6 +6,7 @@ import type {
   RuntimeToolRun,
   RuntimeToolRunStatus,
 } from './threads.js';
+import { normalizeRuntimeMessageProviderMetadata } from './message-metadata.js';
 
 const TOOL_OUTPUT_PREVIEW_MAX_LENGTH = 12000;
 
@@ -31,19 +32,10 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
   };
 }
 
-export function cloneProviderMetadata(metadata: NonNullable<RuntimeMessage['providerMetadata']>): NonNullable<RuntimeMessage['providerMetadata']> {
-  return {
-    ...metadata,
-    anthropic: metadata.anthropic
-      ? {
-          contentBlocks: metadata.anthropic.contentBlocks.map((block) => (
-            block.type === 'tool_use'
-              ? { ...block, input: cloneJsonValue(block.input) }
-              : { ...block }
-          )),
-        }
-      : undefined,
-  };
+export function cloneProviderMetadata(
+  metadata: NonNullable<RuntimeMessage['providerMetadata']>,
+): RuntimeMessage['providerMetadata'] {
+  return normalizeRuntimeMessageProviderMetadata(metadata);
 }
 
 export function cloneJsonValue<T>(value: T): T {

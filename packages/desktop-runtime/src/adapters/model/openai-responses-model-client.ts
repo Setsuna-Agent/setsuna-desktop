@@ -1,6 +1,7 @@
 import type {
   ModelRequest,
   ModelStreamEvent,
+  RuntimeJsonObject,
   RuntimeModelVerification,
   RuntimeSafetyBuffering,
   RuntimeStreamItem,
@@ -9,6 +10,17 @@ import type {
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest, ModelCompactionResult } from '../../ports/model-client.js';
 import { openAiResponsesReasoningBody } from './provider-thinking.js';
+import {
+  isOpenAiResponsesOutputItemType,
+  openAiResponsesMetadata,
+  sanitizeOpenAiResponsesItem,
+  sanitizeOpenAiResponsesItems,
+} from './openai-responses-provider-metadata.js';
+import {
+  providerMetadataFitsPersistenceLimit,
+  providerMetadataSource,
+  providerReplayContext,
+} from './provider-replay-context.js';
 import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   assertOkResponse,
@@ -36,6 +48,8 @@ export class OpenAiResponsesModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
+    const requestedModel = activeModel?.code || request.model;
+    const replayContext = providerReplayContext(this.provider, requestedModel);
     const instructions = systemText(request.messages);
     const response = await fetcher(withEndpoint(this.provider.baseUrl, '/responses'), {
       method: 'POST',
@@ -45,8 +59,9 @@ export class OpenAiResponsesModelClient implements ModelClient {
       },
       signal: request.signal,
       body: JSON.stringify({
-        model: activeModel?.code || request.model,
-        input: toOpenAiResponsesInput(request.messages),
+        model: requestedModel,
+        input: toOpenAiResponsesInput(request.messages, replayContext),
+        include: ['reasoning.encrypted_content'],
         stream: true,
         max_output_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         ...(instructions ? { instructions } : {}),
@@ -60,21 +75,26 @@ export class OpenAiResponsesModelClient implements ModelClient {
 
     let usage = undefined;
     let finishReason = undefined;
-    const requestedModel = activeModel?.code || request.model;
     let lastServerModel = '';
+    let responseId = '';
+    const nativeItems: RuntimeJsonObject[] = [];
     const toolCalls = new Map<string, RuntimeToolCall>();
     const toolCallIdByItemId = new Map<string, string>();
     let toolCallsYielded = false;
     let nativeToolCallsCompleted = false;
     const nativeToolItemIds = new Set<string>();
     const completedItemIds = new Set<string>();
+    const pendingNativeItemIds = new Set<string>();
     const reasoningTextByItemId = new Map<string, string>();
+    let nativeEnvelopeComplete = true;
+    let responseTerminalSeen = false;
     let currentAgentItemId = '';
     let currentReasoningItemId = '';
     for await (const { event, data } of parseSse(response)) {
       if (data === '[DONE]') break;
       const payload = objectValue(parseJson(data));
       const type = stringValue(payload.type) || event || '';
+      responseId = responsesResponseId(payload) || responseId;
       const serverModel = responsesServerModel(payload);
       if (serverModel && serverModel !== lastServerModel) {
         lastServerModel = serverModel;
@@ -123,6 +143,15 @@ export class OpenAiResponsesModelClient implements ModelClient {
           summaryIndex: numberValue(payload.summary_index) ?? 0,
         };
       } else if (type === 'response.output_item.added' || type === 'response.output_item.done') {
+        const providerItem = objectValue(payload.item);
+        const providerItemId = stringValue(providerItem.id);
+        if (!isOpenAiResponsesOutputItemType(providerItem) || !providerItemId) {
+          nativeEnvelopeComplete = false;
+        } else if (type === 'response.output_item.added') {
+          pendingNativeItemIds.add(providerItemId);
+        } else {
+          pendingNativeItemIds.delete(providerItemId);
+        }
         const streamItem = responsesStreamItem(payload, type);
         if (streamItem) {
           if (streamItem.kind === 'agent_message') currentAgentItemId = streamItem.id;
@@ -143,6 +172,11 @@ export class OpenAiResponsesModelClient implements ModelClient {
             toolCallsYielded = true;
             if (!streamItem) yield { type: 'tool_calls' as const, toolCalls: calls };
           }
+        }
+        if (type === 'response.output_item.done') {
+          const nativeItem = sanitizeOpenAiResponsesItem(payload.item, 'response');
+          if (nativeItem) upsertNativeResponseItem(nativeItems, nativeItem);
+          else nativeEnvelopeComplete = false;
         }
       } else if (type === 'response.function_call_arguments.delta' || type === 'response.function_call_arguments.done') {
         const toolCall = mergeResponsesArguments(toolCalls, toolCallIdByItemId, payload);
@@ -180,7 +214,17 @@ export class OpenAiResponsesModelClient implements ModelClient {
           };
         }
       } else if (type === 'response.completed' || type === 'response.incomplete') {
+        responseTerminalSeen = true;
         const responsePayload = objectValue(payload.response);
+        if (Array.isArray(responsePayload.output) && responsePayload.output.length) {
+          const completedItems = sanitizeOpenAiResponsesItems(responsePayload.output, 'response');
+          if (completedItems) {
+            nativeItems.splice(0, nativeItems.length, ...completedItems);
+            pendingNativeItemIds.clear();
+          } else {
+            nativeEnvelopeComplete = false;
+          }
+        }
         usage = normalizeOpenAiUsage(responsePayload.usage);
         finishReason = type === 'response.incomplete'
           ? stringValue(objectValue(responsePayload.incomplete_details).reason) || stringValue(responsePayload.status) || 'incomplete'
@@ -192,6 +236,28 @@ export class OpenAiResponsesModelClient implements ModelClient {
     if (!toolCallsYielded && !nativeToolCallsCompleted && toolCalls.size) {
       const calls = [...toolCalls.values()].filter((call) => call.name);
       if (calls.length) yield { type: 'tool_calls' as const, toolCalls: calls };
+    }
+    if (!responseTerminalSeen || pendingNativeItemIds.size) nativeEnvelopeComplete = false;
+    const providerMetadata = nativeEnvelopeComplete
+      ? openAiResponsesMetadata(providerMetadataSource(replayContext), {
+          kind: 'response',
+          responseId: responseId || undefined,
+          items: nativeItems,
+        })
+      : undefined;
+    if (providerMetadata) {
+      if (providerMetadataFitsPersistenceLimit(providerMetadata)) {
+        yield { type: 'assistant_metadata' as const, providerMetadata };
+      } else {
+        yield {
+          type: 'model_verification' as const,
+          verification: {
+            model: requestedModel,
+            provider: this.provider.provider,
+            warnings: ['provider_metadata_omitted_too_large'],
+          },
+        };
+      }
     }
     if (usage) {
       yield {
@@ -210,6 +276,8 @@ export class OpenAiResponsesModelClient implements ModelClient {
   async compactConversation(request: ModelCompactionRequest): Promise<ModelCompactionResult> {
     const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
+    const requestedModel = activeModel?.code || request.model;
+    const replayContext = providerReplayContext(this.provider, requestedModel);
     const instructions = systemText(request.messages);
     const response = await fetcher(withEndpoint(this.provider.baseUrl, '/responses/compact'), {
       method: 'POST',
@@ -219,34 +287,43 @@ export class OpenAiResponsesModelClient implements ModelClient {
       },
       signal: request.signal,
       body: JSON.stringify({
-        model: activeModel?.code || request.model,
-        input: [
-          ...toOpenAiResponsesInput(request.messages),
-          { type: 'compaction_trigger' },
-        ],
+        model: requestedModel,
+        input: toOpenAiResponsesInput(request.messages, replayContext),
         ...(instructions ? { instructions } : {}),
-        ...(request.tools?.length ? { tools: toOpenAiResponsesTools(request.tools) } : {}),
-        ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
-        ...(request.maxOutputTokens ? { max_output_tokens: request.maxOutputTokens } : {}),
       }),
     });
     await assertOkResponse(response, 'OpenAI Responses compact request failed');
 
     const payload = objectValue(await response.json().catch(() => null));
-    const summary = responsesCompactionSummary(payload);
-    if (!summary) throw new Error('OpenAI Responses compact response did not include a readable summary.');
     const responsePayload = objectValue(payload.response);
     const usage = normalizeOpenAiUsage(payload.usage ?? responsePayload.usage);
-    return {
-      summary,
-      ...(usage ? {
-        usage: {
+    const replacementItems = responsesCompactionOutput(payload);
+    const sanitizedItems = replacementItems
+      ? sanitizeOpenAiResponsesItems(replacementItems, 'compaction')
+      : undefined;
+    if (!sanitizedItems) {
+      throw new Error('OpenAI Responses compact response did not include a complete replayable replacement item list.');
+    }
+    const providerMetadata = openAiResponsesMetadata(providerMetadataSource(replayContext), {
+      kind: 'compaction',
+      responseId: stringValue(payload.id) || stringValue(responsePayload.id) || undefined,
+      items: sanitizedItems,
+    });
+    if (!providerMetadata) {
+      throw new Error('OpenAI Responses compact response could not be normalized into native metadata.');
+    }
+    const normalizedUsage = usage
+      ? {
           ...usage,
           providerId: this.provider.id,
           provider: this.provider.name,
           model: activeModel?.code,
-        },
-      } : {}),
+        }
+      : undefined;
+    return {
+      kind: 'native',
+      providerMetadata,
+      ...(normalizedUsage ? { usage: normalizedUsage } : {}),
     };
   }
 }
@@ -254,6 +331,20 @@ export class OpenAiResponsesModelClient implements ModelClient {
 function toOpenAiResponsesToolChoice(toolChoice: ModelRequest['toolChoice']) {
   if (!toolChoice || toolChoice === 'auto' || toolChoice === 'none') return toolChoice;
   return { type: 'function', name: toolChoice.name };
+}
+
+function responsesResponseId(payload: Record<string, unknown>): string {
+  return stringValue(objectValue(payload.response).id) || stringValue(payload.response_id);
+}
+
+function upsertNativeResponseItem(
+  items: RuntimeJsonObject[],
+  next: RuntimeJsonObject,
+): void {
+  const id = typeof next.id === 'string' ? next.id : '';
+  const index = id ? items.findIndex((item) => item.id === id) : -1;
+  if (index < 0) items.push(structuredClone(next));
+  else items[index] = structuredClone(next);
 }
 
 function responsesStreamItem(payload: Record<string, unknown>, eventType: string): RuntimeStreamItem | null {
@@ -455,51 +546,8 @@ function openAiResponsesErrorMessage(payload: Record<string, unknown>): string {
   return stringValue(error.message) || stringValue(payload.message) || 'OpenAI Responses stream failed.';
 }
 
-function responsesCompactionSummary(payload: Record<string, unknown>): string {
-  return compactionSummaryFromValue(payload)
-    || compactionSummaryFromValue(objectValue(payload.response))
-    || firstCompactionSummaryFromArray(payload.output)
-    || firstCompactionSummaryFromArray(payload.items)
-    || firstCompactionSummaryFromArray(payload.data)
-    || '';
-}
-
-function firstCompactionSummaryFromArray(value: unknown): string {
-  if (!Array.isArray(value)) return '';
-  for (const item of value) {
-    const summary = compactionSummaryFromValue(item);
-    if (summary) return summary;
-  }
-  return '';
-}
-
-function compactionSummaryFromValue(value: unknown): string {
-  if (typeof value === 'string') return value.trim();
-  const item = objectValue(value);
-  const direct = stringValue(item.summary)
-    || stringValue(item.message)
-    || stringValue(item.text)
-    || stringValue(item.output_text);
-  if (direct.trim()) return direct.trim();
-  const type = stringValue(item.type);
-  if (type === 'compaction' || type === 'compaction_summary' || type === 'context_compaction') {
-    const readable = stringValue(item.summary) || stringValue(item.message) || stringValue(item.text);
-    if (readable.trim()) return readable.trim();
-  }
-  const contentText = compactionContentText(item.content);
-  if (contentText) return contentText;
-  return '';
-}
-
-function compactionContentText(value: unknown): string {
-  if (typeof value === 'string') return value.trim();
-  if (!Array.isArray(value)) return '';
-  return value
-    .map((part) => {
-      const record = objectValue(part);
-      return stringValue(record.text);
-    })
-    .filter(Boolean)
-    .join('')
-    .trim();
+function responsesCompactionOutput(payload: Record<string, unknown>): unknown[] | undefined {
+  if (Array.isArray(payload.output)) return payload.output;
+  const response = objectValue(payload.response);
+  return Array.isArray(response.output) ? response.output : undefined;
 }

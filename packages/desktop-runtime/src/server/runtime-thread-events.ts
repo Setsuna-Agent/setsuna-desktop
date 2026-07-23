@@ -1,6 +1,7 @@
 import {
   isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
+  normalizeRuntimeMessageProviderMetadata,
   type RuntimeEvent,
   type RuntimeMessage,
   type RuntimeMessageAttachment,
@@ -241,6 +242,9 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
+    providerMetadata: message.providerMetadata
+      ? normalizeRuntimeMessageProviderMetadata(message.providerMetadata)
+      : undefined,
     reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),

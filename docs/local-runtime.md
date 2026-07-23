@@ -138,6 +138,7 @@ REST 路由覆盖：
 - 被动 memory 在串行、可取消的后台队列中运行，不占用 active turn；失败不能影响主回答完成，runtime shutdown 会中止仍在执行的抽取。
 - usage 只在模型返回 usage 时记录，不伪造。
 - 工具调用由模型驱动持续 sampling，不按调用次数截断；长链路在每次 sampling 前按上下文边界自动压缩，直到模型正常结束或取消、hook、provider/资源错误终止。
+- 模型窗口在发送前统一归一化并校验 tool call/result 事务：同一 assistant 事务内的 call ID 必须唯一；兼容厂商跨轮复用的 vendor ID 会在 model-facing 副本上确定性改为窗口唯一 wire ID，并同步改写对应 result。可恢复的中断仍补入既有 recovery result；N-1 压缩边界遗留的 orphan result 会从模型窗口省略并记录 `legacy_orphan_tool_result_omitted` warning；同一事务内无法消歧的重复 ID 仍明确报错且不执行工具。
 - 只读检查工具可以批处理，文件写入必须通过 mutation 工具的预览、审批和权限预检。
 
 ## Runtime Environment
@@ -163,14 +164,16 @@ REST 路由覆盖：
 
 ## Context Compaction
 
-`src/loop/context-compaction.ts` 用字符数估算 token，默认上限 `256K` tokens。
+`src/loop/context/context-compaction.ts` 用字符数估算 token，默认上限 `256K` tokens。
 
 规则：
 
 - transcript-only 消息不进入 token 统计。
 - 普通 system prompt 不压缩，历史压缩摘要可以再次合并。
 - 保留最近若干模型可见消息原文。
-- 旧消息降级为 `visibility: "transcript"`，新增一条 system summary。
+- compaction 边界不能拆开 assistant tool call 与其 tool result，二者之间存在 steer 消息时也按同一事务处理。
+- 旧消息降级为 `visibility: "transcript"`，并新增一条始终可跨协议使用的 portable summary message。
+- portable summary 始终由独立的摘要请求生成。OpenAI Responses 的 `/responses/compact` 另行接收待替换的真实旧模型窗口，并把返回的完整 replacement item 列表写入 native provider metadata；两条产物不能互相推导。原 provider/协议/模型/endpoint 继续且 semantic fingerprint 未变化时回放 native items，切换或校验失败后只发送 portable summary。Generic Chat 与 Anthropic 只使用 portable summary。
 - notice 同步记录原始 token、压缩 token、保留消息数、触发范围等。
 
 ## Ports
@@ -210,6 +213,7 @@ REST 路由覆盖：
 - 高频 delta 延迟 checkpoint，恢复时只重放 `snapshot_seq` 后的短事件尾部。
 - `runtime_owner` 使用租约和 fencing token，第二个 runtime 在恢复 stale turn 前就会被拒绝。
 - 首次启动会只读校验并导入旧 `threads/*.json` 与 `threads/*.jsonl`，不截断、不双写。缺号、乱序等不可证明的损坏仍会停止迁移；对于有后续连续事件且最终 snapshot 能佐证最后写入者的重复 seq，迁移器采用 last-writer-wins，并把被替换事件记录在 `legacy_json_import` 元数据中。
+- Protocol-aware metadata 只存在于现有 message/event JSON 中；SQLite 表结构和 `PRAGMA user_version = 1` 不变，也不会为旧线程执行 eager migration。
 
 `JsonThreadStore` 仍保留给旧数据格式测试和迁移读取，不再由 `runtime-factory` 作为主存储注入。
 
@@ -258,6 +262,15 @@ REST 路由覆盖：
 - `openai-responses`：Responses API adapter。
 - `anthropic`：Messages API adapter。
 - 没有可用 provider 或只使用 smoke 模型时走 `TestModelClient`。
+
+`RuntimeMessage[]` 是所有 adapter 共用的 semantic history。adapter 可以读取同一 message 上的版本化 `providerMetadata`，但原生 replay 必须同时匹配 provider ID、provider kind、model 和规范化 endpoint fingerprint：
+
+- OpenAI-compatible Chat 只使用 semantic messages/tool calls/tool results，不透传未知厂商原始字段。
+- Anthropic Messages 在同一 replay context 下使用签名 content blocks；legacy blocks 只在 Anthropic 内继续兼容，跨 provider 时根据 semantic message 重建。
+- OpenAI Responses 请求 encrypted reasoning，完成时仅捕获嵌套字段也经过结构白名单的 output items、response ID 和必要 compaction 字段；assistant message 的 `phase: commentary | final_answer` 会在普通 response 与 native compact replacement items 中原样保留，非法 phase 会使整包降级。任一 output item、content block 或 summary part 无法安全保存时，整条 native envelope 都不落盘。同一 replay context 下还会核对 semantic fingerprint、assistant 文本以及 tool call 的 ID/名称/参数；任一不一致即整条 message 回退 semantic conversion，避免原生与普通 assistant/function call 重复。
+- Responses 的 response ID 本期只持久化，不发送 `previous_response_id`；没有 WebSocket transport 或可见输出后的自动续流。
+
+原生 metadata 经 JSON-safe sanitizer 深拷贝，未知顶层字段、headers、request metadata 和诊断对象不会落盘。单条消息超过 2 MiB 时只保留 semantic history，并发布 `provider_metadata_omitted_too_large` warning。
 
 `provider-utils.ts` 负责：
 

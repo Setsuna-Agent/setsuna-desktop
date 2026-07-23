@@ -36,13 +36,14 @@ import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordina
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RuntimeToolRouter } from '../tools/tool-router.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
-import { normalizeModelConversationOrder } from './runtime-model-message-order.js';
+import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 
 const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
 export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
   messages: RuntimeMessage[];
+  modelHistoryWarnings?: string[];
   runtimeConfig: RuntimeConfigState | null | undefined;
   snapshot: RuntimeModelRequestStepSnapshot;
   toolChoice: ModelRequest['toolChoice'];
@@ -112,7 +113,8 @@ export class RuntimeSamplingContextBuilder {
     turnId: string;
     toolAccess?: 'all' | 'read-only' | 'none';
   }): Promise<RuntimeSamplingStepContext> {
-    const orderedConversationMessages = normalizeModelConversationOrder(conversationMessages);
+    const normalizedConversation = normalizeModelConversationHistory(conversationMessages);
+    const orderedConversationMessages = normalizedConversation.messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
     const environment = await this.options.environmentResolver.resolve({
@@ -248,6 +250,9 @@ export class RuntimeSamplingContextBuilder {
     return {
       conversationMessages: compactedConversationMessages,
       messages,
+      ...(normalizedConversation.warnings.length
+        ? { modelHistoryWarnings: normalizedConversation.warnings }
+        : {}),
       runtimeConfig: stepRuntimeConfig,
       snapshot,
       toolChoice,
