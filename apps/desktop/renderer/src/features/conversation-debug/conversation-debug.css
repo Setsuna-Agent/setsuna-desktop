@@ -792,11 +792,6 @@
   margin-left: auto;
 }
 
-.conversation-debug-inspector__close:hover {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
-}
-
 .conversation-debug-inspector__lane,
 .conversation-debug-inspector__status {
   display: inline-flex;

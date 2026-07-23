@@ -66,7 +66,7 @@ export function ConversationDebugInspector({
           {node.summary ? <p title={node.summary}>{node.summary}</p> : null}
         </div>
         <IconButton
-          className="conversation-debug-inspector__close"
+          className="app-shell-icon-control conversation-debug-inspector__close"
           label={t('conversationDebug.inspector.close')}
           onClick={onClose}
         >
