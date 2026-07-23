@@ -6,6 +6,11 @@ import {
 } from '../../../../src/features/conversation-debug/conversationDebugGraph.js';
 import { mergeConversationDebugTraces } from '../../../../src/features/conversation-debug/conversationDebugTraces.js';
 
+type ProviderReplayTrace = Extract<
+  RuntimeDebugTraceEvent,
+  { kind: 'provider.replay.decision' }
+>;
+
 describe('conversation debug graph', () => {
   it('completes the input node without hiding the running turn state', () => {
     const graph = projectConversationDebugGraph([
@@ -62,6 +67,64 @@ describe('conversation debug graph', () => {
     expect(filtered.traces.map((trace) => trace.id)).toEqual(['debug_trace_1']);
     expect(filtered.events.every((event) => event.turnId === 'turn_1')).toBe(true);
     expect(filtered.turns).toHaveLength(1);
+  });
+
+  it('groups provider replay decisions by model request while retaining raw traces', () => {
+    const eventGraph = projectConversationDebugGraph(runtimeEvents());
+    const traces = [
+      providerReplayTrace(10, 'replay_1', 'model-request:turn_1:4', {
+        messageId: 'assistant_1',
+        nativeItemCount: 0,
+        reason: 'metadata_missing',
+        strategy: 'semantic',
+      }),
+      providerReplayTrace(11, 'replay_2', 'model-request:turn_1:4', {
+        messageId: 'assistant_2',
+        nativeItemCount: 2,
+        reason: 'native_replay_compatible',
+        strategy: 'native',
+      }),
+      providerReplayTrace(12, 'replay_3', 'model-request:turn_1:4', {
+        messageId: 'assistant_3',
+        nativeItemCount: 1,
+        reason: 'context_mismatch',
+        strategy: 'semantic',
+      }),
+      providerReplayTrace(13, 'replay_4', 'model-request:turn_1:8', {
+        messageId: 'assistant_4',
+        nativeItemCount: 0,
+        reason: 'metadata_missing',
+        strategy: 'semantic',
+      }),
+    ];
+    const graph = mergeConversationDebugTraces(eventGraph, traces);
+    const replayNodes = graph.nodes.filter((node) => node.kind === 'provider-replay');
+    const firstRequestNode = replayNodes.find((node) => node.traceIds.includes('replay_1'));
+    const secondRequestNode = replayNodes.find((node) => node.traceIds.includes('replay_4'));
+
+    expect(replayNodes).toHaveLength(2);
+    expect(firstRequestNode).toMatchObject({
+      seqStart: 10,
+      seqEnd: 12,
+      status: 'warning',
+      summary: '3 messages · 2 semantic · 1 native',
+      traceIds: ['replay_1', 'replay_2', 'replay_3'],
+    });
+    expect(secondRequestNode).toMatchObject({
+      seqStart: 13,
+      seqEnd: 13,
+      status: 'neutral',
+      summary: '1 message · 1 semantic · 0 native',
+      traceIds: ['replay_4'],
+    });
+    expect(new Set(traces.map((trace) => graph.traceNodeIds.get(trace.id)))).toEqual(
+      new Set([firstRequestNode?.id, secondRequestNode?.id]),
+    );
+    expect(graph.traceNodeIds.get('replay_1')).toBe(firstRequestNode?.id);
+    expect(graph.traceNodeIds.get('replay_2')).toBe(firstRequestNode?.id);
+    expect(graph.traceNodeIds.get('replay_3')).toBe(firstRequestNode?.id);
+    expect(graph.traces).toEqual(traces);
+    expect(graph.records.filter((record) => 'kind' in record)).toEqual(traces);
   });
 
   it('keeps reused provider tool IDs isolated by model transaction', () => {
@@ -303,6 +366,33 @@ function historyTrace(): RuntimeDebugTraceEvent {
       warnings: ['legacy_orphan_tool_result_omitted'],
       wireToolCallRewrites: [],
     },
+  };
+}
+
+function providerReplayTrace(
+  seq: number,
+  id: string,
+  spanId: string,
+  payload: Pick<
+    ProviderReplayTrace['payload'],
+    'messageId' | 'nativeItemCount' | 'reason' | 'strategy'
+  >,
+): ProviderReplayTrace {
+  return {
+    afterEventSeq: 4,
+    createdAt: `2026-07-23T00:00:04.${String(seq).padStart(3, '0')}Z`,
+    id,
+    kind: 'provider.replay.decision',
+    payload: {
+      ...payload,
+      model: 'model_1',
+      providerId: 'provider_1',
+      providerKind: 'anthropic',
+    },
+    seq,
+    spanId,
+    threadId: 'thread_1',
+    turnId: 'turn_1',
   };
 }
 

@@ -17,20 +17,27 @@ import {
   type ConversationDebugNodeStatus,
 } from './conversationDebugGraph.js';
 
+type ProviderReplayDebugTrace = Extract<
+  RuntimeDebugTraceEvent,
+  { kind: 'provider.replay.decision' }
+>;
+
 export function mergeConversationDebugTraces(
   graph: ConversationDebugGraph,
   incomingTraces: RuntimeDebugTraceEvent[],
 ): ConversationDebugGraph {
   const traces = uniqueDebugTraces(incomingTraces);
   if (!traces.length) return graph;
-  const traceNodes = traces.map(debugTraceNode);
+  const traceNodes = projectDebugTraceNodes(traces);
   const nodes = [...graph.nodes, ...traceNodes].sort(compareConversationDebugNodes);
   return {
     ...graph,
     edges: conversationDebugEdgesForNodes(nodes),
     nodes,
     records: sortConversationDebugRecords([...graph.events, ...traces]),
-    traceNodeIds: new Map(traces.map((trace) => [trace.id, `trace:${trace.id}`])),
+    traceNodeIds: new Map(traceNodes.flatMap((node) => (
+      node.traceIds.map((traceId) => [traceId, node.id] as const)
+    ))),
     traces,
     turns: conversationDebugTurnGroups(nodes, graph.turnGroupIds),
   };
@@ -96,6 +103,69 @@ function debugTraceNode(trace: RuntimeDebugTraceEvent): ConversationDebugNode {
     traceIds: [trace.id],
     traces: [trace],
     turnId: trace.turnId,
+  };
+}
+
+function projectDebugTraceNodes(traces: RuntimeDebugTraceEvent[]): ConversationDebugNode[] {
+  const nodes: ConversationDebugNode[] = [];
+  const providerReplayGroups = new Map<string, ProviderReplayDebugTrace[]>();
+
+  for (const trace of traces) {
+    if (trace.kind !== 'provider.replay.decision' || !trace.spanId) {
+      nodes.push(debugTraceNode(trace));
+      continue;
+    }
+    const groupId = providerReplayGroupId(trace, trace.spanId);
+    const group = providerReplayGroups.get(groupId) ?? [];
+    group.push(trace);
+    providerReplayGroups.set(groupId, group);
+  }
+
+  for (const [groupId, group] of providerReplayGroups) {
+    nodes.push(providerReplayDebugNode(groupId, group));
+  }
+  return nodes;
+}
+
+/**
+ * One provider replay decision is emitted for every historical assistant
+ * message. Group decisions from the same immutable sampling step so the flow
+ * shows one model request while the inspector keeps every raw trace.
+ */
+function providerReplayGroupId(
+  trace: ProviderReplayDebugTrace,
+  spanId: string,
+): string {
+  return [
+    'trace-group:provider-replay',
+    encodeURIComponent(trace.threadId),
+    encodeURIComponent(trace.turnId ?? 'thread'),
+    encodeURIComponent(spanId),
+  ].join(':');
+}
+
+function providerReplayDebugNode(
+  id: string,
+  traces: ProviderReplayDebugTrace[],
+): ConversationDebugNode {
+  const first = traces[0]!;
+  const last = traces.at(-1)!;
+  return {
+    eventIds: [],
+    events: [],
+    eventTypes: [],
+    id,
+    kind: 'provider-replay',
+    lane: 'provider',
+    seqEnd: last.seq,
+    seqStart: first.seq,
+    source: 'trace',
+    startedAt: first.createdAt,
+    status: providerReplayGroupStatus(traces),
+    summary: providerReplayGroupSummary(traces),
+    traceIds: traces.map((trace) => trace.id),
+    traces,
+    turnId: first.turnId,
   };
 }
 
@@ -187,6 +257,22 @@ function historyNormalizationSummary(payload: RuntimeHistoryNormalizationDebugPa
 
 function providerReplaySummary(payload: RuntimeProviderReplayDebugPayload): string {
   return `${payload.strategy} · ${payload.reason} · ${payload.nativeItemCount} native items`;
+}
+
+function providerReplayGroupSummary(traces: ProviderReplayDebugTrace[]): string {
+  const semanticCount = traces.filter((trace) => trace.payload.strategy === 'semantic').length;
+  const nativeCount = traces.length - semanticCount;
+  const messageLabel = traces.length === 1 ? 'message' : 'messages';
+  return `${traces.length} ${messageLabel} · ${semanticCount} semantic · ${nativeCount} native`;
+}
+
+function providerReplayGroupStatus(
+  traces: ProviderReplayDebugTrace[],
+): ConversationDebugNodeStatus {
+  const statuses = traces.map(traceStatus);
+  if (statuses.includes('warning')) return 'warning';
+  if (statuses.includes('neutral')) return 'neutral';
+  return 'success';
 }
 
 function compactionSummary(payload: RuntimeCompactionDebugPayload): string {
