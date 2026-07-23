@@ -107,11 +107,11 @@
 }
 
 .chat-starter-suggestion--green {
-  --chat-starter-suggestion-accent: #10a66a;
+  --chat-starter-suggestion-accent: var(--app-green);
 }
 
 .chat-starter-suggestion--orange {
-  --chat-starter-suggestion-accent: #f97316;
+  --chat-starter-suggestion-accent: var(--app-orange);
 }
 
 @container (max-width: 720px) {
@@ -146,9 +146,8 @@
   width: 100%;
   max-width: 100%;
   overflow: hidden;
-  border: 0;
-  border-left: 2px solid color-mix(in srgb, var(--desktop-agent-accent) 32%, transparent);
-  border-radius: 0 8px 8px 0;
+  border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
+  border-radius: var(--app-radius-md);
   background: color-mix(in srgb, var(--app-text) 2.8%, transparent);
 }
 

@@ -4,8 +4,8 @@ export const accentColorOptions = [
   { value: 'neutral', label: '默认', lightSwatch: '#15171a', darkSwatch: '#f4f4f5' },
   { value: 'blue', label: '蓝色', lightSwatch: '#2563eb', darkSwatch: '#60a5fa' },
   { value: 'purple', label: '紫色', lightSwatch: '#7c3aed', darkSwatch: '#c084fc' },
-  { value: 'green', label: '绿色', lightSwatch: '#15803d', darkSwatch: '#4ade80' },
-  { value: 'orange', label: '橙色', lightSwatch: '#c2410c', darkSwatch: '#fb923c' },
+  { value: 'green', label: '绿色', lightSwatch: 'var(--app-green)', darkSwatch: 'var(--app-green)' },
+  { value: 'orange', label: '橙色', lightSwatch: 'var(--app-orange)', darkSwatch: 'var(--app-orange)' },
 ] as const;
 
 export type AccentColor = typeof accentColorOptions[number]['value'];

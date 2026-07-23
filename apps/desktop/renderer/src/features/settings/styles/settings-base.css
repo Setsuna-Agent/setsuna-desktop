@@ -308,11 +308,11 @@
 }
 
 .desktop-settings-panel .settings-usage-metric[data-tone='cache'] {
-  --settings-usage-tone: #d97706;
+  --settings-usage-tone: var(--app-orange);
 }
 
 .desktop-settings-panel .settings-usage-metric[data-tone='calls'] {
-  --settings-usage-tone: #0f9f6e;
+  --settings-usage-tone: var(--app-green);
 }
 
 .desktop-settings-panel .settings-usage-metric__heading {

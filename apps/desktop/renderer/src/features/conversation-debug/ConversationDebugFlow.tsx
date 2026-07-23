@@ -21,9 +21,9 @@ const FLOW_LANE_LEFT: Record<ConversationDebugLane, number> = {
   provider: 520,
   tool: 762,
 };
-const FLOW_NODE_WIDTH = 202;
-const FLOW_NODE_HEIGHT = 76;
-const FLOW_ROW_HEIGHT = 108;
+const FLOW_NODE_WIDTH = 220;
+const FLOW_NODE_HEIGHT = 104;
+const FLOW_ROW_HEIGHT = 132;
 const FLOW_TOP = 72;
 const FLOW_OVERSCAN_ROWS = 6;
 
@@ -217,6 +217,11 @@ export function ConversationDebugFlow({
           const nodeIndex = startIndex + visibleIndex;
           const position = debugNodePosition(node, nodeIndex);
           const title = conversationDebugNodeTitle(node, t);
+          const statusLabel = conversationDebugStatusLabel(node.status, t);
+          const recordCount = node.eventIds.length + node.traceIds.length;
+          const sequenceLabel = `${node.source === 'trace' ? 'D' : 'E'}#${node.seqStart}${
+            node.seqEnd > node.seqStart ? `–${node.seqEnd}` : ''
+          }`;
           return (
             <button
               aria-pressed={selectedNodeId === node.id}
@@ -237,26 +242,32 @@ export function ConversationDebugFlow({
             >
               <span className="conversation-debug-node__heading">
                 <strong>{title}</strong>
-                <i aria-label={conversationDebugStatusLabel(node.status, t)} />
+                <span className="conversation-debug-node__status" title={statusLabel}>
+                  <i aria-hidden="true" />
+                  {statusLabel}
+                </span>
               </span>
               <span className="conversation-debug-node__summary">
                 {node.summary || node.eventTypes.join(', ')}
               </span>
-              <span className="conversation-debug-node__meta">
-                <code>
-                  {node.source === 'trace' ? 'D' : 'E'}#{node.seqStart}
-                  {node.seqEnd > node.seqStart ? `–${node.seqEnd}` : ''}
-                </code>
-                <time dateTime={node.startedAt}>
-                  {new Date(node.startedAt).toLocaleTimeString(locale, {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                  })}
-                </time>
-                {node.eventIds.length + node.traceIds.length > 1
-                  ? <em>{node.eventIds.length + node.traceIds.length}</em>
-                  : null}
+              <span className="conversation-debug-node__footer">
+                <span className="conversation-debug-node__lane">
+                  <i aria-hidden="true" />
+                  {conversationDebugLaneLabel(node.lane, t)}
+                </span>
+                <span className="conversation-debug-node__meta">
+                  <code title={sequenceLabel}>{sequenceLabel}</code>
+                  <time dateTime={node.startedAt}>
+                    {new Date(node.startedAt).toLocaleTimeString(locale, {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </time>
+                  <em title={t('conversationDebug.recordsInNode', { count: recordCount })}>
+                    {t('conversationDebug.recordCountShort', { count: recordCount })}
+                  </em>
+                </span>
               </span>
             </button>
           );

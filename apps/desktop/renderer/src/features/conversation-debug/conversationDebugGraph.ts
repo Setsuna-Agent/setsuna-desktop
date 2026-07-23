@@ -539,7 +539,6 @@ function statusForEvent(
   current: ConversationDebugNodeStatus = 'neutral',
 ): ConversationDebugNodeStatus {
   switch (event.type) {
-    case 'turn.started':
     case 'message.created':
     case 'message.delta':
     case 'item.started':
@@ -555,6 +554,7 @@ function statusForEvent(
     case 'approval.requested':
     case 'thread.context_compacting':
       return 'running';
+    case 'turn.started':
     case 'turn.completed':
     case 'message.completed':
     case 'thread.context_compacted':

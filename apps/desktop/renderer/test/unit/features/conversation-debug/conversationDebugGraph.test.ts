@@ -7,6 +7,19 @@ import {
 import { mergeConversationDebugTraces } from '../../../../src/features/conversation-debug/conversationDebugTraces.js';
 
 describe('conversation debug graph', () => {
+  it('completes the input node without hiding the running turn state', () => {
+    const graph = projectConversationDebugGraph([
+      debugEvent(1, 'turn_1', 'turn.started', { input: 'Run' }),
+    ]);
+
+    expect(graph.nodes.find((node) => node.kind === 'turn-input')).toMatchObject({
+      status: 'success',
+    });
+    expect(graph.turns).toMatchObject([
+      { status: 'running' },
+    ]);
+  });
+
   it('folds streaming records into semantic nodes without losing raw events', () => {
     const graph = projectConversationDebugGraph(runtimeEvents());
 

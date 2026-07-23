@@ -29,6 +29,17 @@ describe('accent color preferences', () => {
   it('offers a compact set of accessible presets', () => {
     expect(accentColorOptions.map((option) => option.value)).toEqual(['neutral', 'blue', 'purple', 'green', 'orange']);
   });
+
+  it('keeps vivid color swatches aligned with the shared UI tokens', () => {
+    expect(accentColorOptions.find((option) => option.value === 'green')).toMatchObject({
+      lightSwatch: 'var(--app-green)',
+      darkSwatch: 'var(--app-green)',
+    });
+    expect(accentColorOptions.find((option) => option.value === 'orange')).toMatchObject({
+      lightSwatch: 'var(--app-orange)',
+      darkSwatch: 'var(--app-orange)',
+    });
+  });
 });
 
 function withAccentColorEnvironment(items: Record<string, string>, callback: (dataset: Record<string, string>) => void): void {

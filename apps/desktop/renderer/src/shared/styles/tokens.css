@@ -31,6 +31,14 @@
   --app-shadow-modal: 0 24px 64px color-mix(in srgb, #000000 18%, transparent), 0 4px 16px color-mix(in srgb, #000000 8%, transparent);
   --app-tooltip-bg: #ffffff;
   --app-tooltip-border: #dedede;
+  --app-green: #22c55e;
+  --app-green-hover: #4ade80;
+  --app-green-active: #16a34a;
+  --app-green-text: #ffffff;
+  --app-orange: #f97316;
+  --app-orange-hover: #fb923c;
+  --app-orange-active: #ea580c;
+  --app-orange-text: #ffffff;
   --app-primary: #15171a;
   --app-primary-hover: #24272c;
   --app-primary-text: #ffffff;
@@ -39,8 +47,8 @@
   --app-accent-border: color-mix(in srgb, var(--app-primary) 30%, var(--app-border));
   --app-danger: #dc2626;
   --app-danger-bg: #fef2f2;
-  --app-success: #16833a;
-  --app-warning: #c2410c;
+  --app-success: var(--app-green-active);
+  --app-warning: var(--app-orange-active);
   --file-icon-seti-blue: #519aba;
   --file-icon-seti-grey: #4d5a5e;
   --file-icon-seti-grey-light: #6d8086;
@@ -179,8 +187,8 @@
   --app-primary-text: #181818;
   --app-danger: #f87171;
   --app-danger-bg: rgba(248, 113, 113, 0.11);
-  --app-success: #62c779;
-  --app-warning: #fb923c;
+  --app-success: var(--app-green-hover);
+  --app-warning: var(--app-orange-hover);
   --file-icon-seti-white: #d4d7d6;
   --file-icon-seti-yellow: #cbcb41;
   --file-icon-seti-ignore: #41535b;
@@ -258,23 +266,23 @@
 }
 
 :root[data-accent-color='green'] {
-  --app-primary: #15803d;
-  --app-primary-hover: #166534;
-  --app-primary-text: #ffffff;
-  --app-focus: rgb(21 128 61 / 24%);
+  --app-primary: var(--app-green);
+  --app-primary-hover: var(--app-green-hover);
+  --app-primary-text: var(--app-green-text);
+  --app-focus: color-mix(in srgb, var(--app-green) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
-  --chat-send-bg-active: #14532d;
+  --chat-send-bg-active: var(--app-green-active);
 }
 
 :root[data-accent-color='orange'] {
-  --app-primary: #c2410c;
-  --app-primary-hover: #9a3412;
-  --app-primary-text: #ffffff;
-  --app-focus: rgb(194 65 12 / 24%);
+  --app-primary: var(--app-orange);
+  --app-primary-hover: var(--app-orange-hover);
+  --app-primary-text: var(--app-orange-text);
+  --app-focus: color-mix(in srgb, var(--app-orange) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
-  --chat-send-bg-active: #7c2d12;
+  --chat-send-bg-active: var(--app-orange-active);
 }
 
 :root[data-theme='dark'][data-accent-color='blue'] {
@@ -294,19 +302,19 @@
 }
 
 :root[data-theme='dark'][data-accent-color='green'] {
-  --app-primary: #4ade80;
-  --app-primary-hover: #86efac;
-  --app-primary-text: #071b0f;
-  --app-focus: rgb(74 222 128 / 28%);
-  --chat-send-bg-active: #bbf7d0;
+  --app-primary: var(--app-green);
+  --app-primary-hover: var(--app-green-hover);
+  --app-primary-text: var(--app-green-text);
+  --app-focus: color-mix(in srgb, var(--app-green) 28%, transparent);
+  --chat-send-bg-active: var(--app-green-active);
 }
 
 :root[data-theme='dark'][data-accent-color='orange'] {
-  --app-primary: #fb923c;
-  --app-primary-hover: #fdba74;
-  --app-primary-text: #241006;
-  --app-focus: rgb(251 146 60 / 28%);
-  --chat-send-bg-active: #fed7aa;
+  --app-primary: var(--app-orange);
+  --app-primary-hover: var(--app-orange-hover);
+  --app-primary-text: var(--app-orange-text);
+  --app-focus: color-mix(in srgb, var(--app-orange) 28%, transparent);
+  --chat-send-bg-active: var(--app-orange-active);
 }
 
 ::view-transition-old(root),
