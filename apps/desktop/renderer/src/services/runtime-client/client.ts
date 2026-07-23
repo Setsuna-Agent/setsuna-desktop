@@ -13,6 +13,7 @@ import type {
   RuntimeBackgroundShellProcessTermination,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeDebugTraceList,
   RuntimeEvent,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
@@ -206,6 +207,12 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     subscribeEvents(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void) {
       return bridge.startSse(threadId, sinceSeq, onEvent);
+    },
+    listDebugTraces(threadId, afterSeq = 0) {
+      const normalizedAfterSeq = Math.max(0, Math.floor(afterSeq));
+      return request<RuntimeDebugTraceList>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/debug-traces?afterSeq=${normalizedAfterSeq}`,
+      });
     },
     getConfig() {
       return request<RuntimeConfigState>({ path: '/v1/config' });

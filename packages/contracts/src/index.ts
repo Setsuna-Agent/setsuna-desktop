@@ -4,6 +4,7 @@ export * from './attachments.js';
 export * from './background-shell-processes.js';
 export * from './browser-control.js';
 export * from './config.js';
+export * from './debug-traces.js';
 export * from './desktop.js';
 export * from './environment.js';
 export * from './events.js';

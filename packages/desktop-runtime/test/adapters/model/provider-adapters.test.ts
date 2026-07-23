@@ -1,8 +1,11 @@
-import type {
-  ModelRequest,
-  RuntimeJsonObject,
-  RuntimeMessage,
-  RuntimeMessageProviderMetadata,
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  type ModelRequest,
+  type RuntimeDebugTraceEvent,
+  type RuntimeDebugTraceInput,
+  type RuntimeJsonObject,
+  type RuntimeMessage,
+  type RuntimeMessageProviderMetadata,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { AiSdkOpenAiCompatibleModelClient } from '../../../src/adapters/model/ai-sdk-model-client.js';
@@ -10,10 +13,16 @@ import { AnthropicMessagesModelClient } from '../../../src/adapters/model/anthro
 import { ConfiguredModelClient } from '../../../src/adapters/model/configured-model-client.js';
 import { OpenAiChatModelClient } from '../../../src/adapters/model/openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from '../../../src/adapters/model/openai-responses-model-client.js';
-import { providerEndpointFingerprint } from '../../../src/adapters/model/provider-replay-context.js';
+import {
+  providerEndpointFingerprint,
+  providerReplayContext,
+} from '../../../src/adapters/model/provider-replay-context.js';
 import { openAiCompatibleThinkingBody } from '../../../src/adapters/model/provider-thinking.js';
 import { bindProviderMetadataToSemanticMessage } from '../../../src/utils/runtime-message-semantic-fingerprint.js';
-import type { FetchImpl } from '../../../src/adapters/model/provider-utils.js';
+import {
+  providerReplayDebugPayloads,
+  type FetchImpl,
+} from '../../../src/adapters/model/provider-utils.js';
 import type { RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 
@@ -1153,6 +1162,51 @@ describe('provider model adapters', () => {
       { type: 'function_call_output', call_id: 'call_1', output: 'README contents' },
     ]);
     expect(JSON.stringify(expectBody(replayCaptured).input)).not.toContain('<think>');
+  });
+
+  it('diagnoses native, semantic, and context-mismatched Responses replay', () => {
+    const assistantBase: RuntimeMessage = {
+      id: 'assistant-debug-replay',
+      role: 'assistant',
+      content: 'Native answer',
+      createdAt: '2026-07-23T00:00:00.000Z',
+      status: 'complete',
+    };
+    const metadata = bindProviderMetadataToSemanticMessage(
+      responsesMetadata([{
+        type: 'message',
+        id: 'message-debug-replay',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'Native answer' }],
+      }]),
+      assistantBase,
+    );
+    const assistant = { ...assistantBase, providerMetadata: metadata };
+    const replayProvider = provider('openai-responses', 'https://api.openai.test/v1');
+
+    expect(providerReplayDebugPayloads(
+      [assistant],
+      providerReplayContext(replayProvider),
+    )[0]).toMatchObject({
+      messageId: assistant.id,
+      nativeItemCount: 1,
+      reason: 'native_replay_compatible',
+      strategy: 'native',
+    });
+    expect(providerReplayDebugPayloads(
+      [{ ...assistant, content: 'Changed answer' }],
+      providerReplayContext(replayProvider),
+    )[0]).toMatchObject({
+      reason: 'semantic_mismatch',
+      strategy: 'semantic',
+    });
+    expect(providerReplayDebugPayloads(
+      [assistant],
+      providerReplayContext(provider('openai-responses', 'https://api.openai.test/v2')),
+    )[0]).toMatchObject({
+      reason: 'context_mismatch',
+      strategy: 'semantic',
+    });
   });
 
   it('omits the whole Responses envelope when one output item is unsupported', async () => {
@@ -2524,6 +2578,67 @@ describe('provider model adapters', () => {
     });
   });
 
+  it('publishes provider replay decisions only for developer-enabled model steps', async () => {
+    const traces: RuntimeDebugTraceEvent[] = [];
+    let traceSeq = 0;
+    const debugTrace = {
+      append(input: RuntimeDebugTraceInput) {
+        const trace = {
+          ...input,
+          createdAt: '2026-07-23T00:00:00.000Z',
+          id: `debug_trace_${++traceSeq}`,
+          seq: traceSeq,
+        } as RuntimeDebugTraceEvent;
+        traces.push(trace);
+        return trace;
+      },
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => provider('openai-compatible', 'https://llm.example/v1'),
+      },
+      fakeFetch('data: {"choices":[{"delta":{"content":"Configured"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', {}),
+      undefined,
+      { debugTrace },
+    );
+    const assistant: RuntimeMessage = {
+      id: 'assistant_1',
+      role: 'assistant',
+      content: 'Earlier answer',
+      createdAt: '2026-07-23T00:00:00.000Z',
+      status: 'complete',
+    };
+
+    await collect(client, {
+      messages: [assistant],
+      stepSnapshot: modelStepSnapshot([RUNTIME_DEVELOPER_FEATURES_FLAG]),
+    });
+    await collect(client, {
+      messages: [assistant],
+      stepSnapshot: modelStepSnapshot([]),
+    });
+
+    expect(traces).toHaveLength(1);
+    expect(traces[0]).toMatchObject({
+      afterEventSeq: 12,
+      kind: 'provider.replay.decision',
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      payload: {
+        messageId: 'assistant_1',
+        providerKind: 'openai-compatible',
+        reason: 'unsupported_provider',
+        strategy: 'semantic',
+      },
+    });
+  });
+
   it('retries a configured model request without temperature when the provider rejects that parameter', async () => {
     const bodies: Record<string, unknown>[] = [];
     let callCount = 0;
@@ -2864,6 +2979,28 @@ function responsesMetadata(items: RuntimeJsonObject[]): RuntimeMessageProviderMe
     openAiResponses: {
       kind: 'response',
       items,
+    },
+  };
+}
+
+function modelStepSnapshot(
+  featureKeys: string[],
+): NonNullable<ModelRequest['stepSnapshot']> {
+  return {
+    threadId: 'thread_1',
+    turnId: 'turn_1',
+    threadLastSeq: 12,
+    conversationMessageIds: ['assistant_1'],
+    messageIds: ['assistant_1'],
+    toolNames: [],
+    selectedSkills: [],
+    mcpServerKeys: [],
+    mcpServerCount: 0,
+    permissionProfile: 'workspace-write',
+    featureKeys,
+    worldState: {
+      threadMessageCount: 1,
+      threadUpdatedAt: '2026-07-23T00:00:00.000Z',
     },
   };
 }

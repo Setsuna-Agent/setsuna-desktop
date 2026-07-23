@@ -6,7 +6,7 @@ import {
   type WorkspaceFileRead,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { ChevronDown, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
+import { Bug, ChevronDown, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
 import {
   useEffect,
   useMemo,
@@ -62,6 +62,7 @@ export function WorkspacePanel({
   onOpenProjectFile,
   onOpenFilesPanel,
   onOpenBrowser,
+  onOpenConversationDebug,
   onOpenReviewPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
@@ -93,6 +94,7 @@ export function WorkspacePanel({
   onOpenProjectFile: (filePath: string) => void;
   onOpenFilesPanel: () => void;
   onOpenBrowser: () => void;
+  onOpenConversationDebug?: () => void;
   onOpenReviewPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
@@ -265,6 +267,7 @@ export function WorkspacePanel({
         latestReviewSummary={latestReviewSummary}
         onOpenFilesPanel={onOpenFilesPanel}
         onOpenBrowser={onOpenBrowser}
+        onOpenConversationDebug={onOpenConversationDebug}
         onOpenReviewPanel={onOpenReviewPanel}
         onOpenSideChat={onOpenSideChat}
         onOpenTerminalPanel={onOpenTerminalPanel}
@@ -419,6 +422,7 @@ export function WorkspaceOverviewPanel({
   latestReviewSummary,
   onOpenFilesPanel,
   onOpenBrowser,
+  onOpenConversationDebug,
   onOpenReviewPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
@@ -427,6 +431,7 @@ export function WorkspaceOverviewPanel({
   latestReviewSummary: DesktopDiffSummary | null;
   onOpenFilesPanel: () => void;
   onOpenBrowser: () => void;
+  onOpenConversationDebug?: () => void;
   onOpenReviewPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
@@ -481,6 +486,14 @@ export function WorkspaceOverviewPanel({
       disabled: false,
       onClick: () => onOpenBrowser(),
     },
+    ...(onOpenConversationDebug ? [{
+      key: 'conversation-debug',
+      label: t('workspace.overview.conversationDebug'),
+      meta: t('workspace.overview.conversationDebugDescription'),
+      icon: <Bug size={15} />,
+      disabled: false,
+      onClick: onOpenConversationDebug,
+    }] : []),
   ];
 
   return (

@@ -125,6 +125,14 @@ describe('model conversation ordering', () => {
     expect(normalized.messages[3]?.toolCallId).toBe(secondWireId);
     expect(normalized.messages[2]?.providerMetadata).toBeUndefined();
     expect(normalized.warnings).toEqual([]);
+    expect(normalized.diagnostics.wireToolCallRewrites).toEqual([{
+      assistantMessageId: 'assistant_second',
+      callIndex: 0,
+      providerMetadataRemoved: true,
+      semanticCallId: 'call_same',
+      toolResultMessageIds: ['tool_second'],
+      wireCallId: secondWireId,
+    }]);
     expect(normalizeModelConversationHistory([first, firstResult, second, secondResult]).messages)
       .toEqual(normalized.messages);
     expect(second.toolCalls?.[0]?.id).toBe('call_same');
@@ -161,6 +169,20 @@ describe('model conversation ordering', () => {
       expect.objectContaining({ id: 'tool_visible', visibility: 'transcript' }),
     ]);
     expect(normalized.warnings).toEqual([LEGACY_ORPHAN_TOOL_RESULT_OMITTED_WARNING]);
+    expect(normalized.diagnostics.orphanToolResultMessageIds).toEqual(['tool_visible']);
+  });
+
+  it('reports synthesized interrupted tool results in normalization diagnostics', () => {
+    const assistant = message('assistant_missing', 'assistant', '', {
+      toolCalls: [{ id: 'call_missing', name: 'view_image', arguments: '{}' }],
+    });
+    const user = message('user_continue', 'user', 'Continue.');
+
+    const normalized = normalizeModelConversationHistory([assistant, user]);
+
+    expect(normalized.diagnostics.interruptedToolResultMessageIds).toEqual([
+      'model_recovery_assistant_missing_call_missing',
+    ]);
   });
 
   it('rejects orphan, reversed, and duplicate tool results', () => {

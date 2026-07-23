@@ -1,5 +1,6 @@
 import type {
   ModelStreamEvent,
+  RuntimeEvent,
   RuntimeMemoryCitation,
   RuntimeMessage,
   RuntimeModelRequestStepSnapshot,
@@ -20,7 +21,10 @@ type RuntimeModelStreamEventPublisherOptions = {
   clock: Clock;
   ids: IdGenerator;
   memoryStore?: MemoryStore;
-  appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
+  appendEvent(
+    threadId: string,
+    event: Parameters<ThreadStore['appendEvent']>[1],
+  ): Promise<RuntimeEvent | null>;
 };
 
 /** 写入模型采样期间产生的对话记录与条目流投影。 */
@@ -57,8 +61,12 @@ export class RuntimeModelStreamEventPublisher {
     });
   }
 
-  async publishSamplingStepSnapshot(threadId: string, turnId: string, snapshot: RuntimeModelRequestStepSnapshot): Promise<void> {
-    await this.options.appendEvent(threadId, {
+  async publishSamplingStepSnapshot(
+    threadId: string,
+    turnId: string,
+    snapshot: RuntimeModelRequestStepSnapshot,
+  ): Promise<RuntimeEvent | null> {
+    return this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,

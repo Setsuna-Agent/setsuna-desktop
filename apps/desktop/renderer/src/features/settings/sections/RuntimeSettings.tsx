@@ -1,4 +1,9 @@
-import type { RuntimeConfigState, RuntimeDesktopSettings } from '@setsuna-desktop/contracts';
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  runtimeDeveloperFeaturesEnabled,
+  type RuntimeConfigState,
+  type RuntimeDesktopSettings,
+} from '@setsuna-desktop/contracts';
 import { ChevronRight, Database, FileCog, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -172,6 +177,17 @@ function RuntimeAdvancedSettings({
         </span>
       </summary>
       <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
+        <MemorySettingToggle
+          checked={runtimeDeveloperFeaturesEnabled(config)}
+          description={t('settings.runtime.developerFeaturesDescription')}
+          label={t('settings.runtime.developerFeatures')}
+          onChange={(enabled) => void onSave({
+            features: {
+              ...(config.features ?? {}),
+              [RUNTIME_DEVELOPER_FEATURES_FLAG]: enabled,
+            },
+          })}
+        />
         <MemorySettingToggle
           checked={config.sandboxWorkspaceWrite?.networkAccess === true}
           description={t('settings.runtime.sandboxNetworkDescription')}

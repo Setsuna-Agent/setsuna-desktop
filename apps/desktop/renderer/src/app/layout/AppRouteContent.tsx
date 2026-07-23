@@ -270,6 +270,7 @@ export function AppRouteContent({
       }}
       onOpenBottomTerminalPanel={() => workspacePanels.openDesktopPanel('bottom', 'terminal')}
       onOpenBrowser={(url) => workspacePanels.openBrowserPanel(url)}
+      onOpenConversationDebug={() => workspacePanels.openDesktopPanel('side', 'conversation-debug')}
       onOpenMarkdownWebLink={openMarkdownWebLink}
       onOpenFilesPanel={() => {
         projectWorkspace.setFilePreview(null);

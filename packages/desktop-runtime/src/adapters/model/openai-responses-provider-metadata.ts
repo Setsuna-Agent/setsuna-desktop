@@ -3,6 +3,7 @@ import type {
   RuntimeJsonValue,
   RuntimeMessage,
   RuntimeMessageProviderMetadata,
+  RuntimeProviderReplayReason,
 } from '@setsuna-desktop/contracts';
 import {
   portableRuntimeAssistantText,
@@ -75,12 +76,52 @@ export function compatibleOpenAiResponsesItems(
   message: RuntimeMessage,
   context: ProviderReplayContext,
 ): RuntimeJsonObject[] | undefined {
+  const resolved = resolveOpenAiResponsesReplay(message, context);
+  return resolved.items?.map((item) => structuredClone(item));
+}
+
+export function diagnoseOpenAiResponsesReplay(
+  message: RuntimeMessage,
+  context: ProviderReplayContext,
+): {
+  nativeItemCount: number;
+  reason: RuntimeProviderReplayReason;
+  strategy: 'native' | 'semantic';
+} {
+  const resolved = resolveOpenAiResponsesReplay(message, context);
+  return {
+    nativeItemCount: resolved.items?.length ?? resolved.nativeItemCount,
+    reason: resolved.reason,
+    strategy: resolved.items ? 'native' : 'semantic',
+  };
+}
+
+function resolveOpenAiResponsesReplay(
+  message: RuntimeMessage,
+  context: ProviderReplayContext,
+): {
+  items?: RuntimeJsonObject[];
+  nativeItemCount: number;
+  reason: RuntimeProviderReplayReason;
+} {
   const metadata = message.providerMetadata;
   const envelope = metadata?.openAiResponses;
-  if (!envelope || !providerMetadataMatchesReplayContext(metadata, context)) return undefined;
+  if (!envelope) return { nativeItemCount: 0, reason: 'metadata_missing' };
+  if (!providerMetadataMatchesReplayContext(metadata, context)) {
+    return { nativeItemCount: envelope.items.length, reason: 'context_mismatch' };
+  }
   const items = sanitizeOpenAiResponsesItems(envelope.items, envelope.kind);
-  if (!items || !nativeItemsMatchSemanticMessage(items, message, metadata)) return undefined;
-  return items.map((item) => structuredClone(item));
+  if (!items) {
+    return { nativeItemCount: envelope.items.length, reason: 'native_envelope_invalid' };
+  }
+  if (!nativeItemsMatchSemanticMessage(items, message, metadata)) {
+    return { nativeItemCount: items.length, reason: 'semantic_mismatch' };
+  }
+  return {
+    items,
+    nativeItemCount: items.length,
+    reason: 'native_replay_compatible',
+  };
 }
 
 export function openAiResponsesMetadata(

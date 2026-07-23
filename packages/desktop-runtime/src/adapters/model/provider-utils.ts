@@ -6,6 +6,7 @@ import {
   type RuntimeAnthropicContentBlock,
   type RuntimeInlineMessageAttachment,
   type RuntimeMessage,
+  type RuntimeProviderReplayDebugPayload,
   type RuntimeToolDefinition,
   type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
@@ -14,7 +15,10 @@ import {
   providerMetadataMatchesSemanticMessage,
   runtimeJsonValuesEqual,
 } from '../../utils/runtime-message-semantic-fingerprint.js';
-import { compatibleOpenAiResponsesItems } from './openai-responses-provider-metadata.js';
+import {
+  compatibleOpenAiResponsesItems,
+  diagnoseOpenAiResponsesReplay,
+} from './openai-responses-provider-metadata.js';
 import {
   isLegacyAnthropicMetadata,
   providerMetadataMatchesReplayContext,
@@ -236,6 +240,37 @@ export function toOpenAiResponsesInput(
   return output;
 }
 
+export function providerReplayDebugPayloads(
+  messages: RuntimeMessage[],
+  replayContext: ProviderReplayContext,
+): RuntimeProviderReplayDebugPayload[] {
+  return messages
+    .filter((message) => (
+      message.visibility !== 'transcript'
+      && message.role === 'assistant'
+    ))
+    .map((message) => {
+      const decision = replayContext.providerKind === 'openai-responses'
+        ? diagnoseOpenAiResponsesReplay(message, replayContext)
+        : replayContext.providerKind === 'anthropic'
+          ? diagnoseAnthropicReplay(message, replayContext)
+          : {
+              nativeItemCount: 0,
+              reason: 'unsupported_provider' as const,
+              strategy: 'semantic' as const,
+            };
+      return {
+        messageId: message.id,
+        model: replayContext.model,
+        nativeItemCount: decision.nativeItemCount,
+        providerId: replayContext.providerId,
+        providerKind: replayContext.providerKind,
+        reason: decision.reason,
+        strategy: decision.strategy,
+      };
+    });
+}
+
 function openAiResponsesToolOutputsByCallId(messages: RuntimeMessage[]): Map<string, unknown> {
   const outputTextByCallId = new Map<string, string[]>();
   for (const message of messages) {
@@ -336,6 +371,33 @@ function anthropicReplayBlocks(
     if (block.type === 'text') return { type: block.type, text: block.text };
     return { type: block.type, id: block.id, name: block.name, input: cloneJsonValue(block.input) };
   });
+}
+
+function diagnoseAnthropicReplay(
+  message: RuntimeMessage,
+  replayContext: ProviderReplayContext,
+): Pick<RuntimeProviderReplayDebugPayload, 'nativeItemCount' | 'reason' | 'strategy'> {
+  const metadata = message.providerMetadata;
+  const legacy = isLegacyAnthropicMetadata(metadata);
+  const blocks = metadata?.anthropic?.contentBlocks;
+  if (!blocks?.length) {
+    return { nativeItemCount: 0, reason: 'metadata_missing', strategy: 'semantic' };
+  }
+  if (legacy) {
+    return replayContext.providerKind === 'anthropic'
+      ? { nativeItemCount: blocks.length, reason: 'native_replay_compatible', strategy: 'native' }
+      : { nativeItemCount: blocks.length, reason: 'legacy_provider_mismatch', strategy: 'semantic' };
+  }
+  if (!providerMetadataMatchesReplayContext(metadata, replayContext)) {
+    return { nativeItemCount: blocks.length, reason: 'context_mismatch', strategy: 'semantic' };
+  }
+  if (
+    !providerMetadataMatchesSemanticMessage(metadata, message)
+    || !anthropicBlocksMatchSemanticMessage(blocks, message)
+  ) {
+    return { nativeItemCount: blocks.length, reason: 'semantic_mismatch', strategy: 'semantic' };
+  }
+  return { nativeItemCount: blocks.length, reason: 'native_replay_compatible', strategy: 'native' };
 }
 
 function anthropicBlocksMatchSemanticMessage(

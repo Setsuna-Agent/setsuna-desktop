@@ -1,4 +1,4 @@
-import type { RuntimeReviewTarget } from '@setsuna-desktop/contracts';
+import { runtimeDeveloperFeaturesEnabled, type RuntimeReviewTarget } from '@setsuna-desktop/contracts';
 import {
   useCallback,
   useEffect,
@@ -77,6 +77,9 @@ export function useDesktopAppController() {
     activeProject: activeWorkspace,
     activeView,
     autoLoadReview: Boolean(currentThread),
+    developerFeaturesEnabled: runtime.config
+      ? runtimeDeveloperFeaturesEnabled(runtime.config)
+      : null,
     setError,
     targetIdentity: chatTargetIdentity,
     workspaceStatus: activeWorkspaceState.status,

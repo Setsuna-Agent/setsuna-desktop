@@ -1,14 +1,19 @@
-import type {
-  ModelRequest,
-  ModelStreamEvent,
-  RuntimeEvent,
-  RuntimeMessage,
-  RuntimeMessageProviderMetadata,
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  type ModelRequest,
+  type ModelStreamEvent,
+  type RuntimeConfigState,
+  type RuntimeEvent,
+  type RuntimeMessage,
+  type RuntimeMessageProviderMetadata,
+  type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import type { RuntimeContextCompactionCandidate } from '../../../src/loop/context/context-compaction.js';
 import { RuntimeContextCompactor } from '../../../src/loop/context/runtime-context-compactor.js';
 import type { ModelClient, ModelCompactionRequest } from '../../../src/ports/model-client.js';
+import type { RuntimeDebugTraceSink } from '../../../src/ports/runtime-debug-trace.js';
+import { InMemoryRuntimeDebugTraceStore } from '../../../src/adapters/debug/in-memory-runtime-debug-trace-store.js';
 
 describe('RuntimeContextCompactor', () => {
   it('reads item-based agent output from current provider adapters', async () => {
@@ -118,18 +123,111 @@ describe('RuntimeContextCompactor', () => {
     expect(result.text).toContain('需要保留的用户目标');
     expect(result.providerMetadata).toBe(providerMetadata);
   });
+
+  it('records portable and native summary decisions on the debug channel', async () => {
+    let id = 0;
+    const traces = new InMemoryRuntimeDebugTraceStore(
+      { now: () => new Date('2026-07-11T00:00:00.000Z') },
+      { id: (prefix) => `${prefix}_${++id}` },
+    );
+    const modelClient = new CompactionModelClient([
+      { type: 'text_delta', text: '{"summary":"Portable summary."}' },
+      { type: 'done', finishReason: 'stop' },
+    ]);
+    const compactor = createCompactor(modelClient, [], traces);
+
+    await compactor.generateContextCompactionSummary(
+      compactionCandidate(),
+      undefined,
+      {
+        afterEventSeq: 7,
+        spanId: 'span_1',
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+      },
+    );
+
+    expect(traces.list('thread_1').traces.map((trace) => ({
+      kind: trace.kind,
+      outcome: 'outcome' in trace.payload ? trace.payload.outcome : undefined,
+      spanId: trace.spanId,
+    }))).toEqual([
+      { kind: 'context.compaction.portable', outcome: 'started', spanId: 'span_1' },
+      { kind: 'context.compaction.portable', outcome: 'success', spanId: 'span_1' },
+      { kind: 'context.compaction.native', outcome: 'unsupported', spanId: 'span_1' },
+    ]);
+  });
+
+  it('marks compaction complete only after the persisted compaction event succeeds', async () => {
+    let id = 0;
+    const traces = new InMemoryRuntimeDebugTraceStore(
+      { now: () => new Date('2026-07-11T00:00:00.000Z') },
+      { id: (prefix) => `${prefix}_${++id}` },
+    );
+    const modelClient = new CompactionModelClient([
+      { type: 'text_delta', text: '{"summary":"Portable summary."}' },
+      { type: 'done', finishReason: 'stop' },
+    ]);
+    const messages = compactionMessages();
+    const thread = compactionThread(messages);
+
+    await createCompactor(modelClient, [], traces).compactMessagesBeforeModelRequest({
+      force: true,
+      messages,
+      runtimeConfig: developerRuntimeConfig(),
+      signal: new AbortController().signal,
+      thread,
+      threadId: thread.id,
+      turnId: 'turn_1',
+    });
+
+    expect(traces.list(thread.id).traces.at(-1)).toMatchObject({
+      afterEventSeq: 2,
+      kind: 'context.compaction.completed',
+      payload: {
+        outcome: 'success',
+        source: 'local',
+      },
+    });
+  });
+
+  it('keeps compaction behavior independent from debug sink failures', async () => {
+    const modelClient = new CompactionModelClient([
+      { type: 'text_delta', text: '{"summary":"Portable summary."}' },
+      { type: 'done', finishReason: 'stop' },
+    ]);
+    const failingTrace: RuntimeDebugTraceSink = {
+      append: () => {
+        throw new Error('debug sink unavailable');
+      },
+    };
+
+    await expect(createCompactor(modelClient, [], failingTrace).generateContextCompactionSummary(
+      compactionCandidate(),
+      undefined,
+      {
+        afterEventSeq: 7,
+        spanId: 'span_1',
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+      },
+    )).resolves.toMatchObject({ text: '摘要：\nPortable summary.' });
+  });
 });
 
 function createCompactor(
   modelClient: ModelClient,
   events: Array<Omit<RuntimeEvent, 'seq'>> = [],
+  debugTrace?: RuntimeDebugTraceSink,
 ): RuntimeContextCompactor {
   return new RuntimeContextCompactor({
     clock: { now: () => new Date('2026-07-11T00:00:00.000Z') },
+    debugTrace,
     ids: { id: (prefix) => `${prefix}_1` },
     modelClient,
     appendEvent: async (_threadId, event) => {
       events.push(event);
+      return { ...event, seq: events.length } as RuntimeEvent;
     },
     onCompacted: () => undefined,
     runCompactHooks: async () => ({}),
@@ -178,6 +276,67 @@ function compactionCandidate(): RuntimeContextCompactionCandidate {
     reservedTokens: 0,
     targetContextTokens: 8,
     triggerScopes: ['manual'],
+  };
+}
+
+function compactionMessages(): RuntimeMessage[] {
+  return [
+    {
+      id: 'message_older',
+      role: 'user',
+      content: 'An older goal that must be summarized.',
+      createdAt: '2026-07-11T00:00:00.000Z',
+      status: 'complete',
+    },
+    {
+      id: 'message_recent_assistant',
+      role: 'assistant',
+      content: 'A recent response.',
+      createdAt: '2026-07-11T00:00:01.000Z',
+      status: 'complete',
+    },
+    {
+      id: 'message_recent_user',
+      role: 'user',
+      content: 'Continue.',
+      createdAt: '2026-07-11T00:00:02.000Z',
+      status: 'complete',
+    },
+  ];
+}
+
+function compactionThread(messages: RuntimeMessage[]): RuntimeThread {
+  return {
+    id: 'thread_1',
+    title: 'Compaction trace',
+    createdAt: '2026-07-11T00:00:00.000Z',
+    updatedAt: '2026-07-11T00:00:02.000Z',
+    archived: false,
+    lastMessagePreview: 'Continue.',
+    lastSeq: 0,
+    messageCount: messages.length,
+    messages,
+  };
+}
+
+function developerRuntimeConfig(): RuntimeConfigState {
+  return {
+    configPath: '/tmp/config.json',
+    dataPath: '/tmp/runtime',
+    storagePath: '/tmp/memory',
+    providers: [],
+    globalPrompt: '',
+    memory: {
+      useMemories: false,
+      generateMemories: false,
+      dedicatedTools: false,
+      disableOnExternalContext: true,
+    },
+    memoryEnabled: false,
+    setsunaStyle: 'developer',
+    approvalPolicy: 'on-request',
+    permissionProfile: 'workspace-write',
+    features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
   };
 }
 

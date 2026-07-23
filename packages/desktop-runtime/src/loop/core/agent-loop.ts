@@ -27,6 +27,7 @@ import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
+import type { RuntimeDebugTraceSink } from '../../ports/runtime-debug-trace.js';
 import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolHost } from '../../ports/tool-host.js';
@@ -69,6 +70,7 @@ export type AgentLoopOptions = {
   approvalGate?: ApprovalGate;
   appServerNotificationBus?: AppServerNotificationBus;
   configStore?: ConfigStore;
+  debugTrace?: RuntimeDebugTraceSink;
   skillRegistry?: SkillRegistry;
   toolHost?: ToolHost;
   usageStore?: UsageStore;
@@ -125,7 +127,7 @@ export class AgentLoop {
       clock: options.clock,
       ids: options.ids,
       memoryStore: options.memoryStore,
-      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
+      appendEvent: (threadId, event) => this.appendAndPublishWithResult(threadId, event),
     });
     this.inputGuard = new RuntimeModelInputGuard(options.configStore);
     this.collaborationCoordinator = new RuntimeCollaborationCoordinator({
@@ -160,10 +162,11 @@ export class AgentLoop {
     });
     this.contextCompactor = new RuntimeContextCompactor({
       clock: options.clock,
+      debugTrace: options.debugTrace,
       ids: options.ids,
       modelClient: options.modelClient,
       usageStore: options.usageStore,
-      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
+      appendEvent: (threadId, event) => this.appendAndPublishWithResult(threadId, event),
       onCompacted: (threadId) => this.hooks.queueSessionStartSource(threadId, 'compact'),
       runCompactHooks: (input) => this.hooks.runCompactHooks(input),
     });
@@ -173,6 +176,7 @@ export class AgentLoop {
       clock: options.clock,
       configStore: options.configStore,
       contextCompactor: this.contextCompactor,
+      debugTrace: options.debugTrace,
       environmentResolver,
       mcpStore: options.mcpStore,
       memory: this.memory,
@@ -612,7 +616,14 @@ export class AgentLoop {
    */
   private async appendAndPublish(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void> {
     // 先落盘再发布，订阅端按 seq 重放时才能得到和存储一致的事件顺序。
-    await this.eventWriter.append(threadId, event);
+    await this.appendAndPublishWithResult(threadId, event);
+  }
+
+  private appendAndPublishWithResult(
+    threadId: string,
+    event: Parameters<ThreadStore['appendEvent']>[1],
+  ) {
+    return this.eventWriter.append(threadId, event);
   }
 
   private assertAcceptingWork(): void {

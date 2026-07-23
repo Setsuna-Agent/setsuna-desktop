@@ -1,4 +1,4 @@
-import { FileText, FolderOpen, Globe2, MessageSquare, PanelRight, Plus, Terminal, X } from 'lucide-react';
+import { Bug, FileText, FolderOpen, Globe2, MessageSquare, PanelRight, Plus, Terminal, X } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -17,6 +17,7 @@ export type DesktopPanelPlacement = 'side' | 'bottom';
 const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; icon: JSX.Element }> = [
   { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
   { key: 'browser', labelKey: 'workspace.panel.launcher.browser', icon: <Globe2 size={14} /> },
+  { key: 'conversation-debug', labelKey: 'workspace.panel.launcher.conversationDebug', icon: <Bug size={14} /> },
   { key: 'review', labelKey: 'workspace.panel.launcher.review', icon: <FileText size={14} /> },
   { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
   { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <Terminal size={14} /> },

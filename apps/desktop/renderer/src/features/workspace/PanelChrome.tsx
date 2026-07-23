@@ -1,4 +1,4 @@
-import { Code2, FileText, FolderOpen, MessageSquare, PanelRight, Terminal } from 'lucide-react';
+import { Bug, Code2, FileText, FolderOpen, MessageSquare, PanelRight, Terminal } from 'lucide-react';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import { BrowserFavicon } from './BrowserFavicon.js';
@@ -11,6 +11,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 const panelTitleCopy: Partial<Record<DesktopPanelType, { key: MessageKey; legacyTitle: string }>> = {
   overview: { key: 'workspace.panel.overview', legacyTitle: '汇总目录' },
   chat: { key: 'workspace.panel.sideTask', legacyTitle: '侧边任务' },
+  'conversation-debug': { key: 'workspace.panel.conversationDebug', legacyTitle: '对话调试' },
   browser: { key: 'workspace.panel.newTab', legacyTitle: '新标签页' },
   review: { key: 'workspace.panel.review', legacyTitle: '审查' },
   terminal: { key: 'workspace.panel.terminal', legacyTitle: '终端' },
@@ -31,6 +32,7 @@ export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; typ
   }
   if (panelType === 'overview') return <PanelRight size={14} />;
   if (panelType === 'chat') return <MessageSquare size={14} />;
+  if (panelType === 'conversation-debug') return <Bug size={14} />;
   if (panelType === 'browser') {
     return <BrowserFavicon faviconUrl={panel?.browser?.faviconUrl ?? null} loading={panel?.browser?.loading ?? false} />;
   }

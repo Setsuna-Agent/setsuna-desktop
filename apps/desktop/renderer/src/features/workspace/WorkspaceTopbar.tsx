@@ -8,6 +8,7 @@ export function WorkspaceTopbar({
   terminalOpen,
   onClosePanel,
   onOpenBrowser,
+  onOpenConversationDebug,
   onOpenFilesPanel,
   onOpenReviewPanel,
   onOpenSideChat,
@@ -23,6 +24,7 @@ export function WorkspaceTopbar({
   terminalOpen: boolean;
   onClosePanel: (panelId: string) => void;
   onOpenBrowser: () => void;
+  onOpenConversationDebug: () => void;
   onOpenFilesPanel: () => void;
   onOpenReviewPanel: () => void;
   onOpenSideChat: () => void;
@@ -40,6 +42,10 @@ export function WorkspaceTopbar({
     }
     if (panel === 'chat') {
       onOpenSideChat();
+      return;
+    }
+    if (panel === 'conversation-debug') {
+      onOpenConversationDebug();
       return;
     }
     if (panel === 'review') {

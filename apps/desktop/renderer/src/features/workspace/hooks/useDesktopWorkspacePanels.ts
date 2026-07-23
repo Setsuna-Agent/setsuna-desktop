@@ -12,6 +12,7 @@ import {
   activePanelInSlot,
   addPanelToSlotState,
   createBrowserPanel,
+  createConversationDebugPanel,
   createDefaultSidePanelSlot,
   createEmptyPanelSlot,
   createFilePanel,
@@ -48,6 +49,7 @@ type WorkspacePanelsOptions = {
   activeProject: WorkspaceProject | null | undefined;
   activeView: string;
   autoLoadReview: boolean;
+  developerFeaturesEnabled: boolean | null;
   setError: (message: string | null) => void;
   targetIdentity: ChatComposerTargetIdentity;
   workspaceStatus: ThreadWorkspaceStatus;
@@ -62,6 +64,7 @@ export function useDesktopWorkspacePanels({
   activeProject,
   activeView,
   autoLoadReview,
+  developerFeaturesEnabled,
   setError,
   targetIdentity,
   workspaceStatus,
@@ -315,18 +318,21 @@ export function useDesktopWorkspacePanels({
   const openDesktopPanel = useCallback(
     (slot: DesktopPanelSlot, type: OpenableDesktopPanelType) => {
       if (type === 'chat' && slot !== 'side') return;
+      if (type === 'conversation-debug' && (slot !== 'side' || developerFeaturesEnabled !== true)) return;
       if (type === 'review' && !activeProject) return;
       if (type === 'files' && !activeProject?.path) return;
       const panel =
         type === 'chat'
           ? createSideChatPanel()
-          : type === 'overview'
-            ? createWorkspaceOverviewPanel()
-            : type === 'review'
-              ? createReviewPanel()
-              : type === 'files'
-                ? createFilesPanel()
-                : createTerminalPanel();
+          : type === 'conversation-debug'
+            ? createConversationDebugPanel()
+            : type === 'overview'
+              ? createWorkspaceOverviewPanel()
+              : type === 'review'
+                ? createReviewPanel()
+                : type === 'files'
+                  ? createFilesPanel()
+                  : createTerminalPanel();
       const updater = (current: DesktopPanelSlotState) => addPanelToSlotState(current, panel);
       if (slot === 'side') {
         setSidePanelExpanded(true);
@@ -335,8 +341,24 @@ export function useDesktopWorkspacePanels({
       }
       setBottomPanelSlot(updater);
     },
-    [activeProject, createSideChatPanel, createTerminalPanel, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot],
+    [
+      activeProject,
+      createSideChatPanel,
+      createTerminalPanel,
+      developerFeaturesEnabled,
+      setBottomPanelSlot,
+      setSidePanelExpanded,
+      setSidePanelSlot,
+    ],
   );
+
+  useEffect(() => {
+    if (developerFeaturesEnabled !== false) return;
+    setSidePanelSlot((current) => {
+      const debugPanel = current.panels.find((panel) => panel.type === 'conversation-debug');
+      return debugPanel ? removePanelFromSlotState(current, debugPanel.id) : current;
+    });
+  }, [developerFeaturesEnabled, setSidePanelSlot]);
 
   const openFilePanel = useCallback((filePath: string) => {
     closeWorkspaceMenus();
@@ -524,6 +546,7 @@ export function useDesktopWorkspacePanels({
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
       copyWorkspaceFilePath,
+      developerFeaturesEnabled: developerFeaturesEnabled === true,
       loadReviewState,
       openBrowserPanel,
       openDesktopPanel,
@@ -565,6 +588,7 @@ export function useDesktopWorkspacePanels({
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
       copyWorkspaceFilePath,
+      developerFeaturesEnabled,
       loadReviewState,
       openBrowserPanel,
       openDesktopPanel,

@@ -109,6 +109,24 @@ describe('WorkspaceOverviewPanel', () => {
     expect(onOpenBrowser.mock.calls).toEqual([[]]);
   });
 
+  it('shows conversation debug only when the developer action is provided', () => {
+    const baseProps: WorkspaceOverviewProps = {
+      activeProject: project,
+      latestReviewSummary: null,
+      onOpenBrowser: () => undefined,
+      onOpenFilesPanel: () => undefined,
+      onOpenReviewPanel: () => undefined,
+      onOpenSideChat: () => undefined,
+      onOpenTerminalPanel: () => undefined,
+    };
+
+    expect(renderWorkspaceOverviewPanel(baseProps)).not.toContain('对话调试');
+    expect(renderWorkspaceOverviewPanel({
+      ...baseProps,
+      onOpenConversationDebug: () => undefined,
+    })).toContain('对话调试');
+  });
+
   it('在普通对话的临时目录中开放工作区操作', () => {
     const panel = captureWorkspaceOverviewPanel({
       activeProject: {

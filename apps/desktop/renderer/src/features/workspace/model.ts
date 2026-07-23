@@ -22,7 +22,15 @@ export type {
 };
 
 export type DesktopPanelSlot = 'side' | 'bottom';
-export type DesktopPanelType = 'overview' | 'browser' | 'chat' | 'files' | 'file' | 'review' | 'terminal';
+export type DesktopPanelType =
+  | 'overview'
+  | 'browser'
+  | 'chat'
+  | 'conversation-debug'
+  | 'files'
+  | 'file'
+  | 'review'
+  | 'terminal';
 export type DesktopBrowserPanelState = {
   faviconUrl: string | null;
   loading: boolean;
@@ -46,6 +54,7 @@ export const REVIEW_PANEL_ID = 'review';
 export const FILES_PANEL_ID = 'files';
 export const WORKSPACE_OVERVIEW_PANEL_ID = 'workspace-overview';
 export const SIDE_CHAT_PANEL_ID = 'side-chat';
+export const CONVERSATION_DEBUG_PANEL_ID = 'conversation-debug';
 export const DEFAULT_BROWSER_URL = 'https://www.bing.com/';
 
 export const createEmptyPanelSlot = (): DesktopPanelSlotState => ({ active: null, panels: [] });
@@ -55,6 +64,11 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
 export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边任务'): DesktopPanelTab => ({ id, type: 'chat', title });
+export const createConversationDebugPanel = (): DesktopPanelTab => ({
+  id: CONVERSATION_DEBUG_PANEL_ID,
+  type: 'conversation-debug',
+  title: '对话调试',
+});
 export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): DesktopPanelTab => {
   // A zero-argument callback can still receive React's click event at runtime.
   // Never let that object become a relative `[object Object]` renderer URL.
@@ -83,6 +97,10 @@ export const addPanelToSlotState = (slot: DesktopPanelSlotState, panel: DesktopP
   }
   if (panel.type === 'files') {
     const existing = panelsWithoutOverview.find((item) => item.type === 'files');
+    if (existing) return { active: existing.id, panels: panelsWithoutOverview };
+  }
+  if (panel.type === 'conversation-debug') {
+    const existing = panelsWithoutOverview.find((item) => item.type === 'conversation-debug');
     if (existing) return { active: existing.id, panels: panelsWithoutOverview };
   }
   return {

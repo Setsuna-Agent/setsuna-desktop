@@ -1,5 +1,7 @@
-import type {
-  RuntimeEvent
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  type RuntimeConfigState,
+  type RuntimeEvent,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
@@ -311,6 +313,44 @@ describe('agent loop turn execution', () => {
       expect(modelClient.requests[0].stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThan(0);
       expect(toolHost.runContexts[0].environment).toBe(firstSnapshotEnvironment);
     });
+
+  it('uses the committed step event only as a transient developer trace anchor', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Debug trace anchor' });
+      const modelClient = new MemoryCapturingModelClient();
+      const config = developerFeaturesConfig();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        configStore: {
+          getConfig: async () => config,
+          saveConfig: async () => config,
+          getActiveProviderConfig: async () => null,
+        },
+      });
+
+      await loop.sendTurn(thread.id, { input: 'capture the debug anchor' });
+
+      const events = await threadStore.listEvents(thread.id, 0);
+      const stepEvent = events.find(
+        (event): event is Extract<RuntimeEvent, { type: 'turn.step_snapshot' }> => (
+          event.type === 'turn.step_snapshot'
+        ),
+      );
+      expect(stepEvent).toBeDefined();
+      expect(modelClient.requests[0].stepSnapshot?.threadLastSeq).toBe(stepEvent?.seq);
+      expect(modelClient.requests[0].stepSnapshot?.featureKeys).toContain(
+        RUNTIME_DEVELOPER_FEATURES_FLAG,
+      );
+      expect(stepEvent?.payload.snapshot.threadLastSeq).toBeLessThan(stepEvent?.seq ?? 0);
+      expect(stepEvent?.payload.snapshot.featureKeys).not.toContain(
+        RUNTIME_DEVELOPER_FEATURES_FLAG,
+      );
+    });
   
   it('injects project workflow and instructions before the first model sampling step', async () => {
       const ids = new RandomIdGenerator();
@@ -522,3 +562,24 @@ describe('agent loop turn execution', () => {
       expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toContain('workspace_read_file');
     });
 });
+
+function developerFeaturesConfig(): RuntimeConfigState {
+  return {
+    approvalPolicy: 'on-request',
+    configPath: '/tmp/config.json',
+    dataPath: '/tmp',
+    features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
+    globalPrompt: '',
+    memory: {
+      dedicatedTools: false,
+      disableOnExternalContext: true,
+      generateMemories: false,
+      useMemories: false,
+    },
+    memoryEnabled: false,
+    permissionProfile: 'workspace-write',
+    providers: [],
+    setsunaStyle: 'developer',
+    storagePath: '/tmp/memories',
+  };
+}

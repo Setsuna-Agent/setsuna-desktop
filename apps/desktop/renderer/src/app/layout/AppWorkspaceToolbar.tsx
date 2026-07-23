@@ -32,6 +32,10 @@ export function AppWorkspaceToolbar({
   const sideAvailablePanelTypes = [
     'chat',
     'browser',
+    workspacePanels.developerFeaturesEnabled
+      && !sidePanels.some((panel) => panel.type === 'conversation-debug')
+      ? 'conversation-debug'
+      : null,
     activeProject && !sidePanels.some((panel) => panel.type === 'review') ? 'review' : null,
     activeProject?.path && !sidePanels.some((panel) => panel.type === 'files') ? 'files' : null,
     'terminal',
@@ -46,6 +50,10 @@ export function AppWorkspaceToolbar({
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
       onOpenBrowser={() => {
         workspacePanels.openBrowserPanel();
+      }}
+      onOpenConversationDebug={() => {
+        workspacePanels.closeWorkspaceMenus();
+        workspacePanels.openDesktopPanel('side', 'conversation-debug');
       }}
       onOpenFilesPanel={() => {
         workspacePanels.closeWorkspaceMenus();

@@ -1,6 +1,13 @@
-import type { ModelRequest } from '@setsuna-desktop/contracts';
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  type ModelRequest,
+} from '@setsuna-desktop/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest, ModelCompactionResult } from '../../ports/model-client.js';
+import {
+  appendRuntimeDebugTraceSafely,
+  type RuntimeDebugTraceSink,
+} from '../../ports/runtime-debug-trace.js';
 import { AiSdkOpenAiCompatibleModelClient } from './ai-sdk-model-client.js';
 import { AnthropicMessagesModelClient } from './anthropic-messages-model-client.js';
 import {
@@ -11,15 +18,23 @@ import {
 import { OpenAiChatModelClient } from './openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from './openai-responses-model-client.js';
 import { thinkingRequestDefaults } from './provider-thinking.js';
-import type { FetchImpl } from './provider-utils.js';
+import { providerReplayContext } from './provider-replay-context.js';
+import {
+  providerReplayDebugPayloads,
+  type FetchImpl,
+} from './provider-utils.js';
 import { TestModelClient } from './test-model-client.js';
+
+export type ConfiguredModelClientOptions = ModelRequestTimeoutOptions & {
+  debugTrace?: RuntimeDebugTraceSink;
+};
 
 export class ConfiguredModelClient implements ModelClient {
   constructor(
     private readonly configStore: ConfigStore,
     private readonly fetchImpl: FetchImpl = globalThis.fetch,
     private readonly fallback: ModelClient = new TestModelClient(),
-    private readonly timeoutOptions: ModelRequestTimeoutOptions = {},
+    private readonly timeoutOptions: ConfiguredModelClientOptions = {},
   ) {}
 
   async *stream(request: ModelRequest) {
@@ -38,6 +53,7 @@ export class ConfiguredModelClient implements ModelClient {
       maxOutputTokens: request.maxOutputTokens ?? requestProvider.activeModel?.maxOutputTokens,
       ...thinkingRequestDefaults(requestProvider, { ...request, model: requestModel }),
     };
+    this.publishProviderReplayDebug(configuredRequest, requestProvider, requestModel);
     let emitted = false;
     try {
       for await (const event of this.streamConfiguredRequest(client, configuredRequest, request.signal)) {
@@ -76,6 +92,35 @@ export class ConfiguredModelClient implements ModelClient {
 
   private streamConfiguredRequest(client: ModelClient, request: ModelRequest, parentSignal?: AbortSignal) {
     return streamWithModelTimeout((signal) => client.stream({ ...request, signal }), parentSignal, this.timeoutOptions);
+  }
+
+  private publishProviderReplayDebug(
+    request: ModelRequest,
+    provider: RuntimeProviderConfig,
+    model: string,
+  ): void {
+    const snapshot = request.stepSnapshot;
+    if (
+      !snapshot
+      || !snapshot.featureKeys.includes(RUNTIME_DEVELOPER_FEATURES_FLAG)
+      || !this.timeoutOptions.debugTrace
+    ) return;
+    const replayContext = providerReplayContext(provider, model);
+    const spanId = `model-request:${snapshot.turnId}:${snapshot.threadLastSeq}`;
+    try {
+      for (const payload of providerReplayDebugPayloads(request.messages, replayContext)) {
+        appendRuntimeDebugTraceSafely(this.timeoutOptions.debugTrace, {
+          afterEventSeq: snapshot.threadLastSeq,
+          kind: 'provider.replay.decision',
+          payload,
+          spanId,
+          threadId: snapshot.threadId,
+          turnId: snapshot.turnId,
+        });
+      }
+    } catch {
+      // Provider replay diagnosis is debug-only and must not block a model request.
+    }
   }
 }
 

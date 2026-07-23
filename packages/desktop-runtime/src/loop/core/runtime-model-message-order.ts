@@ -1,9 +1,18 @@
-import type { RuntimeMessage, RuntimeToolCall } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeMessage,
+  RuntimeToolCall,
+  RuntimeToolCallWireRewrite,
+} from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 
 export const LEGACY_ORPHAN_TOOL_RESULT_OMITTED_WARNING = 'legacy_orphan_tool_result_omitted';
 
 export type RuntimeModelConversationNormalization = {
+  diagnostics: {
+    interruptedToolResultMessageIds: string[];
+    orphanToolResultMessageIds: string[];
+    wireToolCallRewrites: RuntimeToolCallWireRewrite[];
+  };
   messages: RuntimeMessage[];
   warnings: string[];
 };
@@ -29,8 +38,15 @@ export function normalizeModelConversationHistory(
 ): RuntimeModelConversationNormalization {
   const compatible = normalizeToolTransactionsForModel(messages);
   assertModelHistoryInvariants(compatible.messages);
+  const orderedMessages = normalizeConversationOrder(compatible.messages);
   return {
-    messages: normalizeConversationOrder(compatible.messages),
+    diagnostics: {
+      ...compatible.diagnostics,
+      interruptedToolResultMessageIds: orderedMessages
+        .filter((message) => message.id.startsWith('model_recovery_'))
+        .map((message) => message.id),
+    },
+    messages: orderedMessages,
     warnings: compatible.warnings,
   };
 }
@@ -94,17 +110,22 @@ function normalizeToolTransactionsForModel(
   const warnings = new Set<string>();
   const usedWireIds = new Set<string>();
   let activeCalls = new Map<string, string>();
+  let activeRewrites = new Map<string, RuntimeToolCallWireRewrite>();
+  const orphanToolResultMessageIds: string[] = [];
+  const wireToolCallRewrites: RuntimeToolCallWireRewrite[] = [];
 
   for (const message of messages) {
     if (message.visibility === 'transcript') {
       // A hidden assistant is still a transaction boundary. Clearing here prevents an orphan
       // result from being attached to an older visible call that happened to reuse the same ID.
       if (message.role === 'assistant') activeCalls = new Map();
+      if (message.role === 'assistant') activeRewrites = new Map();
       output.push(message);
       continue;
     }
     if (message.role === 'assistant') {
       activeCalls = new Map();
+      activeRewrites = new Map();
       const calls = message.toolCalls ?? [];
       const transactionIds = new Set<string>();
       let rewritten = false;
@@ -120,6 +141,18 @@ function normalizeToolTransactionsForModel(
         usedWireIds.add(wireId);
         activeCalls.set(call.id, wireId);
         rewritten ||= wireId !== call.id;
+        if (wireId !== call.id) {
+          const rewrite: RuntimeToolCallWireRewrite = {
+            assistantMessageId: message.id,
+            callIndex,
+            providerMetadataRemoved: Boolean(message.providerMetadata),
+            semanticCallId: call.id,
+            toolResultMessageIds: [],
+            wireCallId: wireId,
+          };
+          activeRewrites.set(call.id, rewrite);
+          wireToolCallRewrites.push(rewrite);
+        }
         return wireId === call.id ? call : { ...call, id: wireId };
       });
       if (!rewritten) {
@@ -137,6 +170,7 @@ function normalizeToolTransactionsForModel(
       // A compaction summary starts a replacement model window. Tool results after it cannot be
       // paired with calls that only survived on the archived side of the old boundary.
       if (message.contextCompaction) activeCalls = new Map();
+      if (message.contextCompaction) activeRewrites = new Map();
       output.push(message);
       continue;
     }
@@ -146,15 +180,25 @@ function normalizeToolTransactionsForModel(
       : undefined;
     if (!wireId) {
       output.push({ ...message, visibility: 'transcript' });
+      orphanToolResultMessageIds.push(message.id);
       warnings.add(LEGACY_ORPHAN_TOOL_RESULT_OMITTED_WARNING);
       continue;
     }
+    activeRewrites.get(message.toolCallId ?? '')?.toolResultMessageIds.push(message.id);
     output.push(wireId === message.toolCallId
       ? message
       : { ...message, toolCallId: wireId });
   }
 
-  return { messages: output, warnings: [...warnings] };
+  return {
+    diagnostics: {
+      interruptedToolResultMessageIds: [],
+      orphanToolResultMessageIds,
+      wireToolCallRewrites,
+    },
+    messages: output,
+    warnings: [...warnings],
+  };
 }
 
 function uniqueWireToolCallId(

@@ -1,22 +1,25 @@
-import type {
-  AnswerRuntimeApprovalInput,
-  DesktopRuntimeClient,
-  RuntimeCollaborationMode,
-  RuntimeConfigState,
-  RuntimePlanDecision,
-  RuntimePluginSummary,
-  RuntimeSkillSummary,
-  RuntimeThread,
-  RuntimeThreadMemoryMode,
-  RuntimeThreadSummary,
-  RuntimeUsageResponse,
-  WorkspaceEntry,
-  WorkspaceEntrySearchItem,
-  WorkspaceEntrySearchResponse,
-  WorkspaceFileRead,
-  WorkspaceProject,
+import {
+  runtimeDeveloperFeaturesEnabled,
+  type AnswerRuntimeApprovalInput,
+  type DesktopRuntimeClient,
+  type RuntimeCollaborationMode,
+  type RuntimeConfigState,
+  type RuntimePlanDecision,
+  type RuntimePluginSummary,
+  type RuntimeSkillSummary,
+  type RuntimeThread,
+  type RuntimeThreadMemoryMode,
+  type RuntimeThreadSummary,
+  type RuntimeUsageResponse,
+  type WorkspaceEntry,
+  type WorkspaceEntrySearchItem,
+  type WorkspaceEntrySearchResponse,
+  type WorkspaceFileRead,
+  type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import {
+  lazy,
+  Suspense,
   useCallback,
   useMemo,
   useRef,
@@ -53,6 +56,11 @@ import type {
   ChatWorkspaceMentionRequest,
   ConversationOverviewVisibility,
 } from '../types.js';
+
+const ConversationDebugPanel = lazy(async () => {
+  const module = await import('../../features/conversation-debug/ConversationDebugPanel.js');
+  return { default: module.ConversationDebugPanel };
+});
 
 type AnswerApprovalHandler = (approvalId: string, input: AnswerRuntimeApprovalInput) => void | Promise<void>;
 type BrowserPanelMetadataHandler = (
@@ -117,6 +125,7 @@ export function AppChatSurface({
   onOpenBottomReviewPanel,
   onOpenBottomTerminalPanel,
   onOpenBrowser,
+  onOpenConversationDebug,
   onOpenMarkdownWebLink,
   onOpenFilesPanel,
   onOpenThread,
@@ -202,6 +211,7 @@ export function AppChatSurface({
   onOpenBottomReviewPanel: () => void;
   onOpenBottomTerminalPanel: () => void;
   onOpenBrowser: (url?: string) => void;
+  onOpenConversationDebug: () => void;
   onOpenMarkdownWebLink: (url: string) => void;
   onOpenFilesPanel: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
@@ -364,38 +374,55 @@ export function AppChatSurface({
         />
       ))}
       {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'browser' && sideActivePanel.type !== 'chat' ? (
-        <WorkspacePanel
-          activePanel={sideActivePanel}
-          activeProject={activeWorkspace}
-          filePreview={filePreview}
-          reviewError={reviewError}
-          reviewFocusRequest={reviewFocusRequest}
-          latestReviewSummary={latestReviewSummary}
-          reviewLoading={reviewLoading}
-          reviewState={reviewState}
-          selectedWorkspaceApp={selectedWorkspaceApp}
-          workspaceApps={workspaceApps}
-          terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
-          onAddFileToConversation={requestWorkspaceMention}
-          onCopyFilePath={onCopyFilePath}
-          onExternalOpenFile={onExternalOpenFile}
-          onOpenFileWithApp={onOpenFileWithApp}
-          onSearchProjectEntries={onSearchProjectEntries}
-          onOpenEntry={onOpenEntry}
-          onOpenProjectFile={onOpenProjectFile}
-          onOpenFilesPanel={onOpenFilesPanel}
-          onOpenBrowser={onOpenBrowser}
-          onOpenReviewPanel={onOpenFileReviewPanel}
-          onOpenSideChat={onOpenSideChat}
-          onOpenTerminalPanel={onOpenSideTerminalPanel}
-          onReviewRefresh={onReviewRefresh}
-          onRevealFile={onRevealFile}
-          onResizeStep={onWorkspaceResizeStep}
-          onResizeStart={onWorkspaceResizeStart}
-          resizeMax={workspaceMaxWidth}
-          resizeMin={workspaceMinWidth}
-          resizeValue={workspaceWidth}
-        />
+        sideActivePanel.type === 'conversation-debug' ? (
+          runtimeDeveloperFeaturesEnabled(config) ? (
+            <Suspense fallback={null}>
+              <ConversationDebugPanel
+                client={runtimeClient}
+                thread={currentThread}
+                onResizeStep={onWorkspaceResizeStep}
+                onResizeStart={onWorkspaceResizeStart}
+                resizeMax={workspaceMaxWidth}
+                resizeMin={workspaceMinWidth}
+                resizeValue={workspaceWidth}
+              />
+            </Suspense>
+          ) : null
+        ) : (
+          <WorkspacePanel
+            activePanel={sideActivePanel}
+            activeProject={activeWorkspace}
+            filePreview={filePreview}
+            reviewError={reviewError}
+            reviewFocusRequest={reviewFocusRequest}
+            latestReviewSummary={latestReviewSummary}
+            reviewLoading={reviewLoading}
+            reviewState={reviewState}
+            selectedWorkspaceApp={selectedWorkspaceApp}
+            workspaceApps={workspaceApps}
+            terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
+            onAddFileToConversation={requestWorkspaceMention}
+            onCopyFilePath={onCopyFilePath}
+            onExternalOpenFile={onExternalOpenFile}
+            onOpenFileWithApp={onOpenFileWithApp}
+            onSearchProjectEntries={onSearchProjectEntries}
+            onOpenEntry={onOpenEntry}
+            onOpenProjectFile={onOpenProjectFile}
+            onOpenFilesPanel={onOpenFilesPanel}
+            onOpenBrowser={onOpenBrowser}
+            onOpenConversationDebug={runtimeDeveloperFeaturesEnabled(config) ? onOpenConversationDebug : undefined}
+            onOpenReviewPanel={onOpenFileReviewPanel}
+            onOpenSideChat={onOpenSideChat}
+            onOpenTerminalPanel={onOpenSideTerminalPanel}
+            onReviewRefresh={onReviewRefresh}
+            onRevealFile={onRevealFile}
+            onResizeStep={onWorkspaceResizeStep}
+            onResizeStart={onWorkspaceResizeStart}
+            resizeMax={workspaceMaxWidth}
+            resizeMin={workspaceMinWidth}
+            resizeValue={workspaceWidth}
+          />
+        )
       ) : null}
       {bottomPanelVisible && bottomActivePanel ? (
         <BottomToolsPanel

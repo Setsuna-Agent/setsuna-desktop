@@ -1,10 +1,12 @@
-import type {
-  ModelRequest,
-  RuntimeConfigState,
-  RuntimeMessage,
-  RuntimeModelRequestStepSnapshot,
-  RuntimeThread,
-  RuntimeToolDefinition,
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  runtimeDeveloperFeaturesEnabled,
+  type ModelRequest,
+  type RuntimeConfigState,
+  type RuntimeMessage,
+  type RuntimeModelRequestStepSnapshot,
+  type RuntimeThread,
+  type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
@@ -14,6 +16,10 @@ import type { McpStore } from '../../ports/mcp-store.js';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
+import {
+  appendRuntimeDebugTraceSafely,
+  type RuntimeDebugTraceSink,
+} from '../../ports/runtime-debug-trace.js';
 import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext, ToolHost } from '../../ports/tool-host.js';
@@ -42,6 +48,7 @@ const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
 export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
+  developerFeaturesEnabled: boolean;
   messages: RuntimeMessage[];
   modelHistoryWarnings?: string[];
   runtimeConfig: RuntimeConfigState | null | undefined;
@@ -58,6 +65,7 @@ type RuntimeSamplingContextBuilderOptions = {
   clock: Clock;
   configStore?: ConfigStore;
   contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
+  debugTrace?: RuntimeDebugTraceSink;
   environmentResolver: RuntimeEnvironmentResolver;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
@@ -117,12 +125,32 @@ export class RuntimeSamplingContextBuilder {
     const orderedConversationMessages = normalizedConversation.messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
+    const developerFeaturesEnabled = runtimeDeveloperFeaturesEnabled(stepRuntimeConfig);
+    const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
+    if (developerFeaturesEnabled) {
+      appendRuntimeDebugTraceSafely(this.options.debugTrace, {
+        afterEventSeq: snapshotThread?.lastSeq ?? thread.lastSeq,
+        kind: 'model.history.normalized',
+        payload: {
+          inputMessageCount: conversationMessages.length,
+          interruptedToolResultMessageIds:
+            normalizedConversation.diagnostics.interruptedToolResultMessageIds,
+          orphanToolResultMessageIds:
+            normalizedConversation.diagnostics.orphanToolResultMessageIds,
+          outputMessageCount: orderedConversationMessages.length,
+          warnings: normalizedConversation.warnings,
+          wireToolCallRewrites: normalizedConversation.diagnostics.wireToolCallRewrites,
+        },
+        spanId: `model-history:${turnId}:${conversationMessages.at(-1)?.id ?? 'empty'}`,
+        threadId,
+        turnId,
+      });
+    }
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
       threadId,
       threadCreatedAt: thread.createdAt,
     });
-    const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
     const attachmentContext = await buildRuntimeAttachmentContext({
       attachmentStore: this.options.attachmentStore,
       messages: [...(snapshotThread?.messages ?? thread.messages), ...orderedConversationMessages],
@@ -151,7 +179,7 @@ export class RuntimeSamplingContextBuilder {
       },
       permissionProfile: stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite,
-      features: stepRuntimeConfig?.features ?? {},
+      features: runtimeToolFeatureFlags(stepRuntimeConfig?.features),
       signal,
     };
     const dynamicTools = this.options.toolExecutor.dynamicToolsForThread(threadId);
@@ -236,7 +264,9 @@ export class RuntimeSamplingContextBuilder {
         budget: contextCompactionBudgetForConfig(stepRuntimeConfig),
       }),
       promptManifest: compiledPrompt.manifest,
-      featureKeys: Object.keys(toolContext.features ?? {}).sort(),
+      featureKeys: Object.keys(toolContext.features ?? {})
+        .filter((key) => key !== RUNTIME_DEVELOPER_FEATURES_FLAG)
+        .sort(),
       worldState: {
         ...(stepRuntimeConfig?.activeProviderId ? { activeProviderId: stepRuntimeConfig.activeProviderId } : {}),
         ...(stepRuntimeConfig?.configPath ? { configPath: stepRuntimeConfig.configPath } : {}),
@@ -249,6 +279,7 @@ export class RuntimeSamplingContextBuilder {
     };
     return {
       conversationMessages: compactedConversationMessages,
+      developerFeaturesEnabled,
       messages,
       ...(normalizedConversation.warnings.length
         ? { modelHistoryWarnings: normalizedConversation.warnings }
@@ -271,6 +302,15 @@ export class RuntimeSamplingContextBuilder {
       .filter(Boolean)
       .sort();
   }
+}
+
+function runtimeToolFeatureFlags(
+  features: Record<string, boolean> | undefined,
+): Record<string, boolean> {
+  return Object.fromEntries(
+    Object.entries(features ?? {})
+      .filter(([key]) => key !== RUNTIME_DEVELOPER_FEATURES_FLAG),
+  );
 }
 
 function currentTurnSkillActivationText(messages: RuntimeMessage[], turnId: string): string {

@@ -4,6 +4,7 @@ import {
   WORKSPACE_OVERVIEW_PANEL_ID,
   addPanelToSlotState,
   createBrowserPanel,
+  createConversationDebugPanel,
   createDefaultSidePanelSlot,
   createFilePanel,
   createFilesPanel,
@@ -58,6 +59,17 @@ describe('desktop workspace panel model', () => {
 
     expect(withBrowsers.active).toBe(second.id);
     expect(withBrowsers.panels).toEqual([first, second]);
+  });
+
+  it('keeps the conversation debug panel as a singleton', () => {
+    const debugPanel = createConversationDebugPanel();
+    const withDebug = addPanelToSlotState(
+      addPanelToSlotState(createDefaultSidePanelSlot(), debugPanel),
+      createConversationDebugPanel(),
+    );
+
+    expect(withDebug.active).toBe(debugPanel.id);
+    expect(withDebug.panels).toEqual([debugPanel]);
   });
 
   it('falls back to the default browser URL for non-string click payloads', () => {

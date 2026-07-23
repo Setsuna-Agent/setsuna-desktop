@@ -29,6 +29,7 @@ import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
+  runtimeDeveloperFeaturesEnabled,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
@@ -526,6 +527,23 @@ export async function handleRuntimeRestRequest(
       memoryMode: input.memoryMode ?? newThreadMemoryMode(config),
     });
     sendJson(response, 201, thread);
+    return true;
+  }
+
+  const debugTracesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/debug-traces$/u);
+  if (debugTracesMatch && request.method === 'GET') {
+    const config = await runtime.configStore.getConfig().catch(() => null);
+    if (!runtimeDeveloperFeaturesEnabled(config)) {
+      sendJson(response, 404, { error: 'Developer features are disabled.' });
+      return true;
+    }
+    const threadId = decodeRuntimeId(debugTracesMatch[1], 'Thread id');
+    if (!await runtime.threadStore.getThread(threadId)) {
+      sendJson(response, 404, { error: 'Thread not found' });
+      return true;
+    }
+    const afterSeq = Math.max(0, Math.floor(optionalNumber(url.searchParams.get('afterSeq')) ?? 0));
+    sendJson(response, 200, runtime.debugTraceStore.list(threadId, afterSeq));
     return true;
   }
 

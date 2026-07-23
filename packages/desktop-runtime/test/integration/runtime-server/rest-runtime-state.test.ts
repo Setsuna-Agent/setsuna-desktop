@@ -1,4 +1,7 @@
-import type { RuntimeThread } from '@setsuna-desktop/contracts';
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  type RuntimeThread,
+} from '@setsuna-desktop/contracts';
 import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -87,6 +90,52 @@ describe('runtime server REST runtime state', () => {
       const approvals = await harness.runtimeFetch('/v1/approvals');
   
       expect(approvals).toEqual({ approvals: [] });
+    });
+
+  it('gates incremental in-memory debug traces behind developer features', async () => {
+      const thread = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Debug trace thread' }),
+      });
+      const debugPath = `/v1/threads/${encodeURIComponent(thread.id)}/debug-traces`;
+      const disabledResponse = await fetch(`${harness.baseUrl}${debugPath}`, {
+        headers: { Authorization: `Bearer ${harness.token}` },
+      });
+
+      expect(disabledResponse.status).toBe(404);
+
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
+        }),
+      });
+      await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+        method: 'POST',
+        body: JSON.stringify({ input: 'Produce a debug trace.' }),
+      });
+      const completedThread = await harness.waitForThread(
+        thread.id,
+        (current) => current.messages.some(
+          (message) => message.role === 'assistant' && message.status === 'complete',
+        ),
+      );
+      expect(completedThread.turns?.flatMap((turn) => (
+        turn.stepSnapshots?.flatMap((step) => step.snapshot.featureKeys) ?? []
+      ))).not.toContain(RUNTIME_DEVELOPER_FEATURES_FLAG);
+
+      const firstPage = await harness.runtimeFetch(debugPath);
+      expect(firstPage.traces).toContainEqual(expect.objectContaining({
+        kind: 'model.history.normalized',
+        threadId: thread.id,
+        payload: expect.objectContaining({
+          inputMessageCount: expect.any(Number),
+          outputMessageCount: expect.any(Number),
+        }),
+      }));
+      const lastSeq = firstPage.traces.at(-1)?.seq ?? 0;
+      const nextPage = await harness.runtimeFetch(`${debugPath}?afterSeq=${lastSeq}`);
+      expect(nextPage).toMatchObject({ traces: [], nextSeq: lastSeq + 1 });
     });
   
   it('starts turns with ids and accepts cancellation requests', async () => {

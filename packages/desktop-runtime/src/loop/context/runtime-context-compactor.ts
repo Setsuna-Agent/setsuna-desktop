@@ -1,8 +1,11 @@
 import {
   RUNTIME_PROVIDER_METADATA_MAX_BYTES,
+  runtimeDeveloperFeaturesEnabled,
   runtimeJsonByteLength,
   sanitizeRuntimeJsonObject,
+  type RuntimeCompactionDebugPayload,
   type RuntimeConfigState,
+  type RuntimeEvent,
   type RuntimeMessage,
   type RuntimeMessageProviderMetadata,
   type RuntimeModelRequestStepSnapshot,
@@ -15,6 +18,10 @@ import type { RuntimeCompactHookTrigger } from '../../hooks/runtime-hooks.js';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
+import {
+  appendRuntimeDebugTraceSafely,
+  type RuntimeDebugTraceSink,
+} from '../../ports/runtime-debug-trace.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
@@ -56,10 +63,14 @@ type NativeContextCompactionArtifact = {
 
 type RuntimeContextCompactorOptions = {
   clock: Clock;
+  debugTrace?: RuntimeDebugTraceSink;
   ids: IdGenerator;
   modelClient: ModelClient;
   usageStore?: UsageStore;
-  appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
+  appendEvent(
+    threadId: string,
+    event: Parameters<ThreadStore['appendEvent']>[1],
+  ): Promise<RuntimeEvent | null | void>;
   onCompacted(threadId: string): void;
   runCompactHooks(input: {
     eventName: 'PreCompact' | 'PostCompact';
@@ -69,6 +80,13 @@ type RuntimeContextCompactorOptions = {
     trigger: RuntimeCompactHookTrigger;
     turnId: string;
   }): Promise<{ shouldStop?: boolean; stopReason?: string }>;
+};
+
+type RuntimeCompactionDebugContext = {
+  afterEventSeq: number;
+  spanId: string;
+  threadId: string;
+  turnId: string;
 };
 
 /** 管理上下文窗口策略、摘要生成及压缩事件投影。 */
@@ -90,8 +108,22 @@ export class RuntimeContextCompactor {
       turnId,
     });
     if (preCompact.shouldStop) throw new HookStoppedTurnError(preCompact.stopReason || 'PreCompact hook stopped execution');
-    await this.publishContextCompacting(threadId, turnId, force, messages, budget);
-    const summary = await this.generateContextCompactionSummary(candidate, signal);
+    const compactingEvent = await this.publishContextCompacting(
+      threadId,
+      turnId,
+      force,
+      messages,
+      budget,
+    );
+    const debugContext = runtimeDeveloperFeaturesEnabled(runtimeConfig)
+      ? {
+          afterEventSeq: committedEventSeq(compactingEvent, thread.lastSeq),
+          spanId: `context-compaction:${turnId}:${candidate.olderMessages.length}:${candidate.recentMessages.length}`,
+          threadId,
+          turnId,
+        }
+      : undefined;
+    const summary = await this.generateContextCompactionSummary(candidate, signal, debugContext);
     const result = materializeRuntimeContextCompaction({
       candidate,
       createdAt: this.options.clock.now().toISOString(),
@@ -101,8 +133,13 @@ export class RuntimeContextCompactor {
       summary: summary.text,
       turnId,
     });
-    await this.publishProviderMetadataWarning(threadId, turnId, summary.omittedProviderMetadata);
-    await this.options.appendEvent(threadId, {
+    const metadataWarningEvent = await this.publishProviderMetadataWarning(
+      threadId,
+      turnId,
+      summary.omittedProviderMetadata,
+    );
+    advanceDebugAnchor(debugContext, metadataWarningEvent);
+    const compactedEvent = await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
@@ -110,8 +147,18 @@ export class RuntimeContextCompactor {
       createdAt: this.options.clock.now().toISOString(),
       payload: result,
     });
-    await this.publishContextCompactionUsage(threadId, turnId, summary.usage);
+    advanceDebugAnchor(debugContext, compactedEvent);
+    const usageEvent = await this.publishContextCompactionUsage(threadId, turnId, summary.usage);
+    advanceDebugAnchor(debugContext, usageEvent);
     this.options.onCompacted(threadId);
+    this.traceCompaction(debugContext, 'context.compaction.completed', {
+      metadataPersisted: Boolean(summary.providerMetadata),
+      olderMessageCount: candidate.olderMessages.length,
+      outcome: 'success',
+      recentMessageCount: candidate.recentMessages.length,
+      source: summary.source,
+      summaryCharacters: summary.text.length,
+    });
     const postCompact = await this.options.runCompactHooks({
       eventName: 'PostCompact',
       runtimeConfig,
@@ -133,9 +180,14 @@ export class RuntimeContextCompactor {
   async generateContextCompactionSummary(
     candidate: RuntimeContextCompactionCandidate,
     signal?: AbortSignal,
+    debugContext?: RuntimeCompactionDebugContext,
   ): Promise<GeneratedContextCompactionSummary> {
-    const portableSummary = await this.generatePortableContextCompactionSummary(candidate, signal);
-    const nativeArtifact = await this.generateNativeContextCompaction(candidate, signal);
+    const portableSummary = await this.generatePortableContextCompactionSummary(
+      candidate,
+      signal,
+      debugContext,
+    );
+    const nativeArtifact = await this.generateNativeContextCompaction(candidate, signal, debugContext);
     const usage = addRuntimeUsage(portableSummary.usage, nativeArtifact.usage);
     return {
       source: nativeArtifact.providerMetadata ? 'remote' : 'local',
@@ -153,7 +205,13 @@ export class RuntimeContextCompactor {
   private async generatePortableContextCompactionSummary(
     candidate: RuntimeContextCompactionCandidate,
     signal?: AbortSignal,
+    debugContext?: RuntimeCompactionDebugContext,
   ): Promise<{ text: string; usage?: RuntimeUsage }> {
+    this.traceCompaction(debugContext, 'context.compaction.portable', {
+      olderMessageCount: candidate.olderMessages.length,
+      outcome: 'started',
+      recentMessageCount: candidate.recentMessages.length,
+    });
     try {
       const output = createModelStreamTextCollector();
       let usage: RuntimeUsage | undefined;
@@ -171,15 +229,61 @@ export class RuntimeContextCompactor {
         if (item.type === 'usage' || item.type === 'token_count') usage = item.usage;
       }
       const parsed = compactedSummaryFromModelText(output.text());
-      if (parsed) return { text: parsed, ...(usage ? { usage } : {}) };
+      if (parsed) {
+        this.traceCompaction(debugContext, 'context.compaction.portable', {
+          olderMessageCount: candidate.olderMessages.length,
+          outcome: 'success',
+          recentMessageCount: candidate.recentMessages.length,
+          summaryCharacters: parsed.length,
+        });
+        return { text: parsed, ...(usage ? { usage } : {}) };
+      }
       const fallback = fallbackContextCompactionSummary(candidate);
-      if (fallback) return { text: fallback, ...(usage ? { usage } : {}) };
+      if (fallback) {
+        this.traceCompaction(debugContext, 'context.compaction.portable', {
+          error: 'Model returned no usable summary.',
+          olderMessageCount: candidate.olderMessages.length,
+          outcome: 'fallback',
+          recentMessageCount: candidate.recentMessages.length,
+          summaryCharacters: fallback.length,
+        });
+        return { text: fallback, ...(usage ? { usage } : {}) };
+      }
     } catch (error) {
-      if (signal?.aborted) throw error;
+      if (signal?.aborted) {
+        this.traceCompaction(debugContext, 'context.compaction.portable', {
+          error: compactionDebugError(error),
+          olderMessageCount: candidate.olderMessages.length,
+          outcome: 'error',
+          recentMessageCount: candidate.recentMessages.length,
+        });
+        throw error;
+      }
       const fallback = fallbackContextCompactionSummary(candidate);
-      if (fallback) return { text: fallback };
+      if (fallback) {
+        this.traceCompaction(debugContext, 'context.compaction.portable', {
+          error: compactionDebugError(error),
+          olderMessageCount: candidate.olderMessages.length,
+          outcome: 'fallback',
+          recentMessageCount: candidate.recentMessages.length,
+          summaryCharacters: fallback.length,
+        });
+        return { text: fallback };
+      }
+      this.traceCompaction(debugContext, 'context.compaction.portable', {
+        error: compactionDebugError(error),
+        olderMessageCount: candidate.olderMessages.length,
+        outcome: 'error',
+        recentMessageCount: candidate.recentMessages.length,
+      });
       throw new Error(`Context compaction model request failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+    this.traceCompaction(debugContext, 'context.compaction.portable', {
+      error: 'Model and fallback returned an empty summary.',
+      olderMessageCount: candidate.olderMessages.length,
+      outcome: 'error',
+      recentMessageCount: candidate.recentMessages.length,
+    });
     throw new Error('Context compaction model returned an empty summary.');
   }
 
@@ -193,8 +297,21 @@ export class RuntimeContextCompactor {
   private async generateNativeContextCompaction(
     candidate: RuntimeContextCompactionCandidate,
     signal?: AbortSignal,
+    debugContext?: RuntimeCompactionDebugContext,
   ): Promise<NativeContextCompactionArtifact> {
-    if (!this.options.modelClient.compactConversation) return {};
+    if (!this.options.modelClient.compactConversation) {
+      this.traceCompaction(debugContext, 'context.compaction.native', {
+        olderMessageCount: candidate.olderMessages.length,
+        outcome: 'unsupported',
+        recentMessageCount: candidate.recentMessages.length,
+      });
+      return {};
+    }
+    this.traceCompaction(debugContext, 'context.compaction.native', {
+      olderMessageCount: candidate.olderMessages.length,
+      outcome: 'started',
+      recentMessageCount: candidate.recentMessages.length,
+    });
     try {
       const result = await this.options.modelClient.compactConversation({
         model: 'context-compaction',
@@ -204,23 +321,63 @@ export class RuntimeContextCompactor {
       });
       throwIfAborted(signal);
       if (result.kind !== 'native') {
+        this.traceCompaction(debugContext, 'context.compaction.native', {
+          olderMessageCount: candidate.olderMessages.length,
+          outcome: 'fallback',
+          recentMessageCount: candidate.recentMessages.length,
+        });
         return result.usage ? { usage: result.usage } : {};
       }
       const metadataFits = providerMetadataFitsPersistenceLimit(result.providerMetadata);
+      this.traceCompaction(debugContext, 'context.compaction.native', {
+        metadataPersisted: metadataFits,
+        olderMessageCount: candidate.olderMessages.length,
+        outcome: 'success',
+        recentMessageCount: candidate.recentMessages.length,
+      });
       return {
         ...(result.usage ? { usage: result.usage } : {}),
         ...(metadataFits ? { providerMetadata: result.providerMetadata } : {}),
         ...(!metadataFits ? { omittedProviderMetadata: result.providerMetadata } : {}),
       };
     } catch (error) {
+      this.traceCompaction(debugContext, 'context.compaction.native', {
+        error: compactionDebugError(error),
+        olderMessageCount: candidate.olderMessages.length,
+        outcome: 'error',
+        recentMessageCount: candidate.recentMessages.length,
+      });
       if (signal?.aborted) throw error;
       return {};
     }
   }
 
-  async publishContextCompactionUsage(threadId: string, turnId: string, usage: RuntimeUsage | undefined): Promise<void> {
+  private traceCompaction(
+    context: RuntimeCompactionDebugContext | undefined,
+    kind:
+      | 'context.compaction.completed'
+      | 'context.compaction.native'
+      | 'context.compaction.portable',
+    payload: RuntimeCompactionDebugPayload,
+  ): void {
+    if (!context) return;
+    appendRuntimeDebugTraceSafely(this.options.debugTrace, {
+      afterEventSeq: context.afterEventSeq,
+      kind,
+      payload,
+      spanId: context.spanId,
+      threadId: context.threadId,
+      turnId: context.turnId,
+    });
+  }
+
+  async publishContextCompactionUsage(
+    threadId: string,
+    turnId: string,
+    usage: RuntimeUsage | undefined,
+  ): Promise<RuntimeEvent | null | void> {
     if (!usage) return;
-    await this.options.appendEvent(threadId, {
+    const event = await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
@@ -234,15 +391,16 @@ export class RuntimeContextCompactor {
       createdAt: this.options.clock.now().toISOString(),
       ...usage,
     });
+    return event;
   }
 
   async publishProviderMetadataWarning(
     threadId: string,
     turnId: string,
     omittedMetadata: RuntimeMessageProviderMetadata | undefined,
-  ): Promise<void> {
+  ): Promise<RuntimeEvent | null | void> {
     if (!omittedMetadata) return;
-    await this.options.appendEvent(threadId, {
+    return this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
@@ -308,9 +466,15 @@ export class RuntimeContextCompactor {
    * @param force 是否为手动强制压缩。
    * @param messages 用于估算 token 使用量的消息列表。
    */
-  async publishContextCompacting(threadId: string, turnId: string | undefined, force: boolean, messages: RuntimeMessage[], budget?: RuntimeContextCompactionBudget): Promise<void> {
+  async publishContextCompacting(
+    threadId: string,
+    turnId: string | undefined,
+    force: boolean,
+    messages: RuntimeMessage[],
+    budget?: RuntimeContextCompactionBudget,
+  ): Promise<RuntimeEvent | null | void> {
     const usage = runtimeContextTokenUsageForMessages(messages, budget);
-    await this.options.appendEvent(threadId, {
+    return this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
@@ -326,6 +490,21 @@ export class RuntimeContextCompactor {
     });
   }
 
+}
+
+function committedEventSeq(
+  event: RuntimeEvent | null | void,
+  fallback: number,
+): number {
+  return event?.seq ?? fallback;
+}
+
+function advanceDebugAnchor(
+  context: RuntimeCompactionDebugContext | undefined,
+  event: RuntimeEvent | null | void,
+): void {
+  if (!context || !event) return;
+  context.afterEventSeq = Math.max(context.afterEventSeq, event.seq);
 }
 
 export class HookStoppedTurnError extends Error {
@@ -502,4 +681,14 @@ function throwIfAborted(signal?: AbortSignal): void {
   const error = new Error(typeof signal.reason === 'string' ? signal.reason : 'Turn cancelled.');
   error.name = 'AbortError';
   throw error;
+}
+
+function compactionDebugError(error: unknown): string {
+  const name = error instanceof Error ? error.name || 'Error' : 'Error';
+  const message = error instanceof Error ? error.message : String(error);
+  const redacted = message
+    .replace(/\bBearer\s+\S+/giu, 'Bearer [redacted]')
+    .replace(/\bsk-[a-z0-9_-]+\b/giu, '[redacted api key]')
+    .replace(/([?&](?:api[_-]?key|token)=)[^&\s]+/giu, '$1[redacted]');
+  return `${name}: ${compactForPrompt(redacted, 240)}`;
 }

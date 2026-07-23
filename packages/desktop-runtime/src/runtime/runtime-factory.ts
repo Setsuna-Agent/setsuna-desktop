@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { HttpBrowserControlClient } from '../adapters/browser/http-browser-control-client.js';
+import { InMemoryRuntimeDebugTraceStore } from '../adapters/debug/in-memory-runtime-debug-trace-store.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
@@ -67,6 +68,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const clock = systemClock;
   const ids = new RandomIdGenerator();
   const eventBus = new InMemoryEventBus();
+  const debugTraceStore = new InMemoryRuntimeDebugTraceStore(clock, ids);
   const appServerNotificationBus = new InMemoryAppServerNotificationBus();
   const approvalGate = new InMemoryApprovalGate(clock, ids);
   // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
@@ -130,7 +132,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new MemoryToolHost(memoryStore, configStore),
   ]);
   const modelClient = new ImageAssetResolvingModelClient(
-    new ConfiguredModelClient(configStore),
+    new ConfiguredModelClient(configStore, globalThis.fetch, undefined, { debugTrace: debugTraceStore }),
     generatedImageStore,
   );
   const agentLoop = new AgentLoop({
@@ -145,6 +147,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     approvalGate,
     appServerNotificationBus,
     configStore,
+    debugTrace: debugTraceStore,
     skillRegistry,
     toolHost,
     usageStore,
@@ -163,6 +166,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     appServerNotificationBus,
     backgroundShellProcesses,
     configStore,
+    debugTraceStore,
     eventBus,
     eventWriter,
     environmentResolver,

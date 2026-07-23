@@ -1,11 +1,12 @@
-import type {
-  ModelRequest,
-  RuntimeMemoryCitation,
-  RuntimeMessage,
-  RuntimeModelRequestStepSnapshot,
-  RuntimeToolCall,
-  RuntimeToolDefinition,
-  RuntimeUsage,
+import {
+  RUNTIME_DEVELOPER_FEATURES_FLAG,
+  type ModelRequest,
+  type RuntimeMemoryCitation,
+  type RuntimeMessage,
+  type RuntimeModelRequestStepSnapshot,
+  type RuntimeToolCall,
+  type RuntimeToolDefinition,
+  type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -25,6 +26,7 @@ import { mergeRuntimeProviderMetadata } from './runtime-provider-metadata.js';
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
 export type RuntimeSamplingModelContext = {
+  developerFeaturesEnabled: boolean;
   messages: RuntimeMessage[];
   snapshot: RuntimeModelRequestStepSnapshot;
   toolChoice: ModelRequest['toolChoice'];
@@ -99,14 +101,29 @@ export class RuntimeModelSampler {
     const requestToolChoice = planOnly ? 'none' : step.toolChoice;
     const requestTools = planOnly ? undefined : toolsForModelRequest(step.tools, requestToolChoice);
     const requestSnapshot = planOnly ? noToolStepSnapshot(step.snapshot) : step.snapshot;
-    await this.options.streamEvents.publishSamplingStepSnapshot(threadId, turnId, requestSnapshot);
+    const samplingStepEvent = await this.options.streamEvents.publishSamplingStepSnapshot(
+      threadId,
+      turnId,
+      requestSnapshot,
+    );
+    const modelRequestSnapshot = step.developerFeaturesEnabled
+      ? {
+          ...requestSnapshot,
+          // Debug traces use the committed step event as their cross-stream order anchor.
+          threadLastSeq: samplingStepEvent?.seq ?? requestSnapshot.threadLastSeq,
+          featureKeys: [...new Set([
+            ...requestSnapshot.featureKeys,
+            RUNTIME_DEVELOPER_FEATURES_FLAG,
+          ])].sort(),
+        }
+      : requestSnapshot;
 
     for await (const item of this.options.modelClient.stream({
       model: 'local-runtime-smoke',
       messages: modelRequestMessages(step.messages),
       tools: requestTools,
       toolChoice: requestToolChoice,
-      stepSnapshot: requestSnapshot,
+      stepSnapshot: modelRequestSnapshot,
       ...thinkingOptions,
       signal,
     })) {
