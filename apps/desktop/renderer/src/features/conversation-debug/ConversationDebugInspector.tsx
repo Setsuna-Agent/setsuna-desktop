@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import {
+  conversationDebugLaneLabel,
   conversationDebugNodeTitle,
   conversationDebugStatusLabel,
 } from './conversationDebugCopy.js';
@@ -30,6 +31,8 @@ export function ConversationDebugInspector({
   onSelectRecord: (record: ConversationDebugRecord) => void;
 }) {
   const { locale, t } = useI18n();
+  const title = conversationDebugNodeTitle(node, t);
+  const statusLabel = conversationDebugStatusLabel(node.status, t);
   const records = useMemo(
     () => sortConversationDebugRecords([...node.events, ...node.traces]),
     [node.events, node.traces],
@@ -43,14 +46,25 @@ export function ConversationDebugInspector({
   );
 
   return (
-    <aside className="conversation-debug-inspector" aria-label={conversationDebugNodeTitle(node, t)}>
+    <aside
+      className={`conversation-debug-inspector conversation-debug-inspector--${node.lane}`}
+      aria-label={title}
+    >
       <header className="conversation-debug-inspector__header">
-        <span>
-          <strong>{conversationDebugNodeTitle(node, t)}</strong>
-          <small className={`conversation-debug-inspector__status conversation-debug-inspector__status--${node.status}`}>
-            {conversationDebugStatusLabel(node.status, t)}
-          </small>
-        </span>
+        <div className="conversation-debug-inspector__heading">
+          <div className="conversation-debug-inspector__badges">
+            <span className="conversation-debug-inspector__lane">
+              <i aria-hidden="true" />
+              {conversationDebugLaneLabel(node.lane, t)}
+            </span>
+            <small className={`conversation-debug-inspector__status conversation-debug-inspector__status--${node.status}`}>
+              <i aria-hidden="true" />
+              {statusLabel}
+            </small>
+          </div>
+          <h2>{title}</h2>
+          {node.summary ? <p title={node.summary}>{node.summary}</p> : null}
+        </div>
         <IconButton
           className="conversation-debug-inspector__close"
           label={t('conversationDebug.inspector.close')}
@@ -87,7 +101,9 @@ export function ConversationDebugInspector({
       </dl>
 
       <div className="conversation-debug-inspector__events">
-        <strong>{t('conversationDebug.recordsInNode', { count: records.length })}</strong>
+        <header>
+          <strong>{t('conversationDebug.recordsInNode', { count: records.length })}</strong>
+        </header>
         <div role="tablist" aria-label={t('conversationDebug.recordsInNode', { count: records.length })}>
           {records.map((record) => (
             <button
@@ -106,10 +122,17 @@ export function ConversationDebugInspector({
       </div>
 
       <div className="conversation-debug-inspector__payload">
-        <span>
-          <strong>{t('conversationDebug.inspector.payload')}</strong>
-          <small>{t('conversationDebug.inspector.redactionNotice')}</small>
-        </span>
+        <header>
+          <span>
+            <strong>{t('conversationDebug.inspector.payload')}</strong>
+            <small>{t('conversationDebug.inspector.redactionNotice')}</small>
+          </span>
+          {selectedRecord ? (
+            <code title={conversationDebugRecordKind(selectedRecord)}>
+              {conversationDebugRecordSequenceLabel(selectedRecord)}
+            </code>
+          ) : null}
+        </header>
         <pre>{serializedRecord}</pre>
       </div>
     </aside>

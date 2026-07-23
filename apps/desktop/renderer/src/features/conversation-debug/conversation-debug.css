@@ -1,4 +1,9 @@
 .conversation-debug-panel__body {
+  --conversation-debug-user-color: #7c3aed;
+  --conversation-debug-runtime-color: #2563eb;
+  --conversation-debug-provider-color: #0891b2;
+  --conversation-debug-tool-color: var(--app-orange);
+
   display: flex;
   flex: 1;
   position: relative;
@@ -119,10 +124,6 @@
 }
 
 .conversation-debug-flow {
-  --conversation-debug-user-color: #7c3aed;
-  --conversation-debug-runtime-color: #2563eb;
-  --conversation-debug-provider-color: #0891b2;
-  --conversation-debug-tool-color: var(--app-orange);
   display: flex;
   position: relative;
   flex: 1;
@@ -710,95 +711,188 @@
 }
 
 .conversation-debug-inspector {
+  --conversation-debug-lane-color: var(--app-primary);
+  --conversation-debug-status-color: var(--app-text-subtle);
+
   display: flex;
   position: absolute;
   z-index: 20;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(390px, 88%);
-  min-width: 300px;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: min(440px, calc(100% - 16px));
+  min-width: 0;
   flex-direction: column;
-  border-left: 1px solid var(--app-border);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-border-strong) 70%, transparent);
+  border-radius: var(--app-radius-lg);
   background: var(--app-surface);
-  box-shadow: -12px 0 32px color-mix(in srgb, #000000 12%, transparent);
+  box-shadow:
+    -18px 0 44px color-mix(in srgb, #000000 9%, transparent),
+    0 3px 12px color-mix(in srgb, #000000 6%, transparent);
+  animation: conversation-debug-inspector-enter 160ms ease-out;
+}
+
+.conversation-debug-inspector--user {
+  --conversation-debug-lane-color: var(--conversation-debug-user-color);
+}
+
+.conversation-debug-inspector--runtime {
+  --conversation-debug-lane-color: var(--conversation-debug-runtime-color);
+}
+
+.conversation-debug-inspector--provider {
+  --conversation-debug-lane-color: var(--conversation-debug-provider-color);
+}
+
+.conversation-debug-inspector--tool {
+  --conversation-debug-lane-color: var(--conversation-debug-tool-color);
 }
 
 .conversation-debug-inspector__header {
   display: flex;
   flex: 0 0 auto;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 12px 12px 10px;
-  border-bottom: 1px solid var(--app-border);
+  padding: 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+  background: var(--app-surface);
 }
 
-.conversation-debug-inspector__header > span {
+.conversation-debug-inspector__heading {
   display: grid;
+  flex: 1;
   min-width: 0;
-  gap: 5px;
+  gap: 6px;
 }
 
-.conversation-debug-inspector__header strong {
+.conversation-debug-inspector__badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conversation-debug-inspector__header h2 {
+  margin: 1px 0 0;
   overflow: hidden;
-  font-size: 12px;
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 19px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.conversation-debug-inspector__header p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .conversation-debug-inspector__close {
+  flex: 0 0 auto;
   margin-left: auto;
 }
 
+.conversation-debug-inspector__close:hover {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.conversation-debug-inspector__lane,
 .conversation-debug-inspector__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   width: fit-content;
-  padding: 2px 6px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--conversation-debug-lane-color) 24%, var(--app-border));
   border-radius: 999px;
-  color: var(--app-text-muted);
+  color: color-mix(in srgb, var(--conversation-debug-lane-color) 78%, var(--app-text));
   font-size: 9px;
-  font-weight: 500;
-  background: var(--app-surface-muted);
+  font-weight: 600;
+  line-height: 1;
+  background: color-mix(in srgb, var(--conversation-debug-lane-color) 9%, var(--app-surface));
+  white-space: nowrap;
+}
+
+.conversation-debug-inspector__lane i,
+.conversation-debug-inspector__status i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.conversation-debug-inspector__status {
+  border-color: color-mix(in srgb, var(--conversation-debug-status-color) 22%, var(--app-border));
+  color: color-mix(in srgb, var(--conversation-debug-status-color) 78%, var(--app-text));
+  background: color-mix(in srgb, var(--conversation-debug-status-color) 8%, var(--app-surface));
+}
+
+.conversation-debug-inspector__status--running {
+  --conversation-debug-status-color: var(--app-primary);
 }
 
 .conversation-debug-inspector__status--success {
-  color: var(--app-success);
+  --conversation-debug-status-color: var(--app-success);
 }
 
 .conversation-debug-inspector__status--warning {
-  color: var(--app-warning);
+  --conversation-debug-status-color: var(--app-warning);
 }
 
 .conversation-debug-inspector__status--error {
-  color: var(--app-danger);
+  --conversation-debug-status-color: var(--app-danger);
 }
 
 .conversation-debug-inspector__facts {
   display: grid;
   flex: 0 0 auto;
-  gap: 7px;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px 20px;
   margin: 0;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--app-border);
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
 }
 
 .conversation-debug-inspector__facts > div {
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr);
-  gap: 8px;
-  font-size: 10px;
+  min-width: 0;
+  gap: 4px;
+}
+
+.conversation-debug-inspector__facts > div:nth-child(3) {
+  grid-column: 1 / -1;
 }
 
 .conversation-debug-inspector__facts dt {
   color: var(--app-text-subtle);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .conversation-debug-inspector__facts dd {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: var(--app-text-muted);
+  color: var(--app-text);
   font-family: var(--app-code-font-family);
+  font-size: 10px;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -806,49 +900,87 @@
 .conversation-debug-inspector__events {
   display: grid;
   flex: 0 0 auto;
-  gap: 7px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--app-border);
+  gap: 8px;
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
 }
 
-.conversation-debug-inspector__events > strong,
-.conversation-debug-inspector__payload > span strong {
-  font-size: 10px;
+.conversation-debug-inspector__events > header,
+.conversation-debug-inspector__payload > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.conversation-debug-inspector__events > header strong,
+.conversation-debug-inspector__payload > header strong {
+  color: var(--app-text);
+  font-size: 10.5px;
   font-weight: 600;
 }
 
 .conversation-debug-inspector__events > div {
   display: flex;
-  gap: 5px;
-  overflow: auto;
+  gap: 3px;
+  min-width: 0;
+  padding: 3px;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-muted);
+  scrollbar-color: color-mix(in srgb, var(--app-text) 20%, transparent) transparent;
+  scrollbar-width: thin;
 }
 
 .conversation-debug-inspector__events button {
   display: grid;
   flex: 0 0 auto;
   gap: 2px;
-  max-width: 150px;
-  padding: 5px 7px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xs);
+  min-width: 108px;
+  max-width: 168px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   text-align: left;
-  background: var(--app-surface-subtle);
+  background: transparent;
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.conversation-debug-inspector__events button:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 5%, var(--app-surface-muted));
 }
 
 .conversation-debug-inspector__events button.is-selected {
-  border-color: var(--app-accent-border);
+  border-color: color-mix(in srgb, var(--conversation-debug-lane-color) 22%, var(--app-border));
   color: var(--app-text);
-  background: var(--app-accent-subtle);
+  background: var(--app-surface);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000000 9%, transparent);
+}
+
+.conversation-debug-inspector__events button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--conversation-debug-lane-color) 42%, transparent);
+  outline-offset: -2px;
 }
 
 .conversation-debug-inspector__events button span {
-  font-size: 9px;
+  color: color-mix(in srgb, var(--conversation-debug-lane-color) 74%, var(--app-text));
+  font-size: 9.5px;
+  font-weight: 650;
 }
 
 .conversation-debug-inspector__events button code {
   overflow: hidden;
+  color: inherit;
+  font-family: var(--app-code-font-family);
   font-size: 9px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -858,37 +990,72 @@
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 12px;
+  gap: 10px;
+  padding: 14px 16px 16px;
 }
 
-.conversation-debug-inspector__payload > span {
+.conversation-debug-inspector__payload > header > span {
   display: grid;
-  flex: 0 0 auto;
+  min-width: 0;
   gap: 3px;
 }
 
-.conversation-debug-inspector__payload > span small {
+.conversation-debug-inspector__payload > header > span small {
   color: var(--app-text-subtle);
   font-size: 9px;
-  line-height: 1.35;
+  line-height: 1.4;
+}
+
+.conversation-debug-inspector__payload > header > code {
+  flex: 0 0 auto;
+  max-width: 120px;
+  padding: 3px 6px;
+  overflow: hidden;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--app-surface-muted);
 }
 
 .conversation-debug-inspector__payload pre {
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 9px;
+  padding: 13px 14px;
   overflow: auto;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
+  border-radius: var(--app-radius-md);
   color: var(--app-text-muted);
   font-family: var(--app-code-font-family);
-  font-size: 9px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: var(--app-surface-subtle);
+  font-size: 9.5px;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre;
+  background: var(--chat-code-bg);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #000000 3%, transparent);
+  scrollbar-color: color-mix(in srgb, var(--app-text) 20%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+@keyframes conversation-debug-inspector-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-debug-inspector {
+    animation: none;
+  }
 }
 
 @keyframes conversation-debug-spin {
