@@ -149,13 +149,6 @@ export function ConversationDebugPanel({
               </span>
             </header>
 
-            <div className="conversation-debug-summary">
-              <span title={thread.id}>{thread.title}</span>
-              <span>{t('conversationDebug.eventCount', { count: visibleGraph.events.length })}</span>
-              <span>{t('conversationDebug.traceCount', { count: visibleGraph.traces.length })}</span>
-              <span>{t('conversationDebug.nodeCount', { count: visibleGraph.nodes.length })}</span>
-            </div>
-
             {traceState.error ? (
               <div className="conversation-debug-panel__notice conversation-debug-panel__notice--error">
                 {t('conversationDebug.traceUnavailable', {
@@ -172,6 +165,10 @@ export function ConversationDebugPanel({
             {visibleGraph.records.length ? (
               mode === 'flow' ? (
                 <ConversationDebugFlow
+                  initialViewKey={`${thread.id}:${turnScope}:${
+                    turnScope === 'latest' ? latestTurnId ?? 'none' : 'all'
+                  }`}
+                  initialViewReady={!eventState.syncing}
                   edges={visibleGraph.edges}
                   nodes={visibleGraph.nodes}
                   selectedNodeId={selectedNode?.id ?? null}

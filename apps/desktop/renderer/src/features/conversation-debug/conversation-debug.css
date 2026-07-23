@@ -12,9 +12,9 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--desktop-agent-subtle-divider);
   background: var(--app-surface);
 }
@@ -22,7 +22,7 @@
 .conversation-debug-toolbar__modes {
   display: inline-flex;
   min-width: 0;
-  padding: 2px;
+  padding: 3px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
   background: var(--app-surface-subtle);
@@ -33,12 +33,12 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
-  height: 25px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 10px;
   border: 0;
   border-radius: 4px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 11.5px;
   white-space: nowrap;
   background: transparent;
 }
@@ -55,13 +55,13 @@
 
 .conversation-debug-toolbar select {
   min-width: 0;
-  height: 29px;
-  padding: 0 22px 0 8px;
+  height: 32px;
+  padding: 0 24px 0 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 11.5px;
   background: var(--app-surface);
 }
 
@@ -76,7 +76,7 @@
   gap: 4px;
   margin-left: auto;
   color: var(--app-text-muted);
-  font-size: 10px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 
@@ -87,31 +87,6 @@
 .conversation-debug-toolbar__status.is-syncing svg {
   color: var(--app-warning);
   animation: conversation-debug-pulse 1.1s ease-in-out infinite;
-}
-
-.conversation-debug-summary {
-  display: flex;
-  flex: 0 0 28px;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
-  color: var(--app-text-subtle);
-  font-size: 10px;
-  background: var(--app-surface-subtle);
-}
-
-.conversation-debug-summary span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--app-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.conversation-debug-summary span:nth-child(2) {
-  margin-left: auto;
 }
 
 .conversation-debug-panel__notice {
@@ -148,77 +123,93 @@
   --conversation-debug-runtime-color: #2563eb;
   --conversation-debug-provider-color: #0891b2;
   --conversation-debug-tool-color: var(--app-orange);
+  display: flex;
+  position: relative;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--app-surface-muted);
+  isolation: isolate;
+}
+
+.conversation-debug-flow__scroll-progress {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.conversation-debug-flow__scroll-progress span {
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--app-primary);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--app-primary) 38%, transparent);
+}
+
+.conversation-debug-flow__viewport {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background:
-    linear-gradient(to right, color-mix(in srgb, var(--app-border) 24%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--app-border) 18%, transparent) 1px, transparent 1px),
-    var(--app-surface-subtle);
-  background-size: 24px 24px;
+  cursor: grab;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: none;
 }
 
-.conversation-debug-flow__canvas {
+.conversation-debug-flow__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.conversation-debug-flow__viewport.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.conversation-debug-flow__stage {
   position: relative;
+  min-width: 100%;
   min-height: 100%;
 }
 
-.conversation-debug-flow__lanes {
-  position: sticky;
-  z-index: 8;
+.conversation-debug-flow__canvas {
+  position: absolute;
   top: 0;
   left: 0;
-  width: 1_000px;
-  height: 44px;
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 74%, transparent);
-  background: color-mix(in srgb, var(--app-surface) 94%, transparent);
-  backdrop-filter: blur(8px);
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--app-text-subtle) 22%, transparent) 1px,
+    transparent 1.25px
+  );
+  background-size: 24px 24px;
+  transform-origin: 0 0;
 }
 
-.conversation-debug-flow__lane-label {
-  display: inline-flex;
-  position: absolute;
-  top: 9px;
-  align-items: center;
-  justify-content: center;
-  height: 25px;
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  color: var(--app-text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  background: var(--app-surface);
-}
-
-.conversation-debug-flow__lane-label::before {
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: var(--conversation-debug-lane-color);
-  content: '';
-}
-
-.conversation-debug-flow__lane-label--user,
+.conversation-debug-flow__legend-item--user,
 .conversation-debug-flow__spine--user,
 .conversation-debug-node--user {
   --conversation-debug-lane-color: var(--conversation-debug-user-color);
 }
 
-.conversation-debug-flow__lane-label--runtime,
+.conversation-debug-flow__legend-item--runtime,
 .conversation-debug-flow__spine--runtime,
 .conversation-debug-node--runtime {
   --conversation-debug-lane-color: var(--conversation-debug-runtime-color);
 }
 
-.conversation-debug-flow__lane-label--provider,
+.conversation-debug-flow__legend-item--provider,
 .conversation-debug-flow__spine--provider,
 .conversation-debug-node--provider {
   --conversation-debug-lane-color: var(--conversation-debug-provider-color);
 }
 
-.conversation-debug-flow__lane-label--tool,
+.conversation-debug-flow__legend-item--tool,
 .conversation-debug-flow__spine--tool,
 .conversation-debug-node--tool {
   --conversation-debug-lane-color: var(--conversation-debug-tool-color);
@@ -227,21 +218,21 @@
 .conversation-debug-flow__turn-band {
   position: absolute;
   z-index: 0;
-  left: 8px;
-  width: 984px;
   border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
   border-radius: var(--app-radius-md);
-  background: color-mix(in srgb, var(--app-surface) 54%, transparent);
+  background: color-mix(in srgb, var(--app-text) 1.8%, transparent);
+  pointer-events: none;
 }
 
 .conversation-debug-flow__turn-band > span {
-  position: sticky;
-  left: 10px;
+  position: absolute;
+  top: 8px;
+  left: 8px;
   padding: 2px 6px;
   border-radius: 999px;
   color: var(--app-text-subtle);
-  font-size: 9px;
-  background: var(--app-surface);
+  font-size: 9.5px;
+  background: color-mix(in srgb, var(--app-surface-muted) 86%, transparent);
 }
 
 .conversation-debug-flow__turn-band--running {
@@ -263,13 +254,13 @@
 
 .conversation-debug-flow__edge {
   fill: none;
-  stroke: color-mix(in srgb, var(--app-text-subtle) 38%, transparent);
-  stroke-width: 1.1;
+  stroke: color-mix(in srgb, var(--app-text-subtle) 46%, transparent);
+  stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
 .conversation-debug-flow__edge--causal {
-  stroke: color-mix(in srgb, var(--app-primary) 48%, transparent);
+  stroke: color-mix(in srgb, var(--app-primary) 54%, transparent);
   stroke-dasharray: 4 3;
   stroke-width: 1.4;
 }
@@ -285,13 +276,25 @@
 .conversation-debug-flow__spine {
   position: absolute;
   z-index: 1;
-  width: 1px;
+  height: 1px;
   background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--conversation-debug-lane-color) 30%, transparent),
-    color-mix(in srgb, var(--conversation-debug-lane-color) 8%, transparent)
+    to right,
+    color-mix(in srgb, var(--conversation-debug-lane-color) 36%, transparent),
+    color-mix(in srgb, var(--conversation-debug-lane-color) 10%, transparent)
   );
   pointer-events: none;
+}
+
+.conversation-debug-flow__spine::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--conversation-debug-lane-color);
+  content: '';
+  transform: translateY(-50%);
 }
 
 .conversation-debug-node {
@@ -303,17 +306,17 @@
   z-index: 3;
   top: var(--conversation-debug-node-top);
   left: var(--conversation-debug-node-left);
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 6px;
-  width: 220px;
-  height: 104px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 5px;
+  width: 228px;
+  height: 112px;
   padding: 9px 10px 8px;
-  border: 1px solid color-mix(in srgb, var(--conversation-debug-lane-color) 42%, var(--app-border));
+  border: 1px solid color-mix(in srgb, var(--conversation-debug-lane-color) 36%, var(--app-border));
   border-radius: var(--app-radius-md);
   color: var(--app-text);
   text-align: left;
-  background: color-mix(in srgb, var(--app-surface) 97%, var(--conversation-debug-lane-color));
-  box-shadow: 0 1px 3px color-mix(in srgb, #000000 7%, transparent);
+  background: color-mix(in srgb, var(--conversation-debug-lane-color) 7%, var(--app-surface-muted));
+  box-shadow: 0 2px 6px color-mix(in srgb, #000000 6%, transparent);
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -322,8 +325,8 @@
 }
 
 .conversation-debug-node:hover {
-  border-color: color-mix(in srgb, var(--conversation-debug-lane-color) 64%, var(--app-border));
-  background: color-mix(in srgb, var(--app-surface) 94%, var(--conversation-debug-lane-color));
+  border-color: color-mix(in srgb, var(--conversation-debug-lane-color) 58%, var(--app-border));
+  background: color-mix(in srgb, var(--conversation-debug-lane-color) 11%, var(--app-surface-muted));
   box-shadow: 0 5px 14px color-mix(in srgb, #000000 9%, transparent);
   transform: translateY(-1px);
 }
@@ -336,15 +339,18 @@
 .conversation-debug-node__heading {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 7px;
   min-width: 0;
 }
 
-.conversation-debug-node__heading strong {
+.conversation-debug-node__title {
+  display: block;
   min-width: 0;
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 650;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -354,17 +360,16 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  height: 19px;
-  margin-left: auto;
+  height: 20px;
   padding: 0 6px;
   border: 1px solid color-mix(in srgb, var(--conversation-debug-status-color) 22%, var(--app-border));
   border-radius: 999px;
   color: color-mix(in srgb, var(--conversation-debug-status-color) 76%, var(--app-text));
-  font-size: 8.5px;
+  font-size: 9px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  background: color-mix(in srgb, var(--conversation-debug-status-color) 9%, var(--app-surface));
+  background: color-mix(in srgb, var(--conversation-debug-status-color) 9%, var(--app-surface-muted));
 }
 
 .conversation-debug-node__status i {
@@ -401,7 +406,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-muted);
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.4;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -409,28 +414,21 @@
   -webkit-line-clamp: 2;
 }
 
-.conversation-debug-node__footer {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-}
-
 .conversation-debug-node__lane {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  height: 18px;
-  padding: 0 5px;
+  height: 20px;
+  padding: 0 6px;
   border: 1px solid color-mix(in srgb, var(--conversation-debug-lane-color) 24%, var(--app-border));
   border-radius: 999px;
   color: color-mix(in srgb, var(--conversation-debug-lane-color) 78%, var(--app-text));
-  font-size: 8.5px;
+  font-size: 9px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  background: color-mix(in srgb, var(--conversation-debug-lane-color) 9%, var(--app-surface));
+  background: color-mix(in srgb, var(--conversation-debug-lane-color) 9%, var(--app-surface-muted));
 }
 
 .conversation-debug-node__lane i {
@@ -442,13 +440,11 @@
 
 .conversation-debug-node__meta {
   display: flex;
-  flex: 1;
   align-items: center;
-  justify-content: flex-end;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
   color: var(--app-text-subtle);
-  font-size: 8.5px;
+  font-size: 9px;
   white-space: nowrap;
 }
 
@@ -463,8 +459,167 @@
 
 .conversation-debug-node__meta em {
   flex: 0 0 auto;
+  margin-left: auto;
   color: var(--app-text-muted);
   font-style: normal;
+}
+
+.conversation-debug-flow__navigator {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100% - 146px);
+  min-width: 0;
+  height: 32px;
+}
+
+.conversation-debug-flow__navigator-track {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.conversation-debug-flow__navigator-track::-webkit-scrollbar {
+  display: none;
+}
+
+.conversation-debug-flow__navigator-track li {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.conversation-debug-flow__navigator-turn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font: inherit;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  background: transparent;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.conversation-debug-flow__navigator-turn:hover {
+  color: var(--app-text);
+}
+
+.conversation-debug-flow__navigator-turn[aria-current='step'] {
+  color: var(--app-primary);
+  font-weight: 700;
+}
+
+.conversation-debug-flow__navigator-turn:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: -1px;
+}
+
+.conversation-debug-flow__controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: auto;
+}
+
+.conversation-debug-flow__controls button {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font: inherit;
+  background: transparent;
+}
+
+.conversation-debug-flow__controls button:hover:not(:disabled) {
+  color: var(--app-text);
+}
+
+.conversation-debug-flow__controls button:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: -1px;
+}
+
+.conversation-debug-flow__controls button:disabled {
+  opacity: 0.35;
+}
+
+.conversation-debug-flow__controls .conversation-debug-flow__zoom-value {
+  min-width: 52px;
+  color: var(--app-text);
+  font-family: var(--app-code-font-family);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.conversation-debug-flow__footer {
+  display: grid;
+  z-index: 5;
+  flex: 0 0 44px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 64%, transparent);
+  background: color-mix(in srgb, var(--app-surface-muted) 96%, var(--app-surface));
+}
+
+.conversation-debug-flow__footer .conversation-debug-flow__navigator {
+  width: 100%;
+  max-width: 100%;
+  justify-self: start;
+}
+
+.conversation-debug-flow__footer .conversation-debug-flow__controls {
+  justify-self: end;
+  margin-left: 0;
+}
+
+.conversation-debug-flow__legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.conversation-debug-flow__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.conversation-debug-flow__legend-item i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--conversation-debug-lane-color);
 }
 
 .conversation-debug-events {
