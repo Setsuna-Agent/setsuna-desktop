@@ -58,20 +58,10 @@
   box-shadow: 0 1px 2px color-mix(in srgb, #000000 10%, transparent);
 }
 
-.conversation-debug-toolbar select {
-  min-width: 0;
-  height: 32px;
-  padding: 0 24px 0 10px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  font: inherit;
+.conversation-debug-toolbar__turn-scope {
+  flex: 0 0 112px;
+  width: 112px;
   font-size: 11.5px;
-  background: var(--app-surface);
-}
-
-.conversation-debug-toolbar select:disabled {
-  opacity: 0.5;
 }
 
 .conversation-debug-toolbar__status {

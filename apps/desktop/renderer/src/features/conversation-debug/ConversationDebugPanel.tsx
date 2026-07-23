@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { EmptyState } from '../../shared/ui/primitives.js';
+import { EmptyState, SelectField } from '../../shared/ui/primitives.js';
 import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { ConversationDebugEventList } from './ConversationDebugEventList.js';
 import { ConversationDebugFlow } from './ConversationDebugFlow.js';
@@ -134,15 +134,16 @@ export function ConversationDebugPanel({
                   {t('conversationDebug.mode.events')}
                 </button>
               </div>
-              <select
+              <SelectField
                 aria-label={t('conversationDebug.turn.all')}
+                className="conversation-debug-toolbar__turn-scope"
                 disabled={graph.turns.length < 2}
                 value={turnScope}
-                onChange={(event) => setTurnScope(event.currentTarget.value === 'latest' ? 'latest' : 'all')}
+                onValueChange={(value) => setTurnScope(value === 'latest' ? 'latest' : 'all')}
               >
                 <option value="all">{t('conversationDebug.turn.all')}</option>
                 <option value="latest">{t('conversationDebug.turn.latest')}</option>
-              </select>
+              </SelectField>
               <span className={`conversation-debug-toolbar__status ${eventState.syncing ? 'is-syncing' : 'is-live'}`}>
                 <Activity size={12} />
                 {t(eventState.syncing ? 'conversationDebug.syncing' : 'conversationDebug.live')}
