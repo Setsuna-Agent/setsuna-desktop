@@ -103,8 +103,12 @@ describe('desktop data root coordinator', () => {
     ) as Record<string, unknown>;
     expect(migratedConfig.storagePath).toBeUndefined();
     expect(migratedConfig.schemaVersion).toBe(3);
-    await expect(readFile(path.join(fixture.targetRoot, 'runtime', 'plugins.json'), 'utf8'))
-      .resolves.toContain(fixture.targetRoot);
+    const migratedPlugins = JSON.parse(
+      await readFile(path.join(fixture.targetRoot, 'runtime', 'plugins.json'), 'utf8'),
+    ) as { installRoot: string };
+    expect(migratedPlugins.installRoot).toBe(
+      path.join(fixture.targetRoot, 'runtime', 'plugins'),
+    );
     expect((await lstat(path.join(fixture.targetRoot, 'runtime', 'empty-owned'))).mode & 0o777)
       .toBe(0o700);
     expect(readDataRootMarkerSync(fixture.targetRoot)).toMatchObject({
@@ -198,8 +202,10 @@ describe('desktop data root coordinator', () => {
 
     await expect(coordinator.cancelMigration()).resolves.toEqual({ ok: true });
     expect(relaunch).toHaveBeenCalledOnce();
-    await expect(readFile(dataRootBootstrapLayout(fixture.appDataRoot).pointerPath, 'utf8'))
-      .resolves.toContain(fixture.sourceRoot);
+    const pointer = JSON.parse(
+      await readFile(dataRootBootstrapLayout(fixture.appDataRoot).pointerPath, 'utf8'),
+    ) as { dataRoot: string };
+    expect(pointer.dataRoot).toBe(fixture.sourceRoot);
   });
 
   it('finishes an interrupted post-rename commit and removes the staging owner marker', async () => {

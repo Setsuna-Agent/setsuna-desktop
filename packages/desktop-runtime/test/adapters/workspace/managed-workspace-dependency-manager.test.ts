@@ -73,7 +73,7 @@ describe('managed workspace dependency manager', () => {
         '',
       ].join('\n')),
     ]);
-    process.env.PATH = [fakeBin, previousPath ?? ''].filter(Boolean).join(path.delimiter);
+    process.env.PATH = fakeBin;
 
     try {
       const configStore = new FileConfigStore(dataDir);

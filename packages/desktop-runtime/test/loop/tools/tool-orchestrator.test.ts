@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { RuntimeToolHookRunner } from '../../../src/hooks/runtime-hooks.js';
 import { ToolApprovalStore, ToolOrchestrator } from '../../../src/loop/tools/tool-orchestrator.js';
@@ -87,7 +88,7 @@ describe('ToolOrchestrator terminal and retry handling', () => {
   });
 
   it('requests a narrow readable root and retries inside the sandbox before bypassing', async () => {
-    const readableRoot = '/opt/toolchains/node-22';
+    const readableRoot = path.resolve('/opt/toolchains/node-22');
     const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
     let approvalInput: CreateApprovalInput | undefined;
     const toolHost = stubToolHost(async (_name, _input, context) => {

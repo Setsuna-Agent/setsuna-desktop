@@ -1018,13 +1018,14 @@ function composePaths(
 }
 
 export function runtimeExecutableReadRoot(executablePath: string, platform = process.platform): string {
-  const resolved = path.resolve(executablePath);
-  if (platform !== 'darwin') return path.dirname(resolved);
-  const parts = resolved.split(path.sep);
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  const resolved = pathApi.resolve(executablePath);
+  if (platform !== 'darwin') return pathApi.dirname(resolved);
+  const parts = resolved.split(pathApi.sep);
   const appIndex = parts.findIndex((part) => part.endsWith('.app'));
   return appIndex >= 0
-    ? path.join(path.parse(resolved).root, ...parts.slice(1, appIndex + 1))
-    : path.dirname(resolved);
+    ? pathApi.join(pathApi.parse(resolved).root, ...parts.slice(1, appIndex + 1))
+    : pathApi.dirname(resolved);
 }
 
 async function projectToolchainHints(environment: RuntimeEnvironment): Promise<ProjectToolchainHints> {

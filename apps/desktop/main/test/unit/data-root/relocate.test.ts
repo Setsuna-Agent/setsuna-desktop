@@ -111,14 +111,24 @@ describe('data root path relocation', () => {
     expect(config.hooks.state[`${newConfigPath}:pre_tool_use:0:0`]).toMatchObject({
       trustedHash: hookHash(newCommand),
     });
-    for (const filePath of [
-      path.join(stagingLayout.runtimeRoot, 'plugins.json'),
-      path.join(stagingLayout.runtimeRoot, 'mcp.json'),
-      path.join(stagingLayout.runtimeRoot, 'workspace-dependencies', 'manifest.json'),
-      shimPath,
-      virtualEnvironmentConfig,
-      virtualEnvironmentActivate,
-    ]) {
+    const plugins = JSON.parse(
+      await readFile(path.join(stagingLayout.runtimeRoot, 'plugins.json'), 'utf8'),
+    ) as { installPath: string };
+    expect(plugins.installPath).toBe(path.join(targetRoot, 'runtime', 'plugins', 'demo'));
+    const mcp = JSON.parse(
+      await readFile(path.join(stagingLayout.runtimeRoot, 'mcp.json'), 'utf8'),
+    ) as { command: string };
+    expect(mcp.command).toBe(path.join(targetRoot, 'runtime', 'plugins', 'demo', 'server.js'));
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(stagingLayout.runtimeRoot, 'workspace-dependencies', 'manifest.json'),
+        'utf8',
+      ),
+    ) as { python: { path: string } };
+    expect(manifest.python.path).toBe(
+      path.join(targetRoot, 'runtime', 'workspace-dependencies', 'toolchain', 'python'),
+    );
+    for (const filePath of [shimPath, virtualEnvironmentConfig, virtualEnvironmentActivate]) {
       const content = await readFile(filePath, 'utf8');
       expect(content).toContain(targetRoot);
       expect(content).not.toContain(sourceRoot);
