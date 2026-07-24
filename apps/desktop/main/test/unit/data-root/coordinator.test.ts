@@ -109,8 +109,13 @@ describe('desktop data root coordinator', () => {
     expect(migratedPlugins.installRoot).toBe(
       path.join(fixture.targetRoot, 'runtime', 'plugins'),
     );
-    expect((await lstat(path.join(fixture.targetRoot, 'runtime', 'empty-owned'))).mode & 0o777)
-      .toBe(0o700);
+    const migratedEmptyDirectory = await lstat(
+      path.join(fixture.targetRoot, 'runtime', 'empty-owned'),
+    );
+    expect(migratedEmptyDirectory.isDirectory()).toBe(true);
+    if (process.platform !== 'win32') {
+      expect(migratedEmptyDirectory.mode & 0o777).toBe(0o700);
+    }
     expect(readDataRootMarkerSync(fixture.targetRoot)).toMatchObject({
       owner: 'setsuna-desktop',
       rootId: expect.any(String),
