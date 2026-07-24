@@ -309,15 +309,33 @@
 
 .sd-button,
 .sd-icon-button {
+  --sd-control-color: var(--app-text);
+  --sd-control-bg: color-mix(in srgb, var(--app-text) 2%, var(--app-surface));
+  --sd-control-border: color-mix(in srgb, var(--app-text) 9%, var(--app-surface));
+  --sd-control-shadow: 0 1px 2px color-mix(in srgb, #000000 5%, transparent);
+  --sd-control-hover-color: var(--app-text);
+  --sd-control-hover-bg: color-mix(in srgb, var(--app-text) 6%, var(--app-surface));
+  --sd-control-hover-border: color-mix(in srgb, var(--app-text) 14%, var(--app-surface));
+  --sd-control-hover-shadow: 0 2px 5px color-mix(in srgb, #000000 8%, transparent);
+  --sd-control-active-color: var(--app-text);
+  --sd-control-active-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
+  --sd-control-active-border: color-mix(in srgb, var(--app-text) 18%, var(--app-surface));
+  --sd-control-active-shadow: inset 0 1px 2px color-mix(in srgb, var(--app-text) 10%, transparent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--desktop-agent-button-border);
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text);
-  background: var(--app-surface);
-  box-shadow: none;
-  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  border: 1px solid var(--sd-control-border);
+  border-radius: var(--app-radius-md);
+  color: var(--sd-control-color);
+  background: var(--sd-control-bg);
+  box-shadow: var(--sd-control-shadow);
+  transform: translateY(0) scale(1);
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 90ms ease;
 }
 
 .sd-button {
@@ -402,59 +420,99 @@
   transform: translate(-50%, 0);
 }
 
-.sd-button:not(.sd-button--primary):not(.sd-button--danger):hover,
-.sd-button:not(.sd-button--primary):not(.sd-button--danger):active,
-.sd-button:not(.sd-button--primary):not(.sd-button--danger).is-active,
-.sd-icon-button:not(.sd-icon-button--danger):hover,
-.sd-icon-button:not(.sd-icon-button--danger):active,
-.sd-icon-button:not(.sd-icon-button--danger).is-active {
-  border-color: var(--desktop-agent-button-hover-border);
-  background: var(--desktop-agent-button-hover-bg);
-}
-
-.sd-button:disabled:not(.sd-button--primary),
-.sd-icon-button:disabled {
-  color: var(--app-text-subtle);
-  background: var(--app-surface-muted);
-  cursor: not-allowed;
-  opacity: 1;
-}
-
 .sd-button--primary {
-  border-color: var(--app-primary);
-  color: var(--app-primary-text);
-  background: var(--app-primary);
-}
-
-.sd-button--primary:hover {
-  border-color: var(--app-primary-hover);
-  background: var(--app-primary-hover);
-}
-
-.sd-button--primary:disabled,
-.sd-button--primary:disabled:hover {
-  border-color: color-mix(in srgb, var(--app-primary) 14%, var(--app-border));
-  color: color-mix(in srgb, var(--app-text) 34%, var(--app-text-subtle));
-  background: color-mix(in srgb, var(--app-primary) 18%, var(--app-surface-muted));
-  cursor: not-allowed;
-  opacity: 1;
+  --sd-control-color: var(--app-primary-text);
+  --sd-control-bg: var(--app-primary);
+  --sd-control-border: var(--app-primary);
+  --sd-control-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 16%, transparent),
+    0 1px 2px color-mix(in srgb, #000000 14%, transparent);
+  --sd-control-hover-color: var(--app-primary-text);
+  --sd-control-hover-bg: var(--app-primary-hover);
+  --sd-control-hover-border: var(--app-primary-hover);
+  --sd-control-hover-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 18%, transparent),
+    0 2px 6px color-mix(in srgb, #000000 16%, transparent);
+  --sd-control-active-color: var(--app-primary-text);
+  --sd-control-active-bg: color-mix(in srgb, var(--app-primary) 88%, #000000);
+  --sd-control-active-border: color-mix(in srgb, var(--app-primary) 88%, #000000);
+  --sd-control-active-shadow: inset 0 1px 2px color-mix(in srgb, #000000 22%, transparent);
 }
 
 .sd-button--ghost,
 .sd-icon-button--ghost {
-  border-color: transparent;
-  background: transparent;
+  --sd-control-bg: transparent;
+  --sd-control-border: transparent;
+  --sd-control-shadow: none;
+  --sd-control-hover-bg: color-mix(in srgb, var(--app-text) 6%, var(--app-surface));
+  --sd-control-hover-border: transparent;
+  --sd-control-hover-shadow: none;
+  --sd-control-active-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
+  --sd-control-active-border: transparent;
+  --sd-control-active-shadow: none;
 }
 
 .sd-button--danger,
 .sd-icon-button--danger {
-  color: var(--app-danger);
+  --sd-control-color: var(--app-danger);
+  --sd-control-bg: color-mix(in srgb, var(--app-danger) 4%, var(--app-surface));
+  --sd-control-border: color-mix(in srgb, var(--app-danger) 16%, var(--app-surface));
+  --sd-control-shadow: none;
+  --sd-control-hover-color: var(--app-danger);
+  --sd-control-hover-bg: color-mix(in srgb, var(--app-danger) 10%, var(--app-surface));
+  --sd-control-hover-border: color-mix(in srgb, var(--app-danger) 28%, var(--app-surface));
+  --sd-control-hover-shadow: 0 1px 3px color-mix(in srgb, var(--app-danger) 10%, transparent);
+  --sd-control-active-color: var(--app-danger);
+  --sd-control-active-bg: color-mix(in srgb, var(--app-danger) 16%, var(--app-surface));
+  --sd-control-active-border: color-mix(in srgb, var(--app-danger) 36%, var(--app-surface));
+  --sd-control-active-shadow: inset 0 1px 2px color-mix(in srgb, var(--app-danger) 14%, transparent);
 }
 
-.sd-button--danger:hover,
-.sd-icon-button--danger:hover {
-  border-color: color-mix(in srgb, var(--app-danger) 45%, var(--app-border));
-  background: var(--app-danger-bg);
+.sd-icon-button--danger {
+  --sd-control-bg: transparent;
+  --sd-control-border: transparent;
+}
+
+.sd-button:hover:not(:disabled),
+.sd-icon-button:hover:not(:disabled) {
+  border-color: var(--sd-control-hover-border);
+  color: var(--sd-control-hover-color);
+  background: var(--sd-control-hover-bg);
+  box-shadow: var(--sd-control-hover-shadow);
+}
+
+.sd-button.is-active:not(:disabled),
+.sd-icon-button.is-active:not(:disabled) {
+  border-color: var(--sd-control-active-border);
+  color: var(--sd-control-active-color);
+  background: var(--sd-control-active-bg);
+  box-shadow: var(--sd-control-active-shadow);
+}
+
+.sd-button:active:not(:disabled),
+.sd-icon-button:active:not(:disabled) {
+  border-color: var(--sd-control-active-border);
+  color: var(--sd-control-active-color);
+  background: var(--sd-control-active-bg);
+  box-shadow: var(--sd-control-active-shadow);
+  transform: translateY(1px) scale(0.98);
+  transition-duration: 60ms;
+}
+
+.sd-button:disabled,
+.sd-icon-button:disabled {
+  border-color: var(--sd-control-border);
+  color: var(--sd-control-color);
+  background: var(--sd-control-bg);
+  box-shadow: none;
+  cursor: default;
+  opacity: 0.42;
+  transform: none;
+}
+
+.sd-button:focus-visible,
+.sd-icon-button:focus-visible {
+  box-shadow: var(--app-focus-ring);
 }
 
 .sd-field,

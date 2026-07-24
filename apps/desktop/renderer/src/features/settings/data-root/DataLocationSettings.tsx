@@ -1,6 +1,6 @@
 import type { DesktopDataMigrationPlan } from '@setsuna-desktop/contracts';
 import { Modal } from 'antd';
-import { Database, FolderOpen, MoveRight } from 'lucide-react';
+import { FolderOpen, FolderRoot, MoveRight } from 'lucide-react';
 import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -75,7 +75,7 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
     <>
       <div className="chat-user-settings__row chat-user-settings__path-row">
         <span className="chat-user-settings__row-label">
-          <Database size={14} />
+          <FolderRoot size={14} />
           <span>{t('settings.runtime.dataDirectory')}</span>
         </span>
         <div className="chat-user-settings__path-actions">

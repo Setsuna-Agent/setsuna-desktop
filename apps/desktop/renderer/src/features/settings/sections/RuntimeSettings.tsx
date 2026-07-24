@@ -4,7 +4,7 @@ import {
   type RuntimeConfigState,
   type RuntimeDesktopSettings,
 } from '@setsuna-desktop/contracts';
-import { ChevronRight, FileCog, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
+import { ChevronRight, FileCog, FileJson2, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { localizedRuntimeAccessModeOptions } from '../../../shared/i18n/runtimeAccessModeCopy.js';
@@ -113,7 +113,7 @@ export function RuntimePolicySettings({
             <div className="chat-user-settings__path-actions">
               <Button
                 className="chat-user-settings__path-open"
-                icon={<FolderOpen size={14} />}
+                icon={<FileJson2 size={14} />}
                 disabled={pathActionDisabled}
                 onClick={() => void openRuntimePath(config.configPath, t('settings.runtime.configFile'))}
               >
