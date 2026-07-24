@@ -4,7 +4,7 @@ import {
   type DesktopDataMigrationCategorySummary,
   type DesktopDataMigrationIssue,
 } from '@setsuna-desktop/contracts';
-import { lstat, readlink, readdir, realpath, statfs } from 'node:fs/promises';
+import { lstat, readFile, readlink, readdir, realpath, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_ROOT_MARKER_FILE_NAME } from './layout.js';
 import type { DataMigrationManifest, DataMigrationManifestEntry } from './model.js';
@@ -29,6 +29,7 @@ const TRANSIENT_ROOT_FILE_NAMES = new Set([
   'SingletonSocket',
 ]);
 const MINIMUM_SPACE_RESERVE_BYTES = 64 * 1024 * 1024;
+const ACTIVE_MEMORY_INDEX_PATH = 'runtime/memories/memories.json';
 
 export async function buildDataMigrationManifest(sourceRoot: string): Promise<{
   manifest: DataMigrationManifest;
@@ -184,6 +185,17 @@ export function summarizeMigrationCategories(
   return DESKTOP_DATA_MIGRATION_CATEGORY_IDS.map((id) => ({ id, ...totals.get(id)! }));
 }
 
+export async function summarizeMigrationPlanCategories(
+  manifest: DataMigrationManifest,
+): Promise<DesktopDataMigrationCategorySummary[]> {
+  const summaries = summarizeMigrationCategories(manifest);
+  const recordCount = await activeMemoryRecordCount(manifest);
+  if (recordCount === undefined) return summaries;
+  return summaries.map((summary) => (
+    summary.id === 'memories' ? { ...summary, recordCount } : summary
+  ));
+}
+
 export function migrationCategory(relativePath: string): DesktopDataMigrationCategoryId {
   const normalized = relativePath.replaceAll(path.sep, '/').toLowerCase();
   if (normalized === 'secure-credentials.json') return 'settings_credentials';
@@ -214,6 +226,35 @@ export function migrationCategory(relativePath: string): DesktopDataMigrationCat
     || normalized.startsWith('runtime/tool-approvals')
   ) return 'projects_capabilities';
   return 'settings_credentials';
+}
+
+async function activeMemoryRecordCount(
+  manifest: DataMigrationManifest,
+): Promise<number | undefined> {
+  const indexEntry = manifest.entries.find((entry) => (
+    entry.relativePath.replaceAll(path.sep, '/').toLowerCase() === ACTIVE_MEMORY_INDEX_PATH
+  ));
+  if (!indexEntry) return 0;
+  try {
+    const parsed = JSON.parse(await readFile(indexEntry.absolutePath, 'utf8')) as {
+      memories?: unknown;
+    };
+    if (!Array.isArray(parsed.memories)) return undefined;
+    return parsed.memories.filter(isPreviewableMemoryRecord).length;
+  } catch {
+    // Migration validation reports malformed managed JSON. The plan can still show
+    // file totals without presenting an unreliable domain-record count.
+    return undefined;
+  }
+}
+
+function isPreviewableMemoryRecord(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.status !== 'archived'
+    && record.status !== 'deleted'
+    && typeof record.content === 'string'
+    && Boolean(record.content.trim());
 }
 
 async function scanDirectory(
@@ -299,6 +340,10 @@ function shouldSkip(relativePath: string, name: string, directory: boolean): boo
   if (relativePath === DATA_ROOT_MARKER_FILE_NAME) return true;
   if (!relativePath.includes(path.sep) && TRANSIENT_ROOT_FILE_NAMES.has(name)) return true;
   const normalized = relativePath.replaceAll(path.sep, '/').toLowerCase();
+  // Phase 2 used a private Git repository before switching to snapshot baselines.
+  // The current runtime never reads this history, so carrying it forward only
+  // inflates the memory category with implementation files.
+  if (directory && normalized === 'runtime/memories/.git') return true;
   const segments = normalized.split('/');
   if (
     directory

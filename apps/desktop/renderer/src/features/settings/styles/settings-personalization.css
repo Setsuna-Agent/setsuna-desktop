@@ -304,10 +304,6 @@
 }
 
 .desktop-settings-panel .chat-user-settings__memory-preview-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 42%);
-  align-items: center;
-  gap: 12px;
   min-width: 0;
   padding: 11px 12px;
   border: 1px solid var(--chat-settings-divider);
@@ -331,20 +327,6 @@
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 18px;
-}
-
-.desktop-settings-panel .chat-user-settings__memory-preview-summary code {
-  min-width: 0;
-  overflow: hidden;
-  padding: 5px 8px;
-  border-radius: 7px;
-  color: var(--app-text);
-  background: var(--app-bg);
-  font-family: var(--app-code-font-family);
-  font-size: 12px;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-settings-panel .chat-user-settings__memory-list {

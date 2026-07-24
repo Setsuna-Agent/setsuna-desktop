@@ -9,7 +9,6 @@ import { ChevronRight, Cpu, Eye, FileText, Pencil, RefreshCw, Sun, Trash2 } from
 import { useEffect, useState } from 'react';
 import {
   Button,
-  EmptyState,
   IconButton,
   PageHeader,
   SelectField,
@@ -107,7 +106,6 @@ export function PersonalizationSettings({
 
   if (personalizationView === 'memoryPreview') {
     const items = memoryPreview?.items ?? [];
-    const previewStoragePath = memoryPreview?.storagePath || config.storagePath;
 
     return (
       <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__memory-preview-section">
@@ -126,12 +124,11 @@ export function PersonalizationSettings({
             <strong>{t('settings.personalization.previewCount', { count: memoryPreview?.total ?? 0 })}</strong>
             <span>{t('settings.personalization.previewDescription')}</span>
           </div>
-          <code title={previewStoragePath}>{previewStoragePath}</code>
         </div>
         {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
-        <div className="chat-user-settings__memory-list" aria-busy={memoryPreviewLoading}>
-          {items.length ? (
-            items.map((item) => {
+        {items.length ? (
+          <div className="chat-user-settings__memory-list" aria-busy={memoryPreviewLoading}>
+            {items.map((item) => {
               const meta = [
                 item.origin === 'active' ? t('settings.personalization.originActive') : t('settings.personalization.originBackground'),
                 memoryScopeLabel(item, projects, t),
@@ -164,11 +161,9 @@ export function PersonalizationSettings({
                   <pre className="chat-user-settings__memory-snippet">{item.preview}</pre>
                 </div>
               );
-            })
-          ) : (
-            <EmptyState title={memoryPreviewLoading ? t('settings.personalization.loadingMemories') : t('settings.personalization.emptyMemories')} />
-          )}
-        </div>
+            })}
+          </div>
+        ) : null}
       </div>
     );
   }

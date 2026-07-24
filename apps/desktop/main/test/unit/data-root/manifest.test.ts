@@ -6,6 +6,7 @@ import {
   buildDataMigrationManifest,
   inspectDataMigrationTarget,
   migrationCategory,
+  summarizeMigrationPlanCategories,
 } from '../../../src/data-root/manifest.js';
 
 const temporaryRoots: string[] = [];
@@ -56,6 +57,35 @@ describe('desktop data migration manifest', () => {
     expect(manifest.entries.find((entry) => entry.relativePath === 'secure-credentials.json')?.category)
       .toBe('settings_credentials');
     expect(migrationCategory('runtime/.memories-before-unification-1/MEMORY.md')).toBe('memories');
+  });
+
+  it('reports active memory records separately from related migration files', async () => {
+    const root = await temporaryRoot();
+    await Promise.all([
+      writeFixture(root, 'runtime/memories/memories.json', JSON.stringify({
+        version: 1,
+        memories: [
+          { id: 'active', content: 'Keep this preference.' },
+          { id: 'archived', content: 'Archived preference.', status: 'archived' },
+          { id: 'deleted', content: 'Deleted preference.', status: 'deleted' },
+          { id: 'empty', content: '   ' },
+        ],
+      })),
+      writeFixture(root, 'runtime/memories/raw_memories.md', '# Raw memories'),
+      writeFixture(root, 'runtime/memories/.git/HEAD', 'ref: refs/heads/main'),
+    ]);
+    const { manifest } = await buildDataMigrationManifest(root);
+
+    const summaries = await summarizeMigrationPlanCategories(manifest);
+
+    expect(summaries.find((summary) => summary.id === 'memories')).toMatchObject({
+      fileCount: 2,
+      recordCount: 1,
+    });
+    expect(manifest.skipped).toContainEqual({
+      relativePath: path.join('runtime', 'memories', '.git'),
+      reason: 'rebuildable',
+    });
   });
 
   it.skipIf(process.platform === 'win32')('blocks external symlinks and makes confined absolute symlinks portable', async () => {

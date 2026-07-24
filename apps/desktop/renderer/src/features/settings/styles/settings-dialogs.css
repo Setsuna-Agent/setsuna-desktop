@@ -838,8 +838,7 @@
     justify-content: flex-start;
   }
 
-  .desktop-settings-panel .chat-user-settings__local-storage-control,
-  .desktop-settings-panel .chat-user-settings__memory-preview-summary {
+  .desktop-settings-panel .chat-user-settings__local-storage-control {
     grid-template-columns: minmax(0, 1fr);
   }
 

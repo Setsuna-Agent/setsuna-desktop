@@ -152,7 +152,14 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
               {plan.categories.map((category) => (
                 <div className="data-root-category" key={category.id}>
                   <strong>{t(dataRootCategoryMessageKey[category.id])}</strong>
-                  <span>{category.fileCount.toLocaleString(locale)} {t('dataRoot.files')}</span>
+                  <span>
+                    {category.id === 'memories' && category.recordCount !== undefined
+                      ? t('dataRoot.category.memoriesCounts', {
+                          memories: category.recordCount.toLocaleString(locale),
+                          files: category.fileCount.toLocaleString(locale),
+                        })
+                      : `${category.fileCount.toLocaleString(locale)} ${t('dataRoot.files')}`}
+                  </span>
                   <small>{formatDataBytes(category.totalBytes, locale)}</small>
                 </div>
               ))}

@@ -410,16 +410,15 @@ export class FileMemoryStore implements MemoryStore {
   async previewMemories(): Promise<RuntimeMemoryPreview> {
     const roots = await this.memoryStoreRoots();
     const entries = await this.readMergedMemoryEntries(roots);
-    const items = entries
+    const previewableItems = entries
       .map((entry) => memoryPreviewItem(entry.memory, entry.root))
       .filter((item): item is RuntimeMemoryPreviewItem => Boolean(item))
-      .sort((left, right) => memoryPreviewSortKey(right).localeCompare(memoryPreviewSortKey(left)))
-      .slice(0, MEMORY_PREVIEW_MAX_ITEMS);
+      .sort((left, right) => memoryPreviewSortKey(right).localeCompare(memoryPreviewSortKey(left)));
 
     return {
       storagePath: roots[0] ?? this.dataDir,
-      total: items.length,
-      items,
+      total: previewableItems.length,
+      items: previewableItems.slice(0, MEMORY_PREVIEW_MAX_ITEMS),
     };
   }
 

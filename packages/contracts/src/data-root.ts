@@ -15,6 +15,8 @@ export type DesktopDataMigrationCategorySummary = {
   id: DesktopDataMigrationCategoryId;
   fileCount: number;
   totalBytes: number;
+  /** Domain records represented by the files, when the category supports a stable count. */
+  recordCount?: number;
 };
 
 export type DesktopDataMigrationIssueCode =

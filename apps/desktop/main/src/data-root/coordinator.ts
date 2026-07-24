@@ -48,6 +48,7 @@ import {
   buildDataMigrationManifest,
   inspectDataMigrationTarget,
   summarizeMigrationCategories,
+  summarizeMigrationPlanCategories,
 } from './manifest.js';
 import {
   buildLegacyDataImportPlan,
@@ -273,7 +274,7 @@ export class DesktopDataRootCoordinator {
       totalBytes: manifest.totalBytes,
       requiredBytes: targetInspection.requiredBytes,
       availableBytes: targetInspection.availableBytes,
-      categories: summarizeMigrationCategories(manifest),
+      categories: await summarizeMigrationPlanCategories(manifest),
       blockers: [...manifestBlockers, ...targetInspection.blockers],
       warnings: targetInspection.warnings,
       createdAt: new Date().toISOString(),
