@@ -4,6 +4,7 @@ import {
   type DesktopDataMigrationPlan,
   type DesktopDataMigrationProgress,
   type DesktopDataRootActionResult,
+  type DesktopDataRootRetainedBackupInspection,
   type DesktopDataRootState,
 } from '@setsuna-desktop/contracts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -58,8 +59,19 @@ import type {
   DataRootMarker,
   DesktopDataRootBootMode,
   PendingDataMigration,
+  RetainedDataRootBackup,
 } from './model.js';
 import { relocateDataRootContents } from './relocate.js';
+import {
+  deleteRetainedDataRootBackup,
+  dismissRetainedDataRootBackups,
+  inspectRetainedDataRootBackup,
+  looksLikeSetsunaDataRoot,
+  readRetainedDataRootBackups,
+  recoverRetainedDataRootDeletions,
+  registerRetainedDataRootBackup,
+  retainedBackupError,
+} from './retained-backups.js';
 import { validateCopiedManifest, validateMigratedData } from './validation.js';
 
 type DataRootCoordinatorOptions = {
@@ -81,6 +93,8 @@ export class DesktopDataRootCoordinator {
   private cachedPlan: CachedPlan | null = null;
   private migrationPromise: Promise<DesktopDataRootActionResult> | null = null;
   private progress: DesktopDataMigrationProgress | null = null;
+  private retainedBackups: RetainedDataRootBackup[] = [];
+  private backupMutationInProgress = false;
   private readonly listeners = new Set<(state: DesktopDataRootState) => void>();
   private lastProgressEventAt = 0;
 
@@ -93,14 +107,23 @@ export class DesktopDataRootCoordinator {
 
   getState(): DesktopDataRootState {
     if (this.bootMode.mode === 'normal') {
+      const { activeRoot, defaultRoot, pointer } = this.bootMode;
       return {
         mode: 'normal',
-        activeRoot: this.bootMode.activeRoot,
-        defaultRoot: this.bootMode.defaultRoot,
-        ...(this.bootMode.pointer?.previousDataRoot
-          ? { previousRoot: this.bootMode.pointer.previousDataRoot }
+        activeRoot,
+        defaultRoot,
+        ...(pointer?.previousDataRoot
+          ? { previousRoot: pointer.previousDataRoot }
           : {}),
-        isCustom: !samePath(this.bootMode.activeRoot, this.bootMode.defaultRoot),
+        isCustom: !samePath(activeRoot, defaultRoot),
+        retainedBackups: this.retainedBackups
+          .filter((backup) => !samePath(backup.dataRoot, activeRoot))
+          .map((backup) => ({
+            id: backup.id,
+            path: backup.dataRoot,
+            createdAt: backup.createdAt,
+            promptOnStartup: backup.promptOnStartup,
+          })),
       };
     }
     if (this.bootMode.mode === 'recovery') {
@@ -136,12 +159,97 @@ export class DesktopDataRootCoordinator {
   }
 
   async finalizeStartup(): Promise<void> {
-    if (this.bootMode.mode !== 'normal' || !this.bootMode.completedPending) return;
-    await removePendingDataMigration(this.options.appDataRoot);
-    this.bootMode = {
-      ...this.bootMode,
-      completedPending: undefined,
-    };
+    if (this.bootMode.mode !== 'normal') return;
+    try {
+      await this.reconcileRetainedBackups();
+    } catch {
+      // Backup cleanup metadata is advisory and must not make the active data root
+      // unusable. Keep any readable records and let Settings surface later errors.
+      this.retainedBackups = await readRetainedDataRootBackups(this.options.appDataRoot);
+    }
+    if (this.bootMode.completedPending) {
+      await removePendingDataMigration(this.options.appDataRoot);
+      this.bootMode = {
+        ...this.bootMode,
+        completedPending: undefined,
+      };
+    }
+  }
+
+  inspectRetainedBackup(
+    backupId: string,
+  ): Promise<DesktopDataRootRetainedBackupInspection> {
+    if (this.bootMode.mode !== 'normal') {
+      return Promise.resolve({
+        id: backupId,
+        path: '',
+        status: 'unavailable',
+        fileCount: 0,
+        totalBytes: 0,
+        error: {
+          code: 'invalid_mode',
+          message: 'Old data can only be inspected during normal startup.',
+        },
+      });
+    }
+    return inspectRetainedDataRootBackup(
+      this.options.appDataRoot,
+      backupId,
+      this.backupSafetyContext(),
+    );
+  }
+
+  async deleteRetainedBackup(backupId: string): Promise<DesktopDataRootActionResult> {
+    if (this.bootMode.mode !== 'normal') {
+      return failure('invalid_mode', 'Old data can only be removed during normal startup.');
+    }
+    if (this.backupMutationInProgress) {
+      return failure('backup_cleanup_busy', 'Another old data operation is still running.');
+    }
+    this.backupMutationInProgress = true;
+    try {
+      const backup = this.retainedBackups.find((candidate) => candidate.id === backupId);
+      if (!backup) return failure('backup_not_found', 'The old data location is no longer registered.');
+      this.retainedBackups = await deleteRetainedDataRootBackup(
+        this.options.appDataRoot,
+        backupId,
+        this.backupSafetyContext(),
+      );
+      await this.clearPreviousRootIfDeleted(backup.dataRoot).catch(() => undefined);
+      this.emitState();
+      return { ok: true };
+    } catch (error) {
+      const issue = retainedBackupError(error, '');
+      return failure(issue.code, issue.message, issue.errorPath);
+    } finally {
+      this.backupMutationInProgress = false;
+    }
+  }
+
+  async dismissRetainedBackups(
+    backupIds: readonly string[],
+  ): Promise<DesktopDataRootActionResult> {
+    if (this.bootMode.mode !== 'normal') {
+      return failure('invalid_mode', 'Old data can only be managed during normal startup.');
+    }
+    if (this.backupMutationInProgress) {
+      return failure('backup_cleanup_busy', 'Another old data operation is still running.');
+    }
+    const registeredIds = new Set(this.retainedBackups.map((backup) => backup.id));
+    const selectedIds = [...new Set(backupIds)].filter((id) => registeredIds.has(id));
+    this.backupMutationInProgress = true;
+    try {
+      this.retainedBackups = await dismissRetainedDataRootBackups(
+        this.options.appDataRoot,
+        selectedIds,
+      );
+      this.emitState();
+      return { ok: true };
+    } catch (error) {
+      return failureFromError('backup_dismiss_failed', error);
+    } finally {
+      this.backupMutationInProgress = false;
+    }
   }
 
   async scanTarget(targetRoot: string): Promise<DesktopDataMigrationPlan> {
@@ -404,6 +512,7 @@ export class DesktopDataRootCoordinator {
       }
 
       this.setProgress({ ...this.requireProgress(), phase: 'committing' }, true);
+      await this.registerMigrationSourceBackup(pending);
       await commitStaging(stagingRoot, pending.targetRoot);
       await rm(path.join(pending.targetRoot, DATA_MIGRATION_OWNER_FILE_NAME), { force: true });
       await writeDataRootPointer(this.options.appDataRoot, {
@@ -470,6 +579,7 @@ export class DesktopDataRootCoordinator {
     if (!pending.targetRootId) return false;
     const marker = readDataRootMarkerSync(pending.targetRoot);
     if (marker?.rootId !== pending.targetRootId) return false;
+    await this.registerMigrationSourceBackup(pending);
     await rm(path.join(pending.targetRoot, DATA_MIGRATION_OWNER_FILE_NAME), { force: true });
     await writeDataRootPointer(this.options.appDataRoot, {
       version: 1,
@@ -596,13 +706,106 @@ export class DesktopDataRootCoordinator {
     ];
   }
 
+  private backupSafetyContext() {
+    if (this.bootMode.mode !== 'normal') {
+      throw new Error('Backup safety context requires normal startup.');
+    }
+    return {
+      activeRoot: this.bootMode.activeRoot,
+      reservedRoots: this.reservedRoots(),
+    };
+  }
+
+  private async registerMigrationSourceBackup(
+    pending: PendingDataMigration,
+  ): Promise<void> {
+    await registerRetainedDataRootBackup(this.options.appDataRoot, {
+      id: pending.migrationId,
+      dataRoot: pending.sourceRoot,
+      ...(pending.sourceRootId ? { rootId: pending.sourceRootId } : {}),
+      createdAt: pending.createdAt,
+      promptOnStartup: true,
+      refreshIdentity: true,
+    });
+  }
+
+  private async reconcileRetainedBackups(): Promise<void> {
+    if (this.bootMode.mode !== 'normal') return;
+    const context = this.backupSafetyContext();
+    await recoverRetainedDataRootDeletions(this.options.appDataRoot, context);
+    const pointer = this.bootMode.pointer;
+    if (
+      pointer?.previousDataRoot
+      && !samePath(pointer.previousDataRoot, this.bootMode.activeRoot)
+    ) {
+      await this.registerDiscoveredBackup(
+        pointer.previousDataRoot,
+        pointer.previousRootId,
+      );
+    }
+    if (
+      !samePath(this.bootMode.defaultRoot, this.bootMode.activeRoot)
+      && await looksLikeSetsunaDataRoot(this.bootMode.defaultRoot)
+    ) {
+      await this.registerDiscoveredBackup(this.bootMode.defaultRoot);
+    }
+    this.retainedBackups = await readRetainedDataRootBackups(this.options.appDataRoot);
+    const previousRoot = this.bootMode.pointer?.previousDataRoot;
+    if (
+      previousRoot
+      && !this.retainedBackups.some((backup) => samePath(backup.dataRoot, previousRoot))
+      && !await lstat(previousRoot).catch(() => null)
+    ) {
+      await this.clearPreviousRootIfDeleted(previousRoot);
+    }
+  }
+
+  private async registerDiscoveredBackup(
+    dataRoot: string,
+    rootId?: string,
+  ): Promise<void> {
+    try {
+      await registerRetainedDataRootBackup(this.options.appDataRoot, {
+        dataRoot,
+        ...(rootId ? { rootId } : {}),
+        promptOnStartup: true,
+        refreshIdentity: false,
+      });
+    } catch {
+      // An unavailable or identity-mismatched legacy path is not safe to adopt
+      // into the cleanup registry. Existing valid records remain untouched.
+    }
+  }
+
+  private async clearPreviousRootIfDeleted(deletedRoot: string): Promise<void> {
+    if (
+      this.bootMode.mode !== 'normal'
+      || !this.bootMode.pointer?.previousDataRoot
+      || !samePath(this.bootMode.pointer.previousDataRoot, deletedRoot)
+    ) {
+      return;
+    }
+    const { previousDataRoot: _previousDataRoot, previousRootId: _previousRootId, ...pointer } =
+      this.bootMode.pointer;
+    const nextPointer = {
+      ...pointer,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeDataRootPointer(this.options.appDataRoot, nextPointer);
+    this.bootMode = { ...this.bootMode, pointer: nextPointer };
+  }
+
+  private emitState(): void {
+    const state = this.getState();
+    for (const listener of this.listeners) listener(state);
+  }
+
   private setProgress(progress: DesktopDataMigrationProgress, force = false): void {
     this.progress = progress;
     const now = Date.now();
     if (!force && now - this.lastProgressEventAt < PROGRESS_EVENT_INTERVAL_MS) return;
     this.lastProgressEventAt = now;
-    const state = this.getState();
-    for (const listener of this.listeners) listener(state);
+    this.emitState();
   }
 }
 

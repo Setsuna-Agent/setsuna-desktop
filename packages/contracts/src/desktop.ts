@@ -6,6 +6,7 @@ import type { RuntimeInterfaceLanguage } from './config.js';
 import type {
   DesktopDataMigrationPlan,
   DesktopDataRootActionResult,
+  DesktopDataRootRetainedBackupInspection,
   DesktopDataRootState,
 } from './data-root.js';
 import type {
@@ -194,6 +195,9 @@ export type SetsunaDesktopBridge = {
     cancelMigration(): Promise<DesktopDataRootActionResult>;
     retryStartup(): Promise<DesktopDataRootActionResult>;
     restorePreviousRoot(): Promise<DesktopDataRootActionResult>;
+    inspectRetainedBackup(backupId: string): Promise<DesktopDataRootRetainedBackupInspection>;
+    deleteRetainedBackup(backupId: string): Promise<DesktopDataRootActionResult>;
+    dismissRetainedBackups(backupIds: string[]): Promise<DesktopDataRootActionResult>;
     onStateChange(callback: (state: DesktopDataRootState) => void): () => void;
   };
   desktopReview: {

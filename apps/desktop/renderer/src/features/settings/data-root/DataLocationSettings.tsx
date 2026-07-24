@@ -6,6 +6,7 @@ import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvid
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button } from '../../../shared/ui/primitives.js';
 import { DataMigrationIssueNotice } from './DataMigrationIssueNotice.js';
+import { DataRootBackupSettings } from './DataRootBackupSettings.js';
 import { formatDataBytes } from './dataRootFormat.js';
 import { dataRootCategoryMessageKey } from './dataRootMessages.js';
 
@@ -101,6 +102,7 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
           {activeRoot}
         </code>
       </div>
+      <DataRootBackupSettings />
       {error && !plan ? <div className="chat-user-settings__runtime-error">{error}</div> : null}
       <Modal
         centered

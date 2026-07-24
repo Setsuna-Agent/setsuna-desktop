@@ -123,6 +123,15 @@ describe('desktop data root coordinator', () => {
       previousDataRoot: fixture.sourceRoot,
       rootId: readDataRootMarkerSync(fixture.targetRoot)?.rootId,
     });
+    const retained = JSON.parse(
+      await readFile(bootstrap.retainedBackupsPath, 'utf8'),
+    ) as { backups: Array<{ dataRoot: string; promptOnStartup: boolean }> };
+    expect(retained.backups).toEqual([
+      expect.objectContaining({
+        dataRoot: fixture.sourceRoot,
+        promptOnStartup: true,
+      }),
+    ]);
     await expect(lstat(bootstrap.pendingMigrationPath)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
@@ -397,9 +406,88 @@ describe('desktop data root coordinator', () => {
     await expect(lstat(dataRootBootstrapLayout(fixture.appDataRoot).pendingMigrationPath))
       .rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  it('discovers the immediate previous root and an older default root for cleanup', async () => {
+    const fixture = await createMigrationFixture();
+    const previousRoot = path.join(fixture.root, 'previous-custom-data');
+    await mkdir(previousRoot);
+    await writeDataRootMarker(previousRoot, {
+      owner: 'setsuna-desktop',
+      version: 1,
+      rootId: 'previous_root',
+      createdAt: '2026-07-24T00:00:00.000Z',
+    });
+    await writeFixture(
+      fixture.sourceRoot,
+      'runtime/config.json',
+      JSON.stringify({ schemaVersion: 3 }),
+    );
+    await mkdir(fixture.targetRoot);
+    const coordinator = normalCoordinator(fixture, {
+      version: 1,
+      dataRoot: fixture.targetRoot,
+      rootId: 'active_root',
+      previousDataRoot: previousRoot,
+      previousRootId: 'previous_root',
+      updatedAt: '2026-07-24T00:00:00.000Z',
+    });
+
+    await coordinator.finalizeStartup();
+
+    expect(coordinator.getState()).toMatchObject({
+      mode: 'normal',
+      retainedBackups: expect.arrayContaining([
+        expect.objectContaining({ path: previousRoot, promptOnStartup: true }),
+        expect.objectContaining({ path: fixture.sourceRoot, promptOnStartup: true }),
+      ]),
+    });
+  });
+
+  it('permanently deletes a confirmed old root and clears the rollback pointer', async () => {
+    const fixture = await createMigrationFixture();
+    const previousRoot = path.join(fixture.root, 'previous-custom-data');
+    await mkdir(previousRoot);
+    await writeFixture(previousRoot, 'old.txt', 'old data');
+    await writeDataRootMarker(previousRoot, {
+      owner: 'setsuna-desktop',
+      version: 1,
+      rootId: 'previous_root',
+      createdAt: '2026-07-24T00:00:00.000Z',
+    });
+    await mkdir(fixture.targetRoot);
+    const coordinator = normalCoordinator(fixture, {
+      version: 1,
+      dataRoot: fixture.targetRoot,
+      rootId: 'active_root',
+      previousDataRoot: previousRoot,
+      previousRootId: 'previous_root',
+      updatedAt: '2026-07-24T00:00:00.000Z',
+    });
+    await coordinator.finalizeStartup();
+    const state = coordinator.getState();
+    if (state.mode !== 'normal') throw new Error('Expected normal data-root state.');
+    const backup = state.retainedBackups.find((candidate) => candidate.path === previousRoot);
+    if (!backup) throw new Error('Expected previous root backup.');
+
+    await expect(coordinator.deleteRetainedBackup(backup.id)).resolves.toEqual({ ok: true });
+
+    await expect(lstat(previousRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(coordinator.getState()).toMatchObject({
+      mode: 'normal',
+      retainedBackups: [],
+    });
+    expect(coordinator.getState()).not.toHaveProperty('previousRoot');
+    const pointer = JSON.parse(
+      await readFile(dataRootBootstrapLayout(fixture.appDataRoot).pointerPath, 'utf8'),
+    ) as Record<string, unknown>;
+    expect(pointer.previousDataRoot).toBeUndefined();
+    expect(pointer.previousRootId).toBeUndefined();
+    expect((await lstat(fixture.targetRoot)).isDirectory()).toBe(true);
+  });
 });
 
 type MigrationFixture = {
+  root: string;
   appDataRoot: string;
   sourceRoot: string;
   targetRoot: string;
@@ -424,7 +512,7 @@ async function createMigrationFixture(): Promise<MigrationFixture> {
     createdAt: '2026-07-23T00:00:00.000Z',
   };
   await writePendingDataMigration(appDataRoot, pending);
-  return { appDataRoot, sourceRoot, targetRoot, pending };
+  return { root, appDataRoot, sourceRoot, targetRoot, pending };
 }
 
 type LegacyImportFixture = {
@@ -518,6 +606,23 @@ function migratingCoordinator(
     bootMode,
     getRuntimeHost: () => null,
     requestRelaunch: async () => requestRelaunch(),
+  });
+}
+
+function normalCoordinator(
+  fixture: MigrationFixture,
+  pointer: NonNullable<Extract<DesktopDataRootBootMode, { mode: 'normal' }>['pointer']>,
+): DesktopDataRootCoordinator {
+  return new DesktopDataRootCoordinator({
+    appDataRoot: fixture.appDataRoot,
+    bootMode: {
+      mode: 'normal',
+      activeRoot: fixture.targetRoot,
+      defaultRoot: fixture.sourceRoot,
+      pointer,
+    },
+    getRuntimeHost: () => null,
+    requestRelaunch: async () => undefined,
   });
 }
 

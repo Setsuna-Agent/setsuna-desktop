@@ -97,6 +97,22 @@ export type DesktopDataMigrationProgress = {
   error?: DesktopDataMigrationError;
 };
 
+export type DesktopDataRootRetainedBackup = {
+  id: string;
+  path: string;
+  createdAt: string;
+  promptOnStartup: boolean;
+};
+
+export type DesktopDataRootRetainedBackupInspection = {
+  id: string;
+  path: string;
+  status: 'ready' | 'unavailable' | 'changed';
+  fileCount: number;
+  totalBytes: number;
+  error?: DesktopDataMigrationError;
+};
+
 export type DesktopDataRootState =
   | {
       mode: 'normal';
@@ -104,6 +120,7 @@ export type DesktopDataRootState =
       defaultRoot: string;
       previousRoot?: string;
       isCustom: boolean;
+      retainedBackups: DesktopDataRootRetainedBackup[];
     }
   | {
       mode: 'migrating';

@@ -76,6 +76,12 @@ const dataRoot: SetsunaDesktopBridge['dataRoot'] = {
   cancelMigration: () => ipcRenderer.invoke('desktop-data-root:cancel-migration'),
   retryStartup: () => ipcRenderer.invoke('desktop-data-root:retry-startup'),
   restorePreviousRoot: () => ipcRenderer.invoke('desktop-data-root:restore-previous'),
+  inspectRetainedBackup: (backupId) =>
+    ipcRenderer.invoke('desktop-data-root:inspect-retained-backup', backupId),
+  deleteRetainedBackup: (backupId) =>
+    ipcRenderer.invoke('desktop-data-root:delete-retained-backup', backupId),
+  dismissRetainedBackups: (backupIds) =>
+    ipcRenderer.invoke('desktop-data-root:dismiss-retained-backups', backupIds),
   onStateChange(callback) {
     const listener = (
       _event: Electron.IpcRendererEvent,

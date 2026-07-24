@@ -16,6 +16,9 @@ export function registerDataRootIpc(
     'desktop-data-root:cancel-migration',
     'desktop-data-root:retry-startup',
     'desktop-data-root:restore-previous',
+    'desktop-data-root:inspect-retained-backup',
+    'desktop-data-root:delete-retained-backup',
+    'desktop-data-root:dismiss-retained-backups',
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
 
@@ -48,6 +51,21 @@ export function registerDataRootIpc(
   ipcMain.handle('desktop-data-root:restore-previous', (event) => {
     if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
     return coordinator.restorePreviousRoot();
+  });
+  ipcMain.handle('desktop-data-root:inspect-retained-backup', (event, backupId) => {
+    if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
+    return coordinator.inspectRetainedBackup(String(backupId ?? ''));
+  });
+  ipcMain.handle('desktop-data-root:delete-retained-backup', (event, backupId) => {
+    if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
+    return coordinator.deleteRetainedBackup(String(backupId ?? ''));
+  });
+  ipcMain.handle('desktop-data-root:dismiss-retained-backups', (event, backupIds) => {
+    if (!trusted(event.sender)) throw new Error('Desktop renderer is unavailable.');
+    const ids = Array.isArray(backupIds)
+      ? backupIds.map((backupId) => String(backupId))
+      : [];
+    return coordinator.dismissRetainedBackups(ids);
   });
 
   return coordinator.subscribe((state) => {

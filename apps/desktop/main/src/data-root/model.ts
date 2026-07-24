@@ -19,6 +19,23 @@ export type DataRootPointer = {
   updatedAt: string;
 };
 
+export type RetainedDataRootBackup = {
+  id: string;
+  dataRoot: string;
+  rootId?: string;
+  deviceId: string;
+  inode: string;
+  createdAt: string;
+  promptOnStartup: boolean;
+  deletionRequestedAt?: string;
+  deletionRoot?: string;
+};
+
+export type RetainedDataRootBackupRegistry = {
+  version: 1;
+  backups: RetainedDataRootBackup[];
+};
+
 export type PendingDataMigration = {
   version: 1;
   kind?: 'data_root' | 'legacy_import';

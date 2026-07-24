@@ -121,9 +121,9 @@ BrowserToolHost
 - `pc-local-policies/`：PC Local Tools 的用户级 exec/shell 规则。runtime 不再读取 `~/.setsuna/desktop`。
 - `usage.jsonl`：模型 token 使用记录。
 
-系统默认数据目录之外只保留 `<appData>/Setsuna Desktop Bootstrap/` 下的位置指针、pending 事务和稳定实例锁。它们仅保存位置、所有权 ID、进程 ID 和迁移恢复信息，不保存业务数据。
+系统默认数据目录之外只保留 `<appData>/Setsuna Desktop Bootstrap/` 下的位置指针、pending 事务、旧数据根清理登记表和稳定实例锁。它们仅保存位置、目录身份、所有权 ID、进程 ID 和迁移恢复信息，不保存业务数据。
 
-更改数据根是重启级迁移：正常 runtime 先关闭新工作准入，子进程退出时等待已进入的 HTTP 写入、取消并排空 turn、释放 SQLite 租约并执行 WAL checkpoint；只有 stdin 关闭协议以退出码 0 完成才允许继续，超时后的 SIGTERM/SIGKILL 一律取消迁移并用旧指针重启。维护模式再复制到目标同级 staging、校验 checksum、受管 JSON/JSONL、SQLite 和资源数量、重写受管绝对路径，最后以同卷原子 rename 提交并原子更新位置指针；Skill、Plugin、运行依赖和浏览器 profile 内的任意 JSON 资源只校验 checksum。任一步失败都保留旧指针和源目录。自定义盘不可用、无法完成临时文件写入/删除探测或 marker 不匹配时只进入恢复页，不创建空数据根。
+更改数据根是重启级迁移：正常 runtime 先关闭新工作准入，子进程退出时等待已进入的 HTTP 写入、取消并排空 turn、释放 SQLite 租约并执行 WAL checkpoint；只有 stdin 关闭协议以退出码 0 完成才允许继续，超时后的 SIGTERM/SIGKILL 一律取消迁移并用旧指针重启。维护模式再复制到目标同级 staging、校验 checksum、受管 JSON/JSONL、SQLite 和资源数量、重写受管绝对路径，最后以同卷原子 rename 提交并原子更新位置指针；Skill、Plugin、运行依赖和浏览器 profile 内的任意 JSON 资源只校验 checksum。任一步失败都保留旧指针和源目录。新目录成功完成一次正常启动后显示迁移完成页，用户可暂时保留旧根，也可二次确认后永久删除；保留项继续在高级设置中可见。删除前重新核对设备号、inode、所有权 marker、活动根和路径嵌套，并先原子 rename 到同盘隔离名；中途崩溃会按登记事务继续，绝不把当前活动根当作旧数据删除。自定义盘不可用、无法完成临时文件写入/删除探测或 marker 不匹配时只进入恢复页，不创建空数据根。
 
 旧 memory 与 PC Local Tools 用户级规则也走维护状态机：启动前扫描源、预检空间并显示真实复制进度；memory staging、旧根备份和正式根替换由 pending 阶段记录保护，可从任意 rename 间隙继续或恢复。外部源只读保留，普通 runtime 从不执行这项导入。
 

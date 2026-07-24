@@ -1,6 +1,7 @@
 import { Button, EmptyState, StatusBadge } from '../../shared/ui/primitives.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { DataMigrationProgressPage } from '../../features/settings/data-root/DataMigrationProgressPage.js';
+import { DataMigrationCleanupPage } from '../../features/settings/data-root/DataMigrationCleanupPage.js';
 import { DataRootRecoveryPage } from '../../features/settings/data-root/DataRootRecoveryPage.js';
 import { useDesktopDataRoot } from '../providers/DesktopDataRootProvider.js';
 import { ShellFrame } from './ShellFrame.js';
@@ -26,5 +27,11 @@ export function DesktopDataRootGate({ children }: { children: React.ReactNode })
   }
   if (state?.mode === 'migrating') return <DataMigrationProgressPage state={state} />;
   if (state?.mode === 'recovery') return <DataRootRecoveryPage state={state} />;
+  if (
+    state?.mode === 'normal'
+    && state.retainedBackups.some((backup) => backup.promptOnStartup)
+  ) {
+    return <DataMigrationCleanupPage state={state} />;
+  }
   return children;
 }

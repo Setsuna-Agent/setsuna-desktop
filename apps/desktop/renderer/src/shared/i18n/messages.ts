@@ -5,6 +5,10 @@ import {
   capabilitiesManagementZhCN,
 } from './capabilitiesManagementMessages.js';
 import { capabilitiesEnUS, capabilitiesZhCN } from './capabilitiesMessages.js';
+import {
+  dataRootCleanupEnUS,
+  dataRootCleanupZhCN,
+} from './dataRootCleanupMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 
@@ -40,7 +44,7 @@ const zhCN = {
   'dataRoot.phase.restarting': '正在重新启动',
   'dataRoot.phase.failed': '迁移失败',
   'dataRoot.migration.title': '正在迁移 Setsuna 数据',
-  'dataRoot.migration.description': '源目录保持不变；只有复制和校验全部完成后才会切换到新目录。',
+  'dataRoot.migration.description': '源目录会在迁移完成前保持不变；复制和校验全部通过后才会切换到新目录。',
   'dataRoot.legacyImport.title': '正在统一旧版数据',
   'dataRoot.legacyImport.description': 'Setsuna 正在安全合并旧记忆和权限规则；完成前不会启动普通运行模式。',
   'dataRoot.migration.progress': '数据迁移进度',
@@ -71,7 +75,8 @@ const zhCN = {
   'dataRoot.plan.title': '迁移 Setsuna 数据',
   'dataRoot.plan.confirm': '重启并开始迁移',
   'dataRoot.plan.scanning': '正在扫描迁移清单与磁盘空间…',
-  'dataRoot.plan.notice': '迁移期间应用会重启。原目录与旧记忆目录会保留作回滚备份；凭据仅保证同一机器、同一系统用户可用。',
+  'dataRoot.plan.notice': '迁移期间应用会重启。原目录会暂时保留，迁移成功启动后可确认删除；凭据仅保证同一机器、同一系统用户可用。',
+  ...dataRootCleanupZhCN,
   'dataRoot.totalSize': '数据大小',
   'dataRoot.requiredSpace': '所需空间',
   'dataRoot.availableSpace': '可用空间',
@@ -623,7 +628,7 @@ const enUS = {
   'dataRoot.phase.restarting': 'Restarting',
   'dataRoot.phase.failed': 'Migration failed',
   'dataRoot.migration.title': 'Migrating Setsuna data',
-  'dataRoot.migration.description': 'The source stays unchanged. Setsuna switches locations only after the copy and every validation complete.',
+  'dataRoot.migration.description': 'The source remains unchanged until migration completes. Setsuna switches only after the copy and every validation pass.',
   'dataRoot.legacyImport.title': 'Consolidating legacy data',
   'dataRoot.legacyImport.description': 'Setsuna is safely merging legacy memories and permission rules before normal startup.',
   'dataRoot.migration.progress': 'Data migration progress',
@@ -654,7 +659,8 @@ const enUS = {
   'dataRoot.plan.title': 'Migrate Setsuna data',
   'dataRoot.plan.confirm': 'Restart and begin migration',
   'dataRoot.plan.scanning': 'Scanning the migration manifest and available disk space…',
-  'dataRoot.plan.notice': 'The app restarts for migration. The source and old memory location remain as rollback backups. Credentials are portable only for the same OS user on this machine.',
+  'dataRoot.plan.notice': 'The app restarts for migration. The old location is retained temporarily and can be removed after Setsuna starts successfully. Credentials remain usable only for the same OS user on this machine.',
+  ...dataRootCleanupEnUS,
   'dataRoot.totalSize': 'Data size',
   'dataRoot.requiredSpace': 'Required space',
   'dataRoot.availableSpace': 'Available space',

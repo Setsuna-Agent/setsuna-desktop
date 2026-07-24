@@ -32,6 +32,7 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 - `instance-lock.ts` 在稳定的系统 `appData` bootstrap 目录维护跨正常/迁移/恢复 profile 的唯一进程锁。
 - `manifest.ts` 扫描持久化文件、分类、磁盘空间、路径嵌套、目标所有权、挂载卷身份、实际网络文件系统类型和不支持的 symlink。
 - `legacy-import.ts` 在专用维护模式中导入旧 memory 与 `~/.setsuna/desktop` 权限规则，并用 pending 阶段恢复 memory 的双 rename 提交。
+- `retained-backups.ts` 登记迁移后保留的旧数据根，统计空间，并以目录身份复核和可恢复 rename 事务执行用户确认的永久删除。
 - `coordinator.ts` 执行 staging 复制、字节进度、checksum/受管 JSON/SQLite 校验、受管路径迁移、原子提交、崩溃续提和旧目录回退。
 - 迁移窗口使用隔离临时 profile；不得用源数据根启动 Chromium，否则扫描后源目录仍会被浏览器写入。
 
@@ -40,6 +41,7 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 - 非空且无 Setsuna marker 的目标、已有另一套 Setsuna 数据、源/目标互相包含、bootstrap 控制目录和空间不足都必须在复制前阻断。
 - staging 所有权文件使用 durable atomic JSON 写入；清理只接受匹配迁移 ID，或仅含该原子写入临时文件/旧版截断 owner 的可证明未初始化目录。最终 marker 与位置指针提交之前，不能删除或改写源目录。
 - runtime 迁移关闭必须由控制协议返回退出码 0；发送过终止信号的退出不能作为成功。
+- 迁移源只在新根正常启动后进入完成页；用户二次确认前不删除。旧根删除必须与活动根、bootstrap 根互不包含，并同时匹配登记时的设备号、inode 和可用所有权 marker。
 - 自定义根不可用或无法通过真实创建、写入、fsync、删除探测时进入恢复模式，只允许重试或恢复已验证且可写的旧根。
 
 ### `src/runtime/host.ts`
@@ -141,7 +143,7 @@ main 进程负责窗口生命周期、本地 runtime 子进程、系统能力和
 暴露对象：
 
 - `runtime`：`request()` 和 `startSse()`。
-- `dataRoot`：数据根状态、扫描、开始/执行/取消迁移、启动恢复和状态订阅。
+- `dataRoot`：数据根状态、扫描、开始/执行/取消迁移、启动恢复、旧根空间检查/确认删除/暂时保留和状态订阅。
 - `desktop`：平台、目录选择、用户 profile、本地路径打开。
 - `links`：打开外链。
 - `updater`：更新状态和操作。
