@@ -100,17 +100,89 @@
 }
 
 .conversation-debug-panel__placeholder {
-  display: grid;
+  display: flex;
   flex: 1;
-  place-content: center;
-  justify-items: center;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
   color: var(--app-text-muted);
-  font-size: 11px;
+  background-color: var(--app-surface-muted);
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--app-text-subtle) 14%, transparent) 1px,
+    transparent 1.25px
+  );
+  background-size: 24px 24px;
 }
 
-.conversation-debug-panel__placeholder .is-spinning {
-  animation: conversation-debug-spin 1s linear infinite;
+.conversation-debug-loading {
+  display: grid;
+  position: relative;
+  align-items: center;
+  justify-content: space-between;
+  grid-template-columns: repeat(3, 9px);
+  width: 58px;
+  height: 24px;
+}
+
+.conversation-debug-loading::before,
+.conversation-debug-loading::after {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  content: '';
+  transform: translateY(-50%);
+}
+
+.conversation-debug-loading::before {
+  right: 4px;
+  height: 1px;
+  background: color-mix(in srgb, var(--app-primary) 24%, var(--app-border));
+}
+
+.conversation-debug-loading::after {
+  z-index: 1;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--app-primary) 88%, white),
+    transparent
+  );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--app-primary) 38%, transparent);
+  animation: conversation-debug-loading-trace 1.6s ease-in-out infinite;
+}
+
+.conversation-debug-loading__node {
+  display: block;
+  position: relative;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
+  border-radius: 3px;
+  background: var(--app-surface);
+  box-shadow: 0 0 0 3px var(--app-surface-muted);
+  animation: conversation-debug-loading-node 1.6s ease-in-out infinite;
+}
+
+.conversation-debug-loading__node:nth-child(2) {
+  animation-delay: 180ms;
+}
+
+.conversation-debug-loading__node:nth-child(3) {
+  animation-delay: 360ms;
+}
+
+.conversation-debug-loading__label {
+  color: var(--app-text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 .conversation-debug-flow {
@@ -1041,11 +1113,52 @@
   .conversation-debug-inspector {
     animation: none;
   }
+
+  .conversation-debug-loading::after {
+    display: none;
+  }
+
+  .conversation-debug-loading__node {
+    animation: none;
+    transform: none;
+  }
 }
 
-@keyframes conversation-debug-spin {
-  to {
-    transform: rotate(360deg);
+@keyframes conversation-debug-loading-trace {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -50%, 0) scaleX(0.7);
+  }
+
+  18%,
+  78% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(32px, -50%, 0) scaleX(0.7);
+  }
+}
+
+@keyframes conversation-debug-loading-node {
+  0%,
+  26%,
+  100% {
+    border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
+    background: var(--app-surface);
+    box-shadow: 0 0 0 3px var(--app-surface-muted);
+    transform: scale(0.92);
+  }
+
+  42%,
+  58% {
+    border-color: color-mix(in srgb, var(--app-primary) 78%, var(--app-border));
+    background: color-mix(in srgb, var(--app-primary) 14%, var(--app-surface));
+    box-shadow:
+      0 0 0 3px var(--app-surface-muted),
+      0 0 10px color-mix(in srgb, var(--app-primary) 28%, transparent);
+    transform: scale(1);
   }
 }
 

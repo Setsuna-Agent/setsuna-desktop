@@ -14,6 +14,7 @@ import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { ConversationDebugEventList } from './ConversationDebugEventList.js';
 import { ConversationDebugFlow } from './ConversationDebugFlow.js';
 import { ConversationDebugInspector } from './ConversationDebugInspector.js';
+import { ConversationDebugLoadingState } from './ConversationDebugLoadingState.js';
 import {
   filterConversationDebugGraphByTurn,
   projectConversationDebugGraph,
@@ -184,10 +185,7 @@ export function ConversationDebugPanel({
                 />
               )
             ) : eventState.syncing ? (
-              <div className="conversation-debug-panel__placeholder">
-                <Activity aria-hidden="true" className="is-spinning" size={16} />
-                <span>{t('conversationDebug.preparing')}</span>
-              </div>
+              <ConversationDebugLoadingState label={t('conversationDebug.preparing')} />
             ) : (
               <EmptyState
                 title={t('conversationDebug.noEvents')}
