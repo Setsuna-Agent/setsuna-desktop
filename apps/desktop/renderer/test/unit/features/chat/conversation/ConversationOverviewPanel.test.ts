@@ -112,6 +112,8 @@ describe('ConversationOverviewPanel', () => {
     const html = renderOverviewPanel({ ...baseProps, compact: false }, 'en-US');
 
     expect(html).toContain('Environment information');
+    expect(html).toContain('aria-label="Collapse environment information"');
+    expect(html).toContain('lucide-chevron-up');
     expect(html).toContain('Changes');
     expect(html).toContain('Branch');
     expect(html).toContain('Commit or push');

@@ -4,7 +4,7 @@ import type {
   RuntimeUsageResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { ChevronsRightLeft, CircleGauge, FileText } from 'lucide-react';
+import { ChevronUp, CircleGauge, FileText } from 'lucide-react';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
@@ -90,7 +90,7 @@ export function ConversationOverviewPanel({
       <div className="chat-conversation-overview-panel__header">
         <span>{t('conversation.overview.title')}</span>
         <button type="button" aria-label={t('conversation.overview.collapse')} title={t('conversation.overview.collapse')} onClick={onCollapse}>
-          <ChevronsRightLeft size={13} />
+          <ChevronUp aria-hidden="true" size={15} />
         </button>
       </div>
       <div className="chat-conversation-overview-panel__actions">

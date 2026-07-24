@@ -36,7 +36,9 @@
   border-radius: 999px;
   color: var(--app-text);
   background: var(--app-surface);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  box-shadow:
+    0 4px 14px color-mix(in srgb, #000000 7%, transparent),
+    0 1px 3px color-mix(in srgb, #000000 4%, transparent);
   font: inherit;
   font-size: 13px;
   line-height: 20px;
@@ -71,7 +73,9 @@
   border-radius: 14px;
   color: var(--app-text);
   background: var(--app-surface);
-  box-shadow: var(--app-shadow-popover);
+  box-shadow:
+    0 8px 24px color-mix(in srgb, #000000 8%, transparent),
+    0 1px 4px color-mix(in srgb, #000000 4%, transparent);
 }
 
 @keyframes chat-conversation-overview-enter {
@@ -106,7 +110,7 @@
 
 .chat-conversation-overview-panel__header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   align-items: center;
   gap: 7px;
   min-height: 22px;
@@ -120,11 +124,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--app-text-muted);
   background: transparent;
   cursor: pointer;
@@ -133,6 +137,11 @@
 .chat-conversation-overview-panel__header button:hover {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
+}
+
+.chat-conversation-overview-panel__header button:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
 }
 
 .chat-conversation-overview-panel__actions {
