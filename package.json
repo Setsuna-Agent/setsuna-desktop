@@ -1,6 +1,6 @@
 {
   "name": "setsuna-desktop",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "packageManager": "pnpm@7.33.7",
   "description": "Local-first desktop runtime and workbench for Setsuna Agent workflows.",
   "author": {
