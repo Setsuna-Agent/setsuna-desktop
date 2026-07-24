@@ -63,7 +63,7 @@ export function useSideChat({
   currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
 
   useEffect(() => {
-    // 侧边任务沿用打开时的项目上下文；主区切换项目后从空白侧边任务重新开始。
+    // 侧边对话沿用打开时的项目上下文；主区切换项目后从空白侧边对话重新开始。
     setCurrentThread(null);
     resetComposer();
     setActiveTurnId(null);

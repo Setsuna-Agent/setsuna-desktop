@@ -63,7 +63,7 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
   return { active: overviewPanel.id, panels: [overviewPanel] };
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
-export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边任务'): DesktopPanelTab => ({ id, type: 'chat', title });
+export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边对话'): DesktopPanelTab => ({ id, type: 'chat', title });
 export const createConversationDebugPanel = (): DesktopPanelTab => ({
   id: CONVERSATION_DEBUG_PANEL_ID,
   type: 'conversation-debug',

@@ -165,7 +165,7 @@ function menuTitle(item: SlashCommandMenuItem | undefined, t: Translate): string
   if (item.type === 'goal') return t('chat.command.goal');
   if (item.type === 'usage') return t('chat.composer.usage');
   if (item.type === 'review') return t('chat.command.review');
-  if (item.type === 'side-chat') return t('chat.composer.sideTask');
+  if (item.type === 'side-chat') return t('chat.composer.sideChat');
   if (item.type === 'memory-mode') return t('chat.command.memory');
   return t('chat.command.label');
 }

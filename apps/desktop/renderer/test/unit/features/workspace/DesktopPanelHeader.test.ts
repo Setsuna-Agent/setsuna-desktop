@@ -65,6 +65,8 @@ describe('DesktopPanelHeader browser tabs', () => {
         onOpenPanel: vi.fn(),
         onSelectPanel: vi.fn(),
         panels: [
+          { id: 'side-chat-1', title: '侧边任务', type: 'chat' },
+          { id: 'side-chat-2', title: '侧边任务 2', type: 'chat' },
           { id: 'review', type: 'review' },
           { id: 'files', type: 'files' },
         ],
@@ -72,10 +74,13 @@ describe('DesktopPanelHeader browser tabs', () => {
       }),
     ));
 
+    expect(html).toContain('title="Side chat"');
+    expect(html).toContain('title="Side chat 2"');
     expect(html).toContain('title="Review"');
     expect(html).toContain('title="Open File"');
     expect(html).toContain('aria-label="Add panel"');
     expect(html).not.toContain('title="审查"');
+    expect(html).not.toContain('title="侧边任务');
   });
 });
 

@@ -258,8 +258,8 @@ export function useDesktopWorkspacePanels({
     return createSideChatPanelTab(
       `side-chat-${Date.now()}-${sequence}`,
       sequence === 1
-        ? t('workspace.panel.sideTask')
-        : t('workspace.panels.sideTaskNumbered', { sequence }),
+        ? t('workspace.panel.sideChat')
+        : t('workspace.panels.sideChatNumbered', { sequence }),
     );
   }, [t]);
 

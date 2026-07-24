@@ -7,21 +7,28 @@ import { workspaceAppIconAssets } from './workspaceAppIcons.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
+const sideChatKnownTitles = ['侧边任务', '侧边对话', 'Side task', 'Side chat'] as const;
+const sideChatNumberedTitlePattern = /^(?:侧边任务|侧边对话|Side task|Side chat) ([1-9]\d*)$/u;
 
-const panelTitleCopy: Partial<Record<DesktopPanelType, { key: MessageKey; legacyTitle: string }>> = {
-  overview: { key: 'workspace.panel.overview', legacyTitle: '汇总目录' },
-  chat: { key: 'workspace.panel.sideTask', legacyTitle: '侧边任务' },
-  'conversation-debug': { key: 'workspace.panel.conversationDebug', legacyTitle: '对话调试' },
-  browser: { key: 'workspace.panel.newTab', legacyTitle: '新标签页' },
-  review: { key: 'workspace.panel.review', legacyTitle: '审查' },
-  terminal: { key: 'workspace.panel.terminal', legacyTitle: '终端' },
-  files: { key: 'workspace.panel.openFile', legacyTitle: '打开文件' },
+const panelTitleCopy: Partial<Record<DesktopPanelType, { key: MessageKey; knownTitles: readonly string[] }>> = {
+  overview: { key: 'workspace.panel.overview', knownTitles: ['汇总目录'] },
+  // Normalize tabs opened before the copy change as well as tabs created in either locale.
+  chat: { key: 'workspace.panel.sideChat', knownTitles: sideChatKnownTitles },
+  'conversation-debug': { key: 'workspace.panel.conversationDebug', knownTitles: ['对话调试'] },
+  browser: { key: 'workspace.panel.newTab', knownTitles: ['新标签页'] },
+  review: { key: 'workspace.panel.review', knownTitles: ['审查'] },
+  terminal: { key: 'workspace.panel.terminal', knownTitles: ['终端'] },
+  files: { key: 'workspace.panel.openFile', knownTitles: ['打开文件'] },
 };
 
 export function desktopPanelTitle(panel: DesktopPanelTab, t: Translate = defaultTranslate): string {
   if (panel.type === 'file' && panel.filePath) return fileName(panel.filePath);
+  if (panel.type === 'chat' && panel.title) {
+    const numberedTitle = sideChatNumberedTitlePattern.exec(panel.title);
+    if (numberedTitle?.[1]) return t('workspace.panels.sideChatNumbered', { sequence: numberedTitle[1] });
+  }
   const copy = panelTitleCopy[panel.type];
-  if (copy && (!panel.title || panel.title === copy.legacyTitle)) return t(copy.key);
+  if (copy && (!panel.title || copy.knownTitles.includes(panel.title))) return t(copy.key);
   return panel.title || t('workspace.panel.openFile');
 }
 

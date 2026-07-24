@@ -45,10 +45,11 @@ describe('desktop workspace panel model', () => {
   });
 
   it('allows multiple independent side chat tabs', () => {
-    const first = createSideChatPanel('side-chat-1', '侧边任务');
-    const second = createSideChatPanel('side-chat-2', '侧边任务 2');
+    const first = createSideChatPanel('side-chat-1', '侧边对话');
+    const second = createSideChatPanel('side-chat-2', '侧边对话 2');
     const withChats = addPanelToSlotState(addPanelToSlotState(createDefaultSidePanelSlot(), first), second);
 
+    expect(createSideChatPanel().title).toBe('侧边对话');
     expect(withChats.active).toBe('side-chat-2');
     expect(withChats.panels).toEqual([first, second]);
   });
@@ -101,8 +102,8 @@ describe('desktop workspace panel model', () => {
   });
 
   it('reorders multiple side chat tabs', () => {
-    const first = createSideChatPanel('side-chat-1', '侧边任务');
-    const second = createSideChatPanel('side-chat-2', '侧边任务 2');
+    const first = createSideChatPanel('side-chat-1', '侧边对话');
+    const second = createSideChatPanel('side-chat-2', '侧边对话 2');
 
     const reordered = reorderPanelInSlotState({ active: second.id, panels: [first, second] }, second.id, first.id, 'before');
 

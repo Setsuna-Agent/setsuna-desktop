@@ -112,7 +112,7 @@ export function SideChatPanel({
   }, [activeWorkspace?.id, onError, onOpenWorkspaceFile, selectedWorkspaceApp, sideWorkspace, t]);
 
   return (
-    <aside className="desktop-workspace-panel desktop-side-chat-panel" aria-label={t('chat.sideTask.label')} hidden={hidden}>
+    <aside className="desktop-workspace-panel desktop-side-chat-panel" aria-label={t('chat.sideChat.label')} hidden={hidden}>
       <WorkspaceResizeHandle
         max={workspaceMaxWidth}
         min={workspaceMinWidth}
