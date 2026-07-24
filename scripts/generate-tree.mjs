@@ -8,6 +8,10 @@ const outputPath = path.join(repositoryRoot, 'Tree.md');
 const ignoredDirectories = new Set([
   '.cache', '.git', '.idea', '.turbo', '.vscode', 'dist', 'node_modules', 'release-artifacts',
 ]);
+const ignoredFileExtensions = new Set([
+  // TypeScript incremental state may exist locally but is absent from clean CI checkouts.
+  '.tsbuildinfo',
+]);
 const indexedRoots = [
   'apps/desktop/main',
   'apps/desktop/preload',
@@ -46,7 +50,7 @@ async function directoryStats(directory) {
       if (child.totalFiles === 0) continue;
       directories.push({ name: entry.name, ...child });
       totalFiles += child.totalFiles;
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !ignoredFileExtensions.has(path.extname(entry.name))) {
       directFiles += 1;
       totalFiles += 1;
     }

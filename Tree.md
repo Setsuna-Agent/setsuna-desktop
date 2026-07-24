@@ -164,7 +164,7 @@ apps/desktop/renderer/ — 0 direct / 450 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 5 direct / 61 total files
+packages/contracts/ — 4 direct / 60 total files
 ├── src/ — 35 direct / 44 total files
 │   └── swe/ — 9 direct / 9 total files
 └── test/ — 4 direct / 12 total files
@@ -175,7 +175,7 @@ packages/contracts/ — 5 direct / 61 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 5 direct / 392 total files
+packages/desktop-runtime/ — 4 direct / 391 total files
 ├── src/ — 2 direct / 216 total files
 │   ├── adapters/ — 92 files
 │   │   ├── approval/ — 1 direct / 1 total files
