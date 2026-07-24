@@ -105,17 +105,24 @@ export function RuntimePolicySettings({
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.runtime.localStorage')}</div>
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
-          <div className="chat-user-settings__row">
+          <div className="chat-user-settings__row chat-user-settings__path-row">
             <span className="chat-user-settings__row-label">
               <FileCog size={14} />
               <span>{t('settings.runtime.configFile')}</span>
             </span>
-            <div className="chat-user-settings__path-control">
-              <code title={config.configPath}>{config.configPath}</code>
-              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.configPath, t('settings.runtime.configFile'))}>
+            <div className="chat-user-settings__path-actions">
+              <Button
+                className="chat-user-settings__path-open"
+                icon={<FolderOpen size={14} />}
+                disabled={pathActionDisabled}
+                onClick={() => void openRuntimePath(config.configPath, t('settings.runtime.configFile'))}
+              >
                 {isOpeningConfig ? t('common.opening') : t('common.open')}
               </Button>
             </div>
+            <code className="chat-user-settings__path-value" title={config.configPath}>
+              {config.configPath}
+            </code>
           </div>
           <DataLocationSettings fallbackRoot={config.dataPath} />
         </div>

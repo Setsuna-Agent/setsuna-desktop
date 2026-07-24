@@ -73,13 +73,12 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
 
   return (
     <>
-      <div className="chat-user-settings__row">
+      <div className="chat-user-settings__row chat-user-settings__path-row">
         <span className="chat-user-settings__row-label">
           <Database size={14} />
           <span>{t('settings.runtime.dataDirectory')}</span>
         </span>
-        <div className="chat-user-settings__path-control">
-          <code title={activeRoot}>{activeRoot}</code>
+        <div className="chat-user-settings__path-actions">
           <Button
             className="chat-user-settings__path-open"
             icon={<FolderOpen size={14} />}
@@ -97,6 +96,9 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
             {t('dataRoot.change')}
           </Button>
         </div>
+        <code className="chat-user-settings__path-value" title={activeRoot}>
+          {activeRoot}
+        </code>
       </div>
       {error && !plan ? <div className="chat-user-settings__runtime-error">{error}</div> : null}
       <Modal
