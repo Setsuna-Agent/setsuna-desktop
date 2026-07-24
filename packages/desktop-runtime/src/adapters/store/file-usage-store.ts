@@ -106,8 +106,101 @@ function summarizeUsage(records: RuntimeUsageRecord[]): RuntimeUsageSummary {
     recordCount: records.length,
     byDay: bucket(records, (record) => localUsageDateKey(record.createdAt)).sort((a, b) => a.key.localeCompare(b.key)),
     byProvider: bucket(records, (record) => record.provider ?? 'unknown'),
-    byModel: bucket(records, (record) => record.model ?? 'unknown'),
+    byModel: modelBuckets(records),
   };
+}
+
+type ProviderContribution = {
+  key: string;
+  providerId?: string;
+  provider?: string;
+  totalTokens: number;
+  recordCount: number;
+  latestCreatedAt: string;
+};
+
+function modelBuckets(records: RuntimeUsageRecord[]): RuntimeUsageBucket[] {
+  const buckets = bucket(records, (record) => record.model ?? 'unknown');
+  const contributionsByModel = new Map<string, Map<string, ProviderContribution>>();
+
+  for (const record of records) {
+    const model = record.model ?? 'unknown';
+    const contribution = providerContribution(record);
+    if (!contribution) continue;
+    const contributions = contributionsByModel.get(model) ?? new Map<string, ProviderContribution>();
+    const existing = contributions.get(contribution.key);
+    contributions.set(contribution.key, existing
+      ? {
+          ...existing,
+          providerId: contribution.latestCreatedAt > existing.latestCreatedAt
+            ? contribution.providerId
+            : existing.providerId,
+          provider: contribution.latestCreatedAt > existing.latestCreatedAt
+            ? contribution.provider
+            : existing.provider,
+          totalTokens: existing.totalTokens + contribution.totalTokens,
+          recordCount: existing.recordCount + 1,
+          latestCreatedAt: contribution.latestCreatedAt > existing.latestCreatedAt
+            ? contribution.latestCreatedAt
+            : existing.latestCreatedAt,
+        }
+      : contribution);
+    contributionsByModel.set(model, contributions);
+  }
+
+  return buckets.map((usageBucket) => {
+    const dominant = dominantProvider(contributionsByModel.get(usageBucket.key));
+    if (!dominant) return usageBucket;
+    return {
+      ...usageBucket,
+      ...(dominant.providerId ? { dominantProviderId: dominant.providerId } : {}),
+      ...(dominant.provider ? { dominantProvider: dominant.provider } : {}),
+    };
+  });
+}
+
+function providerContribution(record: RuntimeUsageRecord): ProviderContribution | undefined {
+  const providerId = nonEmptyString(record.providerId);
+  const provider = nonEmptyString(record.provider);
+  const key = providerId
+    ? `id:${providerId}`
+    : provider
+      ? `name:${provider.toLocaleLowerCase()}`
+      : undefined;
+  return key
+    ? {
+        key,
+        ...(providerId ? { providerId } : {}),
+        ...(provider ? { provider } : {}),
+        totalTokens: record.totalTokens ?? 0,
+        recordCount: 1,
+        latestCreatedAt: record.createdAt,
+      }
+    : undefined;
+}
+
+function dominantProvider(
+  contributions: Map<string, ProviderContribution> | undefined,
+): ProviderContribution | undefined {
+  let dominant: ProviderContribution | undefined;
+  for (const contribution of contributions?.values() ?? []) {
+    if (
+      !dominant
+      || contribution.totalTokens > dominant.totalTokens
+      || (
+        contribution.totalTokens === dominant.totalTokens
+        && contribution.recordCount > dominant.recordCount
+      )
+      || (
+        contribution.totalTokens === dominant.totalTokens
+        && contribution.recordCount === dominant.recordCount
+        && contribution.latestCreatedAt > dominant.latestCreatedAt
+      )
+    ) {
+      dominant = contribution;
+    }
+  }
+  return dominant;
 }
 
 function bucket(records: RuntimeUsageRecord[], keyFor: (record: RuntimeUsageRecord) => string | undefined): RuntimeUsageBucket[] {
@@ -149,6 +242,10 @@ function normalizeRecord(record: RuntimeUsageRecord): RuntimeUsageRecord {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function localUsageDateKey(value: string): string | undefined {

@@ -54,7 +54,12 @@ export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }:
                   <BrandIconMark
                     brand={variant === 'provider'
                       ? usageProviderBrand(providers, bucket.key)
-                      : usageModelBrand(providers, bucket.key)}
+                      : usageModelBrand(
+                          providers,
+                          bucket.key,
+                          bucket.dominantProviderId,
+                          bucket.dominantProvider,
+                        )}
                     fallbackName={bucket.key}
                     size="compact"
                   />

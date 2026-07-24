@@ -57,5 +57,76 @@ describe('UsageSettings', () => {
     expect(html).toContain('brand-icon-mark');
     expect(html).toContain('MiniMax-M2.7-highspeed');
     expect(html).toContain('累计 1 次');
+    expect(html.match(/<span class="settings-usage-calendar__day[^>]*>/u)?.[0]).not.toContain('title=');
+  });
+
+  it('uses the dominant configured provider icon for model codes shared by multiple providers', () => {
+    const html = renderToStaticMarkup(createElement(UsageSettings, {
+      providers: [
+        {
+          id: 'setsuna',
+          name: 'Setsuna',
+          provider: 'openai-compatible',
+          baseUrl: 'https://setsuna.example/v1',
+          enabled: true,
+          icon: { type: 'preset', key: 'openai' },
+          apiKeySet: true,
+          apiKeyPreview: '***',
+          models: [{
+            id: 'setsuna-fugu',
+            name: 'Fugu',
+            code: 'fugu',
+            enabled: true,
+            maxOutputTokens: 8192,
+            thinkingEnabled: false,
+            thinkingEfforts: [],
+          }],
+        },
+        {
+          id: 'sakana',
+          name: 'Sakana',
+          provider: 'openai-compatible',
+          baseUrl: 'https://sakana.example/v1',
+          enabled: true,
+          icon: { type: 'preset', key: 'sakana' },
+          apiKeySet: true,
+          apiKeyPreview: '***',
+          models: [{
+            id: 'sakana-fugu',
+            name: 'Fugu',
+            code: 'fugu',
+            enabled: true,
+            maxOutputTokens: 8192,
+            thinkingEnabled: false,
+            thinkingEfforts: [],
+          }],
+        },
+      ],
+      usage: {
+        records: [],
+        summary: {
+          inputTokens: 900,
+          cachedInputTokens: 0,
+          outputTokens: 100,
+          totalTokens: 1000,
+          recordCount: 2,
+          byDay: [],
+          byProvider: [],
+          byModel: [{
+            key: 'fugu',
+            inputTokens: 900,
+            cachedInputTokens: 0,
+            outputTokens: 100,
+            totalTokens: 1000,
+            recordCount: 2,
+            dominantProviderId: 'sakana',
+            dominantProvider: 'Sakana',
+          }],
+        },
+      },
+    }));
+
+    expect(html).toContain('title="Sakana AI"');
+    expect(html).not.toContain('title="OpenAI"');
   });
 });

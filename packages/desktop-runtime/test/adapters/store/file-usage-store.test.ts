@@ -91,4 +91,40 @@ describe('file usage store', () => {
       { key: '阿里云百炼', totalTokens: 30, recordCount: 1 },
     ]);
   });
+
+  it('keeps the dominant provider identity when the same model code is used by multiple providers', async () => {
+    const store = new FileUsageStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-usage-provider-test-')),
+      new RandomIdGenerator(),
+    );
+
+    await store.recordUsage({
+      threadId: 'thread_setsuna',
+      turnId: 'turn_setsuna',
+      createdAt: '2026-07-14T07:45:22.900Z',
+      providerId: 'setsuna',
+      provider: 'Setsuna',
+      model: 'fugu',
+      totalTokens: 100,
+    });
+    await store.recordUsage({
+      threadId: 'thread_sakana',
+      turnId: 'turn_sakana',
+      createdAt: '2026-07-20T11:05:32.439Z',
+      providerId: 'sakana',
+      provider: 'Sakana',
+      model: 'fugu',
+      totalTokens: 900,
+    });
+
+    const usage = await store.getUsage();
+
+    expect(usage.summary.byModel).toMatchObject([{
+      key: 'fugu',
+      dominantProviderId: 'sakana',
+      dominantProvider: 'Sakana',
+      totalTokens: 1000,
+      recordCount: 2,
+    }]);
+  });
 });

@@ -367,57 +367,26 @@
 }
 
 .sd-action-tooltip {
-  position: relative;
   display: inline-flex;
 }
 
-.sd-action-tooltip:hover,
-.sd-action-tooltip:focus-within {
-  z-index: 1000;
+.sd-tooltip {
+  max-width: min(280px, calc(var(--app-scaled-viewport-width) - 24px));
 }
 
-.sd-action-tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  z-index: 1;
-  top: calc(100% + 6px);
-  right: 0;
-  width: max-content;
-  max-width: min(220px, calc(100vw - 24px));
+.sd-tooltip .sd-tooltip__container {
+  min-height: 28px;
   padding: 4px 8px;
   border: 1px solid var(--app-tooltip-border);
   border-radius: 7px;
   color: var(--app-text);
   background-color: var(--app-tooltip-bg);
   box-shadow: var(--app-shadow-popover);
+  font-family: var(--app-font-family);
   font-size: 12px;
   font-weight: var(--app-font-weight);
   line-height: 18px;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-2px);
-  transition: transform 120ms ease, visibility 0s linear 120ms;
-  white-space: nowrap;
-}
-
-.sd-action-tooltip:hover::after,
-.sd-action-tooltip:focus-within::after {
-  visibility: visible;
-  transform: translateY(0);
-  transition-delay: 0s;
-}
-
-.sd-action-tooltip--top::after {
-  top: auto;
-  right: auto;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translate(-50%, 2px);
-}
-
-.sd-action-tooltip--top:hover::after,
-.sd-action-tooltip--top:focus-within::after {
-  transform: translate(-50%, 0);
+  text-align: left;
 }
 
 .sd-button--primary {

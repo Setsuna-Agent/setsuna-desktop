@@ -30,6 +30,12 @@ export type RuntimeUsageBucket = {
   outputTokens: number;
   totalTokens: number;
   recordCount: number;
+  /**
+   * 按模型聚合时贡献 Token 最多的供应商。模型代码可能被多个供应商复用，
+   * 因而需要保留该身份，供展示层解析正确的已配置模型与图标。
+   */
+  dominantProviderId?: string;
+  dominantProvider?: string;
 };
 
 export type RuntimeUsageSummary = {

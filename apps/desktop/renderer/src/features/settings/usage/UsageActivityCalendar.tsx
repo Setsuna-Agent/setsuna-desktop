@@ -1,6 +1,7 @@
 import type { RuntimeUsageBucket } from '@setsuna-desktop/contracts';
 import { CalendarDays } from 'lucide-react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { formatTokens } from '../../workspace/model.js';
 import { buildUsageCalendar } from './usageCalendar.js';
 
@@ -49,12 +50,12 @@ export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
                 {week.map((day) => {
                   const label = calendarDayLabel(day.dateKey, day.totalTokens, day.cachedInputTokens, day.recordCount, day.isInRange, calendarDateFormatter, t);
                   return (
-                    <span
-                      className={`settings-usage-calendar__day${day.isInRange ? '' : ' is-outside'}`}
-                      data-level={day.level}
-                      key={day.dateKey}
-                      title={label}
-                    />
+                    <AppTooltip key={day.dateKey} placement="top" title={label}>
+                      <span
+                        className={`settings-usage-calendar__day${day.isInRange ? '' : ' is-outside'}`}
+                        data-level={day.level}
+                      />
+                    </AppTooltip>
                   );
                 })}
               </div>

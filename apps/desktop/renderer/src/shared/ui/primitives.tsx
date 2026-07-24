@@ -1,8 +1,10 @@
+import { Tooltip as AntTooltip, type TooltipProps } from 'antd';
 import { ArrowLeft } from 'lucide-react';
 import {
   forwardRef,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
+  type ReactElement,
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
@@ -37,11 +39,49 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   );
 });
 
+const appTooltipClassNames = {
+  root: 'sd-tooltip',
+  container: 'sd-tooltip__container',
+} as const;
+
+type AppTooltipProps = {
+  children: ReactElement;
+  mouseEnterDelay?: number;
+  open?: boolean;
+  placement?: TooltipProps['placement'];
+  title: ReactNode;
+};
+
+export function AppTooltip({
+  children,
+  mouseEnterDelay = 0.18,
+  open,
+  placement = 'top',
+  title,
+}: AppTooltipProps) {
+  return (
+    <AntTooltip
+      arrow={false}
+      autoAdjustOverflow
+      classNames={appTooltipClassNames}
+      destroyOnHidden
+      mouseEnterDelay={mouseEnterDelay}
+      open={open}
+      placement={placement}
+      title={title}
+    >
+      {children}
+    </AntTooltip>
+  );
+}
+
 export function ActionTooltip({ children, placement = 'bottom-end', title }: { children: ReactNode; placement?: 'bottom-end' | 'top'; title: string }) {
   return (
-    <span className={`sd-action-tooltip sd-action-tooltip--${placement}`} data-tooltip={title}>
-      {children}
-    </span>
+    <AppTooltip placement={placement === 'bottom-end' ? 'bottomRight' : 'top'} title={title}>
+      <span className={`sd-action-tooltip sd-action-tooltip--${placement}`} data-tooltip={title}>
+        {children}
+      </span>
+    </AppTooltip>
   );
 }
 

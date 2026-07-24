@@ -44,9 +44,9 @@ export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; icon: ReactNode }> = [
   { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} /> },
   { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
+  { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
   { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
   { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
-  { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
   { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
   { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
   { id: 'about', labelKey: 'settings.section.about', icon: <Info size={14} /> },

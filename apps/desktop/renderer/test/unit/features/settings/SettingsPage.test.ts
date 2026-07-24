@@ -20,6 +20,23 @@ describe('SettingsSidebar', () => {
     expect(html).not.toContain('chat-user-settings--page');
   });
 
+  it('places usage statistics third in the settings navigation', () => {
+    const html = renderToStaticMarkup(createElement(SettingsSidebar, {
+      activeSection: 'general',
+      onBack: vi.fn(),
+      onSelectSection: vi.fn(),
+    }));
+
+    const usageLabelIndex = html.indexOf('用量统计');
+    const tabsIndex = html.indexOf('chat-user-settings__tabs');
+    const navigationItemsBeforeUsageLabel = html
+      .slice(tabsIndex, usageLabelIndex)
+      .match(/<button/gu) ?? [];
+    expect(tabsIndex).toBeGreaterThan(-1);
+    expect(usageLabelIndex).toBeGreaterThan(-1);
+    expect(navigationItemsBeforeUsageLabel).toHaveLength(3);
+  });
+
   it('renders the settings navigation in English when selected', () => {
     const html = renderToStaticMarkup(
       createElement(
