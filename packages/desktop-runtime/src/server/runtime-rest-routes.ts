@@ -83,6 +83,17 @@ export async function handleRuntimeRestRequest(
   response: ServerResponse,
   url: URL,
 ): Promise<boolean> {
+  if (request.method === 'POST' && url.pathname === '/v1/data-migration/prepare') {
+    sendJson(response, 200, runtime.agentLoop.prepareDataMigration());
+    return true;
+  }
+
+  if (request.method === 'DELETE' && url.pathname === '/v1/data-migration/prepare') {
+    runtime.agentLoop.cancelDataMigrationPreparation();
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+
   if (request.method === 'POST' && url.pathname === '/v1/attachments') {
     const name = url.searchParams.get('name') ?? '';
     const type = url.searchParams.get('type') ?? '';

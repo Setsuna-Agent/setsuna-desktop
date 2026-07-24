@@ -19,7 +19,12 @@ import type {
   RuntimeMemoryStage1Output,
   RuntimeMemoryStage1OutputList
 } from '@setsuna-desktop/contracts';
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -28,7 +33,6 @@ import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinem
 import type {
   MemoryIndex,
   RenderedMemoryArtifacts,
-  StorageRootResolver,
   StoredMemoryPhase2Job,
   StoredMemoryRecord,
   StoredMemoryStage1Output
@@ -106,9 +110,8 @@ export class FileMemoryStore implements MemoryStore {
     private readonly dataDir: string,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
-    storageRootResolver?: StorageRootResolver,
   ) {
-    this.storageRoots = new MemoryStorageRootManager(dataDir, storageRootResolver);
+    this.storageRoots = new MemoryStorageRootManager(dataDir);
   }
 
   async listMemories(query: RuntimeMemoryQuery = {}): Promise<RuntimeMemoryList> {

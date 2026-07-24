@@ -186,7 +186,56 @@ describe('agent loop thread deletion barrier', () => {
     await deletion;
     expect(await threadStore.getThread(thread.id)).toBeNull();
   });
+
+  it('keeps migration blocked until cancelled turn cleanup settles, then closes new admissions', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-agent-loop-migration-'));
+    roots.push(root);
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(root, systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Migration admission barrier' });
+    const modelClient = new AbortIgnoringModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'remain registered after cancel' });
+    await modelClient.waitUntilStarted();
+    expect(loop.prepareDataMigration()).toMatchObject({ ready: false, registeredTasks: 1 });
+
+    await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
+    expect(loop.activeTurnId(thread.id)).toBeNull();
+    expect(loop.prepareDataMigration()).toMatchObject({ ready: false, registeredTasks: 1 });
+
+    modelClient.release();
+    await waitForMigrationReadiness(loop);
+    expect(loop.prepareDataMigration()).toMatchObject({
+      ready: true,
+      registeredTasks: 0,
+      pendingMutations: 0,
+    });
+    await expect(loop.startTurn(thread.id, { input: 'must wait for restart' }))
+      .rejects.toThrow('preparing to stop');
+
+    loop.cancelDataMigrationPreparation();
+    await expect(loop.sendTurn(thread.id, { input: 'preparation was cancelled' })).resolves.toBeUndefined();
+  });
 });
+
+async function waitForMigrationReadiness(loop: AgentLoop): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const readiness = loop.prepareDataMigration();
+    if (readiness.ready) {
+      loop.cancelDataMigrationPreparation();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error('Agent loop did not become ready for migration.');
+}
 
 class DeferredClaimAttachmentStore implements AttachmentStore {
   private claimStartedResolve: () => void = () => undefined;

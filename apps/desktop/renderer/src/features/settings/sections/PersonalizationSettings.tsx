@@ -5,7 +5,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { Popconfirm } from 'antd';
-import { ChevronRight, Cpu, Eye, FileText, FolderOpen, Pencil, RefreshCw, Sun, Trash2 } from 'lucide-react';
+import { ChevronRight, Cpu, Eye, FileText, Pencil, RefreshCw, Sun, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   Button,
@@ -14,7 +14,6 @@ import {
   PageHeader,
   SelectField,
   TextArea,
-  TextField,
 } from '../../../shared/ui/primitives.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { MemorySettingToggle, SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
@@ -50,12 +49,10 @@ export function PersonalizationSettings({
   ];
   const [personalizationView, setPersonalizationView] = useState<'overview' | 'memoryPreview'>('overview');
   const [globalPromptDraft, setGlobalPromptDraft] = useState(config.globalPrompt);
-  const [selectingStorage, setSelectingStorage] = useState(false);
   const [memoryDeletingId, setMemoryDeletingId] = useState<string | null>(null);
   const [memoryResetting, setMemoryResetting] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const globalPromptLength = Array.from(globalPromptDraft).length;
-  const storagePath = config.storagePath || config.dataPath;
 
   useEffect(() => {
     setGlobalPromptDraft(config.globalPrompt);
@@ -68,24 +65,6 @@ export function PersonalizationSettings({
     }, PERSONALIZATION_PROMPT_SAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [config.globalPrompt, globalPromptDraft, onSavePreferences]);
-
-  const selectMemoryStoragePath = async () => {
-    const api = window.setsunaDesktop?.desktop;
-    if (!api?.selectDirectory) {
-      setMemoryError(t('settings.personalization.selectUnsupported'));
-      return;
-    }
-    setSelectingStorage(true);
-    setMemoryError(null);
-    try {
-      const selectedPath = await api.selectDirectory({ title: t('settings.personalization.selectDirectory') });
-      if (selectedPath) await onSavePreferences({ storagePath: selectedPath });
-    } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, t('settings.personalization.selectError')));
-    } finally {
-      setSelectingStorage(false);
-    }
-  };
 
   const loadMemoryPreview = async () => {
     setMemoryError(null);
@@ -128,7 +107,7 @@ export function PersonalizationSettings({
 
   if (personalizationView === 'memoryPreview') {
     const items = memoryPreview?.items ?? [];
-    const previewStoragePath = memoryPreview?.storagePath || storagePath;
+    const previewStoragePath = memoryPreview?.storagePath || config.storagePath;
 
     return (
       <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__memory-preview-section">
@@ -252,18 +231,6 @@ export function PersonalizationSettings({
           <MemoryExtractModelField config={config} onSavePreferences={onSavePreferences} />
           <MemorySettingToggle checked={config.memory.disableOnExternalContext} description={t('settings.personalization.externalContextDescription')} label={t('settings.personalization.externalContext')} onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
           <MemorySettingToggle checked={config.memory.dedicatedTools} description={t('settings.personalization.memoryToolsDescription')} label={t('settings.personalization.memoryTools')} onChange={(checked) => void onSavePreferences({ memory: { dedicatedTools: checked } })} />
-          <div className="chat-user-settings__row chat-user-settings__local-field">
-            <span className="chat-user-settings__row-label">
-              <FolderOpen size={14} />
-              <span>{t('settings.personalization.storage')}</span>
-            </span>
-            <div className="chat-user-settings__local-storage-control">
-              <TextField className="settings-local-control" value={storagePath} readOnly />
-              <Button icon={<FolderOpen size={14} />} disabled={selectingStorage} onClick={() => void selectMemoryStoragePath()}>
-                {selectingStorage ? t('settings.personalization.selecting') : t('settings.personalization.select')}
-              </Button>
-            </div>
-          </div>
           <div className="chat-user-settings__row chat-user-settings__local-action-row">
             <span className="chat-user-settings__row-label">
               <Eye size={14} />

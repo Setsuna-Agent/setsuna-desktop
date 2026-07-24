@@ -4,6 +4,11 @@ import type { RuntimeEvent } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
 import type {
+  DesktopDataMigrationPlan,
+  DesktopDataRootActionResult,
+  DesktopDataRootState,
+} from './data-root.js';
+import type {
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSourceInput,
   DesktopUpdateState,
@@ -180,6 +185,16 @@ export type SetsunaDesktopBridge = {
     copyWorkspaceFilePath(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     revealWorkspaceFile(workspaceRoot: string, filePath: string): Promise<DesktopOpenPathResult>;
     createWorkspaceFilePreview(workspaceRoot: string, filePath: string): Promise<DesktopWorkspaceFilePreviewResult>;
+  };
+  dataRoot: {
+    getState(): Promise<DesktopDataRootState>;
+    scanTarget(targetRoot: string): Promise<DesktopDataMigrationPlan>;
+    beginMigration(planId: string): Promise<DesktopDataRootActionResult>;
+    runMigration(): Promise<DesktopDataRootActionResult>;
+    cancelMigration(): Promise<DesktopDataRootActionResult>;
+    retryStartup(): Promise<DesktopDataRootActionResult>;
+    restorePreviousRoot(): Promise<DesktopDataRootActionResult>;
+    onStateChange(callback: (state: DesktopDataRootState) => void): () => void;
   };
   desktopReview: {
     getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;

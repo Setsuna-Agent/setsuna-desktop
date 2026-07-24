@@ -207,7 +207,7 @@ describe('runtime host packaging paths', () => {
     expect(childState.kill).not.toHaveBeenCalled();
   });
 
-  it('force-stops a runtime that does not acknowledge the shutdown request', async () => {
+  it('rejects a runtime that requires forced termination', async () => {
     const childState = Object.assign(new EventEmitter(), {
       exitCode: null as number | null,
       signalCode: null as NodeJS.Signals | null,
@@ -221,9 +221,49 @@ describe('runtime host packaging paths', () => {
       }),
     });
 
-    await stopRuntimeChild(childState as unknown as RuntimeChildProcess, 0);
+    await expect(stopRuntimeChild(childState as unknown as RuntimeChildProcess, 0))
+      .rejects.toThrow('required forced termination');
 
     expect(childState.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('does not trust an exit code of zero after the graceful timeout elapsed', async () => {
+    const childState = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: vi.fn(() => {
+        childState.exitCode = 0;
+        childState.emit('exit', 0, null);
+        return true;
+      }),
+    });
+
+    await expect(stopRuntimeChild(childState as unknown as RuntimeChildProcess, 0))
+      .rejects.toThrow('required forced termination');
+    expect(childState.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('rejects a graceful shutdown that exits with a runtime error', async () => {
+    const stdin = new PassThrough();
+    const childState = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      stdin,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: vi.fn(),
+    });
+    stdin.on('data', () => {
+      childState.exitCode = 1;
+      childState.emit('exit', 1, null);
+    });
+
+    await expect(stopRuntimeChild(childState as unknown as RuntimeChildProcess, 100))
+      .rejects.toThrow('unsuccessful graceful shutdown');
+    expect(childState.kill).not.toHaveBeenCalled();
   });
 });
 

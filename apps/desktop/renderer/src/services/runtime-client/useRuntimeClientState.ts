@@ -445,21 +445,11 @@ export function useRuntimeClientState({ activeProjectId, setActiveProjectId }: R
   }, [client]);
 
   const saveRuntimePreferences = useCallback(
-    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'storagePath' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>) => {
+    async (input: Pick<RuntimeConfigInput, 'globalPrompt' | 'memory' | 'memoryEnabled' | 'setsunaStyle' | 'approvalPolicy' | 'permissionProfile' | 'sandboxWorkspaceWrite' | 'bypassHookTrust' | 'features' | 'desktopSettings'>) => {
       const next = await client.saveConfig(input);
       setConfig(next);
-      if (Object.hasOwn(input, 'storagePath')) {
-        const projectId = activeProjectId;
-        const isLatest = memoryListRequests.begin();
-        memoryPreviewRequests.invalidate();
-        const list = await client.listMemories({ projectId: projectId ?? undefined, limit: 20 });
-        if (isLatest() && activeProjectIdRef.current === projectId) {
-          setMemories(list.memories);
-          setMemoryPreview(null);
-        }
-      }
     },
-    [activeProjectId, client, memoryListRequests, memoryPreviewRequests],
+    [client],
   );
 
   const fetchProviderModels = useCallback(

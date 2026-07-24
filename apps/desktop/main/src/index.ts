@@ -12,13 +12,15 @@ import {
   type NativeImage,
   type Rectangle,
 } from 'electron';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBrowserContextMenuTemplate } from './browser/context-menu.js';
 import { BrowserControlServer } from './browser/control-server.js';
 import { DesktopBrowserController } from './browser/control.js';
 import { registerBrowserIpc } from './ipc/browser-ipc.js';
+import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
 import { registerReviewIpc } from './ipc/review-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
@@ -26,6 +28,13 @@ import { registerTerminalIpc } from './ipc/terminal-ipc.js';
 import { registerUpdaterIpc } from './ipc/updater-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
 import { registerWorkspaceIpc } from './ipc/workspace-ipc.js';
+import {
+  maintenanceProfileRoot,
+  resolveDesktopDataRootBootMode,
+} from './data-root/bootstrap.js';
+import { DesktopDataRootCoordinator } from './data-root/coordinator.js';
+import { acquireBootstrapInstanceLock } from './data-root/instance-lock.js';
+import { desktopDataLayout, legacyDesktopPolicyPaths } from './data-root/layout.js';
 import { installDesktopRipgrepEnvironment, resolveDesktopRipgrep } from './runtime/bundled-tools.js';
 import { hydrateDesktopProcessEnvironment } from './runtime/desktop-environment.js';
 import { RuntimeHost } from './runtime/host.js';
@@ -40,7 +49,6 @@ import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
-const desktopWindowStateFileName = 'window-state.json';
 const mainWindowDefaultWidth = 1320;
 const mainWindowDefaultHeight = 860;
 const mainWindowMinWidth = 880;
@@ -60,9 +68,45 @@ let isAppQuitting = false;
 let desktopServicesShutdownPromise: Promise<void> | null = null;
 let appQuitAfterShutdown = false;
 let appQuitShutdownPending = false;
+let desktopRelaunchRequested = false;
 const usesCustomFrame = process.platform !== 'darwin';
+const defaultDataRoot = app.getPath('userData');
+const desktopAppDataRoot = app.getPath('appData');
+const bootstrapInstanceLock = acquireBootstrapInstanceLock(desktopAppDataRoot);
+const legacyPolicyPaths = legacyDesktopPolicyPaths(os.homedir());
+const desktopDataRootBootMode = resolveDesktopDataRootBootMode({
+  appDataRoot: desktopAppDataRoot,
+  defaultRoot: defaultDataRoot,
+  legacyPolicyPaths: [
+    legacyPolicyPaths.execPolicyPath,
+    legacyPolicyPaths.shellPolicyPath,
+  ],
+});
+const electronProfileRoot = maintenanceProfileRoot(desktopDataRootBootMode)
+  ?? (desktopDataRootBootMode.mode === 'normal'
+    ? desktopDataRootBootMode.activeRoot
+    : desktopDataRootBootMode.defaultRoot);
+if (
+  desktopDataRootBootMode.mode !== 'normal'
+  || path.resolve(electronProfileRoot) === path.resolve(defaultDataRoot)
+) {
+  mkdirSync(electronProfileRoot, { recursive: true });
+}
+app.setPath('userData', electronProfileRoot);
+app.setPath('sessionData', electronProfileRoot);
+const dataRootCoordinator = new DesktopDataRootCoordinator({
+  appDataRoot: desktopAppDataRoot,
+  bootMode: desktopDataRootBootMode,
+  getRuntimeHost: () => runtimeHost,
+  requestRelaunch: requestDesktopRelaunch,
+});
 
 async function createWindow(): Promise<void> {
+  await dataRootCoordinator.finalizeStartup();
+  if (dataRootCoordinator.getState().mode !== 'normal') {
+    await createDataRootMaintenanceWindow();
+    return;
+  }
   if (desktopServicesShutdownPromise) {
     await desktopServicesShutdownPromise;
     desktopServicesShutdownPromise = null;
@@ -72,7 +116,8 @@ async function createWindow(): Promise<void> {
     app.dock?.setIcon(desktopIcon);
   }
 
-  const windowStateFilePath = path.join(app.getPath('userData'), desktopWindowStateFileName);
+  const dataLayout = desktopDataLayout(app.getPath('userData'));
+  const windowStateFilePath = dataLayout.windowStatePath;
   const windowState = loadDesktopWindowState(windowStateFilePath, desktopDisplayWorkAreas(), {
     defaultHeight: mainWindowDefaultHeight,
     defaultWidth: mainWindowDefaultWidth,
@@ -85,9 +130,11 @@ async function createWindow(): Promise<void> {
   let startupClosedBeforeHandoff = false;
   let startupInProgress = true;
   mainWindow = currentMainWindow;
+  const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator, currentMainWindow);
   registerWindowsTitlebarDoubleClick(currentMainWindow);
   if (usesCustomFrame) currentMainWindow.setMenu(null);
   currentMainWindow.on('closed', () => {
+    unregisterDataRootState();
     startupClosedBeforeHandoff = startupInProgress;
     if (mainWindow === currentMainWindow) mainWindow = null;
     if (!isAppQuitting && startupInProgress) {
@@ -130,7 +177,7 @@ async function createWindow(): Promise<void> {
   const browserControl = await currentBrowserControlServer.start();
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault: new DesktopCredentialVault(
-      path.join(app.getPath('userData'), 'secure-credentials.json'),
+      dataLayout.credentialVaultPath,
       electronCredentialEncryption(safeStorage),
     ),
     openExternal: async (url) => { await shell.openExternal(url); },
@@ -142,7 +189,7 @@ async function createWindow(): Promise<void> {
     appRoot: app.getAppPath(),
     browserControl,
     nativeBridge,
-    dataDir: app.getPath('userData'),
+    dataDir: dataLayout.root,
     ripgrepPath,
     requireBundledRipgrep: app.isPackaged,
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,
@@ -162,7 +209,7 @@ async function createWindow(): Promise<void> {
     currentVersion: app.getVersion(),
     repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',
     downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
-    sourceConfigPath: path.join(app.getPath('userData'), 'update-download-sources.json'),
+    sourceConfigPath: dataLayout.updateSourcesPath,
     enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
   });
   await desktopUpdater.initialize();
@@ -173,7 +220,7 @@ async function createWindow(): Promise<void> {
     mainWindow: currentMainWindow,
     nativeBridge: currentDesktopNativeBridgeServer,
     onInterfaceLanguageChange: (locale) => { interfaceLanguage = locale; },
-    userDataPath: app.getPath('userData'),
+    userDataPath: dataLayout.root,
   });
   registerUpdaterIpc(desktopUpdater, currentMainWindow, () => interfaceLanguage);
   registerWindowIpc({ macTrafficLightPosition: getMacTrafficLightPosition });
@@ -260,6 +307,59 @@ async function createWindow(): Promise<void> {
   desktopUpdater.start();
 }
 
+async function createDataRootMaintenanceWindow(): Promise<void> {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    return;
+  }
+  const desktopIcon = loadDesktopIcon();
+  if (process.platform === 'darwin' && desktopIcon) app.dock?.setIcon(desktopIcon);
+  const profileLayout = desktopDataLayout(app.getPath('userData'));
+  const windowState = loadDesktopWindowState(
+    profileLayout.windowStatePath,
+    desktopDisplayWorkAreas(),
+    {
+      defaultHeight: mainWindowDefaultHeight,
+      defaultWidth: mainWindowDefaultWidth,
+      minHeight: mainWindowMinHeight,
+      minWidth: mainWindowMinWidth,
+    },
+  );
+  const currentMainWindow = createMainBrowserWindow(desktopIcon, windowState.bounds);
+  mainWindow = currentMainWindow;
+  trackDesktopWindowState(currentMainWindow, profileLayout.windowStatePath);
+  registerWindowsTitlebarDoubleClick(currentMainWindow);
+  if (usesCustomFrame) currentMainWindow.setMenu(null);
+  registerWindowIpc({ macTrafficLightPosition: getMacTrafficLightPosition });
+  const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator, currentMainWindow);
+  currentMainWindow.on('closed', () => {
+    unregisterDataRootState();
+    if (mainWindow === currentMainWindow) mainWindow = null;
+    app.quit();
+  });
+  const devServerUrl = process.env.SETSUNA_DESKTOP_DEV_SERVER_URL;
+  if (devServerUrl) await currentMainWindow.loadURL(devServerUrl);
+  else await currentMainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
+  await waitForRendererFirstPaint(currentMainWindow);
+  currentMainWindow.show();
+}
+
+async function requestDesktopRelaunch(): Promise<void> {
+  if (desktopRelaunchRequested) return;
+  desktopRelaunchRequested = true;
+  try {
+    await shutdownDesktopServices({ requireRuntimeExit: true });
+    app.relaunch();
+  } catch (error) {
+    desktopRelaunchRequested = false;
+    desktopServicesShutdownPromise = null;
+    throw error;
+  }
+  appQuitAfterShutdown = true;
+  setTimeout(() => app.quit(), 50);
+}
+
 function createMainBrowserWindow(desktopIcon: NativeImage | undefined, bounds: Rectangle): BrowserWindow {
   return new BrowserWindow({
     ...bounds,
@@ -330,7 +430,9 @@ function getMacTrafficLightPosition(pageScale: number): { x: number; y: number }
   };
 }
 
-function shutdownDesktopServices(): Promise<void> {
+function shutdownDesktopServices(
+  options: { requireRuntimeExit?: boolean } = {},
+): Promise<void> {
   if (desktopServicesShutdownPromise) return desktopServicesShutdownPromise;
 
   const currentRuntimeHost = runtimeHost;
@@ -345,10 +447,12 @@ function shutdownDesktopServices(): Promise<void> {
   currentBrowserController?.clear();
 
   desktopServicesShutdownPromise = (async () => {
+    let runtimeStopError: unknown;
     try {
       await currentRuntimeHost?.stop();
     } catch (error) {
       console.error('[runtime] graceful shutdown failed', error);
+      runtimeStopError = error;
     }
 
     const bridgeResults = await Promise.allSettled([
@@ -359,17 +463,21 @@ function shutdownDesktopServices(): Promise<void> {
       if (result.status === 'rejected') console.error('[desktop] local bridge shutdown failed', result.reason);
     }
 
-    if (runtimeHost === currentRuntimeHost) runtimeHost = null;
+    if (!runtimeStopError && runtimeHost === currentRuntimeHost) runtimeHost = null;
     if (browserController === currentBrowserController) browserController = null;
     if (browserControlServer === currentBrowserControlServer) browserControlServer = null;
     if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
     if (terminalStore === currentTerminalStore) terminalStore = null;
     if (desktopUpdater === currentDesktopUpdater) desktopUpdater = null;
+    if (runtimeStopError && options.requireRuntimeExit) throw runtimeStopError;
   })();
   return desktopServicesShutdownPromise;
 }
 
-const ownsDesktopInstance = app.requestSingleInstanceLock();
+const ownsDesktopInstance = bootstrapInstanceLock !== null && app.requestSingleInstanceLock();
+const releaseBootstrapInstanceLock = () => bootstrapInstanceLock?.release();
+app.once('will-quit', releaseBootstrapInstanceLock);
+process.once('exit', releaseBootstrapInstanceLock);
 
 if (!ownsDesktopInstance) {
   // Exit before createWindow() can spawn a second runtime against the same user-data directory.

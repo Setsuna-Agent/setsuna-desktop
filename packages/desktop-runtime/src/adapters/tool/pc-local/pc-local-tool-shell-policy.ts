@@ -12,7 +12,6 @@ import {
   EXEC_POLICY_CONFIG_NAMES,
   SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS,
   SHELL_READ_COMMANDS_WITH_PATH_ARGS,
-  USER_EXEC_POLICY_CONFIG_PATHS,
 } from './pc-local-tool-constants.js';
 import {
   deniedGlobRegExpSourcesForState,
@@ -133,9 +132,9 @@ export function shellPolicyDecision(command, state) {
   return { action: '', reason: '', rule: null };
 }
 
-export function loadShellPolicyRules(workspaceRoot) {
+export function loadShellPolicyRules(workspaceRoot, userConfigPaths: readonly string[] = []) {
   const paths = [
-    ...USER_EXEC_POLICY_CONFIG_PATHS,
+    ...userConfigPaths,
     ...EXEC_POLICY_CONFIG_NAMES.map((name) => path.join(workspaceRoot, name)),
   ];
   const rules = [];

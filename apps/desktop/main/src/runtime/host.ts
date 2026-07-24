@@ -1,5 +1,6 @@
 import {
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
+  type RuntimeDataMigrationReadiness,
   type RuntimeAttachmentUploadInput,
   type RuntimeEvent,
   type RuntimeRequestInput,
@@ -42,7 +43,9 @@ type Subscription = {
 const DEFAULT_SSE_RETRY_BASE_DELAY_MS = 250;
 const MAX_SSE_RETRY_DELAY_MS = 5_000;
 const RUNTIME_READY_TIMEOUT_MS = 30_000;
-const RUNTIME_SHUTDOWN_TIMEOUT_MS = 5_000;
+// Runtime itself may spend up to five seconds draining turns before checkpointing stores.
+// Main leaves additional time for HTTP handlers, MCP teardown and the final SQLite close.
+const RUNTIME_SHUTDOWN_TIMEOUT_MS = 15_000;
 const RUNTIME_FORCE_EXIT_TIMEOUT_MS = 1_000;
 
 export type RuntimeChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
@@ -114,8 +117,10 @@ export class RuntimeHost {
     if (!child) return;
     this.stoppingChild = child;
     const stop = stopRuntimeChild(child, this.options.shutdownTimeoutMs ?? RUNTIME_SHUTDOWN_TIMEOUT_MS)
-      .finally(() => {
+      .then(() => {
         if (this.child === child) this.child = null;
+      })
+      .finally(() => {
         if (this.stoppingChild === child) this.stoppingChild = null;
         if (this.stoppingPromise === stop) this.stoppingPromise = null;
       });
@@ -140,6 +145,20 @@ export class RuntimeHost {
       body: input.body === undefined ? undefined : JSON.stringify(input.body),
     });
     return runtimeJsonResponse<T>(response, `${input.method ?? 'GET'} ${safePath}`);
+  }
+
+  prepareDataMigration(): Promise<RuntimeDataMigrationReadiness> {
+    return this.request({
+      path: '/v1/data-migration/prepare',
+      method: 'POST',
+    });
+  }
+
+  async cancelDataMigrationPreparation(): Promise<void> {
+    await this.request({
+      path: '/v1/data-migration/prepare',
+      method: 'DELETE',
+    });
   }
 
   /** 上传一个由渲染进程选择的文件，同时不暴露 runtime 端口或令牌。 */
@@ -452,7 +471,10 @@ export async function stopRuntimeChild(
   child: RuntimeChildProcess,
   gracefulTimeoutMs = RUNTIME_SHUTDOWN_TIMEOUT_MS,
 ): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (child.exitCode !== null || child.signalCode !== null) {
+    assertCleanRuntimeExit(child);
+    return;
+  }
 
   const exited = new Promise<void>((resolve) => {
     child.once('exit', () => resolve());
@@ -465,13 +487,31 @@ export async function stopRuntimeChild(
     } catch {
       // A process that already closed stdin is handled by the forced-stop fallback below.
     }
-    if (await settlesWithin(exited, Math.max(0, gracefulTimeoutMs))) return;
+    if (await settlesWithin(exited, Math.max(0, gracefulTimeoutMs))) {
+      assertCleanRuntimeExit(child);
+      return;
+    }
 
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
-    await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS);
+    if (await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS)) {
+      throw new Error('Runtime required forced termination after graceful shutdown timed out.');
+    }
+
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    if (!await settlesWithin(exited, RUNTIME_FORCE_EXIT_TIMEOUT_MS)) {
+      throw new Error('Runtime process did not exit after forced termination.');
+    }
+    throw new Error('Runtime required forced termination after graceful shutdown timed out.');
   } finally {
     child.stdin.off('error', ignoreStdinError);
   }
+}
+
+function assertCleanRuntimeExit(child: RuntimeChildProcess): void {
+  if (child.exitCode === 0 && child.signalCode === null) return;
+  throw new Error(
+    `Runtime reported an unsuccessful graceful shutdown (code=${child.exitCode ?? 'null'}, signal=${child.signalCode ?? 'null'}).`,
+  );
 }
 
 async function settlesWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {

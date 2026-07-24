@@ -12,7 +12,6 @@ export type SettingsSectionId =
 export type RuntimePreferenceInput = Pick<
   RuntimeConfigInput,
   | 'globalPrompt'
-  | 'storagePath'
   | 'memory'
   | 'memoryEnabled'
   | 'setsunaStyle'

@@ -2,7 +2,6 @@
 
 /** Shared limits and policy constants for PC local tools. */
 
-import { homedir } from 'node:os';
 import path from 'node:path';
 
 export const MAX_TEXT_BYTES = 60000;
@@ -117,12 +116,11 @@ export const EXEC_POLICY_CONFIG_NAMES = [
   path.join('.setsuna', 'shell-policy.json'),
 ];
 
-export const USER_EXEC_POLICY_CONFIG_PATHS = [
-  path.join(homedir(), '.setsuna', 'desktop', 'exec-policy.json'),
-  path.join(homedir(), '.setsuna', 'desktop', 'shell-policy.json'),
-];
+const DEFAULT_RUNTIME_DATA_DIR = process.env.SETSUNA_DESKTOP_DATA_DIR
+  ? path.join(path.resolve(process.env.SETSUNA_DESKTOP_DATA_DIR), 'runtime')
+  : path.join(process.cwd(), '.setsuna-runtime');
 
-export const MCP_CONFIG_PATH = path.join(homedir(), '.setsuna', 'desktop', 'mcp.json');
+export const MCP_CONFIG_PATH = path.join(DEFAULT_RUNTIME_DATA_DIR, 'mcp.json');
 
 export const MCP_SERVERS_KEY = 'mcpServers';
 
@@ -130,7 +128,7 @@ export const DEFAULT_MCP_TIMEOUT_MS = 60000;
 
 export const MAX_MCP_TIMEOUT_MS = 10 * 60 * 1000;
 
-export const DEFAULT_MEMORY_STORE_DIR = path.join(homedir(), '.setsuna', 'desktop', 'local-sessions');
+export const DEFAULT_MEMORY_STORE_DIR = path.join(DEFAULT_RUNTIME_DATA_DIR, 'memories');
 
 export const MEMORY_STORE_FILE_NAME = 'memories.json';
 

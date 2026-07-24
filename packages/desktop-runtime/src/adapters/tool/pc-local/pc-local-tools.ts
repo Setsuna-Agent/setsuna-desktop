@@ -137,13 +137,16 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
   return {
     root: workspaceRoot,
     environmentId: options?.environmentId || '',
-    mcpConfigPath: MCP_CONFIG_PATH,
+    mcpConfigPath: options?.mcpConfigPath || MCP_CONFIG_PATH,
     permissionProfile: 'workspace-write',
     sandboxWorkspaceWrite: {},
     // 主机没有受支持的沙箱提供方时，受限 Shell 配置必须以拒绝方式失败。
     // 只有显式获批的绕过操作才能暂时禁用此限制。
     osSandbox: true,
-    shellPolicyRules: loadShellPolicyRules(workspaceRoot),
+    shellPolicyRules: loadShellPolicyRules(
+      workspaceRoot,
+      options?.userPolicyConfigPaths ?? [],
+    ),
     networkPolicyAmendments: [],
     reads: new Map(),
     readFileResults: new Map(),

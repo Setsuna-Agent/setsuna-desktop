@@ -24,12 +24,13 @@ React renderer
 
 ## 启动链路
 
-1. `apps/desktop/main/src/index.ts` 在 `app.whenReady()` 后创建 `RuntimeHost`。
-2. `RuntimeHost` 分配本地端口，生成一次性 bearer token，并解析承载 runtime CLI 的 Node 模式可执行文件。
-3. runtime 通过 `ELECTRON_RUN_AS_NODE=1` 复用 Electron 可执行文件；macOS 优先使用 `LSUIElement` Helper，避免 runtime 及工作空间 Node 子进程注册额外 Dock 图标。开发环境可通过 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向 `packages/desktop-runtime/dist/cli.js`。
-4. runtime stdout 输出 ready JSON 后，main 做 `/health` 检查。
-5. main 创建 `BrowserWindow`，加载 Vite dev server 或 `dist/renderer/index.html`。
-6. renderer 初始化 `useRuntimeClientState()`，并行拉取 config、threads、skills、MCP、插件市场/已安装插件、projects、usage、memory、approvals。
+1. `apps/desktop/main/src/index.ts` 在 `requestSingleInstanceLock()` 之前读取系统 `appData` 下的位置指针或待处理迁移，选定数据根，并同步设置 Electron `userData` 与 `sessionData`。
+2. 正常启动使用所选数据根创建窗口和 `RuntimeHost`；迁移或恢复启动改用系统临时目录中的隔离 Chromium profile，只创建维护窗口，不启动 runtime、内置浏览器、terminal 或 updater。
+3. `RuntimeHost` 分配本地端口，生成一次性 bearer token，并解析承载 runtime CLI 的 Node 模式可执行文件。
+4. runtime 通过 `ELECTRON_RUN_AS_NODE=1` 复用 Electron 可执行文件；macOS 优先使用 `LSUIElement` Helper，避免 runtime 及工作空间 Node 子进程注册额外 Dock 图标。开发环境可通过 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向 `packages/desktop-runtime/dist/cli.js`。
+5. runtime stdout 输出 ready JSON 后，main 做 `/health` 检查。
+6. main 加载 Vite dev server 或 `dist/renderer/index.html`；renderer 的 `DesktopDataRootGate` 先决定显示迁移/恢复页还是初始化正常 runtime 状态。
+7. 正常模式下 renderer 初始化 `useRuntimeClientState()`，并行拉取 config、threads、skills、MCP、插件市场/已安装插件、projects、usage、memory、approvals。
 
 ## 请求与事件
 
@@ -106,7 +107,7 @@ BrowserToolHost
 
 ## 本地数据边界
 
-runtime 数据根是 Electron `userData/runtime`：
+用户选择的 Setsuna 数据根同时是 Electron `userData`/`sessionData`。窗口状态、界面与内置浏览器持久化状态、main 侧凭据和更新源配置都位于该根；runtime 数据位于 `<dataRoot>/runtime`：
 
 - `config.json`：本地偏好和 provider 配置，不含明文 key。
 - `secrets.json`：provider API key，写入时设置 `0600`。
@@ -116,8 +117,15 @@ runtime 数据根是 Electron `userData/runtime`：
 - `mcp.json`：本地 MCP server 配置。
 - `skills.json` 与 `user-skills/`：Skill 状态和用户 Skill。
 - `plugins.json` 与 `plugins/`：已安装 Plugin 的所有权索引和 runtime 私有副本。应用包内另有只读 `plugins/` 精选市场源；renderer 只看到无路径摘要，格式与安全约束见 `docs/plugin-bundles.md`。
-- `memories/`：默认 memory 根，带所有权 marker；用户配置 `storagePath` 后使用 `<storagePath>/.setsuna-memory/` 专属子目录。
+- `memories/`：唯一 memory 根，带所有权 marker。旧版 `storagePath` 只在 runtime 启动前的维护模式中结构化导入，外部旧目录不会被删除。
+- `pc-local-policies/`：PC Local Tools 的用户级 exec/shell 规则。runtime 不再读取 `~/.setsuna/desktop`。
 - `usage.jsonl`：模型 token 使用记录。
+
+系统默认数据目录之外只保留 `<appData>/Setsuna Desktop Bootstrap/` 下的位置指针、pending 事务和稳定实例锁。它们仅保存位置、所有权 ID、进程 ID 和迁移恢复信息，不保存业务数据。
+
+更改数据根是重启级迁移：正常 runtime 先关闭新工作准入，子进程退出时等待已进入的 HTTP 写入、取消并排空 turn、释放 SQLite 租约并执行 WAL checkpoint；只有 stdin 关闭协议以退出码 0 完成才允许继续，超时后的 SIGTERM/SIGKILL 一律取消迁移并用旧指针重启。维护模式再复制到目标同级 staging、校验 checksum、受管 JSON/JSONL、SQLite 和资源数量、重写受管绝对路径，最后以同卷原子 rename 提交并原子更新位置指针；Skill、Plugin、运行依赖和浏览器 profile 内的任意 JSON 资源只校验 checksum。任一步失败都保留旧指针和源目录。自定义盘不可用、无法完成临时文件写入/删除探测或 marker 不匹配时只进入恢复页，不创建空数据根。
+
+旧 memory 与 PC Local Tools 用户级规则也走维护状态机：启动前扫描源、预检空间并显示真实复制进度；memory staging、旧根备份和正式根替换由 pending 阶段记录保护，可从任意 rename 间隙继续或恢复。外部源只读保留，普通 runtime 从不执行这项导入。
 
 ## 安全边界
 

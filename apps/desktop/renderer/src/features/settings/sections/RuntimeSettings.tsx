@@ -4,7 +4,7 @@ import {
   type RuntimeConfigState,
   type RuntimeDesktopSettings,
 } from '@setsuna-desktop/contracts';
-import { ChevronRight, Database, FileCog, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
+import { ChevronRight, FileCog, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { localizedRuntimeAccessModeOptions } from '../../../shared/i18n/runtimeAccessModeCopy.js';
@@ -16,6 +16,7 @@ import { RuntimeAccessModeMenu } from '../../../shared/ui/RuntimeAccessModeMenu.
 import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/primitives.js';
 import { WorkspaceDependenciesSettings } from '../WorkspaceDependenciesSettings.js';
 import { MemorySettingToggle } from '../components/SettingsControls.js';
+import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 import { errorMessage } from '../settings-utils.js';
 
@@ -58,7 +59,6 @@ export function RuntimePolicySettings({
   };
 
   const isOpeningConfig = openingPath === config.configPath;
-  const isOpeningData = openingPath === config.dataPath;
   const pathActionDisabled = Boolean(openingPath);
   const accessMode = runtimeAccessModeForConfig(config);
   const accessModeOptions = localizedRuntimeAccessModeOptions(t);
@@ -117,18 +117,7 @@ export function RuntimePolicySettings({
               </Button>
             </div>
           </div>
-          <div className="chat-user-settings__row">
-            <span className="chat-user-settings__row-label">
-              <Database size={14} />
-              <span>{t('settings.runtime.dataDirectory')}</span>
-            </span>
-            <div className="chat-user-settings__path-control">
-              <code title={config.dataPath}>{config.dataPath}</code>
-              <Button className="chat-user-settings__path-open" icon={<FolderOpen size={14} />} disabled={pathActionDisabled} onClick={() => void openRuntimePath(config.dataPath, t('settings.runtime.dataDirectory'))}>
-                {isOpeningData ? t('common.opening') : t('common.open')}
-              </Button>
-            </div>
-          </div>
+          <DataLocationSettings fallbackRoot={config.dataPath} />
         </div>
         {localPathError ? <div className="chat-user-settings__runtime-error">{localPathError}</div> : null}
       </div>

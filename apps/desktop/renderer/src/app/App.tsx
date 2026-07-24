@@ -3,7 +3,9 @@ import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
 import { interfaceLanguageFromConfig, useI18n } from '../shared/i18n/I18nProvider.js';
 import { useDesktopAppController } from './controller/useDesktopAppController.js';
 import { AppReadyLayout } from './layout/AppReadyLayout.js';
+import { DesktopDataRootGate } from './layout/DesktopDataRootGate.js';
 import { ShellFrame } from './layout/ShellFrame.js';
+import { DesktopDataRootProvider } from './providers/DesktopDataRootProvider.js';
 import { ToastProvider } from './providers/ToastProvider.js';
 
 export function App() {
@@ -13,7 +15,11 @@ export function App() {
   return (
     <ToastProvider>
       <AppErrorBoundary>
-        <AppContent />
+        <DesktopDataRootProvider>
+          <DesktopDataRootGate>
+            <AppContent />
+          </DesktopDataRootGate>
+        </DesktopDataRootProvider>
       </AppErrorBoundary>
     </ToastProvider>
   );

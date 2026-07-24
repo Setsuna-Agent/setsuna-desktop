@@ -85,8 +85,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const mcpConnections = new SdkMcpConnectionManager({ nativeBridge, elicitationCoordinator: mcpElicitations });
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
   const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir, mcpStore);
-  // memory 的实际存储根会跟随用户配置变化，因此这里用延迟读取的 storagePath。
-  const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids, async () => (await configStore.getConfig()).storagePath);
+  const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids);
   const builtinSkillsDir =
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
   const fileSkillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
@@ -116,6 +115,14 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     policyAmendmentStore,
     workspaceDependencies,
     workspaceSearchEngine,
+    {
+      globalPolicyPaths: [
+        path.join(runtimeDataDir, 'pc-local-policies', 'legacy-exec-policy.json'),
+        path.join(runtimeDataDir, 'pc-local-policies', 'legacy-shell-policy.json'),
+      ],
+      mcpConfigPath: path.join(runtimeDataDir, 'mcp.json'),
+      memoryStorageRoot: path.join(runtimeDataDir, 'memories'),
+    },
   );
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([

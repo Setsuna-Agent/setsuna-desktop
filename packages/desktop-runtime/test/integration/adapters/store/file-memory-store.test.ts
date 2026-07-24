@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -425,70 +425,7 @@ describe('file memory store', () => {
     await expect(readFile(outsideFile, 'utf8')).resolves.toBe('outside secret\n');
   });
 
-  it('uses configured storage root while previewing the default fallback root', async () => {
-    const defaultDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-default-test-'));
-    const customDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-custom-test-'));
-    const customMemoryRoot = path.join(customDir, '.setsuna-memory');
-    await writeFile(path.join(customDir, 'keep.txt'), 'unrelated user file\n', 'utf8');
-    await mkdir(path.join(customDir, '.git'), { recursive: true });
-    await writeFile(path.join(customDir, '.git', 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
-    let storagePath = '';
-    const store = new FileMemoryStore(defaultDir, systemClock, new RandomIdGenerator(), () => storagePath);
-
-    const defaultMemory = await store.rememberMemory({ content: 'Default directory memory.' });
-    storagePath = customDir;
-    const customMemory = await store.rememberMemory({ content: 'Custom directory memory.' });
-
-    const customIndex = JSON.parse(await readFile(path.join(customMemoryRoot, 'memories.json'), 'utf8'));
-    const preview = await store.previewMemories();
-
-    expect(customIndex.memories).toMatchObject([{ id: customMemory.id }]);
-    expect(preview.storagePath).toBe(path.resolve(customMemoryRoot));
-    expect(preview.items.map((memory) => memory.id)).toEqual(expect.arrayContaining([customMemory.id, defaultMemory.id]));
-
-    await store.deleteMemory(defaultMemory.id);
-    await expect(store.listMemories()).resolves.toMatchObject({ memories: [{ id: customMemory.id }] });
-
-    await store.clearMemories();
-    await expect(directoryEntries(path.join(defaultDir, 'memories'))).resolves.toEqual(['.setsuna-memory-root.json']);
-    await expect(directoryEntries(customMemoryRoot)).resolves.toEqual(['.setsuna-memory-root.json']);
-    await expect(readFile(path.join(customDir, 'keep.txt'), 'utf8')).resolves.toBe('unrelated user file\n');
-    await expect(readFile(path.join(customDir, '.git', 'HEAD'), 'utf8')).resolves.toBe('ref: refs/heads/main\n');
-    await expect(store.previewMemories()).resolves.toMatchObject({ total: 0, items: [] });
-  });
-
-  it('imports legacy configured memory files once without deleting the source container', async () => {
-    const defaultDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-default-test-'));
-    const customDir = await mkdtemp(path.join(tmpdir(), 'setsuna-memory-legacy-test-'));
-    await writeFile(path.join(customDir, 'memories.json'), JSON.stringify({
-      version: 1,
-      memories: [{
-        id: 'mem_legacy',
-        scope: 'global',
-        content: 'Legacy configured memory.',
-        origin: 'active',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      }],
-    }), 'utf8');
-    await writeFile(path.join(customDir, 'keep.txt'), 'do not delete\n', 'utf8');
-
-    const store = new FileMemoryStore(defaultDir, systemClock, new RandomIdGenerator(), () => customDir);
-    await expect(store.listMemories()).resolves.toMatchObject({
-      memories: [expect.objectContaining({ id: 'mem_legacy', content: 'Legacy configured memory.' })],
-    });
-    await expect(readFile(path.join(customDir, '.setsuna-memory', 'memories.json'), 'utf8')).resolves.toContain('mem_legacy');
-
-    await store.clearMemories();
-    await expect(store.listMemories()).resolves.toMatchObject({ memories: [] });
-    await expect(readFile(path.join(customDir, 'memories.json'), 'utf8')).resolves.toContain('mem_legacy');
-    await expect(readFile(path.join(customDir, 'keep.txt'), 'utf8')).resolves.toBe('do not delete\n');
-  });
 });
-
-async function directoryEntries(dir: string): Promise<string[]> {
-  return (await readdir(dir)).sort();
-}
 
 function mutableClock(iso: string): { now(): Date; advance(ms: number): void } {
   let timestamp = Date.parse(iso);

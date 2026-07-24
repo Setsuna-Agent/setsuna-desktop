@@ -2,6 +2,7 @@ import type { DesktopImageActionResult, DesktopImageDataResult, DesktopImageInpu
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { desktopDataLayout } from '../data-root/layout.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_ENCODED_IMAGE_CHARS = Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 1_024;
@@ -88,7 +89,7 @@ export async function resolveGeneratedImageAssetPath(userDataDir: string, assetI
     throw new GeneratedImageActionError('Generated image asset id is invalid.');
   }
 
-  const root = path.resolve(userDataDir, 'runtime', 'generated-images');
+  const root = desktopDataLayout(userDataDir).generatedImagesRoot;
   const requestedAssetDirectory = path.resolve(root, assetId);
   if (path.dirname(requestedAssetDirectory) !== root) {
     throw new GeneratedImageActionError('Generated image asset escapes its storage root.');
@@ -155,7 +156,7 @@ export async function readGeneratedImageAsset(
 async function persistInlineImage(userDataDir: string, input: DesktopImageInput): Promise<string> {
   const { data, extension } = decodeSafeImageDataUrl(validatedImageDataUrl(input.dataUrl));
   const assetId = `inline_image_${createHash('sha256').update(data).digest('hex').slice(0, 24)}`;
-  const root = path.resolve(userDataDir, 'runtime', 'generated-images');
+  const root = desktopDataLayout(userDataDir).generatedImagesRoot;
   const assetDirectory = path.join(root, assetId);
   await mkdir(root, { recursive: true });
   try {

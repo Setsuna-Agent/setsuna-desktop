@@ -37,6 +37,12 @@ type ProjectToolState = {
   lastUsedAt: number;
 };
 
+type PcLocalToolHostStorage = {
+  globalPolicyPaths?: readonly string[];
+  mcpConfigPath?: string;
+  memoryStorageRoot?: string;
+};
+
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 const MAX_PERSISTENT_SHELL_TTL_MS = 6 * 60 * 60 * 1_000;
@@ -203,6 +209,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     private readonly policyAmendmentStore?: PolicyAmendmentStore,
     private readonly workspaceDependencies?: WorkspaceDependencyManager,
     private readonly workspaceSearchEngine: WorkspaceSearchEngine = new JavaScriptWorkspaceSearchEngine(),
+    private readonly storage: PcLocalToolHostStorage = {},
   ) {
     this.environmentResolver = new WorkspaceRuntimeEnvironmentResolver(projects);
   }
@@ -486,7 +493,10 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     }
     const toolState = pcTools.createLocalToolState(root, {
       environmentId: environment.id,
+      mcpConfigPath: this.storage.mcpConfigPath,
+      memoryStorageRoot: this.storage.memoryStorageRoot,
       shellProcessStore: this.shellProcessStore,
+      userPolicyConfigPaths: this.storage.globalPolicyPaths ?? [],
       workspaceSearchEngine: this.workspaceSearchEngine,
     }) as PcToolState;
     const created = {

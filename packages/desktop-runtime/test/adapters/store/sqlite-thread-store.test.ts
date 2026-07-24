@@ -1,5 +1,5 @@
 import type { RuntimeEvent, RuntimeMessage } from '@setsuna-desktop/contracts';
-import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -39,6 +39,29 @@ describe('sqlite thread store', () => {
     ]);
     await expect(reopened.listEvents(thread.id, 1)).resolves.toHaveLength(2);
     await reopened.close();
+  });
+
+  it('releases the runtime lease and checkpoints WAL before migration shutdown completes', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    await store.createThread({ title: 'Checkpoint before migration' });
+
+    await store.close();
+
+    const databasePath = path.join(dataDir, 'threads.sqlite');
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      const owner = database.prepare('SELECT COUNT(*) AS count FROM runtime_owner').get() as {
+        count: number;
+      };
+      expect(Number(owner.count)).toBe(0);
+      expect(database.prepare('PRAGMA quick_check').get()).toMatchObject({ quick_check: 'ok' });
+    } finally {
+      database.close();
+    }
+    const wal = await stat(`${databasePath}-wal`).catch(() => null);
+    expect(wal?.size ?? 0).toBe(0);
   });
 
   it('keeps provider envelopes across reopen without changing SQLite schema version 1', async () => {

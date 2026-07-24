@@ -127,6 +127,11 @@ export class SqliteThreadStore implements ThreadStore {
       this.stopLeaseHeartbeat();
       this.releaseOwnership();
       try {
+        this.database?.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+      } catch (error) {
+        failure ??= toError(error);
+      }
+      try {
         this.database?.close();
       } catch (error) {
         failure ??= toError(error);

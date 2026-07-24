@@ -68,6 +68,24 @@ const desktop: SetsunaDesktopBridge['desktop'] = {
     ipcRenderer.invoke('desktop:create-workspace-file-preview', { workspaceRoot, filePath }),
 };
 
+const dataRoot: SetsunaDesktopBridge['dataRoot'] = {
+  getState: () => ipcRenderer.invoke('desktop-data-root:get-state'),
+  scanTarget: (targetRoot) => ipcRenderer.invoke('desktop-data-root:scan-target', targetRoot),
+  beginMigration: (planId) => ipcRenderer.invoke('desktop-data-root:begin-migration', planId),
+  runMigration: () => ipcRenderer.invoke('desktop-data-root:run-migration'),
+  cancelMigration: () => ipcRenderer.invoke('desktop-data-root:cancel-migration'),
+  retryStartup: () => ipcRenderer.invoke('desktop-data-root:retry-startup'),
+  restorePreviousRoot: () => ipcRenderer.invoke('desktop-data-root:restore-previous'),
+  onStateChange(callback) {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: Parameters<typeof callback>[0],
+    ) => callback(state);
+    ipcRenderer.on('desktop-data-root:state-change', listener);
+    return () => ipcRenderer.off('desktop-data-root:state-change', listener);
+  },
+};
+
 const windowControls: SetsunaDesktopBridge['windowControls'] = {
   minimize: () => ipcRenderer.invoke('window-control:minimize'),
   toggleMaximize: () => ipcRenderer.invoke('window-control:toggle-maximize'),
@@ -166,5 +184,16 @@ const terminal: SetsunaDesktopBridge['terminal'] = {
   },
 };
 
-const bridge: SetsunaDesktopBridge = { browser, desktop, desktopReview, links, runtime, terminal, updater, windowControls, workspaceApps };
+const bridge: SetsunaDesktopBridge = {
+  browser,
+  dataRoot,
+  desktop,
+  desktopReview,
+  links,
+  runtime,
+  terminal,
+  updater,
+  windowControls,
+  workspaceApps,
+};
 contextBridge.exposeInMainWorld('setsunaDesktop', bridge);

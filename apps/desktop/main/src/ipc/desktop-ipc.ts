@@ -44,7 +44,8 @@ export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLangua
     onInterfaceLanguageChange(locale);
     return true;
   });
-  ipcMain.handle('desktop:select-directory', async (_event, input) => {
+  ipcMain.handle('desktop:select-directory', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return null;
     const options: OpenDialogOptions = {
       title: String(input?.title || '选择项目目录'),
       properties: ['openDirectory', 'createDirectory'],

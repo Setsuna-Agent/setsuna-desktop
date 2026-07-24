@@ -31,7 +31,10 @@ import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
-const CONFIG_SCHEMA_VERSION = 2;
+const CONFIG_SCHEMA_VERSION = 3;
+// Network access changed from an implicit deny to an explicit, user-controllable
+// setting in schema v2. Later schema changes must not replay that one-time migration.
+const NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION = 2;
 
 const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'PreToolUse',
@@ -50,9 +53,11 @@ type StoredImageGenerationConfig = Omit<RuntimeImageGenerationConfigState, 'apiK
 
 type StoredConfig = Omit<
   RuntimeConfigState,
-  'configPath' | 'dataPath' | 'providers' | 'memory' | 'memoryEnabled' | 'imageGeneration'
+  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'memory' | 'memoryEnabled' | 'imageGeneration'
 > & {
   schemaVersion?: number;
+  /** Pre-v3 compatibility input. It is consumed once and never written again. */
+  storagePath?: string;
   memory?: Partial<RuntimeMemorySettings>;
   memoryEnabled?: boolean;
   imageGeneration?: StoredImageGenerationConfig;
@@ -112,6 +117,23 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  async getLegacyStoragePath(): Promise<string> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      return normalizeStoragePath(stored.storagePath);
+    });
+  }
+
+  async clearLegacyStoragePath(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      if (!Object.hasOwn(stored, 'storagePath')) return;
+      delete stored.storagePath;
+      stored.schemaVersion = CONFIG_SCHEMA_VERSION;
+      await writeJsonFile(this.configPath, stored);
+    });
+  }
+
   async saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState> {
     return withFileStateUpdate(this.configPath, async () => {
       await mkdir(this.dataDir, { recursive: true });
@@ -127,7 +149,6 @@ export class FileConfigStore implements ConfigStore {
         schemaVersion: CONFIG_SCHEMA_VERSION,
         activeProviderId,
         globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
-        storagePath: normalizeStoragePath(input.storagePath ?? previous.storagePath),
         memory,
         memoryEnabled: memory.useMemories || memory.generateMemories,
         setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
@@ -135,7 +156,11 @@ export class FileConfigStore implements ConfigStore {
         permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
         sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(
           input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite,
-          { migrateNetworkDefault: input.sandboxWorkspaceWrite === undefined && (previous.schemaVersion ?? 0) < CONFIG_SCHEMA_VERSION },
+          {
+            migrateNetworkDefault:
+              input.sandboxWorkspaceWrite === undefined
+              && (previous.schemaVersion ?? 0) < NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION,
+          },
         ),
         hooks: normalizeHooksConfig(input.hooks ?? previous.hooks),
         bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
@@ -166,7 +191,7 @@ export class FileConfigStore implements ConfigStore {
     return {
       configPath: this.configPath,
       dataPath: this.dataDir,
-      storagePath: normalizeStoragePath(stored.storagePath),
+      storagePath: path.join(this.dataDir, 'memories'),
       activeProviderId: stored.activeProviderId,
       globalPrompt: normalizeGlobalPrompt(stored.globalPrompt),
       memory,
@@ -175,7 +200,8 @@ export class FileConfigStore implements ConfigStore {
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
       sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite, {
-        migrateNetworkDefault: (stored.schemaVersion ?? 0) < CONFIG_SCHEMA_VERSION,
+        migrateNetworkDefault:
+          (stored.schemaVersion ?? 0) < NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION,
       }),
       hooks: normalizeHooksConfig(stored.hooks),
       bypassHookTrust: stored.bypassHookTrust === true,
@@ -213,7 +239,6 @@ function defaultConfig(): StoredConfig {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     activeProviderId: 'local-test',
     globalPrompt: '',
-    storagePath: '',
     memory: defaultMemorySettings(),
     memoryEnabled: true,
     setsunaStyle: 'developer',

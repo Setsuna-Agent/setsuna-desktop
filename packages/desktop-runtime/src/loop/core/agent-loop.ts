@@ -1,6 +1,7 @@
 import type {
   RuntimeDynamicToolDefinition,
   RuntimeMemoryCitation,
+  RuntimeDataMigrationReadiness,
   RuntimeMessage,
   RuntimeThread,
   RuntimeThreadGoal,
@@ -109,6 +110,7 @@ export class AgentLoop {
   private readonly deletingThreads = new Set<string>();
   private readonly threadMutationAdmissions = new Map<string, Set<Promise<void>>>();
   private shuttingDown = false;
+  private dataMigrationPreparing = false;
 
   constructor(private readonly options: AgentLoopOptions) {
     const environmentResolver = runtimeEnvironmentResolver(options.environmentResolver, options.toolHost);
@@ -304,6 +306,23 @@ export class AgentLoop {
 
   flushEvents(): Promise<void> {
     return this.eventWriter.flushAll();
+  }
+
+  /**
+   * Atomically closes turn/mutation admission when the runtime is already quiescent.
+   * Cancelled tasks remain registered until their terminal writes finish, so they block too.
+   */
+  prepareDataMigration(): RuntimeDataMigrationReadiness {
+    const registeredTasks = this.turnTasks.registeredTaskCount();
+    const pendingMutations = [...this.threadMutationAdmissions.values()]
+      .reduce((total, admissions) => total + admissions.size, 0);
+    const ready = !this.shuttingDown && registeredTasks === 0 && pendingMutations === 0;
+    if (ready) this.dataMigrationPreparing = true;
+    return { ready, registeredTasks, pendingMutations };
+  }
+
+  cancelDataMigrationPreparation(): void {
+    if (!this.shuttingDown) this.dataMigrationPreparing = false;
   }
 
   async shutdown(reason = 'Desktop runtime is shutting down.', timeoutMs = 5_000): Promise<boolean> {
@@ -627,7 +646,9 @@ export class AgentLoop {
   }
 
   private assertAcceptingWork(): void {
-    if (this.shuttingDown) throw new Error('Desktop runtime is shutting down and cannot accept new work.');
+    if (this.shuttingDown || this.dataMigrationPreparing) {
+      throw new Error('Desktop runtime is preparing to stop and cannot accept new work.');
+    }
   }
 
   private assertThreadAcceptingWork(threadId: string): void {

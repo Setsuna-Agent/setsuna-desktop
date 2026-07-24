@@ -101,6 +101,10 @@ export class RuntimeTurnTaskRegistry {
     return [...this.tasksByKey.values()].filter((task) => !task.controller.signal.aborted);
   }
 
+  registeredTaskCount(): number {
+    return this.tasksByKey.size;
+  }
+
   cancelAll(reason?: unknown): RuntimeTurnTask[] {
     const cancelled: RuntimeTurnTask[] = [];
     for (const task of this.tasksByKey.values()) {

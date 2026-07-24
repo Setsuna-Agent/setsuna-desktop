@@ -14,6 +14,7 @@ import { handleRuntimeRestRequest } from './runtime-rest-routes.js';
 import { settleStaleRuntimeTurns } from './runtime-thread-events.js';
 import { handleAppServerNotificationSse, runtimeEventStreamExperimentalApi } from './sse.js';
 import type { RuntimeServer, RuntimeServerOptions } from './types.js';
+import { InFlightRequestTracker } from './in-flight-requests.js';
 
 export type { RuntimeServer, RuntimeServerOptions } from './types.js';
 
@@ -52,12 +53,14 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   const fsManager = createAppServerFsManager(runtime.appServerNotificationBus);
   const appServerConnections = createAppServerConnectionRegistry();
   const sseResponses = new Set<http.ServerResponse>();
+  const inFlightRequests = new InFlightRequestTracker();
   let shuttingDown = false;
   let closingPromise: Promise<void> | null = null;
   const unsubscribeSkillChanges = runtime.skillRegistry.subscribeChanges(() => {
     runtime.appServerNotificationBus.publish({ method: 'skills/changed', params: {} });
   });
   const server = http.createServer(async (request, response) => {
+    const finishRequest = inFlightRequests.begin();
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1');
       if (shuttingDown) {
@@ -131,6 +134,8 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         error: error instanceof Error ? error.message : String(error),
         ...(error instanceof RuntimeHttpError && error.code ? { code: error.code } : {}),
       });
+    } finally {
+      finishRequest();
     }
   });
 
@@ -151,7 +156,9 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         commandExecManager.terminateAll();
         fsManager.terminateAll();
         try {
-          await runtime.agentLoop.shutdown();
+          const drained = await runtime.agentLoop.shutdown();
+          await inFlightRequests.waitForIdle();
+          if (!drained) throw new Error('Runtime tasks did not drain before shutdown timeout.');
         } finally {
           try {
             await runtime.backgroundShellProcesses.shutdown();

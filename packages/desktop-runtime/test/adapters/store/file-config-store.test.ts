@@ -38,6 +38,32 @@ describe('file config store', () => {
     });
   });
 
+  it('preserves an explicit network denial from schema v2 when upgrading the config', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    await store.saveConfig({ sandboxWorkspaceWrite: { networkAccess: false } });
+    const configPath = path.join(dataDir, 'config.json');
+    const schemaV2 = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    schemaV2.schemaVersion = 2;
+    await writeFile(configPath, `${JSON.stringify(schemaV2, null, 2)}\n`, 'utf8');
+
+    await expect(store.getConfig()).resolves.toMatchObject({
+      sandboxWorkspaceWrite: { networkAccess: false },
+    });
+    await expect(store.saveConfig({ globalPrompt: 'preserve explicit network denial' }))
+      .resolves.toMatchObject({
+        sandboxWorkspaceWrite: { networkAccess: false },
+      });
+    const upgraded = JSON.parse(await readFile(configPath, 'utf8')) as {
+      schemaVersion?: number;
+      sandboxWorkspaceWrite?: { networkAccess?: boolean };
+    };
+    expect(upgraded).toMatchObject({
+      schemaVersion: 3,
+      sandboxWorkspaceWrite: { networkAccess: false },
+    });
+  });
+
   it('serializes partial config updates without losing unrelated fields', async () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
 
@@ -92,6 +118,30 @@ describe('file config store', () => {
 
     await expect(store.getConfig()).rejects.toThrow('Invalid JSON');
     await expect(store.saveConfig({ globalPrompt: 'must not overwrite' })).rejects.toThrow('Invalid JSON');
+  });
+
+  it('consumes the legacy memory path without persisting it in schema v3', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const configPath = path.join(dataDir, 'config.json');
+    const store = new FileConfigStore(dataDir);
+    await store.saveConfig({ globalPrompt: 'legacy memory migration' });
+    const stored = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    stored.storagePath = '/Volumes/legacy-memory';
+    stored.schemaVersion = 2;
+    await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
+
+    await expect(store.getLegacyStoragePath()).resolves.toBe('/Volumes/legacy-memory');
+    await expect(store.getConfig()).resolves.toMatchObject({
+      storagePath: path.join(dataDir, 'memories'),
+    });
+
+    await store.clearLegacyStoragePath();
+    const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    expect(migrated.storagePath).toBeUndefined();
+    expect(migrated.schemaVersion).toBe(3);
+
+    await store.saveConfig({ globalPrompt: 'still unified' });
+    await expect(readFile(configPath, 'utf8')).resolves.not.toContain('storagePath');
   });
 
   it('persists a valid Markdown link opening preference and drops invalid values', async () => {
