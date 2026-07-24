@@ -26,7 +26,7 @@ import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import { PROVIDER_METADATA_SEMANTIC_BINDING_RESERVE_BYTES } from '../../utils/runtime-message-semantic-fingerprint.js';
-import { addRuntimeUsage } from '../core/runtime-usage.js';
+import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import {
   createRuntimeContextCompactionCandidate,
   estimateRuntimeToolDefinitionTokens,
@@ -50,7 +50,7 @@ const CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS = 1600;
 type GeneratedContextCompactionSummary = {
   source: 'local' | 'remote';
   text: string;
-  usage?: RuntimeUsage;
+  usages: RuntimeUsage[];
   providerMetadata?: RuntimeMessageProviderMetadata;
   omittedProviderMetadata?: RuntimeMessageProviderMetadata;
 };
@@ -123,7 +123,12 @@ export class RuntimeContextCompactor {
           turnId,
         }
       : undefined;
-    const summary = await this.generateContextCompactionSummary(candidate, signal, debugContext);
+    const summary = await this.generateContextCompactionSummary(
+      candidate,
+      signal,
+      debugContext,
+      runtimeConfig,
+    );
     const result = materializeRuntimeContextCompaction({
       candidate,
       createdAt: this.options.clock.now().toISOString(),
@@ -148,8 +153,8 @@ export class RuntimeContextCompactor {
       payload: result,
     });
     advanceDebugAnchor(debugContext, compactedEvent);
-    const usageEvent = await this.publishContextCompactionUsage(threadId, turnId, summary.usage);
-    advanceDebugAnchor(debugContext, usageEvent);
+    const usageEvents = await this.publishContextCompactionUsages(threadId, turnId, summary.usages);
+    for (const usageEvent of usageEvents) advanceDebugAnchor(debugContext, usageEvent);
     this.options.onCompacted(threadId);
     this.traceCompaction(debugContext, 'context.compaction.completed', {
       metadataPersisted: Boolean(summary.providerMetadata),
@@ -181,18 +186,21 @@ export class RuntimeContextCompactor {
     candidate: RuntimeContextCompactionCandidate,
     signal?: AbortSignal,
     debugContext?: RuntimeCompactionDebugContext,
+    runtimeConfig?: RuntimeConfigState | null,
   ): Promise<GeneratedContextCompactionSummary> {
     const portableSummary = await this.generatePortableContextCompactionSummary(
       candidate,
       signal,
       debugContext,
+      runtimeConfig,
     );
     const nativeArtifact = await this.generateNativeContextCompaction(candidate, signal, debugContext);
-    const usage = addRuntimeUsage(portableSummary.usage, nativeArtifact.usage);
+    const usages = [portableSummary.usage, nativeArtifact.usage]
+      .filter((usage): usage is RuntimeUsage => Boolean(usage));
     return {
       source: nativeArtifact.providerMetadata ? 'remote' : 'local',
       text: portableSummary.text,
-      ...(usage ? { usage } : {}),
+      usages,
       ...(nativeArtifact.providerMetadata
         ? { providerMetadata: nativeArtifact.providerMetadata }
         : {}),
@@ -206,6 +214,7 @@ export class RuntimeContextCompactor {
     candidate: RuntimeContextCompactionCandidate,
     signal?: AbortSignal,
     debugContext?: RuntimeCompactionDebugContext,
+    runtimeConfig?: RuntimeConfigState | null,
   ): Promise<{ text: string; usage?: RuntimeUsage }> {
     this.traceCompaction(debugContext, 'context.compaction.portable', {
       olderMessageCount: candidate.olderMessages.length,
@@ -214,9 +223,14 @@ export class RuntimeContextCompactor {
     });
     try {
       const output = createModelStreamTextCollector();
+      const compactionModel = runtimeTaskModelRequest(
+        runtimeConfig,
+        'contextCompaction',
+        'context-compaction',
+      );
       let usage: RuntimeUsage | undefined;
       for await (const item of this.options.modelClient.stream({
-        model: 'context-compaction',
+        ...compactionModel,
         messages: this.contextCompactionPromptMessages(candidate),
         maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
         temperature: 0,
@@ -314,6 +328,8 @@ export class RuntimeContextCompactor {
     });
     try {
       const result = await this.options.modelClient.compactConversation({
+        // Provider-native compaction stays on the current conversation model because
+        // its opaque metadata is only replayable by that provider/model pair.
         model: 'context-compaction',
         // Native compact must see the real model window, including exact provider envelopes.
         messages: candidate.olderMessages,
@@ -371,27 +387,31 @@ export class RuntimeContextCompactor {
     });
   }
 
-  async publishContextCompactionUsage(
+  async publishContextCompactionUsages(
     threadId: string,
     turnId: string,
-    usage: RuntimeUsage | undefined,
-  ): Promise<RuntimeEvent | null | void> {
-    if (!usage) return;
-    const event = await this.options.appendEvent(threadId, {
-      id: this.options.ids.id('event'),
-      threadId,
-      turnId,
-      type: 'token.count',
-      createdAt: this.options.clock.now().toISOString(),
-      payload: { usage },
-    });
-    await this.options.usageStore?.recordUsage({
-      threadId,
-      turnId,
-      createdAt: this.options.clock.now().toISOString(),
-      ...usage,
-    });
-    return event;
+    usages: readonly RuntimeUsage[],
+  ): Promise<Array<RuntimeEvent | null | void>> {
+    const events: Array<RuntimeEvent | null | void> = [];
+    for (const usage of usages) {
+      const createdAt = this.options.clock.now().toISOString();
+      const event = await this.options.appendEvent(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'token.count',
+        createdAt,
+        payload: { usage },
+      });
+      await this.options.usageStore?.recordUsage({
+        threadId,
+        turnId,
+        createdAt,
+        ...usage,
+      });
+      events.push(event);
+    }
+    return events;
   }
 
   async publishProviderMetadataWarning(

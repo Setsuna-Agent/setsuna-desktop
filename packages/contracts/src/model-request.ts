@@ -3,6 +3,8 @@ import type { RuntimeMessage } from './threads.js';
 
 export type ModelRequest = {
   model: string;
+  /** Selects a configured provider for background task requests. */
+  providerId?: string;
   messages: RuntimeMessage[];
   tools?: RuntimeToolDefinition[];
   toolChoice?: RuntimeToolChoice;

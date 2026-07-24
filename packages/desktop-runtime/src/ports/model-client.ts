@@ -5,7 +5,7 @@ import type {
   RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 
-export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'messages' | 'signal'>;
+export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'providerId' | 'messages' | 'signal'>;
 
 export type ModelCompactionResult =
   | {

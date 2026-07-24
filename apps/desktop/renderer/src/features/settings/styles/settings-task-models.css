@@ -1,0 +1,76 @@
+.desktop-settings-panel .task-model-settings {
+  gap: 14px;
+  padding: 0;
+}
+
+.desktop-settings-panel .task-model-settings__intro,
+.desktop-settings-panel .task-model-settings__hint {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .task-model-settings__row {
+  grid-template-columns: minmax(320px, 1fr) minmax(220px, 300px);
+  align-items: center;
+  min-height: 78px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.desktop-settings-panel .task-model-settings__label {
+  align-items: flex-start;
+}
+
+.desktop-settings-panel .task-model-settings__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.desktop-settings-panel .task-model-settings__copy small {
+  max-width: 560px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: var(--app-font-weight);
+  line-height: 18px;
+}
+
+.desktop-settings-panel .task-model-settings__select {
+  width: 100%;
+  min-width: 220px;
+  max-width: 300px;
+  justify-self: end;
+}
+
+.task-model-option-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.task-model-option-label > svg {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+.task-model-option-label__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 780px) {
+  .desktop-settings-panel .task-model-settings__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-settings-panel .task-model-settings__select {
+    min-width: 0;
+    max-width: none;
+    justify-self: stretch;
+  }
+}

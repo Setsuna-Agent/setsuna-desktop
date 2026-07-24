@@ -244,11 +244,6 @@ function RuntimeAdvancedSettings({
         <div className="chat-user-settings__runtime-memory-tuning">
           <strong>{t('settings.runtime.memoryTuning')}</strong>
           <TextField
-            defaultValue={config.memory.consolidationModel ?? ''}
-            placeholder={t('settings.runtime.consolidationModel')}
-            onBlur={(event) => void onSave({ memory: { consolidationModel: event.currentTarget.value.trim() || undefined } })}
-          />
-          <TextField
             type="number"
             min="1"
             defaultValue={config.memory.maxRolloutsPerStartup ?? ''}

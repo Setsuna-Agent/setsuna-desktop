@@ -11,6 +11,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import {
   Archive,
+  Bot,
   CircleGauge,
   HardDrive,
   Info,
@@ -34,6 +35,7 @@ import { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 import { GeneralSettings } from './sections/GeneralSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
 import { RuntimePolicySettings } from './sections/RuntimeSettings.js';
+import { TaskModelSettings } from './sections/TaskModelSettings.js';
 import type { RuntimePreferenceInput, SettingsSectionId } from './settings-types.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 
@@ -43,6 +45,7 @@ const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; ico
   { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} /> },
   { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
   { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
+  { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
   { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
   { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
   { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
@@ -53,6 +56,7 @@ const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
   general: 'settings.section.general',
   personalization: 'settings.section.personalization',
   localLlm: 'settings.section.localLlm',
+  taskModels: 'settings.section.taskModels',
   usage: 'settings.section.usage',
   archives: 'settings.section.archives',
   runtime: 'settings.section.runtime',
@@ -61,6 +65,7 @@ const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
 
 const settingsSectionDescriptionKeys: Partial<Record<SettingsSectionId, MessageKey>> = {
   localLlm: 'settings.section.localLlmDescription',
+  taskModels: 'settings.section.taskModelsDescription',
   usage: 'settings.section.usageDescription',
 };
 
@@ -134,6 +139,12 @@ export function SettingsPage({
       )
     ) : activeSection === 'usage' ? (
       <UsageSettings providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS} usage={usage} />
+    ) : activeSection === 'taskModels' ? (
+      config ? (
+        <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />
+      ) : (
+        <EmptyState title={t('settings.configUnavailable')} />
+      )
     ) : activeSection === 'archives' ? (
       <ArchivedThreadsSettings
         threads={archivedThreads}

@@ -847,24 +847,6 @@
   align-items: flex-start;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-model-row {
-  grid-template-columns: minmax(320px, 1fr) minmax(160px, 210px);
-  align-items: center;
-  min-height: 72px;
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-
-.desktop-settings-panel .chat-user-settings__memory-model-label {
-  align-items: flex-start;
-}
-
-.desktop-settings-panel .chat-user-settings__memory-model-select {
-  width: 100%;
-  min-width: 160px;
-  max-width: 210px;
-}
-
 .desktop-settings-panel .chat-user-settings__memory-toggle-copy {
   display: grid;
   gap: 3px;
@@ -877,12 +859,6 @@
   font-size: 12px;
   font-weight: var(--app-font-weight);
   line-height: 18px;
-}
-
-.desktop-settings-panel .chat-user-settings__memory-model-label small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-settings-panel .chat-user-settings__row code {

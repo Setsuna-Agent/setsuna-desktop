@@ -4,6 +4,7 @@ import {
   type ProviderConfigState,
   type ProviderModelConfig,
   type RuntimeAvailableModel,
+  type RuntimeConfiguredModelReference,
   type RuntimeConfigState,
 } from '@setsuna-desktop/contracts';
 
@@ -43,25 +44,49 @@ export function selectedProviderIdFromConfig(config: RuntimeConfigState): string
   return selectedProviderIdFromProviders(config.activeProviderId, config.providers);
 }
 
-function activeSettingsProvider(config: RuntimeConfigState): ProviderConfigState | undefined {
-  const providerId = selectedProviderIdFromConfig(config);
-  return config.providers.find((provider) => provider.id === providerId);
+export type ConfiguredTaskModelOption = {
+  label: string;
+  model: ProviderModelConfig;
+  provider: ProviderConfigState;
+  reference: RuntimeConfiguredModelReference;
+  value: string;
+};
+
+export function configuredTaskModelOptions(
+  config: RuntimeConfigState,
+): ConfiguredTaskModelOption[] {
+  const seen = new Set<string>();
+  const options: ConfiguredTaskModelOption[] = [];
+  for (const provider of config.providers) {
+    if (!provider.enabled) continue;
+    for (const model of provider.models) {
+      const code = model.code.trim();
+      const modelId = model.id.trim();
+      const key = `${provider.id}\0${modelId}`;
+      if (!code || !modelId || seen.has(key)) continue;
+      seen.add(key);
+      const reference = { providerId: provider.id, modelId };
+      const modelLabel = model.name && model.name !== code
+        ? `${model.name} (${code})`
+        : code;
+      options.push({
+        label: `${provider.name} · ${modelLabel}`,
+        model,
+        provider,
+        reference,
+        value: configuredTaskModelReferenceValue(reference),
+      });
+    }
+  }
+  return options;
 }
 
-export function memoryExtractModelOptions(config: RuntimeConfigState): Array<{ value: string; label: string }> {
-  const provider = activeSettingsProvider(config);
-  if (!provider?.enabled) return [];
-  const seen = new Set<string>();
-  return provider.models.reduce<Array<{ value: string; label: string }>>((options, model) => {
-    const code = model.code.trim();
-    if (!code || seen.has(code)) return options;
-    seen.add(code);
-    options.push({
-      value: code,
-      label: model.name && model.name !== code ? `${model.name} (${code})` : code,
-    });
-    return options;
-  }, []);
+export function configuredTaskModelReferenceValue(
+  reference: RuntimeConfiguredModelReference | undefined,
+): string {
+  return reference
+    ? JSON.stringify([reference.providerId, reference.modelId])
+    : '';
 }
 
 export function selectedProviderIdFromProviders(activeProviderId: string | undefined, providers: ProviderConfigState[]): string {

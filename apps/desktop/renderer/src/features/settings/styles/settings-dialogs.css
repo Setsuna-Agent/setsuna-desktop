@@ -806,11 +806,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .desktop-settings-panel .chat-user-settings__memory-model-select {
-    max-width: none;
-    justify-self: stretch;
-  }
-
   .desktop-settings-panel .chat-user-settings__memory-toggle-row > .sd-check {
     justify-self: start;
     margin-top: 0;

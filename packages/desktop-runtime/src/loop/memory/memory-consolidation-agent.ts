@@ -19,6 +19,8 @@ export type MemoryConsolidationAgentResult = {
 
 export type RunMemoryConsolidationAgentInput = {
   modelClient: ModelClient;
+  model?: string;
+  providerId?: string;
   root: string;
   now(): Date;
   signal?: AbortSignal;
@@ -29,7 +31,7 @@ export type RunMemoryConsolidationAgentInput = {
   deadlineMs?: number;
 };
 
-const MEMORY_CONSOLIDATION_MODEL = 'memory-consolidation';
+export const MEMORY_CONSOLIDATION_MODEL = 'memory-consolidation';
 const DEFAULT_CONSOLIDATION_ROLLOUT_TOKEN_BUDGET = 64_000;
 const DEFAULT_CONSOLIDATION_DEADLINE_MS = 5 * 60_000;
 const MAX_CONSOLIDATION_OUTPUT_TOKENS = 2200;
@@ -79,6 +81,8 @@ async function runMemoryConsolidationRollout(
     const assistantId = `memory_consolidation_assistant_${rounds}`;
     const { text, toolCalls, usage: roundUsage } = await runConsolidationModelRound({
       modelClient: input.modelClient,
+      model: input.model,
+      providerId: input.providerId,
       messages,
       signal,
       tools,
@@ -254,12 +258,15 @@ class MemoryConsolidationToolHost implements ToolHost {
 
 async function runConsolidationModelRound(input: {
   modelClient: ModelClient;
+  model?: string;
+  providerId?: string;
   messages: RuntimeMessage[];
   signal?: AbortSignal;
   tools: RuntimeToolDefinition[];
 }): Promise<{ text: string; toolCalls: RuntimeToolCall[]; usage?: RuntimeUsage }> {
   const request: ModelRequest = {
-    model: MEMORY_CONSOLIDATION_MODEL,
+    model: input.model?.trim() || MEMORY_CONSOLIDATION_MODEL,
+    providerId: input.providerId,
     messages: input.messages,
     tools: input.tools,
     toolChoice: 'auto',

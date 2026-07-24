@@ -111,7 +111,7 @@ describe('agent loop memory extraction', () => {
       expect(modelClient.passiveAborted).toBe(true);
     });
   
-  it('uses the configured model for passive memory extraction', async () => {
+  it('uses the configured task model and provider for passive memory extraction', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
       const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
@@ -125,18 +125,18 @@ describe('agent loop memory extraction', () => {
         clock: systemClock,
         ids,
         memoryStore,
-        configStore: new MemorySettingsConfigStore({
+        configStore: new TaskModelMemoryConfigStore({
           useMemories: true,
           generateMemories: true,
           dedicatedTools: false,
           disableOnExternalContext: false,
-          extractModel: 'memory-extract-model',
         }),
       });
   
       await loop.sendTurn(thread.id, { input: '以后记忆生成模型要用单独配置的模型。' });
   
       expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'memory-extract-model']);
+      expect(modelClient.requests[1]?.providerId).toBe('memory-provider');
       await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 1 });
     });
   
@@ -183,8 +183,42 @@ describe('agent loop memory extraction', () => {
         changes: expect.arrayContaining([
           expect.objectContaining({ path: 'raw_memories.md' }),
         ]),
-      });
-    });
+  });
+});
+
+class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
+  async getConfig() {
+    const config = await super.getConfig();
+    return {
+      ...config,
+      activeProviderId: 'chat-provider',
+      providers: [{
+        id: 'memory-provider',
+        name: 'Memory provider',
+        provider: 'openai-compatible' as const,
+        baseUrl: 'https://memory.example/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'memory-model',
+          name: 'Memory extract model',
+          code: 'memory-extract-model',
+          enabled: false,
+          maxOutputTokens: 8_192,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+        }],
+      }],
+      taskModels: {
+        memoryExtraction: {
+          providerId: 'memory-provider',
+          modelId: 'memory-model',
+        },
+      },
+    };
+  }
+}
   
   it('runs phase-2 consolidation with a locked-down internal memory agent', async () => {
       const ids = new RandomIdGenerator();

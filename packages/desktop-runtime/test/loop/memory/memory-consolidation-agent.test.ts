@@ -14,6 +14,8 @@ describe('memory consolidation agent', () => {
 
     const result = await runMemoryConsolidationAgent({
       modelClient,
+      model: 'background-memory-model',
+      providerId: 'background-provider',
       root,
       now: fixedNow,
       rolloutTokenBudget: 1_000,
@@ -25,6 +27,8 @@ describe('memory consolidation agent', () => {
       usage: { inputTokens: 14, outputTokens: 14, totalTokens: 28 },
     });
     expect(modelClient.requests).toHaveLength(toolCallBatches + 1);
+    expect(modelClient.requests.every((request) => request.model === 'background-memory-model')).toBe(true);
+    expect(modelClient.requests.every((request) => request.providerId === 'background-provider')).toBe(true);
     expect(modelClient.requests.every((request) => request.toolChoice === 'auto')).toBe(true);
     expect(modelClient.requests.every((request) => request.tools?.some((tool) => tool.name === 'read_file'))).toBe(true);
   });

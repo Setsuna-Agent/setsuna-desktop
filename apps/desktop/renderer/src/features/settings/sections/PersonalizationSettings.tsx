@@ -11,12 +11,10 @@ import {
   Button,
   IconButton,
   PageHeader,
-  SelectField,
   TextArea,
 } from '../../../shared/ui/primitives.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { MemorySettingToggle, SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
-import { memoryExtractModelOptions } from '../providers/provider-model.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 import { errorMessage, formatSettingsDate } from '../settings-utils.js';
 
@@ -223,7 +221,6 @@ export function PersonalizationSettings({
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
           <MemorySettingToggle checked={config.memory.useMemories} description={t('settings.personalization.useMemoriesDescription')} label={t('settings.personalization.useMemories')} onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
           <MemorySettingToggle checked={config.memory.generateMemories} description={t('settings.personalization.generateMemoriesDescription')} label={t('settings.personalization.generateMemories')} onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
-          <MemoryExtractModelField config={config} onSavePreferences={onSavePreferences} />
           <MemorySettingToggle checked={config.memory.disableOnExternalContext} description={t('settings.personalization.externalContextDescription')} label={t('settings.personalization.externalContext')} onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
           <MemorySettingToggle checked={config.memory.dedicatedTools} description={t('settings.personalization.memoryToolsDescription')} label={t('settings.personalization.memoryTools')} onChange={(checked) => void onSavePreferences({ memory: { dedicatedTools: checked } })} />
           <div className="chat-user-settings__row chat-user-settings__local-action-row">
@@ -249,46 +246,6 @@ export function PersonalizationSettings({
         </div>
       </div>
     </div>
-  );
-}
-
-function MemoryExtractModelField({ config, onSavePreferences }: { config: RuntimeConfigState; onSavePreferences: (input: RuntimePreferenceInput) => Promise<void> }) {
-  const { t } = useI18n();
-  if (!config.memory.generateMemories) return null;
-
-  const options = memoryExtractModelOptions(config);
-  const value = config.memory.extractModel?.trim() ?? '';
-  const currentOptionExists = !value || options.some((option) => option.value === value);
-
-  return (
-    <label className="chat-user-settings__row chat-user-settings__memory-model-row">
-      <span className="chat-user-settings__row-label chat-user-settings__memory-model-label">
-        <span className="chat-user-settings__memory-toggle-copy">
-          <span>{t('settings.personalization.extractModel')}</span>
-          <small>{t('settings.personalization.extractModelDescription')}</small>
-        </span>
-      </span>
-      <SelectField
-        className="settings-local-control chat-user-settings__memory-model-select"
-        value={value}
-        onValueChange={(nextValue) => {
-          const extractModel = nextValue.trim() || undefined;
-          void onSavePreferences({ memory: { extractModel } });
-        }}
-      >
-        <option value="">{t('settings.personalization.followCurrentModel')}</option>
-        {!currentOptionExists ? (
-          <option value={value} disabled>
-            {t('settings.personalization.providerNotConfigured', { model: value })}
-          </option>
-        ) : null}
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </SelectField>
-    </label>
   );
 }
 

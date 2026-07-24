@@ -138,7 +138,7 @@ export class RemoteCompactionModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.model === 'context-compaction') {
+    if (request.model === 'context-compaction' || request.model === 'background-summary-model') {
       yield {
         type: 'text_delta',
         text: JSON.stringify({
@@ -148,6 +148,17 @@ export class RemoteCompactionModelClient implements ModelClient {
           already_said: 'Older context was compacted by the provider-native path.',
           tool_context: 'No active tool context.',
         }),
+      };
+      yield {
+        type: 'usage',
+        usage: {
+          providerId: 'background-provider',
+          provider: 'Background provider',
+          model: 'background-summary-model',
+          inputTokens: 7,
+          outputTokens: 3,
+          totalTokens: 10,
+        },
       };
       yield { type: 'done', finishReason: 'stop' };
       return;

@@ -1,4 +1,4 @@
-import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { RuntimeConfigState, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -53,7 +53,7 @@ describe('agent loop context compaction', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
-        configStore: new HooksConfigStore({
+        configStore: new DedicatedCompactionHooksConfigStore({
           PreCompact: [{
             matcher: 'manual',
             hooks: [{
@@ -89,7 +89,8 @@ describe('agent loop context compaction', () => {
   
       expect(modelClient.requests).toHaveLength(1);
       expect(modelClient.requests[0]).toMatchObject({
-        model: 'context-compaction',
+        model: 'background-summary-model',
+        providerId: 'background-provider',
         maxOutputTokens: 1600,
         temperature: 0,
         toolChoice: 'none',
@@ -417,7 +418,7 @@ describe('agent loop context compaction', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
-        configStore: new ContextWindowConfigStore(1_000),
+        configStore: new DedicatedCompactionContextWindowConfigStore(1_000),
       });
   
       await loop.sendTurn(thread.id, { input: 'continue after small-window history' });
@@ -426,7 +427,10 @@ describe('agent loop context compaction', () => {
       const compactingEvent = events.find((event) => event.type === 'thread.context_compacting' && event.turnId);
       const mainRequest = modelClient.requests.find((request) => request.model === 'local-runtime-smoke');
   
-      expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
+      expect(modelClient.requests.map((request) => request.model)).toEqual(['background-summary-model', 'local-runtime-smoke']);
+      expect(modelClient.requests[0]).toMatchObject({
+        providerId: 'background-provider',
+      });
       expect(compactingEvent?.payload).toMatchObject({
         maxContextTokens: 1_000,
         maxContextTokensK: 1,
@@ -501,26 +505,50 @@ describe('agent loop context compaction', () => {
         compactionHash: expect.stringMatching(/^sha256:/),
         compactionSummaryMessageIds: [expect.any(String)],
       });
-      expect(events).toContainEqual(expect.objectContaining({
-        type: 'token.count',
-        payload: {
-          usage: {
-            provider: 'openai-responses',
-            model: 'gpt-compact',
-            inputTokens: 10,
-            outputTokens: 2,
-            totalTokens: 12,
+      expect(events.filter((event) => event.type === 'token.count')).toMatchObject([
+        {
+          payload: {
+            usage: {
+              providerId: 'background-provider',
+              provider: 'Background provider',
+              model: 'background-summary-model',
+              inputTokens: 7,
+              outputTokens: 3,
+              totalTokens: 10,
+            },
           },
         },
-      }));
-      expect(usageStore.records).toMatchObject([{
-        threadId: thread.id,
-        provider: 'openai-responses',
-        model: 'gpt-compact',
-        inputTokens: 10,
-        outputTokens: 2,
-        totalTokens: 12,
-      }]);
+        {
+          payload: {
+            usage: {
+              provider: 'openai-responses',
+              model: 'gpt-compact',
+              inputTokens: 10,
+              outputTokens: 2,
+              totalTokens: 12,
+            },
+          },
+        },
+      ]);
+      expect(usageStore.records).toMatchObject([
+        {
+          threadId: thread.id,
+          providerId: 'background-provider',
+          provider: 'Background provider',
+          model: 'background-summary-model',
+          inputTokens: 7,
+          outputTokens: 3,
+          totalTokens: 10,
+        },
+        {
+          threadId: thread.id,
+          provider: 'openai-responses',
+          model: 'gpt-compact',
+          inputTokens: 10,
+          outputTokens: 2,
+          totalTokens: 12,
+        },
+      ]);
       expect(mainRequest?.messages.map((message) => message.content).join('\n')).toContain('Remote provider compacted the older history.');
       expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
     });
@@ -662,3 +690,49 @@ describe('agent loop context compaction', () => {
       expect(saved?.messages.at(-1)?.status).toBe('complete');
     }, longAgentLoopTestTimeoutMs);
 });
+
+class DedicatedCompactionHooksConfigStore extends HooksConfigStore {
+  override async getConfig(): Promise<RuntimeConfigState> {
+    return withDedicatedCompactionModel(await super.getConfig());
+  }
+}
+
+class DedicatedCompactionContextWindowConfigStore extends ContextWindowConfigStore {
+  override async getConfig(): Promise<RuntimeConfigState> {
+    return withDedicatedCompactionModel(await super.getConfig());
+  }
+}
+
+function withDedicatedCompactionModel(config: RuntimeConfigState): RuntimeConfigState {
+  return {
+    ...config,
+    providers: [
+      ...config.providers,
+      {
+        id: 'background-provider',
+        name: 'Background provider',
+        provider: 'openai-compatible',
+        baseUrl: 'https://background.example/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'background-summary-model',
+          name: 'Background summary model',
+          code: 'background-summary-model',
+          enabled: true,
+          maxOutputTokens: 8_192,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+        }],
+      },
+    ],
+    taskModels: {
+      ...(config.taskModels ?? {}),
+      contextCompaction: {
+        providerId: 'background-provider',
+        modelId: 'background-summary-model',
+      },
+    },
+  };
+}

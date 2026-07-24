@@ -594,7 +594,7 @@ export class PersonalizationConfigStore implements ConfigStore {
 export class HooksConfigStore implements ConfigStore {
   constructor(private readonly hooks: RuntimeConfigState['hooks']) {}
 
-  async getConfig() {
+  async getConfig(): Promise<RuntimeConfigState> {
     return {
       configPath: '/tmp/config.json',
       dataPath: '/tmp',
@@ -617,7 +617,7 @@ export class HooksConfigStore implements ConfigStore {
     };
   }
 
-  async saveConfig() {
+  async saveConfig(): Promise<RuntimeConfigState> {
     return this.getConfig();
   }
 
@@ -686,7 +686,7 @@ export class ContextWindowConfigStore implements ConfigStore {
 export class MemorySettingsConfigStore implements ConfigStore {
   constructor(private readonly memory: RuntimeConfigState['memory']) {}
 
-  async getConfig() {
+  async getConfig(): Promise<RuntimeConfigState> {
     return {
       configPath: '/tmp/config.json',
       dataPath: '/tmp',
@@ -702,7 +702,7 @@ export class MemorySettingsConfigStore implements ConfigStore {
     };
   }
 
-  async saveConfig() {
+  async saveConfig(): Promise<RuntimeConfigState> {
     return this.getConfig();
   }
 

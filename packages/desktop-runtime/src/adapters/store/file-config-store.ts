@@ -29,6 +29,10 @@ import type {
 } from '../../ports/config-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
+import {
+  taskModelSettingsForSave,
+  taskModelSettingsForState,
+} from './task-model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
 const CONFIG_SCHEMA_VERSION = 3;
@@ -143,6 +147,13 @@ export class FileConfigStore implements ConfigStore {
       pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
       const memory = memorySettingsForSave(input, previous);
+      const taskModels = taskModelSettingsForSave(input.taskModels, previous.taskModels);
+      if (input.taskModels && Object.hasOwn(input.taskModels, 'memoryExtraction')) {
+        delete memory.extractModel;
+      }
+      if (input.taskModels && Object.hasOwn(input.taskModels, 'memoryConsolidation')) {
+        delete memory.consolidationModel;
+      }
       const imageGeneration = imageGenerationSettingsForSave(input.imageGeneration, previous.imageGeneration, secrets);
 
       const stored: StoredConfig = {
@@ -151,6 +162,7 @@ export class FileConfigStore implements ConfigStore {
         globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
         memory,
         memoryEnabled: memory.useMemories || memory.generateMemories,
+        taskModels,
         setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
         approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
         permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
@@ -188,6 +200,18 @@ export class FileConfigStore implements ConfigStore {
 
   private toState(stored: StoredConfig, secrets: StoredSecrets): RuntimeConfigState {
     const memory = normalizeMemorySettings(stored.memory, stored.memoryEnabled);
+    const providers = stored.providers.map((provider) => {
+      const apiKey = secrets.providerApiKeys[provider.id] ?? '';
+      const icon = normalizeProviderIconConfig(provider.icon);
+      const { icon: _storedIcon, ...providerWithoutIcon } = provider;
+      return {
+        ...providerWithoutIcon,
+        ...(icon ? { icon } : {}),
+        models: normalizeModels(provider.models, provider.provider),
+        apiKeySet: apiKey.length > 0,
+        apiKeyPreview: maskApiKey(apiKey),
+      };
+    });
     return {
       configPath: this.configPath,
       dataPath: this.dataDir,
@@ -196,6 +220,12 @@ export class FileConfigStore implements ConfigStore {
       globalPrompt: normalizeGlobalPrompt(stored.globalPrompt),
       memory,
       memoryEnabled: memory.useMemories || memory.generateMemories,
+      taskModels: taskModelSettingsForState(
+        stored.taskModels,
+        memory,
+        providers,
+        stored.activeProviderId,
+      ),
       setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
@@ -208,18 +238,7 @@ export class FileConfigStore implements ConfigStore {
       features: normalizeFeatureFlags(stored.features),
       desktopSettings: normalizeDesktopSettings(stored.desktopSettings),
       imageGeneration: imageGenerationState(stored.imageGeneration, secrets),
-      providers: stored.providers.map((provider) => {
-        const apiKey = secrets.providerApiKeys[provider.id] ?? '';
-        const icon = normalizeProviderIconConfig(provider.icon);
-        const { icon: _storedIcon, ...providerWithoutIcon } = provider;
-        return {
-          ...providerWithoutIcon,
-          ...(icon ? { icon } : {}),
-          models: normalizeModels(provider.models, provider.provider),
-          apiKeySet: apiKey.length > 0,
-          apiKeyPreview: maskApiKey(apiKey),
-        };
-      }),
+      providers,
     };
   }
 }
@@ -241,6 +260,7 @@ function defaultConfig(): StoredConfig {
     globalPrompt: '',
     memory: defaultMemorySettings(),
     memoryEnabled: true,
+    taskModels: {},
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

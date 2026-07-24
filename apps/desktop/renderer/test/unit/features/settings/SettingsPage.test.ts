@@ -16,6 +16,7 @@ describe('SettingsSidebar', () => {
 
     expect(html).toContain('<nav class="app-sidebar desktop-settings-sidebar chat-user-settings__nav">');
     expect(html).toContain('模型服务');
+    expect(html).toContain('专用模型');
     expect(html).not.toContain('chat-user-settings--page');
   });
 
@@ -33,6 +34,7 @@ describe('SettingsSidebar', () => {
     );
 
     expect(html).toContain('Model providers');
+    expect(html).toContain('Task models');
     expect(html).toContain('General');
     expect(html).not.toContain('模型服务');
   });

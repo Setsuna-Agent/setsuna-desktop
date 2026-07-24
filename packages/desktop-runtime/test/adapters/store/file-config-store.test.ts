@@ -78,6 +78,57 @@ describe('file config store', () => {
     });
   });
 
+  it('persists task model references, migrates legacy memory models, and supports clearing assignments', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    const initial = await store.getConfig();
+    const provider = initial.providers[0];
+    const model = provider?.models[0];
+    if (!provider || !model) throw new Error('Expected the default provider and model fixtures.');
+
+    await expect(store.saveConfig({
+      memory: {
+        extractModel: model.code,
+        consolidationModel: model.code,
+      },
+    })).resolves.toMatchObject({
+      taskModels: {
+        memoryExtraction: { providerId: provider.id, modelId: model.id },
+        memoryConsolidation: { providerId: provider.id, modelId: model.id },
+      },
+    });
+
+    await expect(store.saveConfig({
+      taskModels: {
+        memoryExtraction: { providerId: provider.id, modelId: model.id },
+        memoryConsolidation: { providerId: provider.id, modelId: model.id },
+        contextCompaction: { providerId: provider.id, modelId: model.id },
+      },
+    })).resolves.toMatchObject({
+      taskModels: {
+        memoryExtraction: { providerId: provider.id, modelId: model.id },
+        memoryConsolidation: { providerId: provider.id, modelId: model.id },
+        contextCompaction: { providerId: provider.id, modelId: model.id },
+      },
+    });
+
+    const stored = JSON.parse(await readFile(path.join(dataDir, 'config.json'), 'utf8')) as {
+      memory?: Record<string, unknown>;
+    };
+    expect(stored.memory).not.toHaveProperty('extractModel');
+    expect(stored.memory).not.toHaveProperty('consolidationModel');
+
+    await expect(store.saveConfig({
+      taskModels: { memoryExtraction: null },
+    })).resolves.toMatchObject({
+      taskModels: {
+        memoryConsolidation: { providerId: provider.id, modelId: model.id },
+        contextCompaction: { providerId: provider.id, modelId: model.id },
+      },
+    });
+    expect((await store.getConfig()).taskModels).not.toHaveProperty('memoryExtraction');
+  });
+
   it('normalizes missing Anthropic output limits to the provider-specific fallback', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);

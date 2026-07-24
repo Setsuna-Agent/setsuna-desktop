@@ -159,7 +159,9 @@ export type RuntimeMemorySettings = {
   generateMemories: boolean;
   dedicatedTools: boolean;
   disableOnExternalContext: boolean;
+  /** @deprecated Use taskModels.memoryExtraction. */
   extractModel?: string;
+  /** @deprecated Use taskModels.memoryConsolidation. */
   consolidationModel?: string;
   minRateLimitRemainingPercent?: number;
   maxRolloutsPerStartup?: number;
@@ -168,6 +170,27 @@ export type RuntimeMemorySettings = {
   maxUnusedDays?: number;
   maxRawMemoriesForConsolidation?: number;
 };
+
+export const RUNTIME_TASK_MODEL_IDS = [
+  'memoryExtraction',
+  'memoryConsolidation',
+  'contextCompaction',
+] as const;
+
+export type RuntimeTaskModelId = typeof RUNTIME_TASK_MODEL_IDS[number];
+
+export type RuntimeConfiguredModelReference = {
+  providerId: string;
+  modelId: string;
+};
+
+export type RuntimeTaskModelSettings = Partial<
+  Record<RuntimeTaskModelId, RuntimeConfiguredModelReference>
+>;
+
+export type RuntimeTaskModelSettingsInput = Partial<
+  Record<RuntimeTaskModelId, RuntimeConfiguredModelReference | null>
+>;
 
 export type RuntimeConfigState = {
   configPath: string;
@@ -178,6 +201,7 @@ export type RuntimeConfigState = {
   globalPrompt: string;
   memory: RuntimeMemorySettings;
   memoryEnabled: boolean;
+  taskModels?: RuntimeTaskModelSettings;
   setsunaStyle: RuntimeSetsunaStyle;
   approvalPolicy: 'strict' | 'on-request' | 'full';
   permissionProfile: RuntimePermissionProfile;
@@ -235,6 +259,7 @@ export type RuntimeConfigInput = {
   storagePath?: string;
   memory?: Partial<RuntimeMemorySettings>;
   memoryEnabled?: boolean;
+  taskModels?: RuntimeTaskModelSettingsInput;
   setsunaStyle?: RuntimeSetsunaStyle | string;
   approvalPolicy?: RuntimeConfigState['approvalPolicy'];
   permissionProfile?: RuntimePermissionProfile;

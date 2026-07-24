@@ -2739,6 +2739,53 @@ describe('provider model adapters', () => {
     expect(expectBody(captured).max_tokens).toBe(456);
   });
 
+  it('routes a task request to a configured model on another provider', async () => {
+    const captured: CapturedRequest = {};
+    const activeProvider = provider('openai-compatible', 'https://chat.example/v1');
+    const backgroundModel = {
+      ...model,
+      id: 'background-model',
+      name: 'Background model',
+      code: 'background-model-code',
+      maxOutputTokens: 456,
+    };
+    const backgroundProvider: RuntimeProviderConfig = {
+      ...provider('openai-compatible', 'https://background.example/v1', backgroundModel),
+      id: 'background-provider',
+      name: 'Background provider',
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => activeProvider,
+        getProviderConfig: async (providerId) => (
+          providerId === backgroundProvider.id ? backgroundProvider : null
+        ),
+      },
+      fakeFetch('data: {"choices":[{"delta":{"content":"Background"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    const events = await collect(client, {
+      model: backgroundModel.code,
+      providerId: backgroundProvider.id,
+    });
+
+    expect(captured.url).toBe('https://background.example/v1/chat/completions');
+    expect(expectBody(captured).model).toBe(backgroundModel.code);
+    expect(expectBody(captured).max_tokens).toBe(456);
+    expect(events.find((event) => event.type === 'usage')).toMatchObject({
+      usage: {
+        providerId: 'background-provider',
+        provider: 'Background provider',
+      },
+    });
+  });
+
   it('uses configured default thinking effort only when the turn enables thinking', async () => {
     const captured: CapturedRequest = {};
     const thinkingModel = {

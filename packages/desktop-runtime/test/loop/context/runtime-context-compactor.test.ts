@@ -7,13 +7,16 @@ import {
   type RuntimeMessage,
   type RuntimeMessageProviderMetadata,
   type RuntimeThread,
+  type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import type { RuntimeContextCompactionCandidate } from '../../../src/loop/context/context-compaction.js';
 import { RuntimeContextCompactor } from '../../../src/loop/context/runtime-context-compactor.js';
 import type { ModelClient, ModelCompactionRequest } from '../../../src/ports/model-client.js';
 import type { RuntimeDebugTraceSink } from '../../../src/ports/runtime-debug-trace.js';
+import type { UsageStore } from '../../../src/ports/usage-store.js';
 import { InMemoryRuntimeDebugTraceStore } from '../../../src/adapters/debug/in-memory-runtime-debug-trace-store.js';
+import { CapturingUsageStore } from '../../support/agent-loop/shared.js';
 
 describe('RuntimeContextCompactor', () => {
   it('reads item-based agent output from current provider adapters', async () => {
@@ -80,6 +83,69 @@ describe('RuntimeContextCompactor', () => {
     expect(modelClient.summaryRequest?.messages).not.toEqual(candidate.olderMessages);
     expect(JSON.stringify(modelClient.summaryRequest)).not.toContain('encrypted-reasoning');
     expect(result.omittedProviderMetadata).toBeUndefined();
+  });
+
+  it('routes the portable summary through its task model without rebinding native metadata', async () => {
+    const modelClient = new NativeCompactionModelClient(nativeCompactionMetadata('encrypted-compaction'));
+
+    await createCompactor(modelClient).generateContextCompactionSummary(
+      compactionCandidate(),
+      undefined,
+      undefined,
+      contextCompactionTaskModelConfig(),
+    );
+
+    expect(modelClient.summaryRequest).toMatchObject({
+      model: 'background-summary-model',
+      providerId: 'background-provider',
+    });
+    expect(modelClient.compactRequest).toMatchObject({ model: 'context-compaction' });
+    expect(modelClient.compactRequest).not.toHaveProperty('providerId');
+  });
+
+  it('publishes portable and native compaction usage as separate model calls', async () => {
+    const portableUsage: RuntimeUsage = {
+      providerId: 'background-provider',
+      provider: 'Background provider',
+      model: 'background-summary-model',
+      inputTokens: 7,
+      outputTokens: 3,
+      totalTokens: 10,
+    };
+    const nativeUsage: RuntimeUsage = {
+      providerId: 'chat-provider',
+      provider: 'Chat provider',
+      model: 'chat-model',
+      inputTokens: 11,
+      outputTokens: 2,
+      totalTokens: 13,
+    };
+    const events: Array<Omit<RuntimeEvent, 'seq'>> = [];
+    const usageStore = new CapturingUsageStore();
+    const modelClient = new NativeCompactionModelClient(
+      nativeCompactionMetadata('encrypted-compaction'),
+      portableUsage,
+      nativeUsage,
+    );
+    const compactor = createCompactor(modelClient, events, undefined, usageStore);
+
+    const result = await compactor.generateContextCompactionSummary(
+      compactionCandidate(),
+      undefined,
+      undefined,
+      contextCompactionTaskModelConfig(),
+    );
+    await compactor.publishContextCompactionUsages('thread_1', 'turn_1', result.usages);
+
+    expect(result.usages).toEqual([portableUsage, nativeUsage]);
+    expect(events.filter((event) => event.type === 'token.count')).toMatchObject([
+      { payload: { usage: portableUsage } },
+      { payload: { usage: nativeUsage } },
+    ]);
+    expect(usageStore.records).toMatchObject([
+      { threadId: 'thread_1', turnId: 'turn_1', ...portableUsage },
+      { threadId: 'thread_1', turnId: 'turn_1', ...nativeUsage },
+    ]);
   });
 
   it('downgrades oversized native compaction metadata and publishes a verification warning', async () => {
@@ -219,6 +285,7 @@ function createCompactor(
   modelClient: ModelClient,
   events: Array<Omit<RuntimeEvent, 'seq'>> = [],
   debugTrace?: RuntimeDebugTraceSink,
+  usageStore?: UsageStore,
 ): RuntimeContextCompactor {
   return new RuntimeContextCompactor({
     clock: { now: () => new Date('2026-07-11T00:00:00.000Z') },
@@ -231,6 +298,7 @@ function createCompactor(
     },
     onCompacted: () => undefined,
     runCompactHooks: async () => ({}),
+    usageStore,
   });
 }
 
@@ -340,6 +408,57 @@ function developerRuntimeConfig(): RuntimeConfigState {
   };
 }
 
+function contextCompactionTaskModelConfig(): RuntimeConfigState {
+  return {
+    ...developerRuntimeConfig(),
+    activeProviderId: 'chat-provider',
+    providers: [
+      {
+        id: 'chat-provider',
+        name: 'Chat provider',
+        provider: 'openai-responses',
+        baseUrl: 'https://chat.example/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'chat-model',
+          name: 'Chat model',
+          code: 'chat-model',
+          enabled: true,
+          maxOutputTokens: 8_192,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+        }],
+      },
+      {
+        id: 'background-provider',
+        name: 'Background provider',
+        provider: 'openai-compatible',
+        baseUrl: 'https://background.example/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'background-model',
+          name: 'Background summary model',
+          code: 'background-summary-model',
+          enabled: true,
+          maxOutputTokens: 8_192,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+        }],
+      },
+    ],
+    taskModels: {
+      contextCompaction: {
+        providerId: 'background-provider',
+        modelId: 'background-model',
+      },
+    },
+  };
+}
+
 class CompactionModelClient implements ModelClient {
   request: ModelRequest | null = null;
 
@@ -355,19 +474,25 @@ class NativeCompactionModelClient implements ModelClient {
   compactRequest: ModelCompactionRequest | null = null;
   summaryRequest: ModelRequest | null = null;
 
-  constructor(private readonly providerMetadata: RuntimeMessageProviderMetadata) {}
+  constructor(
+    private readonly providerMetadata: RuntimeMessageProviderMetadata,
+    private readonly portableUsage?: RuntimeUsage,
+    private readonly nativeUsage?: RuntimeUsage,
+  ) {}
 
   async compactConversation(request: ModelCompactionRequest) {
     this.compactRequest = request;
     return {
       kind: 'native' as const,
       providerMetadata: this.providerMetadata,
+      ...(this.nativeUsage ? { usage: this.nativeUsage } : {}),
     };
   }
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.summaryRequest = request;
     yield { type: 'text_delta', text: '{"summary":"Portable independent summary."}' };
+    if (this.portableUsage) yield { type: 'usage', usage: this.portableUsage };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

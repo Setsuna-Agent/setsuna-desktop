@@ -30,9 +30,13 @@ import {
   stripMarkdownFence,
 } from '../context/prompt-utils.js';
 import { throwIfAborted } from '../core/runtime-turn-errors.js';
+import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import { addRuntimeUsage } from '../core/runtime-usage.js';
 import { RuntimeBackgroundTaskQueue } from '../lifecycle/runtime-background-task-queue.js';
-import { runMemoryConsolidationAgent } from './memory-consolidation-agent.js';
+import {
+  MEMORY_CONSOLIDATION_MODEL,
+  runMemoryConsolidationAgent,
+} from './memory-consolidation-agent.js';
 
 const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
 const PASSIVE_MEMORY_MAX_ITEMS = 5;
@@ -303,10 +307,15 @@ export class RuntimeMemoryCoordinator {
     if (!memoryStore || !messages.length) return 0;
     throwIfAborted(signal);
     await memoryStore.preparePhase2Workspace().catch(() => undefined);
+    const extractionModel = runtimeTaskModelRequest(
+      config,
+      'memoryExtraction',
+      PASSIVE_MEMORY_MODEL,
+    );
     let text = '';
     let usage: RuntimeUsage | undefined;
     for await (const item of this.options.modelClient.stream({
-      model: memoryExtractModel(config),
+      ...extractionModel,
       messages: this.passiveMemoryPromptMessages(thread, messages, sourceLabel),
       maxOutputTokens: PASSIVE_MEMORY_MAX_OUTPUT_TOKENS,
       signal,
@@ -347,7 +356,10 @@ export class RuntimeMemoryCoordinator {
       failureReason: stage1.failureReason,
       projectId: thread.projectId,
     }).catch(() => undefined);
-    if (stage1) await this.runPhase2Dispatch(thread.id, sourceTurnId, signal).catch(() => undefined);
+    if (stage1) {
+      await this.runPhase2Dispatch(config, thread.id, sourceTurnId, signal)
+        .catch(() => undefined);
+    }
     if (!candidates.length) return 0;
 
     const existing = await memoryStore.listMemories(thread.projectId ? { projectId: thread.projectId, limit: 500 } : { limit: 500 }).catch(() => ({ memories: [] }));
@@ -375,7 +387,12 @@ export class RuntimeMemoryCoordinator {
     return saved;
   }
 
-  private async runPhase2Dispatch(ownerId: string, sourceTurnId: string | undefined, signal: AbortSignal): Promise<void> {
+  private async runPhase2Dispatch(
+    config: RuntimeConfigState | null | undefined,
+    ownerId: string,
+    sourceTurnId: string | undefined,
+    signal: AbortSignal,
+  ): Promise<void> {
     const memoryStore = this.options.memoryStore;
     if (!memoryStore) return;
     throwIfAborted(signal);
@@ -404,8 +421,14 @@ export class RuntimeMemoryCoordinator {
         });
         return;
       }
+      const consolidationModel = runtimeTaskModelRequest(
+        config,
+        'memoryConsolidation',
+        MEMORY_CONSOLIDATION_MODEL,
+      );
       const consolidation = await runMemoryConsolidationAgent({
         modelClient: this.options.modelClient,
+        ...consolidationModel,
         root: workspace.root,
         now: () => this.options.clock.now(),
         signal,
@@ -592,10 +615,6 @@ function memorySourceKey(threadId: string | undefined, turnId: string | undefine
 
 function passiveTaskKey(threadId: string, turnId: string): string {
   return `${threadId}\u0000${turnId}`;
-}
-
-function memoryExtractModel(config: RuntimeConfigState | null | undefined): string {
-  return config?.memory?.extractModel?.trim() || PASSIVE_MEMORY_MODEL;
 }
 
 function memoryMaxRolloutsPerStartup(config: RuntimeConfigState | null | undefined): number {

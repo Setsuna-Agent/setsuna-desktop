@@ -38,7 +38,7 @@ export class ConfiguredModelClient implements ModelClient {
   ) {}
 
   async *stream(request: ModelRequest) {
-    const provider = await this.configStore.getActiveProviderConfig();
+    const provider = await configuredProviderForRequest(this.configStore, request.providerId);
     const requestProvider = provider ? providerForRequestModel(provider, request.model) : null;
     if (!shouldUseConfiguredProvider(requestProvider)) {
       yield* this.fallback.stream(request);
@@ -69,7 +69,7 @@ export class ConfiguredModelClient implements ModelClient {
   }
 
   async compactConversation(request: ModelCompactionRequest): Promise<ModelCompactionResult> {
-    const provider = await this.configStore.getActiveProviderConfig();
+    const provider = await configuredProviderForRequest(this.configStore, request.providerId);
     const requestProvider = provider ? providerForRequestModel(provider, request.model) : null;
     if (!shouldUseConfiguredProvider(requestProvider)) {
       if (this.fallback.compactConversation) return this.fallback.compactConversation(request);
@@ -127,6 +127,17 @@ export class ConfiguredModelClient implements ModelClient {
 function shouldUseConfiguredProvider(provider: RuntimeProviderConfig | null): provider is RuntimeProviderConfig {
   if (!provider?.enabled || !provider.activeModel?.code) return false;
   return Boolean(provider.apiKey || provider.activeModel.code !== 'local-runtime-smoke');
+}
+
+async function configuredProviderForRequest(
+  configStore: ConfigStore,
+  providerId: string | undefined,
+): Promise<RuntimeProviderConfig | null> {
+  if (providerId && configStore.getProviderConfig) {
+    const selected = await configStore.getProviderConfig(providerId);
+    if (selected?.enabled) return selected;
+  }
+  return configStore.getActiveProviderConfig();
 }
 
 function providerForRequestModel(provider: RuntimeProviderConfig, requestedModel: string): RuntimeProviderConfig {

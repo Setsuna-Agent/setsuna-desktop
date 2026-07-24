@@ -17,7 +17,7 @@ type RuntimeCompactionTurnCoordinatorOptions = {
     RuntimeContextCompactor,
     | 'generateContextCompactionSummary'
     | 'publishContextCompacting'
-    | 'publishContextCompactionUsage'
+    | 'publishContextCompactionUsages'
     | 'publishProviderMetadataWarning'
   >;
   hooks: Pick<RuntimeHookCoordinator, 'queueSessionStartSource' | 'runCompactHooks'>;
@@ -95,7 +95,12 @@ export class RuntimeCompactionTurnCoordinator {
 
     await this.options.contextCompactor.publishContextCompacting(threadId, turnId, force, thread.messages);
     try {
-      const summary = await this.options.contextCompactor.generateContextCompactionSummary(candidate, signal);
+      const summary = await this.options.contextCompactor.generateContextCompactionSummary(
+        candidate,
+        signal,
+        undefined,
+        runtimeConfig,
+      );
       const result = materializeRuntimeContextCompaction({
         candidate,
         createdAt: this.options.clock.now().toISOString(),
@@ -118,7 +123,11 @@ export class RuntimeCompactionTurnCoordinator {
         createdAt: this.options.clock.now().toISOString(),
         payload: result,
       });
-      await this.options.contextCompactor.publishContextCompactionUsage(threadId, turnId, summary.usage);
+      await this.options.contextCompactor.publishContextCompactionUsages(
+        threadId,
+        turnId,
+        summary.usages,
+      );
       this.options.hooks.queueSessionStartSource(threadId, 'compact');
       await this.options.hooks.runCompactHooks({
         eventName: 'PostCompact',
