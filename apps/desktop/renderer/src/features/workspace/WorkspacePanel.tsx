@@ -6,7 +6,7 @@ import {
   type WorkspaceFileRead,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { Bug, ChevronDown, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
+import { Bug, ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
 import {
   useEffect,
   useMemo,
@@ -502,6 +502,7 @@ export function WorkspaceOverviewPanel({
         {actions.map((action) => (
           <button
             className="desktop-workspace-overview__action"
+            data-workspace-overview-action={action.key}
             disabled={action.disabled}
             key={action.key}
             type="button"
@@ -512,6 +513,11 @@ export function WorkspaceOverviewPanel({
               <span>{action.label}</span>
               <em>{action.meta}</em>
             </span>
+            <ChevronRight
+              aria-hidden="true"
+              className="desktop-workspace-overview__action-arrow"
+              size={14}
+            />
           </button>
         ))}
       </div>

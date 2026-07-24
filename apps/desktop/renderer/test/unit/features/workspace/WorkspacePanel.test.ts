@@ -127,6 +127,31 @@ describe('WorkspaceOverviewPanel', () => {
     })).toContain('对话调试');
   });
 
+  it('renders stable action-card identities and navigation affordances', () => {
+    const html = renderWorkspaceOverviewPanel({
+      activeProject: project,
+      latestReviewSummary: null,
+      onOpenBrowser: () => undefined,
+      onOpenConversationDebug: () => undefined,
+      onOpenFilesPanel: () => undefined,
+      onOpenReviewPanel: () => undefined,
+      onOpenSideChat: () => undefined,
+      onOpenTerminalPanel: () => undefined,
+    });
+    const actionKeys = [...html.matchAll(/data-workspace-overview-action="([^"]+)"/g)]
+      .map((match) => match[1]);
+
+    expect(actionKeys).toEqual([
+      'review',
+      'files',
+      'terminal',
+      'side-chat',
+      'browser',
+      'conversation-debug',
+    ]);
+    expect(html.match(/desktop-workspace-overview__action-arrow/g)).toHaveLength(6);
+  });
+
   it('在普通对话的临时目录中开放工作区操作', () => {
     const panel = captureWorkspaceOverviewPanel({
       activeProject: {

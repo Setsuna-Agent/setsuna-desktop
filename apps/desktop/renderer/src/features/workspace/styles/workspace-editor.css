@@ -40,53 +40,80 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  padding-bottom: clamp(48px, 8vh, 80px);
   overflow: auto;
   background: var(--app-bg);
+  box-sizing: border-box;
 }
 
 .desktop-workspace-overview__actions {
   display: grid;
   align-content: start;
-  gap: 7px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
   min-width: 0;
-  padding: 10px;
+  margin: auto;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
 .desktop-workspace-overview__action {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr) 14px;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
-  min-height: 48px;
-  padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
-  border-radius: 8px;
+  min-height: 62px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+  border-radius: 10px;
   color: var(--app-text);
   background: var(--app-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000000 3%, transparent);
   text-align: left;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
-.desktop-workspace-overview__action:not(:disabled):hover,
+.desktop-workspace-overview__action:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
+  background: color-mix(in srgb, var(--app-primary) 3%, var(--app-surface));
+  box-shadow: 0 6px 16px color-mix(in srgb, #000000 7%, transparent);
+  transform: translateY(-1px);
+}
+
 .desktop-workspace-overview__action:not(:disabled):focus-visible {
-  border-color: color-mix(in srgb, var(--app-text) 20%, var(--app-border));
-  background: color-mix(in srgb, var(--app-text) 4%, var(--app-surface));
+  outline: 0;
+  border-color: color-mix(in srgb, var(--app-primary) 28%, var(--app-border));
+  background: color-mix(in srgb, var(--app-primary) 3%, var(--app-surface));
+  box-shadow: var(--app-focus-ring);
+}
+
+.desktop-workspace-overview__action:not(:disabled):active {
+  background: color-mix(in srgb, var(--app-primary) 6%, var(--app-surface));
+  box-shadow: 0 1px 2px color-mix(in srgb, #000000 3%, transparent);
+  transform: translateY(0);
 }
 
 .desktop-workspace-overview__action:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.46;
 }
 
 .desktop-workspace-overview__action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: color-mix(in srgb, var(--app-primary) 72%, var(--app-text-muted));
+  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface-muted));
 }
 
 .desktop-workspace-overview__action-body {
@@ -104,16 +131,33 @@
 }
 
 .desktop-workspace-overview__action-body span {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   line-height: 18px;
 }
 
 .desktop-workspace-overview__action-body em {
   color: var(--app-text-muted);
-  font-size: 11px;
+  font-size: 11.5px;
   font-style: normal;
-  line-height: 15px;
+  line-height: 16px;
+}
+
+.desktop-workspace-overview__action-arrow {
+  flex: 0 0 auto;
+  color: var(--app-text-subtle);
+  opacity: 0.5;
+  transition:
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.desktop-workspace-overview__action:not(:disabled):hover .desktop-workspace-overview__action-arrow,
+.desktop-workspace-overview__action:not(:disabled):focus-visible .desktop-workspace-overview__action-arrow {
+  color: var(--app-text-muted);
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .desktop-editor__crumb {
