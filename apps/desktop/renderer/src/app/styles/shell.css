@@ -1,4 +1,7 @@
 .app-shell {
+  --app-sidebar-motion-duration: 220ms;
+  --app-sidebar-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+
   display: grid;
   grid-template-rows: var(--app-topbar-height) minmax(0, 1fr);
   width: 100%;
@@ -25,6 +28,7 @@
   height: var(--app-topbar-height);
   background: transparent;
   border-bottom: 0;
+  transition: grid-template-columns var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
   -webkit-app-region: drag;
 }
 
@@ -269,6 +273,31 @@
   grid-template-columns: var(--app-topbar-sidebar-width, var(--desktop-settings-nav-width)) minmax(0, 1fr) var(--desktop-agent-workspace-width);
 }
 
+/* macOS 把交通灯与侧栏控制放在同一标题栏轨道中。用与工作台相同的
+   侧栏宽度绘制底色边界，避免标题栏先跳到终点、正文仍在动画中。 */
+@media (min-width: 761px) {
+  :root[data-desktop-platform='darwin'] .app-shell:not(.data-root-maintenance-shell) > .app-topbar {
+    background: var(--app-bg);
+  }
+
+  :root[data-desktop-platform='darwin'] .app-shell:not(.data-root-maintenance-shell) > .app-topbar::before {
+    position: absolute;
+    z-index: -1;
+    inset: 0 auto 0 0;
+    width: var(--app-sidebar-width);
+    background: var(--app-sidebar-bg);
+    box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
+    content: '';
+    pointer-events: none;
+    transition: width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
+  }
+
+  :root[data-desktop-platform='darwin'] .app-shell:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__brand {
+    border-right: 0;
+    background: transparent;
+  }
+}
+
 :root[data-desktop-platform='win32'],
 :root[data-desktop-platform='linux'] {
   --app-topbar-height: 34px;
@@ -484,8 +513,21 @@
   height: 100%;
   background: transparent;
   transition:
-    grid-template-columns 180ms ease,
+    grid-template-columns var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing),
     grid-template-rows 180ms ease;
+}
+
+@media (min-width: 761px) {
+  :root[data-desktop-platform='darwin'] .app-workbench::after {
+    position: absolute;
+    z-index: 24;
+    inset: 0 auto 0 0;
+    width: var(--app-sidebar-width);
+    box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
+    content: '';
+    pointer-events: none;
+    transition: width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
+  }
 }
 
 .app-runtime-error-notice {
@@ -596,6 +638,13 @@ body.desktop-terminal-resizing .app-workbench {
   transition: none;
 }
 
+body.desktop-agent-sidebar-resizing .app-topbar,
+body.desktop-agent-workspace-resizing .app-topbar,
+body.desktop-agent-sidebar-resizing .app-topbar::before,
+body.desktop-agent-sidebar-resizing .app-workbench::after {
+  transition: none;
+}
+
 .app-workbench--inspector-closed {
   grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr) 0;
 }
@@ -606,18 +655,19 @@ body.desktop-terminal-resizing .app-workbench {
   grid-row: 1 / -1;
   flex-direction: column;
   position: relative;
+  width: var(--desktop-agent-sidebar-visual-width);
   min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--desktop-agent-sidebar-edge);
+  clip-path: inset(0);
   overflow: hidden;
   background: transparent;
   color: var(--app-sidebar-text);
   opacity: 1;
-  /* 持久变换层会让 Chromium 在 macOS 毛玻璃效果上重新栅格化文本。 */
-  transform: none;
+  /* 固定内容宽度并按布局轨道裁切，避免列宽动画和整栏位移产生双重速度。 */
   transition:
-    transform 180ms ease,
-    opacity 160ms ease,
+    clip-path var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing),
+    opacity 130ms ease 70ms,
     visibility 0s linear 0s;
   visibility: visible;
 }
@@ -625,14 +675,18 @@ body.desktop-terminal-resizing .app-workbench {
 .desktop-agent-page--sidebar-collapsed .app-sidebar {
   width: var(--desktop-agent-sidebar-visual-width);
   min-width: var(--desktop-agent-sidebar-visual-width);
+  clip-path: inset(0 100% 0 0);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-100%);
   transition:
-    transform 180ms ease,
-    opacity 160ms ease,
-    visibility 0s linear 180ms;
+    clip-path var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing),
+    opacity 110ms ease,
+    visibility 0s linear var(--app-sidebar-motion-duration);
   visibility: hidden;
+}
+
+:root[data-desktop-platform='darwin'] .app-sidebar {
+  border-right: 0;
 }
 
 .desktop-agent-sidebar__resize-handle,
