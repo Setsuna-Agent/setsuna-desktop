@@ -154,9 +154,13 @@ export const reorderPanelInSlotState = (
   return { ...slot, panels };
 };
 export const removePanelFromSlotState = (slot: DesktopPanelSlotState, panelId: string): DesktopPanelSlotState => {
-  if (!slot.panels.some((panel) => panel.id === panelId)) return slot;
+  const panelIndex = slot.panels.findIndex((panel) => panel.id === panelId);
+  if (panelIndex < 0) return slot;
   const panels = slot.panels.filter((panel) => panel.id !== panelId);
-  const active = slot.active === panelId ? panels[0]?.id ?? null : slot.active;
+  // Keep the user's position in the tab strip: the next tab fills the closed
+  // tab's index, while closing the last tab falls back to its left neighbor.
+  const fallbackIndex = Math.min(panelIndex, panels.length - 1);
+  const active = slot.active === panelId ? panels[fallbackIndex]?.id ?? null : slot.active;
   return { active, panels };
 };
 

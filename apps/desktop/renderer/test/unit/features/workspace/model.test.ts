@@ -11,6 +11,7 @@ import {
   createReviewPanel,
   createSideChatPanel,
   createWorkspaceOverviewPanel,
+  removePanelFromSlotState,
   reorderPanelInSlotState,
   updatePanelInSlotState,
 } from '../../../../src/features/workspace/model.js';
@@ -139,5 +140,38 @@ describe('desktop workspace panel model', () => {
     };
 
     expect(reorderPanelInSlotState(slot, 'review', 'files', 'before')).toBe(slot);
+  });
+
+  it('activates the next tab after closing the active middle tab', () => {
+    const slot = {
+      active: 'files',
+      panels: [createReviewPanel(), createFilesPanel(), createFilePanel('src/main.ts')],
+    };
+
+    const next = removePanelFromSlotState(slot, 'files');
+
+    expect(next.active).toBe('file:src/main.ts');
+    expect(next.panels.map((panel) => panel.id)).toEqual(['review', 'file:src/main.ts']);
+  });
+
+  it('activates the previous tab after closing the active last tab', () => {
+    const slot = {
+      active: 'file:src/main.ts',
+      panels: [createReviewPanel(), createFilesPanel(), createFilePanel('src/main.ts')],
+    };
+
+    const next = removePanelFromSlotState(slot, 'file:src/main.ts');
+
+    expect(next.active).toBe('files');
+    expect(next.panels.map((panel) => panel.id)).toEqual(['review', 'files']);
+  });
+
+  it('keeps the active tab when closing an inactive tab', () => {
+    const slot = {
+      active: 'review',
+      panels: [createReviewPanel(), createFilesPanel(), createFilePanel('src/main.ts')],
+    };
+
+    expect(removePanelFromSlotState(slot, 'files').active).toBe('review');
   });
 });
