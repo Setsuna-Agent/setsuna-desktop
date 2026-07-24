@@ -65,6 +65,7 @@ describe('managed workspace dependency manager', () => {
     const previousPath = process.env.PATH;
     await mkdir(fakeBin, { recursive: true });
     await Promise.all([
+      writeExecutable(path.join(fakeBin, 'node'), '#!/bin/sh\necho "v22.23.1"\n'),
       writeExecutable(path.join(fakeBin, 'python3'), '#!/bin/sh\necho "Python 3.12.9"\n'),
       writeExecutable(path.join(fakeBin, 'uv'), [
         '#!/bin/sh',
@@ -208,7 +209,9 @@ describe('managed workspace dependency manager', () => {
         UV_DEFAULT_INDEX: DEFAULT_PYTHON_PACKAGE_INDEX_URL,
         npm_config_registry: DEFAULT_NPM_REGISTRY_URL,
       });
-      expect(shell.commands.node?.executablePath).not.toBe(path.join(dataDir, 'workspace-dependencies', 'bin', 'node'));
+      expect(shell.environment.UV_PYTHON).toBeUndefined();
+      expect(shell.environment.UV_PYTHON_BIN_DIR).toBeUndefined();
+      expect(shell.environment.UV_PYTHON_INSTALL_DIR).toBeUndefined();
       await expect(manager.getStatus()).resolves.toMatchObject({ enabled: true });
       await expect(access(path.join(dataDir, 'workspace-dependencies', 'toolchain', 'manifest.json')))
         .rejects.toMatchObject({ code: 'ENOENT' });

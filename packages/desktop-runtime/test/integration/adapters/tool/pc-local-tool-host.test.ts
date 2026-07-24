@@ -1963,7 +1963,7 @@ describe('pc local tool host', () => {
 
 async function expectRestrictedShellUnavailable(execution: Promise<unknown>): Promise<void> {
   await expect(execution).rejects.toMatchObject({
-    failureKind: 'sandbox_denied',
+    failureKind: 'sandbox_unavailable',
     failureStage: 'preflight',
   });
 }

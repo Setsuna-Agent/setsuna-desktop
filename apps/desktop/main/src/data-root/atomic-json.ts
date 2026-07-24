@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const WINDOWS_RENAME_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 const WINDOWS_RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400, 800, 1_600];
+const WINDOWS_UNSUPPORTED_DIRECTORY_SYNC_CODES = new Set(['EPERM', 'EINVAL']);
 
 export function isAtomicJsonTemporaryFileName(
   fileName: string,
@@ -31,22 +32,31 @@ export async function writeJsonAtomically(filePath: string, value: unknown): Pro
     await rm(temporaryPath, { force: true }).catch(() => undefined);
     throw error;
   }
-  const directoryHandle = await open(directory, 'r').catch(() => null);
-  try {
-    await directoryHandle?.sync();
-  } finally {
-    await directoryHandle?.close();
-  }
+  await syncDirectory(directory);
 }
 
 export async function removeFileDurably(filePath: string): Promise<void> {
   await rm(filePath, { force: true });
-  const directoryHandle = await open(path.dirname(filePath), 'r').catch(() => null);
+  await syncDirectory(path.dirname(filePath));
+}
+
+async function syncDirectory(directory: string): Promise<void> {
+  const directoryHandle = await open(directory, 'r').catch(() => null);
+  if (!directoryHandle) return;
   try {
-    await directoryHandle?.sync();
+    await directoryHandle.sync();
+  } catch (error) {
+    if (!isUnsupportedDirectorySyncError(error)) throw error;
   } finally {
-    await directoryHandle?.close();
+    await directoryHandle.close();
   }
+}
+
+function isUnsupportedDirectorySyncError(error: unknown): boolean {
+  if (process.platform !== 'win32' || !(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  // Windows can open directory handles but does not support fsync on them.
+  return Boolean(code && WINDOWS_UNSUPPORTED_DIRECTORY_SYNC_CODES.has(code));
 }
 
 async function renameWithRetry(sourcePath: string, destinationPath: string): Promise<void> {
