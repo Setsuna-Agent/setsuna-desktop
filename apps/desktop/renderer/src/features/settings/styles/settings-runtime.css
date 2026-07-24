@@ -257,7 +257,13 @@
   margin-top: 0;
 }
 
-.desktop-settings-panel .workspace-dependencies-settings__source-row,
+.desktop-settings-panel .workspace-dependencies-settings__source-row {
+  min-height: 58px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  row-gap: 6px;
+}
+
 .desktop-settings-panel .workspace-dependencies-settings__status-row {
   min-height: 72px;
   padding-top: 10px;
@@ -265,26 +271,48 @@
   row-gap: 6px;
 }
 
-.desktop-settings-panel .workspace-dependencies-settings__source-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+.desktop-settings-panel .workspace-dependencies-settings__source-display,
+.desktop-settings-panel .workspace-dependencies-settings__source-editor {
   align-items: center;
-  gap: 7px;
   min-width: 0;
 }
 
-.desktop-settings-panel .workspace-dependencies-settings__source-controls .sd-field {
+.desktop-settings-panel .workspace-dependencies-settings__source-display {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__source-display code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font: 11px/16px var(--app-code-font-family);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__source-edit,
+.desktop-settings-panel .workspace-dependencies-settings__source-reset {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__source-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__source-editor .sd-field {
   min-width: 0;
   font-family: var(--app-code-font-family);
 }
 
-.desktop-settings-panel .workspace-dependencies-settings__source-save {
-  min-width: 62px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-reset {
-  padding-right: 7px;
-  padding-left: 7px;
+.desktop-settings-panel .workspace-dependencies-settings__source-cancel {
+  min-width: 68px;
 }
 
 .desktop-settings-panel .workspace-dependencies-settings__source-error {
@@ -298,138 +326,16 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.desktop-settings-panel .workspace-dependencies-settings__status-actions,
-.desktop-settings-panel .workspace-dependencies-settings__action-buttons,
-.desktop-settings-panel .workspace-dependencies-settings__state {
+.desktop-settings-panel .workspace-dependencies-settings__action-buttons {
   display: flex;
   align-items: center;
+  justify-self: end;
   gap: 8px;
   min-width: 0;
 }
 
-.desktop-settings-panel .workspace-dependencies-settings__status-actions {
-  justify-content: flex-end;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__state {
-  gap: 7px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__state small {
-  overflow: hidden;
-  max-width: 132px;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings .sd-status--success {
-  border-color: color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
-  color: var(--app-primary);
-  background: var(--app-accent-subtle);
-}
-
 .desktop-settings-panel .workspace-dependencies-settings__action-buttons .sd-button {
   min-height: 30px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__diagnostics {
-  display: grid;
-  min-width: 0;
-  background: color-mix(in srgb, var(--app-surface-muted) 48%, var(--app-surface));
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  min-width: 0;
-  padding: 11px 14px 12px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item {
-  --workspace-tool-tone: var(--app-text-muted);
-
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  min-width: 0;
-  padding: 0 12px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item:first-child {
-  padding-left: 0;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item:last-child {
-  padding-right: 0;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item + .workspace-dependencies-settings__tool-item {
-  border-left: 1px solid var(--chat-settings-divider);
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item[data-status='ok'] {
-  --workspace-tool-tone: var(--app-primary);
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item[data-status='warning'] {
-  --workspace-tool-tone: var(--app-warning);
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item[data-status='error'] {
-  --workspace-tool-tone: var(--app-danger);
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-heading {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-heading > span:first-child {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--workspace-tool-tone);
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-heading strong {
-  overflow: hidden;
-  color: var(--app-text);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-source {
-  flex: 0 0 auto;
-  margin-left: auto;
-  color: var(--app-text-muted);
-  font-size: 9px;
-  line-height: 14px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-version {
-  overflow: hidden;
-  color: var(--app-text-secondary);
-  font: 10px/15px var(--app-code-font-family);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__tool-item code {
-  display: block;
-  overflow: hidden;
-  color: var(--app-text-subtle);
-  font: 9px/14px var(--app-code-font-family);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-settings-panel .workspace-dependencies-settings__card > .chat-user-settings__runtime-error {
@@ -458,53 +364,30 @@
     justify-self: start;
   }
 
+  .desktop-settings-panel .workspace-dependencies-settings__source-display {
+    justify-content: flex-start;
+  }
+
+  .desktop-settings-panel .workspace-dependencies-settings__source-display code {
+    text-align: left;
+  }
+
   .desktop-settings-panel .workspace-dependencies-settings__source-error {
     grid-column: 1;
   }
 
-  .desktop-settings-panel .workspace-dependencies-settings__status-actions {
-    justify-content: space-between;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__tool-grid {
-    grid-template-columns: 1fr;
-    padding-top: 4px;
-    padding-bottom: 4px;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__tool-item {
-    padding: 8px 0;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__tool-item + .workspace-dependencies-settings__tool-item {
-    border-top: 1px solid var(--chat-settings-divider);
-    border-left: 0;
+  .desktop-settings-panel .workspace-dependencies-settings__action-buttons {
+    justify-self: start;
   }
 
 }
 
 @media (max-width: 560px) {
-  .desktop-settings-panel .workspace-dependencies-settings__source-controls {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__source-controls .sd-field {
-    grid-column: 1 / -1;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__status-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__state,
-  .desktop-settings-panel .workspace-dependencies-settings__action-buttons {
-    justify-content: space-between;
-  }
-
   .desktop-settings-panel .workspace-dependencies-settings__action-buttons {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    justify-self: stretch;
+    width: 100%;
   }
 
   .desktop-settings-panel .workspace-dependencies-settings__action-buttons .sd-button {

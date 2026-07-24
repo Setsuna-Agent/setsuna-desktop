@@ -1,9 +1,4 @@
-import type {
-  RuntimeWorkspaceDependenciesStatus,
-  RuntimeWorkspaceDependencyCheck,
-  RuntimeWorkspaceDependencySource,
-  RuntimeWorkspaceDependencyToolStatus,
-} from '@setsuna-desktop/contracts';
+import type { RuntimeWorkspaceDependenciesStatus } from '@setsuna-desktop/contracts';
 import {
   DEFAULT_NPM_REGISTRY_URL,
   DEFAULT_PYTHON_PACKAGE_INDEX_URL,
@@ -14,13 +9,16 @@ import {
   CircleGauge,
   Code2,
   Download,
+  Pencil,
   RefreshCw,
   RotateCcw,
+  X,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
-import { Button, StatusBadge, TextField } from '../../shared/ui/primitives.js';
+import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
 import { useWorkspaceDependencies } from '../workspace/hooks/useWorkspaceDependencies.js';
+import { planPackageSourceSave } from './packageSourceEditor.js';
 
 type WorkspaceDependenciesSettingsProps = {
   npmRegistryUrl: string;
@@ -37,17 +35,11 @@ export function WorkspaceDependenciesSettings({
   onPythonPackageIndexUrlPersist,
   pythonPackageIndexUrl,
 }: WorkspaceDependenciesSettingsProps) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const dependencies = useWorkspaceDependencies();
   const [persistError, setPersistError] = useState<string | null>(null);
   const busy = dependencies.busyAction !== null;
   const status = dependencies.status;
-  const showEnvironmentDetails = Boolean(
-    status?.updatedAt
-    || status?.error
-    || status?.state === 'ready'
-    || dependencies.hasDiagnosed,
-  );
   const setEnabled = async (enabled: boolean) => {
     setPersistError(null);
     const nextStatus = await dependencies.setEnabled(enabled);
@@ -87,7 +79,6 @@ export function WorkspaceDependenciesSettings({
 
         <PackageSourceForm
           defaultValue={DEFAULT_NPM_REGISTRY_URL}
-          description={t('settings.dependencies.npmSourceDescription')}
           id="workspace-npm-registry"
           icon="npm"
           label={t('settings.dependencies.npmSource')}
@@ -98,7 +89,6 @@ export function WorkspaceDependenciesSettings({
         />
         <PackageSourceForm
           defaultValue={DEFAULT_PYTHON_PACKAGE_INDEX_URL}
-          description={t('settings.dependencies.pythonSourceDescription')}
           id="workspace-python-package-index"
           icon="python"
           label={t('settings.dependencies.pythonSource')}
@@ -116,48 +106,27 @@ export function WorkspaceDependenciesSettings({
               <small>{environmentStatusCopy(status, t)}</small>
             </span>
           </span>
-          <div className="workspace-dependencies-settings__status-actions">
-            <span className="workspace-dependencies-settings__state">
-              <StatusBadge tone={statusTone(status)}>{statusLabel(status, t)}</StatusBadge>
-              {status?.updatedAt ? <small>{formatDate(status.updatedAt, locale)}</small> : null}
-            </span>
-            <div className="workspace-dependencies-settings__action-buttons">
-              <Button
-                icon={dependencies.busyAction === 'diagnose'
-                  ? <RefreshCw className="is-spinning" size={14} />
-                  : <RefreshCw size={14} />}
-                disabled={busy}
-                onClick={() => void dependencies.diagnose()}
-              >
-                {dependencies.busyAction === 'diagnose' ? t('settings.dependencies.checking') : t('settings.dependencies.check')}
-              </Button>
-              <Button
-                icon={dependencies.busyAction === 'reinstall'
-                  ? <RefreshCw className="is-spinning" size={14} />
-                  : <Download size={14} />}
-                disabled={busy || status?.enabled !== true}
-                onClick={() => void dependencies.reinstall()}
-              >
-                {dependencies.busyAction === 'reinstall' ? t('settings.dependencies.installing') : t('settings.dependencies.reinstall')}
-              </Button>
-            </div>
+          <div className="workspace-dependencies-settings__action-buttons">
+            <Button
+              icon={dependencies.busyAction === 'diagnose'
+                ? <RefreshCw className="is-spinning" size={14} />
+                : <RefreshCw size={14} />}
+              disabled={busy}
+              onClick={() => void dependencies.diagnose()}
+            >
+              {dependencies.busyAction === 'diagnose' ? t('settings.dependencies.checking') : t('settings.dependencies.check')}
+            </Button>
+            <Button
+              icon={dependencies.busyAction === 'reinstall'
+                ? <RefreshCw className="is-spinning" size={14} />
+                : <Download size={14} />}
+              disabled={busy || status?.enabled !== true}
+              onClick={() => void dependencies.reinstall()}
+            >
+              {dependencies.busyAction === 'reinstall' ? t('settings.dependencies.installing') : t('settings.dependencies.reinstall')}
+            </Button>
           </div>
         </div>
-
-        {showEnvironmentDetails && status ? (
-          <div className="workspace-dependencies-settings__diagnostics">
-            <div className="workspace-dependencies-settings__tool-grid" aria-label={t('settings.dependencies.toolchainStatus')}>
-              {dependencyToolItems(status).map((item) => (
-                <DependencyToolCard
-                  check={status.checks.find((check) => check.id === item.id)}
-                  key={item.id}
-                  label={item.label}
-                  tool={item.tool}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         {dependencies.error || persistError ? (
           <div className="chat-user-settings__runtime-error" role="alert">{dependencies.error ?? persistError}</div>
@@ -171,7 +140,6 @@ type PackageSourceKind = 'npm' | 'python';
 
 type PackageSourceFormProps = {
   defaultValue: string;
-  description: string;
   id: string;
   icon: PackageSourceKind;
   label: string;
@@ -183,7 +151,6 @@ type PackageSourceFormProps = {
 
 function PackageSourceForm({
   defaultValue,
-  description,
   id,
   icon,
   label,
@@ -196,28 +163,41 @@ function PackageSourceForm({
   const effectiveValue = value || defaultValue;
   const [draft, setDraft] = useState(effectiveValue);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const helpId = `${id}-help`;
   const errorId = `${id}-error`;
-  const dirty = draft.trim() !== effectiveValue;
   const customized = Boolean(value && value !== defaultValue);
 
   useEffect(() => {
     setDraft(effectiveValue);
     setError(null);
+    setEditing(false);
   }, [effectiveValue]);
 
   const save = async (nextValue: string) => {
-    const normalized = normalize(nextValue);
-    if (normalized === null) {
+    const plan = planPackageSourceSave({
+      defaultValue,
+      draft: nextValue,
+      effectiveValue,
+      normalize,
+    });
+    if (plan.kind === 'invalid') {
       setError(t('settings.dependencies.invalidSource'));
       return;
     }
+    if (plan.kind === 'unchanged') {
+      setDraft(plan.displayValue);
+      setEditing(false);
+      setError(null);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      await onPersist(normalized && normalized !== defaultValue ? normalized : undefined);
-      setDraft(normalized || defaultValue);
+      await onPersist(plan.persistedValue);
+      setDraft(plan.displayValue);
+      setEditing(false);
     } catch (unknownError) {
       setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     } finally {
@@ -230,45 +210,84 @@ function PackageSourceForm({
     void save(draft);
   };
 
+  const startEditing = () => {
+    setDraft(effectiveValue);
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancelEditing = () => {
+    if (saving) return;
+    setDraft(effectiveValue);
+    setError(null);
+    setEditing(false);
+  };
+
   return (
     <form className="chat-user-settings__row workspace-dependencies-settings__source-row" noValidate onSubmit={submit}>
-      <label className="chat-user-settings__runtime-policy-copy" htmlFor={id}>
+      <div className="chat-user-settings__runtime-policy-copy">
         <PackageSourceIcon kind={icon} />
         <span>
           <strong>{label}</strong>
-          <small id={helpId}>{description}</small>
         </span>
-      </label>
-      <div className="workspace-dependencies-settings__source-controls">
-        <TextField
-          id={id}
-          aria-describedby={error ? `${helpId} ${errorId}` : helpId}
-          aria-invalid={error ? 'true' : undefined}
-          disabled={saving}
-          inputMode="url"
-          placeholder={placeholder}
-          spellCheck={false}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.currentTarget.value);
-            setError(null);
-          }}
-        />
-        <Button className="workspace-dependencies-settings__source-save" variant={dirty ? 'primary' : 'secondary'} disabled={saving || !dirty} type="submit">
-          {saving ? t('settings.dependencies.saving') : dirty ? t('common.save') : t('settings.dependencies.saved')}
-        </Button>
-        {customized ? (
+      </div>
+      {editing ? (
+        <div className="workspace-dependencies-settings__source-editor">
+          <TextField
+            autoFocus
+            id={id}
+            aria-label={label}
+            aria-describedby={error ? errorId : undefined}
+            aria-invalid={error ? 'true' : undefined}
+            disabled={saving}
+            inputMode="url"
+            placeholder={placeholder}
+            spellCheck={false}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.currentTarget.value);
+              setError(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              cancelEditing();
+            }}
+          />
           <Button
-            className="workspace-dependencies-settings__source-reset"
-            icon={<RotateCcw size={13} />}
+            className="workspace-dependencies-settings__source-cancel"
+            icon={saving ? <RefreshCw className="is-spinning" size={13} /> : <X size={13} />}
             variant="ghost"
             disabled={saving}
-            onClick={() => void save(defaultValue)}
+            onClick={cancelEditing}
           >
-            {t('settings.dependencies.default')}
+            {saving ? t('settings.dependencies.saving') : t('common.cancel')}
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : (
+        <div className="workspace-dependencies-settings__source-display">
+          <code title={effectiveValue}>{effectiveValue}</code>
+          <IconButton
+            className="workspace-dependencies-settings__source-edit"
+            label={t('settings.dependencies.editSource', { source: label })}
+            disabled={saving}
+            onClick={startEditing}
+          >
+            <Pencil size={13} />
+          </IconButton>
+          {customized ? (
+            <IconButton
+              className="workspace-dependencies-settings__source-reset"
+              label={t('settings.dependencies.resetSource', { source: label })}
+              variant="ghost"
+              disabled={saving}
+              onClick={() => void save(defaultValue)}
+            >
+              {saving ? <RefreshCw className="is-spinning" size={13} /> : <RotateCcw size={13} />}
+            </IconButton>
+          ) : null}
+        </div>
+      )}
       {error ? <small className="workspace-dependencies-settings__source-error" id={errorId} role="alert">{error}</small> : null}
     </form>
   );
@@ -300,79 +319,16 @@ function PackageSourceIcon({ kind }: { kind: PackageSourceKind }) {
   );
 }
 
-type DependencyToolItem = {
-  id: Exclude<RuntimeWorkspaceDependencyCheck['id'], 'sandbox'>;
-  label: string;
-  tool: RuntimeWorkspaceDependencyToolStatus;
-};
-
-function dependencyToolItems(status: RuntimeWorkspaceDependenciesStatus): DependencyToolItem[] {
-  return [
-    { id: 'node', label: 'Node.js', tool: status.node },
-    { id: 'python', label: 'Python', tool: status.python },
-    { id: 'uv', label: 'uv', tool: status.uv },
-  ];
-}
-
-function DependencyToolCard({
-  check,
-  label,
-  tool,
-}: {
-  check?: RuntimeWorkspaceDependencyCheck;
-  label: string;
-  tool: RuntimeWorkspaceDependencyToolStatus;
-}) {
-  const { t } = useI18n();
-  const state = check?.status ?? (tool.available ? 'ok' : 'error');
-  return (
-    <div className="workspace-dependencies-settings__tool-item" data-status={state}>
-      <div className="workspace-dependencies-settings__tool-heading">
-        <span aria-hidden="true" />
-        <strong>{label}</strong>
-        <span className="workspace-dependencies-settings__tool-source">{dependencySourceLabel(tool.source, t)}</span>
-      </div>
-      <span className="workspace-dependencies-settings__tool-version">
-        {tool.version ?? (tool.available ? t('settings.dependencies.versionUnknown') : t('settings.dependencies.notInstalled'))}
-      </span>
-      <code title={tool.path}>{tool.path ?? t('settings.dependencies.executableNotFound')}</code>
-    </div>
-  );
-}
-
 function environmentStatusCopy(status: RuntimeWorkspaceDependenciesStatus | null, t: Translate): string {
   if (!status) return t('settings.dependencies.status.reading');
-  if (status.state === 'ready') return t('settings.dependencies.status.ready');
-  if (status.state === 'installing') return t('settings.dependencies.status.installing');
-  if (status.state === 'error') return status.error || t('settings.dependencies.status.error');
-  if (status.state === 'not-installed') return t('settings.dependencies.status.notInstalled');
-  return t('settings.dependencies.status.disabled');
-}
-
-function dependencySourceLabel(source: RuntimeWorkspaceDependencySource | undefined, t: Translate): string {
-  if (source === 'system') return t('settings.dependencies.source.system');
-  if (source === 'bundled') return t('settings.dependencies.source.bundled');
-  if (source === 'managed') return t('settings.dependencies.source.managed');
-  return t('settings.dependencies.source.unavailable');
-}
-
-function statusTone(status: RuntimeWorkspaceDependenciesStatus | null): 'neutral' | 'success' | 'warning' | 'danger' {
-  if (status?.state === 'ready') return 'success';
-  if (status?.state === 'error') return 'danger';
-  if (status?.state === 'not-installed') return 'warning';
-  return 'neutral';
-}
-
-function statusLabel(status: RuntimeWorkspaceDependenciesStatus | null, t: Translate): string {
-  if (!status) return t('settings.dependencies.badge.loading');
-  if (status.state === 'ready') return t('settings.dependencies.badge.ready');
-  if (status.state === 'installing') return t('settings.dependencies.badge.installing');
-  if (status.state === 'error') return t('settings.dependencies.badge.error');
-  if (status.state === 'not-installed') return t('settings.dependencies.badge.pending');
-  return t('settings.dependencies.badge.disabled');
-}
-
-function formatDate(value: string, locale: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
+  return [
+    { available: status.node.available, tool: 'Node.js' },
+    { available: status.python.available, tool: 'Python' },
+    { available: status.uv.available, tool: 'uv' },
+  ].map(({ available, tool }) => t('settings.dependencies.status.item', {
+    status: t(available
+      ? 'settings.dependencies.status.available'
+      : 'settings.dependencies.status.unavailable'),
+    tool,
+  })).join(' · ');
 }
