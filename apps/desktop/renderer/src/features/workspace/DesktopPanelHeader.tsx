@@ -3,12 +3,15 @@ import {
   useEffect,
   useRef,
   useState,
+  type AnimationEvent as ReactAnimationEvent,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
+import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
 
@@ -47,6 +50,7 @@ type PanelDragOverlay = {
 const PANEL_DRAG_START_DISTANCE = 4;
 const PANEL_LAUNCHER_MENU_WIDTH = 156;
 const PANEL_LAUNCHER_VIEWPORT_INSET = 8;
+const PANEL_TAB_EXIT_ANIMATION_NAME = 'desktop-panel-tab-exit';
 
 export function DesktopPanelHeader({
   activePanel,
@@ -85,6 +89,11 @@ export function DesktopPanelHeader({
   const launcherRef = useRef<HTMLSpanElement | null>(null);
   const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
   const launcherMenuRef = useRef<HTMLSpanElement | null>(null);
+  const {
+    closingPanelWidths,
+    finishPanelClose,
+    startPanelClose,
+  } = usePanelTabCloseTransition(onClosePanel);
   const activeId = activePanelId || activePanel;
   const tabPanels = panels?.length ? panels : [{ id: activeId, type: activePanel }];
   const availableTypeSet = new Set(availablePanelTypes || panelLauncherItems.map((item) => item.key));
@@ -244,6 +253,11 @@ export function DesktopPanelHeader({
     onSelectPanel?.(panelId);
   };
 
+  const handleTabExitAnimationEnd = (event: ReactAnimationEvent<HTMLSpanElement>, panelId: string) => {
+    if (event.currentTarget !== event.target || event.animationName !== PANEL_TAB_EXIT_ANIMATION_NAME) return;
+    finishPanelClose(panelId);
+  };
+
   const renderTabLabel = (panel: DesktopPanelTab) => (
     <>
       <DesktopPanelIcon panel={panel} />
@@ -255,47 +269,60 @@ export function DesktopPanelHeader({
     <div className={['desktop-panel-chrome', 'chat-file-review-panel__header', dragOverlay ? 'is-reordering-tabs' : ''].filter(Boolean).join(' ')}>
       <div className="chat-file-review-panel__heading">
         <span className="chat-file-review-panel__tabs" ref={tabsRef}>
-          {tabPanels.map((panel) => (
-            <span
-              className={[
-                'chat-file-review-panel__title',
-                activeId === panel.id ? 'chat-file-review-panel__title--active' : '',
-                onClosePanel ? 'chat-file-review-panel__title--closable' : '',
-                sortable ? 'chat-file-review-panel__title--sortable' : '',
-                draggedPanelId === panel.id ? 'is-dragging' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              data-desktop-panel-tab-id={panel.id}
-              key={panel.id}
-              onPointerCancel={handlePointerEnd}
-              onPointerDown={(event) => handlePointerDown(event, panel)}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerEnd}
-            >
-              <button
-                className="chat-file-review-panel__tab-button"
-                type="button"
-                title={desktopPanelTitle(panel, t)}
-                onClick={(event) => handleTabClick(event, panel.id)}
+          {tabPanels.map((panel) => {
+            const closingWidth = closingPanelWidths[panel.id];
+            const closing = closingWidth !== undefined;
+            const tabStyle = closing
+              ? { '--desktop-panel-tab-exit-width': `${closingWidth}px` } as CSSProperties
+              : undefined;
+            return (
+              <span
+                className={[
+                  'chat-file-review-panel__title',
+                  activeId === panel.id ? 'chat-file-review-panel__title--active' : '',
+                  onClosePanel ? 'chat-file-review-panel__title--closable' : '',
+                  sortable ? 'chat-file-review-panel__title--sortable' : '',
+                  draggedPanelId === panel.id ? 'is-dragging' : '',
+                  closing ? 'is-closing' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                data-desktop-panel-tab-id={panel.id}
+                key={panel.id}
+                onAnimationEnd={closing ? (event) => handleTabExitAnimationEnd(event, panel.id) : undefined}
+                onPointerCancel={handlePointerEnd}
+                onPointerDown={(event) => handlePointerDown(event, panel)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerEnd}
+                style={tabStyle}
               >
-                {renderTabLabel(panel)}
-              </button>
-              {onClosePanel ? (
                 <button
-                  className="chat-file-review-panel__tab-close"
+                  className="chat-file-review-panel__tab-button"
+                  disabled={closing}
                   type="button"
-                  aria-label={t('workspace.panel.closeNamed', { title: desktopPanelTitle(panel, t) })}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onClosePanel(panel.id);
-                  }}
+                  title={desktopPanelTitle(panel, t)}
+                  onClick={(event) => handleTabClick(event, panel.id)}
                 >
-                  <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
+                  {renderTabLabel(panel)}
                 </button>
-              ) : null}
-            </span>
-          ))}
+                {onClosePanel ? (
+                  <button
+                    className="chat-file-review-panel__tab-close"
+                    disabled={closing}
+                    type="button"
+                    aria-label={t('workspace.panel.closeNamed', { title: desktopPanelTitle(panel, t) })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const visualWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
+                      startPanelClose(panel.id, visualWidth * pageScaleInverse());
+                    }}
+                  >
+                    <span className="chat-file-review-panel__tab-close-glyph" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </span>
+            );
+          })}
           {onOpenPanel && launcherItems.length ? (
             <span className="desktop-panel-launcher" ref={launcherRef}>
               <button

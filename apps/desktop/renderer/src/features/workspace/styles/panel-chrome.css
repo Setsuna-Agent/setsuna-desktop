@@ -42,6 +42,57 @@
   background: transparent;
   font-size: 13px;
   line-height: 20px;
+  transform-origin: left center;
+  animation: desktop-panel-tab-enter 180ms var(--app-sidebar-motion-easing) both;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title:not(:last-child) {
+  --desktop-panel-tab-adjacent-gap: -6px;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title.is-closing {
+  flex: 0 0 var(--desktop-panel-tab-exit-width);
+  width: var(--desktop-panel-tab-exit-width);
+  min-width: 0;
+  max-width: none;
+  pointer-events: none;
+  animation: desktop-panel-tab-exit 160ms var(--app-sidebar-motion-easing) forwards;
+}
+
+@keyframes desktop-panel-tab-enter {
+  from {
+    min-width: 0;
+    max-width: 0;
+    margin-inline-end: var(--desktop-panel-tab-adjacent-gap, 0);
+    opacity: 0;
+    transform: translateX(-4px) scale(0.96);
+  }
+
+  to {
+    min-width: 72px;
+    max-width: 150px;
+    margin-inline-end: 0;
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes desktop-panel-tab-exit {
+  from {
+    flex-basis: var(--desktop-panel-tab-exit-width);
+    width: var(--desktop-panel-tab-exit-width);
+    margin-inline-end: 0;
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    flex-basis: 0;
+    width: 0;
+    margin-inline-end: var(--desktop-panel-tab-adjacent-gap, 0);
+    opacity: 0;
+    transform: translateX(-4px) scale(0.96);
+  }
 }
 
 .desktop-panel-chrome .chat-file-review-panel__title:hover {
@@ -250,6 +301,7 @@
   opacity: 0.98;
   pointer-events: none;
   cursor: grabbing;
+  animation: none;
 }
 
 .desktop-panel-chrome .chat-file-review-panel__title--drag-preview .chat-file-review-panel__tab-close {

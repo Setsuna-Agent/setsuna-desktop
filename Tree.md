@@ -76,15 +76,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 449 total files
-├── src/ — 2 direct / 330 total files
+apps/desktop/renderer/ — 0 direct / 450 total files
+├── src/ — 2 direct / 331 total files
 │   ├── app/ — 2 direct / 31 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 7 direct / 7 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 241 files
+│   ├── features/ — 242 files
 │   │   ├── capabilities/ — 17 direct / 24 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
@@ -106,10 +106,10 @@ apps/desktop/renderer/ — 0 direct / 449 total files
 │   │   │   ├── sections/ — 7 direct / 7 total files
 │   │   │   ├── styles/ — 8 direct / 8 total files
 │   │   │   └── usage/ — 7 direct / 7 total files
-│   │   └── workspace/ — 30 direct / 68 total files
+│   │   └── workspace/ — 30 direct / 69 total files
 │   │       ├── assets/ — 20 direct / 20 total files
 │   │       ├── browser/ — 1 direct / 1 total files
-│   │       ├── hooks/ — 9 direct / 9 total files
+│   │       ├── hooks/ — 10 direct / 10 total files
 │   │       ├── model/ — 1 direct / 1 total files
 │   │       └── styles/ — 7 direct / 7 total files
 │   ├── services/ — 3 files
