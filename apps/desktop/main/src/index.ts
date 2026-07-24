@@ -35,6 +35,10 @@ import {
 import { DesktopDataRootCoordinator } from './data-root/coordinator.js';
 import { acquireBootstrapInstanceLock } from './data-root/instance-lock.js';
 import { desktopDataLayout, legacyDesktopPolicyPaths } from './data-root/layout.js';
+import {
+  DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV,
+  parseDesktopDevRelaunchExitCode,
+} from './dev-relaunch-protocol.js';
 import { installDesktopRipgrepEnvironment, resolveDesktopRipgrep } from './runtime/bundled-tools.js';
 import { hydrateDesktopProcessEnvironment } from './runtime/desktop-environment.js';
 import { RuntimeHost } from './runtime/host.js';
@@ -350,14 +354,22 @@ async function requestDesktopRelaunch(): Promise<void> {
   desktopRelaunchRequested = true;
   try {
     await shutdownDesktopServices({ requireRuntimeExit: true });
-    app.relaunch();
+    const devRelaunchExitCode = parseDesktopDevRelaunchExitCode(
+      process.env[DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV],
+    );
+    // Keep the Vite process alive in development by asking its Electron
+    // supervisor to restart this child instead of spawning outside that tree.
+    if (devRelaunchExitCode === null) app.relaunch();
+    appQuitAfterShutdown = true;
+    setTimeout(() => {
+      if (devRelaunchExitCode === null) app.quit();
+      else app.exit(devRelaunchExitCode);
+    }, 50);
   } catch (error) {
     desktopRelaunchRequested = false;
     desktopServicesShutdownPromise = null;
     throw error;
   }
-  appQuitAfterShutdown = true;
-  setTimeout(() => app.quit(), 50);
 }
 
 function createMainBrowserWindow(desktopIcon: NativeImage | undefined, bounds: Rectangle): BrowserWindow {

@@ -51,6 +51,11 @@ export async function relocateDataRootContents(
     sourceRoot,
     targetRoot,
   );
+  await relocateVirtualEnvironmentText(
+    path.join(layout.runtimeRoot, 'temporary-workspace'),
+    sourceRoot,
+    targetRoot,
+  );
 }
 
 async function relocateRuntimeConfig(
@@ -194,6 +199,26 @@ async function relocateManagedDependencyText(
     const content = buffer.toString('utf8');
     const relocated = replaceDataRoot(content, sourceRoot, targetRoot);
     if (relocated !== content) await writeFile(candidate, relocated, 'utf8');
+  }
+}
+
+async function relocateVirtualEnvironmentText(
+  root: string,
+  sourceRoot: string,
+  targetRoot: string,
+): Promise<void> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+    const candidate = path.join(root, entry.name);
+    if (entry.name.toLowerCase() === '.venv') {
+      // venv metadata, activation scripts and console entry points embed absolute
+      // interpreter paths. They are runtime-derived, so relocating these occurrences
+      // is safe while arbitrary temporary-workspace project files stay untouched.
+      await relocateManagedDependencyText(candidate, sourceRoot, targetRoot);
+      continue;
+    }
+    await relocateVirtualEnvironmentText(candidate, sourceRoot, targetRoot);
   }
 }
 

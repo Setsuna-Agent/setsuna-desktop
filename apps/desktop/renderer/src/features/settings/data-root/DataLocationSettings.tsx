@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button } from '../../../shared/ui/primitives.js';
+import { DataMigrationIssueNotice } from './DataMigrationIssueNotice.js';
 import { formatDataBytes } from './dataRootFormat.js';
 import { dataRootCategoryMessageKey } from './dataRootMessages.js';
 
@@ -155,14 +156,20 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
               ))}
             </div>
             {plan.blockers.map((blocker) => (
-              <div className="data-root-plan__issue is-blocker" key={`${blocker.code}:${blocker.path ?? ''}`}>
-                {blocker.message}
-              </div>
+              <DataMigrationIssueNotice
+                issue={blocker}
+                key={`${blocker.code}:${blocker.path ?? ''}`}
+                severity="blocker"
+                targetRoot={plan.targetRoot}
+              />
             ))}
             {plan.warnings.map((warning) => (
-              <div className="data-root-plan__issue is-warning" key={`${warning.code}:${warning.path ?? ''}`}>
-                {warning.message}
-              </div>
+              <DataMigrationIssueNotice
+                issue={warning}
+                key={`${warning.code}:${warning.path ?? ''}`}
+                severity="warning"
+                targetRoot={plan.targetRoot}
+              />
             ))}
             <p className="data-root-plan__notice">{t('dataRoot.plan.notice')}</p>
             {error ? <div className="data-root-plan__issue is-blocker">{error}</div> : null}

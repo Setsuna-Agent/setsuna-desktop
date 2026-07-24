@@ -1,3 +1,34 @@
+.data-root-maintenance-shell {
+  --app-topbar-sidebar-width: 0px;
+  background: var(--app-window-bg);
+}
+
+.data-root-maintenance-shell .app-topbar,
+.data-root-maintenance-shell .app-topbar__brand,
+.data-root-maintenance-shell .app-topbar__right,
+.data-root-maintenance-shell .app-topbar__workspace,
+.data-root-maintenance-shell .app-workbench {
+  background: var(--app-window-bg);
+}
+
+.data-root-maintenance-shell .app-topbar__brand,
+.data-root-maintenance-shell .app-topbar__workspace {
+  border-color: transparent;
+}
+
+/* Maintenance windows have no sidebar or inspector. On macOS, collapse those
+   empty titlebar tracks so the traffic lights sit on one uninterrupted surface. */
+:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar__brand,
+:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar__right,
+:root[data-desktop-platform='darwin'] .data-root-maintenance-shell .app-topbar__workspace {
+  padding-right: 0;
+  padding-left: 0;
+}
+
 .data-root-maintenance-shell .app-workbench {
   display: block;
   min-height: 0;
@@ -203,13 +234,25 @@
 .data-root-maintenance__error,
 .data-root-plan__issue.is-blocker {
   background: color-mix(in srgb, var(--app-danger) 10%, transparent);
-  color: var(--app-danger);
 }
 
 .data-root-maintenance__error {
   display: flex;
   gap: 8px;
   align-items: flex-start;
+  color: var(--app-danger);
+}
+
+.data-root-plan__issue {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  color: var(--app-text);
+}
+
+.data-root-plan__issue.is-blocker .data-root-plan__issue-icon,
+.data-root-plan__issue.is-blocker strong {
+  color: var(--app-danger);
 }
 
 .data-root-plan__issue.is-warning {
@@ -217,11 +260,58 @@
   color: var(--app-text);
 }
 
+.data-root-plan__issue.is-warning .data-root-plan__issue-icon {
+  color: var(--app-warning);
+}
+
+.data-root-plan__issue-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.data-root-plan__issue-content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.data-root-plan__issue-content p {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
+.data-root-plan__issue-path {
+  display: grid;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.data-root-plan__issue-path span {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.data-root-plan__issue-path code {
+  display: block;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  color: var(--app-text);
+  overflow-wrap: anywhere;
+  user-select: text;
+  white-space: normal;
+}
+
 .data-root-maintenance__notice,
 .data-root-plan__notice {
   color: var(--app-text-secondary);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.data-root-plan__notice {
+  margin: 16px 0 4px;
 }
 
 .data-root-maintenance__actions,

@@ -75,7 +75,8 @@ dev 启动流程：
 1. 复用当前 pnpm entrypoint 构建 contracts。
 2. 构建 runtime。
 3. 调用 `buildElectron()`。
-4. 启动 Electron。
+4. 通过开发 supervisor 启动 Electron；应用内计划重启使用专用退出码原地拉起，
+   不结束 Vite renderer。
 5. 注入：
    - `SETSUNA_DESKTOP_DEV_SERVER_URL=http://127.0.0.1:5174`
    - `SETSUNA_DESKTOP_RUNTIME_ENTRY=packages/desktop-runtime/dist/cli.js`

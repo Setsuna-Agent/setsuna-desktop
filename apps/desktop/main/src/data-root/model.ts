@@ -63,6 +63,8 @@ export type DataMigrationManifestEntry = {
   category: DesktopDataMigrationCategoryId;
   kind: 'file' | 'symlink';
   linkTarget?: string;
+  /** Original source value when an in-root absolute link is made portable for the target. */
+  sourceLinkTarget?: string;
   relativePath: string;
   size: number;
   mode: number;

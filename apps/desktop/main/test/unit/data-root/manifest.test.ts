@@ -58,12 +58,27 @@ describe('desktop data migration manifest', () => {
     expect(migrationCategory('runtime/.memories-before-unification-1/MEMORY.md')).toBe('memories');
   });
 
-  it.skipIf(process.platform === 'win32')('blocks external symlinks but preserves confined relative symlinks', async () => {
+  it.skipIf(process.platform === 'win32')('blocks external symlinks and makes confined absolute symlinks portable', async () => {
     const root = await temporaryRoot();
     const outside = await temporaryRoot();
     await writeFixture(root, 'runtime/file.txt', 'inside');
+    await writeFixture(
+      root,
+      'runtime/workspace-dependencies/toolchain/python/bin/python3.12',
+      'managed-python',
+    );
     await writeFixture(outside, 'outside.txt', 'outside');
     await symlink('file.txt', path.join(root, 'runtime', 'inside-link'));
+    const managedPython = path.join(
+      root,
+      'runtime/workspace-dependencies/toolchain/python/bin/python3.12',
+    );
+    const virtualEnvironmentPython = path.join(
+      root,
+      'runtime/temporary-workspace/.venv/bin/python',
+    );
+    await mkdir(path.dirname(virtualEnvironmentPython), { recursive: true });
+    await symlink(managedPython, virtualEnvironmentPython);
     await symlink(path.join(outside, 'outside.txt'), path.join(root, 'runtime', 'outside-link'));
 
     const { manifest, blockers } = await buildDataMigrationManifest(root);
@@ -73,6 +88,14 @@ describe('desktop data migration manifest', () => {
         kind: 'symlink',
         relativePath: path.join('runtime', 'inside-link'),
         linkTarget: 'file.txt',
+      }),
+    ]));
+    expect(manifest.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'symlink',
+        relativePath: path.join('runtime', 'temporary-workspace', '.venv', 'bin', 'python'),
+        sourceLinkTarget: managedPython,
+        linkTarget: path.relative(path.dirname(virtualEnvironmentPython), managedPython),
       }),
     ]));
     expect(blockers).toEqual([

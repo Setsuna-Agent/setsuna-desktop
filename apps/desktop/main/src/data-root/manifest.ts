@@ -234,16 +234,22 @@ async function scanDirectory(
     }
     const absolutePath = path.join(root, relativePath);
     if (child.isSymbolicLink()) {
-      const linkTarget = await readlink(absolutePath);
-      const resolvedTarget = path.resolve(path.dirname(absolutePath), linkTarget);
-      if (path.isAbsolute(linkTarget) || !isPathInside(root, resolvedTarget)) {
+      const sourceLinkTarget = await readlink(absolutePath);
+      const resolvedTarget = path.resolve(path.dirname(absolutePath), sourceLinkTarget);
+      if (!isPathInside(root, resolvedTarget)) {
         blockers.push(issue(
           'symlink_not_supported',
-          'Only relative symlinks confined to the data root can be migrated.',
+          'Only symlinks that resolve inside the data root can be migrated.',
           absolutePath,
         ));
         continue;
       }
+      // Absolute links created by managed runtimes would otherwise keep pointing at
+      // the old data root. A relative target preserves the same in-root relationship
+      // after staging is atomically renamed into the selected location.
+      const linkTarget = path.isAbsolute(sourceLinkTarget)
+        ? path.relative(path.dirname(absolutePath), resolvedTarget) || '.'
+        : sourceLinkTarget;
       const stats = await lstat(absolutePath);
       entries.push({
         absolutePath,
@@ -251,6 +257,7 @@ async function scanDirectory(
         category: migrationCategory(relativePath),
         kind: 'symlink',
         linkTarget,
+        ...(linkTarget !== sourceLinkTarget ? { sourceLinkTarget } : {}),
         size: 0,
         mode: stats.mode,
         mtimeMs: stats.mtimeMs,

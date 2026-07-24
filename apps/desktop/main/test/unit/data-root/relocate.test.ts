@@ -61,6 +61,39 @@ describe('data root path relocation', () => {
     );
     const shimPath = path.join(stagingLayout.runtimeRoot, 'workspace-dependencies', 'bin', 'python');
     await writeFixture(shimPath, `#!/bin/sh\nexec "${path.join(sourceRoot, 'runtime', 'workspace-dependencies', 'toolchain', 'python')}" "$@"\n`);
+    const virtualEnvironmentConfig = path.join(
+      stagingLayout.runtimeRoot,
+      'temporary-workspace',
+      '.venv',
+      'pyvenv.cfg',
+    );
+    const virtualEnvironmentActivate = path.join(
+      stagingLayout.runtimeRoot,
+      'temporary-workspace',
+      '.venv',
+      'bin',
+      'activate',
+    );
+    const managedPythonHome = path.join(
+      sourceRoot,
+      'runtime',
+      'workspace-dependencies',
+      'toolchain',
+      'python',
+      'bin',
+    );
+    await writeFixture(virtualEnvironmentConfig, `home = ${managedPythonHome}\n`);
+    await writeFixture(
+      virtualEnvironmentActivate,
+      `VIRTUAL_ENV="${path.join(sourceRoot, 'runtime', 'temporary-workspace', '.venv')}"\n`,
+    );
+    const projectFixture = path.join(
+      stagingLayout.runtimeRoot,
+      'temporary-workspace',
+      'project',
+      'fixture.txt',
+    );
+    await writeFixture(projectFixture, `user content: ${sourceRoot}\n`);
 
     await relocateDataRootContents(stagingRoot, sourceRoot, targetRoot);
 
@@ -83,11 +116,14 @@ describe('data root path relocation', () => {
       path.join(stagingLayout.runtimeRoot, 'mcp.json'),
       path.join(stagingLayout.runtimeRoot, 'workspace-dependencies', 'manifest.json'),
       shimPath,
+      virtualEnvironmentConfig,
+      virtualEnvironmentActivate,
     ]) {
       const content = await readFile(filePath, 'utf8');
       expect(content).toContain(targetRoot);
       expect(content).not.toContain(sourceRoot);
     }
+    await expect(readFile(projectFixture, 'utf8')).resolves.toContain(sourceRoot);
   });
 });
 

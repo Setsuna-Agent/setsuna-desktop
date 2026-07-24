@@ -3,7 +3,7 @@ import { AlertTriangle, Database, RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ShellFrame } from '../../../app/layout/ShellFrame.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { Button, StatusBadge } from '../../../shared/ui/primitives.js';
+import { Button } from '../../../shared/ui/primitives.js';
 import { formatDataBytes, formatDataDuration } from './dataRootFormat.js';
 import { dataRootCategoryMessageKey, dataRootPhaseMessageKey } from './dataRootMessages.js';
 
@@ -55,11 +55,6 @@ export function DataMigrationProgressPage({ state }: { state: MigratingState }) 
       className="data-root-maintenance-shell"
       showSidebarToggle={false}
       inspectorOpen={false}
-      status={(
-        <StatusBadge tone={progress.phase === 'failed' ? 'danger' : 'warning'}>
-          {t(dataRootPhaseMessageKey[progress.phase])}
-        </StatusBadge>
-      )}
     >
       <main className="data-root-maintenance">
         <section className="data-root-maintenance__card">

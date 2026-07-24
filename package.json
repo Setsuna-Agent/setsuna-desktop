@@ -12,7 +12,7 @@
   "main": "dist/electron/main/index.js",
   "private": false,
   "scripts": {
-    "dev": "concurrently -k -n renderer,electron \"pnpm dev:renderer\" \"wait-on tcp:5174 && pnpm dev:electron\"",
+    "dev": "concurrently -k -s command-electron -n renderer,electron \"pnpm dev:renderer\" \"wait-on tcp:5174 && pnpm dev:electron\"",
     "dev:renderer": "vite --host 127.0.0.1 --port 5174",
     "dev:electron": "tsx scripts/start-electron-dev.ts",
     "build": "pnpm clean && pnpm build:contracts && pnpm build:runtime && pnpm build:electron && pnpm build:renderer",

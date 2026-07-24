@@ -43,7 +43,7 @@ export async function validateCopiedManifest(
       if (
         !stats.isSymbolicLink()
         || await readlink(targetPath) !== entry.linkTarget
-        || await readlink(entry.absolutePath) !== entry.linkTarget
+        || await readlink(entry.absolutePath) !== (entry.sourceLinkTarget ?? entry.linkTarget)
       ) {
         throw new Error(`Symlink validation failed: ${entry.relativePath}`);
       }

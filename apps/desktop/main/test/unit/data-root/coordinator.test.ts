@@ -1,4 +1,15 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -113,6 +124,44 @@ describe('desktop data root coordinator', () => {
       rootId: readDataRootMarkerSync(fixture.targetRoot)?.rootId,
     });
     await expect(lstat(bootstrap.pendingMigrationPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.skipIf(process.platform === 'win32')('relocates a virtual environment that uses managed Python', async () => {
+    const fixture = await createMigrationFixture();
+    const managedPythonRelative = 'runtime/workspace-dependencies/toolchain/python/bin/python3.12';
+    const virtualEnvironmentPythonRelative = 'runtime/temporary-workspace/.venv/bin/python';
+    const virtualEnvironmentConfigRelative = 'runtime/temporary-workspace/.venv/pyvenv.cfg';
+    await writeFixture(fixture.sourceRoot, managedPythonRelative, 'managed-python');
+    const sourceManagedPython = path.join(fixture.sourceRoot, managedPythonRelative);
+    const sourceVirtualEnvironmentPython = path.join(
+      fixture.sourceRoot,
+      virtualEnvironmentPythonRelative,
+    );
+    await mkdir(path.dirname(sourceVirtualEnvironmentPython), { recursive: true });
+    await symlink(sourceManagedPython, sourceVirtualEnvironmentPython);
+    await writeFixture(
+      fixture.sourceRoot,
+      virtualEnvironmentConfigRelative,
+      `home = ${path.dirname(sourceManagedPython)}\n`,
+    );
+    const coordinator = migratingCoordinator(fixture, vi.fn());
+
+    await expect(coordinator.runMigration()).resolves.toEqual({ ok: true });
+
+    const targetManagedPython = path.join(fixture.targetRoot, managedPythonRelative);
+    const targetVirtualEnvironmentPython = path.join(
+      fixture.targetRoot,
+      virtualEnvironmentPythonRelative,
+    );
+    const migratedLinkTarget = await readlink(targetVirtualEnvironmentPython);
+    expect(path.isAbsolute(migratedLinkTarget)).toBe(false);
+    expect(path.resolve(path.dirname(targetVirtualEnvironmentPython), migratedLinkTarget))
+      .toBe(targetManagedPython);
+    await expect(readFile(
+      path.join(fixture.targetRoot, virtualEnvironmentConfigRelative),
+      'utf8',
+    )).resolves.toBe(`home = ${path.dirname(targetManagedPython)}\n`);
+    await expect(readlink(sourceVirtualEnvironmentPython)).resolves.toBe(sourceManagedPython);
   });
 
   it('keeps the pointer on the source and leaves the old data untouched when validation fails', async () => {

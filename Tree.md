@@ -35,8 +35,8 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 79 total files
-├── src/ — 1 direct / 50 total files
+apps/desktop/main/ — 0 direct / 81 total files
+├── src/ — 2 direct / 51 total files
 │   ├── browser/ — 5 direct / 8 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 12 direct / 12 total files
@@ -50,11 +50,11 @@ apps/desktop/main/ — 0 direct / 79 total files
 │   ├── window/ — 2 direct / 4 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 29 files
+└── test/ — 30 files
     ├── integration/ — 2 files
     │   ├── review/ — 1 direct / 1 total files
     │   └── terminal/ — 1 direct / 1 total files
-    └── unit/ — 27 files
+    └── unit/ — 1 direct / 28 total files
         ├── browser/ — 4 direct / 6 total files
         │   └── cdp/ — 2 direct / 2 total files
         ├── data-root/ — 6 direct / 6 total files
@@ -76,15 +76,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 433 total files
-├── src/ — 2 direct / 318 total files
+apps/desktop/renderer/ — 0 direct / 436 total files
+├── src/ — 2 direct / 320 total files
 │   ├── app/ — 2 direct / 31 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 7 direct / 7 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 230 files
+│   ├── features/ — 232 files
 │   │   ├── capabilities/ — 17 direct / 24 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
@@ -99,9 +99,9 @@ apps/desktop/renderer/ — 0 direct / 433 total files
 │   │   │   ├── styles/ — 8 direct / 8 total files
 │   │   │   └── tool-runs/ — 7 direct / 7 total files
 │   │   ├── conversation-debug/ — 16 direct / 16 total files
-│   │   ├── settings/ — 9 direct / 36 total files
+│   │   ├── settings/ — 9 direct / 38 total files
 │   │   │   ├── components/ — 1 direct / 1 total files
-│   │   │   ├── data-root/ — 5 direct / 5 total files
+│   │   │   ├── data-root/ — 7 direct / 7 total files
 │   │   │   ├── providers/ — 2 direct / 2 total files
 │   │   │   ├── sections/ — 5 direct / 5 total files
 │   │   │   ├── styles/ — 7 direct / 7 total files
@@ -124,14 +124,14 @@ apps/desktop/renderer/ — 0 direct / 433 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 3 direct / 3 total files
-└── test/ — 115 files
-    └── unit/ — 115 files
+└── test/ — 116 files
+    └── unit/ — 116 files
         ├── app/ — 1 direct / 9 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 2 direct / 2 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 3 direct / 3 total files
-        ├── features/ — 92 files
+        ├── features/ — 93 files
         │   ├── capabilities/ — 4 direct / 5 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 48 files
@@ -143,7 +143,8 @@ apps/desktop/renderer/ — 0 direct / 433 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
         │   │   └── tool-runs/ — 2 direct / 2 total files
         │   ├── conversation-debug/ — 7 direct / 7 total files
-        │   ├── settings/ — 6 direct / 9 total files
+        │   ├── settings/ — 6 direct / 10 total files
+        │   │   ├── data-root/ — 1 direct / 1 total files
         │   │   └── usage/ — 3 direct / 3 total files
         │   └── workspace/ — 14 direct / 23 total files
         │       ├── browser/ — 1 direct / 1 total files
