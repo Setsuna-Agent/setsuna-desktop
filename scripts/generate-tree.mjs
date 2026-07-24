@@ -73,6 +73,11 @@ function renderDirectory(node, prefix = '', depth = 0, maxDepth = 5) {
   return lines;
 }
 
+function normalizeLineEndings(content) {
+  // Git may check out text as CRLF on Windows while generated content uses LF.
+  return content.replace(/\r\n?/gu, '\n');
+}
+
 async function buildTreeDocument() {
   const sections = [];
   for (const relativeRoot of indexedRoots) {
@@ -91,7 +96,7 @@ async function buildTreeDocument() {
 const nextDocument = await buildTreeDocument();
 if (process.argv.includes('--check')) {
   const currentDocument = existsSync(outputPath) ? await readFile(outputPath, 'utf8') : '';
-  if (currentDocument !== nextDocument) {
+  if (normalizeLineEndings(currentDocument) !== normalizeLineEndings(nextDocument)) {
     console.error('Tree.md is out of date. Run `pnpm docs:tree`.');
     process.exitCode = 1;
   } else {
