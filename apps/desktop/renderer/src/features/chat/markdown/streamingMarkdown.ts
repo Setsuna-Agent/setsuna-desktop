@@ -18,8 +18,13 @@ export function parseMarkdownBlocks(markdown: string): string[] {
 
   try {
     return Lexer.lex(markdown, { gfm: true })
-      .map((token) => token.raw)
-      .filter((block) => block.trim().length > 0);
+      .filter((token) => {
+        // MarkdownContentBlock enables skipHtml, so top-level HTML tokens produce no
+        // layout box. Keeping them would make virtualization alternate between an
+        // estimated-height placeholder and a zero-height rendered block.
+        return token.type !== 'html' && token.raw.trim().length > 0;
+      })
+      .map((token) => token.raw);
   } catch {
     // 即使边界词法分析器暂时无法分类最新片段，不完整的流式内容也应保持可读。
     return [markdown];

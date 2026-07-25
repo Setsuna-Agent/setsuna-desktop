@@ -34,4 +34,28 @@ describe('streamingMarkdown', () => {
     expect(blocks[1]).toContain('| A | B |');
     expect(blocks[2]).toContain('```ts');
   });
+
+  it('excludes top-level HTML that the renderer intentionally skips', () => {
+    const markdown = [
+      '```java',
+      'pool.execute(() -> System.out.println("学习中"));',
+      '```',
+      '',
+      '<details>',
+      '<summary>点我看答案</summary>',
+      '',
+      '意思是：给线程池一个任务。',
+      '</details>',
+      '',
+      '---',
+    ].join('\n');
+    const blocks = parseMarkdownBlocks(markdown);
+
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toContain('```java');
+    expect(blocks[1]).toContain('意思是：给线程池一个任务。');
+    expect(blocks[2]).toBe('---');
+    expect(blocks.join('\n')).not.toContain('<details>');
+    expect(blocks.join('\n')).not.toContain('<summary>');
+  });
 });
