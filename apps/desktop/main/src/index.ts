@@ -50,6 +50,7 @@ import { DesktopUpdater } from './updater/updater.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/window.js';
 import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.js';
+import { resolveMainWindowSurfaceOptions } from './window/surface.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
@@ -382,9 +383,7 @@ function createMainBrowserWindow(desktopIcon: NativeImage | undefined, bounds: R
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
     trafficLightPosition: process.platform === 'darwin' ? getMacTrafficLightPosition(1) : undefined,
     autoHideMenuBar: usesCustomFrame,
-    // Keep the existing transparent custom-frame surface for the final renderer.
-    transparent: process.platform !== 'darwin',
-    backgroundColor: '#00000000',
+    ...resolveMainWindowSurfaceOptions(),
     vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
     visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
     icon: desktopIcon,

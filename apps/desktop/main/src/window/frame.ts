@@ -35,7 +35,7 @@ export function registerWindowsTitlebarDoubleClick(window: BrowserWindow, platfo
     const command = parameter & windowsSystemCommandMask;
     if (command !== windowsMaximizeCommand && command !== windowsRestoreCommand) return;
 
-    // 透明无边框窗口在标题栏的两种状态下都可能发出 SC_MAXIMIZE。
+    // Chromium 自绘标题栏在两种窗口状态下都可能发出 SC_MAXIMIZE。
     // 将重复的最大化命令视为原生标题栏切换操作。
     scheduleMaximizedState(command === windowsMaximizeCommand ? !window.isMaximized() : false);
   });

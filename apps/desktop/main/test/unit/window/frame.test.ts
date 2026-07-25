@@ -18,7 +18,7 @@ describe('window frame interactions', () => {
     expect(window.unmaximize).toHaveBeenCalledOnce();
   });
 
-  it('maximizes a transparent Windows window for its titlebar system command', async () => {
+  it('maximizes a frameless Windows window for its titlebar system command', async () => {
     let callback: ((wParam: Buffer, lParam: Buffer) => void) | undefined;
     const window = {
       hookWindowMessage: vi.fn((message, nextCallback) => {
@@ -40,7 +40,7 @@ describe('window frame interactions', () => {
     expect(window.maximize).toHaveBeenCalledOnce();
   });
 
-  it('restores a maximized transparent Windows window for its titlebar system command', async () => {
+  it('restores a maximized frameless Windows window for its titlebar system command', async () => {
     let callback: ((wParam: Buffer, lParam: Buffer) => void) | undefined;
     const window = {
       hookWindowMessage: vi.fn((message, nextCallback) => {
