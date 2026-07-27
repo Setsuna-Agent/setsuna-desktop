@@ -37,6 +37,7 @@ export async function generateThreadTitle({
   maxOutputTokens = THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
   model,
   modelClient,
+  providerId,
   signal,
   userContent,
 }: {
@@ -44,6 +45,7 @@ export async function generateThreadTitle({
   maxOutputTokens?: number;
   model: string;
   modelClient: ModelClient;
+  providerId?: string;
   signal: AbortSignal;
   userContent: string;
 }): Promise<GeneratedThreadTitle> {
@@ -53,6 +55,7 @@ export async function generateThreadTitle({
 
   for await (const event of modelClient.stream({
     model,
+    ...(providerId ? { providerId } : {}),
     messages: titlePromptMessages(userContent, attachmentCount),
     toolChoice: 'none',
     maxOutputTokens,

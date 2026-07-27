@@ -56,6 +56,30 @@ describe('agent loop thread titles', () => {
     expect(events.findIndex((event) => event.type === 'thread.updated')).toBeLessThan(events.findIndex((event) => event.type === 'turn.completed'));
   });
 
+  it('uses the configured dedicated model and provider for title generation', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread();
+    const modelClient = new TitleAwareModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      configStore: new TitleConfigStore(true),
+    });
+
+    await loop.sendTurn(thread.id, { input: '确认标题生成使用单独配置的模型' });
+
+    expect((await threadStore.getThread(thread.id))?.title).toBe('专用模型生成标题');
+    expect(modelClient.requests.find((request) => request.toolChoice === 'none')).toMatchObject({
+      maxOutputTokens: 128,
+      model: 'title-model',
+      providerId: 'title-provider',
+    });
+  });
+
   it('keeps the deterministic fallback when title generation fails', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
@@ -127,8 +151,11 @@ class TitleAwareModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.model === 'current-model') {
-      yield { type: 'text_delta', text: '恢复模型自动生成标题' };
+    if (request.toolChoice === 'none') {
+      yield {
+        type: 'text_delta',
+        text: request.model === 'title-model' ? '专用模型生成标题' : '恢复模型自动生成标题',
+      };
     } else {
       yield { type: 'text_delta', text: '主回答正常完成' };
     }
@@ -138,7 +165,7 @@ class TitleAwareModelClient implements ModelClient {
 
 class FailingTitleModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    if (request.model === 'current-model') throw new Error('title generation failed');
+    if (request.toolChoice === 'none') throw new Error('title generation failed');
     yield { type: 'text_delta', text: '主回答正常完成' };
     yield { type: 'done', finishReason: 'stop' };
   }
@@ -146,7 +173,7 @@ class FailingTitleModelClient implements ModelClient {
 
 class PlaceholderTitleModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    yield { type: 'text_delta', text: request.model === 'current-model' ? '新对话' : '主回答正常完成' };
+    yield { type: 'text_delta', text: request.toolChoice === 'none' ? '新对话' : '主回答正常完成' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -162,7 +189,7 @@ class DelayedTitleModelClient implements ModelClient {
   });
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    if (request.model === 'current-model') {
+    if (request.toolChoice === 'none') {
       this.markTitleStarted();
       await this.titleReleased;
       yield { type: 'text_delta', text: '模型生成标题' };
@@ -178,13 +205,55 @@ class DelayedTitleModelClient implements ModelClient {
 }
 
 class TitleConfigStore implements ConfigStore {
+  constructor(private readonly dedicatedTitleModel = false) {}
+
   async getConfig(): Promise<RuntimeConfigState> {
+    const providers: RuntimeConfigState['providers'] = this.dedicatedTitleModel
+      ? [
+          {
+            id: 'provider',
+            name: 'Provider',
+            provider: 'openai-compatible',
+            baseUrl: 'https://example.test/v1',
+            enabled: true,
+            apiKeySet: true,
+            apiKeyPreview: '***',
+            models: [{
+              id: 'current-model',
+              name: 'Current model',
+              code: 'current-model',
+              enabled: true,
+              maxOutputTokens: 4_096,
+              thinkingEnabled: false,
+              thinkingEfforts: [],
+            }],
+          },
+          {
+            id: 'title-provider',
+            name: 'Title provider',
+            provider: 'openai-compatible',
+            baseUrl: 'https://title.example.test/v1',
+            enabled: true,
+            apiKeySet: true,
+            apiKeyPreview: '***',
+            models: [{
+              id: 'title-model',
+              name: 'Title model',
+              code: 'title-model',
+              enabled: true,
+              maxOutputTokens: 128,
+              thinkingEnabled: false,
+              thinkingEfforts: [],
+            }],
+          },
+        ]
+      : [];
     return {
       configPath: '/tmp/config.json',
       dataPath: '/tmp',
       storagePath: '/tmp/memories',
       activeProviderId: 'provider',
-      providers: [],
+      providers,
       globalPrompt: '',
       memory: {
         useMemories: false,
@@ -193,6 +262,16 @@ class TitleConfigStore implements ConfigStore {
         disableOnExternalContext: true,
       },
       memoryEnabled: false,
+      ...(this.dedicatedTitleModel
+        ? {
+            taskModels: {
+              threadTitle: {
+                providerId: 'title-provider',
+                modelId: 'title-model',
+              },
+            },
+          }
+        : {}),
       setsunaStyle: 'developer',
       approvalPolicy: 'on-request',
       permissionProfile: 'workspace-write',

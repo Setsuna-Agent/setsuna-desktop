@@ -172,6 +172,7 @@ export type RuntimeMemorySettings = {
 };
 
 export const RUNTIME_TASK_MODEL_IDS = [
+  'threadTitle',
   'memoryExtraction',
   'memoryConsolidation',
   'contextCompaction',

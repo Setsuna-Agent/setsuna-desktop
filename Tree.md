@@ -76,8 +76,8 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 450 total files
-├── src/ — 2 direct / 331 total files
+apps/desktop/renderer/ — 0 direct / 451 total files
+├── src/ — 2 direct / 332 total files
 │   ├── app/ — 2 direct / 31 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
@@ -114,12 +114,12 @@ apps/desktop/renderer/ — 0 direct / 450 total files
 │   │       └── styles/ — 7 direct / 7 total files
 │   ├── services/ — 3 files
 │   │   └── runtime-client/ — 3 direct / 3 total files
-│   └── shared/ — 53 files
+│   └── shared/ — 54 files
 │       ├── assets/ — 20 files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
 │       ├── hooks/ — 2 direct / 2 total files
-│       ├── i18n/ — 10 direct / 10 total files
+│       ├── i18n/ — 11 direct / 11 total files
 │       ├── lib/ — 4 direct / 4 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files

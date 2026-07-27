@@ -25,6 +25,7 @@ describe('TaskModelSettings', () => {
       <TaskModelSettings config={configFixture} onSave={vi.fn()} />,
     );
 
+    expect(html).toContain('标题生成');
     expect(html).toContain('记忆提取');
     expect(html).toContain('记忆整理');
     expect(html).toContain('上下文压缩');
@@ -98,6 +99,10 @@ const configFixture: RuntimeConfigState = {
   },
   memoryEnabled: true,
   taskModels: {
+    threadTitle: {
+      providerId: 'provider-kimi',
+      modelId: 'kimi-k2',
+    },
     memoryExtraction: {
       providerId: 'provider-minimax',
       modelId: 'minimax-m3',

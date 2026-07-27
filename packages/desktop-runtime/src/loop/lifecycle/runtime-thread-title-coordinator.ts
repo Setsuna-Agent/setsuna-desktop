@@ -1,16 +1,18 @@
 import {
   DEFAULT_THREAD_TITLE,
   fallbackThreadTitle,
+  type RuntimeConfigState,
   type RuntimeMessage,
   type RuntimeTaskKind,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
-import type { ConfigStore } from '../../ports/config-store.js';
+import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
+import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import type { RuntimeEventWriter } from './runtime-event-writer.js';
 import {
   generateThreadTitle,
@@ -54,26 +56,31 @@ export class RuntimeThreadTitleCoordinator {
     if (taskKind !== 'regular' || thread.title !== DEFAULT_THREAD_TITLE) return null;
     if (thread.messages.some((message) => message.role === 'user' && message.visibility !== 'model')) return null;
 
-    const result = this.options.configStore?.getActiveProviderConfig()
-      .then((provider) => {
-        const model = provider?.enabled ? provider.activeModel?.code.trim() : '';
-        const usable = Boolean(model && (provider?.apiKey || model !== 'local-runtime-smoke'));
-        if (!model || !usable) return null;
-        return generateThreadTitle({
-          attachmentCount: attachments.length,
-          // 部分 OpenAI-compatible 思考模型即使收到 thinking=false，仍会先输出
-          // reasoning；预算必须覆盖这部分，才能收集到最终可见标题。
-          maxOutputTokens: Math.max(1, Math.min(
-            THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
-            provider?.activeModel?.maxOutputTokens ?? THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
-          )),
-          model,
-          modelClient: this.options.modelClient,
-          signal,
-          userContent,
-        });
-      })
-      .catch(() => null);
+    const result = this.options.configStore
+      ? Promise.all([
+          this.options.configStore.getConfig(),
+          this.options.configStore.getActiveProviderConfig(),
+        ])
+        .then(([config, activeProvider]) => {
+          const selection = threadTitleModelSelection(config, activeProvider);
+          if (!selection) return null;
+          return generateThreadTitle({
+            attachmentCount: attachments.length,
+            // 部分 OpenAI-compatible 思考模型即使收到 thinking=false，仍会先输出
+            // reasoning；预算必须覆盖这部分，才能收集到最终可见标题。
+            maxOutputTokens: Math.max(1, Math.min(
+              THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
+              selection.maxOutputTokens,
+            )),
+            model: selection.model,
+            modelClient: this.options.modelClient,
+            ...(selection.providerId ? { providerId: selection.providerId } : {}),
+            signal,
+            userContent,
+          });
+        })
+        .catch(() => null)
+      : undefined;
     return result ? { initialSeq: thread.lastSeq, result } : null;
   }
 
@@ -110,4 +117,44 @@ export class RuntimeThreadTitleCoordinator {
       payload: { title: generated.title },
     });
   }
+}
+
+function threadTitleModelSelection(
+  config: RuntimeConfigState,
+  activeProvider: RuntimeProviderConfig | null,
+): { maxOutputTokens: number; model: string; providerId?: string } | null {
+  const fallbackModel = activeProvider?.enabled ? activeProvider.activeModel?.code.trim() : '';
+  const request = runtimeTaskModelRequest(config, 'threadTitle', fallbackModel || '');
+  const model = request.model.trim();
+  if (!model) return null;
+
+  if (request.providerId) {
+    const reference = config.taskModels?.threadTitle;
+    const provider = config.providers.find((item) => item.enabled && item.id === request.providerId);
+    const configuredModel = reference && provider && reference.providerId === provider.id
+      ? provider.models.find((item) => item.id === reference.modelId && item.code.trim() === model)
+      : undefined;
+    const usable = Boolean(
+      provider
+      && configuredModel
+      && (provider.apiKeySet || model !== 'local-runtime-smoke'),
+    );
+    if (!usable || !configuredModel || !provider) return null;
+    return {
+      maxOutputTokens: configuredModel.maxOutputTokens,
+      model,
+      providerId: provider.id,
+    };
+  }
+
+  const usable = Boolean(
+    activeProvider?.enabled
+    && activeProvider.activeModel?.code.trim() === model
+    && (activeProvider.apiKey || model !== 'local-runtime-smoke'),
+  );
+  if (!usable || !activeProvider?.activeModel) return null;
+  return {
+    maxOutputTokens: activeProvider.activeModel.maxOutputTokens,
+    model,
+  };
 }

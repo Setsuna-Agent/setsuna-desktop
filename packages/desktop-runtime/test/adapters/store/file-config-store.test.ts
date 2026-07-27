@@ -132,12 +132,14 @@ describe('file config store', () => {
 
     await expect(store.saveConfig({
       taskModels: {
+        threadTitle: { providerId: provider.id, modelId: model.id },
         memoryExtraction: { providerId: provider.id, modelId: model.id },
         memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     })).resolves.toMatchObject({
       taskModels: {
+        threadTitle: { providerId: provider.id, modelId: model.id },
         memoryExtraction: { providerId: provider.id, modelId: model.id },
         memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
@@ -154,6 +156,7 @@ describe('file config store', () => {
       taskModels: { memoryExtraction: null },
     })).resolves.toMatchObject({
       taskModels: {
+        threadTitle: { providerId: provider.id, modelId: model.id },
         memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },

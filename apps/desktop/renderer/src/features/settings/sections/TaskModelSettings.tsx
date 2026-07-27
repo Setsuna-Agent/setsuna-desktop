@@ -2,7 +2,7 @@ import type {
   RuntimeConfigState,
   RuntimeTaskModelId,
 } from '@setsuna-desktop/contracts';
-import { Combine, Minimize2, SearchCheck, type LucideIcon } from 'lucide-react';
+import { Combine, Heading1, Minimize2, SearchCheck, type LucideIcon } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../../shared/i18n/messages.js';
 import { SelectField } from '../../../shared/ui/primitives.js';
@@ -19,6 +19,12 @@ const taskModelFields: Array<{
   id: RuntimeTaskModelId;
   labelKey: MessageKey;
 }> = [
+  {
+    id: 'threadTitle',
+    labelKey: 'settings.taskModels.threadTitle',
+    descriptionKey: 'settings.taskModels.threadTitleDescription',
+    icon: Heading1,
+  },
   {
     id: 'memoryExtraction',
     labelKey: 'settings.taskModels.memoryExtraction',
