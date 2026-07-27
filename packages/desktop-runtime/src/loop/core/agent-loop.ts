@@ -1,4 +1,11 @@
 import type {
+  DeleteQueuedTurnInputResponse,
+  QueueTurnInput,
+  QueuedTurnInputEditRelease,
+  QueuedTurnInputEditReleaseResponse,
+  QueuedTurnInputEditSession,
+  QueuedTurnInputPatch,
+  QueuedTurnInputResponse,
   RuntimeDynamicToolDefinition,
   RuntimeMemoryCitation,
   RuntimeDataMigrationReadiness,
@@ -10,6 +17,7 @@ import type {
   RuntimeUsage,
   SendTurnInput,
   SendTurnResponse,
+  StartTurnResponse,
   SteerTurnInput,
 } from '@setsuna-desktop/contracts';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
@@ -40,6 +48,7 @@ import { RuntimeCollaborationCoordinator } from '../lifecycle/collaboration-coor
 import { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { RuntimeGoalCoordinator } from '../lifecycle/runtime-goal-coordinator.js';
 import { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
+import { RuntimeQueuedTurnCoordinator } from '../lifecycle/runtime-queued-turn-coordinator.js';
 import { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
 import {
@@ -97,6 +106,7 @@ export class AgentLoop {
   private readonly collaborationCoordinator: RuntimeCollaborationCoordinator;
   private readonly goals: RuntimeGoalCoordinator;
   private readonly hooks: RuntimeHookCoordinator;
+  private readonly queuedTurns: RuntimeQueuedTurnCoordinator;
   private readonly samplingContexts: RuntimeSamplingContextBuilder;
   private readonly threadTitles: RuntimeThreadTitleCoordinator;
   private readonly toolExecutor: RuntimeToolCallExecutor;
@@ -139,7 +149,14 @@ export class AgentLoop {
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
       deliverMailbox: (threadId, input) => this.deliverMailboxInput(threadId, input),
-      startTurn: (threadId, input) => this.startTurn(threadId, { input }),
+      startTurn: async (threadId, input) => {
+        const started = await this.startTurn(threadId, { input });
+        if ('queuedInputId' in started && !started.turnId) {
+          throw new Error(`Collaboration turn was queued instead of started: ${started.queuedInputId}`);
+        }
+        if (!started.turnId) throw new Error('Collaboration turn did not return a turn id.');
+        return { turnId: started.turnId };
+      },
     });
     this.toolExecutor = new RuntimeToolCallExecutor({
       approvalGate: options.approvalGate,
@@ -231,6 +248,8 @@ export class AgentLoop {
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
       turnTermination: this.turnTermination,
+      observeRun: (threadId, turnId, done) =>
+        this.queuedTurns.observeRun(threadId, turnId, 'compact', done),
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
     this.turnInputs = new RuntimeTurnInputCoordinator({
@@ -242,9 +261,13 @@ export class AgentLoop {
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      createMailboxTriggeredRun: (threadId, thread, turnId, content) =>
-        this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content),
-      publishMessage: (threadId, turnId, message) => this.publishMessage(threadId, turnId, message),
+      createMailboxTriggeredRun: (threadId, thread, turnId, content) => {
+        const run = this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content);
+        this.observeRun(threadId, run.turnId, 'regular', run.done);
+        return run;
+      },
+      publishMessage: (threadId, turnId, message, publishOptions) =>
+        this.publishMessage(threadId, turnId, message, publishOptions),
     });
     this.turnRunner = new RuntimeAgentTurnRunner({
       clock: options.clock,
@@ -264,7 +287,8 @@ export class AgentLoop {
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       completeMessage: (threadId, turnId, messageId, payload) => this.completeMessage(threadId, turnId, messageId, payload),
       publishAssistantDelta: (threadId, turnId, messageId, text) => this.publishAssistantDelta(threadId, turnId, messageId, text),
-      publishMessage: (threadId, turnId, message) => this.publishMessage(threadId, turnId, message),
+      publishMessage: (threadId, turnId, message, publishOptions) =>
+        this.publishMessage(threadId, turnId, message, publishOptions),
     });
     this.turnRuns = new RuntimeTurnRunFactory({
       clock: options.clock,
@@ -279,16 +303,54 @@ export class AgentLoop {
       publishStoredEventsSince: (threadId, sinceSeq) => this.publishStoredEventsSince(threadId, sinceSeq),
       runTurn: (input) => this.turnRunner.run(input),
     });
+    this.queuedTurns = new RuntimeQueuedTurnCoordinator({
+      clock: options.clock,
+      ids: options.ids,
+      inputGuard: this.inputGuard,
+      threadStore: options.threadStore,
+      turnTasks: this.turnTasks,
+      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
+      claimAttachments: (threadId, attachments) =>
+        options.attachmentStore?.claimForThread(threadId, attachments) ?? Promise.resolve(attachments),
+      normalizeAttachments,
+      validateGoalInput: (threadId, objective) =>
+        this.goals.validateQueuedGoal(threadId, objective),
+      startRegularTurn: (threadId, input, queuedInputId) =>
+        this.withThreadMutation(
+          threadId,
+          () => this.turnRuns.createRegular(threadId, input, { queuedInputId }),
+        ),
+      startGoalTurn: (threadId, input) =>
+        this.withThreadMutation(
+          threadId,
+          () => this.goals.startQueuedGoal(threadId, input),
+        ),
+      steerQueuedInput: (threadId, activeTurnId, input) =>
+        this.turnInputs.steerQueuedInput(threadId, activeTurnId, input),
+      // 队列协调器已经观察自己的 run；这里只接入目标计量与续轮调度。
+      onRunCreated: (threadId, turnId, taskKind, done) =>
+        this.goals.observeRun(threadId, turnId, taskKind, done),
+    });
     this.goals = new RuntimeGoalCoordinator({
       clock: options.clock,
       ids: options.ids,
       threadStore: options.threadStore,
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
-      createContinuation: (threadId, goal, contextMessages) => this.withThreadMutation(
+      createContinuation: (threadId, goal, contextMessages, execution) => this.withThreadMutation(
         threadId,
-        () => this.turnRuns.createGoalContinuation(threadId, goal, contextMessages),
+        async () => {
+          const run = await this.turnRuns.createGoalContinuation(
+            threadId,
+            goal,
+            contextMessages,
+            execution,
+          );
+          this.queuedTurns.observeRun(threadId, run.turnId, 'goal', run.done);
+          return run;
+        },
       ),
+      hasQueuedInput: (threadId) => this.queuedTurns.hasPending(threadId),
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
     this.userShellRunner = new RuntimeUserShellRunner({
@@ -328,6 +390,7 @@ export class AgentLoop {
   async shutdown(reason = 'Desktop runtime is shutting down.', timeoutMs = 5_000): Promise<boolean> {
     this.shuttingDown = true;
     this.goals.shutdown();
+    this.queuedTurns.shutdown();
     const error = new TurnCancelledError(reason);
     const tasks = this.turnTasks.cancelAll(error);
     this.options.approvalGate?.rejectPending?.(error);
@@ -353,28 +416,33 @@ export class AgentLoop {
   }
 
   /**
-   * 启动一轮异步对话，立即返回 turnId，实际执行在后台继续。
+   * 启动一轮异步对话。线程忙碌或队列被编辑时只持久化输入并返回 queued 成功态；
+   * 真正启动的轮次仍在后台执行。
    *
    * @param threadId 目标线程 ID。
    * @param input 用户输入、附件、skill 选择和客户端消息 ID。
    */
-  async startTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse> {
+  async startTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse> {
     return this.withThreadMutation(threadId, async () => {
       const active = this.turnTasks.activeForThread(threadId);
-      if ((active?.taskKind === 'regular' || active?.taskKind === 'goal') && active.acceptingSteers && !active.controller.signal.aborted) {
-        // 防御 renderer/SSE 短暂不同步：active 期间的普通发送必须落回当前 turn 的 steer。
-        return this.turnInputs.steer(threadId, {
+      const hasQueuedInput = !input.planDecision && await this.queuedTurns.hasPending(threadId);
+      if ((active || hasQueuedInput) && !input.planDecision) {
+        // 防御 renderer/SSE 短暂不同步：即使客户端误走普通发送入口，也必须进入
+        // 跨轮次队列。线程因错误暂停时也先恢复旧项，避免新输入越过 FIFO。
+        const queued = await this.queuedTurns.enqueue(threadId, {
           attachments: input.attachments,
           clientId: input.clientId,
-          expectedTurnId: active.turnId,
           input: input.input,
+          kind: input.collaborationMode === 'plan' ? 'plan' : 'message',
           skillIds: input.skillIds,
           thinking: input.thinking,
           thinkingEffort: input.thinkingEffort,
         });
+        // turn.input_queued 已经持久化后必须返回成功；否则客户端恢复草稿重试会制造重复项。
+        return queued;
       }
       const run = await this.turnRuns.createRegular(threadId, input);
-      this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
+      this.observeRun(threadId, run.turnId, 'regular', run.done);
       void run.done.catch(() => undefined);
       return { accepted: true, turnId: run.turnId };
     });
@@ -390,7 +458,7 @@ export class AgentLoop {
   async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}): Promise<SendTurnResponse> {
     return this.withThreadMutation(threadId, async () => {
       const run = await this.turnRuns.createRegenerate(threadId, messageId, input);
-      this.goals.observeRun(threadId, run.turnId, 'regular', run.done);
+      this.observeRun(threadId, run.turnId, 'regular', run.done);
       void run.done.catch(() => undefined);
       return { accepted: true, turnId: run.turnId };
     });
@@ -405,7 +473,7 @@ export class AgentLoop {
   async sendTurn(threadId: string, input: SendTurnInput): Promise<void> {
     const run = await this.withThreadMutation(threadId, async () => {
       const prepared = await this.turnRuns.createRegular(threadId, input);
-      this.goals.observeRun(threadId, prepared.turnId, 'regular', prepared.done);
+      this.observeRun(threadId, prepared.turnId, 'regular', prepared.done);
       return prepared;
     });
     await run.done;
@@ -439,7 +507,7 @@ export class AgentLoop {
   async startReview(threadId: string, input: RuntimeReviewTurnInput): Promise<SendTurnResponse> {
     return this.withThreadMutation(threadId, async () => {
       const run = await this.turnRuns.createReview(threadId, input);
-      this.goals.observeRun(threadId, run.turnId, 'review', run.done);
+      this.observeRun(threadId, run.turnId, 'review', run.done);
       void run.done.catch(() => undefined);
       return { accepted: true, turnId: run.turnId };
     });
@@ -546,6 +614,62 @@ export class AgentLoop {
     return this.withThreadMutation(threadId, () => this.turnInputs.steer(threadId, input));
   }
 
+  /** 将用户输入持久化到线程级发送队列；线程空闲时会立即启动该项。 */
+  async queueTurnInput(
+    threadId: string,
+    input: QueueTurnInput,
+  ): Promise<QueuedTurnInputResponse> {
+    return this.withThreadMutation(threadId, () => this.queuedTurns.enqueue(threadId, input));
+  }
+
+  async retrieveQueuedTurnInput(
+    threadId: string,
+    inputId: string,
+  ): Promise<QueuedTurnInputEditSession> {
+    return this.withThreadMutation(
+      threadId,
+      () => this.queuedTurns.retrieveForEditing(threadId, inputId),
+    );
+  }
+
+  async releaseQueuedTurnInputEdit(
+    threadId: string,
+    inputId: string,
+    input: QueuedTurnInputEditRelease,
+  ): Promise<QueuedTurnInputEditReleaseResponse> {
+    return this.withThreadMutation(
+      threadId,
+      () => this.queuedTurns.releaseEditing(threadId, inputId, input),
+    );
+  }
+
+  async updateQueuedTurnInput(
+    threadId: string,
+    inputId: string,
+    patch: QueuedTurnInputPatch,
+  ): Promise<QueuedTurnInputResponse> {
+    return this.withThreadMutation(
+      threadId,
+      () => this.queuedTurns.updateAfterEditing(threadId, inputId, patch),
+    );
+  }
+
+  async deleteQueuedTurnInput(
+    threadId: string,
+    inputId: string,
+  ): Promise<DeleteQueuedTurnInputResponse> {
+    return this.withThreadMutation(threadId, async () => ({
+      deleted: await this.queuedTurns.delete(threadId, inputId),
+    }));
+  }
+
+  async sendQueuedTurnInputNow(
+    threadId: string,
+    inputId: string,
+  ): Promise<QueuedTurnInputResponse> {
+    return this.withThreadMutation(threadId, () => this.queuedTurns.sendNow(threadId, inputId));
+  }
+
   /**
    * 向当前 active turn 投递来自子 agent/协作方的 mailbox 消息。
    *
@@ -597,6 +721,7 @@ export class AgentLoop {
       threadId,
       turnId,
     }));
+    this.queuedTurns.observeRun(threadId, turnId, 'user_shell', run.done);
     await run.done;
   }
 
@@ -616,8 +741,13 @@ export class AgentLoop {
    * @param turnId 消息所属 turn ID。
    * @param message 要写入线程的 runtime message。
    */
-  private publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void> {
-    return this.modelStreamEvents.publishMessage(threadId, turnId, message);
+  private publishMessage(
+    threadId: string,
+    turnId: string,
+    message: RuntimeMessage,
+    options: { queuedInputId?: string } = {},
+  ): Promise<void> {
+    return this.modelStreamEvents.publishMessage(threadId, turnId, message, options);
   }
 
   private publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void> {
@@ -649,6 +779,16 @@ export class AgentLoop {
     if (this.shuttingDown || this.dataMigrationPreparing) {
       throw new Error('Desktop runtime is preparing to stop and cannot accept new work.');
     }
+  }
+
+  private observeRun(
+    threadId: string,
+    turnId: string,
+    taskKind: Parameters<RuntimeGoalCoordinator['observeRun']>[2],
+    done: Promise<void>,
+  ): void {
+    this.goals.observeRun(threadId, turnId, taskKind, done);
+    this.queuedTurns.observeRun(threadId, turnId, taskKind, done);
   }
 
   private assertThreadAcceptingWork(threadId: string): void {

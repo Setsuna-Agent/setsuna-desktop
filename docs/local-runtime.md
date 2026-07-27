@@ -104,6 +104,7 @@ REST 路由覆盖：
 
 - `RuntimeAgentTurnRunner`：执行单个 turn 的多轮 sampling/tool loop，处理 steer drain、Stop hook、最终回答与错误/取消分支。
 - `RuntimeTurnInputCoordinator`：管理 steer、active/idle mailbox 队列、持久化和模型消息转换。
+- `RuntimeQueuedTurnCoordinator`：持久化线程级用户发送队列，串行化 retrieve/release/update/delete/send-now/自动续发；编辑会话使用作用域令牌，调度隔离迟到 run 结算并保证 FIFO。
 - `RuntimeCompactionTurnCoordinator`：管理显式 compact turn 的任务登记、hooks、事件与取消生命周期。
 - `RuntimeModelInputGuard`：统一校验当前模型的附件能力。
 - `RuntimeHookCoordinator`：维护 SessionStart source，并统一运行 SessionStart、UserPromptSubmit、Stop、Pre/PostCompact hooks。
@@ -135,9 +136,10 @@ REST 路由覆盖：
 
 关键能力：
 
-- `startTurn()` 异步返回 turnId，后台执行。
+- `startTurn()` 异步返回已启动 turn，或在输入已持久化但暂不能调度时返回 `queued` 成功态；实际 turn 在后台执行。
 - `sendTurn()` 用于测试或命令式等待完整结果。
 - `regenerateFromMessage()` 先截断历史再重跑。
+- `queueTurnInput()` 默认把 active 期间的补充输入留到正常收尾后作为独立 turn 发送。
 - `steerTurn()` 允许向活跃普通 turn 追加用户输入。
 - `startReview()` 支持 UI 展示文本和模型 prompt 分离。
 - `compactThreadContext()` 通过事件链写入压缩生命周期。

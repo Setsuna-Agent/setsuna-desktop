@@ -1,11 +1,15 @@
 import {
+  cloneRuntimeThreadGoal,
   DEFAULT_THREAD_TITLE,
   fallbackThreadTitle,
+  normalizeRuntimeQueuedTurnInputKind,
   type RuntimeConfigState,
   type RuntimeEvent,
   type RuntimeMessage,
+  type RuntimeQueuedTurnInput,
   type RuntimeTaskKind,
   type RuntimeThreadGoal,
+  type RuntimeThreadGoalExecutionOptions,
   type RuntimeThreadGoalPatch,
   type RuntimeThreadGoalStatus,
   type RuntimeToolDefinition,
@@ -27,6 +31,10 @@ type GoalContinuationRun = {
   turnId: string;
 };
 
+type GoalContinuationOptions = {
+  turnId?: string;
+};
+
 export type GoalToolExecutionResult = {
   content: string;
   data: Record<string, unknown>;
@@ -39,7 +47,13 @@ type RuntimeGoalCoordinatorOptions = {
   threadStore: ThreadStore;
   activeTask(threadId: string): ActiveGoalTask | null;
   cancelTurn(threadId: string, turnId: string): Promise<boolean>;
-  createContinuation(threadId: string, goal: RuntimeThreadGoal, contextMessages: RuntimeMessage[]): Promise<GoalContinuationRun>;
+  createContinuation(
+    threadId: string,
+    goal: RuntimeThreadGoal,
+    contextMessages: RuntimeMessage[],
+    options?: GoalContinuationOptions,
+  ): Promise<GoalContinuationRun>;
+  hasQueuedInput?(threadId: string): Promise<boolean>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
@@ -103,44 +117,105 @@ export class RuntimeGoalCoordinator {
 
   async getGoal(threadId: string): Promise<RuntimeThreadGoal | null> {
     const thread = await this.requireThread(threadId);
-    return thread.goal ? { ...thread.goal } : null;
+    return thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
+  }
+
+  /**
+   * 在队列事件落盘前复用 Goal 的完整领域校验，避免客户端收到失败后重试出重复项。
+   */
+  async validateQueuedGoal(threadId: string, objective: string): Promise<void> {
+    normalizeObjective(objective);
+    const thread = await this.requireThread(threadId);
+    assertNoUnfinishedGoal(thread.goal);
   }
 
   async setGoal(threadId: string, patch: RuntimeThreadGoalPatch, options: { cancelActiveGoalTurn?: boolean } = {}): Promise<RuntimeThreadGoal> {
     const thread = await this.requireThread(threadId);
-    const previous = thread.goal;
-    const objective = patch.objective === undefined ? previous?.objective : normalizeObjective(patch.objective);
-    if (!objective) throw new Error(`cannot update goal for thread ${threadId}: no goal exists`);
-    const status = normalizeGoalStatus(patch.status ?? previous?.status ?? 'active');
-    const tokenBudget = patch.tokenBudget === undefined ? previous?.tokenBudget ?? null : normalizeTokenBudget(patch.tokenBudget);
-    const now = epochSeconds(this.options.clock.now());
-    const replacesTerminalGoal = Boolean(previous && previous.objective !== objective && isTerminalGoalStatus(previous.status));
-    const goal: RuntimeThreadGoal = {
-      threadId,
-      objective,
-      status,
-      tokenBudget,
-      tokensUsed: replacesTerminalGoal ? 0 : previous?.tokensUsed ?? 0,
-      timeUsedSeconds: replacesTerminalGoal ? 0 : previous?.timeUsedSeconds ?? 0,
-      createdAt: replacesTerminalGoal ? now : previous?.createdAt ?? now,
-      updatedAt: now,
-    };
-    await this.publishGoal(goal);
-    if (!previous && thread.title === DEFAULT_THREAD_TITLE) {
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        type: 'thread.updated',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: { title: fallbackThreadTitle(objective) },
-      });
+    if (
+      (patch.objective !== undefined || patch.status === 'active')
+      && thread.queuedTurnInputs?.some((input) =>
+        normalizeRuntimeQueuedTurnInputKind(input.kind) === 'goal'
+      )
+    ) {
+      throw new Error('A queued goal already exists. Edit or remove it before setting another goal.');
     }
+    const previous = thread.goal;
+    const goal = nextGoalState(threadId, previous, patch, this.options.clock.now());
+    await this.publishGoal(goal, {
+      preserveExecution: Boolean(previous?.execution && goal.execution),
+    });
+    if (!previous) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
     const active = this.options.activeTask(threadId);
     if (goal.status !== 'active' && options.cancelActiveGoalTurn !== false && active?.taskKind === 'goal') {
       await this.options.cancelTurn(threadId, active.turnId);
     }
     if (goal.status === 'active') await this.continueIfIdle(threadId);
     return goal;
+  }
+
+  /**
+   * 将队列中的 Goal 项原子转换为线程目标并启动首轮执行。
+   *
+   * goal_updated 事件同时消费 queuedInputId，并写入带 Goal 类型的可见用户消息，
+   * 避免目标、transcript 和队列之间出现部分提交；后续项仍按 FIFO 调度。
+   */
+  async startQueuedGoal(
+    threadId: string,
+    input: RuntimeQueuedTurnInput,
+  ): Promise<GoalContinuationRun> {
+    if (
+      this.stopped
+      || this.deletionPausedThreads.has(threadId)
+      || this.scheduling.has(threadId)
+      || this.options.activeTask(threadId)
+    ) {
+      throw new Error(`Thread is not idle for queued goal: ${threadId}`);
+    }
+
+    this.scheduling.add(threadId);
+    try {
+      const thread = await this.requireThread(threadId);
+      assertNoUnfinishedGoal(thread.goal);
+      const objective = normalizeObjective(input.input);
+      const turnId = this.options.ids.id('turn_goal');
+      const createdAt = this.options.clock.now().toISOString();
+      const sourceMessage: RuntimeMessage = {
+        id: this.options.ids.id('msg'),
+        clientId: input.clientId,
+        turnId,
+        role: 'user',
+        inputKind: 'goal',
+        content: objective,
+        attachments: input.attachments?.map((attachment) => ({ ...attachment })),
+        createdAt,
+        status: 'complete',
+      };
+      const goal: RuntimeThreadGoal = {
+        ...nextGoalState(
+          threadId,
+          undefined,
+          { objective, status: 'active' },
+          this.options.clock.now(),
+        ),
+        ...goalExecutionState(input, sourceMessage.id),
+      };
+      await this.publishGoal(goal, {
+        queuedInputId: input.id,
+        sourceMessage,
+        turnId,
+      });
+      if (!thread.goal) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
+      const run = await this.options.createContinuation(
+        threadId,
+        goal,
+        goalContinuationMessages(goal, this.options.ids, this.options.clock),
+        { turnId },
+      );
+      void run.done.catch(() => undefined);
+      return run;
+    } finally {
+      this.scheduling.delete(threadId);
+    }
   }
 
   async clearGoal(threadId: string): Promise<void> {
@@ -228,8 +303,14 @@ export class RuntimeGoalCoordinator {
     if (this.stopped || this.deletionPausedThreads.has(threadId) || this.scheduling.has(threadId) || this.options.activeTask(threadId)) return;
     this.scheduling.add(threadId);
     try {
-      const goal = await this.getGoal(threadId);
+      const thread = await this.requireThread(threadId);
+      const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
       if (this.deletionPausedThreads.has(threadId) || !goal || goal.status !== 'active' || this.options.activeTask(threadId)) return;
+      // 用户明确排队的下一轮优先于后台目标续轮，避免两个调度器同时争抢线程空闲位。
+      if (await this.options.hasQueuedInput?.(threadId)) return;
+      // Plan 必须先由用户确认或放弃。等待期间不能让后台 Goal 抢占线程，否则计划
+      // 决策会被任务注册表拒绝，并且 Goal 会在用户确认前继续执行。
+      if (hasAwaitingPlanConfirmation(thread.messages)) return;
       if (goal.tokenBudget !== null && goal.tokensUsed >= goal.tokenBudget) {
         await this.updateStatus(goal, 'budgetLimited');
         return;
@@ -270,21 +351,57 @@ export class RuntimeGoalCoordinator {
     }
 
     const updated = { ...accounted, status: nextStatus, updatedAt: epochSeconds(this.options.clock.now()) };
-    await this.publishGoal(updated);
+    await this.publishGoal(updated, {
+      preserveExecution: Boolean(updated.execution),
+    });
     if (updated.status === 'active') await this.continueIfIdle(threadId);
   }
 
   private async updateStatus(goal: RuntimeThreadGoal, status: RuntimeThreadGoalStatus): Promise<void> {
-    await this.publishGoal({ ...goal, status, updatedAt: epochSeconds(this.options.clock.now()) });
+    await this.publishGoal(
+      { ...goal, status, updatedAt: epochSeconds(this.options.clock.now()) },
+      { preserveExecution: Boolean(goal.execution) },
+    );
   }
 
-  private async publishGoal(goal: RuntimeThreadGoal): Promise<void> {
+  private async publishGoal(
+    goal: RuntimeThreadGoal,
+    options: {
+      preserveExecution?: boolean;
+      queuedInputId?: string;
+      sourceMessage?: RuntimeMessage;
+      turnId?: string;
+    } = {},
+  ): Promise<void> {
+    const snapshot = cloneRuntimeThreadGoal(goal);
+    if (options.preserveExecution) delete snapshot.execution;
     await this.options.appendEvent(goal.threadId, {
       id: this.options.ids.id('event'),
       threadId: goal.threadId,
+      turnId: options.turnId,
       type: 'thread.goal_updated',
       createdAt: this.options.clock.now().toISOString(),
-      payload: { goal },
+      payload: {
+        goal: snapshot,
+        ...(options.preserveExecution ? { preserveExecution: true } : {}),
+        ...(options.queuedInputId ? { queuedInputId: options.queuedInputId } : {}),
+        ...(options.sourceMessage ? { sourceMessage: options.sourceMessage } : {}),
+      },
+    });
+  }
+
+  private async updateDefaultTitle(
+    threadId: string,
+    currentTitle: string,
+    objective: string,
+  ): Promise<void> {
+    if (currentTitle !== DEFAULT_THREAD_TITLE) return;
+    await this.options.appendEvent(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      type: 'thread.updated',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { title: fallbackThreadTitle(objective) },
     });
   }
 
@@ -379,6 +496,69 @@ function goalTerminalStatus(value: unknown): 'complete' | 'blocked' {
 function normalizeGoalStatus(value: unknown): RuntimeThreadGoalStatus {
   if (value === 'active' || value === 'paused' || value === 'blocked' || value === 'usageLimited' || value === 'budgetLimited' || value === 'complete') return value;
   throw new Error('invalid goal status');
+}
+
+function nextGoalState(
+  threadId: string,
+  previous: RuntimeThreadGoal | undefined,
+  patch: RuntimeThreadGoalPatch,
+  nowDate: Date,
+): RuntimeThreadGoal {
+  const objective = patch.objective === undefined ? previous?.objective : normalizeObjective(patch.objective);
+  if (!objective) throw new Error(`cannot update goal for thread ${threadId}: no goal exists`);
+  const status = normalizeGoalStatus(patch.status ?? previous?.status ?? 'active');
+  const tokenBudget = patch.tokenBudget === undefined
+    ? previous?.tokenBudget ?? null
+    : normalizeTokenBudget(patch.tokenBudget);
+  const now = epochSeconds(nowDate);
+  const replacesTerminalGoal = Boolean(
+    previous
+    && previous.objective !== objective
+    && isTerminalGoalStatus(previous.status),
+  );
+  return {
+    threadId,
+    objective,
+    status,
+    tokenBudget,
+    tokensUsed: replacesTerminalGoal ? 0 : previous?.tokensUsed ?? 0,
+    timeUsedSeconds: replacesTerminalGoal ? 0 : previous?.timeUsedSeconds ?? 0,
+    createdAt: replacesTerminalGoal ? now : previous?.createdAt ?? now,
+    updatedAt: now,
+    execution: replacesTerminalGoal
+      ? undefined
+      : previous?.execution
+        ? cloneRuntimeThreadGoal(previous).execution
+        : undefined,
+  };
+}
+
+function goalExecutionState(
+  input: RuntimeQueuedTurnInput,
+  sourceMessageId: string,
+): Pick<RuntimeThreadGoal, 'execution'> {
+  const execution: RuntimeThreadGoalExecutionOptions = {
+    attachments: input.attachments?.map((attachment) => ({ ...attachment })),
+    sourceMessageId,
+    skillIds: input.skillIds ? [...input.skillIds] : undefined,
+    thinking: input.thinking === true,
+    thinkingEffort: input.thinking === true ? input.thinkingEffort : undefined,
+  };
+  return { execution };
+}
+
+function assertNoUnfinishedGoal(goal: RuntimeThreadGoal | undefined): void {
+  if (goal && !isTerminalGoalStatus(goal.status)) {
+    throw new Error('An unfinished goal already exists. Finish or clear it before starting another goal.');
+  }
+}
+
+function hasAwaitingPlanConfirmation(messages: RuntimeMessage[]): boolean {
+  return messages.some((message) => (
+    message.role === 'assistant'
+    && message.planMode?.mode === 'plan'
+    && message.planMode.status === 'awaiting_confirmation'
+  ));
 }
 
 function isTerminalGoalStatus(status: RuntimeThreadGoalStatus): boolean {

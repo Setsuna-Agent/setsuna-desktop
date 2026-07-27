@@ -33,6 +33,8 @@ export type RuntimeMessage = {
   clientId?: string;
   turnId?: string;
   role: RuntimeMessageRole;
+  /** 用户输入的领域类型；普通消息可省略，Plan/Goal 由 transcript 使用独立标识展示。 */
+  inputKind?: RuntimeQueuedTurnInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
   createdAt: string;
@@ -149,6 +151,16 @@ export type RuntimeThreadContextCompactionState = {
 
 export type RuntimeThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete';
 
+export type RuntimeThreadGoalExecutionOptions = {
+  /** 创建 Goal 时绑定的输入资源和执行选项，后续自动续轮会保持同一语义。 */
+  attachments?: RuntimeInputMessageAttachment[];
+  /** 首轮 Goal 对应的可见用户消息，用于避免重复向模型附加同一批附件。 */
+  sourceMessageId?: string;
+  skillIds?: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
+};
+
 export type RuntimeThreadGoal = {
   threadId: string;
   objective: string;
@@ -158,12 +170,50 @@ export type RuntimeThreadGoal = {
   timeUsedSeconds: number;
   createdAt: number;
   updatedAt: number;
+  execution?: RuntimeThreadGoalExecutionOptions;
 };
+
+export function cloneRuntimeThreadGoal(goal: RuntimeThreadGoal): RuntimeThreadGoal {
+  return {
+    ...goal,
+    execution: goal.execution ? {
+      ...goal.execution,
+      attachments: goal.execution.attachments?.map((attachment) => ({ ...attachment })),
+      skillIds: goal.execution.skillIds ? [...goal.execution.skillIds] : undefined,
+    } : undefined,
+  };
+}
 
 export type RuntimeThreadGoalPatch = {
   objective?: string;
   status?: RuntimeThreadGoalStatus;
   tokenBudget?: number | null;
+};
+
+export type RuntimeQueuedTurnInputKind = 'message' | 'plan' | 'goal';
+
+export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueuedTurnInputKind {
+  return value === 'plan' || value === 'goal' ? value : 'message';
+}
+
+/**
+ * 等待当前轮次结束后再作为独立用户轮次发送的输入。
+ *
+ * 它与 active turn 内的 steer 不同：排队期间不会进入 transcript，也不会被当前
+ * 模型请求消费；只有被调度或手动立即发送后才会生成真正的用户消息。
+ */
+export type RuntimeQueuedTurnInput = {
+  id: string;
+  /** 旧版本持久化项可能缺失该字段，读取时按 message 归一化。 */
+  kind?: RuntimeQueuedTurnInputKind;
+  input: string;
+  clientId?: string;
+  attachments?: RuntimeInputMessageAttachment[];
+  skillIds?: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
+  createdAt: string;
+  updatedAt?: string;
 };
 
 export type RuntimeGitInfo = {
@@ -266,6 +316,7 @@ export type RuntimeThread = RuntimeThreadSummary & {
   contextCompaction?: RuntimeThreadContextCompactionState;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
   pendingHookRuns?: RuntimeHookRun[];
+  queuedTurnInputs?: RuntimeQueuedTurnInput[];
   turns?: RuntimeThreadTurn[];
   messages: RuntimeMessage[];
   lastSeq: number;
@@ -324,10 +375,59 @@ export type SteerTurnInput = {
   thinkingEffort?: string;
 };
 
+export type QueueTurnInput = Omit<SteerTurnInput, 'expectedTurnId'> & {
+  /**
+   * 旧客户端省略时按普通消息处理；runtime 持久化后始终写入显式类型。
+   */
+  kind?: RuntimeQueuedTurnInputKind;
+};
+
+/**
+ * 取回编辑使用独立会话令牌，确保旧页面的迟到 release 不会解锁后来重新开始的编辑。
+ */
+export type QueuedTurnInputEditSession = {
+  editToken: string;
+  input: RuntimeQueuedTurnInput;
+};
+
+export type QueuedTurnInputEditRelease = {
+  editToken: string;
+};
+
+export type QueuedTurnInputEditReleaseResponse = {
+  released: boolean;
+  resumed: QueuedTurnInputResponse | null;
+};
+
+export type QueuedTurnInputPatch = {
+  editToken: string;
+  input: string;
+  /** undefined 表示保留原附件，空数组表示移除全部附件。 */
+  attachments?: RuntimeInputMessageAttachment[];
+};
+
+export type QueuedTurnInputDisposition = 'queued' | 'started' | 'steered';
+
+export type QueuedTurnInputResponse = {
+  accepted: true;
+  disposition: QueuedTurnInputDisposition;
+  queuedInputId: string;
+  turnId: string | null;
+};
+
+export type DeleteQueuedTurnInputResponse = {
+  deleted: boolean;
+};
+
 export type SendTurnResponse = {
   accepted: true;
   turnId: string;
 };
+
+/**
+ * startTurn 既可能立即启动，也可能因为线程忙碌或队列被编辑而仅完成持久化。
+ */
+export type StartTurnResponse = SendTurnResponse | QueuedTurnInputResponse;
 
 export type MessagePatch = {
   content: string;

@@ -157,6 +157,7 @@ export function SideChatPanel({
           onSearchProjectEntries={searchSideWorkspaceEntries}
           onSelectModel={onSelectModel}
           onSend={(value, options) => sideChat.actions.sendInput(value, options)}
+          queuedTurnActions={sideChat.actions}
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
           onStartThreadReview={() => sideChat.startReview({ type: 'uncommittedChanges' })}
           onSkillSelectionRequestConsumed={() => undefined}

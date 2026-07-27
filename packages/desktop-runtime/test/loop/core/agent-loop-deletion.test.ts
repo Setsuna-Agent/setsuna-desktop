@@ -206,7 +206,7 @@ describe('agent loop thread deletion barrier', () => {
     await modelClient.waitUntilStarted();
     expect(loop.prepareDataMigration()).toMatchObject({ ready: false, registeredTasks: 1 });
 
-    await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
+    await expect(loop.cancelTurn(thread.id, started.turnId!)).resolves.toBe(true);
     expect(loop.activeTurnId(thread.id)).toBeNull();
     expect(loop.prepareDataMigration()).toMatchObject({ ready: false, registeredTasks: 1 });
 

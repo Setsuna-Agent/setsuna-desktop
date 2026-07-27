@@ -1,205 +1,262 @@
 # Chat Guided Conversation Design
 
-本文记录聊天“引导对话”的设计思路和落地方案。这里的引导对话指：当一个普通 chat turn 仍在运行时，用户可以继续输入补充要求、纠偏或约束；这条输入不会创建新的 turn，而是作为同一个 active turn 的用户消息进入 transcript，并在下一个安全的模型检查点被模型消费。
-
-## 背景
-
-原有聊天链路把一次发送映射成一次 turn。turn 运行期间，composer 主要提供停止能力，用户如果想补充信息，只能等待当前回答结束，或者取消后重发。这会带来几个问题：
-
-- 用户发现模型理解偏差时，无法在不中断工具执行和流式回答的情况下补充约束。
-- 如果直接新建 turn，会形成并行语义：同一个问题被拆成两个 turn，工具结果、usage、memory 和 UI 展示都难以保持一致。
-- 如果 runtime 在模型流式段之间仅靠消息状态推断 active 状态，renderer 容易在中间 assistant/tool 段完成时误以为 turn 已结束。
-
-因此本方案把 active turn 期间的补充输入建模为 `steer`。它是同一个 turn 内的原始用户消息，不是额外 prompt wrapper，也不是新的任务队列。
+本文记录聊天“引导对话发送队列”的设计与实现。用户在一个 turn 运行期间继续提交补充要求时，输入默认进入线程级 FIFO 队列，不会立刻加入当前 transcript；当前 turn 正常完成后，runtime 自动把队首作为新的独立 turn 发送。普通消息可以点击“立即发送”，显式复用原有 steer 逻辑插入当前 turn；Plan 和 Goal 是独立队列类型，必须等待当前 turn 结束后按各自语义启动。
 
 ## 设计目标
 
-- active 普通对话可以接受补充输入和附件，并立即显示在当前对话中。
-- steer 与初始用户输入共享同一个 `turnId`，模型、事件、usage、memory 都按一个 turn 结算。
-- 已接受的 steer 必须先落盘再广播，renderer 可以立刻看到；模型消费则等当前模型段或工具链路到达安全检查点。
-- 如果 renderer 的 active turn 状态短暂滞后，runtime 要能兜底把普通发送收敛成 steer。
-- review turn、已进入收尾阶段的 turn、没有 active turn 的线程不能接受 steer。
-- 前端展示要保持一条连续的 assistant run，避免把引导输入渲染成新的独立用户轮次。
+- active turn 期间的普通提交默认排队，避免补充输入在用户没有明确选择时改变当前模型执行。
+- 队列可见、可持久化，支持立即发送、取回编辑和删除。
+- 当前 turn 只有正常完成时才自动发送队首；取消或错误后保留并暂停队列。
+- 每个自动发送项创建独立 turn，usage、memory、工具链路和错误状态独立结算。
+- 普通消息的“立即发送”仍共享当前 `turnId`，并在下一个安全模型检查点被消费。
+- 普通、Plan、Goal 作为显式队列类型持久化，不能在排队过程中丢失执行语义。
+- renderer、REST 和 runtime 共享同一套 contract 与事件投影，不维护平行状态。
+- 并发的自动调度、取回更新、立即发送和删除必须保证不丢、不重、FIFO 不越序。
 
 非目标：
 
-- 不在当前正在流式输出的模型请求中插入新 token；steer 只会在下一次模型请求前进入上下文。
-- 不允许 active turn 期间切换 skill、thinking effort 或 approval policy。
-- 不把 steer 设计成跨 turn 的通用队列。
+- 不在当前正在流式输出的模型请求中直接插入 token。
+- 取回编辑支持文本和附件；队列项原有 Skill 与 thinking 配置保持不变。
+- 队列不替代 active turn 内部的 mailbox 和 steer 检查点队列。
 
-## 核心模型
+## 数据模型与事件
 
-引导对话在 runtime 内部围绕 `ActiveTurnState` 维护：
+`RuntimeThread.queuedTurnInputs` 是队列快照。每个 `RuntimeQueuedTurnInput` 保存：
 
-- `turnId`：当前运行中的 turn。
-- `kind`：`conversation` 或 `review`，只有 `conversation` 可以 steer。
-- `acceptingSteers`：turn 是否还允许接收补充输入。
-- `pendingSteers`：已落盘、待模型消费的用户消息。
-- `steerWritesInFlight` / `steerWriteWaiters`：防止最终 drain 和异步写入竞态。
+- 稳定 `id` 和可选 `clientId`。
+- `kind: 'message' | 'plan' | 'goal'`；旧版本遗留项缺失时按 `message` 读取。
+- 文本、输入附件、Skill 和 thinking 配置。
+- `createdAt` 与可选 `updatedAt`。
 
-一个典型事件序列如下：
+队列通过 append-only 事件持久化：
 
 ```text
-turn.started(turn_1)
-message.created(user_initial, turn_1)
-message.created(assistant_1, turn_1)
-message.completed(assistant_1, toolCalls?)
-message.created(user_steer, turn_1)
-tool.completed(...)
-message.created(assistant_2, turn_1)
-message.completed(assistant_2)
+turn.input_queued
+turn.input_updated
+turn.input_deleted
+```
+
+队列项开始发送时不额外写“dequeued”事件。普通和 Plan 项的初始用户消息通过 `message.created.queuedInputId` 原子消费；Goal 项由 `thread.goal_updated` 同时写入目标状态、`sourceMessage` 和 `queuedInputId`。因此 Goal 目标、可见用户消息和队列消费不会出现部分提交，也不会在进程崩溃时丢失任一语义。
+
+典型自动发送序列：
+
+```text
+turn.input_queued(queue_1)
+turn.completed(turn_1)
+turn.started(turn_2)
+message.created(user_2, turn_2, queuedInputId=queue_1)
+...
+turn.completed(turn_2)
+```
+
+立即发送序列：
+
+```text
+turn.input_queued(queue_1)
+message.created(user_steer, turn_1, queuedInputId=queue_1)
+...
 turn.completed(turn_1)
 ```
 
-`user_steer` 在事件流中是真实 user message。它会立即进入 transcript，但模型上下文中的顺序由 runtime 检查点控制：如果当前正在执行工具，工具结果先回到模型上下文，然后再追加 steer，保证模型不会在缺少工具返回的情况下响应补充输入。
+普通队列项在这两条路径中都只由对应的 `message.created` 消费。Goal 不走 steer；其自动发送序列由 `thread.goal_updated(..., sourceMessage=user_goal, queuedInputId=queue_1)` 原子投影目标消息后，启动同一真实 `turnId` 的 `taskKind=goal` turn。
 
 ## Contract 和 API
 
-共享 contract 增加 `SteerTurnInput`：
+核心输入和响应：
 
 ```ts
-export type SteerTurnInput = {
+type QueueTurnInput = Omit<SteerTurnInput, 'expectedTurnId'> & {
+  kind?: 'message' | 'plan' | 'goal';
+};
+
+type QueuedTurnInputPatch = {
+  editToken: string;
   input: string;
-  expectedTurnId: string;
-  clientId?: string;
-  attachments?: RuntimeMessageAttachment[];
+  attachments?: RuntimeInputMessageAttachment[];
+};
+
+type QueuedTurnInputEditSession = {
+  editToken: string;
+  input: RuntimeQueuedTurnInput;
+};
+
+type QueuedTurnInputResponse = {
+  accepted: true;
+  disposition: 'queued' | 'started' | 'steered';
+  queuedInputId: string;
+  turnId: string | null;
 };
 ```
 
 HTTP 入口：
 
 ```text
+POST   /v1/threads/:threadId/queued-turn-inputs
+POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/retrieve
+POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/release
+PATCH  /v1/threads/:threadId/queued-turn-inputs/:inputId
+DELETE /v1/threads/:threadId/queued-turn-inputs/:inputId
+POST   /v1/threads/:threadId/queued-turn-inputs/:inputId/send-now
+```
+
+原有显式 steer 接口继续保留：
+
+```text
 POST /v1/threads/:threadId/turns/:turnId/steer
 ```
 
-renderer 通过 `DesktopRuntimeClient.steerTurn(threadId, turnId, input)` 调用。`expectedTurnId` 用来防止旧 UI 状态把输入写入已经切换的 active turn。如果 runtime 发现实际 active turn 不一致，会返回包含实际 turn id 的错误，renderer 可基于这个错误重试一次。
+`disposition` 的含义：
 
-线程 snapshot 增加 `activeTurnId`，由 runtime REST 层在返回 thread/list thread 时按 `agentLoop.activeTurnId(thread.id)` 注入。事件 reducer 同步维护该字段：
+- `queued`：仍在等待。
+- `started`：线程空闲，该项已经作为独立 turn 启动。
+- `steered`：通过“立即发送”插入 active turn。
 
-- `turn.started` 设置 `activeTurnId`。
-- `turn.completed`、`turn.cancelled`、`runtime.error` 清空匹配的 `activeTurnId`。
+## Runtime 调度
 
-这样 renderer 以 runtime 快照为 active 真源，消息状态推断只作为旧快照或事件丢失时的兜底。
+`RuntimeQueuedTurnCoordinator` 集中负责队列写入和调度。每个线程的操作使用独立 promise tail 串行化，避免自动续发与用户操作同时处理同一队列项。队列最多保存 20 项，防止无界增长。
 
-## Runtime 流程
+### 入队
 
-### 启动和兜底
+1. 规范化文本、附件、Skill 和 thinking effort。
+2. Goal 在事件落盘前复用目标长度和未完成目标校验，并拒绝同一线程重复排队 Goal。
+3. 校验附件能力并把临时附件认领到线程。
+4. 写入 `turn.input_queued`。
+5. active turn 存在时保持等待。
+6. 线程空闲时从真正的队首开始发送，而不是让新项越过旧项。
 
-`startTurn()` 首先检查线程是否已有 active conversation turn。如果存在且仍在 `acceptingSteers`，新的 start 请求不会创建第二个 turn，而是转发到 `steerTurn()`。这层兜底用于处理 renderer/SSE 短暂不同步：即使 UI 以为可以普通发送，runtime 仍会把它收敛到当前 turn。
+`AgentLoop.startTurn()` 也有服务端兜底：
 
-### 接收 steer
+- active turn 存在时，普通 start 请求转为入队。
+- 线程因取消或错误留下待发送项时，新的普通 start 也先入队并恢复旧队首。
+- 输入一旦写入 `turn.input_queued` 就返回可表示 `queued` 的成功响应；即使编辑占用暂时阻止调度，也不能返回会诱导客户端重试的失败。
+- 只有显式 send-now 或 steer API 才能插入当前 turn。
 
-`steerTurn()` 的处理顺序：
+这保证 renderer 与 SSE 短暂不同步时不会意外恢复旧的“立即引导”行为。
 
-1. 校验输入或附件非空，并复用图片附件能力校验。
-2. 校验 active turn 存在、未取消、类型是普通 conversation。
-3. 校验 `expectedTurnId` 与实际 active turn 一致。
-4. 校验当前 turn 仍在 `acceptingSteers`。
-5. 标记 steer 写入 in-flight。
-6. 创建 `role: 'user'`、共享当前 `turnId` 的 `RuntimeMessage`。
-7. 先通过事件链发布并落盘该 message，再放入 `pendingSteers`。
-8. 写入完成后唤醒等待最终 drain 的 waiter。
+### 自动发送
 
-关键点是“先可见，后消费”：用户输入一旦被接受，就可以在 UI 中出现；模型只有在安全检查点才会看到它。
+队列协调器观察所有可能占用线程的任务。只有该 turn 存在 `turn.completed` 且不存在任何 `turn.cancelled` / `runtime.error` 时，才调度下一个队首；取消或错误优先于迟到写入的 completed。每个线程还记录最新观察到的 run，旧 run 的迟到结算不能重新暂停或续发已经恢复的新 run。
 
-### 模型检查点
+`turn.cancelled` 或 `runtime.error` 会暂停自动调度并保留队列；之后用户点击“立即发送”、提交新输入或完成一次取回编辑，才恢复队列。
 
-agent loop 在每轮模型请求前执行 `drainPendingSteers()`，把已经落盘的 steer 追加到 `modelMessages`。如果当前模型请求完成后没有工具调用，但 drain 到了 steer，则先 complete 当前 assistant 段，再把 steer 加入模型上下文并进入下一轮模型请求。
+用户队列优先于目标自动续轮。`RuntimeGoalCoordinator` 在创建 goal continuation 前检查队列，避免目标轮次长期抢占用户输入。Plan 进入 `awaiting_confirmation` 后，即使其队列项已经被消费，Goal 也会保持空闲；接受或放弃计划产生的决策轮次结算后再恢复续轮。
 
-如果当前模型段产生工具调用，则顺序是：
+队首按类型调度：
 
-1. complete 当前 assistant message，并记录 tool calls。
-2. 执行工具，发布 tool run 和 tool message。
-3. tool result 进入 `modelMessages`。
-4. 下一轮模型请求前 drain steer。
+- `message`：启动普通独立 turn。
+- `plan`：启动带 `collaborationMode: 'plan'` 的独立 turn。
+- `goal`：通过 `RuntimeGoalCoordinator.startQueuedGoal()` 原子建立目标、写入带 Goal 类型的可见用户消息并启动 goal turn；附件、Skill 和 thinking 选项随目标持久化，并在后续自动续轮中保持。首轮模型请求直接复用可见消息中的附件，避免在合成续轮输入上重复附加；后续计量和状态事件只标记复用既有执行选项。
 
-这样引导输入不会打乱工具结果与后续 assistant 回答的因果顺序。
+### 立即发送
 
-### 收尾和竞态
+如果队列项是普通消息，且 active task 是仍可接收 steer 的普通或 goal turn，send-now 调用 `RuntimeTurnInputCoordinator.steerQueuedInput()`：
 
-turn 准备输出最终回答时会调用 `stopAcceptingSteers()`。在真正完成前，runtime 会等待 `steerWritesInFlight` 清零并 drain 最后一批已接受 steer，避免“HTTP 已返回 accepted，但 turn 已 completed，模型没看到这条 steer”的竞态。
+1. 校验 active turn 仍匹配且可接收输入。
+2. 先落盘带 `queuedInputId` 的用户消息。
+3. 投影器原子移除队列项。
+4. 把消息放入 active turn 内部的 steer 队列。
+5. 模型在当前模型段或工具链路后的安全检查点消费它。
 
-如果 active turn 已结束或正在收尾，renderer 会收到“当前对话已经结束，未插入引导，请重新发送这条消息”的错误，并恢复 draft。
+如果点击期间 active turn 恰好结束，协调器重新检查状态，并把该项作为独立 turn 启动。调度中的项会被标记，删除或重复发送都会拒绝。
+
+Plan 和 Goal 不能被改写为当前 turn 的 steer；active turn 存在时 UI 禁用它们的“立即发送”，runtime 也会拒绝绕过 UI 的请求。
+
+### 取回编辑
+
+retrieve 在线程串行区间内创建带随机令牌的编辑会话，但不会删除持久化队列数据；自动调度在编辑期间暂停。renderer 把返回的文本和附件放入主输入框并临时隐藏该行。用户再次提交时，PATCH 必须携带同一令牌，原子写入完整的 `turn.input_updated`、释放编辑会话，并按当时的 active/idle 状态继续排队或启动。
+
+release 也必须携带同一令牌。旧页面或旧请求的迟到 release 无法释放后来重新创建的编辑会话。renderer 在以下路径主动 release：
+
+- 用户点击输入框 footer 中的紧凑“正在编辑队列消息”关闭按钮。
+- 组件卸载或切换线程。
+- retrieve 返回时 identity guard 已判定请求过期。
+- PATCH 失败；若 release 同样失败则保留编辑 UI 供重试。
+
+只有 composer 没有草稿、附件或待发送选项时才允许开始编辑；取回请求期间 composer 暂时禁用，避免用户刚输入的内容被迟到响应覆盖。因此无需牺牲现有 composer 状态。retrieve 响应丢失、页面切换、组件卸载或应用退出时，原队列项仍可从事件投影恢复，不存在“持久化消息已删除、草稿只存在内存”的窗口。
+
+删除当前正在编辑的项也属于释放编辑占用；删除事件落盘后必须复用 release 的恢复入口，在非暂停且线程空闲时继续调度剩余队首。
 
 ## Renderer 交互
 
-composer 以 `activeTurnId` 区分普通发送和引导输入：
+composer 上方渲染 `ChatSendQueue`：
 
-- active turn 期间，`/` skill 菜单、skill selection、thinking 选项和模型选择被禁用。
-- 有 draft 或图片时，右侧按钮从“停止生成”切换为“插入引导”。
-- 空输入时仍保留停止按钮。
-- 普通 Enter 会提交引导；Shift/Alt/Ctrl/Meta Enter 和输入法组合态不会误提交。
-- active turn 期间提交不会携带 skill/thinking 参数，只携带文本和附件。
+- 队列按 FIFO 顺序以紧凑单行列表展示，不额外占用标题卡片空间。
+- 每项展示文本和附件名；普通、Plan、Goal 分别使用消息、计划清单和目标图标。消息真正进入 transcript 后仍保留 `inputKind`，Plan/Goal 用户消息继续显示各自的语义图标。
+- 普通项的“立即发送”调用 send-now API；Plan/Goal 在 active turn 期间等待自动调度。
+- “编辑”调用 retrieve 后把文本与附件放入主输入框并隐藏原行；可删除或补充附件，再通过 PATCH 原子更新原队列项。
+- composer 已有内容时只禁用“编辑”，不会影响立即发送和删除；编辑期间通过 footer 小标签显式取消。
+- “删除”只移除尚未发送的项。
+- 队列为空时组件返回 `null`，不占用输入框上方空间。
 
-`useChatTurnActions.sendInput()` 在有 `activeTurnId` 时调用 `steerTurn()`，否则调用 `sendTurn()`。如果因为 UI 状态过期导致 expected turn 不匹配，会使用错误中的实际 active turn id 重试一次；如果 turn 已结束，则恢复 draft 并给出可读错误。
+active turn 期间：
 
-## Transcript 投影
+- 有文本或附件时，发送按钮语义为“加入队列”。
+- 普通 Enter 加入队列；组合键和输入法组合态不误提交。
+- 空输入仍显示停止按钮。
+- Skill 与 thinking 配置会随队列项保存，并在该项真正开始时使用。
+- Plan/Goal 模式随提交写入队列项 `kind`，提交成功后清除 composer 徽标，避免模式错误顺延到更晚的消息。
 
-runtime 存储里 steer 是真实 user message，但 UI 不把它渲染成新的独立用户轮次。`buildChatTranscript()` 会把同一 turn 内的 steer 折叠进原始用户项和同一个 assistant run：
+`useChatTurnActions` 负责提交和队列动作，展示组件只接收明确的异步回调。队列动作共享 composer identity guard；切换线程后，旧请求可以在后台完成，但不能再写入新线程的 active turn、错误或草稿状态。线程事件继续作为实时 UI 真源，renderer 的局部收敛只作为 SSE 到达前的过渡。
 
-- user item 记录 `messageIds`、`steerMessages`、`handledSteerMessageIds` 和 `guidanceProcessed`。
-- assistant item 记录 `segments`、`messageIds`、`steerMessages` 和 `handledSteerMessageIds`。
-- 当 steer 后出现了具备处理证据的 assistant message 时，才把该 steer 标记为 handled。
-- 空 assistant placeholder 不会让 steer 被误标记为已处理。
-- 旧数据里初始 user message 没有 `turnId` 时，会尝试按相邻 assistant turn 折叠，兼容历史 transcript。
+## 原有 steer 的模型顺序
 
-`activeAssistantRunItemId()` 会找出当前 active turn 真正位于最前沿的 assistant run。同一个 turn 内早先完成的 assistant 段仍带同一个 `turnId`，但不应该继续显示“工作中”；这个 helper 用来避免 active 状态挂在过期段上。
+立即发送生成的消息是真实 user message，并共享 active `turnId`。它立刻进入 transcript，但只在安全检查点加入模型上下文：
 
-## 引导消息的时间线展示
+- 如果模型段没有工具调用，runtime 完成当前 assistant 段后 drain steer，再发起下一次模型请求。
+- 如果模型段产生工具调用，先完成工具和 tool result，再 drain steer。
+- turn 收尾会等待已接受的 steer 写入完成，避免 HTTP 已接受但模型未消费。
 
-assistant run 内部还会被拆成内容段、thinking 段、tool run 和 work history。单纯把 steer 附在 assistant run 末尾会破坏顺序，所以当前方案把展示计划抽到 `createAssistantGuidanceTimelinePlan()`：
-
-- 先用 runtime message 顺序建立 `messageOrderIds`。
-- active 状态下，把 guidance 按“位于哪个 block 之后”分组。
-- 对 work history 内部，再用 `interleaveGuidanceByMessageOrder()` 把 guidance 插到具体 work item 前后。
-- 如果 guidance 到达时还没有新的 assistant/work block，则放入 active placeholder 内，避免跳到 turn header 外面。
-- turn 完成后，guidance 会折叠进 completed work history，而不是散落在外层 timeline。
-
-视觉上，guidance 使用用户气泡风格，并带“已引导对话”标记。标记的语义是：这条引导已经被后续 assistant 段处理过；未处理时只展示引导内容。
+同 turn 的 steer 仍由现有 transcript 与 guidance timeline 投影折叠进同一个 assistant run，历史展示语义不变。
 
 ## 边界场景
 
-- 无 active turn：`steerTurn()` 返回 `no active turn to steer`。
-- review turn：返回 `cannot steer a review turn`。
-- expected turn 过期：返回 `expected active turn id ... but found ...`，renderer 最多重试一次。
-- turn 正在收尾：返回 `active turn is finishing and can no longer be steered`。
-- 工具执行中：steer 立即可见，但模型消费排在 tool result 之后。
-- 最终 drain 竞态：runtime 等待已 accepted 的 steer 写入完成后再判断 turn 是否可以完成。
-- SSE 丢帧或 renderer 恢复：thread snapshot 的 `activeTurnId` 是真源，消息状态推断只兜底。
+- 队列为空：不渲染队列面板。
+- 仅附件输入：允许入队和取回编辑；附件会进入现有附件托盘，可删除、补充或保持不变。
+- Goal 必须有文本目标，也支持附件、Skill 和 thinking；这些选项在 Goal 的后续自动续轮中继续生效。
+- 超过 20 项：runtime 拒绝继续入队。
+- 队列项已发送或不存在：取回编辑不会覆盖主输入框，send-now 返回 not found；重复删除返回 `deleted: false`。
+- 项正在调度：取回、删除和重复 send-now 返回明确错误。
+- 编辑期间当前 turn 结束：原队列项保持持久化和暂停，直到用户提交或显式取消。
+- 另一窗口删除正在编辑的项：清除编辑占用并尝试恢复剩余队首。
+- 旧编辑会话迟到释放：令牌不匹配，不影响当前编辑会话。
+- review、compact 或 user-shell active：不能 steer，但可以排队，正常完成后自动发送。
+- 取消或错误：队列保留且不自动发送。
+- runtime 重启：队列从事件投影恢复；不会在没有新用户动作时擅自恢复失败前的自动发送。
+- 普通 start 与 active turn 竞态：服务端转为排队。
+- 编辑占用下的普通 start：返回 `queued` 成功且只持久化一次，不恢复草稿诱导重复提交。
 
 ## 验证覆盖
 
-runtime 侧测试覆盖：
+runtime 与 contract 测试覆盖：
 
-- active turn 内 steer 会进入同一 turn 的下一次模型请求。
-- active 期间新的 start request 会被当作 steer。
-- 工具执行中 steer 立即落盘，但模型消费排在 tool result 之后。
-- final drain 会等待 accepted steer 写入完成。
-- REST 和 AppServer `turn/steer` 都能把补充输入映射到 active turn。
-- 无匹配 active turn 时 AppServer 返回协议错误。
+- 事件投影的入队、更新、删除和 `message.created` 原子消费。
+- 多项按 FIFO 自动创建独立 turn。
+- send-now 复用同 turn steer。
+- 取回期间保持持久化和暂停；显式 release 恢复调度，旧令牌不能释放新会话。
+- 更新后发送新文本和附件，删除项不进入 transcript。
+- 错误后暂停；新输入恢复时旧项优先。
+- cancelled 后迟到的 completed 不会续发；旧 run 的迟到结算不会污染新 run。
+- active 期间误发普通 start 也会排队。
+- Plan/Goal 类型持久化、专用调度和 Goal 原子消费。
+- Goal 入队前完整校验、附件与执行选项续轮复用，以及 awaiting Plan 对 Goal 的调度阻塞。
+- 删除当前编辑项后恢复剩余队首；编辑占用下 start 返回 queued 成功且不重复。
+- REST 的创建、retrieve、release、更新、删除和 send-now 路由；AppServer busy start 返回显式 queued 结果而不伪造 turn ID。
 
-renderer 侧测试覆盖：
-
-- steer user message 折叠进同一个 assistant run。
-- steer 等待后续 assistant 段时仍保持 active run。
-- 多条 steer、streaming placeholder 和 tool run 同处一个 turn 时展示稳定。
-- 空 assistant placeholder 不会误标记 steer 已处理。
-- guidance timeline 能按 message 顺序插入 work history、non-work block 和 placeholder。
-- active turn snapshot 优先于消息状态推断，避免中间段 complete 后误清空 active 状态。
+renderer 测试覆盖队列顺序、空态、附件摘要和操作入口。原有 steer transcript、工具顺序、final drain 与 guidance timeline 测试继续覆盖立即发送路径。
 
 ## 相关文件
 
 - `packages/contracts/src/threads.ts`
-- `packages/contracts/src/http.ts`
+- `packages/contracts/src/events.ts`
 - `packages/contracts/src/thread-events.ts`
+- `packages/contracts/src/http.ts`
+- `packages/desktop-runtime/src/loop/lifecycle/runtime-queued-turn-coordinator.ts`
+- `packages/desktop-runtime/src/loop/lifecycle/runtime-turn-input-coordinator.ts`
 - `packages/desktop-runtime/src/loop/core/agent-loop.ts`
 - `packages/desktop-runtime/src/server/runtime-rest-routes.ts`
 - `apps/desktop/renderer/src/services/runtime-client/client.ts`
 - `apps/desktop/renderer/src/features/chat/hooks/useChatTurnActions.ts`
-- `apps/desktop/renderer/src/services/runtime-client/useRuntimeClientState.ts`
+- `apps/desktop/renderer/src/features/chat/composer/ChatSendQueue.tsx`
+- `apps/desktop/renderer/src/features/chat/composer/useQueuedTurnComposerEdit.ts`
 - `apps/desktop/renderer/src/features/chat/ChatComposer.tsx`
-- `apps/desktop/renderer/src/features/chat/conversation/chatMessageDisplay.ts`
-- `apps/desktop/renderer/src/features/chat/conversation/chatGuidanceTimeline.ts`
-- `apps/desktop/renderer/src/features/chat/conversation/chatAssistantGuidanceTimeline.ts`
-- `apps/desktop/renderer/src/features/chat/ChatWorkspace.tsx`
-- `apps/desktop/renderer/src/features/chat/styles/chat.css`
+- `apps/desktop/renderer/src/features/chat/styles/chat-send-queue.css`

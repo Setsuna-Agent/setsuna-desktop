@@ -4,7 +4,10 @@ import type {
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
 } from '@setsuna-desktop/contracts';
-import { normalizeRuntimeMessageProviderMetadata } from '@setsuna-desktop/contracts';
+import {
+  cloneRuntimeThreadGoal,
+  normalizeRuntimeMessageProviderMetadata,
+} from '@setsuna-desktop/contracts';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 
 export const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
@@ -41,6 +44,9 @@ export function eventCanUseDelayedCheckpoint(event: RuntimeEvent): boolean {
 }
 
 export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
+  const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : undefined;
+  // 列表摘要不携带 Goal 的图片数据或执行选项，避免内联附件放大每次线程列表响应。
+  if (goal) delete goal.execution;
   return {
     id: thread.id,
     activeTurnId: thread.activeTurnId,
@@ -53,7 +59,7 @@ export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
     archived: thread.archived,
     memoryMode: normalizeThreadMemoryMode(thread.memoryMode),
     gitInfo: thread.gitInfo ? { ...thread.gitInfo } : thread.gitInfo,
-    goal: thread.goal ? { ...thread.goal } : undefined,
+    goal,
     messageCount: thread.messageCount,
     lastMessagePreview: thread.lastMessagePreview,
   };

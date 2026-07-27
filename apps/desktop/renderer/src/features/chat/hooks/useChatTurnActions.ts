@@ -2,14 +2,24 @@ import {
   isRuntimeInputMessageAttachment,
   type DesktopRuntimeClient,
   type RuntimeCollaborationMode,
-  type RuntimeInputMessageAttachment,
   type RuntimeMessageAttachment,
   type RuntimePlanDecision,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
-import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
+import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
+
+type ChatTurnSendOptions = {
+  attachments?: RuntimeMessageAttachment[];
+  collaborationMode?: RuntimeCollaborationMode;
+  goalMode?: boolean;
+  planDecision?: RuntimePlanDecision;
+  skillIds?: string[];
+  thinking?: boolean;
+  thinkingEffort?: string;
+};
 
 export function useChatTurnActions({
   activeProjectId,
@@ -44,8 +54,18 @@ export function useChatTurnActions({
 }) {
   const { t } = useI18n();
   const actionRequests = useIdentityRequestGuard(composerKey);
+  const queuedTurnActions = useQueuedTurnInputActions({
+    actionRequests,
+    client,
+    currentThread,
+    reloadThreads,
+    setActiveTurnId,
+    setCurrentThread,
+    setError,
+    terminalTurnIdsRef,
+  });
   const sendInput = useCallback(
-    async (value?: string, options: { attachments?: RuntimeMessageAttachment[]; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}) => {
+    async (value?: string, options: ChatTurnSendOptions = {}) => {
       const input = (value ?? draft).trim();
       const attachments = (options.attachments ?? []).filter(isRuntimeInputMessageAttachment);
       if (!input && !attachments.length && !options.planDecision) return false;
@@ -69,22 +89,6 @@ export function useChatTurnActions({
           await reloadThreads();
         }
         const threadId = thread.id;
-        if (options.goalMode && input) {
-          const goal = await client.setThreadGoal(threadId, { objective: input, status: 'active' });
-          // 目标轮次由 setThreadGoal 内部启动。重新读取 runtime 任务注册表快照，避免遗漏或重叠的
-          // SSE turn.started 事件导致输入框缺少停止操作。
-          const goalThread = await client.getThread(threadId);
-          if (isCurrentRequest()) {
-            terminalTurnIdsRef.current.delete(goalThread.activeTurnId ?? '');
-            setCurrentThread((current) => mergeGoalThreadSnapshot(current, goalThread, goal));
-            if (goalThread.activeTurnId) setActiveTurnId(goalThread.activeTurnId);
-            setDraft('');
-          }
-          await reloadThreads();
-          // 目标执行由 runtime 管理：设置目标会调度首个隐藏目标轮次，之后每次空闲完成都会调度
-          // 下一个轮次，直到目标进入终止状态。
-          return true;
-        }
         if (isCurrentRequest()) setDraft('');
         const startTurn = () => client.sendTurn(threadId, {
           attachments,
@@ -95,20 +99,23 @@ export function useChatTurnActions({
           ...(options.collaborationMode ? { collaborationMode: options.collaborationMode } : {}),
           ...(options.planDecision ? { planDecision: options.planDecision } : {}),
         });
-        const response = activeTurnId && !options.planDecision
-          ? await steerActiveTurn({
-              activeTurnId,
+        // Goal 无论线程当前是否空闲都先进入同一持久化入口；空闲时 runtime 会立刻
+        // 原子消费并启动，忙碌时则保留完整附件、Skill 与 thinking 语义等待调度。
+        const response = shouldQueueComposerTurn(activeTurnId, options)
+          ? await client.queueTurnInput(threadId, {
               attachments,
-              client,
               input,
+              kind: options.goalMode
+                ? 'goal'
+                : options.collaborationMode === 'plan'
+                  ? 'plan'
+                  : 'message',
               skillIds: options.skillIds,
               thinking: options.thinking,
               thinkingEffort: options.thinkingEffort,
-              threadId,
-              t,
             })
           : await startTurn();
-        if (isCurrentRequest() && !terminalTurnIdsRef.current.has(response.turnId)) {
+        if (isCurrentRequest() && response.turnId && !terminalTurnIdsRef.current.has(response.turnId)) {
           setActiveTurnId(response.turnId);
         }
         if (!isCurrentRequest()) void reloadThreads().catch(() => undefined);
@@ -121,7 +128,7 @@ export function useChatTurnActions({
         return false;
       }
     },
-    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, t, terminalTurnIdsRef],
+    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
   );
 
   const cancelActiveTurn = useCallback(async () => {
@@ -181,10 +188,23 @@ export function useChatTurnActions({
     [actionRequests, activeTurnId, client, currentThread, reloadThreads, setActiveTurnId, setCurrentThread, setError, t, terminalTurnIdsRef],
   );
 
-  return { cancelActiveTurn, deleteMessages, editUserMessage, sendInput };
+  return {
+    cancelActiveTurn,
+    deleteMessages,
+    editUserMessage,
+    ...queuedTurnActions,
+    sendInput,
+  };
 }
 
 export type ChatTurnActions = ReturnType<typeof useChatTurnActions>;
+
+export function shouldQueueComposerTurn(
+  activeTurnId: string | null,
+  options: Pick<ChatTurnSendOptions, 'goalMode' | 'planDecision'>,
+): boolean {
+  return options.goalMode === true || Boolean(activeTurnId && !options.planDecision);
+}
 
 export function claimCreatedChatThreadForSend({
   activeProjectId,
@@ -213,78 +233,4 @@ export function claimCreatedChatThreadForSend({
 function normalizeRuntimeActionError(error: unknown, notFoundMessage: string): string {
   const message = error instanceof Error ? error.message : String(error);
   return /\bnot found\b/i.test(message) ? notFoundMessage : message;
-}
-
-export function mergeGoalThreadSnapshot(
-  current: RuntimeThread | null,
-  snapshot: RuntimeThread,
-  goal: NonNullable<RuntimeThread['goal']>,
-): RuntimeThread {
-  if (!current || current.id !== snapshot.id || snapshot.lastSeq >= current.lastSeq) {
-    return { ...snapshot, goal: snapshot.goal ?? goal };
-  }
-  return {
-    ...current,
-    goal,
-    activeTurnId: snapshot.activeTurnId ?? current.activeTurnId,
-  };
-}
-
-async function steerActiveTurn({
-  activeTurnId,
-  attachments,
-  client,
-  input,
-  skillIds,
-  thinking,
-  thinkingEffort,
-  threadId,
-  t,
-}: {
-  activeTurnId: string;
-  attachments: RuntimeInputMessageAttachment[];
-  client: DesktopRuntimeClient;
-  input: string;
-  skillIds?: string[];
-  thinking?: boolean;
-  thinkingEffort?: string;
-  threadId: string;
-  t: Translate;
-}) {
-  try {
-    return await client.steerTurn(threadId, activeTurnId, {
-      attachments,
-      expectedTurnId: activeTurnId,
-      input,
-      skillIds,
-      thinking,
-      thinkingEffort,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const retryTurnId = steerMismatchTurnId(message);
-    if (retryTurnId) {
-      return client.steerTurn(threadId, retryTurnId, {
-        attachments,
-        expectedTurnId: retryTurnId,
-        input,
-        skillIds,
-        thinking,
-        thinkingEffort,
-      });
-    }
-    if (isExpiredSteerError(message)) {
-      throw new Error(t('chat.action.turnEnded'));
-    }
-    throw error;
-  }
-}
-
-function steerMismatchTurnId(message: string): string | null {
-  const match = message.match(/but found `([^`]+)`/);
-  return match?.[1] ?? null;
-}
-
-function isExpiredSteerError(message: string): boolean {
-  return /no active turn to steer|active turn is finishing/i.test(message);
 }

@@ -4,6 +4,9 @@ import type {
   CreateThreadInput,
   MessageDeleteInput,
   MessagePatch,
+  QueueTurnInput,
+  QueuedTurnInputEditRelease,
+  QueuedTurnInputPatch,
   RegenerateMessageInput,
   RuntimeConfigState,
   RuntimeFetchModelsInput,
@@ -29,6 +32,7 @@ import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
+  normalizeRuntimeQueuedTurnInputKind,
   runtimeDeveloperFeaturesEnabled,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -728,6 +732,94 @@ export async function handleRuntimeRestRequest(
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
       thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
     }));
+    return true;
+  }
+
+  const queuedTurnInputCollectionMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/queued-turn-inputs$/);
+  if (queuedTurnInputCollectionMatch && request.method === 'POST') {
+    const threadId = decodeRuntimeId(queuedTurnInputCollectionMatch[1], 'Thread id');
+    const input = await readBody<{
+      attachments?: unknown;
+      clientId?: unknown;
+      input?: unknown;
+      kind?: unknown;
+      skillIds?: unknown;
+      thinking?: unknown;
+      thinkingEffort?: unknown;
+      thinking_effort?: unknown;
+    }>(request);
+    const attachments: QueueTurnInput['attachments'] = Array.isArray(input.attachments)
+      ? input.attachments.filter(isRuntimeMessageAttachment)
+      : [];
+    sendJson(response, 202, await runtime.agentLoop.queueTurnInput(threadId, {
+      attachments,
+      clientId: stringInput(input.clientId),
+      input: typeof input.input === 'string' ? input.input : '',
+      kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
+      skillIds: Array.isArray(input.skillIds)
+        ? input.skillIds.filter((item): item is string => typeof item === 'string')
+        : [],
+      thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
+      thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
+    }));
+    return true;
+  }
+
+  const queuedTurnInputSendNowMatch = url.pathname.match(
+    /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/([^/]+)\/send-now$/,
+  );
+  if (queuedTurnInputSendNowMatch && request.method === 'POST') {
+    const threadId = decodeRuntimeId(queuedTurnInputSendNowMatch[1], 'Thread id');
+    const inputId = decodeRuntimeId(queuedTurnInputSendNowMatch[2], 'Queued input id');
+    sendJson(response, 202, await runtime.agentLoop.sendQueuedTurnInputNow(threadId, inputId));
+    return true;
+  }
+
+  const queuedTurnInputRetrieveMatch = url.pathname.match(
+    /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/([^/]+)\/retrieve$/,
+  );
+  if (queuedTurnInputRetrieveMatch && request.method === 'POST') {
+    const threadId = decodeRuntimeId(queuedTurnInputRetrieveMatch[1], 'Thread id');
+    const inputId = decodeRuntimeId(queuedTurnInputRetrieveMatch[2], 'Queued input id');
+    sendJson(response, 200, await runtime.agentLoop.retrieveQueuedTurnInput(threadId, inputId));
+    return true;
+  }
+
+  const queuedTurnInputReleaseMatch = url.pathname.match(
+    /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/([^/]+)\/release$/,
+  );
+  if (queuedTurnInputReleaseMatch && request.method === 'POST') {
+    const threadId = decodeRuntimeId(queuedTurnInputReleaseMatch[1], 'Thread id');
+    const inputId = decodeRuntimeId(queuedTurnInputReleaseMatch[2], 'Queued input id');
+    const input = await readBody<QueuedTurnInputEditRelease>(request);
+    sendJson(response, 200, await runtime.agentLoop.releaseQueuedTurnInputEdit(
+      threadId,
+      inputId,
+      { editToken: stringInput(input.editToken) ?? '' },
+    ));
+    return true;
+  }
+
+  const queuedTurnInputMatch = url.pathname.match(
+    /^\/v1\/threads\/([^/]+)\/queued-turn-inputs\/([^/]+)$/,
+  );
+  if (queuedTurnInputMatch && request.method === 'PATCH') {
+    const threadId = decodeRuntimeId(queuedTurnInputMatch[1], 'Thread id');
+    const inputId = decodeRuntimeId(queuedTurnInputMatch[2], 'Queued input id');
+    const patch = await readBody<QueuedTurnInputPatch>(request);
+    sendJson(response, 202, await runtime.agentLoop.updateQueuedTurnInput(threadId, inputId, {
+      editToken: stringInput(patch.editToken) ?? '',
+      input: typeof patch.input === 'string' ? patch.input : '',
+      attachments: Array.isArray(patch.attachments)
+        ? patch.attachments.filter(isRuntimeMessageAttachment)
+        : undefined,
+    }));
+    return true;
+  }
+  if (queuedTurnInputMatch && request.method === 'DELETE') {
+    const threadId = decodeRuntimeId(queuedTurnInputMatch[1], 'Thread id');
+    const inputId = decodeRuntimeId(queuedTurnInputMatch[2], 'Queued input id');
+    sendJson(response, 200, await runtime.agentLoop.deleteQueuedTurnInput(threadId, inputId));
     return true;
   }
 

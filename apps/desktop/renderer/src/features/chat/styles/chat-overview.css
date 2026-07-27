@@ -96,6 +96,7 @@
   .chat-delete-bar__inner,
   .chat-scroll-bottom,
   .chat-sender:not(.chat-sender--starter) > .chat-usage-panel,
+  .chat-sender:not(.chat-sender--starter) > .chat-send-queue,
   .chat-sender:not(.chat-sender--starter) .ant-sender,
   .chat-sender:not(.chat-sender--starter) > .chat-command-menu,
   .chat-sender:not(.chat-sender--starter) .chat-attachments {

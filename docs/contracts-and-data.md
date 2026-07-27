@@ -42,7 +42,7 @@
 事件类别：
 
 - thread：created、updated、deleted、metadata、goal、context clear/compact。
-- turn：started、completed、cancelled。
+- turn：started、completed、cancelled，以及线程级输入 queued、updated、deleted。
 - message：created、delta、updated、completed、deleted、truncated。
 - tool：started、output_delta、completed。
 - approval：requested、resolved。
@@ -68,7 +68,7 @@
 
 ## Thread Snapshot
 
-`RuntimeThread` 是 `RuntimeThreadSummary + messages + lastSeq + contextCompaction`。
+`RuntimeThread` 是 `RuntimeThreadSummary + messages + lastSeq + contextCompaction`，并可携带尚未进入 transcript 的 `queuedTurnInputs`。
 
 消息关键字段：
 
@@ -86,6 +86,8 @@
 - tool result 是模型上下文的一部分，toolRun 是 UI 投影的一部分。
 - 删除和重生成要按 message id 操作，而不是按 UI display item id。
 - context compaction 后，旧消息保留给用户看，但 visibility 降为 transcript。
+- 普通/Plan 队列项由 `message.created.payload.queuedInputId` 在写入真实用户消息时原子消费；Goal 项由 `thread.goal_updated.payload` 中的 `queuedInputId + sourceMessage + goal` 原子完成队列消费、可见消息写入和目标建立，不能拆成多次持久化。
+- Goal 的附件、Skill、thinking 和可见源消息 ID 保存在 `RuntimeThreadGoal.execution`；后续计量事件以 `preserveExecution` 复用首个目标事件中的执行选项，避免重复持久化内联图片。用户消息通过 `RuntimeMessage.inputKind` 区分普通、Plan 与 Goal 展示语义。
 
 ## Protocol-aware Model History
 
@@ -123,6 +125,7 @@ renderer 的 `DesktopRuntimeClient` 是方法级 contract。它不应该暴露�
 - `/v1/threads`
 - `/v1/threads/:id`
 - `/v1/threads/:id/turns`
+- `/v1/threads/:id/queued-turn-inputs`
 - `/v1/threads/:id/events`
 - `/v1/threads/:id/debug-traces`（仅全局开发者功能开启时）
 - `/v1/skills`

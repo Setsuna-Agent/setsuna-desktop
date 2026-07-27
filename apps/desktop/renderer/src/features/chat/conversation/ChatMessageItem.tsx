@@ -1,6 +1,6 @@
 import { Bubble } from '@ant-design/x';
 import type { RuntimeMessage, RuntimePlanDecision } from '@setsuna-desktop/contracts';
-import { BookOpen, Copy, Pencil, Trash2 } from 'lucide-react';
+import { BookOpen, Copy, ListTodo, Pencil, Target, Trash2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type AppLocale, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
@@ -136,7 +136,7 @@ export function MessageItem({
         <Bubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={<MessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={<MessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered || message.inputKind === 'goal' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           placement="end"
           variant="filled"
         />
@@ -148,17 +148,37 @@ export function MessageItem({
 }
 
 function UserMessageContent({ message, streaming }: { message: RuntimeMessage; streaming: boolean }) {
+  const hasSemanticKind = message.inputKind === 'plan' || message.inputKind === 'goal';
   return (
     <div className="chat-user-message-content">
       {message.attachments?.length ? (
         <ChatMessageAttachments attachments={message.attachments} />
       ) : null}
-      {message.content || streaming ? (
+      {message.content || streaming || hasSemanticKind ? (
         <div className="chat-user-message-content__text">
-          <WorkspaceMentionText content={message.content || '...'} />
+          <UserMessageKindBadge kind={message.inputKind} />
+          {message.content || streaming
+            ? <WorkspaceMentionText content={message.content || '...'} />
+            : null}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
+  const { t } = useI18n();
+  if (kind !== 'plan' && kind !== 'goal') return null;
+  const label = kind === 'goal'
+    ? t('chat.message.kind.goal')
+    : t('chat.message.kind.plan');
+  return (
+    <span className={`chat-user-message-kind chat-user-message-kind--${kind}`} aria-label={label}>
+      {kind === 'goal'
+        ? <Target size={13} strokeWidth={1.9} aria-hidden="true" />
+        : <ListTodo size={13} strokeWidth={1.9} aria-hidden="true" />}
+      <span>{label}</span>
+    </span>
   );
 }
 

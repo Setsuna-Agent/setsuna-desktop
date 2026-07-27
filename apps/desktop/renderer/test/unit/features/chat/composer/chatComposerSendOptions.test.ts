@@ -3,42 +3,41 @@ import { describe, expect, it } from 'vitest';
 import { createChatComposerSendOptions } from '../../../../../src/features/chat/composer/chatComposerSendOptions.js';
 
 describe('createChatComposerSendOptions', () => {
-  it('keeps steer-compatible attachments, skills, and thinking options during an active turn', () => {
+  it('keeps Plan semantics with attachments, skills, and thinking options for a queued turn', () => {
     expect(createChatComposerSendOptions({
       attachments: [imageAttachment],
-      goalModeEnabled: true,
+      goalModeEnabled: false,
       planModeEnabled: true,
       selectedSkillIds: ['skill_review'],
-      steering: true,
       supportsImageInput: true,
       thinkingEffort: 'high',
       thinkingEnabled: true,
       thinkingSupported: true,
     })).toEqual({
       attachments: [imageAttachment],
+      collaborationMode: 'plan',
       skillIds: ['skill_review'],
       thinking: true,
       thinkingEffort: 'high',
     });
   });
 
-  it('adds new-turn-only modes to a regular send', () => {
+  it('keeps Goal semantics together with attachments and execution options', () => {
     expect(createChatComposerSendOptions({
-      attachments: [],
+      attachments: [imageAttachment, documentAttachment],
       goalModeEnabled: true,
-      planModeEnabled: true,
-      selectedSkillIds: [],
-      steering: false,
-      supportsImageInput: false,
-      thinkingEffort: '',
-      thinkingEnabled: false,
+      planModeEnabled: false,
+      selectedSkillIds: ['skill_goal'],
+      supportsImageInput: true,
+      thinkingEffort: 'high',
+      thinkingEnabled: true,
       thinkingSupported: true,
     })).toEqual({
-      attachments: [],
-      collaborationMode: 'plan',
+      attachments: [imageAttachment, documentAttachment],
       goalMode: true,
-      skillIds: [],
-      thinking: false,
+      skillIds: ['skill_goal'],
+      thinking: true,
+      thinkingEffort: 'high',
     });
   });
 
@@ -48,7 +47,6 @@ describe('createChatComposerSendOptions', () => {
       goalModeEnabled: false,
       planModeEnabled: false,
       selectedSkillIds: [],
-      steering: false,
       supportsImageInput: false,
       thinkingEffort: '',
       thinkingEnabled: false,

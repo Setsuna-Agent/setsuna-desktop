@@ -6,6 +6,13 @@ import type {
   DesktopRuntimeClient,
   MessageDeleteInput,
   MessagePatch,
+  QueueTurnInput,
+  QueuedTurnInputEditRelease,
+  QueuedTurnInputEditReleaseResponse,
+  QueuedTurnInputEditSession,
+  QueuedTurnInputPatch,
+  QueuedTurnInputResponse,
+  DeleteQueuedTurnInputResponse,
   RegenerateMessageInput,
   RuntimeApprovalList,
   RuntimeAvailableModelsResponse,
@@ -51,6 +58,7 @@ import type {
   RuntimeWorkspaceDependenciesToggleInput,
   SendTurnInput,
   SendTurnResponse,
+  StartTurnResponse,
   SteerTurnInput,
   ThreadList,
   ThreadMemoryModePatch,
@@ -161,7 +169,7 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       });
     },
     sendTurn(threadId: string, input: SendTurnInput) {
-      return request<SendTurnResponse>({
+      return request<StartTurnResponse>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/turns`,
         method: 'POST',
         body: input,
@@ -172,6 +180,45 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         path: `/v1/threads/${encodeURIComponent(threadId)}/turns/${encodeURIComponent(turnId)}/steer`,
         method: 'POST',
         body: input,
+      });
+    },
+    queueTurnInput(threadId: string, input: QueueTurnInput) {
+      return request<QueuedTurnInputResponse>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs`,
+        method: 'POST',
+        body: input,
+      });
+    },
+    retrieveQueuedTurnInput(threadId: string, inputId: string) {
+      return request<QueuedTurnInputEditSession>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}/retrieve`,
+        method: 'POST',
+      });
+    },
+    releaseQueuedTurnInputEdit(threadId: string, inputId: string, input: QueuedTurnInputEditRelease) {
+      return request<QueuedTurnInputEditReleaseResponse>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}/release`,
+        method: 'POST',
+        body: input,
+      });
+    },
+    updateQueuedTurnInput(threadId: string, inputId: string, patch: QueuedTurnInputPatch) {
+      return request<QueuedTurnInputResponse>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}`,
+        method: 'PATCH',
+        body: patch,
+      });
+    },
+    deleteQueuedTurnInput(threadId: string, inputId: string) {
+      return request<DeleteQueuedTurnInputResponse>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}`,
+        method: 'DELETE',
+      });
+    },
+    sendQueuedTurnInputNow(threadId: string, inputId: string) {
+      return request<QueuedTurnInputResponse>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/queued-turn-inputs/${encodeURIComponent(inputId)}/send-now`,
+        method: 'POST',
       });
     },
     updateMessage(threadId: string, messageId: string, patch: MessagePatch) {

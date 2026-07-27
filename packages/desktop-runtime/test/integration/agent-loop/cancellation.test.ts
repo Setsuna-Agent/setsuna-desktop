@@ -35,7 +35,7 @@ describe('agent loop turn cancellation', () => {
       await waitForModelRequest(modelClient);
       await modelClient.waitUntilAbortListenerReady();
   
-      await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
+      await expect(loop.cancelTurn(thread.id, started.turnId!)).resolves.toBe(true);
       const events = await waitForTurnCancelled(threadStore, thread.id);
       const saved = await threadStore.getThread(thread.id);
       const markerIndex = events.findIndex((event) => event.type === 'message.created'
@@ -79,7 +79,7 @@ describe('agent loop turn cancellation', () => {
       await waitForModelRequest(modelClient);
       await modelClient.waitUntilAbortListenerReady();
   
-      await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
+      await expect(loop.cancelTurn(thread.id, started.turnId!)).resolves.toBe(true);
   
       const events = await threadStore.listEvents(thread.id, 0);
       const saved = await threadStore.getThread(thread.id);

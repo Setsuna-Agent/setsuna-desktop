@@ -1,5 +1,9 @@
 import type { RuntimeEvent } from '../events.js';
-import type { RuntimeMailboxDeliveryRecord, RuntimeThread } from '../threads.js';
+import {
+  cloneRuntimeThreadGoal,
+  type RuntimeMailboxDeliveryRecord,
+  type RuntimeThread,
+} from '../threads.js';
 import {
   contextCompactionItem,
   contextCompactionItemId,
@@ -193,7 +197,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
       params: {
         threadId: event.threadId,
         turnId: event.turnId ?? null,
-        goal: { ...event.payload.goal },
+        goal: cloneRuntimeThreadGoal(event.payload.goal),
       },
     }];
   }

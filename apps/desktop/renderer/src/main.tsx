@@ -32,6 +32,7 @@ import './features/chat/styles/chat-timeline-divider.css';
 import './shared/styles/loading-indicators.css';
 import './features/chat/styles/markdown.css';
 import './features/chat/styles/chat-composer.css';
+import './features/chat/styles/chat-send-queue.css';
 import './app/styles/sidebar-search.css';
 import './shared/styles/code-theme.css';
 

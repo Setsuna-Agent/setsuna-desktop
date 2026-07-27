@@ -700,6 +700,16 @@ export async function dispatchAppServerRpcRequest(
       ...appServerPlanDecisionInput(input.planDecision ?? input.plan_decision),
       ...thinking,
     });
+    if ('queuedInputId' in started && !started.turnId) {
+      return {
+        queued: true,
+        queuedInputId: started.queuedInputId,
+        // queuedInputId 只标识持久化输入，不是可 interrupt/跟踪的 turn。实际调度
+        // 时会生成真正的 turnId，因此这里必须显式返回空 turn。
+        turn: null,
+      };
+    }
+    if (!started.turnId) throw new AppServerRpcError(-32600, 'turn/start did not return a turn id');
     return { turn: sweTurn(started.turnId, 'inProgress') };
   }
 

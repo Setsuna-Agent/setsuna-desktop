@@ -94,7 +94,7 @@ describe('agent loop memory extraction', () => {
       });
   
       const first = await loop.startTurn(thread.id, { input: 'first turn' });
-      await waitForTurnCompleted(threadStore, thread.id, first.turnId);
+      await waitForTurnCompleted(threadStore, thread.id, first.turnId!);
       await modelClient.waitForPassiveStart();
       await waitForTestState(
         () => loop.activeTurnId(thread.id),
@@ -103,7 +103,7 @@ describe('agent loop memory extraction', () => {
       );
   
       const second = await loop.startTurn(thread.id, { input: 'second turn' });
-      await waitForTurnCompleted(threadStore, thread.id, second.turnId);
+      await waitForTurnCompleted(threadStore, thread.id, second.turnId!);
       expect(modelClient.requests.filter((request) => request.model === 'local-runtime-smoke')).toHaveLength(2);
       expect(modelClient.requests.filter((request) => request.model === 'passive-memory-extraction')).toHaveLength(1);
   

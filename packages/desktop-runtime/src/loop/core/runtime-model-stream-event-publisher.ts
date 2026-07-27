@@ -31,14 +31,22 @@ type RuntimeModelStreamEventPublisherOptions = {
 export class RuntimeModelStreamEventPublisher {
   constructor(private readonly options: RuntimeModelStreamEventPublisherOptions) {}
 
-  async publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void> {
+  async publishMessage(
+    threadId: string,
+    turnId: string,
+    message: RuntimeMessage,
+    options: { queuedInputId?: string } = {},
+  ): Promise<void> {
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
       turnId,
       type: 'message.created',
       createdAt: message.createdAt,
-      payload: { message },
+      payload: {
+        message,
+        ...(options.queuedInputId ? { queuedInputId: options.queuedInputId } : {}),
+      },
     });
   }
 

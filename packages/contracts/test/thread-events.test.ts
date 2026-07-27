@@ -995,6 +995,12 @@ describe('applyRuntimeEventToThread context compaction', () => {
       lastMessagePreview: '',
       lastSeq: 0,
       messages: [],
+      queuedTurnInputs: [{
+        id: 'queued_goal',
+        kind: 'goal',
+        input: 'Ship alignment.',
+        createdAt: '2026-06-26T00:00:00.000Z',
+      }],
     };
     const updatedEvent: RuntimeEvent = {
       id: 'event_goal_1',
@@ -1003,6 +1009,23 @@ describe('applyRuntimeEventToThread context compaction', () => {
       type: 'thread.goal_updated',
       createdAt: '2026-06-26T00:00:01.000Z',
       payload: {
+        queuedInputId: 'queued_goal',
+        sourceMessage: {
+          id: 'message_goal',
+          turnId: 'turn_goal',
+          role: 'user',
+          inputKind: 'goal',
+          content: 'Ship alignment.',
+          createdAt: '2026-06-26T00:00:01.000Z',
+          status: 'complete',
+          attachments: [{
+            id: 'goal_image',
+            name: 'goal.png',
+            type: 'image/png',
+            size: 1,
+            url: 'data:image/png;base64,AA==',
+          }],
+        },
         goal: {
           threadId: 'thread_1',
           objective: 'Ship alignment.',
@@ -1012,22 +1035,64 @@ describe('applyRuntimeEventToThread context compaction', () => {
           timeUsedSeconds: 0,
           createdAt: 1782432001,
           updatedAt: 1782432001,
+          execution: {
+            attachments: [{
+              id: 'goal_image',
+              name: 'goal.png',
+              type: 'image/png',
+              size: 1,
+              url: 'data:image/png;base64,AA==',
+            }],
+            skillIds: ['skill_goal'],
+            thinking: true,
+          },
+        },
+      },
+    };
+    const accountedEvent: RuntimeEvent = {
+      id: 'event_goal_accounted',
+      seq: 2,
+      threadId: 'thread_1',
+      type: 'thread.goal_updated',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        preserveExecution: true,
+        goal: {
+          ...updatedEvent.payload.goal,
+          execution: undefined,
+          tokensUsed: 25,
+          updatedAt: 1782432002,
         },
       },
     };
     const clearedEvent: RuntimeEvent = {
       id: 'event_goal_2',
-      seq: 2,
+      seq: 3,
       threadId: 'thread_1',
       type: 'thread.goal_cleared',
-      createdAt: '2026-06-26T00:00:02.000Z',
+      createdAt: '2026-06-26T00:00:03.000Z',
       payload: { cleared: true },
     };
 
     const withGoal = applyRuntimeEventToThread(thread, updatedEvent);
-    const cleared = applyRuntimeEventToThread(withGoal, clearedEvent);
+    const accounted = applyRuntimeEventToThread(withGoal, accountedEvent);
+    const cleared = applyRuntimeEventToThread(accounted, clearedEvent);
 
     expect(withGoal.goal).toEqual(updatedEvent.payload.goal);
+    expect(withGoal.queuedTurnInputs).toEqual([]);
+    expect(withGoal.messages).toEqual([
+      expect.objectContaining({
+        id: 'message_goal',
+        inputKind: 'goal',
+        content: 'Ship alignment.',
+      }),
+    ]);
+    expect(withGoal.messageCount).toBe(1);
+    expect(withGoal.lastMessagePreview).toBe('Ship alignment.');
+    expect(accounted.goal).toMatchObject({
+      tokensUsed: 25,
+      execution: updatedEvent.payload.goal.execution,
+    });
     expect(cleared.goal).toBeUndefined();
   });
 
@@ -1677,5 +1742,129 @@ describe('applyRuntimeEventToThread context compaction', () => {
     });
     cloned.turns![0]!.items[0]!.content = 'mutated';
     expect(projected.turns?.[0]?.items[0]?.content).toBe('Hello');
+  });
+});
+
+describe('applyRuntimeEventToThread queued turn inputs', () => {
+  it('keeps pending inputs outside the transcript and consumes them with message creation', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_queue',
+      title: 'Queue projection',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      updatedAt: '2026-07-27T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+    };
+    const queued = [
+      {
+        id: 'event_queue_1',
+        seq: 1,
+        threadId: thread.id,
+        type: 'turn.input_queued',
+        createdAt: '2026-07-27T00:00:01.000Z',
+        payload: {
+          input: {
+            id: 'queued_1',
+            clientId: 'client_queued_1',
+            input: 'Original first input',
+            skillIds: ['skill_1'],
+            createdAt: '2026-07-27T00:00:01.000Z',
+          },
+        },
+      },
+      {
+        id: 'event_queue_2',
+        seq: 2,
+        threadId: thread.id,
+        type: 'turn.input_queued',
+        createdAt: '2026-07-27T00:00:02.000Z',
+        payload: {
+          input: {
+            id: 'queued_2',
+            input: 'Second input',
+            createdAt: '2026-07-27T00:00:02.000Z',
+          },
+        },
+      },
+    ] satisfies RuntimeEvent[];
+
+    const pending = queued.reduce(applyRuntimeEventToThread, thread);
+    expect(pending.messages).toEqual([]);
+    expect(pending.queuedTurnInputs?.map((input) => input.input)).toEqual([
+      'Original first input',
+      'Second input',
+    ]);
+
+    const edited = applyRuntimeEventToThread(pending, {
+      id: 'event_update_1',
+      seq: 3,
+      threadId: thread.id,
+      type: 'turn.input_updated',
+      createdAt: '2026-07-27T00:00:03.000Z',
+      payload: {
+        input: {
+          id: 'queued_1',
+          clientId: 'client_queued_1',
+          input: 'Edited first input',
+          attachments: [{
+            id: 'attachment_1',
+            name: 'edited.pdf',
+            type: 'application/pdf',
+            size: 128,
+            source: 'runtime',
+            assetId: 'asset_1',
+          }],
+          skillIds: ['skill_1'],
+          createdAt: '2026-07-27T00:00:01.000Z',
+          updatedAt: '2026-07-27T00:00:03.000Z',
+        },
+      },
+    });
+    expect(edited.queuedTurnInputs?.[0]).toMatchObject({
+      input: 'Edited first input',
+      attachments: [expect.objectContaining({ id: 'attachment_1' })],
+      skillIds: ['skill_1'],
+      updatedAt: '2026-07-27T00:00:03.000Z',
+    });
+
+    const consumed = applyRuntimeEventToThread(edited, {
+      id: 'event_message_1',
+      seq: 4,
+      threadId: thread.id,
+      turnId: 'turn_2',
+      type: 'message.created',
+      createdAt: '2026-07-27T00:00:04.000Z',
+      payload: {
+        queuedInputId: 'queued_1',
+        message: {
+          id: 'message_1',
+          clientId: 'client_queued_1',
+          turnId: 'turn_2',
+          role: 'user',
+          content: 'Edited first input',
+          createdAt: '2026-07-27T00:00:04.000Z',
+          status: 'complete',
+        },
+      },
+    });
+    expect(consumed.queuedTurnInputs?.map((input) => input.id)).toEqual(['queued_2']);
+    expect(consumed.messages).toMatchObject([{
+      clientId: 'client_queued_1',
+      content: 'Edited first input',
+      turnId: 'turn_2',
+    }]);
+
+    const deleted = applyRuntimeEventToThread(consumed, {
+      id: 'event_delete_2',
+      seq: 5,
+      threadId: thread.id,
+      type: 'turn.input_deleted',
+      createdAt: '2026-07-27T00:00:05.000Z',
+      payload: { inputId: 'queued_2' },
+    });
+    expect(deleted.queuedTurnInputs).toEqual([]);
   });
 });

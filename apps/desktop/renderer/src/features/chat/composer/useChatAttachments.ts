@@ -126,6 +126,36 @@ export function useChatAttachments({
     removalTimersRef.current.set(key, timer);
   }, [commitItems, discardStoredAttachment, replaceItem]);
 
+  const clear = useCallback(() => {
+    const currentItems = itemsRef.current;
+    for (const item of currentItems) {
+      if (item.status === 'uploading') cancelledKeysRef.current.add(item.key);
+    }
+    for (const timer of removalTimersRef.current.values()) window.clearTimeout(timer);
+    removalTimersRef.current.clear();
+    commitItems([]);
+
+    // 已归属线程的队列附件不会被 deletePending 删除；编辑期间新上传但未提交的
+    // 附件则会在取消或失败时被可靠回收。
+    const disposable = disposableChatAttachments(currentItems, inFlightAttachmentIdsRef.current);
+    for (const attachment of disposable) discardStoredAttachment(attachment);
+  }, [commitItems, discardStoredAttachment]);
+
+  const replaceWithExisting = useCallback((attachments: RuntimeMessageAttachment[]) => {
+    clear();
+    const uniqueAttachments = [...new Map(
+      attachments.map((attachment) => [attachment.id, attachment] as const),
+    ).values()];
+    commitItems(uniqueAttachments.map((attachment) => ({
+      key: attachmentKey(),
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+      status: 'ready',
+      attachment: { ...attachment },
+    })));
+  }, [clear, commitItems]);
+
   const clearAfterSend = useCallback((sentAttachments: RuntimeMessageAttachment[]) => {
     const sentIds = new Set(sentAttachments.map((attachment) => attachment.id));
     if (!sentIds.size) return;
@@ -181,8 +211,10 @@ export function useChatAttachments({
     atLimit: items.filter((item) => item.status !== 'removing').length >= maxChatAttachments,
     beginSend,
     busy: items.some((item) => item.status === 'uploading'),
+    clear,
     items,
     remove,
+    replaceWithExisting,
     sendableAttachments,
     settleSend,
   };

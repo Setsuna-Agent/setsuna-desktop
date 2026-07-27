@@ -25,6 +25,7 @@ type RuntimeCompactionTurnCoordinatorOptions = {
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
   turnTermination: Pick<RuntimeTurnTerminationCoordinator, 'publishCancelledOnce'>;
+  observeRun?(threadId: string, turnId: string, done: Promise<RuntimeThread>): void;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
@@ -52,6 +53,7 @@ export class RuntimeCompactionTurnCoordinator {
       threadId,
       turnId,
     }, (task) => this.run({ candidate, force, signal: task.controller.signal, thread, threadId, turnId }));
+    this.options.observeRun?.(threadId, turnId, run.done);
     return run.done;
   }
 

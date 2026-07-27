@@ -100,7 +100,7 @@ describe('agent loop collaboration tools', () => {
       expect(waitingThread?.messages.some((message) => message.content.includes('主任务会继续等待'))).toBe(true);
   
       modelClient.finishChild();
-      await waitForTurnCompleted(threadStore, parent.id, started.turnId);
+      await waitForTurnCompleted(threadStore, parent.id, started.turnId!);
       const completed = await threadStore.getThread(parent.id);
   
       expect(modelClient.parentRequests).toHaveLength(3);

@@ -103,7 +103,7 @@ BrowserToolHost
 - 流式消费模型输出，发布 assistant delta、reasoning 标记、tool call preview。
 - 执行工具调用，处理审批、并行只读工具批次、工具预算、文件变更预览、shell 输出 delta。
 - 累计本轮所有 sampling step 的 usage，保存显式 memory，发布 `turn.completed`，再把被动 memory 抽取放入可取消的后台队列。
-- 支持 cancel、steer、regenerate、review turn。
+- 支持 cancel、跨轮次用户发送队列、显式 steer、regenerate、review turn；队列只在正常完成后自动续发。
 
 ## 本地数据边界
 

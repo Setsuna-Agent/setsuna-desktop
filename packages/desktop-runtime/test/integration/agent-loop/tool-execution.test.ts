@@ -297,7 +297,7 @@ describe('agent loop tool execution', () => {
   
       const started = await loop.startTurn(thread.id, { input: 'wait on the dynamic tool' });
       await dynamicCallStarted;
-      await expect(loop.cancelTurn(thread.id, started.turnId)).resolves.toBe(true);
+      await expect(loop.cancelTurn(thread.id, started.turnId!)).resolves.toBe(true);
       const events = await waitForTurnCancelled(threadStore, thread.id);
   
       expect(events.some((event) =>

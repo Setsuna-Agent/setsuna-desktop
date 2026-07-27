@@ -63,6 +63,7 @@ import {
   shouldCompactConversationOverview,
   shouldShiftConversationOverviewContent,
 } from './conversation/conversationOverviewLayout.js';
+import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 
 type StarterSuggestion = {
@@ -135,6 +136,7 @@ export function ChatWorkspace({
   onSelectModel,
   onSearchProjectEntries,
   onSend,
+  queuedTurnActions,
   onPlanDecision,
   onReviewRefresh,
   onSetMultiAgentEnabled,
@@ -183,6 +185,7 @@ export function ChatWorkspace({
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
+  queuedTurnActions: ChatQueuedTurnActions;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
@@ -478,6 +481,7 @@ export function ChatWorkspace({
       onOpenSideChat={onOpenSideChat}
       onSetMultiAgentEnabled={onSetMultiAgentEnabled}
       onSend={handleSend}
+      queuedTurnActions={queuedTurnActions}
       onStartThreadReview={onStartThreadReview}
       onThreadMemoryModeChange={onThreadMemoryModeChange}
       onImageAttachmentRequestConsumed={onImageAttachmentRequestConsumed}

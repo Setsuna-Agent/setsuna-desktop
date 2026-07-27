@@ -3,6 +3,7 @@ import type { SlotConfigType } from '@ant-design/x/es/sender';
 import type {
   DesktopRuntimeClient,
   RuntimeConfigState,
+  RuntimeQueuedTurnInput,
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeThreadMemoryMode,
@@ -14,6 +15,7 @@ import type {
 import { Button, Dropdown } from 'antd';
 import { ArrowUp, Boxes, Check, CircleGauge, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -34,6 +36,7 @@ import { ChatApprovalPolicyMenu } from './composer/ChatApprovalPolicyMenu.js';
 import { ChatAttachmentTray } from './composer/ChatAttachmentTray.js';
 import { ProjectEntryCommandMenu } from './composer/ChatCommandMenus.js';
 import { ChatModelPicker } from './composer/ChatModelPicker.js';
+import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
 import { chatAttachmentAccept } from './composer/chatAttachments.js';
 import { parseMentionCommand, parseSlashCommand, skillDisplayText } from './composer/chatCommandUtils.js';
@@ -49,7 +52,9 @@ import {
   createWorkspaceMentionSlots,
 } from './composer/chatComposerSlots.js';
 import { useChatAttachments } from './composer/useChatAttachments.js';
+import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
+import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 
 type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
 type ActiveThinkingConfig = {
@@ -58,6 +63,7 @@ type ActiveThinkingConfig = {
   defaultEffort: string;
 };
 const EMPTY_SLOT_CONFIG: SlotConfigType[] = [];
+const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
 
 export function ChatComposer({
   activeTurnId,
@@ -87,6 +93,7 @@ export function ChatComposer({
   onOpenSideChat,
   onSetMultiAgentEnabled,
   onSend,
+  queuedTurnActions,
   onStartThreadReview,
   onThreadMemoryModeChange,
   onImageAttachmentRequestConsumed,
@@ -122,6 +129,7 @@ export function ChatComposer({
   onOpenSideChat?: () => void;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
+  queuedTurnActions: ChatQueuedTurnActions;
   onStartThreadReview: () => void | Promise<unknown>;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
@@ -156,12 +164,14 @@ export function ChatComposer({
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
+  const queuedTurnInputs = currentThread?.queuedTurnInputs ?? EMPTY_QUEUED_TURN_INPUTS;
+  const deleteQueuedTurnInput = queuedTurnActions.deleteQueuedTurnInput;
+  const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
   const commandCursorOffset = cursorOffset ?? draft.length;
   const mentionCommand = useMemo(() => parseMentionCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
   const slashCommand = useMemo(() => parseSlashCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
   const mentionQuery = mentionCommand?.query ?? '';
   const commandOpen = Boolean(focused && mentionCommand && dismissedCommandValue !== draft);
-  const skillCommandOpen = Boolean(focused && !commandOpen && (slashCommand ? dismissedSlashValue !== draft : slashMenuForcedOpen));
   const selectedSkillIds = useMemo(() => new Set(selectedSkills.map((skill) => skill.id)), [selectedSkills]);
   const skillQuery = slashCommand?.query.trim().toLowerCase() ?? '';
   const supportsImageInput = activeModelSupportsImages(config);
@@ -171,21 +181,67 @@ export function ChatComposer({
     atLimit: attachmentLimitReached,
     beginSend: beginAttachmentSend,
     busy: attachmentsBusy,
+    clear: clearAttachments,
     items: attachmentItems,
     remove: removeAttachment,
+    replaceWithExisting: replaceAttachmentsWithExisting,
     sendableAttachments,
     settleSend: settleAttachmentSend,
   } = useChatAttachments({ client, supportsImageInput });
   const thinkingConfig = useMemo(() => activeModelThinkingConfig(config), [config]);
   const attachmentOnlyReady = sendableAttachments.length > 0 && !draft.trim();
-  const activeSteerReady = Boolean(activeTurnId && (draft.trim() || sendableAttachments.length));
+  const activeQueueReady = Boolean(
+    activeTurnId
+    && (draft.trim() || sendableAttachments.length),
+  );
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
   const memoryMode = threadMemoryMode ?? 'enabled';
   const memoryGenerationEnabled = config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
   const multiAgentEnabled = config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
   const activeGoal = currentThread?.goal?.status === 'active' ? currentThread.goal : null;
   const goalEnabled = goalModeEnabled || Boolean(activeGoal);
-  const hasComposerAttachments = attachmentItems.some((item) => item.status !== 'removing');
+  const composerHasProtectedState = Boolean(
+    draft
+    || attachmentItems.length
+    || selectedSkills.length
+    || thinkingEnabled
+    || planModeEnabled
+    || goalModeEnabled,
+  );
+  const resetQueuedTurnComposer = useCallback(() => {
+    clearAttachments();
+    setSelectedSkills([]);
+    onDraftChange('');
+    lastEditorDraftRef.current = '';
+    senderRef.current?.clear?.();
+  }, [clearAttachments, onDraftChange]);
+  const replaceQueuedTurnComposer = useCallback((input: RuntimeQueuedTurnInput) => {
+    replaceAttachmentsWithExisting(input.attachments ?? []);
+    setSelectedSkills([]);
+    onDraftChange(input.input);
+    setFocused(true);
+  }, [
+    onDraftChange,
+    replaceAttachmentsWithExisting,
+  ]);
+  const queuedTurnEdit = useQueuedTurnComposerEdit({
+    actions: queuedTurnActions,
+    attachmentsBusy,
+    composerHasProtectedState,
+    queuedTurnInputs,
+    replaceComposer: replaceQueuedTurnComposer,
+    resetComposer: resetQueuedTurnComposer,
+    sendableAttachments,
+    setSubmitting,
+    submitting,
+  });
+  const skillCommandOpen = Boolean(
+    !queuedTurnEdit.editing
+    && !queuedTurnEdit.retrieving
+    && focused
+    && !commandOpen
+    && (slashCommand ? dismissedSlashValue !== draft : slashMenuForcedOpen),
+  );
   const slashEntries = useMemo(() => {
     const actions: SlashQuickAction[] = [
       {
@@ -224,9 +280,7 @@ export function ChatComposer({
         kind: 'action',
         type: 'goal',
         title: t('chat.composer.goalMode'),
-        description: !activeGoal && hasComposerAttachments
-          ? t('chat.composer.goalAttachmentBlocked')
-          : activeGoal
+        description: activeGoal
           ? t('chat.composer.goalActive', { objective: activeGoal.objective })
           : activeTurnId
             ? goalModeEnabled
@@ -236,7 +290,6 @@ export function ChatComposer({
             ? t('chat.composer.goalEnabled')
             : t('chat.composer.goalDescription'),
         checked: goalEnabled,
-        disabled: !activeGoal && hasComposerAttachments,
         scope: activeGoal || (!activeTurnId && goalEnabled)
           ? t('chat.composer.scope.enabled')
           : activeTurnId
@@ -330,7 +383,7 @@ export function ChatComposer({
       .slice(0, Math.max(0, 8 - visibleActions.length))
       .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
     return [...visibleActions, ...visibleSkills];
-  }, [activeGoal, activeProject, activeTurnId, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, hasComposerAttachments, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills, t]);
+  }, [activeGoal, activeProject, activeTurnId, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills, t]);
 
   useEffect(() => {
     if (!commandOpen || !activeProject) {
@@ -429,7 +482,6 @@ export function ChatComposer({
     consumedImageAttachmentRequestIdRef.current = imageAttachmentRequest.requestId;
     const outcome = addExistingImage(imageAttachmentRequest.attachment);
     if (outcome === 'added') {
-      setGoalModeEnabled(false);
       setFocused(true);
     }
     onImageAttachmentRequestConsumed?.(imageAttachmentRequest.requestId, outcome);
@@ -505,7 +557,7 @@ export function ChatComposer({
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (skillCommandOpen) return handleSkillKeyDown(event);
     if (!commandOpen) {
-      return submitActiveSteerFromKeyboard(event);
+      return submitActiveQueueFromKeyboard(event);
     }
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -532,7 +584,7 @@ export function ChatComposer({
       selectEntry(entries[activeIndex]);
       return false;
     }
-    return submitActiveSteerFromKeyboard(event);
+    return submitActiveQueueFromKeyboard(event);
   };
 
   const handleSkillKeyDown = (event: ReactKeyboardEvent) => {
@@ -593,7 +645,9 @@ export function ChatComposer({
       return;
     }
     if (item.kind === 'action' && item.type === 'plan') {
-      setPlanModeEnabled((value) => !value);
+      const enabled = !planModeEnabled;
+      setPlanModeEnabled(enabled);
+      if (enabled) setGoalModeEnabled(false);
       setFocused(true);
       return;
     }
@@ -607,7 +661,9 @@ export function ChatComposer({
         void onClearThreadGoal();
         setGoalModeEnabled(false);
       } else {
-        setGoalModeEnabled((value) => !value);
+        const enabled = !goalModeEnabled;
+        setGoalModeEnabled(enabled);
+        if (enabled) setPlanModeEnabled(false);
       }
       setFocused(true);
       return;
@@ -635,13 +691,15 @@ export function ChatComposer({
 
   const submitDraft = async (value?: string) => {
     if (attachmentsBusy || submitting) return;
-    const steering = Boolean(activeTurnId);
+    if (queuedTurnEdit.editing) {
+      await queuedTurnEdit.submit(value ?? draft);
+      return;
+    }
     const sendOptions = createChatComposerSendOptions({
       attachments: sendableAttachments,
       goalModeEnabled,
       planModeEnabled,
       selectedSkillIds: selectedSkills.map((skill) => skill.id),
-      steering,
       supportsImageInput,
       thinkingEffort,
       thinkingEnabled,
@@ -656,22 +714,18 @@ export function ChatComposer({
     setSubmitting(false);
     if (!sent) return;
     setSelectedSkills([]);
-    if (!steering) {
-      setPlanModeEnabled(false);
-      setGoalModeEnabled(false);
-    }
+    setPlanModeEnabled(false);
+    setGoalModeEnabled(false);
     senderRef.current?.clear?.();
   };
 
   const addFiles = (files: File[]) => {
-    if (!files.length || submitting) return;
-    // 目前创建目标时只保存目标描述。接收文件前先关闭目标模式，避免资源被静默丢弃。
-    setGoalModeEnabled(false);
+    if (!files.length || submitting || queuedTurnEdit.retrieving) return;
     void addAttachmentFiles(files);
   };
 
-  const submitActiveSteerFromKeyboard = (event: ReactKeyboardEvent) => {
-    if (!activeSteerReady || !isPlainEnter(event)) return undefined;
+  const submitActiveQueueFromKeyboard = (event: ReactKeyboardEvent) => {
+    if (!activeQueueReady || !isPlainEnter(event)) return undefined;
     event.preventDefault();
     event.stopPropagation();
     void submitDraft(draft);
@@ -732,10 +786,19 @@ export function ChatComposer({
       {usagePanelOpen && currentThread ? (
         <ChatUsagePanel threadUsage={threadUsage} onClose={() => setUsagePanelOpen(false)} />
       ) : null}
+      <ChatSendQueue
+        disabled={submitting || queuedTurnEdit.editing}
+        editDisabled={queuedTurnEdit.editDisabled}
+        hasActiveTurn={Boolean(activeTurnId)}
+        items={queuedTurnEdit.visibleQueuedTurnInputs}
+        onDelete={deleteQueuedTurnInput}
+        onEdit={queuedTurnEdit.edit}
+        onSendNow={sendQueuedTurnInputNow}
+      />
       <Sender
         ref={senderRef}
         value={draft}
-        disabled={submitting}
+        disabled={submitting || queuedTurnEdit.retrieving}
         slotConfig={initialSlotConfigRef.current}
         loading={Boolean(activeTurnId)}
         placeholder={placeholder ?? t('chat.composer.placeholder')}
@@ -767,6 +830,7 @@ export function ChatComposer({
               <button
                 className={`chat-sender-icon-button chat-sender-command-button ${slashMenuForcedOpen ? 'is-active' : ''}`}
                 type="button"
+                disabled={queuedTurnEdit.editing || queuedTurnEdit.retrieving}
                 aria-label={t('chat.composer.openCommands')}
                 title={t('chat.composer.openCommands')}
                 onMouseDown={(event) => event.preventDefault()}
@@ -775,6 +839,7 @@ export function ChatComposer({
                 <Plus size={14} />
               </button>
               <ChatThinkingMenu
+                disabled={queuedTurnEdit.editing || queuedTurnEdit.retrieving}
                 enabled={thinkingEnabled}
                 menuOpen={thinkingMenuOpen}
                 thinkingConfig={thinkingConfig}
@@ -788,6 +853,13 @@ export function ChatComposer({
                 permissionProfile={config?.permissionProfile ?? 'workspace-write'}
                 onChange={onAccessModeChange}
               />
+              {queuedTurnEdit.editing ? (
+                <ChatModeBadge
+                  disabled={submitting}
+                  label={t('chat.queue.editing')}
+                  onClose={() => void queuedTurnEdit.cancel()}
+                />
+              ) : null}
               {planModeEnabled ? (
                 <ChatModeBadge
                   label={activeTurnId ? t('chat.composer.badge.planNext') : t('chat.composer.badge.plan')}
@@ -810,7 +882,7 @@ export function ChatComposer({
                 type="button"
                 aria-label={t('chat.composer.uploadAttachment')}
                 title={t('chat.composer.uploadAttachmentHint')}
-                disabled={attachmentLimitReached || submitting}
+                disabled={attachmentLimitReached || submitting || queuedTurnEdit.retrieving}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip size={13} />
@@ -824,8 +896,8 @@ export function ChatComposer({
                 onSelect={onSelectModel}
               />
               <span className="chat-sender-divider" aria-hidden="true" />
-              {activeSteerReady ? (
-                <button className="chat-sender-attachment-submit" type="button" aria-label={t('chat.composer.steer')} title={t('chat.composer.steer')} disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
+              {activeQueueReady ? (
+                <button className="chat-sender-attachment-submit" type="button" aria-label={t('chat.composer.queue')} title={t('chat.composer.queue')} disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
                   <ArrowUp size={16} />
                 </button>
               ) : activeTurnId ? (
@@ -847,11 +919,19 @@ export function ChatComposer({
   );
 }
 
-function ChatModeBadge({ label, onClose }: { label: string; onClose: () => void }) {
+function ChatModeBadge({
+  disabled = false,
+  label,
+  onClose,
+}: {
+  disabled?: boolean;
+  label: string;
+  onClose: () => void;
+}) {
   const { t } = useI18n();
 
   return (
-    <button className="chat-sender-plan-badge" type="button" aria-label={t('chat.composer.closeBadge', { label })} title={t('chat.composer.closeBadge', { label })} onClick={onClose}>
+    <button className="chat-sender-plan-badge" type="button" disabled={disabled} aria-label={t('chat.composer.closeBadge', { label })} title={t('chat.composer.closeBadge', { label })} onClick={onClose}>
       <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
       <span className="chat-sender-plan-badge__label">{label}</span>
       <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />

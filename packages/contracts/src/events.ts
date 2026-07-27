@@ -10,6 +10,7 @@ import type {
   RuntimeGitInfo,
   RuntimeHookRun,
   RuntimeMessage,
+  RuntimeQueuedTurnInput,
   RuntimeThreadGoal,
   RuntimeThreadMemoryMode,
 } from './threads.js';
@@ -38,6 +39,9 @@ export type RuntimeEventType =
   | 'thread.context_cleared'
   | 'thread.context_compacting'
   | 'thread.context_compacted'
+  | 'turn.input_queued'
+  | 'turn.input_updated'
+  | 'turn.input_deleted'
   | 'turn.started'
   | 'turn.step_snapshot'
   | 'mailbox.delivered'
@@ -88,7 +92,17 @@ export type RuntimeEvent =
   | RuntimeEventBase<'thread.deleted', Record<string, never>>
   | RuntimeEventBase<'thread.metadata_updated', { gitInfo: RuntimeGitInfo | null }>
   | RuntimeEventBase<'thread.memory_mode_updated', { mode: RuntimeThreadMemoryMode; reason?: string }>
-  | RuntimeEventBase<'thread.goal_updated', { goal: RuntimeThreadGoal }>
+  | RuntimeEventBase<'thread.goal_updated', {
+      goal: RuntimeThreadGoal;
+      queuedInputId?: string;
+      /**
+       * 队列 Goal 首次启动时，与目标状态原子落盘的可见用户消息。
+       * 状态/计量更新不携带该字段。
+       */
+      sourceMessage?: RuntimeMessage;
+      /** 计量/状态更新可复用既有执行选项，避免在每轮事件中重复内联附件数据。 */
+      preserveExecution?: boolean;
+    }>
   | RuntimeEventBase<'thread.goal_cleared', { cleared: boolean }>
   | RuntimeEventBase<'thread.context_cleared', { clearedMessageCount: number }>
   | RuntimeEventBase<
@@ -102,10 +116,13 @@ export type RuntimeEvent =
       }
     >
   | RuntimeEventBase<'thread.context_compacted', { messages: RuntimeMessage[]; notice: NonNullable<RuntimeMessage['contextCompaction']> }>
+  | RuntimeEventBase<'turn.input_queued', { input: RuntimeQueuedTurnInput }>
+  | RuntimeEventBase<'turn.input_updated', { input: RuntimeQueuedTurnInput }>
+  | RuntimeEventBase<'turn.input_deleted', { inputId: string }>
   | RuntimeEventBase<'turn.started', { input: string; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'turn.step_snapshot', { snapshot: RuntimeModelRequestStepSnapshot }>
   | RuntimeEventBase<'mailbox.delivered', RuntimeMailboxDelivery>
-  | RuntimeEventBase<'message.created', { message: RuntimeMessage }>
+  | RuntimeEventBase<'message.created', { message: RuntimeMessage; queuedInputId?: string }>
   | RuntimeEventBase<'message.delta', { messageId: string; text: string }>
   | RuntimeEventBase<'message.updated', { messageId: string; content: string }>
   | RuntimeEventBase<'message.plan_mode_updated', { messageId: string; content?: string; planMode: NonNullable<RuntimeMessage['planMode']> }>

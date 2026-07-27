@@ -10,6 +10,7 @@ import {
   stepSnapshotSkillRegistry,
   ToolCallingModelClient,
   waitForModelRequestCount,
+  waitForTestState,
   waitForTurnCompleted
 } from '../../support/agent-loop/shared.js';
 import {
@@ -35,7 +36,7 @@ describe('agent loop turn steering and mailbox input', () => {
         ids,
         toolHost,
       });
-  
+
       const running = loop.runUserShellCommand(thread.id, 'node -e "setInterval(() => {}, 1000)"');
       await toolHost.started;
       const turnId = loop.activeTurnId(thread.id);
@@ -144,7 +145,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
       await expect(loop.steerTurn(thread.id, {
         clientId: 'client-steer-1',
-        expectedTurnId: started.turnId,
+        expectedTurnId: started.turnId!,
         input: 'Prefer the shorter path.',
         skillIds: ['skill_step'],
         thinking: true,
@@ -158,7 +159,7 @@ describe('agent loop turn steering and mailbox input', () => {
       });
   
       modelClient.releaseFirstResponse();
-      const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+      const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
       const saved = await threadStore.getThread(thread.id);
       const secondTurnMessages = modelClient.requests[1].messages.filter((message) => message.turnId === started.turnId);
       const modelSteerMessage = secondTurnMessages.find((message) => message.clientId === 'client-steer-1');
@@ -209,12 +210,12 @@ describe('agent loop turn steering and mailbox input', () => {
       await waitForModelRequestCount(modelClient, 1);
       await expect(loop.steerTurn(thread.id, {
         clientId: 'client-oversized-steer',
-        expectedTurnId: started.turnId,
+        expectedTurnId: started.turnId!,
         input: oversizedSteer,
       })).resolves.toEqual({ accepted: true, turnId: started.turnId });
   
       modelClient.releaseFirstResponse();
-      await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+      await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
       const saved = await threadStore.getThread(thread.id);
       const compactRequest = modelClient.requests.find((request) => request.model === 'context-compaction');
       const followUpRequest = modelClient.requests.at(-1);
@@ -240,7 +241,7 @@ describe('agent loop turn steering and mailbox input', () => {
       expect(followUpRequest?.stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThan(0);
     });
   
-  it('treats a new start request during an active conversation as a steer', async () => {
+  it('queues a new start request that races with an active conversation', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Start while active' });
@@ -258,28 +259,47 @@ describe('agent loop turn steering and mailbox input', () => {
   
       await expect(loop.startTurn(thread.id, {
         clientId: 'client-start-while-active',
-        input: 'Treat this as guidance.',
-      })).resolves.toEqual({ accepted: true, turnId: started.turnId });
-  
-      const steeredBeforeRelease = await threadStore.getThread(thread.id);
-      expect(steeredBeforeRelease?.messages.find((message) => message.clientId === 'client-start-while-active')).toMatchObject({
-        content: 'Treat this as guidance.',
-        role: 'user',
-        turnId: started.turnId,
+        input: 'Queue this as the next turn.',
+      })).resolves.toMatchObject({
+        accepted: true,
+        disposition: 'queued',
+        queuedInputId: expect.any(String),
+        turnId: null,
       });
   
+      const queuedBeforeRelease = await threadStore.getThread(thread.id);
+      expect(queuedBeforeRelease?.queuedTurnInputs).toMatchObject([{
+        clientId: 'client-start-while-active',
+        input: 'Queue this as the next turn.',
+      }]);
+      expect(queuedBeforeRelease?.messages.find((message) => message.clientId === 'client-start-while-active')).toBeUndefined();
+
       modelClient.releaseFirstResponse();
-      await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+      await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
+      const completed = await waitForTestState(
+        () => threadStore.getThread(thread.id),
+        (snapshot) => Boolean(
+          snapshot
+          && snapshot.activeTurnId === null
+          && !snapshot.queuedTurnInputs?.length
+          && snapshot.messages.some((message) => message.clientId === 'client-start-while-active')
+        ),
+        (snapshot) => `Timed out waiting for queued start; active=${snapshot?.activeTurnId ?? 'unknown'}`,
+      );
   
       expect(modelClient.requests).toHaveLength(2);
-      const secondTurnMessages = modelClient.requests[1].messages.filter((message) => message.turnId === started.turnId);
-      const modelSteerMessage = secondTurnMessages.find((message) => message.clientId === 'client-start-while-active');
-      expect(secondTurnMessages.slice(0, 2).map((message) => `${message.role}:${message.content}`)).toEqual([
+      const conversationMessages = modelClient.requests[1].messages
+        .filter((message) => message.role === 'user' || message.role === 'assistant');
+      expect(conversationMessages.slice(0, 2).map((message) => `${message.role}:${message.content}`)).toEqual([
         'user:initial prompt',
         'assistant:initial answer',
       ]);
-      expect(modelSteerMessage).toMatchObject({ role: 'user' });
-      expect(modelSteerMessage?.content).toBe('Treat this as guidance.');
+      const queuedMessage = completed?.messages.find((message) => message.clientId === 'client-start-while-active');
+      expect(queuedMessage).toMatchObject({
+        content: 'Queue this as the next turn.',
+        role: 'user',
+      });
+      expect(queuedMessage?.turnId).not.toBe(started.turnId);
     });
   
   it('publishes steered input immediately but queues it behind the current tool result for the next model request', async () => {
@@ -302,7 +322,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
       await expect(loop.steerTurn(thread.id, {
         clientId: 'client-steer-during-tool',
-        expectedTurnId: started.turnId,
+        expectedTurnId: started.turnId!,
         input: 'Prefer the shorter path.',
       })).resolves.toEqual({ accepted: true, turnId: started.turnId });
       const eventsBeforeToolRelease = await threadStore.listEvents(thread.id, 0);
@@ -311,7 +331,7 @@ describe('agent loop turn steering and mailbox input', () => {
       )).toBe(true);
   
       toolHost.release();
-      const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+      const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
       const toolCompletedIndex = events.findIndex((event) => event.type === 'tool.completed' && event.payload.toolName === 'workspace_read_file');
       const steerCreatedIndex = events.findIndex((event) =>
         event.type === 'message.created' && event.payload.message.clientId === 'client-steer-during-tool',
@@ -361,7 +381,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
       const steer = loop.steerTurn(thread.id, {
         clientId: 'client-delayed-steer',
-        expectedTurnId: started.turnId,
+        expectedTurnId: started.turnId!,
         input: 'Do not finish before this is stored.',
       });
       await threadStore.steerAppendStarted;
@@ -370,7 +390,7 @@ describe('agent loop turn steering and mailbox input', () => {
       threadStore.releaseSteerAppend();
   
       await expect(steer).resolves.toEqual({ accepted: true, turnId: started.turnId });
-      await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+      await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
   
       expect(modelClient.requests).toHaveLength(2);
       expect(modelClient.requests[1].messages.find((message) => message.clientId === 'client-delayed-steer')).toMatchObject({
@@ -398,12 +418,12 @@ describe('agent loop turn steering and mailbox input', () => {
       await expect(loop.deliverMailboxInput(thread.id, {
         id: 'mail_1',
         fromAgentId: 'agent_child',
-        expectedTurnId: started.turnId,
+        expectedTurnId: started.turnId!,
         content: 'child agent found the auth regression',
       })).resolves.toEqual({ accepted: true, turnId: started.turnId });
   
       modelClient.releaseFirstResponse();
-      const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+      const events = await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
       const secondRequestText = modelClient.requests[1].messages.map((message) => message.content).join('\n');
   
       expect(events).toContainEqual(expect.objectContaining({

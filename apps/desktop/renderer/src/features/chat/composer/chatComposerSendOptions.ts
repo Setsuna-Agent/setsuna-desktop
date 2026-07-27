@@ -20,7 +20,6 @@ export function createChatComposerSendOptions({
   goalModeEnabled,
   planModeEnabled,
   selectedSkillIds,
-  steering,
   supportsImageInput,
   thinkingEffort,
   thinkingEnabled,
@@ -30,7 +29,6 @@ export function createChatComposerSendOptions({
   goalModeEnabled: boolean;
   planModeEnabled: boolean;
   selectedSkillIds: string[];
-  steering: boolean;
   supportsImageInput: boolean;
   thinkingEffort: string;
   thinkingEnabled: boolean;
@@ -43,8 +41,8 @@ export function createChatComposerSendOptions({
     skillIds: selectedSkillIds,
     thinking,
     ...(thinking && thinkingEffort ? { thinkingEffort } : {}),
-    // 计划/目标会创建新的执行语义，不能在已运行 turn 内改写；用户的选择保留到下一轮。
-    ...(!steering && planModeEnabled ? { collaborationMode: 'plan' as const } : {}),
-    ...(!steering && goalModeEnabled ? { goalMode: true } : {}),
+    // active turn 下会由发送动作持久化为独立的 Plan/Goal 队列项。
+    ...(planModeEnabled ? { collaborationMode: 'plan' as const } : {}),
+    ...(goalModeEnabled ? { goalMode: true } : {}),
   };
 }

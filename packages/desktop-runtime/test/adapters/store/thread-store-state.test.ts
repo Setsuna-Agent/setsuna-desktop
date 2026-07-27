@@ -5,7 +5,10 @@ import {
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { normalizeThreadSnapshot } from '../../../src/adapters/store/thread-store-state.js';
+import {
+  normalizeThreadSnapshot,
+  toSummary,
+} from '../../../src/adapters/store/thread-store-state.js';
 
 describe('thread snapshot provider metadata compatibility', () => {
   it('keeps legacy Anthropic metadata readable without adding V2 source fields', () => {
@@ -112,6 +115,40 @@ describe('thread snapshot provider metadata compatibility', () => {
     } satisfies RuntimeEvent);
 
     expect(replayed.messages[0]?.providerMetadata).toEqual(direct.messages[0]?.providerMetadata);
+  });
+});
+
+describe('thread summary Goal projection', () => {
+  it('omits Goal execution attachments from list summaries', () => {
+    const thread = threadWithMetadata({});
+    thread.goal = {
+      threadId: thread.id,
+      objective: 'Inspect the attached design.',
+      status: 'active',
+      tokenBudget: null,
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      execution: {
+        attachments: [{
+          id: 'goal_image',
+          name: 'design.png',
+          type: 'image/png',
+          size: 1,
+          url: 'data:image/png;base64,AA==',
+        }],
+        skillIds: ['skill_design'],
+        thinking: true,
+      },
+    };
+
+    expect(toSummary(thread).goal).toMatchObject({
+      objective: 'Inspect the attached design.',
+      status: 'active',
+    });
+    expect(toSummary(thread).goal?.execution).toBeUndefined();
+    expect(thread.goal.execution?.attachments).toHaveLength(1);
   });
 });
 

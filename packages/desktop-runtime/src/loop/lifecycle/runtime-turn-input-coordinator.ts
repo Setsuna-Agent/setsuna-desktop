@@ -1,6 +1,7 @@
 import type {
   RuntimeMailboxDelivery,
   RuntimeMessage,
+  RuntimeQueuedTurnInput,
   RuntimeThread,
   SendTurnResponse,
   SteerTurnInput,
@@ -40,7 +41,12 @@ type RuntimeTurnInputCoordinatorOptions = {
   turnTasks: RuntimeTurnTaskRegistry;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
   createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string): { done: Promise<void> };
-  publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
+  publishMessage(
+    threadId: string,
+    turnId: string,
+    message: RuntimeMessage,
+    options?: { queuedInputId?: string },
+  ): Promise<void>;
 };
 
 /** 管理活动轮次的 steer 与邮箱队列及其持久化边界。 */
@@ -54,6 +60,30 @@ export class RuntimeTurnInputCoordinator {
   }
 
   async steer(threadId: string, input: SteerTurnInput): Promise<SendTurnResponse> {
+    return this.writeSteer(threadId, input);
+  }
+
+  async steerQueuedInput(
+    threadId: string,
+    activeTurnId: string,
+    input: RuntimeQueuedTurnInput,
+  ): Promise<SendTurnResponse> {
+    return this.writeSteer(threadId, {
+      attachments: input.attachments,
+      clientId: input.clientId,
+      expectedTurnId: activeTurnId,
+      input: input.input,
+      skillIds: input.skillIds,
+      thinking: input.thinking,
+      thinkingEffort: input.thinkingEffort,
+    }, input.id);
+  }
+
+  private async writeSteer(
+    threadId: string,
+    input: SteerTurnInput,
+    queuedInputId?: string,
+  ): Promise<SendTurnResponse> {
     const text = input.input.trim();
     const attachments = this.options.normalizeAttachments(input.attachments);
     if (!text && !attachments.length) throw new Error('input must not be empty');
@@ -82,7 +112,7 @@ export class RuntimeTurnInputCoordinator {
         createdAt: this.options.clock.now().toISOString(),
         status: 'complete',
       };
-      await this.options.publishMessage(threadId, active.turnId, message);
+      await this.options.publishMessage(threadId, active.turnId, message, { queuedInputId });
       active.inputQueue.enqueueSteer({
         message,
         skillIds: [...new Set((input.skillIds ?? []).map((skillId) => skillId.trim()).filter(Boolean))],

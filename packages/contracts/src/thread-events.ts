@@ -36,7 +36,12 @@ import {
   userMessageForTurn
 } from './thread-event-projection.js';
 import { DEFAULT_THREAD_TITLE, fallbackThreadTitle } from './thread-title.js';
-import type { RuntimeThread } from './threads.js';
+import {
+  cloneRuntimeThreadGoal,
+  normalizeRuntimeQueuedTurnInputKind,
+  type RuntimeMessage,
+  type RuntimeThread,
+} from './threads.js';
 
 /**
  * 将一条 append-only runtime event 投影到线程快照上，供 renderer state 和持久化测试共用。
@@ -49,9 +54,16 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   const next: RuntimeThread = {
     ...thread,
     contextCompaction: thread.contextCompaction ? cloneThreadContextCompaction(thread.contextCompaction) : undefined,
+    goal: thread.goal ? cloneRuntimeThreadGoal(thread.goal) : undefined,
     mailboxDeliveries: thread.mailboxDeliveries?.map((delivery) => ({ ...delivery })),
     messages: thread.messages.map(cloneMessage),
     pendingHookRuns: thread.pendingHookRuns?.map(cloneHookRun),
+    queuedTurnInputs: thread.queuedTurnInputs?.map((input) => ({
+      ...input,
+      kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
+      attachments: input.attachments?.map((attachment) => ({ ...attachment })),
+      skillIds: input.skillIds ? [...input.skillIds] : undefined,
+    })),
     turns: thread.turns?.map(cloneThreadTurn),
     lastSeq: Math.max(thread.lastSeq, event.seq),
     updatedAt: event.createdAt,
@@ -79,7 +91,22 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'thread.goal_updated') {
-    next.goal = { ...event.payload.goal };
+    const previousExecution = next.goal?.execution;
+    next.goal = cloneRuntimeThreadGoal(event.payload.goal);
+    if (event.payload.preserveExecution && previousExecution) {
+      next.goal.execution = cloneRuntimeThreadGoal({
+        ...next.goal,
+        execution: previousExecution,
+      }).execution;
+    }
+    if (event.payload.queuedInputId) {
+      next.queuedTurnInputs = next.queuedTurnInputs?.filter(
+        (input) => input.id !== event.payload.queuedInputId,
+      );
+    }
+    if (event.payload.sourceMessage) {
+      appendCreatedMessage(next, event.payload.sourceMessage, event.createdAt);
+    }
     return next;
   }
 
@@ -136,14 +163,43 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
+  if (event.type === 'turn.input_queued') {
+    next.queuedTurnInputs = [
+      ...(next.queuedTurnInputs ?? []),
+      {
+        ...event.payload.input,
+        kind: normalizeRuntimeQueuedTurnInputKind(event.payload.input.kind),
+        attachments: event.payload.input.attachments?.map((attachment) => ({ ...attachment })),
+        skillIds: event.payload.input.skillIds ? [...event.payload.input.skillIds] : undefined,
+      },
+    ];
+    return next;
+  }
+
+  if (event.type === 'turn.input_updated') {
+    next.queuedTurnInputs = next.queuedTurnInputs?.map((input) => (
+      input.id === event.payload.input.id
+          ? {
+            ...event.payload.input,
+            kind: normalizeRuntimeQueuedTurnInputKind(event.payload.input.kind),
+            attachments: event.payload.input.attachments?.map((attachment) => ({ ...attachment })),
+            skillIds: event.payload.input.skillIds ? [...event.payload.input.skillIds] : undefined,
+          }
+        : input
+    ));
+    return next;
+  }
+
+  if (event.type === 'turn.input_deleted') {
+    next.queuedTurnInputs = next.queuedTurnInputs?.filter((input) => input.id !== event.payload.inputId);
+    return next;
+  }
+
   if (event.type === 'message.created') {
-    const message = cloneMessage(event.payload.message);
-    attachPendingHookRunsToMessage(next, message, event.createdAt);
-    next.messages.push(message);
-    refreshThreadSummary(next);
-    if (isTranscriptVisibleMessage(event.payload.message) && next.title === DEFAULT_THREAD_TITLE && event.payload.message.role === 'user') {
-      next.title = fallbackThreadTitle(event.payload.message.content, event.payload.message.attachments?.length) || next.title;
+    if (event.payload.queuedInputId) {
+      next.queuedTurnInputs = next.queuedTurnInputs?.filter((input) => input.id !== event.payload.queuedInputId);
     }
+    appendCreatedMessage(next, event.payload.message, event.createdAt);
     return next;
   }
 
@@ -522,4 +578,29 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   return next;
+}
+
+/**
+ * 统一处理所有“新建可见消息”的投影副作用。
+ *
+ * Goal 首轮消息与 goal_updated 原子提交，普通消息走 message.created；两条事件链
+ * 必须共享摘要、标题和 hook 绑定规则，避免重放结果产生分叉。
+ */
+function appendCreatedMessage(
+  thread: RuntimeThread,
+  source: RuntimeMessage,
+  createdAt: string,
+): void {
+  if (thread.messages.some((message) => message.id === source.id)) return;
+  const message = cloneMessage(source);
+  attachPendingHookRunsToMessage(thread, message, createdAt);
+  thread.messages.push(message);
+  refreshThreadSummary(thread);
+  if (
+    isTranscriptVisibleMessage(source)
+    && thread.title === DEFAULT_THREAD_TITLE
+    && source.role === 'user'
+  ) {
+    thread.title = fallbackThreadTitle(source.content, source.attachments?.length) || thread.title;
+  }
 }

@@ -215,6 +215,8 @@ renderer 是 React 工作台。它只消费 preload bridge 和 contract 类型�
 
 - `features/chat/ChatWorkspace.tsx`：聊天页面编排；消息项和滚动窗口下沉到 `conversation/`。
 - `features/chat/ChatComposer.tsx`：输入区编排；附件、模型、菜单和 draft helper 下沉到 `composer/`。
+- `features/chat/composer/ChatSendQueue.tsx`：输入框上方的紧凑线程级发送队列，只负责展示和动作回调。
+- `features/chat/composer/useQueuedTurnComposerEdit.ts`：保护既有 composer 状态，接管队列文本与附件，并在取消、卸载和失败路径释放带令牌的 runtime 编辑会话。
 - `features/chat/tool-runs/`：工具运行、审批、MCP elicitation、结构化用户输入和文件变更展示。
 - `features/chat/conversation/`：message display、assistant timeline、overview、thinking、context usage 和滚动状态。
 - `features/chat/artifacts/`：产物卡片和 Plugin 使用记录。
@@ -226,6 +228,7 @@ renderer 是 React 工作台。它只消费 preload bridge 和 contract 类型�
 - runtime message 是数据源，不要在 UI 中发明无法回放的新状态。
 - assistant 一轮可能有多段消息和多个 toolRun，删除/复制/展示都要按 display item 逻辑处理。
 - streaming 和 SSE 丢帧要有 polling 或 snapshot 兜底。
+- active turn 期间的提交进入持久化 FIFO 队列；普通项点击“立即发送”可复用同 turn 的 steer，Plan/Goal 以独立图标和专用执行语义等待下一轮。Goal 支持与普通消息相同的附件入口，附件和执行选项会随目标续轮保留。
 - 文件变更、审批、工具输出要保持同一个 toolRun 的可追踪性。
 
 ### Workspace

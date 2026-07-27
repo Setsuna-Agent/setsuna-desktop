@@ -51,8 +51,15 @@ import type {
 } from './skills.js';
 import type {
   CreateThreadInput,
+  DeleteQueuedTurnInputResponse,
   MessageDeleteInput,
   MessagePatch,
+  QueuedTurnInputEditRelease,
+  QueuedTurnInputEditReleaseResponse,
+  QueuedTurnInputEditSession,
+  QueuedTurnInputPatch,
+  QueuedTurnInputResponse,
+  QueueTurnInput,
   RegenerateMessageInput,
   RuntimeReviewTarget,
   RuntimeThread,
@@ -60,6 +67,7 @@ import type {
   RuntimeThreadGoalPatch,
   SendTurnInput,
   SendTurnResponse,
+  StartTurnResponse,
   SteerTurnInput,
   ThreadList,
   ThreadMemoryModePatch,
@@ -112,8 +120,14 @@ export type DesktopRuntimeClient = {
   updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch): Promise<RuntimeThread>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
-  sendTurn(threadId: string, input: SendTurnInput): Promise<SendTurnResponse>;
+  sendTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse>;
   steerTurn(threadId: string, turnId: string, input: SteerTurnInput): Promise<SendTurnResponse>;
+  queueTurnInput(threadId: string, input: QueueTurnInput): Promise<QueuedTurnInputResponse>;
+  retrieveQueuedTurnInput(threadId: string, inputId: string): Promise<QueuedTurnInputEditSession>;
+  releaseQueuedTurnInputEdit(threadId: string, inputId: string, input: QueuedTurnInputEditRelease): Promise<QueuedTurnInputEditReleaseResponse>;
+  updateQueuedTurnInput(threadId: string, inputId: string, patch: QueuedTurnInputPatch): Promise<QueuedTurnInputResponse>;
+  deleteQueuedTurnInput(threadId: string, inputId: string): Promise<DeleteQueuedTurnInputResponse>;
+  sendQueuedTurnInputNow(threadId: string, inputId: string): Promise<QueuedTurnInputResponse>;
   updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread>;
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput): Promise<SendTurnResponse>;

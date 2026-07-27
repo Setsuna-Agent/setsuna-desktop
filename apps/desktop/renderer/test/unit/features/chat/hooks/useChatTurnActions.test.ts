@@ -1,40 +1,10 @@
-import type { RuntimeThread, RuntimeThreadGoal } from '@setsuna-desktop/contracts';
+import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   claimCreatedChatThreadForSend,
-  mergeGoalThreadSnapshot,
+  shouldQueueComposerTurn,
 } from '../../../../../src/features/chat/hooks/useChatTurnActions.js';
 import { createIdentityRequestGuard } from '../../../../../src/shared/hooks/useIdentityRequestGuard.js';
-
-describe('mergeGoalThreadSnapshot', () => {
-  it('uses the runtime goal snapshot so the active turn keeps the stop action available', () => {
-    const current = thread({ lastSeq: 2, activeTurnId: null });
-    const snapshot = thread({ lastSeq: 4, activeTurnId: 'turn_goal_1' });
-
-    expect(mergeGoalThreadSnapshot(current, snapshot, goal)).toMatchObject({
-      activeTurnId: 'turn_goal_1',
-      lastSeq: 4,
-      goal,
-    });
-  });
-
-  it('preserves newer SSE state while merging the runtime active goal turn', () => {
-    const current = thread({ lastSeq: 6, activeTurnId: null, messages: [{
-      id: 'message_newer',
-      turnId: 'turn_goal_1',
-      role: 'assistant',
-      content: 'Newer streamed content',
-      createdAt: '2026-07-11T00:00:01.000Z',
-      status: 'streaming',
-    }] });
-    const snapshot = thread({ lastSeq: 4, activeTurnId: 'turn_goal_1' });
-
-    const merged = mergeGoalThreadSnapshot(current, snapshot, goal);
-    expect(merged.activeTurnId).toBe('turn_goal_1');
-    expect(merged.lastSeq).toBe(6);
-    expect(merged.messages).toEqual(current.messages);
-  });
-});
 
 describe('first-turn composer claim', () => {
   it('claims the created thread before publishing it to React', () => {
@@ -80,16 +50,14 @@ describe('first-turn composer claim', () => {
   });
 });
 
-const goal: RuntimeThreadGoal = {
-  threadId: 'thread_1',
-  objective: 'Finish the goal',
-  status: 'active',
-  tokenBudget: null,
-  tokensUsed: 0,
-  timeUsedSeconds: 0,
-  createdAt: 1,
-  updatedAt: 1,
-};
+describe('composer turn routing', () => {
+  it('always uses the durable queue entry point for Goal submissions', () => {
+    expect(shouldQueueComposerTurn(null, { goalMode: true })).toBe(true);
+    expect(shouldQueueComposerTurn('turn_active', {})).toBe(true);
+    expect(shouldQueueComposerTurn('turn_active', { planDecision: 'accepted' })).toBe(false);
+    expect(shouldQueueComposerTurn(null, {})).toBe(false);
+  });
+});
 
 function thread(overrides: Partial<RuntimeThread>): RuntimeThread {
   return {

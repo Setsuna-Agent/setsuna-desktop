@@ -294,6 +294,7 @@ export function AppRouteContent({
       })}
       onStartThreadReview={() => startCurrentThreadReview({ type: 'uncommittedChanges' })}
       onSend={(value, options) => chatActions.sendInput(value, options)}
+      queuedTurnActions={chatActions}
       onPlanDecision={(decision) => void chatActions.sendInput('', { planDecision: decision })}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onTerminalResizeStep={onTerminalResizeStep}

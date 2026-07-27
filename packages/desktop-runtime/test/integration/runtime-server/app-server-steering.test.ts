@@ -107,6 +107,53 @@ describe('runtime server AppServer steering and dynamic tools', () => {
         await capture.close();
       }
     });
+
+  it('returns an explicit queued AppServer result without inventing a turn id', async () => {
+    const capture = await createDelayedOpenAiCaptureServer();
+    try {
+      await harness.configureOpenAiProvider('app-server-queue-provider', capture.baseUrl);
+      const startedThread = await harness.appServerRpc('thread/start', {
+        name: 'AppServer queued turn start',
+        cwd: process.cwd(),
+      });
+      const active = await harness.appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        input: [{ type: 'text', text: 'Keep this AppServer turn active.' }],
+      });
+      await withTimeout(
+        capture.nextBody,
+        harness.providerCaptureTimeoutMs,
+        'Timed out waiting for delayed AppServer provider request',
+      );
+
+      const queued = await harness.appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        input: [{ type: 'text', text: 'Queue this as the next AppServer turn.' }],
+      });
+      expect(queued).toEqual({
+        queued: true,
+        queuedInputId: expect.any(String),
+        turn: null,
+      });
+
+      const read = await harness.appServerRpc('thread/read', {
+        threadId: startedThread.thread.id,
+        includeTurns: true,
+      });
+      expect(read.thread.turns.some((turn: { id: string }) => turn.id === queued.queuedInputId)).toBe(false);
+      expect(read.thread.turns.some((turn: { id: string }) => turn.id === active.turn.id)).toBe(true);
+
+      await harness.runtimeFetch(
+        `/v1/threads/${encodeURIComponent(startedThread.thread.id)}/queued-turn-inputs/${encodeURIComponent(queued.queuedInputId)}`,
+        { method: 'DELETE' },
+      );
+      capture.release();
+      await harness.waitForThread(startedThread.thread.id, (thread) => thread.activeTurnId === null);
+    } finally {
+      capture.release();
+      await capture.close();
+    }
+  });
   
   it('delivers AppServer mailbox input into the active turn', async () => {
       const capture = await createDelayedOpenAiCaptureServer();
@@ -398,7 +445,112 @@ describe('runtime server AppServer steering and dynamic tools', () => {
       }
     });
   
-  it('treats REST turn starts during an active conversation as steering the active turn', async () => {
+  it('manages queued REST input and reuses steering for send-now', async () => {
+      const capture = await createDelayedOpenAiCaptureServer();
+      try {
+        await harness.configureOpenAiProvider('rest-queue-provider', capture.baseUrl);
+        const thread = await harness.runtimeFetch('/v1/threads', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'REST queued turn inputs' }),
+        });
+        const started = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+          method: 'POST',
+          body: JSON.stringify({ input: 'Keep the queue test active.' }),
+        });
+        await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for delayed REST provider request');
+
+        const first = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs`, {
+          method: 'POST',
+          body: JSON.stringify({
+            clientId: 'rest-queued-send-now',
+            input: 'Original queued guidance.',
+          }),
+        });
+        const second = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs`, {
+          method: 'POST',
+          body: JSON.stringify({ input: 'Delete this queued input.' }),
+        });
+        expect(first).toMatchObject({ disposition: 'queued', turnId: null });
+        expect(second).toMatchObject({ disposition: 'queued', turnId: null });
+
+        const firstEditSession = await harness.runtimeFetch(
+          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/retrieve`,
+          { method: 'POST' },
+        );
+        expect(firstEditSession).toMatchObject({
+          editToken: expect.any(String),
+          input: {
+            id: first.queuedInputId,
+            input: 'Original queued guidance.',
+          },
+        });
+        await expect(harness.runtimeFetch(
+          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/release`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ editToken: firstEditSession.editToken }),
+          },
+        )).resolves.toMatchObject({
+          released: true,
+          resumed: {
+            disposition: 'queued',
+            queuedInputId: first.queuedInputId,
+          },
+        });
+        const editSession = await harness.runtimeFetch(
+          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/retrieve`,
+          { method: 'POST' },
+        );
+        await expect(harness.runtimeFetch(
+          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              editToken: editSession.editToken,
+              input: 'Edited queued guidance.',
+            }),
+          },
+        )).resolves.toMatchObject({
+          disposition: 'queued',
+          queuedInputId: first.queuedInputId,
+          turnId: null,
+        });
+        await expect(harness.runtimeFetch(
+          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(second.queuedInputId)}`,
+          { method: 'DELETE' },
+        )).resolves.toEqual({ deleted: true });
+        const pending = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+        expect(pending.queuedTurnInputs).toMatchObject([
+          { id: first.queuedInputId, input: 'Edited queued guidance.' },
+        ]);
+
+        await expect(harness.runtimeFetch(
+          `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(first.queuedInputId)}/send-now`,
+          { method: 'POST' },
+        )).resolves.toMatchObject({
+          disposition: 'steered',
+          queuedInputId: first.queuedInputId,
+          turnId: started.turnId,
+        });
+        const sent = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+        expect(sent.queuedTurnInputs).toEqual([]);
+        expect(sent.messages.find((message: { clientId?: string }) =>
+          message.clientId === 'rest-queued-send-now'
+        )).toMatchObject({
+          content: 'Edited queued guidance.',
+          role: 'user',
+          turnId: started.turnId,
+        });
+
+        capture.release();
+        await harness.waitForThread(thread.id, (item) => item.activeTurnId === null);
+      } finally {
+        capture.release();
+        await capture.close();
+      }
+    });
+
+  it('queues REST turn starts that race with an active conversation', async () => {
       const capture = await createDelayedOpenAiCaptureServer();
       try {
         await harness.configureOpenAiProvider('rest-start-steer-provider', capture.baseUrl);
@@ -415,31 +567,44 @@ describe('runtime server AppServer steering and dynamic tools', () => {
         await expect(harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
           method: 'POST',
           body: JSON.stringify({
-            clientId: 'rest-start-while-active-steer',
-            input: 'This should stay in the current turn.',
+            clientId: 'rest-start-while-active-queue',
+            input: 'This should become the next turn.',
           }),
-        })).resolves.toEqual({ accepted: true, turnId: started.turnId });
+        })).resolves.toMatchObject({
+          accepted: true,
+          disposition: 'queued',
+          queuedInputId: expect.any(String),
+          turnId: null,
+        });
   
         const beforeRelease = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
         expect(beforeRelease.activeTurnId).toBe(started.turnId);
-        expect(beforeRelease.messages.find((message: { clientId?: string }) => message.clientId === 'rest-start-while-active-steer')).toMatchObject({
-          content: 'This should stay in the current turn.',
-          role: 'user',
-          turnId: started.turnId,
-        });
+        expect(beforeRelease.queuedTurnInputs).toMatchObject([{
+          clientId: 'rest-start-while-active-queue',
+          input: 'This should become the next turn.',
+        }]);
+        expect(beforeRelease.messages.find((message: { clientId?: string }) =>
+          message.clientId === 'rest-start-while-active-queue'
+        )).toBeUndefined();
   
         capture.release();
         const updated = await harness.waitForThread(
           thread.id,
           (item) => item.activeTurnId === null
             && item.messages.some((message) =>
-              message.turnId === started.turnId
-              && message.role === 'user'
-              && message.clientId === 'rest-start-while-active-steer'
+              message.role === 'user'
+              && message.clientId === 'rest-start-while-active-queue'
             ),
         );
   
-        expect(updated.messages.filter((message) => message.turnId === started.turnId && message.role === 'user')).toHaveLength(2);
+        const queuedMessage = updated.messages.find((message) => message.clientId === 'rest-start-while-active-queue');
+        expect(updated.queuedTurnInputs).toEqual([]);
+        expect(updated.messages.filter((message) => message.turnId === started.turnId && message.role === 'user')).toHaveLength(1);
+        expect(queuedMessage).toMatchObject({
+          content: 'This should become the next turn.',
+          role: 'user',
+        });
+        expect(queuedMessage?.turnId).not.toBe(started.turnId);
       } finally {
         capture.release();
         await capture.close();

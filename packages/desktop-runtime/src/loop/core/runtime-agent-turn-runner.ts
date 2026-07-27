@@ -58,7 +58,12 @@ type RuntimeAgentTurnRunnerOptions = {
     },
   ): Promise<void>;
   publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void>;
-  publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
+  publishMessage(
+    threadId: string,
+    turnId: string,
+    message: RuntimeMessage,
+    options?: { queuedInputId?: string },
+  ): Promise<void>;
 };
 
 const COLLABORATION_WAIT_NOTE = '\n\n子线程仍在执行；主任务会继续等待，收到调研结果后再统一收口。';
@@ -87,6 +92,7 @@ export class RuntimeAgentTurnRunner {
       clientId: options.clientId,
       turnId,
       role: 'user',
+      inputKind: options.inputKind,
       content: text,
       attachments,
       createdAt,
@@ -119,7 +125,11 @@ export class RuntimeAgentTurnRunner {
       });
       return;
     }
-    if (publishUserMessage) await this.options.publishMessage(threadId, turnId, userMessage);
+    if (publishUserMessage) {
+      await this.options.publishMessage(threadId, turnId, userMessage, {
+        queuedInputId: options.queuedInputId,
+      });
+    }
     if (options.review) await this.options.turnFinalizer.publishReviewModeMessage(threadId, turnId, 'entered', options.review.displayText);
     const turnStartHooks = await this.options.hooks.runTurnStartHooks({
       prompt: options.modelInput ?? text,

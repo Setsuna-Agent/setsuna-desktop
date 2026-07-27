@@ -18,6 +18,64 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('routes queued turn input operations through encoded thread and input paths', async () => {
+    const request = installRuntimeBridge(() => ({ accepted: true }));
+    const client = createDesktopRuntimeClient();
+    const queuedInput = {
+      input: 'follow up',
+      clientId: 'client_1',
+      kind: 'plan' as const,
+      skillIds: ['skill_1'],
+      thinking: true,
+      thinkingEffort: 'high',
+    };
+
+    await client.queueTurnInput('thread / 1', queuedInput);
+    await client.retrieveQueuedTurnInput('thread / 1', 'input / 1');
+    await client.releaseQueuedTurnInputEdit('thread / 1', 'input / 1', { editToken: 'edit_1' });
+    await client.updateQueuedTurnInput('thread / 1', 'input / 1', {
+      editToken: 'edit_2',
+      input: 'edited follow up',
+      attachments: [],
+    });
+    await client.deleteQueuedTurnInput('thread / 1', 'input / 1');
+    await client.sendQueuedTurnInputNow('thread / 1', 'input / 1');
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      {
+        path: '/v1/threads/thread%20%2F%201/queued-turn-inputs',
+        method: 'POST',
+        body: queuedInput,
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/queued-turn-inputs/input%20%2F%201/retrieve',
+        method: 'POST',
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/queued-turn-inputs/input%20%2F%201/release',
+        method: 'POST',
+        body: { editToken: 'edit_1' },
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/queued-turn-inputs/input%20%2F%201',
+        method: 'PATCH',
+        body: {
+          editToken: 'edit_2',
+          input: 'edited follow up',
+          attachments: [],
+        },
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/queued-turn-inputs/input%20%2F%201',
+        method: 'DELETE',
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/queued-turn-inputs/input%20%2F%201/send-now',
+        method: 'POST',
+      },
+    ]);
+  });
+
   it('lists and terminates thread-scoped background shell services through encoded paths', async () => {
     const request = installRuntimeBridge(() => ({ processes: [] }));
     const client = createDesktopRuntimeClient();

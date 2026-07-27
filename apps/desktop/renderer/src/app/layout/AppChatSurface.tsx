@@ -32,6 +32,7 @@ import {
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
 import { SideChatPanel } from '../../features/chat/SideChatPanel.js';
 import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
+import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
 import { BottomToolsPanel } from '../../features/workspace/BottomToolsPanel.js';
 import { BrowserPanel } from '../../features/workspace/BrowserPanel.js';
@@ -142,6 +143,7 @@ export function AppChatSurface({
   onSetMultiAgentEnabled,
   onStartThreadReview,
   onSend,
+  queuedTurnActions,
   onPlanDecision,
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
@@ -228,6 +230,7 @@ export function AppChatSurface({
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: () => void | Promise<unknown>;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
+  queuedTurnActions: ChatQueuedTurnActions;
   onPlanDecision: (decision: RuntimePlanDecision) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
@@ -323,6 +326,7 @@ export function AppChatSurface({
           onSearchProjectEntries={onSearchProjectEntries}
           onSelectModel={onSelectModel}
           onSend={onSend}
+          queuedTurnActions={queuedTurnActions}
           onPlanDecision={onPlanDecision}
           onReviewRefresh={onReviewRefresh}
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
