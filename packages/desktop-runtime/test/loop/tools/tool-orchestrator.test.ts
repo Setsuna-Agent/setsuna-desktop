@@ -22,7 +22,7 @@ describe('ToolApprovalStore', () => {
 });
 
 describe('ToolOrchestrator terminal and retry handling', () => {
-  it.each(['network_denied', 'sandbox_denied'] as const)('runs post-processing and PostToolUse after a %s retry', async (failureKind) => {
+  it.each(['network_denied', 'sandbox_denied', 'sandbox_unavailable'] as const)('runs post-processing and PostToolUse after a %s retry', async (failureKind) => {
     let attempts = 0;
     let retryApproval: CreateApprovalInput | undefined;
     const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
@@ -37,7 +37,8 @@ describe('ToolOrchestrator terminal and retry handling', () => {
       shouldBlock: false,
     }));
     const postProcessResult = vi.fn(async (result) => ({ ...result, content: `${result.content} processed` }));
-    const approvalGate = failureKind === 'sandbox_denied'
+    const sandboxFailure = failureKind === 'sandbox_denied' || failureKind === 'sandbox_unavailable';
+    const approvalGate = sandboxFailure
       ? autoApproveGate({ onCreate: (input) => { retryApproval = input; } })
       : undefined;
     const fixture = createOrchestratorFixture(toolHost, postHook, approvalGate);
@@ -46,12 +47,12 @@ describe('ToolOrchestrator terminal and retry handling', () => {
       { id: 'call_retry', name: 'network_tool', arguments: '{}' },
       {},
       executionContext(),
-      failureKind === 'sandbox_denied' ? 'on-request' : 'full',
+      sandboxFailure ? 'on-request' : 'full',
       { postProcessResult },
     );
 
     expect(attempts).toBe(2);
-    if (failureKind === 'sandbox_denied') {
+    if (sandboxFailure) {
       expect(contexts[1]?.sandbox).toMatchObject({ mode: 'bypass' });
       expect(retryApproval).toMatchObject({
         toolCallId: 'call_retry',

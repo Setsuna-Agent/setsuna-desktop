@@ -59,8 +59,40 @@ describe('file config store', () => {
       sandboxWorkspaceWrite?: { networkAccess?: boolean };
     };
     expect(upgraded).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       sandboxWorkspaceWrite: { networkAccess: false },
+    });
+  });
+
+  it.each([
+    ['strict', 'read-only'],
+    ['strict', 'danger-full-access'],
+    ['on-request', 'read-only'],
+    ['on-request', 'danger-full-access'],
+    ['full', 'read-only'],
+    ['full', 'workspace-write'],
+  ] as const)('automatically persists the legacy %s + %s access combination as agent approval', async (
+    approvalPolicy,
+    permissionProfile,
+  ) => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const configPath = path.join(dataDir, 'config.json');
+    const store = new FileConfigStore(dataDir);
+    await store.saveConfig({ globalPrompt: 'legacy access migration' });
+    const legacy = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    legacy.schemaVersion = 3;
+    legacy.approvalPolicy = approvalPolicy;
+    legacy.permissionProfile = permissionProfile;
+    await writeFile(configPath, `${JSON.stringify(legacy, null, 2)}\n`, 'utf8');
+
+    await expect(store.getConfig()).resolves.toMatchObject({
+      approvalPolicy: 'on-request',
+      permissionProfile: 'workspace-write',
+    });
+    await expect(readFile(configPath, 'utf8').then((content) => JSON.parse(content))).resolves.toMatchObject({
+      schemaVersion: 4,
+      approvalPolicy: 'on-request',
+      permissionProfile: 'workspace-write',
     });
   });
 
@@ -171,7 +203,7 @@ describe('file config store', () => {
     await expect(store.saveConfig({ globalPrompt: 'must not overwrite' })).rejects.toThrow('Invalid JSON');
   });
 
-  it('consumes the legacy memory path without persisting it in schema v3', async () => {
+  it('consumes the legacy memory path without persisting it in the current schema', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const configPath = path.join(dataDir, 'config.json');
     const store = new FileConfigStore(dataDir);
@@ -179,6 +211,8 @@ describe('file config store', () => {
     const stored = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     stored.storagePath = '/Volumes/legacy-memory';
     stored.schemaVersion = 2;
+    stored.approvalPolicy = 'full';
+    stored.permissionProfile = 'workspace-write';
     await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
 
     await expect(store.getLegacyStoragePath()).resolves.toBe('/Volumes/legacy-memory');
@@ -189,7 +223,11 @@ describe('file config store', () => {
     await store.clearLegacyStoragePath();
     const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     expect(migrated.storagePath).toBeUndefined();
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated).toMatchObject({
+      approvalPolicy: 'on-request',
+      permissionProfile: 'workspace-write',
+    });
 
     await store.saveConfig({ globalPrompt: 'still unified' });
     await expect(readFile(configPath, 'utf8')).resolves.not.toContain('storagePath');

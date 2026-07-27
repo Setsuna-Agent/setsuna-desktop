@@ -19,6 +19,7 @@ import {
   normalizeNpmRegistryUrl,
   normalizeProviderIconConfig,
   normalizePythonPackageIndexUrl,
+  normalizeRuntimeAccessModeConfig,
 } from '@setsuna-desktop/contracts';
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -35,10 +36,11 @@ import {
 } from './task-model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
-const CONFIG_SCHEMA_VERSION = 3;
+const CONFIG_SCHEMA_VERSION = 4;
 // Network access changed from an implicit deny to an explicit, user-controllable
 // setting in schema v2. Later schema changes must not replay that one-time migration.
 const NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION = 2;
+const ACCESS_MODE_MIGRATION_SCHEMA_VERSION = 4;
 
 const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'PreToolUse',
@@ -85,6 +87,9 @@ export class FileConfigStore implements ConfigStore {
   async getConfig(): Promise<RuntimeConfigState> {
     return withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      if (migrateStoredConfig(stored)) {
+        await writeJsonFile(this.configPath, stored);
+      }
       const secrets = await this.readSecrets();
       return this.toState(stored, secrets);
     });
@@ -132,6 +137,7 @@ export class FileConfigStore implements ConfigStore {
     await withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
       if (!Object.hasOwn(stored, 'storagePath')) return;
+      migrateStoredConfig(stored);
       delete stored.storagePath;
       stored.schemaVersion = CONFIG_SCHEMA_VERSION;
       await writeJsonFile(this.configPath, stored);
@@ -155,6 +161,7 @@ export class FileConfigStore implements ConfigStore {
         delete memory.consolidationModel;
       }
       const imageGeneration = imageGenerationSettingsForSave(input.imageGeneration, previous.imageGeneration, secrets);
+      const previousAccessMode = accessModeForStoredConfig(previous);
 
       const stored: StoredConfig = {
         schemaVersion: CONFIG_SCHEMA_VERSION,
@@ -164,8 +171,8 @@ export class FileConfigStore implements ConfigStore {
         memoryEnabled: memory.useMemories || memory.generateMemories,
         taskModels,
         setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
-        approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previous.approvalPolicy),
-        permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previous.permissionProfile),
+        approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previousAccessMode.approvalPolicy),
+        permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previousAccessMode.permissionProfile),
         sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(
           input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite,
           {
@@ -456,6 +463,34 @@ function normalizeApprovalPolicy(value: unknown): RuntimeConfigState['approvalPo
   if (value === 'strict' || value === 'on-request' || value === 'full') return value;
   if (value === 'suggest') return 'on-request';
   return 'on-request';
+}
+
+function accessModeForStoredConfig(stored: StoredConfig) {
+  const accessMode = {
+    approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
+    permissionProfile: normalizePermissionProfile(stored.permissionProfile),
+  };
+  return (stored.schemaVersion ?? 0) < ACCESS_MODE_MIGRATION_SCHEMA_VERSION
+    ? normalizeRuntimeAccessModeConfig(accessMode)
+    : accessMode;
+}
+
+function migrateStoredConfig(stored: StoredConfig): boolean {
+  const schemaVersion = stored.schemaVersion ?? 0;
+  if (schemaVersion >= CONFIG_SCHEMA_VERSION) return false;
+
+  if (schemaVersion < NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION) {
+    stored.sandboxWorkspaceWrite = normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite, {
+      migrateNetworkDefault: true,
+    });
+  }
+  if (schemaVersion < ACCESS_MODE_MIGRATION_SCHEMA_VERSION) {
+    const accessMode = accessModeForStoredConfig(stored);
+    stored.approvalPolicy = accessMode.approvalPolicy;
+    stored.permissionProfile = accessMode.permissionProfile;
+  }
+  stored.schemaVersion = CONFIG_SCHEMA_VERSION;
+  return true;
 }
 
 function normalizeGlobalPrompt(value: unknown): string {

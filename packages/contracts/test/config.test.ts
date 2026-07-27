@@ -4,6 +4,9 @@ import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
   defaultModelMaxOutputTokens,
   normalizeBrandIconConfig,
+  normalizeRuntimeAccessModeConfig,
+  runtimeAccessModeForConfig,
+  runtimeAccessModeSelection,
   runtimeDeveloperFeaturesEnabled,
 } from '../src/config.js';
 
@@ -43,5 +46,32 @@ describe('runtimeDeveloperFeaturesEnabled', () => {
     expect(runtimeDeveloperFeaturesEnabled({
       features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
     })).toBe(true);
+  });
+});
+
+describe('runtime access modes', () => {
+  it.each([
+    ['request-approval', 'strict', 'workspace-write'],
+    ['agent-approval', 'on-request', 'workspace-write'],
+    ['full-access', 'full', 'danger-full-access'],
+  ] as const)('keeps the %s mode atomic', (mode, approvalPolicy, permissionProfile) => {
+    const selection = { approvalPolicy, permissionProfile };
+    expect(runtimeAccessModeSelection(mode)).toEqual(selection);
+    expect(runtimeAccessModeForConfig(selection)).toBe(mode);
+    expect(normalizeRuntimeAccessModeConfig(selection)).toEqual(selection);
+  });
+
+  it.each([
+    ['strict', 'read-only'],
+    ['strict', 'danger-full-access'],
+    ['on-request', 'read-only'],
+    ['on-request', 'danger-full-access'],
+    ['full', 'read-only'],
+    ['full', 'workspace-write'],
+  ] as const)('normalizes legacy %s + %s to agent approval', (approvalPolicy, permissionProfile) => {
+    expect(normalizeRuntimeAccessModeConfig({ approvalPolicy, permissionProfile })).toEqual({
+      approvalPolicy: 'on-request',
+      permissionProfile: 'workspace-write',
+    });
   });
 });

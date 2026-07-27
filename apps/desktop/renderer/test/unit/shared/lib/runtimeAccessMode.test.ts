@@ -16,10 +16,11 @@ describe('runtime access mode', () => {
     });
   });
 
-  it('projects inconsistent legacy combinations onto the conservative visible level', () => {
-    expect(runtimeAccessModeForConfig({ approvalPolicy: 'on-request', permissionProfile: 'read-only' })).toBe('request-approval');
-    expect(runtimeAccessModeForConfig({ approvalPolicy: 'full', permissionProfile: 'workspace-write' })).toBe('request-approval');
-    expect(runtimeAccessModeForConfig({ approvalPolicy: 'strict', permissionProfile: 'danger-full-access' })).toBe('request-approval');
+  it('projects inconsistent legacy combinations onto agent approval', () => {
+    expect(runtimeAccessModeForConfig({ approvalPolicy: 'on-request', permissionProfile: 'read-only' })).toBe('agent-approval');
+    expect(runtimeAccessModeForConfig({ approvalPolicy: 'full', permissionProfile: 'workspace-write' })).toBe('agent-approval');
+    expect(runtimeAccessModeForConfig({ approvalPolicy: 'strict', permissionProfile: 'danger-full-access' })).toBe('agent-approval');
+    expect(runtimeAccessModeForConfig({ approvalPolicy: 'strict', permissionProfile: 'workspace-write' })).toBe('request-approval');
     expect(runtimeAccessModeForConfig({ approvalPolicy: 'full', permissionProfile: 'danger-full-access' })).toBe('full-access');
   });
 });

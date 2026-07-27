@@ -213,6 +213,45 @@ export type RuntimeConfigState = {
   imageGeneration?: RuntimeImageGenerationConfigState;
 };
 
+export type RuntimeAccessMode =
+  | 'request-approval'
+  | 'agent-approval'
+  | 'full-access';
+
+export type RuntimeAccessModeConfig = Pick<
+  RuntimeConfigState,
+  'approvalPolicy' | 'permissionProfile'
+>;
+
+/**
+ * Desktop exposes permissions as three atomic modes. Legacy releases persisted
+ * the two underlying fields independently, so any other combination is migrated
+ * to the default risk-based approval mode instead of merely looking canonical in UI.
+ */
+export function runtimeAccessModeForConfig(config: RuntimeAccessModeConfig): RuntimeAccessMode {
+  if (config.approvalPolicy === 'full' && config.permissionProfile === 'danger-full-access') {
+    return 'full-access';
+  }
+  if (config.approvalPolicy === 'strict' && config.permissionProfile === 'workspace-write') {
+    return 'request-approval';
+  }
+  return 'agent-approval';
+}
+
+export function runtimeAccessModeSelection(mode: RuntimeAccessMode): RuntimeAccessModeConfig {
+  if (mode === 'full-access') {
+    return { approvalPolicy: 'full', permissionProfile: 'danger-full-access' };
+  }
+  if (mode === 'agent-approval') {
+    return { approvalPolicy: 'on-request', permissionProfile: 'workspace-write' };
+  }
+  return { approvalPolicy: 'strict', permissionProfile: 'workspace-write' };
+}
+
+export function normalizeRuntimeAccessModeConfig(config: RuntimeAccessModeConfig): RuntimeAccessModeConfig {
+  return runtimeAccessModeSelection(runtimeAccessModeForConfig(config));
+}
+
 export function runtimeDeveloperFeaturesEnabled(
   config: Pick<RuntimeConfigState, 'features'> | null | undefined,
 ): boolean {
