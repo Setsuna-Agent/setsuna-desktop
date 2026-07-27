@@ -22,6 +22,91 @@ describe('ToolApprovalStore', () => {
 });
 
 describe('ToolOrchestrator terminal and retry handling', () => {
+  it.each(['strict', 'on-request'] as const)(
+    'merges the %s shell approval with an unavailable-sandbox bypass before the first attempt',
+    async (approvalPolicy) => {
+      let approvalInput: CreateApprovalInput | undefined;
+      const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
+      const toolHost = stubToolHost(
+        async (_name, _input, context) => {
+          contexts.push(context);
+          return { content: 'ran once' };
+        },
+        {
+          approvalForTool: async () => ({
+            reason: 'High-risk shell command requires confirmation.',
+          }),
+          toolRuntimeProfile: async () => ({ requiresSandboxBypassApproval: true }),
+        },
+      );
+      const fixture = createOrchestratorFixture(
+        toolHost,
+        undefined,
+        autoApproveGate({ onCreate: (input) => { approvalInput = input; } }),
+      );
+      const command = 'powershell.exe -Command "Write-Output once"';
+
+      const execution = await fixture.orchestrator.runToolCall(
+        { id: `call_upfront_${approvalPolicy}`, name: 'exec_command', arguments: JSON.stringify({ cmd: command }) },
+        { cmd: command },
+        executionContext(),
+        approvalPolicy,
+      );
+
+      expect(execution.status).toBe('success');
+      expect(contexts).toHaveLength(1);
+      expect(contexts[0]?.sandbox).toMatchObject({ mode: 'bypass' });
+      expect(approvalInput).toMatchObject({
+        retryKind: 'sandbox_bypass',
+        reason: expect.stringContaining('OS sandbox is unavailable'),
+      });
+      expect(approvalInput?.reason).toContain('High-risk shell command');
+    },
+  );
+
+  it('reuses an approved unavailable-sandbox command without a second approval or failed attempt', async () => {
+    const approvalStore = new ToolApprovalStore();
+    const createApproval = vi.fn(async (input: CreateApprovalInput) => ({
+      ...input,
+      id: `approval_${createApproval.mock.calls.length}`,
+      status: 'pending' as const,
+      createdAt: new Date().toISOString(),
+    }));
+    const approvalGate = {
+      createApproval,
+      waitForDecision: async () => ({ decision: 'approve_for_session' as const }),
+      answerApproval: async () => { throw new Error('not expected'); },
+      listApprovals: async () => ({ approvals: [] }),
+      forgetApproval: () => undefined,
+    } as ApprovalGate;
+    const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
+    const toolHost = stubToolHost(
+      async (_name, _input, context) => {
+        contexts.push(context);
+        return { content: 'session-approved' };
+      },
+      {
+        toolRuntimeProfile: async () => ({ requiresSandboxBypassApproval: true }),
+      },
+    );
+    const fixture = createOrchestratorFixture(toolHost, undefined, approvalGate, approvalStore);
+    const command = 'git status --short';
+
+    for (const callId of ['call_session_1', 'call_session_2']) {
+      const execution = await fixture.orchestrator.runToolCall(
+        { id: callId, name: 'exec_command', arguments: JSON.stringify({ cmd: command }) },
+        { cmd: command },
+        executionContext(),
+        'on-request',
+      );
+      expect(execution.status).toBe('success');
+    }
+
+    expect(createApproval).toHaveBeenCalledTimes(1);
+    expect(contexts).toHaveLength(2);
+    expect(contexts.every((context) => context.sandbox?.mode === 'bypass')).toBe(true);
+  });
+
   it.each(['network_denied', 'sandbox_denied', 'sandbox_unavailable'] as const)('runs post-processing and PostToolUse after a %s retry', async (failureKind) => {
     let attempts = 0;
     let retryApproval: CreateApprovalInput | undefined;
@@ -71,10 +156,17 @@ describe('ToolOrchestrator terminal and retry handling', () => {
 
   it('keeps no-confirm workspace mode sandboxed instead of silently bypassing', async () => {
     let attempts = 0;
-    const toolHost = stubToolHost(async () => {
-      attempts += 1;
-      throw new ToolExecutionError('sandbox denied', { failureKind: 'sandbox_denied' });
-    });
+    const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
+    const toolHost = stubToolHost(
+      async (_name, _input, context) => {
+        contexts.push(context);
+        attempts += 1;
+        throw new ToolExecutionError('sandbox denied', { failureKind: 'sandbox_denied' });
+      },
+      {
+        toolRuntimeProfile: async () => ({ requiresSandboxBypassApproval: true }),
+      },
+    );
     const fixture = createOrchestratorFixture(toolHost);
 
     const execution = await fixture.orchestrator.runToolCall(
@@ -85,6 +177,7 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     );
 
     expect(attempts).toBe(1);
+    expect(contexts[0]?.sandbox).toMatchObject({ mode: 'default' });
     expect(execution).toMatchObject({ status: 'error', content: expect.stringContaining('No unsandboxed retry') });
   });
 
@@ -260,10 +353,11 @@ describe('ToolOrchestrator terminal and retry handling', () => {
   });
 });
 
-function stubToolHost(runTool: ToolHost['runTool']): ToolHost {
+function stubToolHost(runTool: ToolHost['runTool'], overrides: Partial<ToolHost> = {}): ToolHost {
   return {
     listTools: async () => [],
     runTool,
+    ...overrides,
   };
 }
 

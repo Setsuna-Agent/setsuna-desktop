@@ -37,10 +37,11 @@ type ProjectToolState = {
   lastUsedAt: number;
 };
 
-type PcLocalToolHostStorage = {
+type PcLocalToolHostOptions = {
   globalPolicyPaths?: readonly string[];
   mcpConfigPath?: string;
   memoryStorageRoot?: string;
+  shellSandboxCapability?: () => ReturnType<typeof pcTools.shellSandboxCapability>;
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
@@ -209,7 +210,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     private readonly policyAmendmentStore?: PolicyAmendmentStore,
     private readonly workspaceDependencies?: WorkspaceDependencyManager,
     private readonly workspaceSearchEngine: WorkspaceSearchEngine = new JavaScriptWorkspaceSearchEngine(),
-    private readonly storage: PcLocalToolHostStorage = {},
+    private readonly options: PcLocalToolHostOptions = {},
   ) {
     this.environmentResolver = new WorkspaceRuntimeEnvironmentResolver(projects);
   }
@@ -244,6 +245,15 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   async systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
     const workspaceDependencies = await this.workspaceDependencies?.getPromptContext();
     return pcLocalToolPrompt(request?.tools, { workspaceDependencies });
+  }
+
+  toolRuntimeProfile(name: string, context: ToolExecutionContext) {
+    if (this.normalizeToolName(name) !== 'run_shell_command') return null;
+    if (context.permissionProfile === 'danger-full-access') return null;
+    const capability = this.options.shellSandboxCapability?.() ?? pcTools.shellSandboxCapability();
+    return capability.supported
+      ? null
+      : { requiresSandboxBypassApproval: true };
   }
 
   /**
@@ -493,10 +503,10 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     }
     const toolState = pcTools.createLocalToolState(root, {
       environmentId: environment.id,
-      mcpConfigPath: this.storage.mcpConfigPath,
-      memoryStorageRoot: this.storage.memoryStorageRoot,
+      mcpConfigPath: this.options.mcpConfigPath,
+      memoryStorageRoot: this.options.memoryStorageRoot,
       shellProcessStore: this.shellProcessStore,
-      userPolicyConfigPaths: this.storage.globalPolicyPaths ?? [],
+      userPolicyConfigPaths: this.options.globalPolicyPaths ?? [],
       workspaceSearchEngine: this.workspaceSearchEngine,
     }) as PcToolState;
     const created = {

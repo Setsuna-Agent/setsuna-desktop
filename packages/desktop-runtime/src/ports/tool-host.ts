@@ -101,6 +101,11 @@ export type ToolRuntimeProfile = {
   visibleToModel?: boolean;
   /** 工具自行管理可审计交互生命周期，不能再接受第二次通用审批。 */
   approvalMode?: 'orchestrated' | 'selfManaged';
+  /**
+   * 当前平台无法为该工具提供受限 OS sandbox。交互审批模式必须把无沙箱授权
+   * 合并到首次工具审批中，避免先失败一次再请求第二次批准。
+   */
+  requiresSandboxBypassApproval?: boolean;
 };
 
 export type ToolApprovalRequirement = {

@@ -21,6 +21,7 @@ import {
   type ToolExecutionResult,
   type ToolHost,
   type ToolOutputDelta,
+  type ToolRuntimeProfile,
 } from '../../ports/tool-host.js';
 import { FILE_MUTATION_TOOL_NAMES } from '../../security/file-system-policy.js';
 import {
@@ -185,7 +186,26 @@ export class ToolOrchestrator {
         throw new ToolPolicyRejectedError(effective.rejectionReason);
       }
 
-      const approval = runOptions.checkApproval === false ? 'approve' : await this.approveToolCall(runToolCall, runArguments, stepContext, approvalPolicy, environment);
+      const runtimeProfile = runOptions.checkApproval === false
+        ? null
+        : (await this.options.toolHost.toolRuntimeProfile?.(runToolCall.name, stepContext) ?? null);
+      const upfrontSandboxBypass = runOptions.checkApproval !== false && requiresUpfrontSandboxBypass(
+        runtimeProfile,
+        runToolCall,
+        runArguments,
+        stepContext,
+        approvalPolicy,
+      );
+      const approval = runOptions.checkApproval === false
+        ? 'approve'
+        : await this.approveToolCall(
+            runToolCall,
+            runArguments,
+            stepContext,
+            approvalPolicy,
+            environment,
+            runtimeProfile,
+          );
       if (approval === 'reject') {
         content = `Tool ${runToolCall.name} was rejected.`;
         await this.options.events.publishToolCompleted(runToolCall, runArguments, 'rejected', content, {
@@ -199,12 +219,14 @@ export class ToolOrchestrator {
       const sandboxWorkspaceWrite = this.sandboxWorkspaceWriteForRun(stepContext, additionalSandboxPermissions?.sandboxWorkspaceWrite);
       const networkAccessApprovedForSession = this.options.approvalStore?.hasAny(networkRetryApprovalKeys(runToolCall, runArguments, stepContext), stepContext.turnId) ?? false;
       const fullAccess = approvalPolicy === 'full' && stepContext.permissionProfile === 'danger-full-access';
-      const firstRunSandbox = fullAccess || requestedSandboxBypass(runToolCall.name, runArguments)
+      const firstRunSandbox = fullAccess || requestedSandboxBypass(runToolCall.name, runArguments) || upfrontSandboxBypass
         ? {
             mode: 'bypass' as const,
             retryReason: fullAccess
               ? 'Full access mode disables the OS sandbox.'
-              : 'Command requested escalated sandbox permissions.',
+              : upfrontSandboxBypass
+                ? 'The OS sandbox is unavailable on this platform; unsandboxed execution was approved before the first attempt.'
+                : 'Command requested escalated sandbox permissions.',
           }
         : { mode: 'default' as const };
       const toolRunContext: RuntimeToolExecutionContext = {
@@ -917,8 +939,22 @@ export class ToolOrchestrator {
     }
   }
 
-  private async approveToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
-    const requirement = await this.approvalRequirement(toolCall, parsedArguments, context, approvalPolicy, environment);
+  private async approveToolCall(
+    toolCall: RuntimeToolCall,
+    parsedArguments: unknown,
+    context: RuntimeToolExecutionContext,
+    approvalPolicy: RuntimeConfigState['approvalPolicy'],
+    environment: ToolExecutionEnvironment,
+    runtimeProfile?: ToolRuntimeProfile | null,
+  ): Promise<RuntimeApprovalDecision> {
+    const requirement = await this.approvalRequirement(
+      toolCall,
+      parsedArguments,
+      context,
+      approvalPolicy,
+      environment,
+      runtimeProfile,
+    );
     if (requirement.action === 'skip') return 'approve';
     if (requirement.action === 'reject') {
       throw new ToolPolicyRejectedError(requirement.reason);
@@ -948,6 +984,7 @@ export class ToolOrchestrator {
       toolName: toolCall.name,
       reason: requirement.reason,
       argumentsPreview: requirement.argumentsPreview,
+      retryKind: requirement.retryKind,
       availableDecisions: toolApprovalAvailableDecisions(requirement),
       proposedExecPolicyAmendment: requirement.proposedExecPolicyAmendment,
       environmentId: requirement.environmentId,
@@ -982,12 +1019,19 @@ export class ToolOrchestrator {
     return answer.decision;
   }
 
-  private async approvalRequirement(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], environment: ToolExecutionEnvironment): Promise<ToolApprovalRequirement> {
+  private async approvalRequirement(
+    toolCall: RuntimeToolCall,
+    parsedArguments: unknown,
+    context: RuntimeToolExecutionContext,
+    approvalPolicy: RuntimeConfigState['approvalPolicy'],
+    environment: ToolExecutionEnvironment,
+    knownRuntimeProfile?: ToolRuntimeProfile | null,
+  ): Promise<ToolApprovalRequirement> {
     const strictAutoReview = this.options.approvalStore?.strictAutoReviewEnabled(context.turnId) ?? false;
     const fileRequirement = assessFileMutationApproval(toolCall, parsedArguments, context, approvalPolicy);
     if (fileRequirement) return fileRequirement;
     const additionalPermissionRequirement = assessAdditionalSandboxPermissionsApproval(toolCall, parsedArguments, context, approvalPolicy, Boolean(this.options.approvalGate), environment);
-    if (additionalPermissionRequirement) return additionalPermissionRequirement;
+    if (additionalPermissionRequirement?.action === 'reject') return additionalPermissionRequirement;
     const requestsSandboxBypass = requestedSandboxBypass(toolCall.name, parsedArguments);
     if (requestsSandboxBypass && approvalPolicy === 'full' && context.permissionProfile !== 'danger-full-access') {
       return {
@@ -995,12 +1039,24 @@ export class ToolOrchestrator {
         reason: '无需确认模式仍受工作区沙箱限制；无沙箱执行需要切换到“完全访问”或启用可交互审批。',
       };
     }
-    const runtimeProfile = await this.options.toolHost.toolRuntimeProfile?.(toolCall.name, context);
-    if (runtimeProfile?.approvalMode === 'selfManaged' && !requestsSandboxBypass) return { action: 'skip' };
+    const runtimeProfile = knownRuntimeProfile === undefined
+      ? await this.options.toolHost.toolRuntimeProfile?.(toolCall.name, context)
+      : knownRuntimeProfile;
+    const needsUpfrontSandboxBypass = requiresUpfrontSandboxBypass(
+      runtimeProfile,
+      toolCall,
+      parsedArguments,
+      context,
+      approvalPolicy,
+    );
+    if (additionalPermissionRequirement && !needsUpfrontSandboxBypass) return additionalPermissionRequirement;
+    if (runtimeProfile?.approvalMode === 'selfManaged' && !requestsSandboxBypass && !needsUpfrontSandboxBypass) {
+      return { action: 'skip' };
+    }
     // 权限配置仍用于定义实际生效的文件系统边界，但完整审批策略本身绝不能触发交互提示。
     if (approvalPolicy === 'full' && !strictAutoReview) return { action: 'skip' };
     if (!this.options.approvalGate) {
-      return requestsSandboxBypass
+      return requestsSandboxBypass || needsUpfrontSandboxBypass
         ? { action: 'reject', reason: 'Unsandboxed shell execution requires an interactive approval gate.' }
         : { action: 'skip' };
     }
@@ -1008,6 +1064,31 @@ export class ToolOrchestrator {
     if (!strictAutoReview && this.options.approvalStore?.hasAny(execApprovalLookupKeys, context.turnId)) return { action: 'skip' };
 
     const hostRequirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, context);
+    if (needsUpfrontSandboxBypass) {
+      const additionalRequirement = additionalPermissionRequirement?.action === 'ask'
+        ? additionalPermissionRequirement
+        : null;
+      const reasons = [
+        hostRequirement?.reason,
+        additionalRequirement?.reason,
+        `The OS sandbox is unavailable on this platform. Approving ${toolCall.name} will run this command without the OS sandbox.`,
+      ].filter((reason): reason is string => Boolean(reason));
+      return {
+        action: 'ask',
+        reason: reasons.join(' '),
+        argumentsPreview: hostRequirement?.argumentsPreview
+          ?? additionalRequirement?.argumentsPreview
+          ?? previewArguments(parsedArguments),
+        approvalKeys: [...new Set([
+          ...sandboxRetryApprovalKeys(toolCall, parsedArguments, context),
+          ...(hostRequirement?.approvalKeys ?? []),
+          ...(additionalRequirement?.approvalKeys ?? []),
+        ])],
+        environmentId: environment.id,
+        additionalPermissions: additionalRequirement?.additionalPermissions,
+        retryKind: 'sandbox_bypass',
+      };
+    }
     if (hostRequirement) {
       return {
         action: 'ask',
@@ -1060,6 +1141,19 @@ export class ToolOrchestrator {
   private async persistentApprovalIsRemembered(keys: string[]): Promise<boolean> {
     return Boolean(keys.length && await this.options.persistentToolApprovalStore?.hasAll(keys));
   }
+}
+
+function requiresUpfrontSandboxBypass(
+  runtimeProfile: ToolRuntimeProfile | null | undefined,
+  toolCall: RuntimeToolCall,
+  parsedArguments: unknown,
+  context: RuntimeToolExecutionContext,
+  approvalPolicy: RuntimeConfigState['approvalPolicy'],
+): boolean {
+  return runtimeProfile?.requiresSandboxBypassApproval === true
+    && approvalPolicy !== 'full'
+    && context.permissionProfile !== 'danger-full-access'
+    && !requestedSandboxBypass(toolCall.name, parsedArguments);
 }
 
 export { ToolApprovalStore } from './tool-approval-store.js';

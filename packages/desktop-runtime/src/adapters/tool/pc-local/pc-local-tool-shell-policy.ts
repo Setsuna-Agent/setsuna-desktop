@@ -46,13 +46,13 @@ export function shellSandboxCapability(platform = process.platform, hasMacSandbo
     return {
       supported: false,
       provider: '',
-      reason: 'Windows 当前没有可用的桌面 OS sandbox provider。受限权限下已拒绝 shell 执行；如确有需要，请显式批准一次无沙箱重试或切换到 danger-full-access。',
+      reason: 'Windows 当前没有可用的桌面 OS sandbox provider。交互审批模式会在命令执行前请求一次无沙箱批准；禁止提示且保持受限权限的组合会拒绝执行。',
     };
   }
   return {
     supported: false,
     provider: '',
-    reason: '当前平台没有可用的 OS sandbox provider。受限权限下已拒绝 shell 执行；如确有需要，请显式批准一次无沙箱重试或切换到 danger-full-access。',
+    reason: '当前平台没有可用的 OS sandbox provider。交互审批模式会在命令执行前请求一次无沙箱批准；禁止提示且保持受限权限的组合会拒绝执行。',
   };
 }
 

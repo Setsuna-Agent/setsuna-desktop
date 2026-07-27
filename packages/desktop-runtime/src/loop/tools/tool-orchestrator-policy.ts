@@ -2,6 +2,7 @@ import type {
   AnswerRuntimeApprovalInput,
   RuntimeApprovalAvailableDecision,
   RuntimeApprovalDecision,
+  RuntimeApprovalRetryKind,
   RuntimeConfigState,
   RuntimeExecPolicyAmendment,
   RuntimeNetworkPolicyAmendment,
@@ -40,6 +41,7 @@ export type ToolApprovalRequirement =
       proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
       environmentId?: string;
       additionalPermissions?: RequestPermissionProfileOutput;
+      retryKind?: RuntimeApprovalRetryKind;
     }
   | { action: 'reject'; reason: string };
 

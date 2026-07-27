@@ -1077,7 +1077,7 @@ describe('pc local tool host', () => {
       osSandbox: true,
       permissionProfile: 'workspace-write',
       sandboxWorkspaceWrite: {},
-    }, capability)).toContain('显式批准一次无沙箱重试');
+    }, capability)).toContain('执行前请求一次无沙箱批准');
     expect(shellSandboxUnavailableReason({
       root: 'C:\\workspace',
       osSandbox: true,
@@ -1789,6 +1789,33 @@ describe('pc local tool host', () => {
     expect(polled.content).toContain('stdin:hello');
   });
 
+  it('declares an upfront sandbox bypass for restricted shell tools when the provider is unavailable', async () => {
+    const { host } = await createHost({
+      shellSandboxCapability: () => ({
+        supported: false,
+        provider: '',
+        reason: 'test platform has no sandbox provider',
+      }),
+    });
+    const restrictedContext = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write' as const,
+    };
+
+    expect(host.toolRuntimeProfile('exec_command', restrictedContext)).toEqual({
+      requiresSandboxBypassApproval: true,
+    });
+    expect(host.toolRuntimeProfile('run_shell_command', restrictedContext)).toEqual({
+      requiresSandboxBypassApproval: true,
+    });
+    expect(host.toolRuntimeProfile('read_file', restrictedContext)).toBeNull();
+    expect(host.toolRuntimeProfile('exec_command', {
+      ...restrictedContext,
+      permissionProfile: 'danger-full-access',
+    })).toBeNull();
+  });
+
   it('cleans non-persisted shell processes for a turn', async () => {
     const { host, projectId } = await createHost();
     const context = {
@@ -1972,6 +1999,7 @@ async function createHost(options: {
   fixtureRootParent?: string;
   policyAmendmentStore?: PolicyAmendmentStore;
   projectDirName?: string;
+  shellSandboxCapability?: () => ReturnType<typeof shellSandboxCapability>;
   workspaceDependencies?: WorkspaceDependencyManager;
 } = {}): Promise<{ fixtureRoot: string; host: PcLocalToolHost; projectDir: string; projectId: string }> {
   const fixtureRootParent = options.fixtureRootParent ?? tmpdir();
@@ -1988,7 +2016,13 @@ async function createHost(options: {
   const project = await store.addProject({ path: projectDir });
   return {
     fixtureRoot: root,
-    host: new PcLocalToolHost(store, options.policyAmendmentStore, options.workspaceDependencies),
+    host: new PcLocalToolHost(
+      store,
+      options.policyAmendmentStore,
+      options.workspaceDependencies,
+      undefined,
+      { shellSandboxCapability: options.shellSandboxCapability },
+    ),
     projectDir,
     projectId: project.id,
   };
