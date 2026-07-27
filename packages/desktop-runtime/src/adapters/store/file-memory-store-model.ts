@@ -13,6 +13,9 @@ import type { Dirent } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
+import { isNodeErrorCode } from '../../shared/node-errors.js';
+
+export { isNodeErrorCode };
 
 export type StoredMemoryRecord = RuntimeMemoryRecord & {
   kind?: string;
@@ -205,10 +208,6 @@ export async function overlayStoredDirectory(files: Map<string, string>, root: s
     if (!entry.isFile()) return;
     files.set(relativePath, await readFile(absolutePath, 'utf8'));
   }));
-}
-
-export function isNodeErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }
 
 export function optionalText(value: unknown, maxChars?: number): string | undefined {

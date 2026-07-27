@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { isNodeError } from '../../shared/node-errors.js';
 
 const WINDOWS_RENAME_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 const WINDOWS_RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400, 800, 1_600];
@@ -75,8 +76,4 @@ function errorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
   const code = (error as { code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error;
 }

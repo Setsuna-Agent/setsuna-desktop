@@ -17,6 +17,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId, resolveRuntimeStoragePath } from '../../security/runtime-id.js';
+import { isNodeError } from '../../shared/node-errors.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 import {
   assertThreadSnapshot,
@@ -464,9 +465,6 @@ export class JsonThreadStore implements ThreadStore {
 
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error;
-}
 
 export function createMessage(input: Omit<RuntimeMessage, 'createdAt'> & { createdAt?: string }): RuntimeMessage {
   return {

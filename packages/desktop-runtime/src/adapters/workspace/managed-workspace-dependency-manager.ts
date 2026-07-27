@@ -34,6 +34,7 @@ import type {
   WorkspaceDependencyManager,
   WorkspaceDependencyPromptContext,
 } from '../../ports/workspace-dependency-manager.js';
+import { errorMessage } from '../../shared/node-errors.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
 const BUNDLE_VERSION = '2026.07.3';
@@ -1151,10 +1152,6 @@ function versionAtLeast(version: string, minimum: readonly [number, number]): bo
 
 function commandFailure(result: CommandResult): string {
   return (result.stderr || result.stdout || `exit code ${String(result.exitCode)}`).trim().slice(0, 1200);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function runCommand(command: string, args: string[], environment?: NodeJS.ProcessEnv): Promise<CommandResult> {

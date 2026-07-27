@@ -10,6 +10,7 @@ import path from 'node:path';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
 import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
+import { recordInput } from '../../shared/unknown.js';
 import { addRuntimeUsage, runtimeUsageTokenCount } from '../core/runtime-usage.js';
 
 export type MemoryConsolidationAgentResult = {
@@ -421,10 +422,6 @@ function parseToolArguments(value: string): unknown {
   } catch {
     return {};
   }
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function stringArg(value: unknown, fallback = ''): string {

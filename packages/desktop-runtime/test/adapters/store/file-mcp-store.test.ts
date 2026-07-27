@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
-import { InMemorySecretStore } from '../../../src/adapters/store/in-memory-secret-store.js';
+import { InMemorySecretStore } from '../../support/in-memory-secret-store.js';
 
 describe('file mcp store', () => {
   it('serializes concurrent server upserts without losing either server', async () => {

@@ -1,4 +1,5 @@
 import { AppServerRpcError } from './errors.js';
+export { recordInput } from '../../shared/unknown.js';
 
 export function requiredString(value: unknown, name: string): string {
   const text = stringInput(value);
@@ -26,10 +27,6 @@ export function hasOwn(record: Record<string, unknown>, key: string): boolean {
 export function requiredRawString(value: unknown, name: string): string {
   if (typeof value === 'string') return value;
   throw new AppServerRpcError(-32602, `Missing required parameter: ${name}`);
-}
-
-export function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 export function numericInput(value: unknown): number | undefined {

@@ -11,6 +11,7 @@ import type {
   ToolExecutionResult,
   ToolHost,
 } from '../../ports/tool-host.js';
+import { recordInput } from '../../shared/unknown.js';
 
 const configureSkillToolName = 'configure_skill';
 const installSkillMcpDependenciesToolName = 'install_skill_mcp_dependencies';
@@ -323,10 +324,6 @@ function normalizeSkillId(value: string): string | undefined {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
   return id || undefined;
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function stringValue(value: unknown): string {

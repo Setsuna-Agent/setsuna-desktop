@@ -34,6 +34,7 @@ import type {
   McpToolCallResponse,
 } from '../../ports/mcp-client-runtime.js';
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
+import { recordInput } from '../../shared/unknown.js';
 import { UnavailableDesktopNativeBridge } from '../native/http-desktop-native-bridge.js';
 import type { McpElicitationExecutionContext, McpElicitationHandler } from './mcp-elicitation-coordinator.js';
 import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from './mcp-oauth-coordinator.js';
@@ -981,10 +982,6 @@ function waitWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T
 
 function isExpiredHttpSession(error: unknown): boolean {
   return error instanceof StreamableHTTPError && error.code === 404;
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function asError(error: unknown): Error {

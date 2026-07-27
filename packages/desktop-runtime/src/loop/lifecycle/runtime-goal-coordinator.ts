@@ -14,6 +14,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext } from '../../ports/tool-host.js';
+import { recordInput } from '../../shared/unknown.js';
 import { neutralizePromptClosingTags } from '../context/prompt-utils.js';
 
 type ActiveGoalTask = {
@@ -382,10 +383,6 @@ function normalizeGoalStatus(value: unknown): RuntimeThreadGoalStatus {
 
 function isTerminalGoalStatus(status: RuntimeThreadGoalStatus): boolean {
   return status === 'complete' || status === 'blocked' || status === 'budgetLimited' || status === 'usageLimited';
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function goalToolResult(name: string, data: Record<string, unknown>, preview: string): GoalToolExecutionResult {

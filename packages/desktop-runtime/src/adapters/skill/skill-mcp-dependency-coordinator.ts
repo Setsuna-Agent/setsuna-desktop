@@ -17,6 +17,7 @@ import type {
   SkillMcpDependencyManager,
   SkillRegistry,
 } from '../../ports/skill-registry.js';
+import { errorMessage } from '../../shared/node-errors.js';
 
 type SkillMcpClient = Pick<McpClientRuntime, 'authStatus' | 'invalidateServer' | 'login'>;
 
@@ -220,8 +221,4 @@ function comparableUrl(value: string | undefined): string {
 
 function arraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((item, index) => item === right[index]);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

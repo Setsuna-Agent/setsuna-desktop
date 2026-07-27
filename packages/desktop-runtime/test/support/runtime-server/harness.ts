@@ -2,7 +2,7 @@ import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { InMemoryDesktopNativeBridge } from '../../../src/adapters/store/in-memory-secret-store.js';
+import { InMemoryDesktopNativeBridge } from '../in-memory-secret-store.js';
 import type { AppServerPtyFactory } from '../../../src/server/app-server/command-exec.js';
 import { createRuntimeServer, type RuntimeServer } from '../../../src/server/runtime-server.js';
 import {

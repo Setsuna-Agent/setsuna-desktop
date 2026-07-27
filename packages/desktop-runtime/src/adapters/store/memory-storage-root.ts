@@ -1,5 +1,6 @@
 import { lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { isNodeErrorCode } from '../../shared/node-errors.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { writeJsonFile } from './json-file.js';
 
@@ -120,8 +121,4 @@ async function pathKind(target: string): Promise<'missing' | 'directory' | 'syml
     if (isNodeErrorCode(error, 'ENOENT')) return 'missing';
     throw error;
   }
-}
-
-function isNodeErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }

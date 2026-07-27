@@ -163,6 +163,23 @@ describe('pc local tool host', () => {
       .resolves.toBe('created through path\n');
   });
 
+  it('keeps legacy workspace tool names as execution aliases', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    await writeFile(path.join(projectDir, 'README.md'), 'legacy workspace needle\n', 'utf8');
+
+    const listed = await host.runTool('workspace_list_directory', {}, context);
+    const read = await host.runTool('workspace_read_file', { path: 'README.md' }, context);
+    const searched = await host.runTool('workspace_search_text', { query: 'legacy workspace' }, context);
+    await host.runTool('workspace_write_file', { path: 'generated.txt', content: 'generated\n' }, context);
+
+    expect(listed.content).toContain('README.md');
+    expect(read.content).toContain('legacy workspace needle');
+    expect(searched.content).toContain('README.md');
+    await expect(readFile(path.join(projectDir, 'generated.txt'), 'utf8')).resolves.toBe('generated\n');
+  });
+
   it('builds streaming write previews when partial tool arguments use path aliases', async () => {
     const { host } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

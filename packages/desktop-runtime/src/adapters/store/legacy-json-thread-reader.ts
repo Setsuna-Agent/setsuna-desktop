@@ -3,6 +3,7 @@ import { applyRuntimeEventToThread } from '@setsuna-desktop/contracts';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { assertSafeRuntimeId, resolveRuntimeStoragePath } from '../../security/runtime-id.js';
+import { isNodeError } from '../../shared/node-errors.js';
 import {
   assertThreadSnapshot,
   hydrateMessageCompletionTimesFromEvents,
@@ -171,8 +172,4 @@ async function readLegacyEventLog(filePath: string, threadId: string): Promise<L
     throw new Error(`Invalid runtime event sequence at ${filePath}:${index + 1}`);
   }
   return { duplicateSequenceRecoveries, events };
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error;
 }

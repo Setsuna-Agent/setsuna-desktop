@@ -15,6 +15,8 @@ import type {
   ToolExternalContext,
   ToolHost,
 } from '../../ports/tool-host.js';
+import { errorMessage } from '../../shared/node-errors.js';
+import { recordInput } from '../../shared/unknown.js';
 import { mcpToolExecutionResult } from '../mcp/mcp-tool-result.js';
 import { threadScopeId } from '../mcp/sdk-mcp-connection-manager.js';
 
@@ -345,10 +347,6 @@ function externalJsonResult(value: unknown): ToolExecutionResult {
   };
 }
 
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
 function requiredString(value: unknown, label: string): string {
   const text = optionalString(value);
   if (!text) throw new Error(`${label} is required.`);
@@ -358,8 +356,4 @@ function requiredString(value: unknown, label: string): string {
 function optionalString(value: unknown): string | undefined {
   const text = typeof value === 'string' ? value.trim() : '';
   return text || undefined;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -1,6 +1,7 @@
 import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { ProjectInstructionLoader, ProjectInstructionSource } from '../../ports/project-instruction-loader.js';
+import { directoriesFromRoot, pathIsWithin, truncateUtf8 } from './workspace-discovery-utils.js';
 
 const DEFAULT_MAX_BYTES = 32 * 1024;
 const PRIMARY_FILENAMES = ['AGENTS.override.md', 'AGENTS.md'];
@@ -69,35 +70,8 @@ async function readUtf8Prefix(filePath: string, maxBytes: number): Promise<{ con
   }
 }
 
-function directoriesFromRoot(root: string, cwd: string): string[] {
-  const relative = path.relative(root, cwd);
-  const parts = relative ? relative.split(path.sep).filter(Boolean) : [];
-  const directories = [root];
-  for (let index = 0; index < parts.length; index += 1) {
-    directories.push(path.join(root, ...parts.slice(0, index + 1)));
-  }
-  return directories;
-}
-
-function pathIsWithin(root: string, candidate: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
-}
-
 function validFallbackFilenames(values: string[]): string[] {
   return values
     .map((value) => value.trim())
     .filter((value, index, all) => Boolean(value) && path.basename(value) === value && !PRIMARY_FILENAMES.includes(value) && all.indexOf(value) === index);
-}
-
-function truncateUtf8(value: string, maxBytes: number): string {
-  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
-  let start = 0;
-  let end = value.length;
-  while (start < end) {
-    const middle = Math.ceil((start + end) / 2);
-    if (Buffer.byteLength(value.slice(0, middle), 'utf8') <= maxBytes) start = middle;
-    else end = middle - 1;
-  }
-  return value.slice(0, start).trimEnd();
 }

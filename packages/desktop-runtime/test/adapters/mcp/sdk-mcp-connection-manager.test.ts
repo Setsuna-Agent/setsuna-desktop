@@ -7,7 +7,7 @@ import {
   stdioTransportEnvironment,
   threadScopeId,
 } from '../../../src/adapters/mcp/sdk-mcp-connection-manager.js';
-import { InMemoryDesktopNativeBridge } from '../../../src/adapters/store/in-memory-secret-store.js';
+import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 
 describe('SdkMcpConnectionManager', () => {
   it('preserves Electron Node mode only when stdio reuses the current executable', () => {

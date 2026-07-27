@@ -20,6 +20,7 @@ import type {
   SkillInjection,
   SkillRegistry,
 } from '../../ports/skill-registry.js';
+import { errorMessage } from '../../shared/node-errors.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
 
@@ -708,10 +709,6 @@ function stringArray(value: unknown, name: string): string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) throw new Error(`${name} must be a string array.`);
   return value.map((item) => item.trim()).filter(Boolean);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function emptyDependencyManifest(): SkillDependencyManifest {

@@ -8,6 +8,7 @@ import type {
   ProjectWorkflowResolver,
   ProjectWorkflowScript,
 } from '../../ports/project-workflow-resolver.js';
+import { directoriesFromRoot, pathIsWithin, truncateUtf8 } from './workspace-discovery-utils.js';
 
 const PACKAGE_MANAGER_NAMES = ['pnpm', 'yarn', 'npm', 'bun'] as const satisfies readonly ProjectPackageManagerName[];
 const SCRIPT_FAMILIES = ['test', 'lint', 'typecheck', 'build', 'check', 'verify', 'format'] as const;
@@ -394,36 +395,13 @@ function candidateFingerprint(states: CandidateState[]): string {
   )).join('|');
 }
 
-function directoriesFromRoot(root: string, cwd: string): string[] {
-  const relative = path.relative(root, cwd);
-  const parts = relative ? relative.split(path.sep).filter(Boolean) : [];
-  return [root, ...parts.map((_part, index) => path.join(root, ...parts.slice(0, index + 1)))];
-}
-
 async function canonicalPath(value: string): Promise<string> {
   return realpath(value).catch(() => path.resolve(value));
-}
-
-function pathIsWithin(root: string, candidate: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 
 function workspaceRelativePath(root: string, candidate: string): string {
   const relative = path.relative(root, candidate);
   return relative || path.basename(candidate);
-}
-
-function truncateUtf8(value: string, maxBytes: number): string {
-  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
-  let start = 0;
-  let end = value.length;
-  while (start < end) {
-    const middle = Math.ceil((start + end) / 2);
-    if (Buffer.byteLength(value.slice(0, middle), 'utf8') <= maxBytes) start = middle;
-    else end = middle - 1;
-  }
-  return value.slice(0, start).trimEnd();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

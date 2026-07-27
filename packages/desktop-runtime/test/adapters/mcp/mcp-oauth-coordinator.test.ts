@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from '../../../src/adapters/mcp/mcp-oauth-coordinator.js';
 import { SdkMcpConnectionManager } from '../../../src/adapters/mcp/sdk-mcp-connection-manager.js';
-import { InMemoryDesktopNativeBridge } from '../../../src/adapters/store/in-memory-secret-store.js';
+import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 
 describe('McpOAuthCoordinator', () => {
   it('opens the system authorization URL, validates callback state, and persists tokens', async () => {

@@ -14,6 +14,7 @@ import type {
   ToolExecutionResult,
   ToolHost,
 } from '../../ports/tool-host.js';
+import { recordInput } from '../../shared/unknown.js';
 
 const configureMcpToolName = 'configure_mcp_server';
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -464,10 +465,6 @@ function optionalString(value: unknown): string | undefined {
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {

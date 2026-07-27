@@ -28,6 +28,7 @@ import {
   type RuntimeNetworkApprovalContext,
 } from '../../security/network-approval-policy.js';
 import { reusableShellCommandWords } from '../../security/shell-command-analysis.js';
+import { recordInput } from '../../shared/unknown.js';
 import { abortReason } from '../core/runtime-turn-errors.js';
 
 export type ToolApprovalRequirement =
@@ -887,9 +888,7 @@ export function stringList(value: unknown): string[] {
     : [];
 }
 
-export function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
+export { recordInput };
 
 export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;

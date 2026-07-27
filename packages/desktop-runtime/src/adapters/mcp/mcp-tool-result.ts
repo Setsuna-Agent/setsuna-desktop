@@ -1,6 +1,7 @@
 import type { RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
 import type { McpToolCallResponse } from '../../ports/mcp-client-runtime.js';
 import type { ToolExecutionContext, ToolExecutionResult } from '../../ports/tool-host.js';
+import { recordInput } from '../../shared/unknown.js';
 
 const MAX_MODEL_TEXT_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -151,10 +152,6 @@ function stringifyResult(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function stringValue(value: unknown): string {

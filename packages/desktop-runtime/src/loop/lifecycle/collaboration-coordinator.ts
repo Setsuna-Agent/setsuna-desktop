@@ -9,6 +9,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext } from '../../ports/tool-host.js';
+import { recordInput } from '../../shared/unknown.js';
 import { neutralizePromptClosingTags } from '../context/prompt-utils.js';
 
 type ActiveCollaborationTask = {
@@ -344,10 +345,6 @@ export class RuntimeCollaborationCoordinator {
     if (wait === 'timeout') return { status: 'running', timedOut: true };
     return { status: this.options.activeTask(threadId) ? 'running' : 'idle', timedOut: false };
   }
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function childAgentOutput(thread: RuntimeThread | null): string {

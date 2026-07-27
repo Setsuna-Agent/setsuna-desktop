@@ -6,6 +6,7 @@ import type {
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../ports/policy-amendment-store.js';
+import { isNodeError } from '../../shared/node-errors.js';
 import { readJsonFile } from './json-file.js';
 
 type StoredPolicyAmendments = RuntimePolicyAmendments;
@@ -117,9 +118,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error;
-}
 
 function emptyPolicyAmendments(): RuntimePolicyAmendments {
   return { execPolicyAmendments: [], networkPolicyAmendments: [] };

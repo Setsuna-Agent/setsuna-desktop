@@ -7,6 +7,7 @@ import type {
 import type { RuntimeMcpAuthStatus, RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
+import { errorMessage } from '../../shared/node-errors.js';
 import { McpOAuthCallbackServer } from './mcp-oauth-callback-server.js';
 
 type StoredOAuthTokens = {
@@ -335,8 +336,4 @@ function deserializeResponse(response: SerializedResponse): Response {
     status: response.status,
     statusText: response.statusText,
   });
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

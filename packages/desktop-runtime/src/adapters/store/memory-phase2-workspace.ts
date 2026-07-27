@@ -6,6 +6,7 @@ import type {
 import { lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
+import { isNodeErrorCode } from '../../shared/node-errors.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
 const PHASE2_WORKSPACE_DIFF_FILE = 'phase2_workspace_diff.md';
@@ -187,8 +188,4 @@ function boundedDiff(value: string): string {
 function isStringRecord(value: unknown): value is Record<string, string> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)
     && Object.values(value).every((item) => typeof item === 'string'));
-}
-
-function isNodeErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }

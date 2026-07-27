@@ -39,6 +39,7 @@ import { RuntimeAttachmentValidationError } from '../ports/attachment-store.js';
 import type { WorkspaceProjectStore } from '../ports/workspace-project-store.js';
 import { WorkspaceSearchCancelledError } from '../ports/workspace-search-engine.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
+import { recordInput } from '../shared/unknown.js';
 import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 import { stringInput } from './app-server/input.js';
 import { RuntimeHttpError } from './http-error.js';
@@ -840,10 +841,6 @@ function planDecisionInput(value: unknown): SendTurnInput['planDecision'] {
   const text = stringInput(value);
   if (text === 'accepted' || text === 'dismissed') return text;
   return undefined;
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function normalizeGeneratedCommitMessage(value: string): string {

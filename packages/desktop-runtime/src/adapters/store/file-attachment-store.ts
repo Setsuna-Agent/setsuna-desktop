@@ -17,6 +17,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
+import { replaceControlCharacters, safeStorageFileStem } from './storage-file-name.js';
 
 type StoredAttachmentRecord = {
   id: string;
@@ -277,20 +278,8 @@ function safeDisplayName(value: string): string {
 
 function safeStoredFileName(name: string, type: RuntimeFileAttachmentMimeType): string {
   const extension = type === PDF_MIME_TYPE ? '.pdf' : '.docx';
-  const stem = replaceControlCharacters(name.slice(0, -path.extname(name).length), '_')
-    .replace(/[<>:"/\\|?*]/gu, '_')
-    .replace(/[. ]+$/u, '')
-    .trim()
-    .slice(0, 120) || 'attachment';
-  const windowsReserved = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/iu.test(stem);
-  return `${windowsReserved ? `_${stem}` : stem}${extension}`;
-}
-
-function replaceControlCharacters(value: string, replacement: string): string {
-  return Array.from(value, (character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint <= 0x1f || codePoint === 0x7f ? replacement : character;
-  }).join('');
+  const stem = safeStorageFileStem(name.slice(0, -path.extname(name).length), 'attachment');
+  return `${stem}${extension}`;
 }
 
 function compatibleDeclaredType(declared: string, expected: RuntimeFileAttachmentMimeType): boolean {

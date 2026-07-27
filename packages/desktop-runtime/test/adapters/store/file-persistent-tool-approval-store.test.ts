@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
 import { FilePersistentToolApprovalStore } from '../../../src/adapters/store/file-persistent-tool-approval-store.js';
-import { InMemorySecretStore } from '../../../src/adapters/store/in-memory-secret-store.js';
+import { InMemorySecretStore } from '../../support/in-memory-secret-store.js';
 
 describe('file persistent tool approval store', () => {
   it('persists normalized approval keys', async () => {

@@ -1,5 +1,6 @@
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
+import { isNodeErrorCode } from '../shared/node-errors.js';
 
 /**
  * 在已授权根目录下解析路径，同时拒绝路径中的所有符号链接组件。
@@ -35,8 +36,4 @@ export async function resolveConfinedPathWithoutSymlinks(
     }
   }
   return targetPath;
-}
-
-function isNodeErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
 }

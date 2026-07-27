@@ -5,7 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SdkMcpConnectionManager } from '../../../src/adapters/mcp/sdk-mcp-connection-manager.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
-import { InMemorySecretStore } from '../../../src/adapters/store/in-memory-secret-store.js';
+import { InMemorySecretStore } from '../../support/in-memory-secret-store.js';
 import { McpManagementToolHost } from '../../../src/adapters/tool/mcp-management-tool-host.js';
 
 describe('mcp management tool host', () => {

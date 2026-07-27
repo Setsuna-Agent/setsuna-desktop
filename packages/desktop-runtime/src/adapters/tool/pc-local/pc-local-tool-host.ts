@@ -18,6 +18,7 @@ import {
 import type { ShellToolchain, WorkspaceDependencyManager } from '../../../ports/workspace-dependency-manager.js';
 import type { WorkspaceProjectStore } from '../../../ports/workspace-project-store.js';
 import type { WorkspaceSearchEngine } from '../../../ports/workspace-search-engine.js';
+import { recordInput } from '../../../shared/unknown.js';
 import { JavaScriptWorkspaceSearchEngine } from '../../search/javascript-workspace-search-engine.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../../workspace/workspace-runtime-environment-resolver.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
@@ -646,10 +647,6 @@ function toRuntimeToolDefinition(tool: unknown): RuntimeToolDefinition | null {
     description: typeof fn.description === 'string' ? fn.description : '',
     inputSchema: recordInput(fn.parameters),
   };
-}
-
-function recordInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function assertLocalFileMutationPolicy(name: string, args: Record<string, unknown>, state: PcToolState): void {

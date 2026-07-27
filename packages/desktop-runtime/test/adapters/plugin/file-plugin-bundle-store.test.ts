@@ -6,7 +6,7 @@ import { FilePluginBundleStore } from '../../../src/adapters/plugin/file-plugin-
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
-import { InMemoryDesktopNativeBridge } from '../../../src/adapters/store/in-memory-secret-store.js';
+import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 import { discoverRuntimeHooks } from '../../../src/hooks/runtime-hooks.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
