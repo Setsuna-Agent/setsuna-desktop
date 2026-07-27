@@ -25,8 +25,14 @@ export type LocalFileChange = {
   symbolicLink?: boolean;
 };
 
-type FileMutationCoordinator = {
+export type FileMutationCoordinator = {
   tail: Promise<void>;
+};
+
+export type FileMutationState = {
+  root?: string;
+  expectedMutationIntegrityToken?: unknown;
+  fileMutationCoordinator?: FileMutationCoordinator;
 };
 
 type FileIdentity = {
@@ -82,7 +88,7 @@ export async function mutationIntegrityToken(
  */
 export async function commitFileChanges(
   changes: LocalFileChange[],
-  state: Record<string, any>,
+  state: FileMutationState,
 ): Promise<void> {
   await withMutationLock(state, async () => {
     const root = realWorkspaceRoot(state.root);
@@ -306,7 +312,7 @@ async function mutationSnapshot(change: LocalFileChange): Promise<FileSnapshot> 
 }
 
 async function withMutationLock<T>(
-  state: Record<string, any>,
+  state: FileMutationState,
   task: () => Promise<T>,
 ): Promise<T> {
   const coordinator: FileMutationCoordinator = state.fileMutationCoordinator ??= createFileMutationCoordinator();

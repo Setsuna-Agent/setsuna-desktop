@@ -2,11 +2,17 @@ import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { rememberRead, rememberReadFileResult } from '../../../../src/adapters/tool/pc-local/pc-local-tool-files.js';
+import {
+  rememberRead,
+  rememberReadFileResult,
+  writeLocalFile,
+} from '../../../../src/adapters/tool/pc-local/pc-local-tool-files.js';
 import { openValidatedReadableFile } from '../../../../src/adapters/tool/pc-local/pc-local-tool-secure-read.js';
 import {
   appendBoundedProcessText,
   collectProcess,
+} from '../../../../src/adapters/tool/pc-local/pc-local-tool-git.js';
+import {
   windowsProcessTreeKillArgs,
 } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
 
@@ -58,6 +64,24 @@ describe('PC local tool resource bounds', () => {
 
     expect(spawnCalls).toBe(0);
     expect(result).toMatchObject({ aborted: true, exitCode: null });
+  });
+
+  it('reports a directory target as a write validation error', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-write-directory-'));
+    try {
+      const result = await writeLocalFile(
+        { file_path: '.', content: 'not written' },
+        { root, reads: new Map() },
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        content: 'Error: Path is not a writable file: .',
+        display: 'Path is not a writable file: .',
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it.skipIf(process.platform === 'win32')('keeps reads bound to the validated descriptor after a directory is replaced', async () => {

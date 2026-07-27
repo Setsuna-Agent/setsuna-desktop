@@ -1,9 +1,8 @@
-// @ts-nocheck
-
 /** Desktop MCP server configuration updates and previews. */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { isNodeErrorCode } from '../../../shared/node-errors.js';
 import {
   DEFAULT_MCP_TIMEOUT_MS,
   MAX_MCP_TIMEOUT_MS,
@@ -16,11 +15,51 @@ import {
   okResult,
 } from './pc-local-tool-utils.js';
 
-export function isLocalMcpConfigPath() {
+type McpToolState = {
+  mcpConfigPath?: string;
+};
+
+type McpTransport = 'stdio' | 'streamableHttp';
+type McpRequireApproval = 'auto' | 'approve' | 'prompt';
+type JsonRecord = Record<string, unknown>;
+
+type McpServerPreview = {
+  key: string;
+  label: string;
+  description: string;
+  transport: McpTransport;
+  command: string;
+  args: string[];
+  cwd: string;
+  url: string;
+  timeoutMs: number;
+  requireApproval: McpRequireApproval;
+  enabled: boolean;
+  allowedTools: string[];
+  disabledTools: string[];
+  oauthClientId: string;
+  oauthResource: string;
+  envKeys: string[];
+  headerKeys: string[];
+  configPath: string;
+};
+
+type McpServerConfigResult =
+  | {
+      ok: true;
+      configPath: string;
+      config: JsonRecord;
+      key: string;
+      server: JsonRecord;
+      preview: McpServerPreview;
+    }
+  | { ok: false; error: string };
+
+export function isLocalMcpConfigPath(): boolean {
   return false;
 }
 
-export async function configureMcpServer(args, state) {
+export async function configureMcpServer(args: JsonRecord, state: McpToolState) {
   const result = await calculateMcpServerConfig(args, state);
   if (!result.ok) return errorResult(result.error);
 
@@ -42,21 +81,25 @@ export async function configureMcpServer(args, state) {
   );
 }
 
-export async function calculateMcpServerConfig(args, state) {
+export async function calculateMcpServerConfig(
+  args: JsonRecord,
+  state: McpToolState,
+): Promise<McpServerConfigResult> {
   const configPath = path.resolve(String(state?.mcpConfigPath || MCP_CONFIG_PATH));
-  const config = await readMcpConfigForWrite(configPath);
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+  const configValue = await readMcpConfigForWrite(configPath);
+  if (!isRecord(configValue)) {
     return { ok: false, error: 'MCP 配置根节点必须是 JSON 对象。' };
   }
+  const config = configValue;
 
   const key = normalizeMcpKey(args?.key);
   if (!key) return { ok: false, error: 'MCP 服务 key 不能为空。' };
 
   const serversValue = config[MCP_SERVERS_KEY] ?? config.servers;
-  const servers = serversValue && typeof serversValue === 'object' && !Array.isArray(serversValue)
+  const servers: JsonRecord = isRecord(serversValue)
     ? { ...serversValue }
     : {};
-  const existing = servers[key] && typeof servers[key] === 'object' && !Array.isArray(servers[key])
+  const existing: JsonRecord = isRecord(servers[key])
     ? { ...servers[key] }
     : {};
   const server = { ...existing };
@@ -107,12 +150,12 @@ export async function calculateMcpServerConfig(args, state) {
   };
 }
 
-async function readMcpConfigForWrite(configPath) {
+async function readMcpConfigForWrite(configPath: string): Promise<unknown> {
   try {
     const content = await readFile(configPath, 'utf8');
-    return JSON.parse(content);
+    return JSON.parse(content) as unknown;
   } catch (error) {
-    if (error?.code === 'ENOENT') return {};
+    if (isNodeErrorCode(error, 'ENOENT')) return {};
     if (error instanceof SyntaxError) {
       throw new Error(`MCP 配置 JSON 解析失败：${error.message}`);
     }
@@ -120,25 +163,25 @@ async function readMcpConfigForWrite(configPath) {
   }
 }
 
-function normalizeMcpKey(value) {
+function normalizeMcpKey(value: unknown): string {
   return String(value || '').trim().split(/\s+/).filter(Boolean).join('_');
 }
 
-function upsertMcpString(object, key, value) {
+function upsertMcpString(object: JsonRecord, key: string, value: unknown): void {
   if (value === undefined || value === null) return;
   const text = String(value).trim();
   if (text) object[key] = text;
   else delete object[key];
 }
 
-function upsertMcpStringList(object, key, value) {
+function upsertMcpStringList(object: JsonRecord, key: string, value: unknown): void {
   if (value === undefined || value === null) return;
   const list = normalizeMcpStringList(value);
   if (list.length) object[key] = list;
   else delete object[key];
 }
 
-function upsertMcpStringMap(object, key, value) {
+function upsertMcpStringMap(object: JsonRecord, key: string, value: unknown): void {
   if (value === undefined || value === null) return;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     delete object[key];
@@ -153,10 +196,10 @@ function upsertMcpStringMap(object, key, value) {
   else delete object[key];
 }
 
-function upsertMcpOAuthClientId(server, value) {
+function upsertMcpOAuthClientId(server: JsonRecord, value: unknown): void {
   if (value === undefined || value === null) return;
   const text = String(value).trim();
-  const oauth = server.oauth && typeof server.oauth === 'object' && !Array.isArray(server.oauth)
+  const oauth: JsonRecord = isRecord(server.oauth)
     ? { ...server.oauth }
     : {};
   delete oauth.clientId;
@@ -168,12 +211,12 @@ function upsertMcpOAuthClientId(server, value) {
   delete server.oauth_client_id;
 }
 
-function normalizeMcpStringList(value) {
+function normalizeMcpStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item).trim()).filter(Boolean);
 }
 
-function normalizeMcpTransport(value, server) {
+function normalizeMcpTransport(value: unknown, server: Readonly<JsonRecord>): McpTransport | '' {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) {
     if (String(server.command || '').trim()) return 'stdio';
@@ -187,14 +230,14 @@ function normalizeMcpTransport(value, server) {
   return '';
 }
 
-function normalizeMcpRequireApproval(value) {
+function normalizeMcpRequireApproval(value: unknown): McpRequireApproval {
   const raw = String(value || '').trim().toLowerCase();
   if (raw === 'never' || raw === 'approve' || raw === 'approved' || raw === 'false') return 'approve';
   if (raw === 'always' || raw === 'prompt' || raw === 'true') return 'prompt';
   return 'auto';
 }
 
-function validateMcpServerObject(key, server) {
+function validateMcpServerObject(key: string, server: Readonly<JsonRecord>): string {
   const transport = String(server.transport || '');
   if (transport === 'stdio' && !String(server.command || '').trim()) {
     return `MCP server ${key} 的 stdio 配置缺少 command。`;
@@ -208,7 +251,7 @@ function validateMcpServerObject(key, server) {
   return '';
 }
 
-function pruneMcpTransportFields(server) {
+function pruneMcpTransportFields(server: JsonRecord): void {
   if (server.transport === 'stdio') {
     delete server.url;
     delete server.headers;
@@ -228,12 +271,17 @@ function pruneMcpTransportFields(server) {
   delete server.envVars;
 }
 
-function mcpServerPreview(key, server, configPath) {
+function mcpServerPreview(
+  key: string,
+  server: Readonly<JsonRecord>,
+  configPath: string,
+): McpServerPreview {
+  const oauth = isRecord(server.oauth) ? server.oauth : {};
   return {
     key,
     label: String(server.label || key),
     description: String(server.description || ''),
-    transport: String(server.transport || ''),
+    transport: server.transport === 'stdio' ? 'stdio' : 'streamableHttp',
     command: String(server.command || ''),
     args: normalizeMcpStringList(server.args),
     cwd: String(server.cwd || ''),
@@ -243,19 +291,27 @@ function mcpServerPreview(key, server, configPath) {
     enabled: server.enabled !== false,
     allowedTools: normalizeMcpStringList(server.allowedTools),
     disabledTools: normalizeMcpStringList(server.disabledTools),
-    oauthClientId: String(server.oauth?.client_id || server.oauthClientId || server.oauth_client_id || ''),
+    oauthClientId: String(oauth.client_id || server.oauthClientId || server.oauth_client_id || ''),
     oauthResource: String(server.oauth_resource || server.oauthResource || ''),
-    envKeys: [...new Set([...Object.keys(server.env || {}), ...normalizeMcpStringList(server.envVars)])],
+    envKeys: [...new Set([...objectKeys(server.env), ...normalizeMcpStringList(server.envVars)])],
     headerKeys: mcpHeaderKeys(server),
     configPath,
   };
 }
 
-function mcpHeaderKeys(server) {
+function mcpHeaderKeys(server: Readonly<JsonRecord>): string[] {
   const keys = [
-    ...Object.keys(server.headers || {}),
-    ...Object.keys(server.envHttpHeaders || {}),
+    ...objectKeys(server.headers),
+    ...objectKeys(server.envHttpHeaders),
   ];
   if (String(server.bearerTokenEnvVar || '').trim()) keys.push('Authorization');
   return [...new Set(keys)];
+}
+
+function objectKeys(value: unknown): string[] {
+  return value === null || value === undefined ? [] : Object.keys(Object(value));
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

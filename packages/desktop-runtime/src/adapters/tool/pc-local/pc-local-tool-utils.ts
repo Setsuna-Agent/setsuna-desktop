@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 /** Small shared value, result, and text helpers. */
 
 import {
@@ -7,11 +5,25 @@ import {
   MAX_TOOL_SUMMARY_CHARS,
 } from './pc-local-tool-constants.js';
 
-export function escapeRegExp(value) {
+export type LocalToolSuccess<TExtra extends object = Record<string, never>> = {
+  ok: true;
+  content: string;
+  display: string;
+} & TExtra;
+
+export type LocalToolFailure<TDiagnostics extends object = Record<string, never>> = {
+  ok: false;
+  content: string;
+  display: string;
+  failure_kind: string;
+  failure_stage: string;
+} & TDiagnostics;
+
+export function escapeRegExp(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function countOccurrences(content, needle) {
+export function countOccurrences(content: string, needle: string): number {
   if (!needle) return 0;
   let count = 0;
   let offset = 0;
@@ -23,47 +35,47 @@ export function countOccurrences(content, needle) {
   }
 }
 
-export function boundedInteger(value, fallback, min, max) {
+export function boundedInteger(value: unknown, fallback: number, min: number, max: number): number {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.min(max, Math.max(min, Math.trunc(number)));
 }
 
-export function sleep(ms) {
-  return new Promise((resolve) => {
+export function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, Math.max(0, ms));
     timer.unref?.();
   });
 }
 
-export function integerOrNull(value) {
+export function integerOrNull(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return Math.trunc(number);
 }
 
-export function shortSingleLine(value, maxChars = MAX_TOOL_SUMMARY_CHARS) {
+export function shortSingleLine(value: unknown, maxChars = MAX_TOOL_SUMMARY_CHARS): string {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars - 1)}…`;
 }
 
-export function relativeLabel(value) {
+export function relativeLabel(value: unknown): string {
   return String(value || '').trim() || '.';
 }
 
-export function truncateText(value, maxChars = MAX_TEXT_BYTES) {
+export function truncateText(value: unknown, maxChars = MAX_TEXT_BYTES): string {
   const text = String(value ?? '');
   return text.length > maxChars ? `${text.slice(0, maxChars)}\n...[truncated]` : text;
 }
 
-export function clipString(value, maxChars) {
+export function clipString(value: unknown, maxChars: number): string {
   const text = String(value ?? '');
   return text.length > maxChars ? text.slice(0, maxChars) : text;
 }
 
-export function truncateMiddle(value, maxChars = MAX_TEXT_BYTES) {
+export function truncateMiddle(value: unknown, maxChars = MAX_TEXT_BYTES): string {
   const text = String(value ?? '');
   if (text.length <= maxChars) return text;
   const head = Math.floor(maxChars / 2);
@@ -71,16 +83,23 @@ export function truncateMiddle(value, maxChars = MAX_TEXT_BYTES) {
   return `${text.slice(0, head)}\n...[${text.length - head - tail} chars omitted]...\n${text.slice(text.length - tail)}`;
 }
 
-export function okResult(content, display, extra = {}) {
+export function okResult<TExtra extends object = Record<string, never>>(
+  content: string,
+  display: string,
+  extra: TExtra = {} as TExtra,
+): LocalToolSuccess<TExtra> {
   return {
     ok: true,
     content,
     display,
     ...extra,
-  };
+  } as LocalToolSuccess<TExtra>;
 }
 
-export function errorResult(message, diagnostics = {}) {
+export function errorResult<TDiagnostics extends Record<string, unknown> = Record<string, never>>(
+  message: string,
+  diagnostics: TDiagnostics = {} as TDiagnostics,
+): LocalToolFailure<TDiagnostics> {
   const failure = normalizeFailureDiagnostics(message, diagnostics);
   return {
     ok: false,
@@ -88,25 +107,25 @@ export function errorResult(message, diagnostics = {}) {
     display: message,
     ...diagnostics,
     ...failure,
-  };
+  } as LocalToolFailure<TDiagnostics>;
 }
 
-function normalizeFailureDiagnostics(message, diagnostics = {}) {
+function normalizeFailureDiagnostics(
+  message: string,
+  diagnostics: Readonly<Record<string, unknown>>,
+): { failure_kind: string; failure_stage: string } {
   const failureKind = String(diagnostics.failure_kind || classifyLocalToolFailure(message)).trim();
   const failureStage = String(diagnostics.failure_stage || defaultFailureStage(failureKind)).trim();
-  return {
-    ...(failureKind ? { failure_kind: failureKind } : {}),
-    ...(failureStage ? { failure_stage: failureStage } : {}),
-  };
+  return { failure_kind: failureKind, failure_stage: failureStage };
 }
 
-function defaultFailureStage(failureKind) {
+function defaultFailureStage(failureKind: string): string {
   if (failureKind === 'timeout' || failureKind === 'process_exit' || failureKind === 'stdin_closed') return 'execution';
   if (failureKind === 'policy_blocked' || failureKind === 'permission_denied' || failureKind === 'sandbox_unavailable' || failureKind === 'network_denied') return 'preflight';
   return 'validation';
 }
 
-function classifyLocalToolFailure(message) {
+function classifyLocalToolFailure(message: string): string {
   const text = String(message || '');
   if (/not found or already closed/i.test(text)) return 'process_not_found';
   if (/process id is required/i.test(text) || /cannot be empty/i.test(text)) return 'invalid_arguments';

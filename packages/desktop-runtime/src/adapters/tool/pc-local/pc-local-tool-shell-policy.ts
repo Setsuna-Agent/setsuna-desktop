@@ -1,13 +1,19 @@
-// @ts-nocheck
-
 /** Shell risk classification, policy evaluation, and OS sandbox profiles. */
 
+import type {
+  RuntimeNetworkPolicyAmendment,
+  RuntimeSandboxWorkspaceWrite,
+} from '@setsuna-desktop/contracts';
 import { existsSync, lstatSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
 import { protectedWorkspaceMetadataPathForPath } from '../../../security/file-system-policy.js';
-import { assessShellNetworkAccess } from '../../../security/network-approval-policy.js';
+import {
+  assessShellNetworkAccess,
+  type RuntimeNetworkApprovalContext,
+} from '../../../security/network-approval-policy.js';
 import { reusableShellCommandWords } from '../../../security/shell-command-analysis.js';
+import { recordInput } from '../../../shared/unknown.js';
 import {
   EXEC_POLICY_CONFIG_NAMES,
   SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS,
@@ -27,7 +33,54 @@ import {
   escapeRegExp,
 } from './pc-local-tool-utils.js';
 
-export function shellSandboxCapability(platform = process.platform, hasMacSandboxExec = existsSync('/usr/bin/sandbox-exec')) {
+export type ShellSandboxCapability = {
+  supported: boolean;
+  provider: string;
+  reason: string;
+};
+
+export type ShellPolicyAction = 'allow' | 'ask' | 'deny';
+
+export type ShellPolicyRule = {
+  action: ShellPolicyAction;
+  command: string;
+  pattern: string;
+  prefixWords: string[];
+  label: string;
+  sourcePath: string;
+  reason: string;
+};
+
+export type ShellPolicyState = {
+  root?: string;
+  permissionProfile?: unknown;
+  sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  osSandbox?: boolean;
+  shellPolicyRules?: readonly unknown[];
+  networkPolicyAmendments?: readonly RuntimeNetworkPolicyAmendment[] | readonly unknown[];
+  shellEnvironment?: Record<string, string>;
+};
+
+export type ShellPolicyDecision = {
+  action: ShellPolicyAction | '';
+  reason: string;
+  rule: ShellPolicyRule | null;
+};
+
+type ShellWorkspaceWriteRootOptions = {
+  includeWorkspaceRoot?: boolean;
+};
+
+type ParsedShellCommandSegment = {
+  words: string[];
+  inputRedirects: string[];
+  outputRedirects: string[];
+};
+
+export function shellSandboxCapability(
+  platform: NodeJS.Platform | string = process.platform,
+  hasMacSandboxExec = existsSync('/usr/bin/sandbox-exec'),
+): ShellSandboxCapability {
   if (platform === 'darwin') {
     if (hasMacSandboxExec) {
       return {
@@ -56,17 +109,17 @@ export function shellSandboxCapability(platform = process.platform, hasMacSandbo
   };
 }
 
-export function normalizeShellCommandForRisk(command) {
+export function normalizeShellCommandForRisk(command: unknown): string {
   return String(command || '')
     .replace(/\\\n/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-export function obviousHighRiskShellReason(command) {
-  const text = command.toLowerCase();
+export function obviousHighRiskShellReason(command: unknown): string {
+  const text = String(command || '').toLowerCase();
   const words = text.split(/[^a-z0-9_.-]+/).filter(Boolean);
-  const hasWord = (value) => words.includes(value);
+  const hasWord = (value: string) => words.includes(value);
 
   if (_usesShellApplyPatch(text)) return '命令会通过 apply_patch 修改工作区文件。';
   if (hasWord('rm') || hasWord('rmdir') || hasWord('unlink')) return '命令可能删除文件。';
@@ -101,22 +154,27 @@ export function obviousHighRiskShellReason(command) {
   return '';
 }
 
-export function shellPolicyBlockReason(command, state) {
+export function shellPolicyBlockReason(command: unknown, state: ShellPolicyState): string {
   const decision = shellPolicyDecision(command, state);
   if (decision.action !== 'deny') return '';
   return decision.reason || '命令被本地 exec policy 拒绝。';
 }
 
-export function shellPolicyDecision(command, state) {
+export function shellPolicyDecision(
+  command: unknown,
+  state: ShellPolicyState | null,
+): ShellPolicyDecision {
   const rawCommand = String(command || '');
   // Reusable authorization must inspect the original shell program. Display
   // normalization intentionally collapses newlines, which would otherwise turn
   // a command separator into an apparent argument boundary.
   const reusableWords = reusableShellCommandWords(rawCommand);
   const rules = Array.isArray(state?.shellPolicyRules) ? state.shellPolicyRules : [];
-  for (const rule of rules) {
+  for (const input of rules) {
+    const rule = normalizeShellPolicyRule(input, String(recordInput(input).sourcePath ?? ''));
+    if (!rule) continue;
     if (!shellPolicyRuleMatches(rule, rawCommand, reusableWords)) continue;
-    const action = rule.action || 'ask';
+    const action = rule.action;
     return {
       action,
       reason: rule.reason || (
@@ -132,21 +190,24 @@ export function shellPolicyDecision(command, state) {
   return { action: '', reason: '', rule: null };
 }
 
-export function loadShellPolicyRules(workspaceRoot, userConfigPaths: readonly string[] = []) {
+export function loadShellPolicyRules(
+  workspaceRoot: string,
+  userConfigPaths: readonly string[] = [],
+): ShellPolicyRule[] {
   const paths = [
     ...userConfigPaths,
     ...EXEC_POLICY_CONFIG_NAMES.map((name) => path.join(workspaceRoot, name)),
   ];
-  const rules = [];
+  const rules: ShellPolicyRule[] = [];
   for (const configPath of paths) {
     const parsed = readJsonFileSync(configPath);
-    if (!parsed || parsed.enabled === false) continue;
+    if (!parsed || recordInput(parsed).enabled === false) continue;
     rules.push(...normalizeShellPolicyRules(parsed, configPath));
   }
   return rules;
 }
 
-function readJsonFileSync(filePath) {
+function readJsonFileSync(filePath: string): unknown {
   try {
     return JSON.parse(readFileSync(filePath, 'utf8'));
   } catch {
@@ -154,22 +215,24 @@ function readJsonFileSync(filePath) {
   }
 }
 
-function normalizeShellPolicyRules(config, sourcePath) {
-  const shellConfig = config?.shell && typeof config.shell === 'object' && !Array.isArray(config.shell)
-    ? config.shell
-    : config;
-  const rules = [];
+function normalizeShellPolicyRules(config: unknown, sourcePath: string): ShellPolicyRule[] {
+  const configRecord = recordInput(config);
+  const shellValue = configRecord.shell;
+  const shellConfig = shellValue && typeof shellValue === 'object' && !Array.isArray(shellValue)
+    ? recordInput(shellValue)
+    : configRecord;
+  const rules: ShellPolicyRule[] = [];
   const rawRules = Array.isArray(shellConfig.rules) ? shellConfig.rules : [];
   for (const rawRule of rawRules) {
     const normalized = normalizeShellPolicyRule(rawRule, sourcePath);
     if (normalized) rules.push(normalized);
   }
-  for (const action of ['deny', 'ask', 'allow']) {
+  for (const action of ['deny', 'ask', 'allow'] as const) {
     const entries = Array.isArray(shellConfig[action]) ? shellConfig[action] : [];
     for (const entry of entries) {
       const rawRule = typeof entry === 'string' || Array.isArray(entry)
         ? { action, prefix: entry }
-        : { ...(entry || {}), action };
+        : { ...recordInput(entry), action };
       const normalized = normalizeShellPolicyRule(rawRule, sourcePath);
       if (normalized) rules.push(normalized);
     }
@@ -177,18 +240,23 @@ function normalizeShellPolicyRules(config, sourcePath) {
   return rules;
 }
 
-function normalizeShellPolicyRule(rawRule, sourcePath) {
+function normalizeShellPolicyRule(rawRule: unknown, sourcePath: string): ShellPolicyRule | null {
   if (!rawRule || typeof rawRule !== 'object' || Array.isArray(rawRule)) return null;
-  const action = normalizeShellPolicyAction(rawRule.action || rawRule.effect || rawRule.decision);
+  const record = recordInput(rawRule);
+  const action = normalizeShellPolicyAction(record.action || record.effect || record.decision);
   if (!action) return null;
-  const prefixWords = normalizeShellPolicyPrefix(rawRule.prefix ?? rawRule.prefix_rule);
+  const prefixWords = normalizeShellPolicyPrefix(
+    record.prefix ?? record.prefix_rule ?? record.prefixWords,
+  );
   // Exact rules deliberately preserve internal whitespace and shell control
   // characters. Risk-display normalization must never change the program that
   // a persisted authorization represents.
-  const command = String(rawRule.command ?? rawRule.exact ?? '').trim();
-  const pattern = String(rawRule.pattern || rawRule.match || '').trim();
+  const command = String(record.command ?? record.exact ?? '').trim();
+  const pattern = String(record.pattern || record.match || '').trim();
   if (!prefixWords.length && !command && !pattern) return null;
-  const label = command || (prefixWords.length ? prefixWords.join(' ') : pattern);
+  const label = String(record.label || '').trim()
+    || command
+    || (prefixWords.length ? prefixWords.join(' ') : pattern);
   return {
     action,
     command,
@@ -196,11 +264,11 @@ function normalizeShellPolicyRule(rawRule, sourcePath) {
     prefixWords,
     label,
     sourcePath,
-    reason: String(rawRule.reason || '').trim(),
+    reason: String(record.reason || '').trim(),
   };
 }
 
-function normalizeShellPolicyAction(value) {
+function normalizeShellPolicyAction(value: unknown): ShellPolicyAction | '' {
   const text = String(value || '').trim().toLowerCase();
   if (text === 'allow' || text === 'allowed') return 'allow';
   if (text === 'deny' || text === 'block' || text === 'forbid' || text === 'forbidden') return 'deny';
@@ -208,13 +276,17 @@ function normalizeShellPolicyAction(value) {
   return '';
 }
 
-function normalizeShellPolicyPrefix(value) {
+function normalizeShellPolicyPrefix(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
   const text = String(value || '').trim();
   return text ? reusableShellCommandWords(text) : [];
 }
 
-function shellPolicyRuleMatches(rule, rawCommand, reusableWords) {
+function shellPolicyRuleMatches(
+  rule: ShellPolicyRule,
+  rawCommand: string,
+  reusableWords: readonly string[],
+): boolean {
   if (rule.command && rawCommand === rule.command) return true;
   if (rule.prefixWords?.length) {
     if (!reusableWords.length || reusableWords.length < rule.prefixWords.length) return false;
@@ -225,13 +297,13 @@ function shellPolicyRuleMatches(rule, rawCommand, reusableWords) {
   return new RegExp(`^${source}$`).test(rawCommand);
 }
 
-export function _usesShellApplyPatch(text) {
+export function _usesShellApplyPatch(text: string): boolean {
   return /(?:^|[;&|]\s*)(?:apply_patch|applypatch)\b/.test(text)
     || /\b(?:apply_patch|applypatch)\s*<</.test(text)
     || /<<[A-Z0-9_'-]*\s*\n?[^|&;]*(?:apply_patch|applypatch)\b/.test(text);
 }
 
-export function shellPermissionBlockReason(command, state) {
+export function shellPermissionBlockReason(command: unknown, state: ShellPolicyState): string {
   const profile = normalizePermissionProfile(state?.permissionProfile);
   if (profile === 'danger-full-access') return '';
   const normalized = normalizeShellCommandForRisk(command);
@@ -250,7 +322,10 @@ export function shellPermissionBlockReason(command, state) {
     if (deniedPath) {
       return `当前权限配置不能通过 shell 修改 sandbox filesystem deny 规则覆盖的路径：${deniedPath}。`;
     }
-    if (state?.sandboxWorkspaceWrite?.networkAccess !== true && assessShellNetworkAccess(command)) {
+    if (
+      state?.sandboxWorkspaceWrite?.networkAccess !== true
+      && assessShellNetworkAccess(String(command || ''))
+    ) {
       return '';
     }
     if (state?.sandboxWorkspaceWrite?.writableRoots?.length) {
@@ -276,7 +351,7 @@ export function shellPermissionBlockReason(command, state) {
   return `当前权限配置只允许修改工作区或 sandbox_workspace_write.writable_roots，命令包含未授权路径：${outsidePath}。需要 danger-full-access 权限才能执行。`;
 }
 
-export function shellNetworkBlockReason(command, state) {
+export function shellNetworkBlockReason(command: unknown, state: ShellPolicyState) {
   const profile = normalizePermissionProfile(state?.permissionProfile);
   if (profile === 'danger-full-access') return null;
   if (state?.sandboxWorkspaceWrite?.networkAccess === true) return null;
@@ -300,18 +375,28 @@ export function shellNetworkBlockReason(command, state) {
   };
 }
 
-function networkPolicyDecision(context, state) {
+function networkPolicyDecision(
+  context: RuntimeNetworkApprovalContext,
+  state: ShellPolicyState,
+): 'allow' | 'deny' | '' {
   if (!context?.host) return '';
   const amendments = Array.isArray(state?.networkPolicyAmendments) ? state.networkPolicyAmendments : [];
   const host = String(context.host || '').trim().toLowerCase();
-  const match = [...amendments].reverse().find((item) => String(item?.host || '').trim().toLowerCase() === host);
+  const match = [...amendments].reverse().find((item) => {
+    const record = recordInput(item);
+    return String(record.host || '').trim().toLowerCase() === host;
+  });
   if (!match) return '';
-  if (match.action === 'allow') return 'allow';
-  if (match.action === 'deny') return 'deny';
+  const action = recordInput(match).action;
+  if (action === 'allow') return 'allow';
+  if (action === 'deny') return 'deny';
   return '';
 }
 
-export function shellSandboxUnavailableReason(state, capability = shellSandboxCapability()) {
+export function shellSandboxUnavailableReason(
+  state: ShellPolicyState,
+  capability: ShellSandboxCapability = shellSandboxCapability(),
+): string {
   if (!state?.osSandbox) return '';
   const profile = normalizePermissionProfile(state?.permissionProfile);
   if (profile === 'danger-full-access') return '';
@@ -323,7 +408,11 @@ export function shellSandboxUnavailableReason(state, capability = shellSandboxCa
   return '';
 }
 
-function firstPathOutsideWorkspaceWriteRoots(command, state, options = {}) {
+function firstPathOutsideWorkspaceWriteRoots(
+  command: unknown,
+  state: ShellPolicyState,
+  options: ShellWorkspaceWriteRootOptions = {},
+): string {
   const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   const allowedRoots = shellWorkspaceWriteRoots(state, options);
   for (const raw of shellWritePathCandidates(command)) {
@@ -335,7 +424,7 @@ function firstPathOutsideWorkspaceWriteRoots(command, state, options = {}) {
   return '';
 }
 
-function firstDeniedShellWritePath(command, state) {
+function firstDeniedShellWritePath(command: unknown, state: ShellPolicyState): string {
   const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   for (const raw of shellWritePathCandidates(command)) {
     const candidate = shellCandidateToPath(raw);
@@ -345,7 +434,7 @@ function firstDeniedShellWritePath(command, state) {
   return '';
 }
 
-function firstDeniedShellAccessPath(command, state) {
+function firstDeniedShellAccessPath(command: unknown, state: ShellPolicyState): string {
   const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   for (const raw of shellPathCandidates(command)) {
     const candidate = shellCandidateToPath(raw);
@@ -355,8 +444,8 @@ function firstDeniedShellAccessPath(command, state) {
   return '';
 }
 
-function shellWritePathCandidates(command) {
-  const candidates = [];
+function shellWritePathCandidates(command: unknown): string[] {
+  const candidates: string[] = [];
   const text = String(command || '');
 
   for (const segment of splitShellCommandSegments(text)) {
@@ -377,7 +466,7 @@ function shellWritePathCandidates(command) {
   return [...new Set(candidates.map((item) => String(item || '').trim()).filter((item) => item && !isShellNonPathToken(item)))];
 }
 
-function shellPathCandidates(command) {
+function shellPathCandidates(command: unknown): string[] {
   const candidates = [...shellWritePathCandidates(command)];
   for (const segment of splitShellCommandSegments(command)) {
     const parsed = parseShellCommandSegment(segment);
@@ -396,8 +485,8 @@ function shellPathCandidates(command) {
 }
 
 // 路径策略只需要识别简单命令边界；保留引号和转义，交给下面的词法扫描处理。
-function splitShellCommandSegments(command) {
-  const segments = [];
+function splitShellCommandSegments(command: unknown): string[] {
+  const segments: string[] = [];
   let current = '';
   let quote = '';
   let escaped = false;
@@ -438,10 +527,10 @@ function splitShellCommandSegments(command) {
 }
 
 // 避免用空白正则拆 shell：带空格路径、复合命令和 2>/dev/null 都会产生错误路径。
-function parseShellCommandSegment(command) {
-  const words = [];
-  const inputRedirects = [];
-  const outputRedirects = [];
+function parseShellCommandSegment(command: unknown): ParsedShellCommandSegment {
+  const words: string[] = [];
+  const inputRedirects: string[] = [];
+  const outputRedirects: string[] = [];
   let current = '';
   let quote = '';
   let escaped = false;
@@ -540,8 +629,8 @@ function parseShellCommandSegment(command) {
   return { words, inputRedirects, outputRedirects };
 }
 
-function shellPositionalPathArguments(words) {
-  const candidates = [];
+function shellPositionalPathArguments(words: readonly string[]): string[] {
+  const candidates: string[] = [];
   let seenDoubleDash = false;
   for (const word of words.slice(1)) {
     if (!seenDoubleDash && word === '--') {
@@ -554,7 +643,10 @@ function shellPositionalPathArguments(words) {
   return candidates;
 }
 
-function shellCopyDestinationArguments(words, positionalArguments = shellPositionalPathArguments(words)) {
+function shellCopyDestinationArguments(
+  words: readonly string[],
+  positionalArguments = shellPositionalPathArguments(words),
+): string[] {
   for (let index = 1; index < words.length; index += 1) {
     const word = String(words[index] || '');
     if (word === '--') break;
@@ -571,8 +663,8 @@ function shellCopyDestinationArguments(words, positionalArguments = shellPositio
   return positionalArguments.slice(-1);
 }
 
-function shellLiteralPathCandidates(words) {
-  const candidates = [];
+function shellLiteralPathCandidates(words: readonly string[]): string[] {
+  const candidates: string[] = [];
   const pathPrefix = /^(?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/])/u;
   const quotedPath = /(["'])((?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/]).*?)\1/gu;
   const embeddedPath = /(?:^|[\s"'=(])((?:[A-Za-z]:[\\/]|\/|~\/|\.\.?[\\/])[^\s"'`$<>|;&),\]]+)/gu;
@@ -592,7 +684,7 @@ function shellLiteralPathCandidates(words) {
   return candidates;
 }
 
-function isShellNonPathToken(value) {
+function isShellNonPathToken(value: string): boolean {
   if (!value || value === '.' || value === '..') return true;
   if (/^\/dev\/(?:null|stdout|stderr)$/u.test(value) || /^nul:?$/iu.test(value)) return true;
   if (/^\d+$/.test(value)) return true;
@@ -600,36 +692,48 @@ function isShellNonPathToken(value) {
   return false;
 }
 
-function firstProtectedWorkspaceMetadataShellPath(command, state) {
+function firstProtectedWorkspaceMetadataShellPath(
+  command: unknown,
+  state: ShellPolicyState,
+): string {
+  const permissionProfile = normalizePermissionProfile(state?.permissionProfile);
   const workspaceRoot = resolvePolicyPath(state?.root || process.cwd());
   for (const raw of shellWritePathCandidates(command)) {
     const candidate = resolvePolicyPath(shellCandidateToPath(raw), workspaceRoot);
-    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, state?.permissionProfile)
-      || protectedWorkspaceMetadataPathForPath(realPathIfExists(candidate), state?.permissionProfile);
+    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, permissionProfile)
+      || protectedWorkspaceMetadataPathForPath(realPathIfExists(candidate), permissionProfile);
     if (protectedPath) return raw;
   }
   const metadataMatches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\.git|\.agents|\.codex)(?:\/[^\s"'`$<>|;&]*)?)/gi);
   for (const match of metadataMatches) {
     const raw = match[1];
-    const protectedPath = protectedWorkspaceMetadataPathForPath(resolvePolicyPath(raw, workspaceRoot), state?.permissionProfile);
+    if (!raw) continue;
+    const protectedPath = protectedWorkspaceMetadataPathForPath(
+      resolvePolicyPath(raw, workspaceRoot),
+      permissionProfile,
+    );
     if (protectedPath) return raw;
   }
   const matches = String(command || '').matchAll(/(?:^|[\s"'=])((?:\/|~\/|\.\.?\/)[^\s"'`$<>|;&]+)/g);
   for (const match of matches) {
     const raw = match[1];
+    if (!raw) continue;
     const candidate = raw.startsWith('~/')
       ? path.join(process.env.HOME || '', raw.slice(2))
         : raw.startsWith('/')
           ? raw
           : resolvePolicyPath(raw, workspaceRoot);
-    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, state?.permissionProfile)
-      || protectedWorkspaceMetadataPathForPath(realPathIfExists(candidate), state?.permissionProfile);
+    const protectedPath = protectedWorkspaceMetadataPathForPath(candidate, permissionProfile)
+      || protectedWorkspaceMetadataPathForPath(realPathIfExists(candidate), permissionProfile);
     if (protectedPath) return raw;
   }
   return '';
 }
 
-export function shellWorkspaceWriteRoots(state, options = {}) {
+export function shellWorkspaceWriteRoots(
+  state: ShellPolicyState,
+  options: ShellWorkspaceWriteRootOptions = {},
+): string[] {
   const roots = options.includeWorkspaceRoot === false ? [] : [state?.root || process.cwd()];
   const configuredRoots = Array.isArray(state?.sandboxWorkspaceWrite?.writableRoots)
     ? state.sandboxWorkspaceWrite.writableRoots
@@ -642,18 +746,18 @@ export function shellWorkspaceWriteRoots(state, options = {}) {
   return [...new Set(roots.map((root) => resolvePolicyPath(root)))];
 }
 
-function shellCandidateToPath(raw) {
+function shellCandidateToPath(raw: unknown): string {
   const value = String(raw || '').trim();
   if (value.startsWith('~/')) return path.join(process.env.HOME || '', value.slice(2));
   return value;
 }
 
 export function createShellSandboxExecutionPlan(
-  state,
+  state: ShellPolicyState,
   options: {
     cwd?: string;
     environment?: Record<string, string>;
-    capability?: ReturnType<typeof shellSandboxCapability>;
+    capability?: ShellSandboxCapability;
     temporaryRoot?: string;
   } = {},
 ): SandboxExecutionPlan {
@@ -689,7 +793,10 @@ export function createShellSandboxExecutionPlan(
   };
 }
 
-export function shellSandboxProfile(stateOrPlan, capability = shellSandboxCapability()) {
+export function shellSandboxProfile(
+  stateOrPlan: ShellPolicyState | SandboxExecutionPlan,
+  capability: ShellSandboxCapability = shellSandboxCapability(),
+): string {
   const plan = isSandboxExecutionPlan(stateOrPlan)
     ? stateOrPlan
     : createShellSandboxExecutionPlan(stateOrPlan, { capability });
@@ -730,11 +837,12 @@ export function shellSandboxProfile(stateOrPlan, capability = shellSandboxCapabi
   return lines.join('\n');
 }
 
-function isSandboxExecutionPlan(value): value is SandboxExecutionPlan {
-  return Boolean(value && typeof value === 'object' && typeof value.provider === 'string' && Array.isArray(value.readableRoots));
+function isSandboxExecutionPlan(value: unknown): value is SandboxExecutionPlan {
+  const record = recordInput(value);
+  return typeof record.provider === 'string' && Array.isArray(record.readableRoots);
 }
 
-const MACOS_SEATBELT_SYSTEM_READ_ROOTS = [
+const MACOS_SEATBELT_SYSTEM_READ_ROOTS: readonly string[] = [
   '/System',
   '/usr',
   '/bin',
@@ -754,7 +862,7 @@ const MACOS_SEATBELT_SYSTEM_READ_ROOTS = [
   '/private/var/db/timezone',
 ];
 
-const MACOS_SEATBELT_EXACT_READ_PATHS = [
+const MACOS_SEATBELT_EXACT_READ_PATHS: readonly string[] = [
   '/private/etc/hosts',
   '/private/etc/resolv.conf',
   '/private/etc/services',
@@ -764,7 +872,7 @@ const MACOS_SEATBELT_EXACT_READ_PATHS = [
   '/var/select/developer_dir',
 ];
 
-function shellSandboxTempRoots(temporaryRoot) {
+function shellSandboxTempRoots(temporaryRoot: unknown): string[] {
   const candidate = String(temporaryRoot ?? '').trim();
   if (!candidate || !path.isAbsolute(candidate)) return [];
   try {
@@ -774,7 +882,10 @@ function shellSandboxTempRoots(temporaryRoot) {
   }
 }
 
-function shellExplicitReadableRoots(state, additionalRoots = []) {
+function shellExplicitReadableRoots(
+  state: ShellPolicyState,
+  additionalRoots: readonly string[] = [],
+): string[] {
   const roots = [
     ...readableRootsForState(state),
     ...shellWorkspaceWriteRoots(state),
@@ -785,7 +896,7 @@ function shellExplicitReadableRoots(state, additionalRoots = []) {
     .filter((root) => Boolean(root) && path.resolve(root) !== path.parse(path.resolve(root)).root))];
 }
 
-function shellReadablePathVariants(value) {
+function shellReadablePathVariants(value: unknown): string[] {
   const lexical = path.resolve(String(value || ''));
   const canonical = realPathIfExists(lexical);
   const variants = new Set([lexical, canonical]);
@@ -793,7 +904,12 @@ function shellReadablePathVariants(value) {
   return [...variants];
 }
 
-function collectShellSymlinkPathVariants(value, variants, visited, depth) {
+function collectShellSymlinkPathVariants(
+  value: unknown,
+  variants: Set<string>,
+  visited: Set<string>,
+  depth: number,
+): void {
   if (depth >= 16) return;
   const resolved = path.resolve(String(value || ''));
   if (visited.has(resolved)) return;
@@ -844,7 +960,11 @@ function seatbeltProtectedMetadataRules(plan: SandboxExecutionPlan) {
   });
 }
 
-function seatbeltDenyOutsideRoots(operation, roots, exactPaths = []) {
+function seatbeltDenyOutsideRoots(
+  operation: string,
+  roots: readonly string[],
+  exactPaths: readonly string[] = [],
+): string {
   const normalizedRoots = roots.filter(Boolean).map((root) => path.resolve(root));
   const normalizedExactPaths = exactPaths.filter(Boolean).map((filePath) => path.resolve(filePath));
   const filters = normalizedRoots.map((root) => `(require-not (subpath ${seatbeltString(root)}))`);
@@ -859,7 +979,7 @@ function seatbeltDenyOutsideRoots(operation, roots, exactPaths = []) {
   return `(deny ${operation} (require-all ${filters.join(' ')}))`;
 }
 
-function seatbeltTraversalPaths(roots) {
+function seatbeltTraversalPaths(roots: readonly string[]): string[] {
   const paths = new Set(['/']);
   for (const root of roots) {
     let current = root;
@@ -873,7 +993,7 @@ function seatbeltTraversalPaths(roots) {
   return [...paths];
 }
 
-function seatbeltDenyWritesOutsideRoots(roots) {
+function seatbeltDenyWritesOutsideRoots(roots: readonly string[]): string {
   const filters = roots
     .filter(Boolean)
     .map((root) => `(require-not (subpath ${seatbeltString(root)}))`);
@@ -884,6 +1004,6 @@ function seatbeltDenyWritesOutsideRoots(roots) {
   return `(deny file-write* (require-all ${filters.join(' ')}))`;
 }
 
-function seatbeltString(value) {
+function seatbeltString(value: unknown): string {
   return JSON.stringify(String(value || ''));
 }

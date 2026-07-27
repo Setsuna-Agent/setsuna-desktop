@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 /** Model-facing definitions for the built-in PC local tools. */
 
 import {
@@ -12,7 +10,20 @@ import {
   MAX_SHELL_YIELD_MS,
 } from './pc-local-tool-constants.js';
 
-export const LOCAL_TOOL_DEFINITIONS = [
+export type LocalToolDefinition = {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, unknown>;
+      required?: string[];
+    };
+  };
+};
+
+export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
   localTool(
     'list_directory',
     'List files and directories under the local workspace.',
@@ -530,7 +541,12 @@ export const LOCAL_TOOL_DEFINITIONS = [
   ),
 ];
 
-function localTool(name, description, properties, required = []) {
+function localTool(
+  name: string,
+  description: string,
+  properties: Record<string, unknown>,
+  required: string[] = [],
+): LocalToolDefinition {
   return {
     type: 'function',
     function: {

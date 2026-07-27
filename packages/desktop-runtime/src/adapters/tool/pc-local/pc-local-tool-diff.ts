@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 /** Line-oriented file diff generation and compaction. */
 
 import {
@@ -11,7 +9,49 @@ import {
   workspaceRelativePath,
 } from './pc-local-tool-paths.js';
 
-export function patchDiffFromDiffs(diffs) {
+export type FileDiffAction = 'Created' | 'Edited' | 'Deleted';
+
+export type FileDiffLine =
+  | { type: 'context'; lineNumber: number; oldLine: number; newLine: number; content: string }
+  | { type: 'add'; lineNumber: number; newLine: number; content: string }
+  | { type: 'del'; lineNumber: number; oldLine: number; content: string }
+  | { type: 'gap'; content: string };
+
+export type FileDiff = {
+  type: 'file_diff';
+  action: FileDiffAction;
+  path: string;
+  additions: number;
+  deletions: number;
+  truncated: boolean;
+  lines: FileDiffLine[];
+  partial?: boolean;
+};
+
+export type PatchDiff = {
+  type: 'patch_diff';
+  action: 'Edited' | 'Planned';
+  path: string;
+  additions: number;
+  deletions: number;
+  truncated?: boolean;
+  partial?: boolean;
+  diffs: FileDiff[];
+};
+
+export type LocalToolDiff = FileDiff | PatchDiff;
+
+type FileDiffInput = {
+  filePath: string;
+  root: string;
+  existed: boolean;
+  previousContent: unknown;
+  nextContent: unknown;
+};
+
+type DeletedFileDiffInput = Omit<FileDiffInput, 'existed' | 'nextContent'>;
+
+export function patchDiffFromDiffs(diffs: FileDiff[]): LocalToolDiff | null {
   if (!diffs.length) return null;
   if (diffs.length === 1) return diffs[0];
   return {
@@ -25,7 +65,13 @@ export function patchDiffFromDiffs(diffs) {
   };
 }
 
-export function buildFileDiff({ filePath, root, existed, previousContent, nextContent }) {
+export function buildFileDiff({
+  filePath,
+  root,
+  existed,
+  previousContent,
+  nextContent,
+}: FileDiffInput): FileDiff {
   const previousLines = splitContentLines(previousContent);
   const nextLines = splitContentLines(nextContent);
   const ops = diffLineOperations(previousLines, nextLines);
@@ -44,7 +90,11 @@ export function buildFileDiff({ filePath, root, existed, previousContent, nextCo
   };
 }
 
-export function buildDeletedFileDiff({ filePath, root, previousContent }) {
+export function buildDeletedFileDiff({
+  filePath,
+  root,
+  previousContent,
+}: DeletedFileDiffInput): FileDiff {
   return {
     ...buildFileDiff({
       filePath,
@@ -57,7 +107,7 @@ export function buildDeletedFileDiff({ filePath, root, previousContent }) {
   };
 }
 
-function splitContentLines(content) {
+function splitContentLines(content: unknown): string[] {
   const text = String(content ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (!text) return [];
   const lines = text.split('\n');
@@ -65,13 +115,13 @@ function splitContentLines(content) {
   return lines;
 }
 
-export function previewComparablePreviousContent(previousContent, nextContent) {
+export function previewComparablePreviousContent(previousContent: unknown, nextContent: unknown): string {
   const nextLines = splitContentLines(nextContent);
   if (!nextLines.length) return '';
   return splitContentLines(previousContent).slice(0, nextLines.length).join('\n');
 }
 
-function diffLineOperations(previousLines, nextLines) {
+function diffLineOperations(previousLines: string[], nextLines: string[]): FileDiffLine[] {
   if (!previousLines.length && !nextLines.length) return [];
   let prefixLength = 0;
   while (
@@ -108,7 +158,7 @@ function diffLineOperations(previousLines, nextLines) {
   return [...prefix, ...middle, ...suffix];
 }
 
-function contextDiffLine(content, oldLine, newLine) {
+function contextDiffLine(content: string, oldLine: number, newLine: number): FileDiffLine {
   return {
     type: 'context',
     lineNumber: newLine,
@@ -118,7 +168,12 @@ function contextDiffLine(content, oldLine, newLine) {
   };
 }
 
-function lcsDiffOperations(previousLines, nextLines, oldOffset = 0, newOffset = 0) {
+function lcsDiffOperations(
+  previousLines: string[],
+  nextLines: string[],
+  oldOffset = 0,
+  newOffset = 0,
+): FileDiffLine[] {
   if (!previousLines.length && !nextLines.length) return [];
 
   const rows = previousLines.length + 1;
@@ -134,7 +189,7 @@ function lcsDiffOperations(previousLines, nextLines, oldOffset = 0, newOffset = 
     }
   }
 
-  const operations = [];
+  const operations: FileDiffLine[] = [];
   let oldIndex = 0;
   let newIndex = 0;
   while (oldIndex < previousLines.length && newIndex < nextLines.length) {
@@ -184,16 +239,21 @@ function lcsDiffOperations(previousLines, nextLines, oldOffset = 0, newOffset = 
   return operations;
 }
 
-function replacementDiff(previousLines, nextLines, oldOffset = 0, newOffset = 0) {
+function replacementDiff(
+  previousLines: string[],
+  nextLines: string[],
+  oldOffset = 0,
+  newOffset = 0,
+): FileDiffLine[] {
   return [
     ...previousLines.map((content, index) => ({
-      type: 'del',
+      type: 'del' as const,
       lineNumber: oldOffset + index + 1,
       oldLine: oldOffset + index + 1,
       content,
     })),
     ...nextLines.map((content, index) => ({
-      type: 'add',
+      type: 'add' as const,
       lineNumber: newOffset + index + 1,
       newLine: newOffset + index + 1,
       content,
@@ -201,13 +261,13 @@ function replacementDiff(previousLines, nextLines, oldOffset = 0, newOffset = 0)
   ];
 }
 
-function compactDiffOperations(operations, contextSize) {
+function compactDiffOperations(operations: FileDiffLine[], contextSize: number): FileDiffLine[] {
   const changedIndexes = operations
     .map((line, index) => (line.type === 'context' ? -1 : index))
     .filter((index) => index >= 0);
   if (!changedIndexes.length) return [];
 
-  const ranges = [];
+  const ranges: Array<{ start: number; end: number }> = [];
   for (const index of changedIndexes) {
     const start = Math.max(0, index - contextSize);
     const end = Math.min(operations.length - 1, index + contextSize);
@@ -219,7 +279,7 @@ function compactDiffOperations(operations, contextSize) {
     }
   }
 
-  const compacted = [];
+  const compacted: FileDiffLine[] = [];
   ranges.forEach((range, index) => {
     if (index > 0) {
       const previous = ranges[index - 1];

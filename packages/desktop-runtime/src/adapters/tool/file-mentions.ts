@@ -1,12 +1,29 @@
-// @ts-nocheck
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { isNodeError } from '../../shared/node-errors.js';
+
+export type FileMentionEntry = {
+  path: string;
+  name: string;
+  lowerPath: string;
+  lowerName: string;
+};
+
+type FileMentionIndexCacheEntry = {
+  createdAt: number;
+  files: FileMentionEntry[];
+  signature: string;
+};
+
+type BuildFileMentionIndexOptions = {
+  force?: boolean;
+};
 
 const MAX_INDEXED_FILES = 8000;
 const MAX_SUGGESTIONS = 8;
 const INDEX_CACHE_TTL_MS = 5000;
 const IGNORE_FILES = ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'];
-const indexCache = new Map();
+const indexCache = new Map<string, FileMentionIndexCacheEntry>();
 
 const DEFAULT_IGNORE_PATTERNS = [
   '.git/',
@@ -37,7 +54,10 @@ const DEFAULT_IGNORE_PATTERNS = [
   '*.key',
 ];
 
-export async function buildFileMentionIndex(root = process.cwd(), options = {}) {
+export async function buildFileMentionIndex(
+  root = process.cwd(),
+  options: BuildFileMentionIndexOptions = {},
+): Promise<FileMentionEntry[]> {
   const workspaceRoot = path.resolve(root);
   const force = Boolean(options?.force);
   const signature = await workspaceIndexSignature(workspaceRoot);
@@ -52,17 +72,21 @@ export async function buildFileMentionIndex(root = process.cwd(), options = {}) 
   }
 
   const ignoreMatcher = await createWorkspaceIgnoreMatcher(workspaceRoot);
-  const files = [];
+  const files: FileMentionEntry[] = [];
   await walkFiles(workspaceRoot, workspaceRoot, ignoreMatcher, files);
   indexCache.set(workspaceRoot, { createdAt: Date.now(), files, signature });
   return files;
 }
 
-export function invalidateFileMentionIndex(root = process.cwd()) {
+export function invalidateFileMentionIndex(root = process.cwd()): void {
   indexCache.delete(path.resolve(root));
 }
 
-export function findFileMentionSuggestions(index, query, limit = MAX_SUGGESTIONS) {
+export function findFileMentionSuggestions(
+  index: readonly FileMentionEntry[],
+  query: unknown,
+  limit = MAX_SUGGESTIONS,
+): FileMentionEntry[] {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return index.slice(0, limit);
 
@@ -74,12 +98,12 @@ export function findFileMentionSuggestions(index, query, limit = MAX_SUGGESTIONS
     .map((item) => item.file);
 }
 
-export async function createWorkspaceIgnoreMatcher(root) {
-  const rules = DEFAULT_IGNORE_PATTERNS.map(parseIgnoreLine).filter(Boolean);
+export async function createWorkspaceIgnoreMatcher(root: string): Promise<WorkspaceIgnoreMatcher> {
+  const rules = DEFAULT_IGNORE_PATTERNS.map(parseIgnoreLine).filter(isIgnoreRule);
   for (const fileName of IGNORE_FILES) {
     try {
       const content = await readFile(path.join(root, fileName), 'utf8');
-      rules.push(...content.split(/\r?\n/).map(parseIgnoreLine).filter(Boolean));
+      rules.push(...content.split(/\r?\n/).map(parseIgnoreLine).filter(isIgnoreRule));
     } catch {
       // 忽略规则文件是可选的，缺失时不应影响工作区索引。
     }
@@ -87,7 +111,12 @@ export async function createWorkspaceIgnoreMatcher(root) {
   return new WorkspaceIgnoreMatcher(rules);
 }
 
-async function walkFiles(root, directory, ignoreMatcher, files) {
+async function walkFiles(
+  root: string,
+  directory: string,
+  ignoreMatcher: WorkspaceIgnoreMatcher,
+  files: FileMentionEntry[],
+): Promise<void> {
   if (files.length >= MAX_INDEXED_FILES) return;
 
   let entries;
@@ -124,27 +153,30 @@ async function walkFiles(root, directory, ignoreMatcher, files) {
   }
 }
 
-async function workspaceIndexSignature(root) {
+async function workspaceIndexSignature(root: string): Promise<string> {
   const paths = [root, ...IGNORE_FILES.map((fileName) => path.join(root, fileName))];
   const parts = await Promise.all(paths.map(async (filePath) => {
     try {
       const info = await stat(filePath);
       return `${filePath}:${Math.round(info.mtimeMs)}:${info.size}`;
     } catch (error) {
-      if (error?.code === 'ENOENT') return `${filePath}:missing`;
-      return `${filePath}:error:${error?.code || 'unknown'}`;
+      if (isNodeError(error) && error.code === 'ENOENT') return `${filePath}:missing`;
+      return `${filePath}:error:${isNodeError(error) ? error.code || 'unknown' : 'unknown'}`;
     }
   }));
   return parts.join('|');
 }
 
-class WorkspaceIgnoreMatcher {
-  constructor(rules) {
+export class WorkspaceIgnoreMatcher {
+  private readonly rules: IgnoreRule[];
+  private readonly negatedRules: IgnoreRule[];
+
+  constructor(rules: IgnoreRule[]) {
     this.rules = rules;
     this.negatedRules = rules.filter((rule) => rule.negated);
   }
 
-  ignores(relativePath) {
+  ignores(relativePath: string): boolean {
     const target = normalizeIgnorePath(relativePath);
     if (!target.path) return false;
     let ignored = false;
@@ -154,7 +186,7 @@ class WorkspaceIgnoreMatcher {
     return ignored;
   }
 
-  shouldSkipDirectory(relativePath) {
+  shouldSkipDirectory(relativePath: string): boolean {
     if (!this.ignores(relativePath)) return false;
     const directory = normalizeIgnorePath(relativePath).path.replace(/\/+$/, '');
     if (!directory || !this.negatedRules.length) return true;
@@ -162,7 +194,7 @@ class WorkspaceIgnoreMatcher {
   }
 }
 
-function parseIgnoreLine(line) {
+function parseIgnoreLine(line: unknown): IgnoreRule | null {
   let raw = String(line || '').trim();
   if (!raw || raw.startsWith('#')) return null;
   const escapedLeading = raw.startsWith('\\#') || raw.startsWith('\\!');
@@ -176,7 +208,15 @@ function parseIgnoreLine(line) {
 }
 
 class IgnoreRule {
-  constructor(pattern, negated) {
+  readonly original: string;
+  readonly negated: boolean;
+  readonly directoryOnly: boolean;
+  readonly anchored: boolean;
+  readonly pattern: string;
+  readonly hasSlash: boolean;
+  readonly regex: RegExp;
+
+  constructor(pattern: string, negated: boolean) {
     this.original = pattern;
     this.negated = negated;
     this.directoryOnly = pattern.endsWith('/');
@@ -188,7 +228,7 @@ class IgnoreRule {
     this.regex = globToRegExp(this.pattern);
   }
 
-  matches(relativePath, isDirectory) {
+  matches(relativePath: string, isDirectory: boolean): boolean {
     const target = relativePath.replace(/^\.?\//, '').replace(/\/+$/, '');
     if (!target) return false;
     if (this.directoryOnly) return this.matchesDirectory(target, isDirectory);
@@ -196,7 +236,7 @@ class IgnoreRule {
     return target.split('/').some((segment) => this.regex.test(segment));
   }
 
-  matchesDirectory(target, isDirectory) {
+  matchesDirectory(target: string, isDirectory: boolean): boolean {
     if (!isDirectory && !target.includes('/')) return false;
     if (this.anchored || this.hasSlash) {
       return this.regex.test(target) || target.startsWith(`${this.pattern}/`);
@@ -204,7 +244,7 @@ class IgnoreRule {
     return target.split('/').some((segment) => this.regex.test(segment));
   }
 
-  canReincludeInside(directory) {
+  canReincludeInside(directory: string): boolean {
     if (!this.negated) return false;
     if (this.anchored || this.hasSlash) {
       return this.pattern === directory
@@ -215,7 +255,11 @@ class IgnoreRule {
   }
 }
 
-function scoreFile(file, query) {
+function isIgnoreRule(rule: IgnoreRule | null): rule is IgnoreRule {
+  return rule !== null;
+}
+
+function scoreFile(file: FileMentionEntry, query: string): number {
   if (file.lowerName === query) return 0;
   if (file.lowerName.startsWith(query)) return 10 + file.name.length;
   const nameIndex = file.lowerName.indexOf(query);
@@ -226,7 +270,7 @@ function scoreFile(file, query) {
   return Number.POSITIVE_INFINITY;
 }
 
-function globToRegExp(pattern) {
+function globToRegExp(pattern: unknown): RegExp {
   let source = '';
   for (const char of String(pattern || '')) {
     if (char === '*') source += '[^/]*';
@@ -236,7 +280,7 @@ function globToRegExp(pattern) {
   return new RegExp(`^${source}$`);
 }
 
-function normalizeIgnorePath(value) {
+function normalizeIgnorePath(value: unknown): { directory: boolean; path: string } {
   const raw = slashPath(value).replace(/^\.?\//, '');
   return {
     directory: raw.endsWith('/'),
@@ -244,14 +288,14 @@ function normalizeIgnorePath(value) {
   };
 }
 
-function slashPath(value) {
+function slashPath(value: unknown): string {
   return String(value || '').split(path.sep).join('/').replace(/\\/g, '/');
 }
 
-function normalize(value) {
+function normalize(value: unknown): string {
   return String(value || '').toLowerCase();
 }
 
-function escapeRegExp(value) {
+function escapeRegExp(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

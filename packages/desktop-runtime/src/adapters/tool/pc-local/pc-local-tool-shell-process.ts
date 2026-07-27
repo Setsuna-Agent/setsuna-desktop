@@ -1,16 +1,22 @@
-// @ts-nocheck
+/** Shell session lifecycle, process I/O, and sandboxed command execution. */
 
-/** Shell session lifecycle, process I/O, and read-only Git commands. */
-
-import { spawn } from 'node:child_process';
+import {
+  spawn,
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams,
+} from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
+import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
+import {
+  errorMessage,
+  isNodeError,
+} from '../../../shared/node-errors.js';
 import {
   DEFAULT_PERSISTENT_SHELL_TTL_MS,
-  DEFAULT_READONLY_TIMEOUT_MS,
   DEFAULT_SHELL_TIMEOUT_MS,
   DEFAULT_SHELL_YIELD_MS,
   MAX_PERSISTENT_SHELL_TTL_MS,
@@ -31,8 +37,6 @@ import {
   realPathIfExists,
   realWorkspaceRoot,
   resolvePolicyPath,
-  resolveWorkspacePath,
-  workspaceRelativePath,
 } from './pc-local-tool-paths.js';
 import {
   _usesShellApplyPatch,
@@ -44,6 +48,19 @@ import {
   shellSandboxUnavailableReason,
   shellWorkspaceWriteRoots,
 } from './pc-local-tool-shell-policy.js';
+import type {
+  RegisterShellSessionOptions,
+  ShellCommandExecutionOptions,
+  ShellCommandTimeoutOptions,
+  ShellFailureSession,
+  ShellProcessState,
+  ShellProcessStore,
+  ShellProcessStoreOptions,
+  ShellSession,
+  ShellSpawnSpec,
+  StartShellSessionOptions,
+  ToolArguments,
+} from './pc-local-tool-shell-process-types.js';
 import {
   boundedInteger,
   errorResult,
@@ -53,43 +70,62 @@ import {
   truncateText,
 } from './pc-local-tool-utils.js';
 
-export function createShellProcessStore(options = {}) {
+export type {
+  ShellCommandExecutionOptions,
+  ShellProcessState,
+  ShellProcessStore,
+  ShellProcessStoreOptions,
+  ShellSession,
+} from './pc-local-tool-shell-process-types.js';
+
+export function createShellProcessStore(
+  options: ShellProcessStoreOptions = {},
+): ShellProcessStore {
   return {
-    sessions: new Map(),
+    sessions: new Map<string, ShellSession>(),
     defaultTtlMs: boundedInteger(options.defaultTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS),
     maxTtlMs: boundedInteger(options.maxTtlMs, MAX_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS),
   };
 }
 
-export async function closeShellProcessStore(store = createShellProcessStore()) {
-  const sessions = [...(store.sessions?.values?.() || [])];
+export async function closeShellProcessStore(
+  store: ShellProcessStore = createShellProcessStore(),
+): Promise<void> {
+  const sessions = [...store.sessions.values()];
   sessions.forEach((session) => terminateShellSession(session, 'SIGTERM'));
   await Promise.allSettled(sessions.map((session) =>
     Promise.race([session.done, sleep(SHELL_GRACEFUL_KILL_MS + 1000)])
   ));
-  store.sessions?.clear?.();
+  store.sessions.clear();
 }
 
 /**
  * Return only intentionally persisted, still-running processes for one conversation.
  * Foreground commands are excluded so short build/test runs never appear as services.
  */
-export function listBackgroundShellProcesses(store = createShellProcessStore(), threadId = '') {
+export function listBackgroundShellProcesses(
+  store: ShellProcessStore = createShellProcessStore(),
+  threadId = '',
+) {
   pruneShellProcessStore(store);
   const normalizedThreadId = String(threadId || '').trim();
   if (!normalizedThreadId) return [];
-  return [...(store.sessions?.values?.() || [])]
+  return [...store.sessions.values()]
     .filter((session) => session.persist && !session.closed && session.threadId === normalizedThreadId)
     .map((session) => shellProcessSnapshot(session, session.root || session.cwd))
     .sort((left, right) => right.started_at_ms - left.started_at_ms);
 }
 
 /** Terminate a persisted process only when it belongs to the requested conversation. */
-export async function terminateBackgroundShellProcess(store = createShellProcessStore(), threadId = '', processId = '') {
+export async function terminateBackgroundShellProcess(
+  store: ShellProcessStore = createShellProcessStore(),
+  threadId = '',
+  processId = '',
+): Promise<boolean> {
   pruneShellProcessStore(store);
   const normalizedThreadId = String(threadId || '').trim();
   const normalizedProcessId = String(processId || '').trim();
-  const session = store.sessions?.get?.(normalizedProcessId);
+  const session = store.sessions.get(normalizedProcessId);
   if (!session || !session.persist || session.threadId !== normalizedThreadId) return false;
   if (session.closed) {
     store.sessions.delete(normalizedProcessId);
@@ -103,17 +139,21 @@ export async function terminateBackgroundShellProcess(store = createShellProcess
   return true;
 }
 
-export function shellSessionsForStateClose(state) {
+export function shellSessionsForStateClose(state: ShellProcessState): ShellSession[] {
   const sessions = shellSessionsMap(state);
   if (state?.ownsShellProcessStore || !(state?.ownedShellProcessIds instanceof Set)) {
-    return [...(sessions.values?.() || [])];
+    return [...sessions.values()];
   }
   return [...state.ownedShellProcessIds]
     .map((id) => sessions.get(id))
-    .filter(Boolean);
+    .filter((session): session is ShellSession => Boolean(session));
 }
 
-function registerShellSession(state, session, options = {}) {
+function registerShellSession(
+  state: ShellProcessState,
+  session: ShellSession,
+  options: RegisterShellSessionOptions = {},
+): void {
   pruneShellProcessStore(state.shellProcessStore);
   const persist = Boolean(options.persist);
   const persistTtlMs = persist
@@ -130,7 +170,10 @@ function registerShellSession(state, session, options = {}) {
   if (!persist) state.ownedShellProcessIds?.add?.(session.id);
 }
 
-function lookupShellSession(state, processId) {
+function lookupShellSession(
+  state: ShellProcessState,
+  processId: string,
+): ShellSession | null {
   const session = shellSessionsMap(state).get(processId);
   if (!session) return null;
   if (session.root && path.resolve(session.root) !== path.resolve(state.root)) return null;
@@ -142,12 +185,12 @@ function lookupShellSession(state, processId) {
   return session;
 }
 
-export function removeShellSession(state, processId) {
+export function removeShellSession(state: ShellProcessState, processId: string): void {
   shellSessionsMap(state).delete(processId);
   state.ownedShellProcessIds?.delete?.(processId);
 }
 
-export function pruneShellProcessStore(store) {
+export function pruneShellProcessStore(store?: ShellProcessStore): void {
   const sessions = store?.sessions;
   if (!sessions || typeof sessions[Symbol.iterator] !== 'function') return;
   for (const [id, session] of sessions) {
@@ -160,22 +203,28 @@ export function pruneShellProcessStore(store) {
   }
 }
 
-export function shellSessionsMap(state) {
-  return state?.shellProcessStore?.sessions || state?.shellProcesses || new Map();
+export function shellSessionsMap(state: ShellProcessState): Map<string, ShellSession> {
+  return state.shellProcessStore?.sessions
+    || state.shellProcesses
+    || new Map<string, ShellSession>();
 }
 
-function persistentShellTtlMs(args, state) {
-  const store = state?.shellProcessStore || {};
-  const maxTtlMs = boundedInteger(store.maxTtlMs, MAX_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS);
-  const defaultTtlMs = boundedInteger(store.defaultTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1000, maxTtlMs);
+function persistentShellTtlMs(args: ToolArguments, state: ShellProcessState): number {
+  const store = state.shellProcessStore;
+  const maxTtlMs = boundedInteger(store?.maxTtlMs, MAX_PERSISTENT_SHELL_TTL_MS, 1000, MAX_PERSISTENT_SHELL_TTL_MS);
+  const defaultTtlMs = boundedInteger(store?.defaultTtlMs, DEFAULT_PERSISTENT_SHELL_TTL_MS, 1000, maxTtlMs);
   return boundedInteger(args?.persist_ttl_ms ?? args?.persistTtlMs, defaultTtlMs, 1000, maxTtlMs);
 }
 
-function isExpiredShellSession(session) {
+function isExpiredShellSession(session: ShellSession): boolean {
   return Boolean(session?.persist && session.expiresAt && Date.now() >= session.expiresAt);
 }
 
-export async function runShellCommand(args, state, options = {}) {
+export async function runShellCommand(
+  args: ToolArguments,
+  state: ShellProcessState,
+  options: ShellCommandExecutionOptions = {},
+) {
   pruneShellProcessStore(state.shellProcessStore);
   const command = String(args?.command || '').trim();
   if (!command) {
@@ -274,7 +323,7 @@ export async function runShellCommand(args, state, options = {}) {
   return completedShellResult(session, state.root);
 }
 
-function resolveShellDirectoryPath(value, state) {
+function resolveShellDirectoryPath(value: unknown, state: ShellProcessState): string {
   const raw = String(value || '').trim();
   if (!raw) return state.root;
   const workspaceRoot = realWorkspaceRoot(state.root);
@@ -286,7 +335,10 @@ function resolveShellDirectoryPath(value, state) {
   throw new Error('Shell directory escapes the workspace and configured writable roots.');
 }
 
-function shellCommandTimeoutMs(args, options = {}) {
+function shellCommandTimeoutMs(
+  args: ToolArguments,
+  options: ShellCommandTimeoutOptions = {},
+): number {
   const explicitTimeout = args?.timeout ?? args?.timeout_ms;
   if (explicitTimeout !== undefined && explicitTimeout !== null && explicitTimeout !== '') {
     return boundedInteger(explicitTimeout, DEFAULT_SHELL_TIMEOUT_MS, 1, MAX_SHELL_TIMEOUT_MS);
@@ -297,7 +349,10 @@ function shellCommandTimeoutMs(args, options = {}) {
   return DEFAULT_SHELL_TIMEOUT_MS;
 }
 
-export async function readShellProcess(args, state) {
+export async function readShellProcess(
+  args: ToolArguments,
+  state: ShellProcessState,
+) {
   const processId = String(args?.process_id || '').trim();
   if (!processId) {
     return errorResult('Process id is required.', {
@@ -321,7 +376,7 @@ export async function readShellProcess(args, state) {
   return completedShellResult(session, state.root);
 }
 
-export function listShellProcesses(args, state) {
+export function listShellProcesses(args: ToolArguments, state: ShellProcessState) {
   pruneShellProcessStore(state.shellProcessStore);
   const includeCompleted = args?.include_completed !== false;
   const sessions = [...(shellSessionsMap(state).values?.() || [])]
@@ -354,7 +409,10 @@ export function listShellProcesses(args, state) {
   );
 }
 
-export async function writeShellProcess(args, state) {
+export async function writeShellProcess(
+  args: ToolArguments,
+  state: ShellProcessState,
+) {
   pruneShellProcessStore(state.shellProcessStore);
   const processId = String(args?.process_id || '').trim();
   const input = String(args?.input ?? '');
@@ -384,7 +442,10 @@ export async function writeShellProcess(args, state) {
   );
 }
 
-export async function terminateShellProcess(args, state) {
+export async function terminateShellProcess(
+  args: ToolArguments,
+  state: ShellProcessState,
+) {
   pruneShellProcessStore(state.shellProcessStore);
   const processId = String(args?.process_id || '').trim();
   if (!processId) {
@@ -412,127 +473,24 @@ export async function terminateShellProcess(args, state) {
   };
 }
 
-export async function gitStatus(state, signal) {
-  const result = await collectProcess(
-    'git',
-    ['-c', 'status.relativePaths=true', '-c', 'core.quotepath=false', '--literal-pathspecs', '--no-pager', 'status', '--short', '--branch', '--', '.'],
-    state.root,
-    DEFAULT_READONLY_TIMEOUT_MS,
-    signal,
-  );
-  return gitProcessResult(result, {
-    title: 'Git status (workspace-relative paths)',
-    empty: '(no status output)',
-    successDisplay: 'read Git status',
-    failureDisplay: 'Git status failed',
-  });
-}
-
-export async function gitLog(args, state, signal) {
-  const revision = normalizedGitRevision(args?.revision, 'HEAD');
-  const maxCount = boundedInteger(args?.max_count, 20, 1, 100);
-  const { pathspec, targetLabel } = gitWorkspacePathspec(args, state);
-  const result = await collectProcess(
-    'git',
-    [
-      '--literal-pathspecs',
-      '--no-pager',
-      'log',
-      `--max-count=${maxCount}`,
-      '--date=iso-strict',
-      '--format=%H%x09%aI%x09%an <%ae>%x09%s',
-      revision,
-      '--',
-      pathspec,
-    ],
-    state.root,
-    DEFAULT_READONLY_TIMEOUT_MS,
-    signal,
-  );
-  return gitProcessResult(result, {
-    title: `Git history for ${targetLabel || '.'} from ${revision} (workspace-scoped)`,
-    empty: '(no commits affect this workspace path)',
-    successDisplay: 'read Git history',
-    failureDisplay: 'Git history failed',
-  });
-}
-
-export async function gitShow(args, state, signal) {
-  const revision = normalizedGitRevision(args?.revision);
-  const contextLines = boundedInteger(args?.context_lines, 3, 0, 20);
-  const { pathspec, targetLabel } = gitWorkspacePathspec(args, state);
-  const result = await collectProcess(
-    'git',
-    [
-      '--literal-pathspecs',
-      '--no-pager',
-      'show',
-      '--no-color',
-      '--no-ext-diff',
-      '--no-textconv',
-      '--no-renames',
-      '--relative',
-      `--unified=${contextLines}`,
-      '--format=fuller',
-      revision,
-      '--',
-      pathspec,
-    ],
-    state.root,
-    DEFAULT_READONLY_TIMEOUT_MS,
-    signal,
-  );
-  return gitProcessResult(result, {
-    title: `Git revision ${revision}${targetLabel ? ` for ${targetLabel}` : ''} (workspace-relative paths)`,
-    empty: '(revision has no changes in the selected workspace path)',
-    successDisplay: `read Git revision ${revision}`,
-    failureDisplay: `Git revision ${revision} failed`,
-  });
-}
-
-export async function readDiff(args, state, signal) {
-  const contextLines = boundedInteger(args?.context_lines, 3, 0, 20);
-  const staged = Boolean(args?.staged);
-  const gitArgs = ['--literal-pathspecs', '--no-pager', 'diff', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--relative', `--unified=${contextLines}`];
-  if (staged) gitArgs.push('--cached');
-
-  const { pathspec, targetLabel } = gitWorkspacePathspec(args, state);
-  gitArgs.push('--', pathspec);
-
-  const result = await collectProcess('git', gitArgs, state.root, DEFAULT_READONLY_TIMEOUT_MS, signal);
-  return gitProcessResult(result, {
-    title: `${staged ? 'Staged' : 'Unstaged'} Git diff (workspace-relative paths)${targetLabel ? ` for ${targetLabel}` : ''}`,
-    empty: staged ? '(no staged diff)' : '(no unstaged diff)',
-    successDisplay: staged ? 'read staged diff' : 'read unstaged diff',
-    failureDisplay: 'Git diff failed',
-  });
-}
-
-function gitWorkspacePathspec(args, state) {
-  const requestedPath = args?.path ?? args?.file_path;
-  if (!requestedPath) return { pathspec: '.', targetLabel: '' };
-  const targetPath = resolveWorkspacePath(requestedPath, state.root);
-  return {
-    pathspec: workspaceRelativePath(targetPath, state.root),
-    targetLabel: formatPath(targetPath, state.root),
-  };
-}
-
-function normalizedGitRevision(value, fallback = '') {
-  const revision = String(value ?? fallback).trim();
-  if (!revision) throw new Error('Git revision is required.');
-  if (revision.startsWith('-') || /[\0\r\n]/.test(revision)) {
-    throw new Error('Git revision must be a revision name or hash, not an option.');
-  }
-  return revision;
-}
-
-async function startShellSession({ command, cwd, state, timeout, signal, onProgress }) {
+async function startShellSession({
+  command,
+  cwd,
+  state,
+  timeout,
+  signal,
+  onProgress,
+}: StartShellSessionOptions): Promise<ShellSession> {
   const root = state.root;
-  const session = {
+  let resolveDone = (_session: ShellSession): void => undefined;
+  const done = new Promise<ShellSession>((resolve) => {
+    resolveDone = resolve;
+  });
+  const session: ShellSession = {
     id: randomUUID(),
     command,
     cwd,
+    root,
     child: null,
     startedAt: Date.now(),
     finishedAt: 0,
@@ -552,6 +510,9 @@ async function startShellSession({ command, cwd, state, timeout, signal, onProgr
     threadId: '',
     turnId: '',
     toolCallId: '',
+    persist: false,
+    persistTtlMs: 0,
+    expiresAt: 0,
     stdout: '',
     stderr: '',
     stdoutOmittedChars: 0,
@@ -561,13 +522,10 @@ async function startShellSession({ command, cwd, state, timeout, signal, onProgr
     progressTimer: null,
     timeoutTimer: null,
     killTimer: null,
-    onProgress,
-    done: null,
-    resolveDone: null,
+    onProgress: onProgress ?? null,
+    done,
+    resolveDone,
   };
-  session.done = new Promise((resolve) => {
-    session.resolveDone = resolve;
-  });
 
   const detached = process.platform !== 'win32';
   // 沙箱规则和子进程必须基于同一份最终 PATH。desktopShellPath 会补充常见
@@ -576,7 +534,7 @@ async function startShellSession({ command, cwd, state, timeout, signal, onProgr
   let sandboxPlan = createShellSandboxExecutionPlan(state, { cwd, environment });
   const temporaryRoot = await createShellSessionTempDirectory(sandboxPlan);
   session.temporaryRoot = temporaryRoot;
-  let child;
+  let child: ChildProcessWithoutNullStreams;
   try {
     if (temporaryRoot) {
       environment = {
@@ -606,18 +564,21 @@ async function startShellSession({ command, cwd, state, timeout, signal, onProgr
   }
   session.child = child;
 
-  const finish = (exitCode, childSignal) => {
+  const finish = (
+    exitCode: number | null,
+    childSignal: NodeJS.Signals | null,
+  ): void => {
     if (session.closed) return;
     session.closed = true;
     session.exitCode = exitCode;
     session.signal = childSignal;
     session.finishedAt = Date.now();
-    clearTimeout(session.timeoutTimer);
-    clearTimeout(session.killTimer);
+    if (session.timeoutTimer) clearTimeout(session.timeoutTimer);
+    if (session.killTimer) clearTimeout(session.killTimer);
     signal?.removeEventListener('abort', abort);
     flushShellProgress(session, root);
     void removeShellSessionTempDirectory(session)
-      .finally(() => session.resolveDone?.(session));
+      .finally(() => session.resolveDone(session));
   };
   const abort = () => {
     session.aborted = true;
@@ -635,15 +596,17 @@ async function startShellSession({ command, cwd, state, timeout, signal, onProgr
   child.stdout.on('data', (chunk) => appendShellOutput(session, 'stdout', chunk, root));
   child.stderr.on('data', (chunk) => appendShellOutput(session, 'stderr', chunk, root));
   child.on('error', (error) => {
-    session.errorCode = error.code || '';
-    appendShellOutput(session, 'stderr', `${error.message || String(error)}\n`, root);
+    session.errorCode = isNodeError(error) ? String(error.code || '') : '';
+    appendShellOutput(session, 'stderr', `${errorMessage(error)}\n`, root);
     finish(null, null);
   });
   child.on('close', finish);
   return session;
 }
 
-async function createShellSessionTempDirectory(sandboxPlan) {
+async function createShellSessionTempDirectory(
+  sandboxPlan: SandboxExecutionPlan,
+): Promise<string> {
   if (sandboxPlan.provider !== 'macos-seatbelt' || sandboxPlan.permissionProfile !== 'workspace-write') return '';
   const candidates = [...new Set([tmpdir(), '/tmp'])]
     .filter((candidate) => candidate && path.isAbsolute(candidate));
@@ -657,14 +620,17 @@ async function createShellSessionTempDirectory(sandboxPlan) {
   return '';
 }
 
-async function removeShellSessionTempDirectory(session) {
+async function removeShellSessionTempDirectory(session: ShellSession): Promise<void> {
   const temporaryRoot = String(session?.temporaryRoot || '');
   session.temporaryRoot = '';
   if (!temporaryRoot) return;
   await rm(temporaryRoot, { recursive: true, force: true }).catch(() => undefined);
 }
 
-function waitForShellSession(session, waitMs) {
+function waitForShellSession(
+  session: ShellSession,
+  waitMs: number,
+): Promise<{ completed: boolean }> {
   if (session.closed) return Promise.resolve({ completed: true });
   return Promise.race([
     session.done.then(() => ({ completed: true })),
@@ -672,7 +638,7 @@ function waitForShellSession(session, waitMs) {
   ]);
 }
 
-function runningShellResult(session, root) {
+function runningShellResult(session: ShellSession, root: string) {
   return {
     ok: true,
     content: [
@@ -691,7 +657,7 @@ function runningShellResult(session, root) {
   };
 }
 
-function completedShellResult(session, root) {
+function completedShellResult(session: ShellSession, root: string) {
   const status = session.timedOut
     ? `command timed out after ${session.timeout}ms`
     : session.exitCode === 0
@@ -709,7 +675,7 @@ function completedShellResult(session, root) {
   };
 }
 
-export function classifyShellSessionFailure(session) {
+export function classifyShellSessionFailure(session: ShellFailureSession) {
   if (!session.timedOut && !session.aborted && session.exitCode === 0) return null;
   if (session.timedOut) {
     return {
@@ -741,7 +707,7 @@ export function classifyShellSessionFailure(session) {
   };
 }
 
-function isSandboxDeniedShellFailure(session) {
+function isSandboxDeniedShellFailure(session: ShellFailureSession): boolean {
   // Node child_process failures often expose only a symbolic spawn code instead
   // of the localized OS error text emitted by ordinary shell commands.
   const errorCode = String(session.errorCode || '').toUpperCase();
@@ -758,25 +724,29 @@ function isSandboxDeniedShellFailure(session) {
     || shellCommandHiddenBySandbox(output, session);
 }
 
-export function shellCommandHiddenBySandbox(output, session) {
+export function shellCommandHiddenBySandbox(
+  output: unknown,
+  session: ShellFailureSession,
+): boolean {
   if (session.exitCode !== 126 && session.exitCode !== 127) return false;
   return shellHiddenCommandNames(output).some((commandName) => hostExecutableExists(commandName, session));
 }
 
-function shellHiddenCommandNames(output) {
-  const commandNames = new Set();
-  for (const match of output.matchAll(/^(?:[^:\n]+:\s*)?(?:line\s+\d+:\s*)?([^\s:]+): (?:command )?not found\s*$/gimu)) {
-    commandNames.add(match[1]);
+function shellHiddenCommandNames(output: unknown): string[] {
+  const commandNames = new Set<string>();
+  const text = String(output || '');
+  for (const match of text.matchAll(/^(?:[^:\n]+:\s*)?(?:line\s+\d+:\s*)?([^\s:]+): (?:command )?not found\s*$/gimu)) {
+    if (match[1]) commandNames.add(match[1]);
   }
-  for (const match of output.matchAll(/^(?:[^:\n]+:\s*)?command not found:\s*([^\s]+)\s*$/gimu)) {
-    commandNames.add(match[1]);
+  for (const match of text.matchAll(/^(?:[^:\n]+:\s*)?command not found:\s*([^\s]+)\s*$/gimu)) {
+    if (match[1]) commandNames.add(match[1]);
   }
   return [...commandNames];
 }
 
-function sandboxDeniedReadableRoots(session) {
+function sandboxDeniedReadableRoots(session: ShellFailureSession): string[] {
   const output = `${session.stdout || ''}\n${session.stderr || ''}`;
-  const roots = [];
+  const roots: string[] = [];
   for (const commandName of shellHiddenCommandNames(output)) {
     if (!hostExecutableExists(commandName, session)) continue;
     const normalizedName = path.basename(String(commandName || '').replace(/^['"]|['"]$/g, '')).replace(/\.(?:cmd|exe)$/iu, '');
@@ -788,11 +758,14 @@ function sandboxDeniedReadableRoots(session) {
   return [...new Set(roots.map((root) => path.resolve(root)).filter((root) => root !== path.parse(root).root))];
 }
 
-function hostExecutableExists(commandName, session) {
+function hostExecutableExists(
+  commandName: unknown,
+  session: ShellFailureSession,
+): boolean {
   const command = String(commandName || '').replace(/^['"]|['"]$/g, '');
   if (!command || command.includes('\0')) return false;
   const candidates = command.includes('/')
-    ? [path.isAbsolute(command) ? command : path.resolve(session.cwd, command)]
+    ? [path.isAbsolute(command) ? command : path.resolve(session.cwd || process.cwd(), command)]
     : String(session.environment?.PATH || '').split(path.delimiter).filter(Boolean).map((directory) => path.join(directory, command));
   return candidates.some((candidate) => {
     try {
@@ -804,13 +777,16 @@ function hostExecutableExists(commandName, session) {
   });
 }
 
-export function isShellSessionVisibleToState(state, session) {
+export function isShellSessionVisibleToState(
+  state: ShellProcessState,
+  session: ShellSession | null | undefined,
+): boolean {
   if (!session || isExpiredShellSession(session)) return false;
   if (!session.root) return true;
   return path.resolve(session.root) === path.resolve(state.root);
 }
 
-function shellProcessSnapshot(session, root) {
+function shellProcessSnapshot(session: ShellSession, root: string) {
   return {
     process_id: session.id,
     command: session.command,
@@ -832,7 +808,7 @@ function shellProcessSnapshot(session, root) {
   };
 }
 
-function formatShellSessionOutput(session, root) {
+function formatShellSessionOutput(session: ShellSession, root: string): string {
   return [
     `Process Id: ${session.id}`,
     `Command: ${session.command}`,
@@ -849,33 +825,47 @@ function formatShellSessionOutput(session, root) {
   ].join('\n');
 }
 
-function formatShellOutputChannel(value, omittedChars) {
+function formatShellOutputChannel(value: unknown, omittedChars: number): string {
   const text = String(value || '');
   if (!text && !omittedChars) return '(empty)';
   const prefix = omittedChars > 0 ? `[output truncated; omitted ${omittedChars} earlier chars]\n` : '';
   return `${prefix}${text || '(empty)'}`;
 }
 
-function appendShellOutput(session, stream, chunk, root) {
+function appendShellOutput(
+  session: ShellSession,
+  stream: 'stdout' | 'stderr',
+  chunk: unknown,
+  root: string,
+): void {
   const text = String(chunk || '');
-  const bufferKey = stream;
-  const omittedKey = `${stream}OmittedChars`;
-  const next = `${session[bufferKey] || ''}${text}`;
+  const current = stream === 'stdout' ? session.stdout : session.stderr;
+  const next = `${current}${text}`;
   if (next.length > MAX_SHELL_BUFFER_CHARS) {
     const omitted = next.length - MAX_SHELL_BUFFER_CHARS;
-    session[bufferKey] = next.slice(omitted);
-    session[omittedKey] += omitted;
+    if (stream === 'stdout') {
+      session.stdout = next.slice(omitted);
+      session.stdoutOmittedChars += omitted;
+    } else {
+      session.stderr = next.slice(omitted);
+      session.stderrOmittedChars += omitted;
+    }
+  } else if (stream === 'stdout') {
+    session.stdout = next;
   } else {
-    session[bufferKey] = next;
+    session.stderr = next;
   }
   if (typeof session.onProgress === 'function') {
-    const pendingKey = stream === 'stdout' ? 'pendingStdout' : 'pendingStderr';
-    session[pendingKey] = boundedProgressText(`${session[pendingKey] || ''}${text}`);
+    if (stream === 'stdout') {
+      session.pendingStdout = boundedProgressText(`${session.pendingStdout}${text}`);
+    } else {
+      session.pendingStderr = boundedProgressText(`${session.pendingStderr}${text}`);
+    }
   }
   scheduleShellProgress(session, root);
 }
 
-function scheduleShellProgress(session, root) {
+function scheduleShellProgress(session: ShellSession, root: string): void {
   if (typeof session.onProgress !== 'function' || session.progressTimer) return;
   session.progressTimer = setTimeout(() => {
     session.progressTimer = null;
@@ -884,8 +874,8 @@ function scheduleShellProgress(session, root) {
   session.progressTimer.unref?.();
 }
 
-function flushShellProgress(session, root) {
-  clearTimeout(session.progressTimer);
+function flushShellProgress(session: ShellSession, root: string): void {
+  if (session.progressTimer) clearTimeout(session.progressTimer);
   session.progressTimer = null;
   const stdoutDelta = session.pendingStdout;
   const stderrDelta = session.pendingStderr;
@@ -914,16 +904,23 @@ function flushShellProgress(session, root) {
   }
 }
 
-export function terminateShellSession(session, childSignal = 'SIGTERM') {
-  if (!session?.child || session.closed) return;
-  killChildProcess(session.child, childSignal);
+export function terminateShellSession(
+  session: ShellSession,
+  childSignal: NodeJS.Signals = 'SIGTERM',
+): void {
+  const child = session.child;
+  if (!child || session.closed) return;
+  killChildProcess(child, childSignal);
   if (childSignal === 'SIGTERM' && !session.killTimer) {
-    session.killTimer = setTimeout(() => killChildProcess(session.child, 'SIGKILL'), SHELL_GRACEFUL_KILL_MS);
+    session.killTimer = setTimeout(
+      () => killChildProcess(child, 'SIGKILL'),
+      SHELL_GRACEFUL_KILL_MS,
+    );
     session.killTimer.unref?.();
   }
 }
 
-function killChildProcess(child, childSignal) {
+export function killChildProcess(child: ChildProcess, childSignal: NodeJS.Signals): void {
   if (process.platform === 'win32' && child.pid) {
     try {
       const args = windowsProcessTreeKillArgs(child.pid, childSignal);
@@ -959,149 +956,24 @@ function killChildProcess(child, childSignal) {
   }
 }
 
-export function windowsProcessTreeKillArgs(pid, childSignal) {
+export function windowsProcessTreeKillArgs(
+  pid: number,
+  childSignal: NodeJS.Signals,
+): string[] {
   const args = ['/pid', String(pid), '/t'];
   if (childSignal === 'SIGKILL') args.push('/f');
   return args;
 }
 
-export function collectProcess(command, args, cwd, timeout, signal, spawnProcess = spawn) {
-  return new Promise((resolve) => {
-    let child;
-    let stdout = '';
-    let stderr = '';
-    let stdoutOmittedChars = 0;
-    let stderrOmittedChars = 0;
-    let settled = false;
-    let timedOut = false;
-    let aborted = false;
-    let forceKillTimer = null;
-
-    // A pre-cancelled read-only command must never create a child process. The
-    // second check after listener registration below closes the remaining race.
-    if (signal?.aborted) {
-      resolve({
-        stdout,
-        stderr,
-        stdoutOmittedChars,
-        stderrOmittedChars,
-        timedOut,
-        aborted: true,
-        exitCode: null,
-        signal: null,
-        errorCode: '',
-      });
-      return;
-    }
-
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      clearTimeout(forceKillTimer);
-      signal?.removeEventListener('abort', abort);
-      resolve({ stdout, stderr, stdoutOmittedChars, stderrOmittedChars, timedOut, aborted, ...result });
-    };
-    const terminate = () => {
-      if (!child) return;
-      killChildProcess(child, 'SIGTERM');
-      if (!forceKillTimer) {
-        forceKillTimer = setTimeout(() => killChildProcess(child, 'SIGKILL'), SHELL_GRACEFUL_KILL_MS);
-        forceKillTimer.unref?.();
-      }
-    };
-    const abort = () => {
-      aborted = true;
-      terminate();
-    };
-    /* node:coverage ignore next 4 */
-    const timer = setTimeout(() => {
-      timedOut = true;
-      terminate();
-    }, timeout);
-
-    child = spawnProcess(command, args, {
-      cwd,
-      shell: false,
-      detached: process.platform !== 'win32',
-      env: shellEnvironment(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    signal?.addEventListener('abort', abort, { once: true });
-    if (signal?.aborted) abort();
-    child.stdout.on('data', (chunk) => {
-      const appended = appendBoundedProcessText(stdout, stdoutOmittedChars, chunk.toString());
-      stdout = appended.text;
-      stdoutOmittedChars = appended.omittedChars;
-    });
-    child.stderr.on('data', (chunk) => {
-      const appended = appendBoundedProcessText(stderr, stderrOmittedChars, chunk.toString());
-      stderr = appended.text;
-      stderrOmittedChars = appended.omittedChars;
-    });
-    child.on('error', (error) => {
-      stderr += `${stderr ? '\n' : ''}${error.message || String(error)}`;
-      finish({ exitCode: null, signal: null, errorCode: error.code || '' });
-    });
-    child.on('close', (exitCode, childSignal) => {
-      finish({ exitCode, signal: childSignal, errorCode: '' });
-    });
-  });
-}
-
-function gitProcessResult(result, { title, empty, successDisplay, failureDisplay }) {
-  const output = formattedCollectedProcessOutput(result, empty);
-  if (result.aborted) {
-    return errorResult(`${title} cancelled.\n${output}`, {
-      failure_kind: 'cancelled',
-      failure_stage: 'execution',
-    });
-  }
-  if (result.exitCode === 0 && !result.timedOut) {
-    return okResult(truncateText(`${title}:\n${output}`, MAX_TEXT_BYTES), successDisplay);
-  }
-  const reason = result.timedOut
-    ? 'timed out'
-    : result.errorCode === 'ENOENT'
-      ? 'git executable was not found'
-      : `exited ${result.exitCode ?? result.signal ?? 'without a status'}`;
-  return {
-    ok: false,
-    content: truncateText(`${title} failed (${reason}):\n${output}`, MAX_TEXT_BYTES),
-    display: failureDisplay,
-  };
-}
-
-function boundedProgressText(value) {
+function boundedProgressText(value: string): string {
   if (value.length <= MAX_SHELL_PROGRESS_CHARS) return value;
   return value.slice(value.length - MAX_SHELL_PROGRESS_CHARS);
 }
 
-export function appendBoundedProcessText(current, omittedChars, addition) {
-  const remaining = Math.max(0, MAX_SHELL_BUFFER_CHARS - current.length);
-  return {
-    text: remaining ? `${current}${addition.slice(0, remaining)}` : current,
-    omittedChars: omittedChars + Math.max(0, addition.length - remaining),
-  };
-}
-
-function formattedCollectedProcessOutput(result, empty) {
-  const stdout = String(result.stdout || '');
-  const stderr = String(result.stderr || '');
-  const stdoutMarker = result.stdoutOmittedChars
-    ? `\n[stdout truncated; omitted ${result.stdoutOmittedChars} later chars]`
-    : '';
-  const stderrMarker = result.stderrOmittedChars
-    ? `\n[stderr truncated; omitted ${result.stderrOmittedChars} later chars]`
-    : '';
-  if (stdout) return `${stdout}${stdoutMarker}`;
-  if (stderr) return `${stderr}${stderrMarker}`;
-  return empty;
-}
-
-function shellSpawnSpec(command, sandboxPlan) {
+function shellSpawnSpec(
+  command: string,
+  sandboxPlan: SandboxExecutionPlan,
+): ShellSpawnSpec {
   const guardedCommand = shellCommandWithPipefail(command);
   const sandboxProfile = shellSandboxProfile(sandboxPlan);
   if (!sandboxProfile) {
@@ -1124,14 +996,14 @@ function shellSpawnSpec(command, sandboxPlan) {
   };
 }
 
-function shellCommandWithPipefail(command) {
+function shellCommandWithPipefail(command: string): string {
   if (process.platform === 'win32') return command;
   // POSIX 未标准化 pipefail。请在子 Shell 中探测，使不支持此选项的 Shell 仍可执行
   // 原命令，而支持它的 Shell 能正确暴露被末尾 `tail` 或 `tee` 阶段掩盖的失败。
   return `(set -o pipefail) 2>/dev/null && set -o pipefail\n${command}`;
 }
 
-function shellWithPipefailSupport() {
+function shellWithPipefailSupport(): boolean | string {
   if (process.platform !== 'linux') return true;
   // Node defaults to /bin/sh, which is dash on Ubuntu and cannot expose a failed
   // upstream pipeline stage. Prefer bash when available; the guarded command still
@@ -1141,11 +1013,13 @@ function shellWithPipefailSupport() {
   return true;
 }
 
-function shellEnvironment(overrides = {}) {
-  const safeEnv = {};
+export function shellEnvironment(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
+  const safeEnv: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     const safeKey = safeShellEnvKey(key);
-    if (!safeKey || SENSITIVE_SHELL_ENV_KEY.test(key)) continue;
+    if (!safeKey || SENSITIVE_SHELL_ENV_KEY.test(key) || typeof value !== 'string') continue;
     safeEnv[safeKey] = value;
   }
   const defaults = {
@@ -1160,9 +1034,10 @@ function shellEnvironment(overrides = {}) {
     npm_config_color: 'false',
     CI: process.env.CI || '1',
   };
-  const safeOverrides = Object.fromEntries(
-    Object.entries(overrides).filter(([key, value]) => key && typeof value === 'string'),
-  );
+  const safeOverrides: Record<string, string> = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    if (key && typeof value === 'string') safeOverrides[key] = value;
+  }
   return {
     ...defaults,
     ...safeOverrides,
@@ -1170,7 +1045,7 @@ function shellEnvironment(overrides = {}) {
   };
 }
 
-function safeShellEnvKey(key) {
+function safeShellEnvKey(key: string): string {
   if (SAFE_SHELL_ENV_KEYS.has(key)) return key;
   if (process.platform !== 'win32') return '';
   const normalized = String(key || '').toLowerCase();
@@ -1180,7 +1055,7 @@ function safeShellEnvKey(key) {
   return '';
 }
 
-function desktopShellPath(basePath = '') {
+function desktopShellPath(basePath: unknown = ''): string {
   const home = process.env.HOME || process.env.USERPROFILE || homedir();
   return [
     ...String(basePath || '').split(path.delimiter),

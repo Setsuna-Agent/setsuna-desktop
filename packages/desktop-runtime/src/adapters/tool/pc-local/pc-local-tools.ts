@@ -1,10 +1,16 @@
-// @ts-nocheck
-
 /** Public facade and dispatcher for the modular PC local-tool implementation. */
 
+import type {
+  RuntimeNetworkPolicyAmendment,
+  RuntimePermissionProfile,
+  RuntimeSandboxWorkspaceWrite,
+} from '@setsuna-desktop/contracts';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import type { ShellToolchain } from '../../../ports/workspace-dependency-manager.js';
+import type { WorkspaceSearchEngine } from '../../../ports/workspace-search-engine.js';
 import { isFileMutationToolName, protectedWorkspaceMetadataPathForTool } from '../../../security/file-system-policy.js';
+import { errorMessage } from '../../../shared/node-errors.js';
 import {
   parsePartialAppendFileArguments,
   parsePartialApplyPatchArguments,
@@ -47,6 +53,7 @@ import {
   rememberReadFileResult,
   rememberedReadFileResult,
   searchText,
+  type PcLocalFileState,
   writeLocalFile,
 } from './pc-local-tool-files.js';
 import {
@@ -54,6 +61,12 @@ import {
   configureMcpServer,
   isLocalMcpConfigPath,
 } from './pc-local-tool-mcp.js';
+import {
+  gitLog,
+  gitShow,
+  gitStatus,
+  readDiff,
+} from './pc-local-tool-git.js';
 import {
   memoryStorePath,
   normalizePlanItems,
@@ -82,14 +95,10 @@ import {
 import {
   closeShellProcessStore,
   createShellProcessStore,
-  gitLog,
-  gitShow,
-  gitStatus,
   isShellSessionVisibleToState,
   listBackgroundShellProcesses,
   listShellProcesses,
   pruneShellProcessStore,
-  readDiff,
   readShellProcess,
   removeShellSession,
   runShellCommand,
@@ -109,35 +118,94 @@ import {
 } from './pc-local-tool-utils.js';
 
 export {
-  parsePartialAppendFileArguments, parsePartialApplyPatchArguments, parsePartialDeleteFileArguments,
-  parsePartialEditFileArguments, parsePartialWriteFileArguments, parseToolArguments
+  parsePartialAppendFileArguments,
+  parsePartialApplyPatchArguments,
+  parsePartialDeleteFileArguments,
+  parsePartialEditFileArguments,
+  parsePartialWriteFileArguments,
+  parseToolArguments,
 };
 
-  export {
-    isLocalMcpConfigPath
-  };
+export {
+  isLocalMcpConfigPath,
+};
 
-  export {
-    createShellSandboxExecutionPlan,
-    shellSandboxCapability, shellSandboxProfile, shellSandboxUnavailableReason
-  };
+export {
+  createShellSandboxExecutionPlan,
+  shellSandboxCapability,
+  shellSandboxProfile,
+  shellSandboxUnavailableReason,
+};
 
-  export {
-    closeShellProcessStore, createShellProcessStore, listBackgroundShellProcesses,
-    terminateBackgroundShellProcess
-  };
+export {
+  closeShellProcessStore,
+  createShellProcessStore,
+  listBackgroundShellProcesses,
+  terminateBackgroundShellProcess,
+};
 
-  export {
-    LOCAL_TOOL_DEFINITIONS
-  };
+export {
+  LOCAL_TOOL_DEFINITIONS,
+};
 
-export function createLocalToolState(root = process.cwd(), options = {}) {
+type ToolArguments = Record<string, unknown>;
+
+export type LocalToolExecutionOptions = {
+  signal?: AbortSignal;
+  threadId?: string;
+  turnId?: string;
+  toolCallId?: string;
+  onProgress?: (progress: Record<string, unknown>) => void;
+};
+
+export type CreateLocalToolStateOptions = {
+  shellProcessStore?: ReturnType<typeof createShellProcessStore>;
+  environmentId?: string;
+  mcpConfigPath?: string;
+  userPolicyConfigPaths?: readonly string[];
+  allowPassiveMemory?: boolean;
+  memoryEnabled?: boolean;
+  memoryStorageRoot?: string;
+  workspaceSearchEngine?: WorkspaceSearchEngine;
+};
+
+export type PcLocalToolState = PcLocalFileState & {
+  root: string;
+  environmentId: string;
+  mcpConfigPath: string;
+  permissionProfile: RuntimePermissionProfile;
+  sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite;
+  osSandbox: boolean;
+  shellPolicyRules: ReturnType<typeof loadShellPolicyRules>;
+  networkPolicyAmendments: RuntimeNetworkPolicyAmendment[];
+  shellProcessStore: ReturnType<typeof createShellProcessStore>;
+  shellProcesses: ReturnType<typeof createShellProcessStore>['sessions'];
+  ownedShellProcessIds: Set<string>;
+  ownsShellProcessStore: boolean;
+  allowPassiveMemory: boolean;
+  memoryEnabled: boolean;
+  memoryStorageRoot: string;
+  workspaceSearchEngine?: WorkspaceSearchEngine;
+  shellEnvironment?: Record<string, string>;
+  shellToolchain?: ShellToolchain;
+};
+
+export type LocalToolTurnContext = {
+  turnId?: string;
+  threadId?: string;
+  toolCallId?: string;
+};
+
+export function createLocalToolState(
+  root = process.cwd(),
+  options: CreateLocalToolStateOptions = {},
+): PcLocalToolState {
   const workspaceRoot = path.resolve(String(root || process.cwd()));
-  const shellProcessStore = options?.shellProcessStore || createShellProcessStore();
+  const shellProcessStore = options.shellProcessStore || createShellProcessStore();
   return {
     root: workspaceRoot,
-    environmentId: options?.environmentId || '',
-    mcpConfigPath: options?.mcpConfigPath || MCP_CONFIG_PATH,
+    environmentId: options.environmentId || '',
+    mcpConfigPath: options.mcpConfigPath || MCP_CONFIG_PATH,
     permissionProfile: 'workspace-write',
     sandboxWorkspaceWrite: {},
     // 主机没有受支持的沙箱提供方时，受限 Shell 配置必须以拒绝方式失败。
@@ -145,7 +213,7 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
     osSandbox: true,
     shellPolicyRules: loadShellPolicyRules(
       workspaceRoot,
-      options?.userPolicyConfigPaths ?? [],
+      options.userPolicyConfigPaths ?? [],
     ),
     networkPolicyAmendments: [],
     reads: new Map(),
@@ -154,15 +222,18 @@ export function createLocalToolState(root = process.cwd(), options = {}) {
     shellProcessStore,
     shellProcesses: shellProcessStore.sessions,
     ownedShellProcessIds: new Set(),
-    ownsShellProcessStore: !options?.shellProcessStore,
-    allowPassiveMemory: options?.allowPassiveMemory === true,
-    memoryEnabled: options?.memoryEnabled !== false,
-    memoryStorageRoot: options?.memoryStorageRoot || DEFAULT_MEMORY_STORE_DIR,
-    workspaceSearchEngine: options?.workspaceSearchEngine,
+    ownsShellProcessStore: !options.shellProcessStore,
+    allowPassiveMemory: options.allowPassiveMemory === true,
+    memoryEnabled: options.memoryEnabled !== false,
+    memoryStorageRoot: options.memoryStorageRoot || DEFAULT_MEMORY_STORE_DIR,
+    workspaceSearchEngine: options.workspaceSearchEngine,
   };
 }
 
-export async function rememberContextFileRead(args, state = createLocalToolState()) {
+export async function rememberContextFileRead(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
   const expectedContent = String(args?.content ?? '');
   const opened = await openValidatedReadableFile(filePath, state);
@@ -178,7 +249,10 @@ export async function rememberContextFileRead(args, state = createLocalToolState
   }
 }
 
-export async function duplicateReadFileResult(args, state = createLocalToolState()) {
+export async function duplicateReadFileResult(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const filePath = resolveWorkspacePath(args?.file_path ?? args?.path, state.root);
   const info = await stat(filePath);
   if (!info.isFile()) return null;
@@ -198,7 +272,11 @@ export async function duplicateReadFileResult(args, state = createLocalToolState
   );
 }
 
-export async function validateLocalFileMutationReadiness(name, args, state = createLocalToolState()) {
+export async function validateLocalFileMutationReadiness(
+  name: string,
+  _args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const normalizedName = String(name || '');
   if (!['write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'apply_patch'].includes(normalizedName)) {
     return { ok: true };
@@ -213,11 +291,16 @@ export async function validateLocalFileMutationReadiness(name, args, state = cre
   return { ok: true };
 }
 
-export function toolNeedsConfirmation(name) {
+export function toolNeedsConfirmation(name: string) {
   return name === 'configure_mcp_server';
 }
 
-export function shellCommandRisk(command, riskLevel = '', riskReason = '', state = null) {
+export function shellCommandRisk(
+  command: unknown,
+  riskLevel: unknown = '',
+  riskReason: unknown = '',
+  state: PcLocalToolState | null = null,
+) {
   const normalized = normalizeShellCommandForRisk(command);
   if (!normalized) return { needsConfirmation: false, reason: '' };
   const policy = shellPolicyDecision(command, state);
@@ -239,7 +322,11 @@ export function shellCommandRisk(command, riskLevel = '', riskReason = '', state
   return { needsConfirmation: true, reason: '命令未声明风险等级。' };
 }
 
-export function summarizeToolCall(name, args, state = createLocalToolState()) {
+export function summarizeToolCall(
+  name: string,
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   if (isEditToolName(name)) return `编辑 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
   if (name === 'apply_patch') return '应用补丁';
   if (name === 'write_file') return `写入 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
@@ -271,7 +358,10 @@ export function summarizeToolCall(name, args, state = createLocalToolState()) {
   return '处理请求';
 }
 
-export async function previewWriteFileDiff(args, state = createLocalToolState()) {
+export async function previewWriteFileDiff(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const result = await calculateWriteFile(args, state);
   if (!result.ok) return null;
   const isPartial = args?.complete === false;
@@ -297,7 +387,10 @@ export async function previewWriteFileDiff(args, state = createLocalToolState())
   };
 }
 
-export async function previewEditFileDiff(args, state = createLocalToolState()) {
+export async function previewEditFileDiff(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const result = await calculateEditFile(normalizeEditArgs(args), state, { enforcePriorRead: false });
   if (!result.ok) return null;
   return {
@@ -311,7 +404,10 @@ export async function previewEditFileDiff(args, state = createLocalToolState()) 
   };
 }
 
-export async function previewAppendFileDiff(args, state = createLocalToolState()) {
+export async function previewAppendFileDiff(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const result = await calculateAppendFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return null;
   return {
@@ -325,7 +421,10 @@ export async function previewAppendFileDiff(args, state = createLocalToolState()
   };
 }
 
-export async function previewDeleteFileDiff(args, state = createLocalToolState()) {
+export async function previewDeleteFileDiff(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const result = await calculateDeleteFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return null;
   return {
@@ -339,7 +438,10 @@ export async function previewDeleteFileDiff(args, state = createLocalToolState()
   };
 }
 
-export async function previewApplyPatchDiff(args, state = createLocalToolState()) {
+export async function previewApplyPatchDiff(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const result = await calculateApplyPatch(args, state);
   if (!result.ok) return null;
   const diff = result.diff;
@@ -356,20 +458,31 @@ export async function previewApplyPatchDiff(args, state = createLocalToolState()
     : null;
 }
 
-export async function previewMcpServerConfig(args, state = createLocalToolState()) {
+export async function previewMcpServerConfig(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   const result = await calculateMcpServerConfig(args, state);
   if (!result.ok) return { error: result.error };
   return { mcpServer: result.preview };
 }
 
-export function previewRememberMemory(args, state = createLocalToolState()) {
+export function previewRememberMemory(
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   return {
     memory: normalizeRememberMemoryArgs(args, state),
     storagePath: memoryStorePath(state),
   };
 }
 
-export async function executeLocalTool(name, args, state = createLocalToolState(), options = {}) {
+export async function executeLocalTool(
+  name: string,
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+  options: LocalToolExecutionOptions = {},
+) {
   try {
     const mutationPolicyError = localFileMutationPolicyError(name, args, state);
     if (mutationPolicyError) return mutationPolicyError;
@@ -390,7 +503,7 @@ export async function executeLocalTool(name, args, state = createLocalToolState(
     if (name === 'delete_file') return await deleteLocalFile(args, state);
     if (isEditToolName(name)) return await editLocalFile(args, state);
     if (name === 'run_shell_command') return await runShellCommand(args, state, options);
-    if (name === 'read_shell_process') return await readShellProcess(args, state, options);
+    if (name === 'read_shell_process') return await readShellProcess(args, state);
     if (name === 'list_shell_processes') return listShellProcesses(args, state);
     if (name === 'write_shell_process') return await writeShellProcess(args, state);
     if (name === 'terminate_shell_process') return await terminateShellProcess(args, state);
@@ -399,12 +512,16 @@ export async function executeLocalTool(name, args, state = createLocalToolState(
       failure_stage: 'validation',
     });
   } catch (error) {
-    return errorResult(error.message || String(error));
+    return errorResult(errorMessage(error));
   }
 }
 
 /** Run before previews as well as execution so a denied target is never read to build a diff. */
-export function localFileMutationPolicyError(name, args, state = createLocalToolState()) {
+export function localFileMutationPolicyError(
+  name: string,
+  args: ToolArguments,
+  state: PcLocalToolState = createLocalToolState(),
+) {
   if (!isFileMutationToolName(name)) return null;
   if (state.permissionProfile === 'read-only') {
     return errorResult('当前权限配置为 read-only，不能修改工作区文件。', {
@@ -436,7 +553,7 @@ export function localFileMutationPolicyError(name, args, state = createLocalTool
   return null;
 }
 
-export async function closeLocalToolState(state = createLocalToolState()) {
+export async function closeLocalToolState(state: PcLocalToolState = createLocalToolState()) {
   const sessions = shellSessionsForStateClose(state);
   sessions.forEach((session) => terminateShellSession(session, 'SIGTERM'));
   await Promise.allSettled(sessions.map((session) =>
@@ -449,7 +566,10 @@ export async function closeLocalToolState(state = createLocalToolState()) {
   pruneShellProcessStore(state.shellProcessStore);
 }
 
-export async function cleanupLocalToolTurn(state = createLocalToolState(), context = {}) {
+export async function cleanupLocalToolTurn(
+  state: PcLocalToolState = createLocalToolState(),
+  context: LocalToolTurnContext = {},
+) {
   const turnId = String(context?.turnId || '');
   if (!turnId) return { terminated: 0 };
   const threadId = String(context?.threadId || '');

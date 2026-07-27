@@ -1,8 +1,24 @@
-// @ts-nocheck
-
 /** Parsing and application of app-server-style text patches. */
 
-export function parseApplyPatch(patch) {
+type ApplyPatchOperationBase = {
+  path: string;
+  moveTo?: string;
+};
+
+export type ApplyPatchOperation =
+  | (ApplyPatchOperationBase & { type: 'add'; content: string })
+  | (ApplyPatchOperationBase & { type: 'delete' })
+  | (ApplyPatchOperationBase & { type: 'update'; moveTo: string; hunks: string[][] });
+
+export type ParseApplyPatchResult =
+  | { ok: true; operations: ApplyPatchOperation[]; environmentId: string }
+  | { ok: false; error: string };
+
+export type ApplyPatchHunksResult =
+  | { ok: true; content: string }
+  | { ok: false; error: string };
+
+export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
   const text = normalizeApplyPatchText(patch);
   const lines = text.split('\n');
   if (lines[0] !== '*** Begin Patch') {
@@ -11,7 +27,7 @@ export function parseApplyPatch(patch) {
   const endIndex = lines.findIndex((line, index) => index > 0 && line === '*** End Patch');
   if (endIndex < 0) return { ok: false, error: 'apply_patch 补丁缺少 *** End Patch。' };
 
-  const operations = [];
+  const operations: ApplyPatchOperation[] = [];
   let index = 1;
   let environmentId = '';
   while (index < endIndex) {
@@ -30,7 +46,7 @@ export function parseApplyPatch(patch) {
     }
     if (line.startsWith('*** Add File: ')) {
       const filePath = line.slice('*** Add File: '.length).trim();
-      const contentLines = [];
+      const contentLines: string[] = [];
       index += 1;
       while (index < endIndex && !isApplyPatchFileHeader(lines[index])) {
         contentLines.push(lines[index]);
@@ -57,7 +73,7 @@ export function parseApplyPatch(patch) {
     }
     if (line.startsWith('*** Update File: ')) {
       const filePath = line.slice('*** Update File: '.length).trim();
-      const hunks = [];
+      const hunks: string[][] = [];
       let moveTo = '';
       index += 1;
       if (lines[index]?.startsWith('*** Move to: ')) {
@@ -69,7 +85,7 @@ export function parseApplyPatch(patch) {
           return { ok: false, error: `更新文件 ${filePath} 的 hunk 必须以 @@ 开头。` };
         }
         index += 1;
-        const hunkLines = [];
+        const hunkLines: string[] = [];
         while (index < endIndex && !lines[index].startsWith('@@') && !isApplyPatchFileHeader(lines[index])) {
           const hunkLine = lines[index];
           if (hunkLine === '*** End of File') {
@@ -97,7 +113,7 @@ export function parseApplyPatch(patch) {
   return { ok: true, operations, environmentId };
 }
 
-function normalizeApplyPatchText(patch) {
+function normalizeApplyPatchText(patch: unknown): string {
   const text = String(patch || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
   const lines = text.split('\n');
   if (lines[0] === '*** Begin Patch') return text;
@@ -113,13 +129,17 @@ function normalizeApplyPatchText(patch) {
   return text;
 }
 
-function isApplyPatchFileHeader(line) {
+function isApplyPatchFileHeader(line: unknown): boolean {
   return String(line || '').startsWith('*** Add File: ')
     || String(line || '').startsWith('*** Update File: ')
     || String(line || '').startsWith('*** Delete File: ');
 }
 
-export function applyPatchHunks(content, hunks, label) {
+export function applyPatchHunks(
+  content: unknown,
+  hunks: ReadonlyArray<ReadonlyArray<string>>,
+  label: string,
+): ApplyPatchHunksResult {
   let nextContent = String(content || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const useCrLf = /\r\n/.test(String(content || ''));
   let cursor = 0;

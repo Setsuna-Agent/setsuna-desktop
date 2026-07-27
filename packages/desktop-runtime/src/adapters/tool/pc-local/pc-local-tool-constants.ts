@@ -1,7 +1,6 @@
-// @ts-nocheck
-
 /** Shared limits and policy constants for PC local tools. */
 
+import type { RuntimeMemoryKind } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 
 export const MAX_TEXT_BYTES = 60000;
@@ -144,9 +143,16 @@ export const MAX_MEMORY_TAG_CHARS = 40;
 
 export const MAX_MEMORY_TAGS = 8;
 
-export const MEMORY_KINDS = new Set(['preference', 'project_rule', 'fact', 'workflow', 'decision', 'note']);
+export const MEMORY_KINDS = new Set<RuntimeMemoryKind>([
+  'preference',
+  'project_rule',
+  'fact',
+  'workflow',
+  'decision',
+  'note',
+]);
 
-export const MEMORY_KIND_LABELS = {
+export const MEMORY_KIND_LABELS: Record<RuntimeMemoryKind, string> = {
   preference: '偏好',
   project_rule: '项目规则',
   fact: '事实',

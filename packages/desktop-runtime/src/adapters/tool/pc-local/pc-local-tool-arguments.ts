@@ -1,32 +1,56 @@
-// @ts-nocheck
-
 /** Parsers for complete and streaming local-tool arguments. */
 
+import { errorMessage } from '../../../shared/node-errors.js';
+import { recordInput } from '../../../shared/unknown.js';
+import type {
+  FileDiff,
+  FileDiffAction,
+  PatchDiff,
+} from './pc-local-tool-diff.js';
 import {
   escapeRegExp,
 } from './pc-local-tool-utils.js';
 
-export function parseToolArguments(toolCall) {
+export type ParsedToolArguments =
+  | { args: Record<string, unknown>; error?: never }
+  | { args?: never; error: string };
+
+type PatchPreviewAction = 'create' | 'edit' | 'append' | 'delete';
+
+type PatchPreviewFile = {
+  file_path: string;
+  action: PatchPreviewAction;
+  additions: number;
+  deletions: number;
+};
+
+type PartialFileDiff = FileDiff & { partial: true };
+type PartialPatchDiff = PatchDiff & { action: 'Planned'; partial: true };
+
+export function parseToolArguments(toolCall: unknown): ParsedToolArguments {
   try {
-    const args = JSON.parse(String(toolCall?.function?.arguments || '{}'));
+    const call = recordInput(toolCall);
+    const fn = recordInput(call.function);
+    const args = JSON.parse(String(fn.arguments || '{}')) as unknown;
     if (!args || typeof args !== 'object' || Array.isArray(args)) {
       return { error: '工具参数必须是 JSON 对象。' };
     }
-    return { args };
+    return { args: args as Record<string, unknown> };
   } catch (error) {
-    return { error: `工具参数不是有效 JSON：${error.message || String(error)}` };
+    return { error: `工具参数不是有效 JSON：${errorMessage(error)}` };
   }
 }
 
-export function parsePartialWriteFileArguments(rawArguments) {
+export function parsePartialWriteFileArguments(rawArguments: string) {
   const raw = String(rawArguments || '');
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const input = parsed as Record<string, unknown>;
       return {
-        file_path: String(parsed.file_path || parsed.path || ''),
-        ...(Object.hasOwn(parsed, 'path') ? { path: parsed.path } : {}),
-        content: String(parsed.content ?? ''),
+        file_path: String(input.file_path || input.path || ''),
+        ...(Object.hasOwn(input, 'path') ? { path: input.path } : {}),
+        content: String(input.content ?? ''),
         complete: true,
       };
     }
@@ -45,12 +69,13 @@ export function parsePartialWriteFileArguments(rawArguments) {
   };
 }
 
-export function parsePartialApplyPatchArguments(rawArguments) {
+export function parsePartialApplyPatchArguments(rawArguments: string) {
   const raw = String(rawArguments || '');
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const files = applyPatchPreviewFiles(String(parsed.patch || ''));
+      const input = parsed as Record<string, unknown>;
+      const files = applyPatchPreviewFiles(String(input.patch || ''));
       const currentFile = files[files.length - 1] || null;
       const preview = partialPatchPreviewFromFiles(files);
       return {
@@ -77,18 +102,19 @@ export function parsePartialApplyPatchArguments(rawArguments) {
   };
 }
 
-export function parsePartialAppendFileArguments(rawArguments) {
+export function parsePartialAppendFileArguments(rawArguments: string) {
   return parsePartialWriteFileArguments(rawArguments);
 }
 
-export function parsePartialDeleteFileArguments(rawArguments) {
+export function parsePartialDeleteFileArguments(rawArguments: string) {
   const raw = String(rawArguments || '');
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const input = parsed as Record<string, unknown>;
       return {
-        file_path: String(parsed.file_path || parsed.path || ''),
-        ...(Object.hasOwn(parsed, 'path') ? { path: parsed.path } : {}),
+        file_path: String(input.file_path || input.path || ''),
+        ...(Object.hasOwn(input, 'path') ? { path: input.path } : {}),
         complete: true,
       };
     }
@@ -105,19 +131,20 @@ export function parsePartialDeleteFileArguments(rawArguments) {
   };
 }
 
-export function parsePartialEditFileArguments(rawArguments) {
+export function parsePartialEditFileArguments(rawArguments: string) {
   const raw = String(rawArguments || '');
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const input = parsed as Record<string, unknown>;
       return {
-        file_path: String(parsed.file_path || parsed.path || ''),
-        ...(Object.hasOwn(parsed, 'path') ? { path: parsed.path } : {}),
-        old_string: String(parsed.old_string ?? ''),
-        new_string: String(parsed.new_string ?? ''),
-        replace_all: Boolean(parsed.replace_all),
-        has_old_string: Object.hasOwn(parsed, 'old_string'),
-        has_new_string: Object.hasOwn(parsed, 'new_string'),
+        file_path: String(input.file_path || input.path || ''),
+        ...(Object.hasOwn(input, 'path') ? { path: input.path } : {}),
+        old_string: String(input.old_string ?? ''),
+        new_string: String(input.new_string ?? ''),
+        replace_all: Boolean(input.replace_all),
+        has_old_string: Object.hasOwn(input, 'old_string'),
+        has_new_string: Object.hasOwn(input, 'new_string'),
         file_path_closed: true,
         old_string_closed: true,
         new_string_closed: true,
@@ -147,10 +174,10 @@ export function parsePartialEditFileArguments(rawArguments) {
   };
 }
 
-function applyPatchPreviewFiles(patch) {
-  const files = [];
-  const byPath = new Map();
-  const pushFile = (filePath, action) => {
+function applyPatchPreviewFiles(patch: unknown): PatchPreviewFile[] {
+  const files: PatchPreviewFile[] = [];
+  const byPath = new Map<string, PatchPreviewFile>();
+  const pushFile = (filePath: unknown, action: unknown): PatchPreviewFile | null => {
     const normalizedPath = String(filePath || '').trim();
     if (!normalizedPath) return null;
     const existing = byPath.get(normalizedPath);
@@ -165,7 +192,7 @@ function applyPatchPreviewFiles(patch) {
     files.push(file);
     return file;
   };
-  let currentFile = null;
+  let currentFile: PatchPreviewFile | null = null;
 
   String(patch || '')
     .replace(/\r\n/g, '\n')
@@ -189,7 +216,7 @@ function applyPatchPreviewFiles(patch) {
   return files;
 }
 
-function normalizePatchPreviewAction(value) {
+function normalizePatchPreviewAction(value: unknown): PatchPreviewAction {
   const action = String(value || '').trim().toLowerCase();
   if (action === 'create' || action === 'edit' || action === 'append' || action === 'delete') {
     return action;
@@ -197,17 +224,19 @@ function normalizePatchPreviewAction(value) {
   return 'edit';
 }
 
-function partialPatchPreviewFromFiles(files) {
-  const diffs = (files || [])
+function partialPatchPreviewFromFiles(
+  files: PatchPreviewFile[],
+): PartialFileDiff | PartialPatchDiff | null {
+  const diffs: PartialFileDiff[] = files
     .filter((file) => file?.file_path)
     .map((file) => ({
-      type: 'file_diff',
+      type: 'file_diff' as const,
       action: patchPreviewDiffAction(file.action),
       path: String(file.file_path).replace(/\\/g, '/'),
       additions: Number(file.additions || 0),
       deletions: Number(file.deletions || 0),
       truncated: false,
-      partial: true,
+      partial: true as const,
       lines: [],
     }));
   if (!diffs.length) return null;
@@ -223,27 +252,29 @@ function partialPatchPreviewFromFiles(files) {
   };
 }
 
-function patchPreviewDiffAction(action) {
+function patchPreviewDiffAction(action: PatchPreviewAction): FileDiffAction {
   if (action === 'create') return 'Created';
   if (action === 'delete') return 'Deleted';
   return 'Edited';
 }
 
-function findJsonStringValue(raw, key) {
+function findJsonStringValue(raw: string, key: string): { value: string; closed: boolean } | null {
   const matcher = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*"`);
   const match = matcher.exec(raw);
   if (!match) return null;
   return readJsonStringAt(raw, match.index + match[0].length - 1);
 }
 
-function findJsonFilePathValue(raw) {
+function findJsonFilePathValue(
+  raw: string,
+): { match: { value: string; closed: boolean }; usedPathAlias: boolean } | null {
   const match = findJsonStringValue(raw, 'file_path');
   if (match) return { match, usedPathAlias: false };
   const pathMatch = findJsonStringValue(raw, 'path');
   return pathMatch ? { match: pathMatch, usedPathAlias: true } : null;
 }
 
-function readJsonStringAt(raw, quoteIndex) {
+function readJsonStringAt(raw: string, quoteIndex: number): { value: string; closed: boolean } {
   let value = '';
   let escaped = false;
   for (let index = quoteIndex + 1; index < raw.length; index += 1) {

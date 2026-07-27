@@ -1,11 +1,23 @@
-// @ts-nocheck
-
 /** Workspace file discovery, reading, mutation, and preview calculation. */
 
-import { existsSync } from 'node:fs';
-import { lstat, readdir, readlink, stat } from 'node:fs/promises';
+import type {
+  RuntimePermissionProfile,
+  RuntimeSandboxWorkspaceWrite,
+} from '@setsuna-desktop/contracts';
+import { existsSync, type Stats } from 'node:fs';
+import { lstat, readdir, readlink, stat, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import { buildFileMentionIndex, findFileMentionSuggestions, invalidateFileMentionIndex } from '../file-mentions.js';
+import type {
+  WorkspaceSearchEngine,
+  WorkspaceTextSearchMatch,
+} from '../../../ports/workspace-search-engine.js';
+import { isNodeErrorCode } from '../../../shared/node-errors.js';
+import {
+  buildFileMentionIndex,
+  findFileMentionSuggestions,
+  invalidateFileMentionIndex,
+  type FileMentionEntry,
+} from '../file-mentions.js';
 import {
   DEFAULT_FIND_RESULTS,
   DEFAULT_SEARCH_RESULTS,
@@ -21,8 +33,15 @@ import {
   buildDeletedFileDiff,
   buildFileDiff,
   patchDiffFromDiffs,
+  type FileDiff,
+  type LocalToolDiff,
 } from './pc-local-tool-diff.js';
-import { commitFileChanges, mutationIntegrityToken } from './pc-local-tool-file-transaction.js';
+import {
+  commitFileChanges,
+  mutationIntegrityToken,
+  type FileMutationState,
+  type LocalFileChange,
+} from './pc-local-tool-file-transaction.js';
 import {
   applyPatchHunks,
   parseApplyPatch,
@@ -49,7 +68,80 @@ import {
   truncateText,
 } from './pc-local-tool-utils.js';
 
-export async function listDirectory(args, state) {
+type ToolArguments = Record<string, unknown>;
+
+export type FileReadRange = {
+  offset: number;
+  limit: number | null;
+};
+
+type FileReadIdentity = {
+  mtimeMs: number;
+  size: number;
+};
+
+type FileReadResultEntry = FileReadIdentity & {
+  source: 'context' | 'runtime';
+};
+
+type FileReadCacheState = {
+  reads: Map<string, FileReadIdentity>;
+  readFileResults?: Map<string, FileReadResultEntry>;
+};
+
+export type PcLocalFileState = FileMutationState & FileReadCacheState & {
+  root: string;
+  environmentId?: string;
+  permissionProfile?: RuntimePermissionProfile;
+  sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  workspaceSearchEngine?: WorkspaceSearchEngine;
+};
+
+type FileCalculationFailure = {
+  ok: false;
+  error: string;
+};
+
+type FileMutationCalculation = {
+  ok: true;
+  filePath: string;
+  existed: boolean;
+  previousContent: string;
+  nextContent: string;
+  diff: FileDiff;
+};
+
+type FileDeleteCalculation = {
+  ok: true;
+  filePath: string;
+  previousContent: string;
+  symbolicLink: boolean;
+  diff: FileDiff;
+};
+
+type ApplyPatchCalculation = {
+  ok: true;
+  changes: LocalFileChange[];
+  diffs: FileDiff[];
+  diff: LocalToolDiff | null;
+};
+
+type CalculatedMutationForIntegrity = {
+  ok: boolean;
+  changes?: LocalFileChange[];
+  filePath?: string;
+  existed?: boolean;
+  previousContent?: string;
+  nextContent?: string;
+  symbolicLink?: boolean;
+  diff?: LocalToolDiff | null;
+};
+
+type PriorReadOptions = {
+  enforcePriorRead?: boolean;
+};
+
+export async function listDirectory(args: ToolArguments, state: PcLocalFileState) {
   const dirPath = resolveReadablePath(args?.path || '.', state);
   const info = await stat(dirPath);
   if (!info.isDirectory()) return errorResult(`Path is not a directory: ${formatAccessiblePath(dirPath, state)}`);
@@ -71,7 +163,7 @@ export async function listDirectory(args, state) {
   );
 }
 
-export async function findFiles(args, state) {
+export async function findFiles(args: ToolArguments, state: PcLocalFileState) {
   const query = String(args?.query ?? '');
   const maxResults = boundedInteger(args?.max_results, DEFAULT_FIND_RESULTS, 1, MAX_FIND_RESULTS);
   const scopePath = args?.path ? resolveWorkspacePath(args.path, state.root) : state.root;
@@ -97,7 +189,11 @@ export async function findFiles(args, state) {
   );
 }
 
-export async function searchText(args, state, signal) {
+export async function searchText(
+  args: ToolArguments,
+  state: PcLocalFileState,
+  signal?: AbortSignal,
+) {
   const query = String(args?.query ?? '');
   if (!query) return errorResult('Search query cannot be empty.');
 
@@ -137,7 +233,7 @@ export async function searchText(args, state, signal) {
   );
 }
 
-export async function readLocalFile(args, state) {
+export async function readLocalFile(args: ToolArguments, state: PcLocalFileState) {
   const filePath = resolveReadablePath(args?.file_path, state);
   const opened = await openValidatedReadableFile(filePath, state);
   try {
@@ -165,7 +261,7 @@ export async function readLocalFile(args, state) {
   }
 }
 
-async function streamFilePrefix(handle, maxChars) {
+async function streamFilePrefix(handle: FileHandle, maxChars: number): Promise<string> {
   let body = '';
   const stream = handle.createReadStream({ encoding: 'utf8', autoClose: false });
   for await (const chunk of stream) {
@@ -176,7 +272,7 @@ async function streamFilePrefix(handle, maxChars) {
   return truncateText(body, maxChars);
 }
 
-async function streamFileRange(handle, range) {
+async function streamFileRange(handle: FileHandle, range: FileReadRange) {
   const startLine = Math.max(1, range.offset || 1);
   const requestedEnd = range.limit === null ? Number.POSITIVE_INFINITY : startLine + Math.max(0, range.limit) - 1;
   let lineNumber = 1;
@@ -186,7 +282,7 @@ async function streamFileRange(handle, range) {
   let outputTruncated = false;
   let reachedEof = true;
 
-  const appendSelected = (value) => {
+  const appendSelected = (value: string): void => {
     if (lineNumber < startLine || lineNumber > requestedEnd || outputTruncated) return;
     const prefix = selectedLine ? '' : `${lineNumber}: `;
     const addition = `${prefix}${value}`;
@@ -200,7 +296,7 @@ async function streamFileRange(handle, range) {
     if (addition.length > remaining) outputTruncated = true;
   };
 
-  const finishLine = () => {
+  const finishLine = (): void => {
     if (lineNumber >= startLine && lineNumber <= requestedEnd && !outputTruncated) {
       if (!selectedLine) appendSelected('');
       if (output.length < MAX_TEXT_BYTES) output += '\n';
@@ -238,7 +334,7 @@ async function streamFileRange(handle, range) {
   };
 }
 
-export async function applyLocalPatch(args, state) {
+export async function applyLocalPatch(args: ToolArguments, state: PcLocalFileState) {
   const result = await calculateApplyPatch(args, state);
   if (!result.ok) return errorResult(result.error);
 
@@ -258,7 +354,7 @@ export async function applyLocalPatch(args, state) {
   );
 }
 
-export async function writeLocalFile(args, state) {
+export async function writeLocalFile(args: ToolArguments, state: PcLocalFileState) {
   const result = await calculateWriteFile(args, state);
   if (!result.ok) return errorResult(result.error);
 
@@ -281,7 +377,10 @@ export async function writeLocalFile(args, state) {
   );
 }
 
-export async function calculateWriteFile(args, state) {
+export async function calculateWriteFile(
+  args: ToolArguments,
+  state: PcLocalFileState,
+): Promise<FileMutationCalculation | FileCalculationFailure> {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
   const content = String(args?.content ?? '');
   let existed = false;
@@ -291,9 +390,11 @@ export async function calculateWriteFile(args, state) {
   try {
     existingStats = await stat(filePath);
     existed = true;
-    if (!existingStats.isFile()) return errorResult(`Path is not a writable file: ${formatPath(filePath, state.root)}`);
+    if (!existingStats.isFile()) {
+      return { ok: false, error: `Path is not a writable file: ${formatPath(filePath, state.root)}` };
+    }
   } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
+    if (!isNodeErrorCode(error, 'ENOENT')) throw error;
   }
 
   if (existed) {
@@ -310,7 +411,10 @@ export async function calculateWriteFile(args, state) {
   return { ok: true, filePath, existed, previousContent, nextContent: content, diff };
 }
 
-export async function calculateApplyPatch(args, state) {
+export async function calculateApplyPatch(
+  args: ToolArguments,
+  state: PcLocalFileState,
+): Promise<ApplyPatchCalculation | FileCalculationFailure> {
   const operations = parseApplyPatch(String(args?.patch || ''));
   if (!operations.ok) return operations;
   const requestedEnvironmentId = String(args?.environment_id ?? args?.environmentId ?? '').trim();
@@ -328,8 +432,8 @@ export async function calculateApplyPatch(args, state) {
   }
   const patchRoot = args?.workdir ? resolveWorkspacePath(args.workdir, state.root) : state.root;
 
-  const changes = [];
-  const touched = new Set();
+  const changes: LocalFileChange[] = [];
+  const touched = new Set<string>();
   for (const operation of operations.operations) {
     const filePath = operation.type === 'delete'
       ? resolveWorkspaceDeletionPathFromBase(operation.path, patchRoot, state.root)
@@ -355,8 +459,8 @@ export async function calculateApplyPatch(args, state) {
       touched.add(moveToPath);
       if (existsSync(moveToPath)) return { ok: false, error: `目标文件已存在，无法移动到：${formatPath(moveToPath, state.root)}` };
     }
-    const info = await lstat(filePath).catch((error) => {
-      if (error?.code === 'ENOENT') return null;
+    const info = await lstat(filePath).catch((error: unknown) => {
+      if (isNodeErrorCode(error, 'ENOENT')) return null;
       throw error;
     });
     if (!info) return { ok: false, error: `找不到文件，无法${operation.type === 'delete' ? '删除' : '修改'}：${formatPath(filePath, state.root)}` };
@@ -433,7 +537,7 @@ export async function calculateApplyPatch(args, state) {
   };
 }
 
-export async function appendLocalFile(args, state) {
+export async function appendLocalFile(args: ToolArguments, state: PcLocalFileState) {
   const result = await calculateAppendFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return errorResult(result.error);
 
@@ -456,7 +560,7 @@ export async function appendLocalFile(args, state) {
   );
 }
 
-export async function deleteLocalFile(args, state) {
+export async function deleteLocalFile(args: ToolArguments, state: PcLocalFileState) {
   const result = await calculateDeleteFile(args, state, { enforcePriorRead: false });
   if (!result.ok) return errorResult(result.error);
 
@@ -478,7 +582,7 @@ export async function deleteLocalFile(args, state) {
   );
 }
 
-export async function editLocalFile(args, state) {
+export async function editLocalFile(args: ToolArguments, state: PcLocalFileState) {
   const result = await calculateEditFile(normalizeEditArgs(args), state, { enforcePriorRead: false });
   if (!result.ok) return errorResult(result.error);
 
@@ -501,7 +605,11 @@ export async function editLocalFile(args, state) {
   );
 }
 
-export async function calculateEditFile(args, state, options = {}) {
+export async function calculateEditFile(
+  args: ToolArguments,
+  state: PcLocalFileState,
+  options: PriorReadOptions = {},
+): Promise<FileMutationCalculation | FileCalculationFailure> {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
   const oldString = String(args?.old_string ?? '');
   const newString = String(args?.new_string ?? '');
@@ -517,7 +625,7 @@ export async function calculateEditFile(args, state, options = {}) {
       return { ok: false, error: `Path is not a writable file: ${formatPath(filePath, state.root)}` };
     }
   } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
+    if (!isNodeErrorCode(error, 'ENOENT')) throw error;
   }
 
   if (!existed) {
@@ -533,7 +641,7 @@ export async function calculateEditFile(args, state, options = {}) {
   }
 
   if (options.enforcePriorRead) {
-    const guard = await priorReadGuard(state, filePath, existingStats, '编辑');
+    const guard = await priorReadGuard(state, filePath, existingStats!, '编辑');
     if (guard) return { ok: false, error: guard.display };
   }
 
@@ -568,7 +676,11 @@ export async function calculateEditFile(args, state, options = {}) {
   return { ok: true, filePath, existed, previousContent, nextContent, diff };
 }
 
-export async function calculateAppendFile(args, state, options = {}) {
+export async function calculateAppendFile(
+  args: ToolArguments,
+  state: PcLocalFileState,
+  options: PriorReadOptions = {},
+): Promise<FileMutationCalculation | FileCalculationFailure> {
   const filePath = resolveWorkspacePath(args?.file_path, state.root);
   const content = String(args?.content ?? '');
   let existed = false;
@@ -582,12 +694,12 @@ export async function calculateAppendFile(args, state, options = {}) {
       return { ok: false, error: `Path is not a writable file: ${formatPath(filePath, state.root)}` };
     }
   } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
+    if (!isNodeErrorCode(error, 'ENOENT')) throw error;
   }
 
   if (existed) {
     if (options.enforcePriorRead) {
-      const guard = await priorReadGuard(state, filePath, existingStats, '追加');
+      const guard = await priorReadGuard(state, filePath, existingStats!, '追加');
       if (guard) return { ok: false, error: guard.display };
     }
     previousContent = await readValidatedFileText(filePath, state);
@@ -604,7 +716,10 @@ export async function calculateAppendFile(args, state, options = {}) {
   return { ok: true, filePath, existed, previousContent, nextContent, diff };
 }
 
-export async function integrityTokenForCalculatedMutation(result, state) {
+export async function integrityTokenForCalculatedMutation(
+  result: CalculatedMutationForIntegrity,
+  state: FileMutationState,
+): Promise<string> {
   if (!result?.ok) return '';
   if (Array.isArray(result.changes)) return mutationIntegrityToken(result.changes, state?.root);
   if (!result.filePath) return '';
@@ -618,14 +733,18 @@ export async function integrityTokenForCalculatedMutation(result, state) {
   }], state?.root);
 }
 
-export async function calculateDeleteFile(args, state, options = {}) {
+export async function calculateDeleteFile(
+  args: ToolArguments,
+  state: PcLocalFileState,
+  options: PriorReadOptions = {},
+): Promise<FileDeleteCalculation | FileCalculationFailure> {
   const filePath = resolveWorkspaceDeletionPath(args?.file_path, state.root);
   let existingStats = null;
 
   try {
     existingStats = await lstat(filePath);
   } catch (error) {
-    if (error?.code === 'ENOENT') {
+    if (isNodeErrorCode(error, 'ENOENT')) {
       return { ok: false, error: `找不到文件，无法删除：${formatPath(filePath, state.root)}` };
     }
     /* node:coverage ignore next */
@@ -651,14 +770,18 @@ export async function calculateDeleteFile(args, state, options = {}) {
   return { ok: true, filePath, diff, previousContent, symbolicLink: existingStats.isSymbolicLink() };
 }
 
-function filterFilesByScope(index, scopePath, root) {
+function filterFilesByScope(
+  index: FileMentionEntry[],
+  scopePath: string,
+  root: string,
+): FileMentionEntry[] {
   const scope = workspaceRelativePath(scopePath, root);
   if (scope === '.') return index;
   const prefix = `${scope}/`;
   return index.filter((file) => file.path === scope || file.path.startsWith(prefix));
 }
 
-export function normalizeEditArgs(args = {}) {
+export function normalizeEditArgs(args: ToolArguments = {}): ToolArguments {
   return {
     ...args,
     old_string: Object.hasOwn(args, 'old_string') ? args.old_string : args.old_text,
@@ -666,7 +789,7 @@ export function normalizeEditArgs(args = {}) {
   };
 }
 
-export function normalizeReadRange(args = {}) {
+export function normalizeReadRange(args: ToolArguments = {}): FileReadRange | null {
   const offset = integerOrNull(args.offset);
   const limit = integerOrNull(args.limit);
   if (offset !== null || limit !== null) {
@@ -683,8 +806,8 @@ export function normalizeReadRange(args = {}) {
   };
 }
 
-function formatSearchMatch(match) {
-  const lines = [];
+function formatSearchMatch(match: WorkspaceTextSearchMatch): string {
+  const lines: string[] = [];
   match.before.forEach((line, index) => {
     lines.push(`${match.path}-${match.beforeStart + index}-${line}`);
   });
@@ -695,7 +818,12 @@ function formatSearchMatch(match) {
   return lines.join('\n');
 }
 
-async function priorReadGuard(state, filePath, currentStats, verb) {
+async function priorReadGuard(
+  state: PcLocalFileState,
+  filePath: string,
+  currentStats: Pick<Stats, 'mtimeMs' | 'size'>,
+  verb: string,
+) {
   const previousRead = state.reads?.get(filePath);
   if (!previousRead) return errorResult(`请先查看 ${formatPath(filePath, state.root)}，再${verb}它。`);
   if (previousRead.mtimeMs !== currentStats.mtimeMs || previousRead.size !== currentStats.size) {
@@ -704,14 +832,24 @@ async function priorReadGuard(state, filePath, currentStats, verb) {
   return null;
 }
 
-export function rememberRead(state, filePath, info) {
+export function rememberRead(
+  state: FileReadCacheState,
+  filePath: string,
+  info: Pick<Stats, 'mtimeMs' | 'size'>,
+): void {
   boundedMapSet(state.reads, filePath, {
     mtimeMs: info.mtimeMs,
     size: info.size,
   }, MAX_FILE_READ_STATE_ENTRIES);
 }
 
-export function rememberReadFileResult(state, filePath, info, range, source) {
+export function rememberReadFileResult(
+  state: FileReadCacheState,
+  filePath: string,
+  info: Pick<Stats, 'mtimeMs' | 'size'>,
+  range: FileReadRange | null,
+  source: FileReadResultEntry['source'],
+): void {
   if (!state.readFileResults) state.readFileResults = new Map();
   boundedMapSet(state.readFileResults, readFileResultCacheKey(filePath, range), {
     mtimeMs: info.mtimeMs,
@@ -720,19 +858,29 @@ export function rememberReadFileResult(state, filePath, info, range, source) {
   }, MAX_FILE_READ_STATE_ENTRIES);
 }
 
-export function rememberedReadFileResult(state, filePath, info, range) {
+export function rememberedReadFileResult(
+  state: FileReadCacheState,
+  filePath: string,
+  info: Pick<Stats, 'mtimeMs' | 'size'>,
+  range: FileReadRange | null,
+): FileReadResultEntry | null {
   const entry = state.readFileResults?.get(readFileResultCacheKey(filePath, range));
   if (!entry) return null;
   if (entry.mtimeMs !== info.mtimeMs || entry.size !== info.size) return null;
   return entry;
 }
 
-function readFileResultCacheKey(filePath, range) {
+function readFileResultCacheKey(filePath: string, range: FileReadRange | null): string {
   if (!range) return `${filePath}\0full`;
   return `${filePath}\0${range.offset || 1}\0${range.limit ?? 'end'}`;
 }
 
-function boundedMapSet(map, key, value, maxEntries) {
+function boundedMapSet<Key, Value>(
+  map: Map<Key, Value> | undefined,
+  key: Key,
+  value: Value,
+  maxEntries: number,
+): void {
   if (!map?.set) return;
   if (map.has(key)) map.delete(key);
   map.set(key, value);
@@ -743,10 +891,10 @@ function boundedMapSet(map, key, value, maxEntries) {
   }
 }
 
-export function isEditToolName(name) {
+export function isEditToolName(name: string): boolean {
   return name === 'edit' || name === 'edit_file';
 }
 
-function shouldIgnoreEntry(name) {
+function shouldIgnoreEntry(name: string): boolean {
   return IGNORED_DIRS.has(name) || name === '.DS_Store';
 }
