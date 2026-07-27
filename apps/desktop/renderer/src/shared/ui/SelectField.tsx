@@ -25,11 +25,14 @@ type SelectOption = {
 
 type SelectFieldProps = {
   'aria-label'?: string;
+  'aria-labelledby'?: string;
   children: ReactNode;
   className?: string;
   disabled?: boolean;
   id?: string;
+  name?: string;
   onValueChange: (value: string) => void;
+  required?: boolean;
   style?: CSSProperties;
   title?: string;
   value: string;
@@ -54,11 +57,14 @@ const VIEWPORT_GUTTER = 8;
 
 export function SelectField({
   'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
   children,
   className = '',
   disabled = false,
   id,
+  name,
   onValueChange,
+  required = false,
   style,
   title,
   value,
@@ -167,6 +173,7 @@ export function SelectField({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         disabled={disabled}
         style={style}
         title={title}
@@ -176,6 +183,32 @@ export function SelectField({
         <span className="sd-select-field__value">{selectedOption?.label ?? ''}</span>
         <ChevronDown className="sd-select-field__chevron" size={15} aria-hidden="true" />
       </button>
+      {name || required ? (
+        <select
+          className="sd-select-field__form-control"
+          aria-hidden="true"
+          disabled={disabled}
+          name={name}
+          required={required}
+          tabIndex={-1}
+          value={value}
+          onChange={(event) => onValueChange(event.currentTarget.value)}
+          onInvalid={(event) => {
+            // Preserve native form validation while presenting the project listbox UI.
+            event.preventDefault();
+            const firstInvalidControl = event.currentTarget.form?.querySelector(':invalid');
+            if (firstInvalidControl !== event.currentTarget) return;
+            openMenu();
+            requestAnimationFrame(() => triggerRef.current?.focus());
+          }}
+        >
+          {options.map((option, index) => (
+            <option key={`${option.value}:${index}`} disabled={option.disabled} value={option.value}>
+              {option.value}
+            </option>
+          ))}
+        </select>
+      ) : null}
       {open && menuPosition && typeof document !== 'undefined'
         ? createPortal(
           <div
@@ -184,6 +217,7 @@ export function SelectField({
             className="sd-select-menu"
             role="listbox"
             aria-label={ariaLabel}
+            aria-labelledby={ariaLabelledBy}
             style={{
               ...style,
               left: menuPosition.left,

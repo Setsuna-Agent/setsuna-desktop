@@ -2,7 +2,9 @@ import type {
   RuntimeStructuredInputField as RuntimeStructuredInputFieldSchema,
   RuntimeStructuredInputValue,
 } from '@setsuna-desktop/contracts';
+import { useId } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { SelectField } from '../../../shared/ui/primitives.js';
 
 export function RuntimeStructuredInputField({
   field,
@@ -18,6 +20,8 @@ export function RuntimeStructuredInputField({
   value: RuntimeStructuredInputValue | undefined;
 }) {
   const { t } = useI18n();
+  const fieldId = useId();
+  const labelId = `${fieldId}-label`;
   const label = field.title || name;
   const choices: Array<{ const: string; title: string; description?: string }> | undefined = field.oneOf
     ?? field.enum?.map((item, index) => ({ const: item, title: field.enumNames?.[index] ?? item }));
@@ -29,13 +33,14 @@ export function RuntimeStructuredInputField({
     .filter((description): description is string => Boolean(description));
 
   return (
-    <label className={`chat-tool-run__elicitation-field${field.type === 'boolean' ? ' chat-tool-run__elicitation-field--boolean' : ''}`}>
-      <span>{label}{required ? <em>{t('toolRun.input.required')}</em> : null}</span>
+    <div className={`chat-tool-run__elicitation-field${field.type === 'boolean' ? ' chat-tool-run__elicitation-field--boolean' : ''}`}>
+      <label id={labelId} htmlFor={fieldId}>{label}{required ? <em>{t('toolRun.input.required')}</em> : null}</label>
       {field.description ? <small>{field.description}</small> : null}
       {field.type === 'boolean' ? (
-        <input name={name} type="checkbox" checked={value === true} onChange={(event) => onChange(event.currentTarget.checked)} />
+        <input id={fieldId} name={name} type="checkbox" checked={value === true} onChange={(event) => onChange(event.currentTarget.checked)} />
       ) : field.type === 'number' || field.type === 'integer' ? (
         <input
+          id={fieldId}
           name={name}
           type="number"
           required={required}
@@ -47,6 +52,7 @@ export function RuntimeStructuredInputField({
         />
       ) : field.type === 'array' ? (
         <select
+          id={fieldId}
           name={name}
           multiple
           required={required}
@@ -56,12 +62,20 @@ export function RuntimeStructuredInputField({
           {(arrayChoices ?? []).map((choice) => <option key={choice.const} value={choice.const}>{choice.title}</option>)}
         </select>
       ) : choices?.length ? (
-        <select name={name} required={required} value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.currentTarget.value)}>
+        <SelectField
+          aria-labelledby={labelId}
+          id={fieldId}
+          name={name}
+          required={required}
+          value={typeof value === 'string' ? value : ''}
+          onValueChange={onChange}
+        >
           <option value="" disabled={required}>{t(required ? 'toolRun.input.choose' : 'toolRun.input.notSelected')}</option>
           {choices.map((choice) => <option key={choice.const} value={choice.const}>{choice.title}</option>)}
-        </select>
+        </SelectField>
       ) : field.multiline ? (
         <textarea
+          id={fieldId}
           name={name}
           required={required}
           minLength={field.minLength}
@@ -72,6 +86,7 @@ export function RuntimeStructuredInputField({
         />
       ) : (
         <input
+          id={fieldId}
           name={name}
           type={inputType(field.format)}
           required={required}
@@ -83,7 +98,7 @@ export function RuntimeStructuredInputField({
         />
       )}
       {selectedDescriptions?.length ? <small>{selectedDescriptions.join(t('toolRun.input.descriptionJoiner'))}</small> : null}
-    </label>
+    </div>
   );
 }
 

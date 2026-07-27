@@ -986,7 +986,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   font-size: 12px;
 }
 
-.chat-tool-run__elicitation-field > span {
+.chat-tool-run__elicitation-field > label {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -999,7 +999,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-tool-run__elicitation-field input:not([type='checkbox']),
-.chat-tool-run__elicitation-field select,
+.chat-tool-run__elicitation-field select:not(.sd-select-field__form-control),
 .chat-tool-run__elicitation-field textarea {
   min-height: 30px;
   padding: 4px 8px;
