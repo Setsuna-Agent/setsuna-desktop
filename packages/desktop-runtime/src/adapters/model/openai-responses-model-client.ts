@@ -1,14 +1,19 @@
-import type {
-  ModelRequest,
-  ModelStreamEvent,
-  RuntimeJsonObject,
-  RuntimeModelVerification,
-  RuntimeSafetyBuffering,
-  RuntimeStreamItem,
-  RuntimeToolCall,
+import {
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+  type ModelRequest,
+  type ModelStreamEvent,
+  type RuntimeJsonObject,
+  type RuntimeModelVerification,
+  type RuntimeSafetyBuffering,
+  type RuntimeStreamItem,
+  type RuntimeToolCall,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest, ModelCompactionResult } from '../../ports/model-client.js';
+import {
+  toOpenAiResponsesInput,
+  toOpenAiResponsesTools,
+} from './openai-provider-messages.js';
 import { openAiResponsesReasoningBody } from './provider-thinking.js';
 import {
   isOpenAiResponsesOutputItemType,
@@ -22,22 +27,16 @@ import {
   providerReplayContext,
 } from './provider-replay-context.js';
 import {
-  DEFAULT_MAX_OUTPUT_TOKENS,
   assertOkResponse,
   bearerAuthHeader,
-  doneEvent,
-  normalizeOpenAiUsage,
-  objectValue,
-  parseJson,
-  parseSse,
   requireFetch,
-  stringValue,
-  systemText,
-  toOpenAiResponsesInput,
-  toOpenAiResponsesTools,
   withEndpoint,
   type FetchImpl,
-} from './provider-utils.js';
+} from './provider-http.js';
+import { systemText } from './provider-message-content.js';
+import { doneEvent, parseJson, parseSse } from './provider-stream.js';
+import { normalizeOpenAiUsage } from './provider-usage.js';
+import { objectValue, stringValue } from './provider-values.js';
 
 export class OpenAiResponsesModelClient implements ModelClient {
   constructor(
@@ -63,7 +62,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
         input: toOpenAiResponsesInput(request.messages, replayContext),
         include: ['reasoning.encrypted_content'],
         stream: true,
-        max_output_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+        max_output_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
         ...(instructions ? { instructions } : {}),
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiResponsesTools(request.tools) } : {}),

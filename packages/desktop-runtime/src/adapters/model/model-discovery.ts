@@ -1,6 +1,6 @@
 import type { ModelProviderKind, RuntimeAvailableModel, RuntimeFetchModelsInput } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
-import { requireFetch, type FetchImpl } from './provider-utils.js';
+import { requireFetch, type FetchImpl } from './provider-http.js';
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
 

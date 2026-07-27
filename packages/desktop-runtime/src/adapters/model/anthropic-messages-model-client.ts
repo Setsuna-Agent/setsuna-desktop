@@ -1,12 +1,17 @@
-import type {
-  ModelRequest,
-  ModelStreamEvent,
-  RuntimeAnthropicContentBlock,
-  RuntimeStreamItem,
-  RuntimeToolCall,
+import {
+  DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS,
+  type ModelRequest,
+  type ModelStreamEvent,
+  type RuntimeAnthropicContentBlock,
+  type RuntimeStreamItem,
+  type RuntimeToolCall,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
+import {
+  toAnthropicMessages,
+  toAnthropicTools,
+} from './anthropic-provider-messages.js';
 import { anthropicThinkingBody } from './provider-thinking.js';
 import {
   providerMetadataFitsPersistenceLimit,
@@ -14,22 +19,16 @@ import {
   providerReplayContext,
 } from './provider-replay-context.js';
 import {
-  DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS,
   anthropicApiKeyHeader,
   assertOkResponse,
-  doneEvent,
-  normalizeAnthropicUsage,
-  objectValue,
-  parseJson,
-  parseSse,
   requireFetch,
-  stringValue,
-  systemAndDeveloperText,
-  toAnthropicMessages,
-  toAnthropicTools,
   withEndpoint,
   type FetchImpl,
-} from './provider-utils.js';
+} from './provider-http.js';
+import { systemAndDeveloperText } from './provider-message-content.js';
+import { doneEvent, parseJson, parseSse } from './provider-stream.js';
+import { normalizeAnthropicUsage } from './provider-usage.js';
+import { objectValue, stringValue } from './provider-values.js';
 
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
 
@@ -45,7 +44,9 @@ export class AnthropicMessagesModelClient implements ModelClient {
     const requestedModel = activeModel?.code || request.model;
     const replayContext = providerReplayContext(this.provider, requestedModel);
     const system = systemAndDeveloperText(request.messages);
-    const maxOutputTokens = request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS;
+    const maxOutputTokens = request.maxOutputTokens
+      ?? activeModel?.maxOutputTokens
+      ?? DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS;
     const thinking = anthropicThinkingBody(this.provider, { ...request, maxOutputTokens });
     const response = await fetcher(withEndpoint(this.provider.baseUrl, '/v1/messages'), {
       method: 'POST',

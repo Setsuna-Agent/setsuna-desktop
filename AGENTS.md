@@ -45,7 +45,7 @@
 - 改线程事件或消息投影：同步看 `packages/contracts/src/events.ts`、`packages/contracts/src/thread-events.ts`、`packages/contracts/src/thread-event-projection.ts`、`packages/desktop-runtime/src/adapters/store/json-thread-store.ts`、`apps/desktop/renderer/src/services/runtime-client/runtimeEvents.ts`。
 - 改 agent 行为：从 `packages/desktop-runtime/src/loop/core/agent-loop.ts` 入手，再按 `context/lifecycle/memory/tools` 找对应 coordinator；保持事件先落盘再发布，注意取消、审批、usage、memory 和 context compaction。
 - 改本地工具：优先走 `ToolHost` 抽象，重点看 `packages/desktop-runtime/src/adapters/tool/pc-local/`、approval/preview 流程和对应测试。
-- 改模型供应商：看 `ConfiguredModelClient`、具体 provider client、`provider-utils.ts`、`model-discovery.ts`，再更新设置页和 contract。
+- 改模型供应商：先看 `ConfiguredModelClient` 和具体 provider client；HTTP/SSE、消息转换、usage、replay 分别放在 `provider-http.ts`、`provider-stream.ts`、`*-provider-messages.ts`、`provider-usage.ts`、`provider-replay-debug.ts`，模型列表看 `model-discovery.ts`，再按需更新设置页和 contract。
 - 改聊天 UI：从 `apps/desktop/renderer/src/features/chat/` 进入，页面编排在根目录，消息、输入、工具、产物、mention 分别在 `conversation/composer/tool-runs/artifacts/mentions`。
 - 改项目/文件/review/terminal：看 `apps/desktop/renderer/src/features/workspace/` 及其 `hooks/`，main 侧对应 `src/review/`、`src/terminal/`、`src/workspace/`。
 - 改设置或能力管理：看 `SettingsPage.tsx`、`CapabilitiesPage.tsx`、runtime config/MCP/Skill stores 和 `FileSkillRegistry`。

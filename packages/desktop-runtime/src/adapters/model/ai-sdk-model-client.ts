@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import {
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   isRuntimeInlineMessageAttachment,
   type ModelRequest,
   type ModelStreamEvent,
@@ -22,14 +23,10 @@ import {
 } from 'ai';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
+import { requireFetch, type FetchImpl } from './provider-http.js';
+import { doneEvent } from './provider-stream.js';
 import { openAiCompatibleAiSdkProviderOptions } from './provider-thinking.js';
-import {
-  DEFAULT_MAX_OUTPUT_TOKENS,
-  doneEvent,
-  requireFetch,
-  stringValue,
-  type FetchImpl,
-} from './provider-utils.js';
+import { stringValue } from './provider-values.js';
 
 type PendingToolCall = {
   id: string;
@@ -72,7 +69,7 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
       messages: toAiSdkMessages(request.messages),
       tools: toAiSdkTools(request.tools),
       toolChoice: toAiSdkToolChoice(request.toolChoice),
-      maxOutputTokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      maxOutputTokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
       ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
       ...(thinkingProviderOptions ? { providerOptions: thinkingProviderOptions } : {}),
       abortSignal: request.signal,

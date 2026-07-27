@@ -1,24 +1,24 @@
-import type { ModelRequest, RuntimeToolCall, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import {
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+  type ModelRequest,
+  type RuntimeToolCall,
+  type RuntimeToolDefinition,
+} from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
-import { openAiCompatibleThinkingBody } from './provider-thinking.js';
+import { toOpenAiMessages } from './openai-provider-messages.js';
 import {
-  DEFAULT_MAX_OUTPUT_TOKENS,
-  arrayValue,
   assertOkResponse,
   bearerAuthHeader,
-  doneEvent,
-  normalizeOpenAiUsage,
-  objectValue,
-  parseJson,
-  parseSse,
   requireFetch,
-  stringValue,
-  toOpenAiMessages,
   withEndpoint,
   type FetchImpl,
-} from './provider-utils.js';
+} from './provider-http.js';
+import { doneEvent, parseJson, parseSse } from './provider-stream.js';
+import { openAiCompatibleThinkingBody } from './provider-thinking.js';
+import { normalizeOpenAiUsage } from './provider-usage.js';
+import { arrayValue, objectValue, stringValue } from './provider-values.js';
 
 export class OpenAiChatModelClient implements ModelClient {
   constructor(
@@ -41,7 +41,7 @@ export class OpenAiChatModelClient implements ModelClient {
         messages: toOpenAiMessages(request.messages),
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+        max_tokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiChatTools(request.tools) } : {}),
         ...(request.toolChoice ? { tool_choice: toOpenAiChatToolChoice(request.toolChoice) } : {}),

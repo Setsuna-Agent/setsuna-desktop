@@ -17,12 +17,10 @@ import {
   providerEndpointFingerprint,
   providerReplayContext,
 } from '../../../src/adapters/model/provider-replay-context.js';
+import type { FetchImpl } from '../../../src/adapters/model/provider-http.js';
+import { providerReplayDebugPayloads } from '../../../src/adapters/model/provider-replay-debug.js';
 import { openAiCompatibleThinkingBody } from '../../../src/adapters/model/provider-thinking.js';
 import { bindProviderMetadataToSemanticMessage } from '../../../src/utils/runtime-message-semantic-fingerprint.js';
-import {
-  providerReplayDebugPayloads,
-  type FetchImpl,
-} from '../../../src/adapters/model/provider-utils.js';
 import type { RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 

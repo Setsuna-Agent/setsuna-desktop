@@ -17,12 +17,10 @@ import {
 } from './model-request-timeout.js';
 import { OpenAiChatModelClient } from './openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from './openai-responses-model-client.js';
-import { thinkingRequestDefaults } from './provider-thinking.js';
+import type { FetchImpl } from './provider-http.js';
+import { providerReplayDebugPayloads } from './provider-replay-debug.js';
 import { providerReplayContext } from './provider-replay-context.js';
-import {
-  providerReplayDebugPayloads,
-  type FetchImpl,
-} from './provider-utils.js';
+import { thinkingRequestDefaults } from './provider-thinking.js';
 import { TestModelClient } from './test-model-client.js';
 
 export type ConfiguredModelClientOptions = ModelRequestTimeoutOptions & {

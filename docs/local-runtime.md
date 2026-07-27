@@ -291,14 +291,15 @@ REST 路由覆盖：
 
 原生 metadata 经 JSON-safe sanitizer 深拷贝，未知顶层字段、headers、request metadata 和诊断对象不会落盘。单条消息超过 2 MiB 时只保留 semantic history，并发布 `provider_metadata_omitted_too_large` warning。
 
-`provider-utils.ts` 负责：
+provider adapter 的共用逻辑按职责拆分：
 
-- endpoint 拼接。
-- auth header。
-- SSE 解析。
-- message/tool 格式转换。
-- usage 归一化。
-- 图片附件转换。
+- `provider-http.ts`：fetch 注入、endpoint 拼接、auth header 和 HTTP 错误。
+- `provider-stream.ts`：SSE 解帧、流 JSON 解析和完成事件。
+- `provider-values.ts`：不可信 provider payload 的基础值收窄。
+- `provider-message-content.ts`：system/developer 指令和模型可见图片附件。
+- `openai-provider-messages.ts`、`anthropic-provider-messages.ts`：各 provider 的 message/tool 格式转换与原生 replay。
+- `provider-usage.ts`：usage 归一化。
+- `provider-replay-debug.ts`：跨 provider replay 诊断载荷。
 
 `model-discovery.ts` 负责 provider 模型列表拉取和能力解析，包括 thinking efforts、max output tokens、vision。
 
