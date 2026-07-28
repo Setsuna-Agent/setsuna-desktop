@@ -1,4 +1,4 @@
-import { Bug, Code2, FileText, FolderOpen, MessageSquare, PanelRight, Terminal } from 'lucide-react';
+import { Bug, Code2, FileDiff, FileText, FolderOpen, MessageSquare, PanelRight, Terminal } from 'lucide-react';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import { BrowserFavicon } from './BrowserFavicon.js';
@@ -44,7 +44,8 @@ export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; typ
     return <BrowserFavicon faviconUrl={panel?.browser?.faviconUrl ?? null} loading={panel?.browser?.loading ?? false} />;
   }
   if (panelType === 'terminal') return <Terminal size={14} />;
-  if (panelType === 'review' || panelType === 'file') return <FileText size={14} />;
+  if (panelType === 'review') return <FileDiff size={14} />;
+  if (panelType === 'file') return <FileText size={14} />;
   return <FolderOpen size={14} />;
 }
 

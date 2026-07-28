@@ -7,7 +7,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import {
   ChevronDown,
-  FileText,
+  FileDiff,
   Undo2
 } from 'lucide-react';
 import {
@@ -20,7 +20,6 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
 import type {
   AnswerApprovalHandler,
@@ -501,6 +500,17 @@ export function FileChangesSummaryCard({
   const fileCount = summary.files.length;
   const singleFile = fileCount === 1 ? summary.files[0] : undefined;
   const filePaths = useMemo(() => [...new Set(summary.files.map((file) => file.path).filter(Boolean))], [summary.files]);
+  // 多文件时汇总增删行数，与单文件一样跟在标题后内联展示
+  const fileTotals = useMemo(() => {
+    if (singleFile) return null;
+    let additions = 0;
+    let deletions = 0;
+    for (const file of summary.files) {
+      additions += Number.isFinite(file.additions) ? Math.max(0, Number(file.additions)) : 0;
+      deletions += Number.isFinite(file.deletions) ? Math.max(0, Number(file.deletions)) : 0;
+    }
+    return { additions, deletions };
+  }, [singleFile, summary.files]);
   const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
   const [showAllFiles, setShowAllFiles] = useState(false);
   const canDiscard = Boolean(onDiscardChanges && filePaths.length && !discarded);
@@ -527,7 +537,7 @@ export function FileChangesSummaryCard({
     <section className="chat-file-changes" aria-label={t('toolRun.changes.label')}>
       <div className="chat-file-changes__header">
         <span className="chat-file-changes__icon" aria-hidden="true">
-          <FileText size={14} />
+          <FileDiff size={14} />
         </span>
         <span className="chat-file-changes__summary">
           <span className="chat-file-changes__title">
@@ -535,7 +545,11 @@ export function FileChangesSummaryCard({
               ? `${completedFileOperationActionLabel(normalizeFileOperationAction(singleFile.action), t)} ${pathBaseName(singleFile.path, t)}`
               : t('toolRun.changes.filesEdited', { count: fileCount })}
           </span>
-          {singleFile ? <ChangeCounts additions={singleFile.additions} deletions={singleFile.deletions} showZero /> : null}
+          {singleFile ? (
+            <ChangeCounts additions={singleFile.additions} deletions={singleFile.deletions} showZero />
+          ) : fileTotals ? (
+            <ChangeCounts additions={fileTotals.additions} deletions={fileTotals.deletions} showZero />
+          ) : null}
         </span>
         {onOpenReview || onDiscardChanges ? (
           <span className="chat-file-changes__actions">
@@ -546,12 +560,12 @@ export function FileChangesSummaryCard({
                 disabled={!canDiscard || discarding}
                 onClick={() => void discardChanges()}
               >
-                <Undo2 size={13} />
                 <span>{t(discarding
                   ? 'toolRun.changes.undoing'
                   : discarded
                     ? 'toolRun.changes.undone'
                     : 'toolRun.changes.undo')}</span>
+                <Undo2 size={13} />
               </button>
             ) : null}
             {onOpenReview ? (
@@ -573,10 +587,7 @@ export function FileChangesSummaryCard({
               title={file.path}
               onClick={() => onOpenReview?.(file.path)}
             >
-              <WorkspaceFileIcon className="chat-file-changes__file-icon" path={file.path} type="file" />
-              <span className="chat-file-changes__path" title={file.path}>
-                {file.path}
-              </span>
+              <FileChangePath path={file.path} />
               <ChangeCounts additions={file.additions} deletions={file.deletions} showZero />
             </button>
           </div>
@@ -596,6 +607,20 @@ export function FileChangesSummaryCard({
         ) : null}
       </div>
     </section>
+  );
+}
+
+// 路径分两段渲染：目录部分弱化显示，文件名保持正文色。
+// 兼容 POSIX 与 Windows 分隔符，运行时路径不保证只有一种。
+function FileChangePath({ path }: { path: string }) {
+  const separatorIndex = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  const directory = separatorIndex >= 0 ? path.slice(0, separatorIndex + 1) : '';
+  const name = separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
+  return (
+    <span className="chat-file-changes__path" title={path}>
+      {directory ? <span className="chat-file-changes__path-dir">{directory}</span> : null}
+      <span className="chat-file-changes__path-name">{name}</span>
+    </span>
   );
 }
 

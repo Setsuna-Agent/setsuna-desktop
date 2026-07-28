@@ -592,7 +592,7 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     expect(text).toContain('已运行 pnpm test');
   });
 
-  it('renders final file changes as review links with file icons', () => {
+  it('renders final file changes as review links', () => {
     const html = renderToStaticMarkup(createElement(FileChangesSummaryCard, {
       summary: {
         additions: 1,
@@ -618,7 +618,7 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     }));
 
     expect(html).toContain('<span class="chat-file-changes__title">已编辑 main.css</span><span class="chat-change-counts"');
-    expect(html).toContain('class="chat-file-changes__file-icon"');
+    expect(html).not.toContain('chat-file-changes__file-icon');
     expect(html).toContain('<button class="chat-file-changes__row"');
     expect(html).not.toContain('<details');
     expect(html).not.toContain('chat-file-changes__row-chevron');
@@ -642,11 +642,13 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     const text = renderedTextFromHtml(html);
 
     expect(text).toContain('已编辑 5 个文件');
-    expect(text).not.toContain('+15-10');
+    // 多文件时标题后内联展示汇总增删统计（各文件 additions 1..5、deletions 0..4）
+    expect(text).toContain('+15-10');
+    expect(html).toContain('<span class="chat-file-changes__title">已编辑 5 个文件</span><span class="chat-change-counts"');
     expect(text).toContain('再显示 2 个文件');
     expect(html.match(/class="chat-file-changes__item"/gu)).toHaveLength(3);
-    expect(html).toContain('src/file-3.ts');
-    expect(html).not.toContain('src/file-4.ts');
+    expect(text).toContain('src/file-3.ts');
+    expect(text).not.toContain('src/file-4.ts');
   });
 
   it('keeps normalized final file changes available for review panels', () => {

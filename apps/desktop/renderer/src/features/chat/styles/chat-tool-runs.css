@@ -356,18 +356,17 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 8px;
   flex-wrap: wrap;
   justify-content: space-between;
-  min-height: 42px;
-  padding: 10px 12px;
+  padding: 6px 8px;
 }
 
 .chat-file-changes__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
-  border-radius: 8px;
+  border-radius: 7px;
   color: var(--app-text-muted);
   background: color-mix(in srgb, var(--app-text) 4%, transparent);
 }
@@ -381,9 +380,9 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-file-changes__title {
   color: var(--app-text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 .chat-file-changes__actions {
@@ -435,7 +434,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-file-changes__error {
-  margin: 0 12px 10px;
+  margin: 0 8px 8px;
   padding: 7px 9px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 26%, var(--app-border));
   border-radius: 6px;
@@ -449,7 +448,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding: 8px 12px;
+  padding: 2px 4px 4px;
   border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
 }
 
@@ -466,7 +465,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 10px;
   width: 100%;
   min-height: 32px;
-  padding: 0 8px;
+  padding: 0 6px;
   border: 0;
   border-radius: 6px;
   color: inherit;
@@ -486,25 +485,25 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   cursor: default;
 }
 
-.chat-file-changes__file-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  font-size: 16px;
-}
-
 .chat-file-changes__path {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chat-file-changes__path-dir {
+  color: var(--app-text-muted);
+}
+
+/* 卡片内的增删统计提到 13px，与正文 14px 档协调；全局 .chat-change-counts 仍保持 12px */
+.chat-file-changes .chat-change-counts {
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .chat-file-changes__more {
@@ -514,14 +513,14 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   width: fit-content;
   min-width: 0;
   height: 32px;
-  margin-top: 1px;
-  padding: 0 10px;
+  margin-top: 0;
+  padding: 0 6px;
   border: 0;
   border-radius: 6px;
   color: var(--app-text);
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
   cursor: pointer;
 }

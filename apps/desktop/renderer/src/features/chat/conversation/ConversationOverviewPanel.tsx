@@ -4,7 +4,7 @@ import type {
   RuntimeUsageResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { ChevronUp, CircleGauge, FileText } from 'lucide-react';
+import { ChevronUp, CircleGauge, FileDiff } from 'lucide-react';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
@@ -74,7 +74,7 @@ export function ConversationOverviewPanel({
   if (compact) {
     return (
       <button className="chat-conversation-overview-chip" type="button" aria-label={t('conversation.overview.expand')} onClick={onExpand}>
-        <FileText size={13} />
+        <FileDiff size={13} />
         <span>{hasFileChanges ? t('conversation.overview.changes') : t('conversation.overview.environment')}</span>
         {hasFileChanges ? (
           <ChangeCountText additions={changeStats.additions} deletions={changeStats.deletions} />
@@ -101,7 +101,7 @@ export function ConversationOverviewPanel({
           onClick={() => onOpenReview?.()}
         >
           <span className="chat-conversation-overview-panel__icon">
-            <FileText size={14} />
+            <FileDiff size={14} />
           </span>
           <span className="chat-conversation-overview-panel__label">{t('conversation.overview.changes')}</span>
           <span className="chat-conversation-overview-panel__meta" title={reviewFailed ? reviewError ?? undefined : undefined}>

@@ -6,7 +6,7 @@ import {
   type WorkspaceFileRead,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { Bug, ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
+import { Bug, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
 import {
   useEffect,
   useMemo,
@@ -448,7 +448,7 @@ export function WorkspaceOverviewPanel({
       key: 'review',
       label: t('workspace.overview.review'),
       meta: reviewMeta,
-      icon: <FileText size={15} />,
+      icon: <FileDiff size={15} />,
       disabled: !activeProject || !onOpenReviewPanel,
       onClick: () => onOpenReviewPanel?.(),
     },
