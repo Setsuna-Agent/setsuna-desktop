@@ -11,10 +11,6 @@ export function systemText(messages: RuntimeMessage[]): string {
   return instructionText(messages, new Set(['system']));
 }
 
-export function systemAndDeveloperText(messages: RuntimeMessage[]): string {
-  return instructionText(messages, new Set(['system', 'developer']));
-}
-
 export function inlineImageAttachments(message: RuntimeMessage): RuntimeInlineMessageAttachment[] {
   return (message.attachments ?? []).filter(
     (attachment): attachment is RuntimeInlineMessageAttachment =>
@@ -30,12 +26,6 @@ export function toolVisualMessage(message: RuntimeMessage): RuntimeMessage {
     role: 'user',
     content: `Image output from tool ${message.toolName || 'tool'}:`,
   };
-}
-
-export function parseInlineImageDataUrl(value: string): { mediaType: string; base64: string } | null {
-  const match = value.match(/^data:([^;,]+);base64,(.+)$/);
-  if (!match) return null;
-  return { mediaType: match[1], base64: match[2] };
 }
 
 function instructionText(messages: RuntimeMessage[], roles: ReadonlySet<RuntimeMessage['role']>): string {

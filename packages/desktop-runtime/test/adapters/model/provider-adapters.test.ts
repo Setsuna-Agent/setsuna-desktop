@@ -567,8 +567,17 @@ describe('provider model adapters', () => {
       provider('openai-responses', 'https://api.openai.test/v1'),
       fakeFetch(
         [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"id":"resp_text_1","created_at":1785120000,"model":"model-code","service_tier":null}}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_text_1","phase":"final_answer"}}',
+          '',
           'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"Hi"}',
+          'data: {"type":"response.output_text.delta","item_id":"msg_text_1","delta":"Hi"}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_text_1","phase":"final_answer"}}',
           '',
           'event: response.completed',
           'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":3},"output_tokens":2,"total_tokens":6}}}',
@@ -581,10 +590,20 @@ describe('provider model adapters', () => {
     const events = await collect(client);
 
     expect(captured.url).toBe('https://api.openai.test/v1/responses');
+    expect(expectHeaders(captured).authorization).toBe('Bearer secret');
     const body = expectBody(captured);
     expect(body.instructions).toBe('System prompt');
-    expect(body.input).toEqual([{ role: 'user', content: 'Hello' }]);
-    expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Hi' });
+    expect(body.max_output_tokens).toBe(1234);
+    expect(body.store).toBe(false);
+    expect(body.input).toEqual([{
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Hello' }],
+    }]);
+    expect(events.filter((event) => event.type === 'item_delta')).toEqual([{
+      type: 'item_delta',
+      itemId: 'msg_text_1',
+      delta: 'Hi',
+    }]);
     expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { cachedInputTokens: 3, totalTokens: 6 } });
   });
 
@@ -614,7 +633,7 @@ describe('provider model adapters', () => {
       instructions: 'System prompt',
       input: [
         { role: 'developer', content: 'Developer policy' },
-        { role: 'user', content: 'Hello' },
+        { role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
       ],
     });
 
@@ -624,8 +643,8 @@ describe('provider model adapters', () => {
       fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', anthropicCaptured),
     ), { messages });
     expect(expectBody(anthropicCaptured)).toMatchObject({
-      system: 'System prompt\n\nDeveloper policy',
-      messages: [{ role: 'user', content: 'Hello' }],
+      system: [{ type: 'text', text: 'System prompt\n\nDeveloper policy' }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
     });
 
     const aiSdkCaptured: CapturedRequest = {};
@@ -914,7 +933,10 @@ describe('provider model adapters', () => {
     );
     expect(expectBody(changedSummaryCaptured).input).toEqual([{
       role: 'user',
-      content: '<context_compaction_summary>Changed after capture.</context_compaction_summary>',
+      content: [{
+        type: 'input_text',
+        text: '<context_compaction_summary>Changed after capture.</context_compaction_summary>',
+      }],
     }]);
 
     const fallbackCaptured: CapturedRequest = {};
@@ -927,7 +949,10 @@ describe('provider model adapters', () => {
     );
     expect(expectBody(fallbackCaptured).input).toEqual([{
       role: 'user',
-      content: '<context_compaction_summary>Portable compact summary.</context_compaction_summary>',
+      content: [{
+        type: 'input_text',
+        text: '<context_compaction_summary>Portable compact summary.</context_compaction_summary>',
+      }],
     }]);
   });
 
@@ -1022,8 +1047,171 @@ describe('provider model adapters', () => {
     expect(events).toContainEqual({ type: 'item_started', item: { id: 'reasoning_1', kind: 'reasoning', content: '', status: 'in_progress' } });
     expect(events).toContainEqual({ type: 'reasoning_summary_delta', itemId: 'reasoning_1', text: 'Need context.', summaryIndex: 1 });
     expect(events).toContainEqual({ type: 'item_completed', item: { id: 'reasoning_1', kind: 'reasoning', content: 'Need context.', status: 'completed' } });
+    const messageStartedIndex = events.findIndex(
+      (event) => event.type === 'item_started' && event.item.id === 'msg_1',
+    );
+    const messageDeltaIndex = events.findIndex(
+      (event) => event.type === 'item_delta' && event.itemId === 'msg_1',
+    );
+    const messageCompletedIndex = events.findIndex(
+      (event) => event.type === 'item_completed' && event.item.id === 'msg_1',
+    );
+    expect(messageStartedIndex).toBeLessThan(messageDeltaIndex);
+    expect(messageDeltaIndex).toBeLessThan(messageCompletedIndex);
     expect(events.some((event) => event.type === 'text_delta')).toBe(false);
     expect(events.find((event) => event.type === 'usage')).toMatchObject({ usage: { totalTokens: 6 } });
+  });
+
+  it('reuses the current native Responses message when text events omit item_id', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","item":{"id":"msg_legacy","type":"message","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"Legacy text"}',
+          '',
+          'event: response.output_text.done',
+          'data: {"type":"response.output_text.done","text":"Legacy text"}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","item":{"id":"msg_legacy","type":"message","content":[{"type":"output_text","text":"Legacy text"}]}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events).toContainEqual({
+      type: 'item_delta',
+      itemId: 'msg_legacy',
+      delta: 'Legacy text',
+    });
+    expect(events.filter((event) => event.type === 'text_delta')).toEqual([]);
+    expect(events.filter(
+      (event) => event.type === 'item_completed' && event.item.id === 'msg_legacy',
+    )).toEqual([{
+      type: 'item_completed',
+      item: {
+        id: 'msg_legacy',
+        kind: 'agent_message',
+        content: 'Legacy text',
+        status: 'completed',
+      },
+    }]);
+  });
+
+  it('projects and exactly replays standard OpenAI Responses refusals', async () => {
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"id":"resp_refusal","created_at":1,"model":"model-code"}}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_refusal","role":"assistant","status":"in_progress","phase":"final_answer","content":[]}}',
+          '',
+          'event: response.content_part.added',
+          'data: {"type":"response.content_part.added","item_id":"msg_refusal","output_index":0,"content_index":0,"part":{"type":"refusal","refusal":""}}',
+          '',
+          'event: response.refusal.delta',
+          'data: {"type":"response.refusal.delta","item_id":"msg_refusal","output_index":0,"content_index":0,"delta":"I cannot help ","sequence_number":1}',
+          '',
+          'event: response.refusal.delta',
+          'data: {"type":"response.refusal.delta","item_id":"msg_refusal","output_index":0,"content_index":0,"delta":"with that.","sequence_number":2}',
+          '',
+          'event: response.refusal.done',
+          'data: {"type":"response.refusal.done","item_id":"msg_refusal","output_index":0,"content_index":0,"refusal":"I cannot help with that.","sequence_number":3}',
+          '',
+          'event: response.content_part.done',
+          'data: {"type":"response.content_part.done","item_id":"msg_refusal","output_index":0,"content_index":0,"part":{"type":"refusal","refusal":"I cannot help with that."}}',
+          '',
+          'event: response.output_item.done',
+          'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_refusal","role":"assistant","status":"completed","phase":"final_answer","content":[{"type":"refusal","refusal":"I cannot help with that."}]}}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_refusal","status":"completed","usage":{"input_tokens":4,"output_tokens":5,"total_tokens":9}}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client);
+
+    expect(events).toContainEqual({
+      type: 'item_started',
+      item: {
+        id: 'msg_refusal',
+        kind: 'agent_message',
+        content: '',
+        status: 'in_progress',
+      },
+    });
+    expect(events.filter((event) => event.type === 'item_delta')).toEqual([
+      { type: 'item_delta', itemId: 'msg_refusal', delta: 'I cannot help ' },
+      { type: 'item_delta', itemId: 'msg_refusal', delta: 'with that.' },
+    ]);
+    expect(events.filter(
+      (event) => event.type === 'item_completed' && event.item.id === 'msg_refusal',
+    )).toEqual([{
+      type: 'item_completed',
+      item: {
+        id: 'msg_refusal',
+        kind: 'agent_message',
+        content: 'I cannot help with that.',
+        status: 'completed',
+      },
+    }]);
+
+    const metadataEvent = events.find((event) => event.type === 'assistant_metadata');
+    if (!metadataEvent || metadataEvent.type !== 'assistant_metadata') {
+      throw new Error('Expected refusal metadata.');
+    }
+    expect(metadataEvent.providerMetadata.openAiResponses?.items).toEqual([{
+      type: 'message',
+      id: 'msg_refusal',
+      role: 'assistant',
+      status: 'completed',
+      phase: 'final_answer',
+      content: [{ type: 'refusal', refusal: 'I cannot help with that.' }],
+    }]);
+
+    const replayCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch(
+          'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n',
+          replayCaptured,
+        ),
+      ),
+      {
+        messages: [{
+          id: 'assistant-refusal',
+          role: 'assistant',
+          content: 'I cannot help with that.',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          providerMetadata: metadataEvent.providerMetadata,
+        }],
+      },
+    );
+    expect(expectBody(replayCaptured).input).toEqual([{
+      type: 'message',
+      id: 'msg_refusal',
+      role: 'assistant',
+      status: 'completed',
+      phase: 'final_answer',
+      content: [{ type: 'refusal', refusal: 'I cannot help with that.' }],
+    }]);
   });
 
   it('captures, sanitizes, and replays OpenAI Responses native output without semantic duplicates', async () => {
@@ -1039,7 +1227,7 @@ describe('provider model adapters', () => {
           'data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","status":"completed","summary":[{"type":"summary_text","text":"Checked context.","headers":{"authorization":"nested-secret"}}],"encrypted_content":"encrypted-reasoning","headers":{"authorization":"never-persist"},"diagnostic":{"trace":"secret"}}}',
           '',
           'event: response.output_item.done',
-          'data: {"type":"response.output_item.done","item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","phase":"commentary","content":[{"type":"output_text","text":"I will read it.","annotations":[],"request_metadata":{"secret":true}}],"unknown":"drop-me"}}',
+          'data: {"type":"response.output_item.done","item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","phase":"commentary","content":[{"type":"output_text","text":"I will read it.","annotations":[{"type":"url_citation","start_index":0,"end_index":14,"title":"Reference","url":"https://example.test/source","trace":"drop-me"}],"request_metadata":{"secret":true}}],"unknown":"drop-me"}}',
           '',
           'event: response.output_item.done',
           'data: {"type":"response.output_item.done","item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}","status":"completed","request_metadata":{"secret":true}}}',
@@ -1082,7 +1270,17 @@ describe('provider model adapters', () => {
             role: 'assistant',
             status: 'completed',
             phase: 'commentary',
-            content: [{ type: 'output_text', text: 'I will read it.', annotations: [] }],
+            content: [{
+              type: 'output_text',
+              text: 'I will read it.',
+              annotations: [{
+                type: 'url_citation',
+                start_index: 0,
+                end_index: 14,
+                title: 'Reference',
+                url: 'https://example.test/source',
+              }],
+            }],
           },
           {
             type: 'function_call',
@@ -1101,6 +1299,42 @@ describe('provider model adapters', () => {
     expect(events).toContainEqual({
       type: 'item_completed',
       item: { id: 'reasoning_1', kind: 'reasoning', content: 'Checked context.', status: 'completed' },
+    });
+    expect(events).toContainEqual({
+      type: 'item_started',
+      item: {
+        id: 'call_1',
+        kind: 'tool_call',
+        name: 'workspace_read_file',
+        status: 'in_progress',
+        toolCall: {
+          id: 'call_1',
+          name: 'workspace_read_file',
+          arguments: '{"path":"README.md"}',
+        },
+      },
+    });
+    expect(events).toContainEqual({
+      type: 'tool_call_delta',
+      call: {
+        id: 'call_1',
+        name: 'workspace_read_file',
+        argumentsDelta: '{"path":"README.md"}',
+      },
+    });
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: {
+        id: 'call_1',
+        kind: 'tool_call',
+        name: 'workspace_read_file',
+        status: 'completed',
+        toolCall: {
+          id: 'call_1',
+          name: 'workspace_read_file',
+          arguments: '{"path":"README.md"}',
+        },
+      },
     });
 
     const replayCaptured: CapturedRequest = {};
@@ -1147,7 +1381,17 @@ describe('provider model adapters', () => {
         role: 'assistant',
         status: 'completed',
         phase: 'commentary',
-        content: [{ type: 'output_text', text: 'I will read it.', annotations: [] }],
+        content: [{
+          type: 'output_text',
+          text: 'I will read it.',
+          annotations: [{
+            type: 'url_citation',
+            start_index: 0,
+            end_index: 14,
+            title: 'Reference',
+            url: 'https://example.test/source',
+          }],
+        }],
       },
       {
         type: 'function_call',
@@ -1309,7 +1553,10 @@ describe('provider model adapters', () => {
           }],
         },
       );
-      expect(expectBody(captured).input).toEqual([{ role: 'assistant', content: 'Portable text' }]);
+      expect(expectBody(captured).input).toEqual([{
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'Portable text' }],
+      }]);
     }
   });
 
@@ -1351,7 +1598,10 @@ describe('provider model adapters', () => {
       },
     );
 
-    expect(expectBody(captured).input).toEqual([{ role: 'assistant', content: 'Portable text' }]);
+    expect(expectBody(captured).input).toEqual([{
+      role: 'assistant',
+      content: [{ type: 'output_text', text: 'Portable text' }],
+    }]);
   });
 
   it('falls back to semantic replay when persisted Responses phase is invalid', async () => {
@@ -1379,7 +1629,10 @@ describe('provider model adapters', () => {
     );
 
     expect(expectBody(captured).input).toEqual([
-      { role: 'assistant', content: 'Portable text' },
+      {
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'Portable text' }],
+      },
     ]);
   });
 
@@ -1407,7 +1660,10 @@ describe('provider model adapters', () => {
     );
 
     expect(expectBody(captured).input).toEqual([
-      { role: 'assistant', content: 'different semantic text' },
+      {
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'different semantic text' }],
+      },
     ]);
   });
 
@@ -1423,29 +1679,46 @@ describe('provider model adapters', () => {
           fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', captured),
         ),
         {
-          messages: [{
-            id: 'assistant-tool-diverged',
-            role: 'assistant',
-            content: '',
-            createdAt: '2026-06-25T00:00:02.000Z',
-            toolCalls: [semanticCall],
-            providerMetadata: responsesMetadata([{
-              type: 'function_call',
-              id: 'fc_1',
-              call_id: 'call_1',
-              name: 'workspace_read_file',
-              arguments: '{"path":"README.md"}',
-            }]),
-          }],
+          messages: [
+            {
+              id: 'assistant-tool-diverged',
+              role: 'assistant',
+              content: '',
+              createdAt: '2026-06-25T00:00:02.000Z',
+              toolCalls: [semanticCall],
+              providerMetadata: responsesMetadata([{
+                type: 'function_call',
+                id: 'fc_1',
+                call_id: 'call_1',
+                name: 'workspace_read_file',
+                arguments: '{"path":"README.md"}',
+              }]),
+            },
+            {
+              id: 'tool-result',
+              role: 'tool',
+              content: 'tool result',
+              createdAt: '2026-06-25T00:00:03.000Z',
+              toolCallId: 'call_1',
+              toolName: semanticCall.name,
+            },
+          ],
         },
       );
 
-      expect(expectBody(captured).input).toEqual([{
-        type: 'function_call',
-        call_id: 'call_1',
-        name: semanticCall.name,
-        arguments: semanticCall.arguments,
-      }]);
+      expect(expectBody(captured).input).toEqual([
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: semanticCall.name,
+          arguments: semanticCall.arguments,
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call_1',
+          output: 'tool result',
+        },
+      ]);
     }
   });
 
@@ -1676,6 +1949,132 @@ describe('provider model adapters', () => {
     });
   });
 
+  it('keeps normalized SDK events ahead of later Responses extension events', async () => {
+    const staged = stagedSseFetch(
+      [
+        'event: response.output_item.added',
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_before_collab","type":"message","role":"assistant","status":"in_progress","content":[]}}',
+        '',
+        'event: response.output_item.added',
+        'data: {"type":"response.output_item.added","item":{"id":"collab_after_message","type":"collab_tool_call","tool":"spawn_agent","status":"in_progress","sender_thread_id":"thread_parent","new_thread_id":"thread_child"}}',
+        '',
+      ].join('\n'),
+      [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"id":"msg_before_collab","type":"message","role":"assistant","status":"completed","content":[]}}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","item":{"id":"collab_after_message","type":"collab_tool_call","tool":"spawn_agent","status":"completed","sender_thread_id":"thread_parent","new_thread_id":"thread_child"}}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}',
+        '',
+      ].join('\n'),
+    );
+    const iterator = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      staged.fetch,
+    ).stream(request)[Symbol.asyncIterator]();
+
+    const first = await iterator.next();
+    staged.release();
+
+    expect(first).toEqual({
+      done: false,
+      value: {
+        type: 'item_started',
+        item: {
+          id: 'msg_before_collab',
+          kind: 'agent_message',
+          content: '',
+          status: 'in_progress',
+        },
+      },
+    });
+
+    const remainingEvents = [];
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) break;
+      remainingEvents.push(next.value);
+    }
+    expect(remainingEvents).toContainEqual({
+      type: 'item_started',
+      item: {
+        id: 'collab_after_message',
+        kind: 'collab_tool_call',
+        status: 'in_progress',
+        collabToolCall: {
+          tool: 'spawn_agent',
+          senderThreadId: 'thread_parent',
+          newThreadId: 'thread_child',
+        },
+      },
+    });
+  });
+
+  it('emits Responses extension events before the next standard SDK event arrives', async () => {
+    const staged = stagedSseFetch(
+      [
+        'event: response.output_item.added',
+        'data: {"type":"response.output_item.added","item":{"id":"collab_live","type":"collab_tool_call","tool":"spawn_agent","status":"in_progress","sender_thread_id":"thread_parent","new_thread_id":"thread_child"}}',
+        '',
+      ].join('\n'),
+      [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","item":{"id":"collab_live","type":"collab_tool_call","tool":"spawn_agent","status":"completed","sender_thread_id":"thread_parent","new_thread_id":"thread_child"}}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}',
+        '',
+      ].join('\n'),
+    );
+    const iterator = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      staged.fetch,
+    ).stream(request)[Symbol.asyncIterator]();
+
+    const first = await iterator.next();
+    staged.release();
+
+    expect(first).toEqual({
+      done: false,
+      value: {
+        type: 'item_started',
+        item: {
+          id: 'collab_live',
+          kind: 'collab_tool_call',
+          status: 'in_progress',
+          collabToolCall: {
+            tool: 'spawn_agent',
+            senderThreadId: 'thread_parent',
+            newThreadId: 'thread_child',
+          },
+        },
+      },
+    });
+
+    const remainingEvents = [];
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) break;
+      remainingEvents.push(next.value);
+    }
+    expect(remainingEvents).toContainEqual({
+      type: 'item_completed',
+      item: {
+        id: 'collab_live',
+        kind: 'collab_tool_call',
+        status: 'completed',
+        collabToolCall: {
+          tool: 'spawn_agent',
+          senderThreadId: 'thread_parent',
+          newThreadId: 'thread_child',
+        },
+      },
+    });
+  });
+
   it('normalizes OpenAI Responses function calls and history items', async () => {
     const captured: CapturedRequest = {};
     const client = new OpenAiResponsesModelClient(
@@ -1683,16 +2082,16 @@ describe('provider model adapters', () => {
       fakeFetch(
         [
           'event: response.output_item.added',
-          'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"workspace_read_file"}}',
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"workspace_read_file","arguments":""}}',
           '',
           'event: response.function_call_arguments.delta',
-          'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\\"path\\":\\""}',
+          'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"{\\"path\\":\\""}',
           '',
           'event: response.function_call_arguments.delta',
-          'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"README.md\\"}"}',
+          'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"README.md\\"}"}',
           '',
           'event: response.output_item.done',
-          'data: {"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}"}}',
+          'data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"workspace_read_file","arguments":"{\\"path\\":\\"README.md\\"}","status":"completed"}}',
           '',
         ].join('\n'),
         captured,
@@ -1745,12 +2144,16 @@ describe('provider model adapters', () => {
     ]);
     expect(body.input).toContainEqual({ type: 'function_call', call_id: 'old_call', name: 'workspace_search_text', arguments: '{"query":"old"}' });
     expect(body.input).toContainEqual({ type: 'function_call_output', call_id: 'old_call', output: 'old result' });
-    expect(body.input).toContainEqual({ role: 'user', content: 'Injected hidden boundary' });
+    expect(body.input).toContainEqual({
+      role: 'user',
+      content: [{ type: 'input_text', text: 'Injected hidden boundary' }],
+    });
     expect(events.find((event) => event.type === 'item_started')).toEqual({
       type: 'item_started',
       item: {
         id: 'call_1',
         kind: 'tool_call',
+        name: 'workspace_read_file',
         status: 'in_progress',
         toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '' },
       },
@@ -1778,11 +2181,169 @@ describe('provider model adapters', () => {
       item: {
         id: 'call_1',
         kind: 'tool_call',
+        name: 'workspace_read_file',
         status: 'completed',
         toolCall: { id: 'call_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
       },
     });
     expect(events.some((event) => event.type === 'tool_calls')).toBe(false);
+  });
+
+  it('preserves original Responses tool arguments through native replay', async () => {
+    const rawArguments = '{"path": "README.md", "limit": 1e3}';
+    const client = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      fakeFetch(
+        [
+          'event: response.output_item.done',
+          `data: ${JSON.stringify({
+            type: 'response.output_item.done',
+            item: {
+              type: 'reasoning',
+              id: 'reasoning_raw_args',
+              status: 'completed',
+              summary: [{ type: 'summary_text', text: 'Keep native reasoning.' }],
+              encrypted_content: 'encrypted-raw-args',
+            },
+          })}`,
+          '',
+          'event: response.output_item.added',
+          `data: ${JSON.stringify({
+            type: 'response.output_item.added',
+            output_index: 1,
+            item: {
+              id: 'fc_raw_args',
+              type: 'function_call',
+              call_id: 'call_raw_args',
+              name: 'workspace_read_file',
+              arguments: '',
+            },
+          })}`,
+          '',
+          'event: response.function_call_arguments.delta',
+          `data: ${JSON.stringify({
+            type: 'response.function_call_arguments.delta',
+            item_id: 'fc_raw_args',
+            output_index: 1,
+            delta: rawArguments,
+          })}`,
+          '',
+          'event: response.output_item.done',
+          `data: ${JSON.stringify({
+            type: 'response.output_item.done',
+            output_index: 1,
+            item: {
+              id: 'fc_raw_args',
+              type: 'function_call',
+              call_id: 'call_raw_args',
+              name: 'workspace_read_file',
+              arguments: rawArguments,
+              status: 'completed',
+            },
+          })}`,
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"id":"resp_raw_args","status":"completed","usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7}}}',
+          '',
+        ].join('\n'),
+        {},
+      ),
+    );
+
+    const events = await collect(client, {
+      tools: [{
+        name: 'workspace_read_file',
+        description: 'Read a file',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            limit: { type: 'number' },
+          },
+        },
+      }],
+    });
+    expect(events).toContainEqual({
+      type: 'item_completed',
+      item: {
+        id: 'call_raw_args',
+        kind: 'tool_call',
+        name: 'workspace_read_file',
+        status: 'completed',
+        toolCall: {
+          id: 'call_raw_args',
+          name: 'workspace_read_file',
+          arguments: rawArguments,
+        },
+      },
+    });
+
+    const metadataEvent = events.find((event) => event.type === 'assistant_metadata');
+    if (!metadataEvent || metadataEvent.type !== 'assistant_metadata') {
+      throw new Error('Expected raw-arguments Responses metadata.');
+    }
+    expect(metadataEvent.providerMetadata.openAiResponses?.items).toContainEqual({
+      type: 'function_call',
+      id: 'fc_raw_args',
+      call_id: 'call_raw_args',
+      name: 'workspace_read_file',
+      arguments: rawArguments,
+      status: 'completed',
+    });
+
+    const replayCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch(
+          'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n',
+          replayCaptured,
+        ),
+      ),
+      {
+        messages: [{
+          id: 'assistant-raw-args',
+          role: 'assistant',
+          content: '<think>Keep native reasoning.</think>',
+          createdAt: '2026-06-25T00:00:02.000Z',
+          toolCalls: [{
+            id: 'call_raw_args',
+            name: 'workspace_read_file',
+            arguments: rawArguments,
+          }],
+          providerMetadata: metadataEvent.providerMetadata,
+        }, {
+          id: 'tool-raw-args',
+          role: 'tool',
+          content: 'README contents',
+          createdAt: '2026-06-25T00:00:03.000Z',
+          toolCallId: 'call_raw_args',
+          toolName: 'workspace_read_file',
+        }],
+      },
+    );
+    expect(expectBody(replayCaptured).input).toEqual([
+      {
+        type: 'reasoning',
+        id: 'reasoning_raw_args',
+        status: 'completed',
+        summary: [{ type: 'summary_text', text: 'Keep native reasoning.' }],
+        encrypted_content: 'encrypted-raw-args',
+      },
+      {
+        type: 'function_call',
+        id: 'fc_raw_args',
+        call_id: 'call_raw_args',
+        name: 'workspace_read_file',
+        arguments: rawArguments,
+        status: 'completed',
+      },
+      {
+        type: 'function_call_output',
+        call_id: 'call_raw_args',
+        output: 'README contents',
+      },
+    ]);
   });
 
   it('interleaves OpenAI Responses function call outputs with their calls', async () => {
@@ -1848,12 +2409,12 @@ describe('provider model adapters', () => {
     });
 
     expect(expectBody(captured).input).toEqual([
-      { role: 'user', content: 'Hello' },
+      { role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
       { type: 'function_call', call_id: 'call_read', name: 'workspace_read_file', arguments: '{"path":"README.md"}' },
       { type: 'function_call_output', call_id: 'call_read', output: 'read result\n\nduplicate read result' },
       { type: 'function_call', call_id: 'call_search', name: 'workspace_search_text', arguments: '{"query":"TODO"}' },
       { type: 'function_call_output', call_id: 'call_search', output: 'search result' },
-      { role: 'user', content: 'Hidden boundary' },
+      { role: 'user', content: [{ type: 'input_text', text: 'Hidden boundary' }] },
     ]);
   });
 
@@ -1864,13 +2425,19 @@ describe('provider model adapters', () => {
       fakeFetch(
         [
           'event: message_start',
-          'data: {"type":"message_start","message":{"usage":{"input_tokens":3,"cache_read_input_tokens":4,"cache_creation_input_tokens":7,"output_tokens":0}}}',
+          'data: {"type":"message_start","message":{"id":"msg_1","model":"model-code","role":"assistant","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":3,"cache_read_input_tokens":4,"cache_creation_input_tokens":7,"output_tokens":0}}}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
           '',
           'event: content_block_delta',
-          'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Claude"}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Claude"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":0}',
           '',
           'event: message_delta',
-          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}',
           '',
           'event: message_stop',
           'data: {"type":"message_stop"}',
@@ -1887,8 +2454,12 @@ describe('provider model adapters', () => {
     const body = expectBody(captured);
     expect(headers['x-api-key']).toBe('secret');
     expect(headers['anthropic-version']).toBe('2023-06-01');
-    expect(body.system).toBe('System prompt');
-    expect(events.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Claude' });
+    expect(body.system).toEqual([{ type: 'text', text: 'System prompt' }]);
+    expect(events.find((event) => event.type === 'item_delta')).toEqual({
+      type: 'item_delta',
+      itemId: 'content_0',
+      delta: 'Claude',
+    });
     expect(events.find((event) => event.type === 'usage')).toMatchObject({
       usage: { providerId: 'provider-1', provider: 'Provider 1', inputTokens: 14, cachedInputTokens: 4, outputTokens: 5, totalTokens: 19 },
     });
@@ -2017,7 +2588,7 @@ describe('provider model adapters', () => {
           'data: {"type":"content_block_stop","index":3}',
           '',
           'event: message_delta',
-          'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":0}}',
           '',
           'event: message_stop',
           'data: {"type":"message_stop"}',
@@ -2089,7 +2660,7 @@ describe('provider model adapters', () => {
     );
 
     expect(expectBody(captured).messages).toEqual([
-      { role: 'user', content: 'Hello' },
+      { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
       {
         role: 'assistant',
         content: [
@@ -2118,7 +2689,7 @@ describe('provider model adapters', () => {
           'data: {"type":"content_block_stop","index":0}',
           '',
           'event: content_block_start',
-          'data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"server_1"}}',
+          'data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"server_1","name":"web_search","input":{}}}',
           '',
           'event: content_block_stop',
           'data: {"type":"content_block_stop","index":1}',
@@ -2130,7 +2701,7 @@ describe('provider model adapters', () => {
           'data: {"type":"content_block_stop","index":2}',
           '',
           'event: message_delta',
-          'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":0}}',
           '',
           'event: message_stop',
           'data: {"type":"message_stop"}',
@@ -2164,39 +2735,55 @@ describe('provider model adapters', () => {
         fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
       ),
       {
-        messages: [{
-          id: 'assistant-diverged',
-          role: 'assistant',
-          content: 'Portable text with runtime note.',
-          createdAt: '2026-06-25T00:00:02.000Z',
-          toolCalls: [{ id: 'toolu_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
-          providerMetadata: {
-            schemaVersion: 2,
-            source: {
-              providerId: 'provider-1',
-              providerKind: 'anthropic',
-              model: 'model-code',
-              endpointFingerprint: providerEndpointFingerprint('https://api.anthropic.test'),
-            },
-            anthropic: {
-              contentBlocks: [
-                { type: 'thinking', thinking: 'Private thought.', signature: 'signed' },
-                { type: 'text', text: 'Native text.' },
-                { type: 'tool_use', id: 'toolu_1', name: 'workspace_read_file', input: { path: 'README.md' } },
-              ],
+        messages: [
+          {
+            id: 'assistant-diverged',
+            role: 'assistant',
+            content: 'Portable text with runtime note.',
+            createdAt: '2026-06-25T00:00:02.000Z',
+            toolCalls: [{ id: 'toolu_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+            providerMetadata: {
+              schemaVersion: 2,
+              source: {
+                providerId: 'provider-1',
+                providerKind: 'anthropic',
+                model: 'model-code',
+                endpointFingerprint: providerEndpointFingerprint('https://api.anthropic.test'),
+              },
+              anthropic: {
+                contentBlocks: [
+                  { type: 'thinking', thinking: 'Private thought.', signature: 'signed' },
+                  { type: 'text', text: 'Native text.' },
+                  { type: 'tool_use', id: 'toolu_1', name: 'workspace_read_file', input: { path: 'README.md' } },
+                ],
+              },
             },
           },
-        }],
+          {
+            id: 'tool-result',
+            role: 'tool',
+            content: 'read result',
+            createdAt: '2026-06-25T00:00:03.000Z',
+            toolCallId: 'toolu_1',
+            toolName: 'workspace_read_file',
+          },
+        ],
       },
     );
 
-    expect(expectBody(captured).messages).toEqual([{
-      role: 'assistant',
-      content: [
-        { type: 'text', text: 'Portable text with runtime note.' },
-        { type: 'tool_use', id: 'toolu_1', name: 'workspace_read_file', input: { path: 'README.md' } },
-      ],
-    }]);
+    expect(expectBody(captured).messages).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Portable text with runtime note.' },
+          { type: 'tool_use', id: 'toolu_1', name: 'workspace_read_file', input: { path: 'README.md' } },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'read result' }],
+      },
+    ]);
   });
 
   it('continues replaying legacy Anthropic blocks only on Anthropic', async () => {
@@ -2370,6 +2957,7 @@ describe('provider model adapters', () => {
         name: 'workspace_search_text',
         description: 'Search text',
         input_schema: { type: 'object', properties: { query: { type: 'string' } } },
+        eager_input_streaming: true,
       },
     ]);
     expect(body.messages).toContainEqual({
@@ -2531,8 +3119,14 @@ describe('provider model adapters', () => {
       },
       fakeFetch(
         [
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+          '',
           'event: content_block_delta',
-          'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Anthropic"}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Anthropic"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":0}',
           '',
           'event: message_stop',
           'data: {"type":"message_stop"}',
@@ -2548,7 +3142,11 @@ describe('provider model adapters', () => {
     const anthropicHeaders = expectHeaders(anthropicCaptured);
     expect(anthropicHeaders['x-api-key']).toBeUndefined();
     expect(anthropicHeaders['anthropic-version']).toBe('2023-06-01');
-    expect(anthropicEvents.find((event) => event.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'Anthropic' });
+    expect(anthropicEvents.find((event) => event.type === 'item_delta')).toEqual({
+      type: 'item_delta',
+      itemId: 'content_0',
+      delta: 'Anthropic',
+    });
   });
 
   it('uses the configured provider when an API key is present', async () => {
@@ -3055,13 +3653,46 @@ function fakeFetch(body: string, captured: CapturedRequest): FetchImpl {
     captured.url = String(input);
     captured.headers = init?.headers as Record<string, string>;
     captured.body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
-    return new Response(body, {
+    const responseBody = body.endsWith('\n\n') ? body : `${body}\n\n`;
+    return new Response(responseBody, {
       status: 200,
       headers: {
         'Content-Type': 'text/event-stream',
       },
     });
   };
+}
+
+function stagedSseFetch(initialBody: string, remainingBody: string): {
+  fetch: FetchImpl;
+  release: () => void;
+} {
+  const encoder = new TextEncoder();
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  return {
+    fetch: async () => new Response(
+      new ReadableStream<Uint8Array>({
+        start(nextController) {
+          controller = nextController;
+          nextController.enqueue(encoder.encode(completeSseBlock(initialBody)));
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      },
+    ),
+    release: () => {
+      if (!controller) throw new Error('Staged SSE response has not started.');
+      controller.enqueue(encoder.encode(completeSseBlock(remainingBody)));
+      controller.close();
+    },
+  };
+}
+
+function completeSseBlock(value: string): string {
+  if (value.endsWith('\n\n')) return value;
+  return value.endsWith('\n') ? `${value}\n` : `${value}\n\n`;
 }
 
 async function collect(client: ModelClient, override: Partial<ModelRequest> = {}) {

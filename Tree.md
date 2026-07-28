@@ -175,16 +175,16 @@ packages/contracts/ — 4 direct / 60 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 407 total files
-├── src/ — 2 direct / 227 total files
-│   ├── adapters/ — 100 files
+packages/desktop-runtime/ — 4 direct / 414 total files
+├── src/ — 2 direct / 234 total files
+│   ├── adapters/ — 107 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── id/ — 1 direct / 1 total files
 │   │   ├── mcp/ — 5 direct / 5 total files
-│   │   ├── model/ — 20 direct / 20 total files
+│   │   ├── model/ — 27 direct / 27 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── plugin/ — 3 direct / 3 total files
 │   │   ├── search/ — 5 direct / 5 total files

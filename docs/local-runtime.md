@@ -279,24 +279,32 @@ REST 路由覆盖：
 
 `ConfiguredModelClient` 根据 active provider 选择具体客户端：
 
-- `openai-compatible`：默认走 AI SDK adapter，可用环境变量切回 legacy OpenAI chat adapter。
-- `openai-responses`：Responses API adapter。
-- `anthropic`：Messages API adapter。
+- `openai-compatible`：默认使用 AI SDK 的 OpenAI-compatible provider；环境变量只保留到 legacy OpenAI chat adapter 的兼容回退。
+- `openai-responses`：使用官方 `@ai-sdk/openai` provider 负责 `/responses` 请求、标准 SSE 校验和流事件归一化。
+- `anthropic`：使用官方 `@ai-sdk/anthropic` provider 负责 Messages 请求、标准 SSE 校验和流事件归一化。
 - 没有可用 provider 或只使用 smoke 模型时走 `TestModelClient`。
+
+这里统一的是标准 transport、prompt/tool schema 和流事件桥接，不是假定三个协议具有完全相同的能力：
+
+- `ai-sdk-prompt.ts` 统一 semantic message、图片附件、tool schema 和 tool choice 到 AI SDK。
+- `ai-sdk-stream-bridge.ts` 统一 AI SDK `fullStream` 到 runtime 的 item、delta、tool call、usage 和 done 事件；Responses 扩展事件通过独立 side-channel 与标准流实时合并，并在下一 SDK raw 边界（或 SDK 流结束）释放旁路事件，以保持 provider 源顺序。
+- `anthropic-native-metadata.ts` 只读取 SDK 暴露的 raw chunks，保留 signed/redacted thinking 与 tool block，供同上下文原生续写。
+- `openai-responses-extension-fetch.ts` / `openai-responses-native-events.ts` 只处理 SDK schema 外的 metadata、safety buffering、reasoning section、collab item 和兼容性 fallback，同时保存经过白名单清洗的 native replay envelope。锁定版本尚未投影的标准 refusal 事件会在该边界转换为 semantic text delta，原始 `refusal` content part 仍写入 metadata；旧兼容流缺少 `output_index` 的 function call 会补稳定的本次流内索引后再交回 SDK。工具参数在 AI SDK 解析前另存 provider 原文，防止 JSON 重排导致 native replay 误降级。
+- `/responses/compact` 不在 AI SDK provider 能力面内，继续由 `OpenAiResponsesModelClient` 直接调用；它与普通 `/responses` transport 明确分离。
 
 `RuntimeMessage[]` 是所有 adapter 共用的 semantic history。adapter 可以读取同一 message 上的版本化 `providerMetadata`，但原生 replay 必须同时匹配 provider ID、provider kind、model 和规范化 endpoint fingerprint：
 
 - OpenAI-compatible Chat 只使用 semantic messages/tool calls/tool results，不透传未知厂商原始字段。
 - Anthropic Messages 在同一 replay context 下使用签名 content blocks；legacy blocks 只在 Anthropic 内继续兼容，跨 provider 时根据 semantic message 重建。
-- OpenAI Responses 请求 encrypted reasoning，完成时仅捕获嵌套字段也经过结构白名单的 output items、response ID 和必要 compaction 字段；assistant message 的 `phase: commentary | final_answer` 会在普通 response 与 native compact replacement items 中原样保留，非法 phase 会使整包降级。任一 output item、content block 或 summary part 无法安全保存时，整条 native envelope 都不落盘。同一 replay context 下还会核对 semantic fingerprint、assistant 文本以及 tool call 的 ID/名称/参数；任一不一致即整条 message 回退 semantic conversion，避免原生与普通 assistant/function call 重复。
+- OpenAI Responses 请求 encrypted reasoning，完成时仅捕获嵌套字段也经过结构白名单的 output items、response ID 和必要 compaction 字段；assistant message 的 `phase: commentary | final_answer`、`refusal` 和 output-text annotations 会在普通 response 与 native compact replacement items 中原样保留。AI SDK prompt 仍提供类型安全的 semantic shadow；一旦选中兼容 native envelope，fetch 扩展会在发送前用完整清洗结果覆盖 `input`，避免 SDK message 类型把原生 part 压成普通 `output_text`。非法 phase 或任一无法安全保存的 output item、content block、summary part 会使整包降级。同一 replay context 下还会核对 semantic fingerprint、assistant 文本以及 tool call 的 ID/名称/参数；任一不一致即整条 message 回退 semantic conversion，避免原生与普通 assistant/function call 重复。
 - Responses 的 response ID 本期只持久化，不发送 `previous_response_id`；没有 WebSocket transport 或可见输出后的自动续流。
 
 原生 metadata 经 JSON-safe sanitizer 深拷贝，未知顶层字段、headers、request metadata 和诊断对象不会落盘。单条消息超过 2 MiB 时只保留 semantic history，并发布 `provider_metadata_omitted_too_large` warning。
 
 provider adapter 的共用逻辑按职责拆分：
 
-- `provider-http.ts`：fetch 注入、endpoint 拼接、auth header 和 HTTP 错误。
-- `provider-stream.ts`：SSE 解帧、流 JSON 解析和完成事件。
+- `provider-http.ts`：fetch 注入，以及 legacy/native 扩展路径使用的 endpoint、auth header 和 HTTP 错误。
+- `provider-stream.ts`：legacy Chat adapter 的 SSE 解帧、流 JSON 解析和完成事件；AI SDK provider 不重复使用这套解析器。
 - `provider-values.ts`：不可信 provider payload 的基础值收窄。
 - `provider-message-content.ts`：system/developer 指令和模型可见图片附件。
 - `openai-provider-messages.ts`、`anthropic-provider-messages.ts`：各 provider 的 message/tool 格式转换与原生 replay。

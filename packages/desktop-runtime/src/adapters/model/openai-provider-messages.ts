@@ -1,4 +1,6 @@
-import type { RuntimeMessage, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { AssistantContent, ModelMessage, UserContent } from 'ai';
+import { parseAiSdkToolInput } from './ai-sdk-prompt.js';
 import { compatibleOpenAiResponsesItems } from './openai-responses-provider-metadata.js';
 import {
   inlineImageAttachments,
@@ -55,12 +57,41 @@ export function toOpenAiResponsesInput(
   messages: RuntimeMessage[],
   replayContext: ProviderReplayContext,
 ): unknown[] {
+  return buildOpenAiResponsesInput(messages, replayContext).input;
+}
+
+export function toOpenAiResponsesAiSdkPrompt(
+  messages: RuntimeMessage[],
+  replayContext: ProviderReplayContext,
+): {
+  messages: ModelMessage[];
+  nativeReplayInput?: unknown[];
+} {
+  const { input, hasNativeReplay } = buildOpenAiResponsesInput(messages, replayContext);
+  return {
+    messages: responsesInputToAiSdkMessages(input),
+    // AI SDK's ModelMessage shape cannot express Responses refusal parts or
+    // output-text annotations. The fetch extension restores this sanitized
+    // input verbatim only when a compatible native envelope was selected.
+    ...(hasNativeReplay ? { nativeReplayInput: input } : {}),
+  };
+}
+
+function buildOpenAiResponsesInput(
+  messages: RuntimeMessage[],
+  replayContext: ProviderReplayContext,
+): {
+  input: unknown[];
+  hasNativeReplay: boolean;
+} {
   const output: unknown[] = [];
   const toolOutputsByCallId = openAiResponsesToolOutputsByCallId(messages);
+  let hasNativeReplay = false;
   for (const message of messages) {
     if (message.visibility === 'transcript') continue;
     const nativeItems = compatibleOpenAiResponsesItems(message, replayContext);
     if (nativeItems) {
+      hasNativeReplay = true;
       output.push(...nativeItems);
       for (const item of nativeItems) {
         if (item.type !== 'function_call' || typeof item.call_id !== 'string') continue;
@@ -90,16 +121,82 @@ export function toOpenAiResponsesInput(
       output.push({ role: 'user', content: openAiResponsesContentParts(toolVisualMessage(message)) });
     }
   }
-  return output;
+  return { input: output, hasNativeReplay };
 }
 
-export function toOpenAiResponsesTools(tools: RuntimeToolDefinition[] = []): unknown[] {
-  return tools.map((tool) => ({
-    type: 'function',
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.inputSchema,
-  }));
+function responsesInputToAiSdkMessages(input: unknown[]): ModelMessage[] {
+  const toolNames = new Map<string, string>();
+  for (const value of input) {
+    const item = objectRecord(value);
+    if (item?.type === 'function_call' && typeof item.call_id === 'string') {
+      toolNames.set(item.call_id, typeof item.name === 'string' ? item.name : 'tool');
+    }
+  }
+
+  const output: ModelMessage[] = [];
+  for (const value of input) {
+    const item = objectRecord(value);
+    if (!item) continue;
+    const role = typeof item.role === 'string' ? item.role : '';
+    if (role === 'developer' || role === 'system') {
+      output.push({ role: 'system', content: responseMessageText(item.content) });
+    } else if (role === 'user') {
+      output.push({ role: 'user', content: responseUserContent(item.content) });
+    } else if (role === 'assistant') {
+      output.push({ role: 'assistant', content: responseAssistantContent(item) });
+    } else if (item.type === 'reasoning') {
+      output.push({ role: 'assistant', content: responseReasoningContent(item) });
+    } else if (item.type === 'function_call') {
+      const callId = typeof item.call_id === 'string' ? item.call_id : '';
+      if (!callId) continue;
+      output.push({
+        role: 'assistant',
+        content: [{
+          type: 'tool-call',
+          toolCallId: callId,
+          toolName: typeof item.name === 'string' ? item.name : 'tool',
+          input: parseAiSdkToolInput(
+            typeof item.arguments === 'string' ? item.arguments : '{}',
+          ),
+          ...(typeof item.id === 'string'
+            ? { providerOptions: { openai: { itemId: item.id } } }
+            : {}),
+        }],
+      });
+    } else if (item.type === 'function_call_output') {
+      const callId = typeof item.call_id === 'string' ? item.call_id : '';
+      if (!callId) continue;
+      output.push({
+        role: 'tool',
+        content: [{
+          type: 'tool-result',
+          toolCallId: callId,
+          toolName: toolNames.get(callId) || 'tool',
+          output: {
+            type: 'text',
+            value: typeof item.output === 'string' ? item.output : '',
+          },
+        }],
+      });
+    } else if (item.type === 'compaction' && typeof item.id === 'string') {
+      output.push({
+        role: 'assistant',
+        content: [{
+          type: 'custom',
+          kind: 'openai.compaction',
+          providerOptions: {
+            openai: {
+              itemId: item.id,
+              ...(typeof item.encrypted_content === 'string'
+                ? { encryptedContent: item.encrypted_content }
+                : {}),
+            },
+          },
+        }],
+      });
+    }
+  }
+  return output;
 }
 
 function openAiResponsesToolOutputsByCallId(messages: RuntimeMessage[]): Map<string, unknown> {
@@ -141,4 +238,89 @@ function openAiResponsesContentParts(message: RuntimeMessage): unknown {
       image_url: attachment.url,
     })),
   ];
+}
+
+function responseAssistantContent(item: Record<string, unknown>): AssistantContent {
+  const text = responseMessageText(item.content);
+  const providerOptions = {
+    openai: {
+      ...(typeof item.id === 'string' ? { itemId: item.id } : {}),
+      ...(item.phase === 'commentary' || item.phase === 'final_answer'
+        ? { phase: item.phase }
+        : {}),
+    },
+  };
+  return [{
+    type: 'text',
+    text,
+    ...(Object.keys(providerOptions.openai).length ? { providerOptions } : {}),
+  }];
+}
+
+function responseReasoningContent(item: Record<string, unknown>): AssistantContent {
+  const itemId = typeof item.id === 'string' ? item.id : undefined;
+  const encryptedContent = typeof item.encrypted_content === 'string'
+    ? item.encrypted_content
+    : undefined;
+  const summary = Array.isArray(item.summary)
+    ? item.summary
+      .map((part) => objectRecord(part))
+      .filter((part): part is Record<string, unknown> => Boolean(part))
+      .map((part) => typeof part.text === 'string' ? part.text : '')
+    : [];
+  const texts = summary.length ? summary : [''];
+  return texts.map((text) => ({
+    type: 'reasoning' as const,
+    text,
+    providerOptions: {
+      openai: {
+        ...(itemId ? { itemId } : {}),
+        ...(encryptedContent ? { reasoningEncryptedContent: encryptedContent } : {}),
+      },
+    },
+  }));
+}
+
+function responseUserContent(value: unknown): UserContent {
+  if (!Array.isArray(value)) return responseMessageText(value);
+  const parts: Exclude<UserContent, string> = [];
+  for (const rawPart of value) {
+    const part = objectRecord(rawPart);
+    if (part?.type === 'input_text' && typeof part.text === 'string') {
+      parts.push({ type: 'text', text: part.text });
+    } else if (part?.type === 'input_image' && typeof part.image_url === 'string') {
+      parts.push(responseImagePart(part.image_url));
+    }
+  }
+  return parts;
+}
+
+function responseImagePart(url: string): Exclude<UserContent, string>[number] {
+  const data = url.match(/^data:([^;,]+);base64,(.+)$/);
+  return {
+    type: 'file',
+    mediaType: data?.[1] || 'image/*',
+    data: data
+      ? { type: 'data', data: data[2] }
+      : { type: 'url', url: new URL(url) },
+  };
+}
+
+function responseMessageText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value.map((rawPart) => {
+    const part = objectRecord(rawPart);
+    if (part?.type === 'output_text' || part?.type === 'input_text') {
+      return typeof part.text === 'string' ? part.text : '';
+    }
+    if (part?.type === 'refusal') return typeof part.refusal === 'string' ? part.refusal : '';
+    return '';
+  }).join('');
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }

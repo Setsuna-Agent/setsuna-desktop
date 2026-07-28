@@ -2,56 +2,36 @@ import type {
   RuntimeAnthropicContentBlock,
   RuntimeMessage,
   RuntimeProviderReplayDebugPayload,
-  RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import type { AssistantContent, ModelMessage } from 'ai';
 import {
   portableRuntimeAssistantText,
   providerMetadataMatchesSemanticMessage,
   runtimeJsonValuesEqual,
 } from '../../utils/runtime-message-semantic-fingerprint.js';
 import {
-  inlineImageAttachments,
-  parseInlineImageDataUrl,
-  portableAssistantText,
-} from './provider-message-content.js';
+  aiSdkFilePart,
+  aiSdkInlineAttachments,
+  parseAiSdkToolInput,
+  type AiSdkPromptOptions,
+} from './ai-sdk-prompt.js';
+import { portableAssistantText } from './provider-message-content.js';
 import {
   isLegacyAnthropicMetadata,
   providerMetadataMatchesReplayContext,
   type ProviderReplayContext,
 } from './provider-replay-context.js';
 
-export function toAnthropicMessages(
-  messages: RuntimeMessage[],
+type AiSdkAssistantPart = Exclude<AssistantContent, string>[number];
+
+export function anthropicAiSdkPromptOptions(
   replayContext: ProviderReplayContext,
-): Array<Record<string, unknown>> {
-  const output: Array<Record<string, unknown>> = [];
-  for (const message of messages) {
-    if (message.visibility === 'transcript') continue;
-    if (message.role === 'user') {
-      output.push({ role: 'user', content: anthropicUserContentParts(message) });
-    } else if (message.role === 'assistant') {
-      const replayBlocks = anthropicReplayBlocks(message, replayContext);
-      const blocks = replayBlocks.length ? replayBlocks : anthropicAssistantContentParts(message);
-      output.push({
-        role: 'assistant',
-        content: blocks.length ? blocks : portableAssistantText(message.content),
-      });
-    } else if (message.role === 'tool' && message.toolCallId) {
-      output.push({
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: message.toolCallId,
-            content: inlineImageAttachments(message).length
-              ? anthropicUserContentParts(message)
-              : message.content,
-          },
-        ],
-      });
-    }
-  }
-  return output;
+): AiSdkPromptOptions {
+  return {
+    appendToolVisuals: false,
+    assistantContent: (message) => anthropicAssistantContent(message, replayContext),
+    toolMessage: anthropicToolMessage,
+  };
 }
 
 export function diagnoseAnthropicReplay(
@@ -81,33 +61,54 @@ export function diagnoseAnthropicReplay(
   return { nativeItemCount: blocks.length, reason: 'native_replay_compatible', strategy: 'native' };
 }
 
-export function toAnthropicTools(tools: RuntimeToolDefinition[] = []): unknown[] {
-  return tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    input_schema: tool.inputSchema,
-  }));
-}
+function anthropicAssistantContent(
+  message: RuntimeMessage,
+  replayContext: ProviderReplayContext,
+): AssistantContent {
+  const replayBlocks = anthropicReplayBlocks(message, replayContext);
+  if (replayBlocks.length) return replayBlocks.map(toAiSdkAnthropicBlock);
 
-function anthropicAssistantContentParts(message: RuntimeMessage): Array<Record<string, unknown>> {
-  const blocks: Array<Record<string, unknown>> = [];
+  const parts: AiSdkAssistantPart[] = [];
   const assistantText = portableAssistantText(message.content);
-  if (assistantText) blocks.push({ type: 'text', text: assistantText });
+  if (assistantText) parts.push({ type: 'text', text: assistantText });
   for (const toolCall of message.toolCalls ?? []) {
-    blocks.push({
-      type: 'tool_use',
-      id: toolCall.id,
-      name: toolCall.name,
-      input: parseToolInput(toolCall.arguments),
+    parts.push({
+      type: 'tool-call',
+      toolCallId: toolCall.id,
+      toolName: toolCall.name,
+      input: parseAiSdkToolInput(toolCall.arguments),
     });
   }
-  return blocks;
+  return parts.length ? parts : assistantText;
+}
+
+function anthropicToolMessage(message: RuntimeMessage): ModelMessage | null {
+  if (!message.toolCallId) return null;
+  const attachments = aiSdkInlineAttachments(message);
+  const output = attachments.length
+    ? {
+        type: 'content' as const,
+        value: [
+          ...(message.content.trim() ? [{ type: 'text' as const, text: message.content }] : []),
+          ...attachments.map(aiSdkFilePart),
+        ],
+      }
+    : { type: 'text' as const, value: message.content };
+  return {
+    role: 'tool',
+    content: [{
+      type: 'tool-result',
+      toolCallId: message.toolCallId,
+      toolName: message.toolName || 'tool',
+      output,
+    }],
+  };
 }
 
 function anthropicReplayBlocks(
   message: RuntimeMessage,
   replayContext: ProviderReplayContext,
-): Array<Record<string, unknown>> {
+): RuntimeAnthropicContentBlock[] {
   const metadata = message.providerMetadata;
   const legacy = isLegacyAnthropicMetadata(metadata);
   const canReplay = legacy
@@ -119,14 +120,37 @@ function anthropicReplayBlocks(
     !providerMetadataMatchesSemanticMessage(metadata, message)
     || !anthropicBlocksMatchSemanticMessage(blocks, message)
   )) return [];
-  return blocks.map((block) => {
-    if (block.type === 'thinking') {
-      return { type: block.type, thinking: block.thinking, signature: block.signature };
-    }
-    if (block.type === 'redacted_thinking') return { type: block.type, data: block.data };
-    if (block.type === 'text') return { type: block.type, text: block.text };
-    return { type: block.type, id: block.id, name: block.name, input: cloneJsonValue(block.input) };
-  });
+  return blocks.map(cloneAnthropicBlock);
+}
+
+function toAiSdkAnthropicBlock(block: RuntimeAnthropicContentBlock): AiSdkAssistantPart {
+  if (block.type === 'thinking') {
+    return {
+      type: 'reasoning',
+      text: block.thinking,
+      providerOptions: { anthropic: { signature: block.signature } },
+    };
+  }
+  if (block.type === 'redacted_thinking') {
+    return {
+      type: 'reasoning',
+      text: '',
+      providerOptions: { anthropic: { redactedData: block.data } },
+    };
+  }
+  if (block.type === 'text') return { type: 'text', text: block.text };
+  return {
+    type: 'tool-call',
+    toolCallId: block.id,
+    toolName: block.name,
+    input: cloneJsonValue(block.input),
+  };
+}
+
+function cloneAnthropicBlock(block: RuntimeAnthropicContentBlock): RuntimeAnthropicContentBlock {
+  return block.type === 'tool_use'
+    ? { ...block, input: cloneJsonValue(block.input) }
+    : { ...block };
 }
 
 function anthropicBlocksMatchSemanticMessage(
@@ -163,15 +187,6 @@ function anthropicBlocksMatchSemanticMessage(
   });
 }
 
-function parseToolInput(argumentsText: string): unknown {
-  if (!argumentsText.trim()) return {};
-  try {
-    return JSON.parse(argumentsText) as unknown;
-  } catch {
-    return {};
-  }
-}
-
 function parseToolInputForComparison(argumentsText: string): unknown {
   if (!argumentsText.trim()) return {};
   try {
@@ -189,27 +204,4 @@ function cloneJsonValue(value: unknown): unknown {
     );
   }
   return value;
-}
-
-function anthropicUserContentParts(message: RuntimeMessage): unknown {
-  const attachments = inlineImageAttachments(message);
-  if (!attachments.length) return message.content;
-  const blocks: unknown[] = [];
-  if (message.content.trim()) blocks.push({ type: 'text', text: message.content });
-  for (const attachment of attachments) {
-    const data = parseInlineImageDataUrl(attachment.url);
-    if (data) {
-      blocks.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: data.mediaType || attachment.type || 'image/jpeg',
-          data: data.base64,
-        },
-      });
-    } else {
-      blocks.push({ type: 'text', text: `[image: ${attachment.name}] ${attachment.url}` });
-    }
-  }
-  return blocks;
 }

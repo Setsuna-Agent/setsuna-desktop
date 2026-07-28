@@ -10,6 +10,8 @@
     "setsuna-desktop-runtime": "dist/cli.js"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.0",
+    "@ai-sdk/openai": "^4.0.0",
     "@ai-sdk/openai-compatible": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@setsuna-desktop/contracts": "workspace:*",

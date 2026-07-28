@@ -1,36 +1,26 @@
+import { createAnthropic } from '@ai-sdk/anthropic';
 import {
   DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS,
   type ModelRequest,
   type ModelStreamEvent,
-  type RuntimeAnthropicContentBlock,
-  type RuntimeStreamItem,
-  type RuntimeToolCall,
 } from '@setsuna-desktop/contracts';
+import { streamText } from 'ai';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
-  toAnthropicMessages,
-  toAnthropicTools,
-} from './anthropic-provider-messages.js';
+  toAiSdkInstructions,
+  toAiSdkMessages,
+  toAiSdkToolChoice,
+  toAiSdkTools,
+} from './ai-sdk-prompt.js';
+import { bridgeAiSdkStream } from './ai-sdk-stream-bridge.js';
+import { AnthropicNativeMetadataCollector } from './anthropic-native-metadata.js';
+import { anthropicAiSdkPromptOptions } from './anthropic-provider-messages.js';
+import { requireFetch, type FetchImpl } from './provider-http.js';
+import { providerReplayContext } from './provider-replay-context.js';
 import { anthropicThinkingBody } from './provider-thinking.js';
-import {
-  providerMetadataFitsPersistenceLimit,
-  providerMetadataSource,
-  providerReplayContext,
-} from './provider-replay-context.js';
-import {
-  anthropicApiKeyHeader,
-  assertOkResponse,
-  requireFetch,
-  withEndpoint,
-  type FetchImpl,
-} from './provider-http.js';
-import { systemAndDeveloperText } from './provider-message-content.js';
-import { doneEvent, parseJson, parseSse } from './provider-stream.js';
-import { normalizeAnthropicUsage } from './provider-usage.js';
-import { objectValue, stringValue } from './provider-values.js';
 
-const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
+const EMPTY_API_KEY_PLACEHOLDER = 'setsuna-no-anthropic-api-key';
 
 export class AnthropicMessagesModelClient implements ModelClient {
   constructor(
@@ -39,358 +29,98 @@ export class AnthropicMessagesModelClient implements ModelClient {
   ) {}
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    const fetcher = requireFetch(this.fetchImpl);
     const activeModel = this.provider.activeModel;
     const requestedModel = activeModel?.code || request.model;
     const replayContext = providerReplayContext(this.provider, requestedModel);
-    const system = systemAndDeveloperText(request.messages);
-    const maxOutputTokens = request.maxOutputTokens
+    const configuredMaxOutputTokens = request.maxOutputTokens
       ?? activeModel?.maxOutputTokens
       ?? DEFAULT_ANTHROPIC_MODEL_MAX_OUTPUT_TOKENS;
-    const thinking = anthropicThinkingBody(this.provider, { ...request, maxOutputTokens });
-    const response = await fetcher(withEndpoint(this.provider.baseUrl, '/v1/messages'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': DEFAULT_ANTHROPIC_VERSION,
-        ...anthropicApiKeyHeader(this.provider.apiKey),
-      },
-      signal: request.signal,
-      body: JSON.stringify({
-        model: requestedModel,
-        messages: toAnthropicMessages(request.messages, replayContext),
-        max_tokens: maxOutputTokens,
-        stream: true,
-        ...(system ? { system } : {}),
-        ...(request.tools?.length ? { tools: toAnthropicTools(request.tools) } : {}),
-        ...(request.toolChoice && request.toolChoice !== 'none' ? { tool_choice: toAnthropicToolChoice(request.toolChoice) } : {}),
-        ...(thinking ? { thinking } : {}),
-      }),
+    const thinking = anthropicThinkingBody(this.provider, {
+      ...request,
+      maxOutputTokens: configuredMaxOutputTokens,
     });
-    await assertOkResponse(response, 'Anthropic Messages request failed');
+    const apiKey = this.provider.apiKey.trim();
+    const anthropic = createAnthropic({
+      baseURL: normalizeAnthropicBaseUrl(this.provider.baseUrl),
+      apiKey: apiKey || EMPTY_API_KEY_PLACEHOLDER,
+      fetch: createAnthropicFetch(this.fetchImpl, Boolean(apiKey)),
+    });
+    const collector = new AnthropicNativeMetadataCollector(
+      this.provider,
+      replayContext,
+      requestedModel,
+    );
+    const result = streamText({
+      model: anthropic(requestedModel),
+      instructions: toAiSdkInstructions(request.messages),
+      messages: toAiSdkMessages(
+        request.messages,
+        anthropicAiSdkPromptOptions(replayContext),
+      ),
+      tools: toAiSdkTools(request.tools),
+      toolChoice: toAiSdkToolChoice(request.toolChoice),
+      // Anthropic counts thinking inside max_tokens. AI SDK treats
+      // maxOutputTokens as visible output and adds the budget itself.
+      maxOutputTokens: anthropicVisibleOutputTokens(configuredMaxOutputTokens, thinking),
+      ...(thinking ? { providerOptions: { anthropic: { thinking: toAiSdkThinking(thinking) } } } : {}),
+      abortSignal: request.signal,
+      maxRetries: 0,
+      include: { rawChunks: true },
+      onError: () => undefined,
+    });
 
-    let usage = undefined;
-    let finishReason = undefined;
-    const toolCalls = new Map<number, RuntimeToolCall>();
-    let toolCallsYielded = false;
-    let nativeToolItems = false;
-    const blocks = new Map<number, AnthropicBlockState>();
-    const completedContentBlocks: RuntimeAnthropicContentBlock[] = [];
-    let nativeEnvelopeComplete = true;
-    let messageStopped = false;
-    for await (const { event, data } of parseSse(response)) {
-      const payload = objectValue(parseJson(data));
-      const type = stringValue(payload.type) || event || '';
-      if (type === 'message_start') {
-        usage = mergeAnthropicUsage(usage, normalizeAnthropicUsage(objectValue(payload.message).usage));
-      } else if (type === 'content_block_start') {
-        const blockState = anthropicBlockState(payload);
-        if (!blockState || blocks.has(blockState.index)) {
-          nativeEnvelopeComplete = false;
-        } else {
-          blocks.set(blockState.index, blockState);
-          if (blockState.item.kind === 'tool_call') nativeToolItems = true;
-          yield { type: 'item_started' as const, item: cloneRuntimeStreamItem(blockState.item) };
-          if (blockState.item.kind === 'tool_call' && blockState.item.toolCall?.arguments) {
-            yield {
-              type: 'tool_call_delta' as const,
-              call: {
-                id: blockState.item.toolCall.id,
-                name: blockState.item.toolCall.name,
-                argumentsDelta: blockState.item.toolCall.arguments,
-              },
-            };
-          }
-        }
-      } else if (type === 'content_block_delta') {
-        const delta = objectValue(payload.delta);
-        const index = typeof payload.index === 'number' ? payload.index : undefined;
-        const blockState = index === undefined ? null : blocks.get(index) ?? null;
-        if (!blockState || !anthropicDeltaMatchesBlock(blockState, delta)) {
-          nativeEnvelopeComplete = false;
-        }
-        const text = stringValue(delta.text);
-        const thinking = stringValue(delta.thinking);
-        const signature = stringValue(delta.signature);
-        const partialJson = stringValue(delta.partial_json);
-        if (blockState?.item.kind === 'reasoning' && thinking) {
-          blockState.content += thinking;
-          yield { type: 'reasoning_raw_delta' as const, itemId: blockState.item.id, text: thinking, contentIndex: 0 };
-        } else if (thinking) {
-          yield { type: 'reasoning_delta' as const, text: thinking };
-        }
-        if (blockState?.contentBlock.type === 'thinking' && signature) {
-          blockState.contentBlock.signature += signature;
-        }
-        if (blockState?.item.kind === 'agent_message' && text) {
-          blockState.content += text;
-          yield { type: 'item_delta' as const, itemId: blockState.item.id, delta: text };
-        } else if (text) {
-          yield { type: 'text_delta' as const, text };
-        }
-        if (blockState?.item.kind === 'tool_call' && partialJson) {
-          const toolCall = blockState.item.toolCall ?? { id: blockState.item.id, name: blockState.item.name ?? '', arguments: '' };
-          toolCall.arguments = `${toolCall.arguments}${partialJson}`;
-          blockState.item.toolCall = toolCall;
-          toolCalls.set(blockState.index, toolCall);
-          yield {
-            type: 'tool_call_delta' as const,
-            call: { id: toolCall.id, name: toolCall.name, argumentsDelta: partialJson },
-          };
-        } else if (!blockState) {
-          const toolCall = mergeAnthropicInputDelta(toolCalls, payload);
-          if (toolCall) {
-            yield {
-              type: 'tool_call_delta' as const,
-              call: { id: toolCall.id, name: toolCall.name, argumentsDelta: partialJson },
-            };
-          }
-        }
-      } else if (type === 'content_block_stop') {
-        const index = typeof payload.index === 'number' ? payload.index : undefined;
-        const blockState = index === undefined ? null : blocks.get(index) ?? null;
-        if (blockState) {
-          blocks.delete(blockState.index);
-          const completedBlock = completedAnthropicContentBlock(blockState);
-          if (completedBlock) completedContentBlocks.push(completedBlock);
-          else nativeEnvelopeComplete = false;
-          yield { type: 'item_completed' as const, item: completedAnthropicBlockItem(blockState) };
-        } else nativeEnvelopeComplete = false;
-      } else if (type === 'message_delta') {
-        const delta = objectValue(payload.delta);
-        usage = mergeAnthropicUsage(usage, normalizeAnthropicUsage(payload.usage));
-        finishReason = stringValue(delta.stop_reason) || finishReason;
-        if (finishReason === 'tool_use' && !nativeToolItems) {
-          const calls = [...toolCalls.values()].filter((call) => call.name);
-          if (calls.length) {
-            toolCallsYielded = true;
-            yield { type: 'tool_calls' as const, toolCalls: calls };
-          }
-        }
-      } else if (type === 'message_stop') {
-        messageStopped = true;
-        if (blocks.size) nativeEnvelopeComplete = false;
-        break;
-      } else if (type === 'error') {
-        const error = objectValue(payload.error);
-        throw new Error(stringValue(error.message) || 'Anthropic Messages stream failed.');
-      }
-    }
-    if (!toolCallsYielded && !nativeToolItems && toolCalls.size) {
-      const calls = [...toolCalls.values()].filter((call) => call.name);
-      if (calls.length) yield { type: 'tool_calls' as const, toolCalls: calls };
-    }
-    if (!messageStopped || blocks.size) nativeEnvelopeComplete = false;
-    if (nativeEnvelopeComplete && shouldPreserveAnthropicContentBlocks(completedContentBlocks)) {
-      const providerMetadata = {
-        schemaVersion: 2 as const,
-        source: providerMetadataSource(replayContext),
-        anthropic: { contentBlocks: completedContentBlocks },
-      };
-      if (providerMetadataFitsPersistenceLimit(providerMetadata)) {
-        yield { type: 'assistant_metadata' as const, providerMetadata };
-      } else {
-        yield {
-          type: 'model_verification' as const,
-          verification: {
-            model: requestedModel,
-            provider: this.provider.provider,
-            warnings: ['provider_metadata_omitted_too_large'],
-          },
-        };
-      }
-    }
-    if (usage) {
-      yield {
-        type: 'usage' as const,
-        usage: {
-          ...usage,
-          providerId: this.provider.id,
-          provider: this.provider.name,
-          model: activeModel?.code,
-        },
-      };
-    }
-    yield doneEvent(finishReason);
-  }
-}
-
-/** Anthropic 在 message_start 报告输入用量，在 message_delta 报告输出用量。 */
-function mergeAnthropicUsage(
-  previous: ReturnType<typeof normalizeAnthropicUsage>,
-  next: ReturnType<typeof normalizeAnthropicUsage>,
-): ReturnType<typeof normalizeAnthropicUsage> {
-  if (!next) return previous;
-  const inputTokens = next.inputTokens ?? previous?.inputTokens;
-  const cachedInputTokens = next.cachedInputTokens ?? previous?.cachedInputTokens;
-  const outputTokens = next.outputTokens ?? previous?.outputTokens;
-  return {
-    ...previous,
-    ...next,
-    inputTokens,
-    cachedInputTokens,
-    outputTokens,
-    totalTokens: inputTokens !== undefined || outputTokens !== undefined
-      ? (inputTokens ?? 0) + (outputTokens ?? 0)
-      : undefined,
-  };
-}
-
-function toAnthropicToolChoice(toolChoice: Exclude<ModelRequest['toolChoice'], undefined | 'none'>) {
-  if (toolChoice === 'auto') return { type: 'auto' };
-  return { type: 'tool', name: toolChoice.name };
-}
-
-type AnthropicBlockState = {
-  contentBlock: RuntimeAnthropicContentBlock;
-  content: string;
-  index: number;
-  item: RuntimeStreamItem;
-};
-
-function anthropicBlockState(payload: Record<string, unknown>): AnthropicBlockState | null {
-  const block = objectValue(payload.content_block);
-  const type = stringValue(block.type);
-  const index = typeof payload.index === 'number' ? payload.index : 0;
-  if (type === 'text') {
-    const content = stringValue(block.text);
-    return {
-      content,
-      contentBlock: { type: 'text', text: content },
-      index,
-      item: { id: `content_${index}`, kind: 'agent_message', content, status: 'in_progress' },
-    };
-  }
-  if (type === 'thinking') {
-    const content = stringValue(block.thinking);
-    return {
-      content,
-      contentBlock: {
-        type: 'thinking',
-        thinking: content,
-        signature: stringValue(block.signature),
-      },
-      index,
-      item: { id: `reasoning_${index}`, kind: 'reasoning', content, status: 'in_progress' },
-    };
-  }
-  if (type === 'redacted_thinking') {
-    return {
-      content: '',
-      contentBlock: { type: 'redacted_thinking', data: stringValue(block.data) },
-      index,
-      item: { id: `reasoning_${index}`, kind: 'reasoning', content: '', status: 'in_progress' },
-    };
-  }
-  if (type === 'tool_use') {
-    const input = block.input === undefined ? '' : JSON.stringify(block.input);
-    const toolCall = {
-      id: stringValue(block.id) || `toolu_${index}`,
-      name: stringValue(block.name),
-      arguments: input === '{}' ? '' : input,
-    };
-    return {
-      content: '',
-      contentBlock: {
-        type: 'tool_use',
-        id: toolCall.id,
-        name: toolCall.name,
-        input: block.input ?? {},
-      },
-      index,
-      item: { id: toolCall.id, kind: 'tool_call', name: toolCall.name, status: 'in_progress', toolCall },
-    };
-  }
-  return null;
-}
-
-function completedAnthropicContentBlock(blockState: AnthropicBlockState): RuntimeAnthropicContentBlock | undefined {
-  const block = blockState.contentBlock;
-  if (block.type === 'thinking') {
-    return block.signature
-      ? { ...block, thinking: blockState.content }
-      : undefined;
-  }
-  if (block.type === 'text') return { ...block, text: blockState.content };
-  if (block.type === 'tool_use') {
-    const input = parseAnthropicToolInput(blockState.item.toolCall?.arguments ?? '');
-    if (!block.id || !block.name || !input) return undefined;
-    return {
-      ...block,
-      input: input.value,
-    };
-  }
-  return block.data ? { ...block } : undefined;
-}
-
-function parseAnthropicToolInput(argumentsText: string): { value: unknown } | undefined {
-  if (!argumentsText.trim()) return { value: {} };
-  try {
-    return { value: JSON.parse(argumentsText) as unknown };
-  } catch {
-    return undefined;
-  }
-}
-
-function anthropicDeltaMatchesBlock(
-  blockState: AnthropicBlockState,
-  delta: Record<string, unknown>,
-): boolean {
-  const deltaType = stringValue(delta.type);
-  if (blockState.contentBlock.type === 'text') {
-    return (deltaType === 'text_delta' && typeof delta.text === 'string')
-      || (!deltaType && typeof delta.text === 'string');
-  }
-  if (blockState.contentBlock.type === 'thinking') {
-    return (deltaType === 'thinking_delta' && typeof delta.thinking === 'string')
-      || (deltaType === 'signature_delta' && typeof delta.signature === 'string')
-      || (!deltaType && (typeof delta.thinking === 'string' || typeof delta.signature === 'string'));
-  }
-  if (blockState.contentBlock.type === 'tool_use') {
-    return (deltaType === 'input_json_delta' && typeof delta.partial_json === 'string')
-      || (!deltaType && typeof delta.partial_json === 'string');
-  }
-  return false;
-}
-
-function shouldPreserveAnthropicContentBlocks(blocks: RuntimeAnthropicContentBlock[]): boolean {
-  return blocks.some((block) => block.type === 'tool_use')
-    && blocks.some((block) => block.type === 'thinking' || block.type === 'redacted_thinking');
-}
-
-function completedAnthropicBlockItem(blockState: AnthropicBlockState): RuntimeStreamItem {
-  const item = blockState.item;
-  if (item.kind === 'tool_call') {
-    return cloneRuntimeStreamItem({
-      ...item,
-      status: 'completed',
-      toolCall: item.toolCall,
+    yield* bridgeAiSdkStream(result.fullStream, {
+      provider: this.provider,
+      model: requestedModel,
+      textItemId: (sourceId) => `content_${sourceId}`,
+      reasoningItemId: (sourceId) => `reasoning_${sourceId}`,
+      includeToolName: true,
+      useRawFinishReason: true,
+      onPart: (part) => collector.observe(part),
+      beforeTerminalEvents: () => collector.terminalEvents(),
     });
   }
-  return cloneRuntimeStreamItem({
-    ...item,
-    content: blockState.content,
-    status: 'completed',
-  });
 }
 
-function cloneRuntimeStreamItem(item: RuntimeStreamItem): RuntimeStreamItem {
+function normalizeAnthropicBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, '');
+  if (!trimmed) throw new Error('Provider base URL is required.');
+  if (/\/v1\/messages$/i.test(trimmed)) return trimmed.replace(/\/messages$/i, '');
+  if (/\/v1$/i.test(trimmed)) return trimmed;
+  return `${trimmed}/v1`;
+}
+
+function createAnthropicFetch(fetchImpl: FetchImpl, sendApiKey: boolean) {
+  const fetcher = requireFetch(fetchImpl);
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    if (!sendApiKey) headers.delete('x-api-key');
+    const normalizedHeaders: Record<string, string> = {};
+    headers.forEach((value, name) => {
+      normalizedHeaders[name] = value;
+    });
+    const target = input instanceof Request ? input.url : input;
+    return fetcher(target instanceof URL ? target : String(target), {
+      ...init,
+      headers: normalizedHeaders,
+    });
+  };
+}
+
+function anthropicVisibleOutputTokens(
+  maxOutputTokens: number,
+  thinking: Record<string, unknown> | null,
+): number {
+  const budgetTokens = thinking?.type === 'enabled' && typeof thinking.budget_tokens === 'number'
+    ? thinking.budget_tokens
+    : 0;
+  return Math.max(1, maxOutputTokens - budgetTokens);
+}
+
+function toAiSdkThinking(thinking: Record<string, unknown>) {
+  if (thinking.type === 'adaptive') return { type: 'adaptive' as const };
   return {
-    ...item,
-    ...(item.toolCall ? { toolCall: { ...item.toolCall } } : {}),
+    type: 'enabled' as const,
+    budgetTokens: typeof thinking.budget_tokens === 'number' ? thinking.budget_tokens : undefined,
   };
-}
-
-function mergeAnthropicInputDelta(toolCalls: Map<number, RuntimeToolCall>, payload: Record<string, unknown>): RuntimeToolCall | null {
-  const index = typeof payload.index === 'number' ? payload.index : toolCalls.size;
-  const delta = objectValue(payload.delta);
-  const partialJson = stringValue(delta.partial_json);
-  if (!partialJson) return null;
-  const existing = toolCalls.get(index) ?? { id: `toolu_${index}`, name: '', arguments: '' };
-  const next = {
-    ...existing,
-    arguments: `${existing.arguments}${partialJson}`,
-  };
-  toolCalls.set(index, next);
-  return next;
 }
