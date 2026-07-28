@@ -9,6 +9,7 @@ import { MarkdownNavigationProvider } from '../../../../../src/features/chat/mar
 import { MarkdownRenderer } from '../../../../../src/features/chat/markdown/MarkdownRenderer.js';
 import {
   estimateMarkdownBlockHeight,
+  normalizeMarkdownBlockHeight,
   shouldVirtualizeMarkdownBlocks,
 } from '../../../../../src/features/chat/markdown/MarkdownVirtualBlock.js';
 import { I18nProvider, type AppLocale } from '../../../../../src/shared/i18n/I18nProvider.js';
@@ -143,5 +144,13 @@ describe('MarkdownRenderer', () => {
     expect(shouldVirtualizeMarkdownBlocks(manyBlocks)).toBe(true);
     expect(shouldVirtualizeMarkdownBlocks([{ content: 'x'.repeat(16_000) }])).toBe(true);
     expect(estimateMarkdownBlockHeight('```ts\nconst value = 1;\n```')).toBeGreaterThan(60);
+  });
+
+  it('converts zoomed Markdown measurements back to layout pixels', () => {
+    expect(normalizeMarkdownBlockHeight({
+      marginBottom: 12,
+      rectHeight: 210,
+      scaleInverse: 1 / 1.05,
+    })).toBeCloseTo(212);
   });
 });

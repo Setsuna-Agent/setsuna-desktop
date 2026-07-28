@@ -1,10 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { pageScaleInverse } from '../../../shared/lib/zoomedPortalPosition.js';
 import { MarkdownContentBlock } from './MarkdownContentBlock.js';
 import { useMarkdownViewport } from './MarkdownViewportProvider.js';
 
 const markdownVirtualizationBlockThreshold = 24;
 const markdownVirtualizationCharacterThreshold = 16_000;
 const estimatedMarkdownLineWidth = 88;
+const measuredHeightEpsilon = 0.1;
 
 type MarkdownVirtualBlockProps = {
   content: string;
@@ -44,7 +46,9 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
     const measure = () => {
       const nextHeight = measureMarkdownBlockHeight(block);
       if (nextHeight > 0) {
-        setPlaceholderHeight((current) => (Math.abs(current - nextHeight) > 1 ? nextHeight : current));
+        setPlaceholderHeight((current) => (
+          Math.abs(current - nextHeight) > measuredHeightEpsilon ? nextHeight : current
+        ));
       }
     };
     measure();
@@ -102,11 +106,29 @@ export function estimateMarkdownBlockHeight(content: string): number {
   return Math.max(30, (visualLineCount * 24) + headingOffset + 8);
 }
 
+export function normalizeMarkdownBlockHeight({
+  marginBottom = 0,
+  marginTop = 0,
+  rectHeight,
+  scaleInverse = 1,
+}: {
+  marginBottom?: number;
+  marginTop?: number;
+  rectHeight: number;
+  scaleInverse?: number;
+}): number {
+  const safeScaleInverse = Number.isFinite(scaleInverse) && scaleInverse > 0 ? scaleInverse : 1;
+  return (rectHeight * safeScaleInverse) + marginTop + marginBottom;
+}
+
 function measureMarkdownBlockHeight(block: HTMLDivElement): number {
   const rectHeight = block.getBoundingClientRect().height;
+  const scaleInverse = pageScaleInverse();
   const firstChild = block.firstElementChild;
   const lastChild = block.lastElementChild;
-  if (!firstChild || !lastChild || typeof window === 'undefined') return Math.ceil(rectHeight);
+  if (!firstChild || !lastChild || typeof window === 'undefined') {
+    return normalizeMarkdownBlockHeight({ rectHeight, scaleInverse });
+  }
 
   // Markdown 子元素的外边距可能穿透包装元素发生折叠。将其外部占用空间计入测量，
   // 避免替换已测量块时移动滚动锚点。
@@ -114,5 +136,12 @@ function measureMarkdownBlockHeight(block: HTMLDivElement): number {
   const lastStyle = firstChild === lastChild ? firstStyle : window.getComputedStyle(lastChild);
   const marginTop = Number.parseFloat(firstStyle.marginTop) || 0;
   const marginBottom = Number.parseFloat(lastStyle.marginBottom) || 0;
-  return Math.ceil(rectHeight + marginTop + marginBottom);
+  // DOMRect 返回 zoom 后的视觉像素，而占位高度使用 zoom 前的 CSS 像素。
+  // 先还原坐标空间并保留小数，避免虚拟块反复切换时改变列表总高度。
+  return normalizeMarkdownBlockHeight({
+    marginBottom,
+    marginTop,
+    rectHeight,
+    scaleInverse,
+  });
 }
