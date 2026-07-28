@@ -8,7 +8,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
 import { ChatAttachmentTray } from '../../../../../src/features/chat/composer/ChatAttachmentTray.js';
 import { ChatMessageAttachments } from '../../../../../src/features/chat/conversation/ChatMessageAttachments.js';
-import { chatImageGalleryColumns } from '../../../../../src/features/chat/conversation/ChatMessageImageGallery.js';
+import {
+  chatImageGalleryColumns,
+  chatImageGalleryWidth,
+} from '../../../../../src/features/chat/conversation/ChatMessageImageGallery.js';
 
 const pdfAttachment: RuntimeStoredMessageAttachment = {
   id: 'attachment_pdf',
@@ -68,6 +71,7 @@ describe('chat attachment cards', () => {
     );
 
     expect(html).toContain('chat-image-gallery--multiple');
+    expect(html).toContain('class="chat-image-gallery-shell" style="--chat-image-gallery-columns:2;--chat-image-gallery-width:360px"');
     expect(html).toContain('--chat-image-gallery-columns:2');
     expect(html.match(/class="ant-image-img/g)).toHaveLength(2);
   });
@@ -96,5 +100,12 @@ describe('chat attachment cards', () => {
 
   it('uses balanced gallery columns for common image counts', () => {
     expect([1, 2, 3, 4, 5, 6].map(chatImageGalleryColumns)).toEqual([1, 2, 3, 2, 3, 3]);
+  });
+
+  it('sizes the outer gallery shell from the rendered image count', () => {
+    expect(chatImageGalleryWidth(1, 'user')).toBe('min(220px, 52vw)');
+    expect(chatImageGalleryWidth(1, 'assistant')).toBe('360px');
+    expect(chatImageGalleryWidth(2, 'user')).toBe('360px');
+    expect(chatImageGalleryWidth(3, 'user')).toBe('544px');
   });
 });

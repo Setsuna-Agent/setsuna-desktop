@@ -435,7 +435,15 @@
   max-width: 100%;
 }
 
+.chat-user-message-attachments--user {
+  /* Ant Bubble may give percentage-sized image children the full message lane during intrinsic sizing. */
+  justify-self: end;
+  width: fit-content;
+  margin-inline-start: auto;
+}
+
 .chat-image-gallery-shell {
+  width: var(--chat-image-gallery-width);
   max-width: 100%;
 }
 
@@ -443,16 +451,8 @@
   display: grid;
   grid-template-columns: repeat(var(--chat-image-gallery-columns), minmax(0, 1fr));
   gap: 8px;
-  width: min(var(--chat-image-gallery-width), 100%);
+  width: 100%;
   max-width: 100%;
-}
-
-.chat-image-gallery--single {
-  width: min(360px, 100%);
-}
-
-.chat-image-gallery--user.chat-image-gallery--single {
-  width: min(220px, 52vw);
 }
 
 .chat-message-image {

@@ -23,6 +23,17 @@ export function chatImageGalleryColumns(imageCount: number): number {
   return 3;
 }
 
+export function chatImageGalleryWidth(
+  imageCount: number,
+  variant: 'user' | 'assistant',
+): string {
+  if (imageCount <= 1) {
+    return variant === 'user' ? 'min(220px, 52vw)' : '360px';
+  }
+  const columns = chatImageGalleryColumns(imageCount);
+  return `${columns * 176 + (columns - 1) * 8}px`;
+}
+
 export function ChatMessageImageGallery({
   attachments,
   variant,
@@ -37,18 +48,17 @@ export function ChatMessageImageGallery({
   const multiple = attachments.length > 1;
   const style: GalleryStyle = {
     '--chat-image-gallery-columns': columns,
-    '--chat-image-gallery-width': `${columns * 176 + (columns - 1) * 8}px`,
+    '--chat-image-gallery-width': chatImageGalleryWidth(attachments.length, variant),
   };
 
   const runAction = (action: DesktopImageAction, attachment: ChatImageAttachment) =>
     runDesktopImageAction(action, desktopImageInput(attachment));
 
   return (
-    <div className="chat-image-gallery-shell">
+    <div className="chat-image-gallery-shell" style={style}>
       <Image.PreviewGroup>
         <div
           className={`chat-image-gallery chat-image-gallery--${variant} ${multiple ? 'chat-image-gallery--multiple' : 'chat-image-gallery--single'}`}
-          style={style}
           aria-label={t('chat.image.count', { count: attachments.length })}
         >
           {attachments.map((attachment) => (
