@@ -110,7 +110,7 @@ pnpm dev
 | --- | --- |
 | `pnpm dev` | 启动 renderer 与 Electron 开发环境。 |
 | `pnpm typecheck` | 运行 TypeScript project references 类型检查。 |
-| `pnpm test` | 运行 Vitest 单元测试。 |
+| `pnpm test` | 依次运行 Vitest 单元与集成测试。 |
 | `pnpm lint` | 运行 ESLint。 |
 | `pnpm build` | 构建 contracts、runtime、Electron main 和 renderer。 |
 | `pnpm package` | 构建并生成本地 unpacked desktop app。 |
@@ -143,7 +143,7 @@ React renderer
 - `packages/desktop-runtime`：本地 runtime service、Agent loop、model adapters、tool hosts、本地存储和 HTTP/SSE API。
 - `skills`：随桌面应用打包的内置 Skill。
 - `assets`：应用图标、品牌资源和 README 展示资源。
-- `docs/local-desktop-runtime-architecture-review.md`：当前本地优先架构的设计背景和阶段目标。
+- [`docs/README.md`](docs/README.md)：按源码模块组织的架构、运行链路、扩展点和验证文档。
 
 renderer 不直接知道 provider 协议，也不直接构造 runtime URL。模型调用、工具执行、审批、存储和事件流都在 runtime 边界内完成。
 

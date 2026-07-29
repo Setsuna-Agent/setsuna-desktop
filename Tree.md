@@ -76,20 +76,20 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 458 total files
-├── src/ — 2 direct / 336 total files
+apps/desktop/renderer/ — 0 direct / 459 total files
+├── src/ — 2 direct / 337 total files
 │   ├── app/ — 2 direct / 31 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 7 direct / 7 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 246 files
+│   ├── features/ — 247 files
 │   │   ├── capabilities/ — 17 direct / 24 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
-│   │   ├── chat/ — 3 direct / 90 total files
+│   │   ├── chat/ — 4 direct / 91 total files
 │   │   │   ├── artifacts/ — 5 direct / 5 total files
 │   │   │   ├── composer/ — 18 direct / 18 total files
 │   │   │   ├── conversation/ — 28 direct / 28 total files
@@ -326,5 +326,19 @@ plugins/ — 0 direct / 44 total files
 ### `docs/`
 
 ```text
-docs/ — 8 direct / 8 total files
+docs/ — 1 direct / 39 total files
+├── apps/ — 13 files
+│   └── desktop/ — 1 direct / 13 total files
+│       ├── main/ — 5 direct / 5 total files
+│       ├── preload/ — 1 direct / 1 total files
+│       └── renderer/ — 6 direct / 6 total files
+├── architecture/ — 4 direct / 4 total files
+├── designs/ — 2 direct / 2 total files
+├── development/ — 3 direct / 3 total files
+├── packages/ — 12 files
+│   ├── contracts/ — 4 direct / 4 total files
+│   └── desktop-runtime/ — 8 direct / 8 total files
+├── plugins/ — 2 direct / 2 total files
+├── scripts/ — 1 direct / 1 total files
+└── skills/ — 1 direct / 1 total files
 ```

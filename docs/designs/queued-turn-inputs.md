@@ -1,4 +1,10 @@
-# Chat Guided Conversation Design
+# Active turn 发送队列
+
+所属模块导航：
+
+- [Contracts 线程与事件](../packages/contracts/threads-and-events.md)
+- [Runtime Agent loop](../packages/desktop-runtime/agent-loop.md)
+- [Renderer Chat](../apps/desktop/renderer/chat.md)
 
 本文记录聊天“引导对话发送队列”的设计与实现。用户在一个 turn 运行期间继续提交补充要求时，输入默认进入线程级 FIFO 队列，不会立刻加入当前 transcript；当前 turn 正常完成后，runtime 自动把队首作为新的独立 turn 发送。普通消息可以点击“立即发送”，显式复用原有 steer 逻辑插入当前 turn；Plan 和 Goal 是独立队列类型，必须等待当前 turn 结束后按各自语义启动。
 

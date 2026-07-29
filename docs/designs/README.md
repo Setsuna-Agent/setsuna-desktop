@@ -1,0 +1,32 @@
+# Cross-module Designs
+
+这里保存跨越多个源码模块的完整状态机或协议设计。模块文档只说明本模块的职责，并链接到这里，避免重复维护。
+
+## 当前设计
+
+- [Active turn 发送队列](queued-turn-inputs.md)：Contract event、runtime FIFO/steer/Goal 调度、REST 和 renderer composer 的完整链路。
+
+## 何时新增设计文档
+
+适合：
+
+- 同一状态机跨 contracts、runtime、main/preload、renderer。
+- 有明显并发、恢复、取消或兼容边界。
+- 单个模块文档无法完整解释因果关系。
+
+不适合：
+
+- 单个目录的文件说明，应写到对应模块文档。
+- 尚未实现的模糊想法；提案必须明确标记状态和决策。
+- 对源码逐行复述。
+
+设计文档至少包含：
+
+- 目标与非目标。
+- 数据模型/事件。
+- 状态转换。
+- 并发与失败。
+- 各模块职责。
+- 验证覆盖。
+- 相关文件。
+

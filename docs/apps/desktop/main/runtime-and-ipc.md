@@ -1,0 +1,159 @@
+# RuntimeHost、原生桥与 IPC
+
+源码目录：
+
+- `apps/desktop/main/src/runtime/`
+- `apps/desktop/main/src/ipc/`
+- `apps/desktop/main/src/security/`
+
+这组模块把 renderer 和 runtime 接到 Electron main 持有的可信能力上，同时避免泄漏任意 IPC、token 或系统 API。
+
+## RuntimeHost
+
+入口：`src/runtime/host.ts`
+
+### 启动职责
+
+`RuntimeHost`：
+
+- 分配本地端口并生成一次性 bearer token。
+- 解析 runtime CLI、spawn cwd 和 Electron Node-mode 可执行文件。
+- 注入数据根、内置 Skill/Plugin、browser control、native bridge 与 ripgrep 环境。
+- 监听 stdout ready JSON 和 stderr 诊断。
+- Ready 后请求 `/health`，只有健康检查成功才对外提供 request/subscribe。
+
+开发环境可用 `SETSUNA_DESKTOP_RUNTIME_ENTRY` 指向编译后的 runtime CLI。Packaged 环境需要兼容 `app.asar`、unpacked native dependency 和平台 Helper 路径。
+
+### 请求代理
+
+`RuntimeHost.request()` 只接受：
+
+- `/health`
+- `/v1/*`
+
+它负责附加 Authorization、JSON 编解码、超时和 runtime 未就绪错误。Renderer 永远看不到实际端口、token 或 headers。
+
+### SSE
+
+Main 为每个 renderer 订阅创建独立 runtime SSE：
+
+- 输入是 `threadId` 与 `sinceSeq`。
+- 输出通过 `runtime:event` IPC 转发。
+- unsubscribe、窗口销毁和 host shutdown 都会关闭连接。
+- Event stream 错误通过订阅通道报告，不能让旧订阅污染新线程。
+
+### 关闭
+
+优先关闭 runtime stdin 触发 graceful shutdown。数据迁移要求这个控制协议正常结束且退出码为 0；SIGTERM/SIGKILL 只能作为失败后的进程清理，不能算安全排空。
+
+## Bundled tools 与环境
+
+### `runtime/bundled-tools.ts`
+
+- 解析开发或 packaged 的 ripgrep 路径。
+- 校验平台/架构产物存在。
+- 把绝对路径注入 runtime 环境。
+- Packaged 模式缺失 bundled ripgrep 时直接失败，避免静默使用机器上的未知版本。
+
+### `runtime/desktop-environment.ts`
+
+负责在 GUI 启动缺少 login-shell PATH 时补齐桌面进程环境。必须保留已有显式变量，并避免把平台 shell 行为硬编码为单一系统。
+
+## 原生 bridge 与凭据
+
+### `runtime/native-bridge-server.ts`
+
+原生 bridge 是 runtime 到 main 的窄 loopback API。目前承载需要 Electron 信任边界的能力，例如：
+
+- Credential vault 读写/删除。
+- 受控打开外链。
+
+Server 使用独立随机 token。Runtime 通过 `HttpDesktopNativeBridge` port adapter 调用，renderer 不参与。
+
+### `security/credential-encryption.ts`
+
+把 Electron `safeStorage` 适配为加解密接口。要明确处理平台不支持或加密不可用，不能把明文伪装成已加密结果。
+
+### `security/credential-vault.ts`
+
+- 在 data root 内持久化加密凭据。
+- 对 key、payload 和文件格式做 normalization。
+- 使用原子写入。
+- 不向 list/status 调用返回 secret 明文。
+
+Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需要 OS-backed 加密的凭据通过原生 bridge 管理。
+
+## IPC 目录
+
+`src/ipc/` 按能力拆分，避免所有 handler 堆在 `index.ts`。
+
+| 文件 | Namespace / 职责 |
+| --- | --- |
+| `runtime-ipc.ts` | runtime request、attachment upload、SSE subscribe/unsubscribe |
+| `data-root-ipc.ts` | 数据根状态、扫描、迁移、恢复、旧根清理 |
+| `desktop-ipc.ts` | 目录选择、profile、clipboard、图片、本地路径与外链 |
+| `browser-ipc.ts` | browser tab 注册、active tab、截图、favicon、设备模拟 |
+| `review-ipc.ts` | review state、stage、unstage、discard |
+| `terminal-ipc.ts` | terminal open/write/read/resize/close |
+| `updater-ipc.ts` | update state、check、download source、download/open |
+| `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
+| `workspace-ipc.ts` | 外部 workspace app 列表与打开 |
+| `sender.ts` | 可信主窗口 sender 校验 |
+
+## IPC 设计规则
+
+### 固定命名
+
+Channel 使用领域前缀，例如 `runtime:*`、`desktop-data-root:*`、`browser:*`。不要增加“任意 channel invoke”或把 channel 名从 renderer 输入传入。
+
+### 校验 sender
+
+Main handler 要确认请求来自当前可信主 renderer。Browser guest 相关调用还要核对：
+
+- `guestContents.hostWebContents` 是主 renderer。
+- guest 属于内置浏览器 partition。
+- tab ID 与 `webContents.id` 映射一致。
+
+### 结构化数据
+
+- 输入输出使用 contracts 类型。
+- 错误保持可展示的稳定语义。
+- 长期事件返回 unsubscribe。
+- 二进制/图片通过明确受限的 payload 或 asset ID 传递。
+- 本地路径在 main 再次规范化，不能相信 renderer 已检查。
+
+### 生命周期
+
+注册函数需要能够：
+
+- 访问当前活跃 service，而不是捕获已销毁对象。
+- 在窗口销毁后停止推送事件。
+- 对 data-root 等状态订阅返回 unregister。
+- 在重复创建窗口时避免残留重复 handler。
+
+## 新增一条桌面 API
+
+完整路径：
+
+1. `packages/contracts/src/desktop.ts` 或相应 contract 文件。
+2. Main 的 domain service/helper。
+3. `apps/desktop/main/src/ipc/<domain>-ipc.ts`。
+4. `apps/desktop/preload/src/index.ts`。
+5. Renderer hook/feature。
+6. Main 单元测试、renderer helper 测试。
+
+如果能力本质属于 runtime 数据或 Agent 行为，应走 Runtime REST/port，而不是新增 main IPC。
+
+## 测试
+
+重点测试：
+
+- `test/unit/runtime/host.test.ts`
+- `test/unit/runtime/bundled-tools.test.ts`
+- `test/unit/runtime/desktop-environment.test.ts`
+- `test/unit/runtime/native-bridge-server.test.ts`
+- `test/unit/security/credential-encryption.test.ts`
+- `test/unit/security/credential-vault.test.ts`
+
+IPC 的领域行为通常由被调用 service 的测试和 renderer bridge/client 测试共同覆盖；新增复杂校验时应为 IPC helper 提取可测试的纯函数。
+

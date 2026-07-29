@@ -1,230 +1,145 @@
-# Contracts And Data
+# Contracts
 
-`packages/contracts` 是桌面主进程、preload、renderer 和 runtime 的共享契约层。任何跨边界数据都应该先在这里定义，再由各层实现。
+源码目录：`packages/contracts/`
 
-## 模块
+Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只定义数据、事件、client method 和纯投影，不执行 I/O。
 
-- `config.ts`：runtime preferences 与 feature flags；provider、permission 等叶子类型位于 `model-provider.ts`、`model-request.ts`、`permissions.ts`，由兼容门面重导出。
-- `environment.ts`：每次 runtime 操作共享的 cwd、workspace roots、shell 与 Git 仓库路径关系；不承载权限。
-- `provider.ts`：模型请求、工具定义、工具调用、流式模型事件。
-- `message-metadata.ts`：跨协议消息角色、JSON-safe provider metadata、版本化原生回放 envelope。
-- `threads.ts`：线程、消息、附件、toolRun、context compaction、goal、git info。
-- `events.ts`：runtime event union 和 SSE envelope。
-- `debug-traces.ts`：开发者模式专用的非持久化诊断 kind、payload 和增量 list contract。
-- `thread-events.ts`：runtime event -> thread snapshot reducer；复用的 projection helper 位于 `thread-event-projection.ts`。
-- `swe-events.ts`：Codex/SWE app-server 公共门面；类型与 mapper 实现位于 `swe/`。
-- `http.ts`：runtime health、request input、`DesktopRuntimeClient` 方法面。
-- `data-root.ts`：桌面数据根、迁移清单/分类/进度、恢复状态和 runtime 准入结果。
-- `workspace.ts`：项目、文件树、文件读写、搜索。
-- `mcp.ts`：MCP server、transport、tool、审批策略。
-- `skills.ts`：Skill summary/detail/input/patch。
-- `memory.ts`：memory record、query、preview。
-- `usage.ts`：usage record、summary、bucket。
-- `approvals.ts`：审批 request、decision、MCP elicitation、结构化用户输入和 list。
+## 为什么单独成包
 
-## Contract 变更规则
+跨层能力如果只在实现端定义类型，会出现：
 
-新增或修改跨层能力时按这个顺序：
+- Renderer 和 runtime 的字段逐渐漂移。
+- Preload 暴露比 main 实际支持更多的方法。
+- Event 写入成功但 reducer 不认识。
+- SWE/app-server 与普通 runtime 对同一状态产生不同解释。
 
-1. 修改 `packages/contracts/src/*` 类型。
-2. 如果是 HTTP 能力，更新 `DesktopRuntimeClient`。
-3. 更新 runtime server route 或 app-server protocol。
-4. 更新 renderer `desktop-runtime-client.ts`。
-5. 更新 `useRuntimeClientState.ts` 或调用方 hook/page。
-6. 补投影、store、server、renderer 相关测试。
+因此新跨边界能力先修改 contracts，再实现上下游。
 
-不要在 renderer 和 runtime 分别定义相似类型。类型重复会让 IPC/REST 协议漂移。
+## 模块分组
 
-## Runtime Event
+### 线程与事件
 
-`RuntimeEvent` 是线程状态的真源。
+| 文件 | 内容 |
+| --- | --- |
+| `threads.ts` | Thread、message、tool run、turn input、goal、review、compaction |
+| `events.ts` | `RuntimeEvent` discriminated union 与 SSE envelope |
+| `thread-events.ts` | Event → `RuntimeThread` reducer facade |
+| `thread-event-projection.ts` | 细分 projection helper |
+| `thread-title.ts` | 自动/手动标题相关类型与纯规则 |
+| `message-metadata.ts` | JSON-safe provider metadata 与 native replay envelope |
 
-事件类别：
+详见 [线程与事件](threads-and-events.md)。
 
-- thread：created、updated、deleted、metadata、goal、context clear/compact。
-- turn：started、completed、cancelled，以及线程级输入 queued、updated、deleted。
-- message：created、delta、updated、completed、deleted、truncated。
-- tool：started、output_delta、completed。
-- approval：requested、resolved。
-- runtime：error。
+### 模型与运行配置
 
-事件要求：
+| 文件 | 内容 |
+| --- | --- |
+| `config.ts` | Runtime config state/input、provider/task model、feature flags、Hooks |
+| `model-provider.ts` | Provider kind/config 的叶子类型 |
+| `model-request.ts` | Thinking、输出限制、模型能力与请求选项 |
+| `provider.ts` | `ModelClient` 方向的 request、tool、stream event contract |
+| `permissions.ts` | Approval/permission/sandbox profile |
+| `environment.ts` | Cwd、workspace roots、repository relationship |
+| `runtime-process.ts` | Runtime 子进程和维护准入状态 |
 
-- 每条事件有 `id`、`seq`、`threadId`、可选 `turnId`、`createdAt`、`payload`。
-- `seq` 由 `ThreadStore.appendEvent()` 分配。
-- reducer 必须能从任意 snapshot + event 得到下一状态。
-- renderer 只应用 `seq > lastSeq` 的事件。
+叶子文件可能由兼容门面重导出。调用方优先从 `@setsuna-desktop/contracts` 公共入口 import。
 
-新增事件时必须更新：
+### Runtime HTTP 与桌面桥
 
-- `events.ts` union。
-- `thread-events.ts` reducer。
-- `SqliteThreadStore` 行为或调用点。
-- SSE/REST 发布点。
-- renderer event apply helper。
-- 测试。
+| 文件 | 内容 |
+| --- | --- |
+| `http.ts` | `RuntimeRequestInput`、`DesktopRuntimeClient` |
+| `desktop.ts` | `SetsunaDesktopBridge` 与 main/preload 能力 |
+| `browser-control.ts` | Runtime ↔ main 浏览器控制协议 |
+| `data-root.ts` | 数据根扫描、迁移、恢复与 cleanup |
+| `updater.ts` | Updater state、source 和 asset |
+| `ui-actions.ts` | Runtime 可投影给桌面的受限 UI action |
 
-`RuntimeDebugTraceEvent` 不属于上述事件模型。它没有 reducer，不进入 `ThreadStore`，也不通过聊天 SSE 发布；独立的 `D#` sequence 只用于调试窗口增量读取。每条 trace 还携带 `afterEventSeq`，表示它发生在最近哪个正式 `E#` 事件之后；跨流展示必须按这个锚点排序，不能直接比较两个独立命名空间的 `seq`。需要观察内部选择但不应改变持久化聊天协议时，优先增加受控 debug trace kind，而不是增加 `RuntimeEvent`。
+详见 [传输与数据边界](transport-and-data.md)。
 
-## Thread Snapshot
+### 能力与数据域
 
-`RuntimeThread` 是 `RuntimeThreadSummary + messages + lastSeq + contextCompaction`，并可携带尚未进入 transcript 的 `queuedTurnInputs`。
+| 文件 | 内容 |
+| --- | --- |
+| `approvals.ts` | Approval、MCP elicitation、结构化用户输入 |
+| `attachments.ts` | 上传、持久化附件与引用 |
+| `artifacts.ts` | Runtime artifact |
+| `background-shell-processes.ts` | 后台 shell process 状态 |
+| `hooks.ts` | Hook event、matcher、input 和 result |
+| `mcp.ts` | Server、transport、tool、resource、OAuth、审批 |
+| `memory.ts` | Memory record、query、preview |
+| `plugins.ts` / `plugin-reference.ts` | Bundle、marketplace、归因与配置 |
+| `skills.ts` | Skill summary/detail/input/dependency |
+| `usage.ts` | Usage record、summary、bucket |
+| `workspace.ts` | Project、entry、read、search、status |
+| `workspace-dependencies.ts` | Bundled workspace dependency 状态与动作 |
+| `debug-traces.ts` | 非持久化开发者 trace |
 
-消息关键字段：
+### SWE / app-server
 
-- `role`：system/user/assistant/tool。
-- `visibility`：默认模型可见；`transcript` 只给 UI 历史展示。
-- `status`：streaming/complete/error。
-- `turnId`：把用户消息、assistant 段、toolRun、review marker 关联成一轮。
-- `toolCalls`：模型请求执行工具。
-- `toolRuns`：UI 展示工具执行状态。
-- `contextCompaction` / `reviewMode`：transcript 特殊展示。
+`swe-events.ts` 是公共门面，`swe/` 内按 mapper、turn、stream、items、capabilities 拆分实现。详见 [SWE / app-server](swe-app-server.md)。
 
-设计注意：
+## 公共入口
 
-- assistant 一轮可以有多段 assistant message。
-- tool result 是模型上下文的一部分，toolRun 是 UI 投影的一部分。
-- 删除和重生成要按 message id 操作，而不是按 UI display item id。
-- context compaction 后，旧消息保留给用户看，但 visibility 降为 transcript。
-- 普通/Plan 队列项由 `message.created.payload.queuedInputId` 在写入真实用户消息时原子消费；Goal 项由 `thread.goal_updated.payload` 中的 `queuedInputId + sourceMessage + goal` 原子完成队列消费、可见消息写入和目标建立，不能拆成多次持久化。
-- Goal 的附件、Skill、thinking 和可见源消息 ID 保存在 `RuntimeThreadGoal.execution`；后续计量事件以 `preserveExecution` 复用首个目标事件中的执行选项，避免重复持久化内联图片。用户消息通过 `RuntimeMessage.inputKind` 区分普通、Plan 与 Goal 展示语义。
+`src/index.ts` 只重导出公共 contract。内部 leaf module 的类型是否公开，应由对应领域门面决定。
 
-## Protocol-aware Model History
+规则：
 
-线程状态仍以 append-only `RuntimeEvent` 为持久化真源；投影得到的 `RuntimeMessage[]` 是模型请求使用的跨协议 semantic history。`item.started` / `item.delta` / `item.completed` 只描述流式 UI 与 turn item，不参与重建模型历史，也不构成第二套可变真源。
+- 上层从 package public entry import。
+- Contracts 内部保持相对 import graph 无环。
+- 不在 public index 添加 runtime/main/renderer 实现。
+- 不用 class instance、Date、Map、Error 等不可直接序列化对象跨 JSON 边界。
+- 新字段优先 additive，并明确旧 snapshot 的 default/normalization。
 
-`RuntimeMessage.providerMetadata` 是 semantic message 上的可选增强：
+`scripts/check-architecture.mjs` 会检查 contracts import cycle。
 
-- 新 metadata 写入 `schemaVersion: 2` 和 `source`。`source` 包含 provider ID、provider kind、model，以及规范化 base URL 的 SHA-256 fingerprint；不会保存 endpoint 明文副本。
-- 只有 provider ID、协议、模型和 endpoint fingerprint 全部匹配时，adapter 才会原生回放 envelope。任一不匹配都静默回退到当前 `RuntimeMessage` 的文本、tool calls 和 tool results。
-- OpenAI-compatible Chat 是 `semantic_only`：不保存或回放未知厂商字段、`reasoning_content` 或任意原始响应 payload。
-- Anthropic envelope 保存签名 thinking/content blocks。没有 V2 source 的 legacy Anthropic blocks 仍只在 Anthropic adapter 中按旧规则回放。
-- OpenAI Responses envelope 只保存白名单内且嵌套结构也通过校验的 message、reasoning、function call、function call output（仅 native compaction replacement list）、compaction item，以及 response ID；合法 assistant message `phase` 会随 response/compact item 保留，非法值使整条 envelope 降级；encrypted reasoning 不进入普通 assistant 文本。任一原生 item 无法完整保存时，整条 envelope 省略。
-- V2 metadata 的 semantic fingerprint 绑定最终 portable message；后续 runtime 追加文本、修改 tool name/arguments 或 compact summary 变化时，同 provider 也会降级为 semantic replay。
-- Responses compaction 是双产物：`/responses/compact` 返回的完整 replacement items 只服务同协议续接，portable summary 由独立摘要请求生成并始终作为跨协议 fallback。
-- 单条消息 metadata 的 JSON 上限是 2 MiB。超限时整个原生 envelope 被省略，semantic message 正常完成，并记录 `provider_metadata_omitted_too_large` verification warning。
+## Contract 设计
 
-读取使用 lazy compatibility：不会为旧消息猜测原生状态，也不会后台重写事件。无 metadata 的旧 Chat/Responses 消息走 semantic replay；旧 compaction 继续使用 portable summary。Chat 厂商跨轮复用的 tool-call ID 只在 model-facing 副本上按事务改写为稳定 wire ID；旧压缩边界留下的 orphan result 不再发送给模型，并产生 verification warning。新字段只追加在现有 JSON payload 中，不新增 event type 或 SQLite 字段，`PRAGMA user_version` 保持 `1`，因此旧版本忽略 metadata 后仍可显示并继续基础 transcript。
+### Discriminated unions
 
-snapshot normalization 只做 JSON-safe 深拷贝、已知 envelope 形状校验和非法 envelope 降级。合法未知 additive 字段保留，用于前向兼容。
+Event、stream item、approval input 等使用稳定 discriminator。新增 variant 后，消费者应能通过 exhaustive switch 暴露遗漏。
 
-## HTTP Client Contract
+### JSON-safe
 
-`RuntimeRequestInput` 只有：
+跨 IPC/HTTP/store 的对象必须是 JSON-safe：
 
-- `path`
-- `method`
-- `body`
+- 时间使用 ISO string。
+- Binary 使用受限 data URL、base64 contract 或 asset ID。
+- `undefined` 不作为持久化语义。
+- 未知外部 payload 先收窄/清洗。
 
-renderer 的 `DesktopRuntimeClient` 是方法级 contract。它不应该暴露任意 URL、headers 或 token。
+### Input 与 State 分开
 
-常见 path：
+例如 provider/MCP/Skill：
 
-- `/v1/config`
-- `/v1/config/models`
-- `/v1/threads`
-- `/v1/threads/:id`
-- `/v1/threads/:id/turns`
-- `/v1/threads/:id/queued-turn-inputs`
-- `/v1/threads/:id/events`
-- `/v1/threads/:id/debug-traces`（仅全局开发者功能开启时）
-- `/v1/skills`
-- `/v1/projects`
-- `/v1/projects/:id/files`
-- `/v1/projects/:id/read`
-- `/v1/mcp/servers`
-- `/v1/memories`
-- `/v1/usage`
-- `/v1/approvals`
-- `/v1/plugins`
-- `/v1/plugin-marketplace`
-- `/v1/plugin-marketplace/:id/install`
+- Input 可以包含本次要写入的 secret。
+- State 只返回脱敏状态。
+- Patch 要区分“不修改”和“清空”。
 
-## 本地数据布局
+### Snapshot 与 Event 分开
 
-所选 Setsuna 数据根就是 Electron `userData` 与 `sessionData`。Electron main 自身的窗口状态、凭据和更新源配置位于根目录，runtime 位于其 `runtime/` 子目录。
+Event 表达状态变化，snapshot 表达 reducer 结果。不要把整个可变 thread snapshot 每次作为 event payload 写入。
 
-```text
-<dataRoot>/
-├── .setsuna-data-root.json  # 自定义根所有权 marker
-├── window-state.json
-├── secure-credentials.json
-├── update-download-sources.json
-├── Chromium/Electron 持久化状态
-└── runtime/
-    ├── config.json
-    ├── secrets.json
-    ├── projects.json
-    ├── mcp.json
-    ├── skills.json
-    ├── user-skills/
-    ├── pc-local-policies/
-    │   ├── legacy-exec-policy.json
-    │   └── legacy-shell-policy.json
-    ├── memories/
-    │   ├── .setsuna-memory-root.json
-    │   ├── memories.json
-    │   ├── MEMORY.md
-    │   ├── memory_summary.md
-    │   └── rollout_summaries/
-    ├── usage.jsonl
-    ├── threads.sqlite
-    └── threads/              # 仅旧格式迁移源/备份
-        ├── index.json
-        ├── <threadId>.json
-        └── <threadId>.jsonl
-```
+## 变更顺序
 
-系统 `appData` 中另有 `Setsuna Desktop Bootstrap/`，保存位置指针、迁移 pending、稳定实例锁和旧数据根清理登记表，只负责在 Electron profile 初始化前定位数据根、串行化启动/维护进程并安全完成用户确认的旧数据删除。登记表只含路径、目录身份和事务状态，不复制业务数据。
+1. 修改领域 contract。
+2. 更新纯 reducer/mapper。
+3. 更新 runtime 或 main 实现。
+4. 更新 preload/client。
+5. 更新 renderer。
+6. 先跑 contracts tests，再跑上下游定向 tests。
 
-memory 的 active root 固定为 `<dataRoot>/runtime/memories/`。旧配置的 `storagePath` 只作为启动前维护导入源：扫描与空间预检完成后，按 ID/去重键合并到带事务 receipt 的 staging，再由 pending 阶段保护备份/正式目录 rename；成功后从 schema v3 配置中删除，旧目录不删除。PC Local Tools 的旧用户级 exec/shell 文件同批复制到 `<dataRoot>/runtime/pc-local-policies/`，之后 runtime 不再读取旧 home 路径。Phase 2 使用内部 snapshot baseline 生成增量 diff，不初始化、读取或删除用户目录中的 Git 仓库。
+常见完整路径见 [变更扩散图](../../architecture/change-map.md)。
 
-## 数据安全
+## 测试
 
-- API key 不在 `RuntimeConfigState.providers` 中明文返回，只暴露 `apiKeySet` 和 `apiKeyPreview`。
-- 自定义 provider/model 图标仅接受 PNG/JPEG/WebP data URL，并在 contract 与 runtime store 两侧限制为 512 KB；不接受可执行 SVG 内容。
-- `secrets.json` 写入后尝试 `chmod 0600`。
-- workspace 文件访问都要防止路径逃逸。
-- MCP list 只暴露 env/header key，不返回值。
-- 结构化用户输入的待处理 schema 可以进入事件；答案不写入 approval request/resolved 事件，只随正常 tool result 进入本地线程上下文。
-- renderer 不能拿到 runtime token。
-- provider metadata 不保存完整 HTTP response、headers、API key、request metadata 或未经过白名单过滤的 provider payload。
-- debug traces 只在内存中有界保存，renderer 也必须按 `droppedBeforeSeq` 清理本地缓存。详情渲染前会归一化凭据键名，并递归隐藏对象或 JSON 字符串中的 secret/token、data URL 和超大字段；它们不写入线程数据库。
+`packages/contracts/test/`：
 
-## 变更扩散范例
+- `thread-events.test.ts`：线程投影真源。
+- `message-metadata.test.ts`：metadata normalize/replay shape。
+- `config.test.ts`：配置 contract。
+- `thread-title.test.ts`：标题规则。
+- `swe-events/`：按 thread、turn、stream、approval、shell/collaboration 拆分的 mapper 测试。
+- `support/`：SWE fixture 与共享断言。
 
-新增一个 runtime preference：
-
-1. `config.ts` 加字段。
-2. `FileConfigStore` normalize、default、toState、save。
-3. `features/settings/sections/` 或 `features/settings/providers/` 增加 UI。
-4. `useRuntimeClientState.saveRuntimePreferences()` 类型允许该字段。
-5. 如果影响 AgentLoop，在 `loop/core/agent-loop.ts` 或对应 coordinator 读取 runtimeConfig。
-6. 加 store 或 UI 测试。
-
-新增一个 toolRun 展示字段：
-
-1. `threads.ts` 更新 `RuntimeToolRun`。
-2. 工具执行处写入 event payload 或 toolRun data。
-3. `thread-events.ts` 投影字段。
-4. `features/chat/tool-runs/` 展示。
-5. 添加 projection 和 renderer 测试。
-
-新增一个 provider：
-
-1. `provider.ts` 扩展 `ModelProviderKind`。
-2. 新增 model client adapter。
-3. `ConfiguredModelClient` 选择 adapter。
-4. `model-discovery.ts` 支持模型列表。
-5. `features/settings/providers/` 加 provider 表单逻辑。
-6. provider adapter tests。
-
-## 测试真源
-
-contracts 层测试特别重要，并统一位于 `packages/contracts/test/`：
-
-- `thread-events.test.ts`：线程投影是否稳定。
-- `swe-events/`：按 notification、turn、stream、capability 等职责拆分的 app-server 映射兼容测试。
-- `support/`：SWE fixture 与共用断言。
-
-只要 runtime event 或 thread message 结构变化，都应优先补这里的测试，再补上层测试。
+跨边界数据结构变化时，不应只依靠 TypeScript；还要有旧数据、非法 payload 和 reducer round-trip 测试。

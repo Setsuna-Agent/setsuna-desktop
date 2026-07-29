@@ -1,5 +1,7 @@
 # Plugin Bundles 与默认市场
 
+模块导航见 [Plugins README](README.md)。本篇定义 Bundle schema、安装事务和安全边界；实现入口位于 `packages/desktop-runtime/src/adapters/plugin/`。
+
 Setsuna Plugin Bundle 用一个包同时分发 Skills、MCP 配置、Hooks 和只读资源。目录结构是插件作者和 runtime 的内部格式；普通用户只在“能力 → 插件”市场选择插件并点击安装，不选择目录，也不会看到 `.setsuna-plugin/plugin.json`。Bundle 目前只支持 `schemaVersion: 1`。
 
 ## 目录示例
@@ -122,3 +124,26 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 Hooks 页只展示真实已配置的 Hook，新环境默认为空；原先的 8 个推荐模板已分别迁移为独立插件，用户可以从市场按需安装，也可以继续手动创建 Hook。
 
 当前默认市场是随应用发布的精选目录，已包含图片生成、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务，并兼容 `b64_json` 与 URL 图片响应；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。市场暂不包含远程源、自动更新、签名验证或自动执行安装脚本；这些能力加入前仍保持“可信应用目录 + 完整本地校验”的边界。
+
+## 实现入口
+
+| 层 | 入口 |
+| --- | --- |
+| Contract | `packages/contracts/src/plugins.ts`、`plugin-reference.ts` |
+| Bundle model | `packages/desktop-runtime/src/adapters/plugin/file-plugin-bundle-model.ts` |
+| 安装/卸载 | `file-plugin-bundle-store.ts` |
+| 默认市场 | `file-plugin-marketplace.ts` |
+| Agent 工具 | `adapters/tool/plugin-bundle-tool-host.ts` |
+| Skill 投影 | `adapters/skill/file-skill-registry.ts` |
+| Runtime REST | `server/runtime-rest-routes.ts` |
+| Renderer | `apps/desktop/renderer/src/features/capabilities/CapabilitiesPlugin*.tsx` |
+
+## 验证
+
+- `packages/desktop-runtime/test/adapters/plugin/file-plugin-bundle-store.test.ts`
+- `file-plugin-marketplace.test.ts`
+- `bundled-hook-plugins.test.ts`
+- `test/adapters/tool/plugin-bundle-tool-host.test.ts`
+- `apps/desktop/renderer/test/unit/features/capabilities/CapabilitiesPluginComponents.test.tsx`
+
+修改 manifest schema 时还要同步 contracts、市场摘要、renderer detail、打包文件列表和数据根迁移校验。

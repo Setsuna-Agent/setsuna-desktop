@@ -1,0 +1,192 @@
+# Chat
+
+源码目录：`apps/desktop/renderer/src/features/chat/`
+
+Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer、附件、队列动作、工具运行、Markdown 和产物展示。Runtime message/event 仍是持久化真源。
+
+## 子目录
+
+| 目录 | 职责 |
+| --- | --- |
+| feature 根 | `ChatWorkspace`、`ChatComposer`、`SideChatPanel` 页面编排 |
+| `hooks/` | Composer session、发送/取消/编辑/队列动作、侧栏 chat |
+| `composer/` | Draft、附件、模型、命令菜单、发送选项、队列 UI |
+| `conversation/` | Message display、assistant timeline、overview、scroll、usage |
+| `tool-runs/` | 工具状态、审批、结构化输入、文件变更 |
+| `markdown/` | 流式 Markdown、代码块、虚拟块、workspace link |
+| `mentions/` | Workspace mention 解析与打开 |
+| `artifacts/` | Runtime artifact 与 Plugin 使用记录 |
+| `styles/` | Chat 分域样式入口与实现 |
+
+## 根组件
+
+### `ChatWorkspace.tsx`
+
+组合：
+
+- Thread transcript。
+- Overview / Git controls / background services。
+- Scroll pin 与 timeline divider。
+- Tool runs 和 artifacts。
+- Composer。
+
+它不直接实现 message folding、Markdown parser 或 queue state machine；这些分别在纯 helper、子组件和 hooks。
+
+### `ChatComposer.tsx`
+
+组合：
+
+- 文本输入。
+- 附件 tray。
+- Model / Skill / thinking / Plan / Goal 等发送选项。
+- Slash command 与命令菜单。
+- Active turn 的 stop/queue 语义。
+- `ChatSendQueue`。
+- 取回编辑 footer。
+
+Composer state 由 `useChatComposerSession` 和专用 hooks 管理，避免页面切换时草稿与异步请求互相覆盖。
+
+## Turn actions
+
+### `useChatTurnActions.ts`
+
+负责：
+
+- 创建 thread 后首发。
+- 普通 send。
+- Stop / cancel。
+- Message update/delete。
+- Regenerate。
+- Context clear/compact。
+- Review turn。
+- Plan / Goal mode。
+
+### `useQueuedTurnInputActions.ts`
+
+负责持久化队列的 retrieve、release、update、delete、send-now，并与 composer identity guard 协作。
+
+Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Plan/Goal 保持独立调度。完整状态机见 [Active turn 发送队列](../../../designs/queued-turn-inputs.md)。
+
+## Composer state
+
+`composer/` 把易变逻辑拆成独立单元：
+
+- `chatComposerDraftSync.ts`：thread/project 身份与 draft 同步。
+- `chatComposerSendOptions.ts`：模型、thinking、Skill、mode 归一化。
+- `chatAttachments.ts` / `chatImageAttachments.ts`：附件选择、上传、清理。
+- `chatCommandUtils.ts`：slash/command 解析。
+- `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。
+- `chatComposerSlots.tsx`：输入区域可组合 slots。
+- `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
+
+取回队列项不会先删除持久化数据。Runtime 返回 edit token，renderer 暂时把内容接管到 composer；提交、取消、卸载和失败路径都要 release 或携 token 更新。
+
+## Message display 与 timeline
+
+Runtime 一轮可能包含：
+
+- 多个 assistant message segment。
+- Reasoning / commentary / final_answer phase。
+- 多次 tool call 和 tool result。
+- Steer user message。
+- Context compaction / review marker。
+- Artifact / Plugin use。
+
+因此 UI 不能假设“一轮等于一条 assistant message”。
+
+关键纯投影：
+
+- `chatMessageDisplay.ts`：消息是否显示及 display item。
+- `chatAssistantTimeline.ts`：assistant/tool 的时间线。
+- `chatAssistantGuidanceTimeline.ts` / `chatGuidanceTimeline.ts`：同 turn steer 引导展示。
+- `chatThinkingContent.ts`：reasoning 内容。
+- `chatContextUsage.ts` / `chatThreadUsage.ts`：上下文和 usage。
+- `chatConversationOverview.ts`：overview 数据。
+- `chatWorkHistoryState.ts`：工作历史状态。
+- `chatWorkspaceOperationScope.ts`：workspace 操作归属。
+
+删除、复制、regenerate 必须回到持久化 message ID，不能把临时 display item ID 传给 runtime。
+
+## Streaming 与滚动
+
+`StreamingScrollPinProvider` / `useStreamingScrollPin` 管理：
+
+- 用户位于底部时跟随 streaming。
+- 用户主动上滚后停止抢夺位置。
+- 新消息、delta、工具卡高度变化后的锚点。
+- Thread 切换后的重置。
+
+`ChatWorkspaceScroll` 负责滚动容器，而不是让每个消息组件自己滚动。
+
+SSE 丢帧或组件重挂载时依赖 thread snapshot 恢复；局部 streaming state 不能成为唯一数据源。
+
+## Tool runs
+
+`tool-runs/` 根据 `RuntimeToolRun` 投影：
+
+- running/completed/error。
+- Output delta。
+- Generic approval。
+- MCP elicitation。
+- `request_user_input` 结构化表单。
+- File mutation preview 和统计。
+- Background process / result summary。
+
+`runtimeToolRunState.ts` 负责状态收敛，`runtimeFileChanges.ts` 负责文件变更纯转换，展示组件不解析任意工具原始 payload。
+
+结构化用户输入的 schema 可以持久化，用户答案不写 approval event；答案只在 normal tool result 中回到模型上下文。UI 和 runtime 都要验证字段。
+
+## Markdown
+
+`markdown/` 需要同时处理：
+
+- 流式不完整 Markdown。
+- GFM 与 math。
+- 代码高亮。
+- Workspace 文件链接。
+- 大内容虚拟块。
+- 外链与本地链接的不同打开策略。
+
+`MarkdownNavigationProvider` 统一导航，`WorkspaceFileLink` 走 workspace 能力，不能让 Markdown 任意调用 `window.open` 或本地 shell。
+
+## Mentions 与附件
+
+- Workspace mention 使用明确 parser，不从渲染后的 Markdown 反推。
+- 文件打开仍走 main/workspace API。
+- 图片附件先上传为 runtime 管理 asset，再在 message input 中引用。
+- Thread/project 切换时迟到 upload 不得附加到新 composer。
+- 仅附件输入也是合法输入。
+
+## Artifacts 与 Plugin usage
+
+`artifacts/` 从 runtime message/tool data 投影：
+
+- 生成文件或图片 artifact。
+- Plugin Skill、MCP、Hook、resource 的使用归因。
+
+进行中与已完成状态使用 runtime 记录，不根据工具名称在 UI 猜测来源。
+
+## 不变量
+
+- Runtime event/snapshot 是 transcript 真源。
+- Assistant 一轮可以有多个 segment 和 tool run。
+- Active turn 的普通提交默认 queue，不默认 steer。
+- Queue edit 必须持有有效 token。
+- Streaming UI 可丢弃并从 snapshot 恢复。
+- 外部 Markdown/page/tool 内容不能升级为可信 UI 命令。
+- 异步动作必须绑定 thread/composer identity。
+
+## 测试
+
+镜像位于 `test/unit/features/chat/`：
+
+- `composer/`：draft、attachment、model、queue、menu、options。
+- `conversation/`：display、timeline、guidance、thinking、usage、scroll。
+- `tool-runs/`：审批、结构化输入、文件变更。
+- `markdown/`：streaming、link、render。
+- `mentions/`：parse/open。
+- `artifacts/`：artifact 与 Plugin use。
+- `hooks/`：turn actions 与 composer session。
+
+修改 message/turn 语义时，还要运行 contracts projection 和 runtime AgentLoop integration 测试。
+

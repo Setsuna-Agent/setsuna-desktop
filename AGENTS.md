@@ -31,11 +31,12 @@
 
 ## 文档入口
 
-- `docs/architecture-overview.md`：总体架构、启动链路、请求/SSE、事件模型和安全边界。
-- `docs/desktop-app.md`：Electron main/preload/renderer、页面、聊天、工作区、设置和能力页。
-- `docs/local-runtime.md`：runtime server、agent loop、ports/adapters、模型、工具、MCP、Skill、memory。
-- `docs/contracts-and-data.md`：共享契约、线程事件、HTTP client、本地数据布局和变更扩散点。
-- `docs/build-release.md`：构建脚本、CI、release workflow、打包产物和验证命令。
+- `docs/README.md`：按源码模块、学习目标和改动类型组织的总导航。
+- `docs/architecture/`：总体边界、启动/请求/SSE/turn 链路、数据安全和变更扩散图。
+- `docs/apps/desktop/`：Electron main、preload、renderer 及各 feature。
+- `docs/packages/contracts/`：共享契约、线程事件、HTTP/bridge 和 SWE 映射。
+- `docs/packages/desktop-runtime/`：server、agent loop、上下文、ports/adapters、存储、模型和工具。
+- `docs/{plugins,skills,scripts,development,designs}/`：扩展包、内置 Skill、仓库脚本、构建发布和跨模块设计。
 - `Tree.md`：由 `pnpm docs:tree` 生成的目录索引，适合定位入口；职责说明仍以 `docs/` 为准。
 
 ## 常见改动入口

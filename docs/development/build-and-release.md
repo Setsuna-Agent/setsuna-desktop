@@ -2,6 +2,8 @@
 
 本仓库是 pnpm workspace，根 package 直接构建 Electron app、renderer 和 runtime。CI 和 release 都以 GitHub Actions 为真源。
 
+开发命令总览见 [Development](README.md)，逐个脚本职责见 [Repository Scripts](../scripts/README.md)。
+
 ## 环境
 
 - Node.js `>=22.13.0`（内置 `node:sqlite` 从该版本起无需 `--experimental-sqlite`）
@@ -107,6 +109,7 @@ dev 启动流程：
   - `package.json`
   - workspace package metadata
   - `skills/**/*`
+  - `plugins/**/*`
 - `asarUnpack`：
   - `**/node_modules/node-pty/prebuilds/**/*`
 - `extraResources`：
@@ -203,6 +206,7 @@ publish job：
 文档-only：
 
 ```bash
+pnpm docs:tree
 git diff --check
 ```
 
