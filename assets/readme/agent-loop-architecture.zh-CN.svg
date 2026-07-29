@@ -1,0 +1,410 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" lang="zh-CN" aria-labelledby="title description">
+  <title id="title">Setsuna Agent Loop 内部架构</title>
+  <desc id="description">每个线程先对 turn 做准入，写入初始事件，在每次采样前重新构建上下文，流式处理模型响应，按需执行经过审批的工具，再把工具结果放回下一次采样，并通过持久化事件脊柱完成轮次。Queue、steer、Hook、协作、取消、usage、标题和 memory 都围绕该循环协调。</desc>
+
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FCFDFF"/>
+      <stop offset="0.56" stop-color="#F7FAFF"/>
+      <stop offset="1" stop-color="#F2F7FF"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.97"/>
+      <stop offset="1" stop-color="#F8FBFF" stop-opacity="0.91"/>
+    </linearGradient>
+    <linearGradient id="blueCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EEF5FF"/>
+    </linearGradient>
+    <linearGradient id="purpleCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F3F0FF"/>
+    </linearGradient>
+    <linearGradient id="greenCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EFFAF5"/>
+    </linearGradient>
+    <linearGradient id="cyanCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EDF9FC"/>
+    </linearGradient>
+    <linearGradient id="amberCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFF7EC"/>
+    </linearGradient>
+    <linearGradient id="eventRail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F1FBF6"/>
+      <stop offset="0.5" stop-color="#EAF8F1"/>
+      <stop offset="1" stop-color="#F1FBF6"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#AABBD3" stroke-width="1" opacity="0.17"/>
+    </pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#27446D" flood-opacity="0.12"/>
+    </filter>
+    <filter id="smallShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#36577F" flood-opacity="0.12"/>
+    </filter>
+    <marker id="blueArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2778E8"/>
+    </marker>
+    <marker id="orangeArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#F29A2E"/>
+    </marker>
+    <marker id="greenArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#18A469"/>
+    </marker>
+    <style>
+      text {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        fill: #10203B;
+      }
+      .title { font-size: 42px; font-weight: 800; letter-spacing: -1px; }
+      .subtitle { font-size: 18px; font-weight: 450; fill: #60708A; }
+      .legend { font-size: 12px; font-weight: 600; fill: #50627D; }
+      .step-title { font-size: 17px; font-weight: 750; letter-spacing: -0.2px; }
+      .step-subtitle { font-size: 11px; font-weight: 600; fill: #718098; }
+      .object-title { font-size: 13px; font-weight: 750; }
+      .object-copy { font-size: 11px; font-weight: 550; fill: #596B85; }
+      .micro { font-size: 10px; font-weight: 650; fill: #61718A; letter-spacing: 0.15px; }
+      .flow-label { font-size: 10px; font-weight: 700; fill: #2778E8; letter-spacing: 0.15px; }
+      .orange-label { font-size: 10px; font-weight: 700; fill: #C87013; letter-spacing: 0.15px; }
+      .green-label { font-size: 10px; font-weight: 700; fill: #168A5B; letter-spacing: 0.15px; }
+      .section-kicker { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; }
+      .section-title { font-size: 18px; font-weight: 800; letter-spacing: -0.25px; }
+      .section-copy { font-size: 11px; font-weight: 550; fill: #64758E; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#background)"/>
+  <rect width="1920" height="1080" fill="url(#grid)"/>
+
+  <text class="title" x="52" y="67">Setsuna Agent Loop 内部架构</text>
+  <text class="subtitle" x="54" y="105">一个可恢复、事件驱动的循环：构建上下文、模型采样、执行工具并完成轮次。</text>
+
+  <g transform="translate(1398 27)" filter="url(#smallShadow)">
+    <rect width="470" height="101" rx="15" fill="#FFFFFF" fill-opacity="0.93" stroke="#DCE6F2"/>
+    <path d="M 20 27 H 66" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+    <text class="legend" x="79" y="31">Turn 与采样链路</text>
+    <path d="M 20 51 H 66" fill="none" stroke="#F29A2E" stroke-width="3" marker-end="url(#orangeArrow)"/>
+    <text class="legend" x="79" y="55">工具结果与续轮反馈</text>
+    <path d="M 20 76 H 66" fill="none" stroke="#18A469" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#greenArrow)"/>
+    <text class="legend" x="79" y="80">持久化 RuntimeEvent</text>
+  </g>
+
+  <rect x="42" y="148" width="1836" height="580" rx="26" fill="url(#panel)" stroke="#DDE6F2" stroke-width="1.5" filter="url(#shadow)"/>
+
+  <!-- AgentLoop facade -->
+  <g filter="url(#smallShadow)">
+    <rect x="72" y="168" width="1776" height="43" rx="16" fill="#F4F7FD" stroke="#D6E1F0"/>
+    <rect x="91" y="177" width="163" height="25" rx="12.5" fill="#FFFFFF" stroke="#C7D7EB"/>
+    <circle cx="111" cy="189.5" r="5" fill="#2778E8"/>
+    <text class="micro" x="125" y="193">AGENTLOOP 门面</text>
+    <text class="object-copy" x="277" y="194">start / send</text>
+    <circle cx="370" cy="189.5" r="2.5" fill="#A8B5C9"/>
+    <text class="object-copy" x="384" y="194">queue / steer / mailbox</text>
+    <circle cx="544" cy="189.5" r="2.5" fill="#A8B5C9"/>
+    <text class="object-copy" x="558" y="194">cancel</text>
+    <circle cx="615" cy="189.5" r="2.5" fill="#A8B5C9"/>
+    <text class="object-copy" x="629" y="194">review</text>
+    <circle cx="690" cy="189.5" r="2.5" fill="#A8B5C9"/>
+    <text class="object-copy" x="704" y="194">Plan / Goal</text>
+    <circle cx="793" cy="189.5" r="2.5" fill="#A8B5C9"/>
+    <text class="object-copy" x="807" y="194">collaboration</text>
+    <circle cx="906" cy="189.5" r="2.5" fill="#A8B5C9"/>
+    <text class="object-copy" x="920" y="194">compact</text>
+    <circle cx="983" cy="189.5" r="2.5" fill="#A8B5C9"/>
+    <text class="object-copy" x="997" y="194">user shell</text>
+    <rect x="1466" y="177" width="356" height="25" rx="12.5" fill="#E9F3FF" stroke="#C7DDF6"/>
+    <text class="micro" x="1644" y="193" text-anchor="middle">每个线程仅一个 ACTIVE TASK</text>
+  </g>
+
+  <!-- Step 1 -->
+  <g>
+    <circle cx="82" cy="242" r="15" fill="#2778E8"/>
+    <text x="82" y="247" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">1</text>
+    <text class="step-title" x="108" y="238">准入与调度</text>
+    <text class="step-subtitle" x="108" y="257">RuntimeTurnRunFactory + task registry</text>
+    <rect x="80" y="282" width="260" height="274" rx="16" fill="#DDEBFF" opacity="0.58"/>
+    <rect x="72" y="274" width="260" height="274" rx="16" fill="url(#blueCard)" stroke="#72A5F3" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="94" y="295" width="40" height="40" rx="12" fill="#E6F1FF" stroke="#A9C8F2"/>
+    <path d="M 103 305 H 125 V 325 H 103 Z M 108 310 H 120 M 108 315 H 120 M 108 320 H 116" fill="none" stroke="#2778E8" stroke-width="1.7"/>
+    <text class="object-title" x="146" y="311">校验并准入</text>
+    <text class="object-copy" x="146" y="328">线程 · 输入 · 模型 · 附件</text>
+    <rect x="94" y="353" width="216" height="39" rx="9" fill="#FFFFFF" stroke="#C5D9F2"/>
+    <circle cx="111" cy="372.5" r="5" fill="#2778E8"/>
+    <text class="micro" x="125" y="370">无 ACTIVE TASK</text>
+    <text class="object-copy" x="125" y="384">创建并登记 run</text>
+    <rect x="94" y="402" width="216" height="39" rx="9" fill="#FFFFFF" stroke="#C5D9F2"/>
+    <circle cx="111" cy="421.5" r="5" fill="#735BC1"/>
+    <text class="micro" x="125" y="419">ACTIVE TASK</text>
+    <text class="object-copy" x="125" y="433">FIFO queue 或 steer</text>
+    <rect x="94" y="459" width="61" height="22" rx="11" fill="#EAF3FF"/>
+    <rect x="162" y="459" width="61" height="22" rx="11" fill="#EAF3FF"/>
+    <rect x="230" y="459" width="61" height="22" rx="11" fill="#EAF3FF"/>
+    <rect x="128" y="488" width="61" height="22" rx="11" fill="#EAF3FF"/>
+    <rect x="196" y="488" width="61" height="22" rx="11" fill="#EAF3FF"/>
+    <text class="micro" x="124.5" y="474" text-anchor="middle">普通</text>
+    <text class="micro" x="192.5" y="474" text-anchor="middle">审查</text>
+    <text class="micro" x="260.5" y="474" text-anchor="middle">PLAN</text>
+    <text class="micro" x="158.5" y="503" text-anchor="middle">GOAL</text>
+    <text class="micro" x="226.5" y="503" text-anchor="middle">压缩</text>
+    <text class="object-copy" x="202" y="536" text-anchor="middle">shutdown / migration 可关闭准入</text>
+  </g>
+
+  <!-- Step 2 -->
+  <g>
+    <circle cx="380" cy="242" r="15" fill="#2778E8"/>
+    <text x="380" y="247" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">2</text>
+    <text class="step-title" x="406" y="238">启动 Turn</text>
+    <text class="step-subtitle" x="406" y="257">RuntimeAgentTurnRunner</text>
+    <rect x="378" y="282" width="260" height="274" rx="16" fill="#E6DEFF" opacity="0.58"/>
+    <rect x="370" y="274" width="260" height="274" rx="16" fill="url(#purpleCard)" stroke="#9B86DD" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="392" y="295" width="40" height="40" rx="12" fill="#F0ECFB" stroke="#C9BDEB"/>
+    <path d="M 402 305 H 422 V 325 H 402 Z M 406 310 H 418 M 406 315 H 418 M 406 320 H 414" fill="none" stroke="#735BC1" stroke-width="1.7"/>
+    <text class="object-title" x="444" y="311">打开当前 turn</text>
+    <text class="object-copy" x="444" y="328">task kind · turn identity</text>
+    <rect x="392" y="353" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#D1C7ED"/>
+    <circle cx="409" cy="370" r="5" fill="#735BC1"/>
+    <text class="object-copy" x="423" y="374">写入 turn.started</text>
+    <rect x="392" y="396" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#D1C7ED"/>
+    <circle cx="409" cy="413" r="5" fill="#735BC1"/>
+    <text class="object-copy" x="423" y="417">发布 user / review 消息</text>
+    <rect x="392" y="439" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#D1C7ED"/>
+    <circle cx="409" cy="456" r="5" fill="#735BC1"/>
+    <text class="object-copy" x="423" y="460">运行 turn-start Hook</text>
+    <rect x="392" y="482" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#D1C7ED"/>
+    <circle cx="409" cy="499" r="5" fill="#735BC1"/>
+    <text class="object-copy" x="423" y="503">并行生成标题</text>
+    <text class="object-copy" x="500" y="536" text-anchor="middle">Hook 可在采样前结束</text>
+  </g>
+
+  <!-- Step 3 -->
+  <g>
+    <circle cx="678" cy="242" r="15" fill="#2778E8"/>
+    <text x="678" y="247" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">3</text>
+    <text class="step-title" x="704" y="238">构建 Step Context</text>
+    <text class="step-subtitle" x="704" y="257">每次模型采样前重新构建</text>
+    <rect x="676" y="282" width="260" height="274" rx="16" fill="#D9F1E5" opacity="0.62"/>
+    <rect x="668" y="274" width="260" height="274" rx="16" fill="url(#greenCard)" stroke="#5AB98B" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="690" y="295" width="40" height="40" rx="12" fill="#E8F7F0" stroke="#A9D7C1"/>
+    <path d="M 701 306 H 719 M 698 312 H 722 M 703 318 H 717 M 706 324 H 714" stroke="#18A469" stroke-width="1.8" stroke-linecap="round"/>
+    <text class="object-title" x="742" y="311">捕获单步快照</text>
+    <text class="object-copy" x="742" y="328">config · model · environment</text>
+    <rect x="690" y="353" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="707" cy="370" r="5" fill="#18A469"/>
+    <text class="object-copy" x="721" y="374">history + 附件</text>
+    <rect x="690" y="396" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="707" cy="413" r="5" fill="#18A469"/>
+    <text class="object-copy" x="721" y="417">项目 workflow / instructions</text>
+    <rect x="690" y="439" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="707" cy="456" r="5" fill="#18A469"/>
+    <text class="object-copy" x="721" y="460">memory + Skill + MCP + tools</text>
+    <rect x="690" y="482" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="707" cy="499" r="5" fill="#18A469"/>
+    <text class="object-copy" x="721" y="503">compaction + provider replay</text>
+    <text class="object-copy" x="798" y="536" text-anchor="middle">安全点 drain mailbox / steer</text>
+  </g>
+
+  <!-- Step 4 -->
+  <g>
+    <circle cx="976" cy="242" r="15" fill="#2778E8"/>
+    <text x="976" y="247" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">4</text>
+    <text class="step-title" x="1002" y="238">模型采样</text>
+    <text class="step-subtitle" x="1002" y="257">RuntimeModelSampler + ModelClient</text>
+    <rect x="974" y="282" width="260" height="274" rx="16" fill="#D9EEF4" opacity="0.64"/>
+    <rect x="966" y="274" width="260" height="274" rx="16" fill="url(#cyanCard)" stroke="#55AEC2" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="988" y="295" width="40" height="40" rx="12" fill="#E4F5F8" stroke="#A9D3DD"/>
+    <path d="M 997 320 C 1002 305 1007 330 1012 311 C 1017 294 1021 322 1023 307" fill="none" stroke="#248EA7" stroke-width="1.8" stroke-linecap="round"/>
+    <text class="object-title" x="1040" y="311">流式处理一次模型响应</text>
+    <text class="object-copy" x="1040" y="328">history + provider metadata</text>
+    <rect x="988" y="353" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1005" cy="370" r="5" fill="#2B9CB5"/>
+    <text class="object-copy" x="1019" y="374">assistant message / item</text>
+    <rect x="988" y="396" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1005" cy="413" r="5" fill="#2B9CB5"/>
+    <text class="object-copy" x="1019" y="417">reasoning / text delta</text>
+    <rect x="988" y="439" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1005" cy="456" r="5" fill="#2B9CB5"/>
+    <text class="object-copy" x="1019" y="460">tool preview / batch</text>
+    <rect x="988" y="482" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1005" cy="499" r="5" fill="#2B9CB5"/>
+    <text class="object-copy" x="1019" y="503">usage + metadata 校验</text>
+    <text class="object-copy" x="1096" y="536" text-anchor="middle">空响应明确失败</text>
+  </g>
+
+  <!-- Step 5 -->
+  <g>
+    <circle cx="1274" cy="242" r="15" fill="#2778E8"/>
+    <text x="1274" y="247" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">5</text>
+    <text class="step-title" x="1300" y="238">工具执行</text>
+    <text class="step-subtitle" x="1300" y="257">RuntimeToolCallExecutor</text>
+    <rect x="1272" y="282" width="260" height="274" rx="16" fill="#FFE7C7" opacity="0.58"/>
+    <rect x="1264" y="274" width="260" height="274" rx="16" fill="url(#amberCard)" stroke="#EBA858" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="1286" y="295" width="40" height="40" rx="12" fill="#FFF0DA" stroke="#EDC58E"/>
+    <circle cx="1306" cy="315" r="8" fill="none" stroke="#E4922E" stroke-width="1.8"/>
+    <path d="M 1306 302 V 307 M 1306 323 V 328 M 1293 315 H 1298 M 1314 315 H 1319" stroke="#E4922E" stroke-width="1.8"/>
+    <text class="object-title" x="1338" y="311">编排每个 tool call</text>
+    <text class="object-copy" x="1338" y="328">只读批次可并行执行</text>
+    <rect x="1286" y="354" width="76" height="31" rx="8" fill="#FFFFFF" stroke="#EED4B1"/>
+    <rect x="1370" y="354" width="76" height="31" rx="8" fill="#FFFFFF" stroke="#EED4B1"/>
+    <text class="micro" x="1324" y="374" text-anchor="middle">路由</text>
+    <text class="micro" x="1408" y="374" text-anchor="middle">预览</text>
+    <path d="M 1362 369 H 1368" stroke="#E4922E" stroke-width="1.5" marker-end="url(#orangeArrow)"/>
+    <rect x="1286" y="397" width="76" height="31" rx="8" fill="#FFFFFF" stroke="#EED4B1"/>
+    <rect x="1370" y="397" width="76" height="31" rx="8" fill="#FFFFFF" stroke="#EED4B1"/>
+    <text class="micro" x="1324" y="417" text-anchor="middle">策略</text>
+    <text class="micro" x="1408" y="417" text-anchor="middle">审批</text>
+    <path d="M 1362 412 H 1368" stroke="#E4922E" stroke-width="1.5" marker-end="url(#orangeArrow)"/>
+    <rect x="1286" y="440" width="160" height="31" rx="8" fill="#FFFFFF" stroke="#EED4B1"/>
+    <text class="micro" x="1366" y="460" text-anchor="middle">执行 + OUTPUT DELTA</text>
+    <rect x="1286" y="483" width="216" height="34" rx="9" fill="#FFF3E2" stroke="#EED4B1"/>
+    <circle cx="1303" cy="500" r="5" fill="#F29A2E"/>
+    <text class="object-copy" x="1317" y="504">把结果发布为 tool message</text>
+    <text class="object-copy" x="1394" y="536" text-anchor="middle">文件 / shell / browser / MCP / Skill...</text>
+  </g>
+
+  <!-- Step 6 -->
+  <g>
+    <circle cx="1572" cy="242" r="15" fill="#2778E8"/>
+    <text x="1572" y="247" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">6</text>
+    <text class="step-title" x="1598" y="238">完成 Turn</text>
+    <text class="step-subtitle" x="1598" y="257">RuntimeTurnFinalizer</text>
+    <rect x="1570" y="282" width="260" height="274" rx="16" fill="#D9F1E5" opacity="0.62"/>
+    <rect x="1562" y="274" width="260" height="274" rx="16" fill="url(#greenCard)" stroke="#5AB98B" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="1584" y="295" width="40" height="40" rx="12" fill="#E8F7F0" stroke="#A9D7C1"/>
+    <path d="M 1594 315 L 1601 322 L 1615 306" fill="none" stroke="#18A469" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="object-title" x="1636" y="311">提交成功轮次</text>
+    <text class="object-copy" x="1636" y="328">固定副作用顺序</text>
+    <rect x="1584" y="353" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="1601" cy="370" r="5" fill="#18A469"/>
+    <text class="object-copy" x="1615" y="374">记录累计 usage</text>
+    <rect x="1584" y="396" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="1601" cy="413" r="5" fill="#18A469"/>
+    <text class="object-copy" x="1615" y="417">完成 message / title</text>
+    <rect x="1584" y="439" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="1601" cy="456" r="5" fill="#18A469"/>
+    <text class="object-copy" x="1615" y="460">review / 显式 memory</text>
+    <rect x="1584" y="482" width="216" height="34" rx="9" fill="#FFFFFF" stroke="#B8DDCA"/>
+    <circle cx="1601" cy="499" r="5" fill="#18A469"/>
+    <text class="object-copy" x="1615" y="503">写入 turn.completed</text>
+    <text class="object-copy" x="1692" y="536" text-anchor="middle">随后排队被动 memory</text>
+  </g>
+
+  <!-- Main transitions -->
+  <path d="M 332 414 H 367" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M 630 414 H 665" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M 928 414 H 963" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M 1226 414 H 1261" fill="none" stroke="#F29A2E" stroke-width="3" marker-end="url(#orangeArrow)"/>
+  <text class="flow-label" x="349.5" y="402" text-anchor="middle">运行</text>
+  <text class="flow-label" x="647.5" y="402" text-anchor="middle">启动</text>
+  <text class="flow-label" x="945.5" y="402" text-anchor="middle">采样</text>
+  <text class="orange-label" x="1243.5" y="402" text-anchor="middle">TOOL CALL</text>
+
+  <!-- Conditional completion and tool feedback -->
+  <path d="M 1096 548 C 1096 604 1560 604 1692 548" fill="none" stroke="#2778E8" stroke-width="2.7" marker-end="url(#blueArrow)"/>
+  <rect x="1234" y="576" width="320" height="27" rx="13.5" fill="#EFF6FF" stroke="#C7DDF6"/>
+  <text class="flow-label" x="1394" y="594" text-anchor="middle">无 TOOL CALL · 无续轮</text>
+  <path d="M 1394 548 C 1394 654 910 654 798 548" fill="none" stroke="#F29A2E" stroke-width="3" marker-end="url(#orangeArrow)"/>
+  <rect x="968" y="620" width="303" height="27" rx="13.5" fill="#FFF5E8" stroke="#F2D1A6"/>
+  <text class="orange-label" x="1119.5" y="638" text-anchor="middle">TOOL RESULT → CONVERSATION → 下一步</text>
+
+  <!-- Persisted event spine -->
+  <g filter="url(#smallShadow)">
+    <rect x="110" y="674" width="1700" height="38" rx="15" fill="url(#eventRail)" stroke="#B9DFC9"/>
+    <circle cx="132" cy="693" r="5" fill="#18A469"/>
+    <text class="green-label" x="146" y="697">所有可见状态变化</text>
+    <path d="M 382 693 H 454" stroke="#18A469" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#greenArrow)"/>
+    <text class="object-copy" x="473" y="697">RuntimeEventWriter</text>
+    <path d="M 598 693 H 670" stroke="#18A469" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#greenArrow)"/>
+    <text class="object-copy" x="689" y="697">ThreadStore / SQLite</text>
+    <path d="M 829 693 H 901" stroke="#18A469" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#greenArrow)"/>
+    <text class="object-copy" x="920" y="697">EventBus</text>
+    <path d="M 989 693 H 1061" stroke="#18A469" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#greenArrow)"/>
+    <text class="object-copy" x="1080" y="697">SSE + renderer</text>
+    <rect x="1510" y="681" width="276" height="24" rx="12" fill="#FFFFFF" stroke="#C5E6D3"/>
+    <text class="micro" x="1648" y="697" text-anchor="middle">先 APPEND 后 PUBLISH · thread seq</text>
+  </g>
+  <path d="M 202 556 V 672" fill="none" stroke="#18A469" stroke-width="2" stroke-dasharray="6 5"/>
+  <path d="M 500 556 V 672" fill="none" stroke="#18A469" stroke-width="2" stroke-dasharray="6 5"/>
+  <path d="M 798 556 V 672" fill="none" stroke="#18A469" stroke-width="2" stroke-dasharray="6 5"/>
+  <path d="M 1096 556 V 672" fill="none" stroke="#18A469" stroke-width="2" stroke-dasharray="6 5"/>
+  <path d="M 1394 556 V 672" fill="none" stroke="#18A469" stroke-width="2" stroke-dasharray="6 5"/>
+  <path d="M 1692 556 V 672" fill="none" stroke="#18A469" stroke-width="2" stroke-dasharray="6 5"/>
+
+  <!-- Input coordination -->
+  <g filter="url(#smallShadow)">
+    <rect x="72" y="760" width="520" height="248" rx="20" fill="#F8FAFF" stroke="#BFD3EF"/>
+    <rect x="94" y="780" width="187" height="24" rx="12" fill="#E9F3FF"/>
+    <text class="section-kicker" x="187.5" y="797" text-anchor="middle" fill="#2778E8">输入协调</text>
+    <text class="section-title" x="94" y="835">Queue、steer 与 mailbox</text>
+    <text class="section-copy" x="94" y="855">task 持有线程时，后续输入保持持久化。</text>
+    <rect x="94" y="878" width="225" height="42" rx="10" fill="#FFFFFF" stroke="#C9DDF4"/>
+    <circle cx="113" cy="899" r="6" fill="#2778E8"/>
+    <text class="object-title" x="128" y="896">持久化 FIFO</text>
+    <text class="object-copy" x="128" y="911">edit token / 自动调度</text>
+    <rect x="331" y="878" width="239" height="42" rx="10" fill="#FFFFFF" stroke="#C9DDF4"/>
+    <circle cx="350" cy="899" r="6" fill="#735BC1"/>
+    <text class="object-title" x="365" y="896">Steer</text>
+    <text class="object-copy" x="365" y="911">安全采样点 drain</text>
+    <rect x="94" y="932" width="225" height="42" rx="10" fill="#FFFFFF" stroke="#C9DDF4"/>
+    <circle cx="113" cy="953" r="6" fill="#2778E8"/>
+    <text class="object-title" x="128" y="950">Mailbox</text>
+    <text class="object-copy" x="128" y="965">协作输入 / 子任务结果</text>
+    <rect x="331" y="932" width="239" height="42" rx="10" fill="#FFFFFF" stroke="#C9DDF4"/>
+    <circle cx="350" cy="953" r="6" fill="#735BC1"/>
+    <text class="object-title" x="365" y="950">Plan / Goal</text>
+    <text class="object-copy" x="365" y="965">保持独立 run 语义</text>
+  </g>
+
+  <!-- Hooks and continuation -->
+  <g filter="url(#smallShadow)">
+    <rect x="700" y="760" width="520" height="248" rx="20" fill="#F7FCF9" stroke="#B9DFC9"/>
+    <rect x="722" y="780" width="238" height="24" rx="12" fill="#E8F7F0"/>
+    <text class="section-kicker" x="841" y="797" text-anchor="middle" fill="#168A5B">续轮协调</text>
+    <text class="section-title" x="722" y="835">Hook、汇合、压缩与 Goal</text>
+    <text class="section-copy" x="722" y="855">部分路径立即重采样；Goal 可稍后新建 run。</text>
+    <rect x="722" y="878" width="225" height="42" rx="10" fill="#FFFFFF" stroke="#C5E6D3"/>
+    <circle cx="741" cy="899" r="6" fill="#18A469"/>
+    <text class="object-title" x="756" y="896">Stop Hooks</text>
+    <text class="object-copy" x="756" y="911">阻断并追加续轮上下文</text>
+    <rect x="959" y="878" width="239" height="42" rx="10" fill="#FFFFFF" stroke="#C5E6D3"/>
+    <circle cx="978" cy="899" r="6" fill="#18A469"/>
+    <text class="object-title" x="993" y="896">等待中的子任务</text>
+    <text class="object-copy" x="993" y="911">等待、收集、重新采样</text>
+    <rect x="722" y="932" width="225" height="42" rx="10" fill="#FFFFFF" stroke="#C5E6D3"/>
+    <circle cx="741" cy="953" r="6" fill="#18A469"/>
+    <text class="object-title" x="756" y="950">上下文压缩</text>
+    <text class="object-copy" x="756" y="965">可在下一次采样前运行</text>
+    <rect x="959" y="932" width="239" height="42" rx="10" fill="#FFFFFF" stroke="#C5E6D3"/>
+    <circle cx="978" cy="953" r="6" fill="#18A469"/>
+    <text class="object-title" x="993" y="950">Goal continuation</text>
+    <text class="object-copy" x="993" y="965">正常完成后调度</text>
+  </g>
+
+  <!-- Termination and background -->
+  <g filter="url(#smallShadow)">
+    <rect x="1328" y="760" width="520" height="248" rx="20" fill="#FFFBF5" stroke="#EDC58E"/>
+    <rect x="1350" y="780" width="219" height="24" rx="12" fill="#FFF0DA"/>
+    <text class="section-kicker" x="1459.5" y="797" text-anchor="middle" fill="#B66512">生命周期保证</text>
+    <text class="section-title" x="1350" y="835">终止与后台任务</text>
+    <text class="section-copy" x="1350" y="855">终态串行；后台任务不能改写。</text>
+    <rect x="1350" y="878" width="225" height="42" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="1369" cy="899" r="6" fill="#F29A2E"/>
+    <text class="object-title" x="1384" y="896">仅一个终态事件</text>
+    <text class="object-copy" x="1384" y="911">completed / cancelled / error</text>
+    <rect x="1587" y="878" width="239" height="42" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="1606" cy="899" r="6" fill="#F29A2E"/>
+    <text class="object-title" x="1621" y="896">清理</text>
+    <text class="object-copy" x="1621" y="911">tools / registry / Hooks</text>
+    <rect x="1350" y="932" width="225" height="42" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="1369" cy="953" r="6" fill="#F29A2E"/>
+    <text class="object-title" x="1384" y="950">取消与错误</text>
+    <text class="object-copy" x="1384" y="965">终态前 flush events</text>
+    <rect x="1587" y="932" width="239" height="42" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="1606" cy="953" r="6" fill="#F29A2E"/>
+    <text class="object-title" x="1621" y="950">被动 Memory</text>
+    <text class="object-copy" x="1621" y="965">turn.completed 后排队</text>
+  </g>
+</svg>

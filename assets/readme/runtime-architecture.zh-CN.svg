@@ -1,0 +1,409 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" lang="zh-CN" aria-labelledby="title description">
+  <title id="title">Setsuna Desktop Agent runtime 架构</title>
+  <desc id="description">请求从 React renderer 经类型化 preload bridge 和 Electron main 进入带认证的本地 runtime。Runtime Agent loop 通过 ports 和 adapters 访问模型、工具、MCP、Skill、Plugin、工作区能力与本地存储。Runtime event 先持久化，再通过 SSE 投影回 renderer。</desc>
+
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FCFDFF"/>
+      <stop offset="0.55" stop-color="#F7FAFF"/>
+      <stop offset="1" stop-color="#F2F7FF"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#F8FBFF" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="blueCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EEF5FF"/>
+    </linearGradient>
+    <linearGradient id="purpleCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F3F0FF"/>
+    </linearGradient>
+    <linearGradient id="amberCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFF7EC"/>
+    </linearGradient>
+    <linearGradient id="greenCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EFFAF5"/>
+    </linearGradient>
+    <linearGradient id="cyanCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EDF9FC"/>
+    </linearGradient>
+    <linearGradient id="contractRail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F5F2FF"/>
+      <stop offset="0.5" stop-color="#EEF5FF"/>
+      <stop offset="1" stop-color="#F0FAF6"/>
+    </linearGradient>
+    <radialGradient id="blueGlow">
+      <stop offset="0" stop-color="#4C96FF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#4C96FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="coreFade">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.78" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#000000"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#AABBD3" stroke-width="1" opacity="0.17"/>
+    </pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#27446D" flood-opacity="0.12"/>
+    </filter>
+    <filter id="smallShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#36577F" flood-opacity="0.12"/>
+    </filter>
+    <filter id="softGlow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <mask id="coreMask">
+      <rect x="715" y="690" width="490" height="390" fill="url(#coreFade)"/>
+    </mask>
+    <marker id="blueArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2778E8"/>
+    </marker>
+    <marker id="greenArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#18A469"/>
+    </marker>
+    <marker id="orangeArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#F29A2E"/>
+    </marker>
+    <style>
+      text {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        fill: #10203B;
+      }
+      .title { font-size: 42px; font-weight: 800; letter-spacing: -1px; }
+      .subtitle { font-size: 18px; font-weight: 450; fill: #60708A; }
+      .legend { font-size: 12px; font-weight: 600; fill: #50627D; }
+      .step-title { font-size: 17px; font-weight: 750; letter-spacing: -0.2px; }
+      .step-subtitle { font-size: 11px; font-weight: 600; fill: #718098; }
+      .object-title { font-size: 14px; font-weight: 750; }
+      .object-copy { font-size: 11px; font-weight: 550; fill: #596B85; }
+      .micro { font-size: 10px; font-weight: 650; fill: #61718A; letter-spacing: 0.15px; }
+      .flow-label { font-size: 10px; font-weight: 700; fill: #2778E8; letter-spacing: 0.15px; }
+      .green-label { font-size: 10px; font-weight: 700; fill: #168A5B; letter-spacing: 0.15px; }
+      .orange-label { font-size: 10px; font-weight: 700; fill: #C87013; letter-spacing: 0.15px; }
+      .rail-title { font-size: 12px; font-weight: 800; fill: #5948A8; letter-spacing: 0.4px; }
+      .rail-copy { font-size: 12px; font-weight: 600; fill: #596B85; }
+      .section-kicker { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; }
+      .section-title { font-size: 18px; font-weight: 800; letter-spacing: -0.25px; }
+      .section-copy { font-size: 11px; font-weight: 550; fill: #64758E; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#background)"/>
+  <rect width="1920" height="1080" fill="url(#grid)"/>
+  <ellipse cx="1030" cy="820" rx="560" ry="330" fill="url(#blueGlow)"/>
+
+  <text class="title" x="52" y="67">Setsuna Desktop 运行时架构</text>
+  <text class="subtitle" x="54" y="105">一条类型安全、权限受控的闭环：从桌面意图到本地 Agent 执行，再到持久化运行时状态。</text>
+
+  <g transform="translate(1436 27)" filter="url(#smallShadow)">
+    <rect width="432" height="101" rx="15" fill="#FFFFFF" fill-opacity="0.92" stroke="#DCE6F2"/>
+    <path d="M 20 27 H 66" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+    <text class="legend" x="79" y="31">请求与控制</text>
+    <path d="M 20 51 H 66" fill="none" stroke="#18A469" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#greenArrow)"/>
+    <text class="legend" x="79" y="55">持久化 RuntimeEvent + SSE</text>
+    <path d="M 20 76 H 66" fill="none" stroke="#F29A2E" stroke-width="3" marker-end="url(#orangeArrow)"/>
+    <text class="legend" x="79" y="80">模型、工具与原生能力执行</text>
+  </g>
+
+  <rect x="42" y="148" width="1836" height="526" rx="26" fill="url(#panel)" stroke="#DDE6F2" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="68" y="169" width="799" height="35" rx="17.5" fill="#F5F8FF" stroke="#DEE7F5"/>
+  <circle cx="88" cy="186.5" r="5" fill="#2778E8"/>
+  <text class="micro" x="101" y="190">桌面应用边界</text>
+  <text class="object-copy" x="200" y="190">renderer → preload → 可信 Electron main</text>
+  <rect x="886" y="169" width="966" height="35" rx="17.5" fill="#F1FAF6" stroke="#D7EEE3"/>
+  <circle cx="906" cy="186.5" r="5" fill="#18A469"/>
+  <text class="micro" x="919" y="190">本地 RUNTIME 子进程</text>
+  <text class="object-copy" x="1070" y="190">server → loop → ports / adapters</text>
+
+  <!-- Step 1: renderer -->
+  <g>
+    <circle cx="110" cy="229" r="15" fill="#2778E8"/>
+    <text x="110" y="234" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">1</text>
+    <text class="step-title" x="136" y="225">桌面工作区</text>
+    <text class="step-subtitle" x="136" y="244">React renderer</text>
+    <rect x="108" y="280" width="215" height="222" rx="16" fill="#DDEBFF" opacity="0.55"/>
+    <rect x="100" y="272" width="215" height="222" rx="16" fill="url(#blueCard)" stroke="#72A5F3" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="120" y="294" width="175" height="128" rx="9" fill="#FFFFFF" stroke="#A8C4EC"/>
+    <rect x="120" y="294" width="175" height="20" rx="9" fill="#EAF2FE"/>
+    <circle cx="133" cy="304" r="3" fill="#7CAAF0"/>
+    <circle cx="143" cy="304" r="3" fill="#A8C4EC"/>
+    <circle cx="153" cy="304" r="3" fill="#C2D4EC"/>
+    <rect x="129" y="322" width="39" height="91" rx="5" fill="#F2F6FC"/>
+    <rect x="136" y="331" width="25" height="4" rx="2" fill="#8EB5EE"/>
+    <rect x="136" y="343" width="20" height="4" rx="2" fill="#C1D3EB"/>
+    <rect x="136" y="355" width="23" height="4" rx="2" fill="#C1D3EB"/>
+    <rect x="180" y="326" width="72" height="21" rx="8" fill="#E7F1FF"/>
+    <rect x="194" y="356" width="85" height="27" rx="9" fill="#2778E8"/>
+    <rect x="180" y="391" width="61" height="16" rx="7" fill="#E7F1FF"/>
+    <rect x="176" y="432" width="61" height="19" rx="9.5" fill="#EFF5FE" stroke="#C8D9EE"/>
+    <rect x="243" y="432" width="52" height="19" rx="9.5" fill="#EFF5FE" stroke="#C8D9EE"/>
+    <text class="micro" x="206.5" y="445" text-anchor="middle">对话</text>
+    <text class="micro" x="269" y="445" text-anchor="middle">文件</text>
+    <text class="object-title" x="207.5" y="472" text-anchor="middle">对话 + 工作区</text>
+    <text class="object-copy" x="207.5" y="488" text-anchor="middle">审查 · 终端 · 浏览器</text>
+  </g>
+
+  <!-- Step 2: preload -->
+  <g>
+    <circle cx="375" cy="229" r="15" fill="#2778E8"/>
+    <text x="375" y="234" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">2</text>
+    <text class="step-title" x="401" y="225">类型化桥接</text>
+    <text class="step-subtitle" x="401" y="244">Preload + 固定 IPC</text>
+    <rect x="377" y="280" width="185" height="222" rx="16" fill="#E5DEFF" opacity="0.58"/>
+    <rect x="369" y="272" width="185" height="222" rx="16" fill="url(#purpleCard)" stroke="#9B86DD" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="391" y="298" width="141" height="43" rx="9" fill="#FFFFFF" stroke="#C9BDEB"/>
+    <circle cx="408" cy="319.5" r="7" fill="#7B61C9"/>
+    <path d="M 405 319.5 H 411 M 408 316.5 V 322.5" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text class="micro" x="422" y="316">contextBridge</text>
+    <text class="object-copy" x="422" y="330">窄命名空间</text>
+    <path d="M 461.5 341 V 358" stroke="#7B61C9" stroke-width="2"/>
+    <circle cx="461.5" cy="365" r="8" fill="#FFFFFF" stroke="#7B61C9" stroke-width="2"/>
+    <path d="M 461.5 373 V 390" stroke="#7B61C9" stroke-width="2"/>
+    <rect x="391" y="390" width="141" height="43" rx="9" fill="#FFFFFF" stroke="#C9BDEB"/>
+    <circle cx="408" cy="411.5" r="7" fill="#7B61C9"/>
+    <path d="M 404.5 411.5 H 411.5" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text class="micro" x="422" y="408">固定方法</text>
+    <text class="object-copy" x="422" y="422">清理 + 校验</text>
+    <rect x="390" y="445" width="143" height="22" rx="11" fill="#F0ECFB" stroke="#D1C7ED"/>
+    <text class="micro" x="461.5" y="460" text-anchor="middle">window.setsunaDesktop</text>
+    <text class="object-copy" x="461.5" y="484" text-anchor="middle">不暴露原始 ipcRenderer</text>
+  </g>
+
+  <!-- Step 3: Electron main -->
+  <g>
+    <circle cx="620" cy="229" r="15" fill="#2778E8"/>
+    <text x="620" y="234" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">3</text>
+    <text class="step-title" x="646" y="225">可信桌面宿主</text>
+    <text class="step-subtitle" x="646" y="244">Electron main 进程</text>
+    <rect x="622" y="280" width="235" height="222" rx="16" fill="#FFE7C7" opacity="0.58"/>
+    <rect x="614" y="272" width="235" height="222" rx="16" fill="url(#amberCard)" stroke="#EBA858" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <path d="M 731.5 293 L 753 301 V 318 C 753 333 744 342 731.5 347 C 719 342 710 333 710 318 V 301 Z" fill="#FFF4E3" stroke="#E4922E" stroke-width="1.5"/>
+    <rect x="724.5" y="311" width="14" height="13" rx="3" fill="#E4922E"/>
+    <path d="M 727 311 V 307.5 C 727 301.5 736 301.5 736 307.5 V 311" fill="none" stroke="#E4922E" stroke-width="2"/>
+    <rect x="636" y="361" width="191" height="43" rx="9" fill="#FFFFFF" stroke="#EDC28F"/>
+    <circle cx="654" cy="382.5" r="7" fill="#E4922E"/>
+    <text class="micro" x="668" y="379">RuntimeHost</text>
+    <text class="object-copy" x="668" y="393">端口 · token · 子进程</text>
+    <rect x="636" y="412" width="191" height="43" rx="9" fill="#FFFFFF" stroke="#EDC28F"/>
+    <circle cx="654" cy="433.5" r="7" fill="#E4922E"/>
+    <text class="micro" x="668" y="430">原生服务</text>
+    <text class="object-copy" x="668" y="444">窗口 · 浏览器 · PTY · 审查</text>
+    <rect x="659" y="464" width="145" height="20" rx="10" fill="#FFF1DB" stroke="#EDC28F"/>
+    <text class="micro" x="731.5" y="478" text-anchor="middle">持有 runtime 端口 + bearer token</text>
+  </g>
+
+  <!-- Step 4: runtime server -->
+  <g>
+    <circle cx="915" cy="229" r="15" fill="#2778E8"/>
+    <text x="915" y="234" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">4</text>
+    <text class="step-title" x="941" y="225">Runtime 服务</text>
+    <text class="step-subtitle" x="941" y="244">带认证的本机回环</text>
+    <rect x="917" y="280" width="215" height="222" rx="16" fill="#D9F1E5" opacity="0.62"/>
+    <rect x="909" y="272" width="215" height="222" rx="16" fill="url(#greenCard)" stroke="#5AB98B" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="936" y="300" width="161" height="130" rx="11" fill="#FFFFFF" stroke="#A9D7C1"/>
+    <rect x="950" y="317" width="133" height="25" rx="6" fill="#EDF9F3"/>
+    <circle cx="966" cy="329.5" r="4" fill="#18A469"/>
+    <text class="micro" x="978" y="333">REST 快照</text>
+    <rect x="950" y="352" width="133" height="25" rx="6" fill="#EDF9F3"/>
+    <circle cx="966" cy="364.5" r="4" fill="#18A469"/>
+    <text class="micro" x="978" y="368">线程 SSE</text>
+    <rect x="950" y="387" width="133" height="25" rx="6" fill="#EDF9F3"/>
+    <circle cx="966" cy="399.5" r="4" fill="#18A469"/>
+    <text class="micro" x="978" y="403">SWE app-server</text>
+    <rect x="941" y="443" width="151" height="23" rx="11.5" fill="#E8F7F0" stroke="#A9D7C1"/>
+    <path d="M 957 451 V 458 H 966 V 451 Z" fill="#18A469"/>
+    <path d="M 959 451 V 448.5 C 959 444.5 964 444.5 964 448.5 V 451" fill="none" stroke="#18A469" stroke-width="1.4"/>
+    <text class="micro" x="974" y="458">127.0.0.1 + bearer token</text>
+    <text class="object-copy" x="1016.5" y="484" text-anchor="middle">路由进入唯一 runtime container</text>
+  </g>
+
+  <!-- Step 5: agent loop -->
+  <g>
+    <circle cx="1190" cy="229" r="15" fill="#2778E8"/>
+    <text x="1190" y="234" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">5</text>
+    <text class="step-title" x="1216" y="225">Agent 编排</text>
+    <text class="step-subtitle" x="1216" y="244">AgentLoop 门面 + 协调器</text>
+    <rect x="1192" y="280" width="255" height="222" rx="16" fill="#D8EFE5" opacity="0.62"/>
+    <rect x="1184" y="272" width="255" height="222" rx="16" fill="url(#greenCard)" stroke="#48AE7C" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <circle cx="1311.5" cy="368" r="64" fill="#F7FCF9" stroke="#B7DDC9" stroke-width="1.5"/>
+    <path d="M 1279 321 A 56 56 0 0 1 1354 331" fill="none" stroke="#2778E8" stroke-width="2" marker-end="url(#blueArrow)"/>
+    <path d="M 1367 350 A 56 56 0 0 1 1355 410" fill="none" stroke="#2778E8" stroke-width="2" marker-end="url(#blueArrow)"/>
+    <path d="M 1335 423 A 56 56 0 0 1 1271 409" fill="none" stroke="#2778E8" stroke-width="2" marker-end="url(#blueArrow)"/>
+    <path d="M 1257 389 A 56 56 0 0 1 1267 338" fill="none" stroke="#2778E8" stroke-width="2" marker-end="url(#blueArrow)"/>
+    <rect x="1282" y="353" width="59" height="30" rx="9" fill="#2778E8" filter="url(#softGlow)"/>
+    <text x="1311.5" y="372" text-anchor="middle" font-size="10" font-weight="800" fill="#FFFFFF">AgentLoop</text>
+    <rect x="1281" y="302" width="61" height="24" rx="8" fill="#FFFFFF" stroke="#9CC8B1"/>
+    <text class="micro" x="1311.5" y="318" text-anchor="middle">上下文</text>
+    <rect x="1352" y="356" width="61" height="24" rx="8" fill="#FFFFFF" stroke="#9CC8B1"/>
+    <text class="micro" x="1382.5" y="372" text-anchor="middle">采样</text>
+    <rect x="1281" y="411" width="61" height="24" rx="8" fill="#FFFFFF" stroke="#9CC8B1"/>
+    <text class="micro" x="1311.5" y="427" text-anchor="middle">工具</text>
+    <rect x="1210" y="356" width="61" height="24" rx="8" fill="#FFFFFF" stroke="#9CC8B1"/>
+    <text class="micro" x="1240.5" y="372" text-anchor="middle">收尾</text>
+    <rect x="1204" y="455" width="64" height="21" rx="10.5" fill="#EAF7F0"/>
+    <rect x="1278" y="455" width="67" height="21" rx="10.5" fill="#EAF7F0"/>
+    <rect x="1355" y="455" width="64" height="21" rx="10.5" fill="#EAF7F0"/>
+    <text class="micro" x="1236" y="469" text-anchor="middle">队列</text>
+    <text class="micro" x="1311.5" y="469" text-anchor="middle">审批</text>
+    <text class="micro" x="1387" y="469" text-anchor="middle">记忆</text>
+  </g>
+
+  <!-- Step 6: ports and adapters -->
+  <g>
+    <circle cx="1505" cy="229" r="15" fill="#2778E8"/>
+    <text x="1505" y="234" text-anchor="middle" font-size="13" font-weight="800" fill="#FFFFFF">6</text>
+    <text class="step-title" x="1531" y="225">Ports 与 Adapters</text>
+    <text class="step-subtitle" x="1531" y="244">Runtime 依赖组装入口</text>
+    <rect x="1507" y="280" width="295" height="222" rx="16" fill="#D9EEF4" opacity="0.64"/>
+    <rect x="1499" y="272" width="295" height="222" rx="16" fill="url(#cyanCard)" stroke="#55AEC2" stroke-width="1.4" filter="url(#smallShadow)"/>
+    <rect x="1521" y="298" width="251" height="46" rx="10" fill="#FFFFFF" stroke="#A9D3DD"/>
+    <rect x="1534" y="308" width="26" height="26" rx="7" fill="#E4F5F8"/>
+    <path d="M 1541 326 L 1547 313 L 1553 326 Z" fill="none" stroke="#248EA7" stroke-width="1.5"/>
+    <text class="object-title" x="1573" y="318">模型 Adapter</text>
+    <text class="object-copy" x="1573" y="333">按配置选择供应商 client</text>
+    <rect x="1521" y="354" width="251" height="46" rx="10" fill="#FFFFFF" stroke="#A9D3DD"/>
+    <rect x="1534" y="364" width="26" height="26" rx="7" fill="#E4F5F8"/>
+    <circle cx="1547" cy="377" r="7" fill="none" stroke="#248EA7" stroke-width="1.5"/>
+    <path d="M 1547 366 V 371 M 1547 383 V 388 M 1536 377 H 1541 M 1553 377 H 1558" stroke="#248EA7" stroke-width="1.5"/>
+    <text class="object-title" x="1573" y="374">组合 ToolHost</text>
+    <text class="object-copy" x="1573" y="389">策略 · 预览 · 审批</text>
+    <rect x="1521" y="410" width="251" height="46" rx="10" fill="#FFFFFF" stroke="#A9D3DD"/>
+    <rect x="1534" y="420" width="26" height="26" rx="7" fill="#E4F5F8"/>
+    <ellipse cx="1547" cy="426" rx="8" ry="4" fill="none" stroke="#248EA7" stroke-width="1.5"/>
+    <path d="M 1539 426 V 439 C 1539 444 1555 444 1555 439 V 426 M 1539 433 C 1539 438 1555 438 1555 433" fill="none" stroke="#248EA7" stroke-width="1.5"/>
+    <text class="object-title" x="1573" y="430">存储 Adapter</text>
+    <text class="object-copy" x="1573" y="445">SQLite + 文件 Store</text>
+    <text class="object-copy" x="1646.5" y="481" text-anchor="middle">MCP · Skill · Plugin · 工作区</text>
+  </g>
+
+  <!-- Forward request path -->
+  <path d="M 315 382 H 362" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M 554 382 H 607" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M 849 382 H 906" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M 1124 382 H 1181" fill="none" stroke="#2778E8" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M 1439 372 C 1460 359 1474 359 1496 372" fill="none" stroke="#F29A2E" stroke-width="2.7" marker-end="url(#orangeArrow)"/>
+  <path d="M 1496 396 C 1474 409 1460 409 1439 396" fill="none" stroke="#F29A2E" stroke-width="2.3" marker-end="url(#orangeArrow)"/>
+  <text class="flow-label" x="338.5" y="370" text-anchor="middle">UI 动作</text>
+  <text class="flow-label" x="580.5" y="370" text-anchor="middle">类型化 IPC</text>
+  <text class="flow-label" x="877.5" y="370" text-anchor="middle">HTTP / SSE</text>
+  <text class="flow-label" x="1152.5" y="370" text-anchor="middle">路由</text>
+  <text class="orange-label" x="1467.5" y="348" text-anchor="middle">PORT 调用</text>
+
+  <!-- Persisted event feedback path -->
+  <path d="M 1311 494 C 1311 607 1155 642 1078 720" fill="none" stroke="#18A469" stroke-width="2.7" stroke-dasharray="7 6" marker-end="url(#greenArrow)"/>
+  <path d="M 956 720 C 956 642 1017 607 1017 494" fill="none" stroke="#18A469" stroke-width="2.7" stroke-dasharray="7 6" marker-end="url(#greenArrow)"/>
+  <path d="M 1017 494 V 548 H 207 V 494" fill="none" stroke="#18A469" stroke-width="2.7" stroke-dasharray="7 6" marker-end="url(#greenArrow)"/>
+  <text class="green-label" x="1208" y="622">先落盘</text>
+  <text class="green-label" x="914" y="627">回放 + 发布</text>
+  <text class="green-label" x="873" y="539">SSE</text>
+  <text class="green-label" x="602" y="539">runtime:event IPC</text>
+  <text class="green-label" x="249" y="539">按 seq 投影</text>
+
+  <!-- Contract-first rail -->
+  <g filter="url(#smallShadow)">
+    <rect x="160" y="594" width="1600" height="55" rx="17" fill="url(#contractRail)" stroke="#C9D7E9"/>
+    <rect x="181" y="606" width="185" height="31" rx="15.5" fill="#FFFFFF" stroke="#D4CCF0"/>
+    <circle cx="201" cy="621.5" r="5" fill="#735BC1"/>
+    <text class="rail-title" x="215" y="626">packages/contracts</text>
+    <text class="rail-copy" x="388" y="626">共享 DTO</text>
+    <circle cx="496" cy="621.5" r="2.5" fill="#A8B5C9"/>
+    <text class="rail-copy" x="510" y="626">桌面桥</text>
+    <circle cx="627" cy="621.5" r="2.5" fill="#A8B5C9"/>
+    <text class="rail-copy" x="641" y="626">HTTP Client</text>
+    <circle cx="744" cy="621.5" r="2.5" fill="#A8B5C9"/>
+    <text class="rail-copy" x="758" y="626">RuntimeEvent Union</text>
+    <circle cx="914" cy="621.5" r="2.5" fill="#A8B5C9"/>
+    <text class="rail-copy" x="928" y="626">投影 Reducer</text>
+    <circle cx="1082" cy="621.5" r="2.5" fill="#A8B5C9"/>
+    <text class="rail-copy" x="1096" y="626">权限</text>
+    <circle cx="1201" cy="621.5" r="2.5" fill="#A8B5C9"/>
+    <text class="rail-copy" x="1215" y="626">模型 / 工具 Contract</text>
+    <circle cx="1414" cy="621.5" r="2.5" fill="#A8B5C9"/>
+    <text class="rail-copy" x="1428" y="626">JSON 安全边界</text>
+  </g>
+
+  <!-- Bottom execution edges -->
+  <path d="M 731 494 C 731 620 544 651 497 735" fill="none" stroke="#F29A2E" stroke-width="3" marker-end="url(#orangeArrow)"/>
+  <text class="orange-label" x="579" y="645">窄原生 API</text>
+  <path d="M 1647 494 C 1837 554 1878 666 1765 742" fill="none" stroke="#F29A2E" stroke-width="3" marker-end="url(#orangeArrow)"/>
+  <path d="M 1330 855 C 1235 839 1217 665 1287 497" fill="none" stroke="#F29A2E" stroke-width="2.5" marker-end="url(#orangeArrow)"/>
+  <text class="orange-label" x="1771" y="647">执行</text>
+  <text class="orange-label" x="1220" y="745" transform="rotate(-75 1220 745)">结果</text>
+
+  <!-- Desktop-native services -->
+  <g filter="url(#smallShadow)">
+    <rect x="88" y="734" width="502" height="209" rx="20" fill="#FFFBF5" stroke="#EDC58E"/>
+    <rect x="109" y="753" width="142" height="24" rx="12" fill="#FFF0DA"/>
+    <text class="section-kicker" x="180" y="770" text-anchor="middle" fill="#B66512">ELECTRON MAIN</text>
+    <text class="section-title" x="109" y="807">桌面原生服务</text>
+    <text class="section-copy" x="109" y="827">系统访问始终位于 main 进程的窄接口之后。</text>
+    <rect x="109" y="849" width="214" height="34" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="128" cy="866" r="6" fill="#F29A2E"/>
+    <text class="object-copy" x="142" y="870">浏览器控制 / CDP</text>
+    <rect x="335" y="849" width="234" height="34" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="354" cy="866" r="6" fill="#F29A2E"/>
+    <text class="object-copy" x="368" y="870">终端 / PTY</text>
+    <rect x="109" y="892" width="214" height="34" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="128" cy="909" r="6" fill="#F29A2E"/>
+    <text class="object-copy" x="142" y="913">审查 + 工作区应用</text>
+    <rect x="335" y="892" width="234" height="34" rx="10" fill="#FFFFFF" stroke="#EED4B1"/>
+    <circle cx="354" cy="909" r="6" fill="#F29A2E"/>
+    <text class="object-copy" x="368" y="913">更新器 + safeStorage</text>
+  </g>
+
+  <!-- Capability and provider edge -->
+  <g filter="url(#smallShadow)">
+    <rect x="1330" y="734" width="502" height="209" rx="20" fill="#F8FCFD" stroke="#A9D5DE"/>
+    <rect x="1351" y="753" width="162" height="24" rx="12" fill="#E8F7FA"/>
+    <text class="section-kicker" x="1432" y="770" text-anchor="middle" fill="#237F95">ADAPTER 边界</text>
+    <text class="section-title" x="1351" y="807">供应商 + 能力面</text>
+    <text class="section-copy" x="1351" y="827">Runtime port 隔离协议、策略与本地 I/O。</text>
+    <rect x="1351" y="849" width="214" height="34" rx="10" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1370" cy="866" r="6" fill="#2B9CB5"/>
+    <text class="object-copy" x="1384" y="870">模型供应商 API</text>
+    <rect x="1577" y="849" width="234" height="34" rx="10" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1596" cy="866" r="6" fill="#2B9CB5"/>
+    <text class="object-copy" x="1610" y="870">MCP Server</text>
+    <rect x="1351" y="892" width="214" height="34" rx="10" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1370" cy="909" r="6" fill="#2B9CB5"/>
+    <text class="object-copy" x="1384" y="913">工作区 + Shell 工具</text>
+    <rect x="1577" y="892" width="234" height="34" rx="10" fill="#FFFFFF" stroke="#C5E0E6"/>
+    <circle cx="1596" cy="909" r="6" fill="#2B9CB5"/>
+    <text class="object-copy" x="1610" y="913">Skill + Plugin</text>
+  </g>
+
+  <!-- Generated local runtime core illustration -->
+  <g>
+    <image href="runtime-core.png" x="715" y="674" width="490" height="490" preserveAspectRatio="xMidYMid slice" mask="url(#coreMask)"/>
+    <rect x="711" y="697" width="498" height="70" rx="18" fill="#FFFFFF" fill-opacity="0.9" stroke="#CFE0F4" filter="url(#smallShadow)"/>
+    <text class="section-kicker" x="960" y="718" text-anchor="middle" fill="#2778E8">事件驱动的 RUNTIME 状态</text>
+    <text class="section-title" x="960" y="742" text-anchor="middle">一次持久化，随时恢复并投影。</text>
+    <text class="section-copy" x="960" y="758" text-anchor="middle">threads.sqlite（RuntimeEvent）· config · memory · usage · 能力状态</text>
+    <rect x="710" y="1010" width="500" height="44" rx="16" fill="#FFFFFF" fill-opacity="0.9" stroke="#CFE0F4"/>
+    <circle cx="741" cy="1032" r="5" fill="#735BC1"/>
+    <text class="micro" x="755" y="1036">CONTRACT 先行</text>
+    <circle cx="875" cy="1032" r="5" fill="#18A469"/>
+    <text class="micro" x="889" y="1036">事件先行</text>
+    <circle cx="997" cy="1032" r="5" fill="#F29A2E"/>
+    <text class="micro" x="1011" y="1036">窄接口 + 权限控制</text>
+  </g>
+
+  <!-- User input cue -->
+  <g transform="translate(48 344)">
+    <circle cx="23" cy="24" r="22" fill="#FFFFFF" stroke="#2778E8" stroke-width="2"/>
+    <circle cx="23" cy="17" r="7" fill="none" stroke="#2778E8" stroke-width="2"/>
+    <path d="M 10 37 C 12 28 34 28 36 37" fill="none" stroke="#2778E8" stroke-width="2"/>
+    <path d="M 47 24 H 76" fill="none" stroke="#2778E8" stroke-width="2.5" marker-end="url(#blueArrow)"/>
+    <text class="micro" x="23" y="59" text-anchor="middle">用户</text>
+  </g>
+</svg>
