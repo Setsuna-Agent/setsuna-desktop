@@ -60,7 +60,7 @@ Factory 当前按顺序组合：
 
 ### `tool-orchestrator-policy.ts`
 
-汇总：
+保存不依赖事件发布或审批等待的纯策略与参数转换：
 
 - Runtime approval policy。
 - Permission profile。
@@ -70,9 +70,34 @@ Factory 当前按顺序组合：
 - Persistent approval。
 - External context。
 
+### `tool-approval-lifecycle.ts`
+
+统一执行 `create → approval.requested → wait → approval.resolved`。轮次在等待期间取消时，由这一层解析 pending approval，并且只发布一次 cancellation resolution。
+
+普通工具审批、`request_permissions`、network retry 和 sandbox retry 不再各自维护一套 wait/cancel/publish 流程。
+
+### `tool-approval-coordinator.ts`
+
+集中处理：
+
+- Approval requirement 与 PermissionRequest hook。
+- Session、turn 和 persistent grant 复用。
+- Exec/network policy amendment 持久化。
+- Network 与 sandbox retry 的授权决策。
+
+它不执行工具，也不发布工具终态。
+
+### `tool-retry-strategy.ts`
+
+处理 network、sandbox readable-root 和 sandbox bypass 的决策及二次执行。它只接收 output delta 发布能力，并返回 `success/error/rejected` outcome，不能发布工具 terminal event。
+
+窄 readable-root 重试只有再次收到 `sandbox_denied` 时才能升级为 bypass；持久 network deny 不会再次审批或执行。
+
 ### `tool-orchestrator.ts`
 
-按统一顺序执行 preview → policy → approval → tool，并处理输出 delta、取消和错误。
+按统一顺序执行 preview → hook → approval coordinator → tool，并把可重试错误交给 retry strategy。它是 post-process、PostToolUse、output delta flush 和唯一 terminal event 的 owner。
+
+所有 fallible success-side work 与 output delta publish 都必须先完成，之后才能发布 terminal event；strategy 返回成功后发生的后处理错误，也从同一个 terminal 出口结束。
 
 只读工具可以在安全条件下批处理；mutation 不能与依赖相同 workspace 状态的操作无序并行。
 
@@ -314,4 +339,3 @@ Hook output 是外部输入，不能直接修改任意 runtime state。Coordinat
 - `test/integration/agent-loop/tool-execution.test.ts`
 - Approval、hook、policy、sandbox integration。
 - `test/integration/adapters/tool/pc-local-tool-host.test.ts`
-

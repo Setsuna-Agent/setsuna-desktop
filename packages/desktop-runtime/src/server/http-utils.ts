@@ -1,5 +1,6 @@
 import type { SendTurnInput, ThreadQuery } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { RuntimeHttpError } from './http-error.js';
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
@@ -66,6 +67,14 @@ export function memoryScope(value: string | null): 'global' | 'project' | undefi
 export function threadScope(value: string | null): ThreadQuery['scope'] {
   if (value === 'all' || value === 'global' || value === 'project') return value;
   return undefined;
+}
+
+export function decodeRuntimeId(value: string, label: string): string {
+  try {
+    return assertSafeRuntimeId(decodeURIComponent(value), label);
+  } catch {
+    throw new RuntimeHttpError(400, `${label} is invalid.`, 'invalid_runtime_id');
+  }
 }
 
 export function isRuntimeMessageAttachment(value: unknown): value is NonNullable<SendTurnInput['attachments']>[number] {

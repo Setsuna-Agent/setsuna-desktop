@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { WorkspaceProjectStore } from '../../src/ports/workspace-project-store.js';
 import { WorkspaceSearchCancelledError } from '../../src/ports/workspace-search-engine.js';
-import { searchWorkspaceProjectForRest } from '../../src/server/runtime-rest-routes.js';
+import { searchWorkspaceProjectForRest } from '../../src/server/runtime-workspace-routes.js';
 
 describe('searchWorkspaceProjectForRest', () => {
   it('owns the project-panel cancellation group and returns completed searches', async () => {

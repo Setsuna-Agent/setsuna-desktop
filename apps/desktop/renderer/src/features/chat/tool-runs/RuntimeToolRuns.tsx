@@ -1,18 +1,9 @@
-import {
-  type AnswerRuntimeApprovalInput,
-  type RuntimeApprovalAvailableDecision,
-  type RuntimeHookRun,
-  type RuntimeStructuredInputValue,
-  type RuntimeToolRun
+import type {
+  RuntimeHookRun,
+  RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 import {
-  ChevronDown,
-  FileDiff,
-  Undo2
-} from 'lucide-react';
-import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type MouseEvent,
@@ -28,19 +19,22 @@ import type {
   ToolRunGroupKind,
   ToolRunSummaryMode,
 } from './runtime-tool-run-types.js';
-import {
-  type RuntimeFileChangeSummary
-} from './runtimeFileChanges.js';
 import { isActiveRuntimeToolRun } from './runtimeToolRunState.js';
 import {
-  compactStructuredInputValues,
-  RuntimeStructuredInputField,
-  structuredInputDefaults,
-} from './RuntimeStructuredInputField.js';
+  ChangeCounts,
+} from './RuntimeFileChangesSummaryCard.js';
+import {
+  GroupedHookRunList,
+  hasHookRuns,
+  HookRunList,
+} from './RuntimeHookRunDetails.js';
+import {
+  ApprovalActions,
+  McpElicitationActions,
+} from './RuntimeToolApprovalActions.js';
 import {
   activeToolRunOrLast,
   compactToolRunGroups,
-  completedFileOperationActionLabel,
   fileOperationActionLabel,
   fileOperationChangeTotals,
   fileOperationEntries,
@@ -64,7 +58,6 @@ import {
   isShellRun,
   mixedToolRunGroupIcon,
   mixedToolRunGroupSummary,
-  normalizeFileOperationAction,
   pathBaseName,
   pendingApprovalDisclosureKey,
   ShellTerminalResult,
@@ -84,7 +77,6 @@ import {
 import { RuntimeUserInputActions } from './RuntimeUserInputActions.js';
 
 export type { ToolRunGroup, ToolRunGroupKind, ToolRunSummaryMode } from './runtime-tool-run-types.js';
-const fileChangePreviewLimit = 3;
 
 export function shouldAutoOpenToolRunDisclosure(previousAutoOpenKey: string | undefined, autoOpenKey: string | undefined): boolean {
   return Boolean(autoOpenKey && autoOpenKey !== previousAutoOpenKey);
@@ -127,10 +119,6 @@ export function RuntimeHookRuns({ runs }: { runs?: RuntimeHookRun[] }) {
 export function isDisplayableRuntimeToolRun(run: RuntimeToolRun): boolean {
   if (run.status === 'error') return false;
   return Boolean(run.name || run.status || run.argumentsPreview || run.resultPreview);
-}
-
-function hasHookRuns(run: RuntimeToolRun): boolean {
-  return Boolean(run.hookRuns?.length);
 }
 
 function ToolRunDisclosure({
@@ -484,212 +472,6 @@ function FileMutationRunRow({
   );
 }
 
-export function FileChangesSummaryCard({
-  summary,
-  onDiscardChanges,
-  onOpenReview,
-}: {
-  summary: RuntimeFileChangeSummary;
-  onDiscardChanges?: (filePaths: string[]) => void | Promise<void>;
-  onOpenReview?: (filePath?: string) => void;
-}) {
-  const { t } = useI18n();
-  const [discarding, setDiscarding] = useState(false);
-  const [discarded, setDiscarded] = useState(false);
-  const [discardError, setDiscardError] = useState<string | null>(null);
-  const fileCount = summary.files.length;
-  const singleFile = fileCount === 1 ? summary.files[0] : undefined;
-  const filePaths = useMemo(() => [...new Set(summary.files.map((file) => file.path).filter(Boolean))], [summary.files]);
-  // 多文件时汇总增删行数，与单文件一样跟在标题后内联展示
-  const fileTotals = useMemo(() => {
-    if (singleFile) return null;
-    let additions = 0;
-    let deletions = 0;
-    for (const file of summary.files) {
-      additions += Number.isFinite(file.additions) ? Math.max(0, Number(file.additions)) : 0;
-      deletions += Number.isFinite(file.deletions) ? Math.max(0, Number(file.deletions)) : 0;
-    }
-    return { additions, deletions };
-  }, [singleFile, summary.files]);
-  const filePathKey = useMemo(() => filePaths.join('\0'), [filePaths]);
-  const [showAllFiles, setShowAllFiles] = useState(false);
-  const canDiscard = Boolean(onDiscardChanges && filePaths.length && !discarded);
-  const hasMoreFiles = fileCount > fileChangePreviewLimit;
-  const visibleFiles = showAllFiles || !hasMoreFiles ? summary.files : summary.files.slice(0, fileChangePreviewLimit);
-  const hiddenFileCount = Math.max(0, fileCount - fileChangePreviewLimit);
-  useEffect(() => {
-    setShowAllFiles(false);
-  }, [filePathKey]);
-  const discardChanges = async () => {
-    if (!canDiscard || discarding || !onDiscardChanges) return;
-    setDiscarding(true);
-    setDiscardError(null);
-    try {
-      await onDiscardChanges(filePaths);
-      setDiscarded(true);
-    } catch (unknownError) {
-      setDiscardError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      setDiscarding(false);
-    }
-  };
-  return (
-    <section className="chat-file-changes" aria-label={t('toolRun.changes.label')}>
-      <div className="chat-file-changes__header">
-        <span className="chat-file-changes__icon" aria-hidden="true">
-          <FileDiff size={14} />
-        </span>
-        <span className="chat-file-changes__summary">
-          <span className="chat-file-changes__title">
-            {singleFile
-              ? `${completedFileOperationActionLabel(normalizeFileOperationAction(singleFile.action), t)} ${pathBaseName(singleFile.path, t)}`
-              : t('toolRun.changes.filesEdited', { count: fileCount })}
-          </span>
-          {singleFile ? (
-            <ChangeCounts additions={singleFile.additions} deletions={singleFile.deletions} showZero />
-          ) : fileTotals ? (
-            <ChangeCounts additions={fileTotals.additions} deletions={fileTotals.deletions} showZero />
-          ) : null}
-        </span>
-        {onOpenReview || onDiscardChanges ? (
-          <span className="chat-file-changes__actions">
-            {onDiscardChanges ? (
-              <button
-                className="chat-file-changes__action chat-file-changes__action--danger"
-                type="button"
-                disabled={!canDiscard || discarding}
-                onClick={() => void discardChanges()}
-              >
-                <span>{t(discarding
-                  ? 'toolRun.changes.undoing'
-                  : discarded
-                    ? 'toolRun.changes.undone'
-                    : 'toolRun.changes.undo')}</span>
-                <Undo2 size={13} />
-              </button>
-            ) : null}
-            {onOpenReview ? (
-              <button className="chat-file-changes__action chat-file-changes__action--review" type="button" onClick={() => onOpenReview()}>
-                <span>{t('toolRun.changes.review')}</span>
-              </button>
-            ) : null}
-          </span>
-        ) : null}
-      </div>
-      {discardError ? <div className="chat-file-changes__error">{discardError}</div> : null}
-      <div className="chat-file-changes__list">
-        {visibleFiles.map((file) => (
-          <div className="chat-file-changes__item" key={file.path}>
-            <button
-              className="chat-file-changes__row"
-              type="button"
-              disabled={!onOpenReview}
-              title={file.path}
-              onClick={() => onOpenReview?.(file.path)}
-            >
-              <FileChangePath path={file.path} />
-              <ChangeCounts additions={file.additions} deletions={file.deletions} showZero />
-            </button>
-          </div>
-        ))}
-        {hasMoreFiles ? (
-          <button
-            className="chat-file-changes__more"
-            type="button"
-            aria-expanded={showAllFiles}
-            onClick={() => setShowAllFiles((current) => !current)}
-          >
-            <span>{showAllFiles
-              ? t('toolRun.changes.collapse')
-              : t('toolRun.changes.showMore', { count: hiddenFileCount })}</span>
-            <ChevronDown className="chat-file-changes__more-chevron" size={13} />
-          </button>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-// 路径分两段渲染：目录部分弱化显示，文件名保持正文色。
-// 兼容 POSIX 与 Windows 分隔符，运行时路径不保证只有一种。
-function FileChangePath({ path }: { path: string }) {
-  const separatorIndex = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-  const directory = separatorIndex >= 0 ? path.slice(0, separatorIndex + 1) : '';
-  const name = separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
-  return (
-    <span className="chat-file-changes__path" title={path}>
-      {directory ? <span className="chat-file-changes__path-dir">{directory}</span> : null}
-      <span className="chat-file-changes__path-name">{name}</span>
-    </span>
-  );
-}
-
-function ChangeCounts({ additions, deletions, showZero = false }: { additions?: number; deletions?: number; showZero?: boolean }) {
-  const { t } = useI18n();
-  const add = Number.isFinite(additions) ? Math.max(0, Number(additions)) : null;
-  const del = Number.isFinite(deletions) ? Math.max(0, Number(deletions)) : null;
-  if (!showZero && (add || 0) === 0 && (del || 0) === 0) return null;
-  return (
-    <span className="chat-change-counts" aria-label={t('toolRun.changes.lineCounts', { additions: add || 0, deletions: del || 0 })}>
-      <RollingChangeCount className="chat-change-counts__add" prefix="+" value={add || 0} />
-      <RollingChangeCount className="chat-change-counts__del" prefix="-" value={del || 0} />
-    </span>
-  );
-}
-
-function RollingChangeCount({ className, prefix, value }: { className: string; prefix: string; value: number }) {
-  const previousValueRef = useRef(value);
-  const [roll, setRoll] = useState<{
-    current: number;
-    direction: 'up' | 'down';
-    previous: number | null;
-    version: number;
-  }>({
-    current: value,
-    direction: 'up',
-    previous: null,
-    version: 0,
-  });
-
-  useEffect(() => {
-    const previous = previousValueRef.current;
-    if (previous === value) return;
-    previousValueRef.current = value;
-    setRoll((currentRoll) => ({
-      current: value,
-      direction: value >= previous ? 'up' : 'down',
-      previous,
-      version: currentRoll.version + 1,
-    }));
-  }, [value]);
-
-  const rolling = roll.previous !== null && roll.previous !== roll.current;
-  const values = rolling
-    ? roll.direction === 'up'
-      ? [roll.previous, roll.current]
-      : [roll.current, roll.previous]
-    : [roll.current];
-
-  return (
-    <span className={`${className} chat-change-counts__item`}>
-      <span className="chat-change-counts__sign">{prefix}</span>
-      <span className={`chat-change-counts__number ${rolling ? `is-rolling is-${roll.direction}` : ''}`}>
-        <span
-          className="chat-change-counts__number-stack"
-          key={roll.version}
-          onAnimationEnd={() => {
-            setRoll((currentRoll) => (currentRoll.previous === null ? currentRoll : { ...currentRoll, previous: null }));
-          }}
-        >
-          {values.map((item, index) => (
-            <span key={`${roll.version}:${index}:${item}`}>{item}</span>
-          ))}
-        </span>
-      </span>
-    </span>
-  );
-}
-
 function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
   const { t } = useI18n();
   const entries = inspectionEntries(runs);
@@ -799,104 +581,6 @@ function ToolRunDetails({
   );
 }
 
-function GroupedHookRunList({ runs }: { runs: RuntimeToolRun[] }) {
-  const { t } = useI18n();
-  const runsWithHooks = runs.filter(hasHookRuns);
-  if (!runsWithHooks.length) return null;
-  return (
-    <div className="chat-tool-run__hook-groups">
-      {runsWithHooks.map((run) => {
-        const summary = toolRunSummary(run, t);
-        const kind = toolRunGroupKind(run);
-        return (
-          <div className="chat-tool-run__hook-group" key={`${run.id}:hooks`}>
-            <div className="chat-tool-run__hook-group-title">
-              <span>{summary.title}</span>
-              <ToolRunSummaryTarget
-                inspectionKind={kind === 'inspection' ? inspectionEntryKind(run) : undefined}
-                kind={kind}
-                target={summary.target}
-              />
-            </div>
-            <HookRunList runs={run.hookRuns} />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function HookRunList({ runs }: { runs?: RuntimeHookRun[] }) {
-  const { t } = useI18n();
-  if (!runs?.length) return null;
-  return (
-    <div className="chat-tool-run__hooks">
-      {runs.map((run) => (
-        <div className={`chat-tool-run__hook chat-tool-run__hook--${run.status}`} key={run.id}>
-          <span className="chat-tool-run__hook-dot" />
-          <span className="chat-tool-run__hook-main">
-            <span className="chat-tool-run__hook-title">{hookRunTitle(run, t)}</span>
-            {run.message ? <span className="chat-tool-run__hook-message">{run.message}</span> : null}
-            <HookOutputEntryList entries={run.entries} />
-          </span>
-          {hookRunStatusText(run.status, t) ? <span className="chat-tool-run__hook-status">{hookRunStatusText(run.status, t)}</span> : null}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function HookOutputEntryList({ entries }: { entries?: RuntimeHookRun['entries'] }) {
-  const { t } = useI18n();
-  if (!entries?.length) return null;
-  return (
-    <span className="chat-tool-run__hook-entries">
-      {entries.map((entry, index) => (
-        <span className={`chat-tool-run__hook-entry chat-tool-run__hook-entry--${entry.kind}`} key={`${entry.kind}:${index}`}>
-          {hookOutputEntryLabel(entry.kind, t)} {entry.text}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function hookOutputEntryLabel(kind: NonNullable<RuntimeHookRun['entries']>[number]['kind'], t: Translate): string {
-  if (kind === 'warning') return t('toolRun.hook.output.warning');
-  if (kind === 'stop') return t('toolRun.hook.output.stop');
-  if (kind === 'feedback') return t('toolRun.hook.output.feedback');
-  if (kind === 'context') return t('toolRun.hook.output.context');
-  return t('toolRun.hook.output.error');
-}
-
-function hookRunTitle(run: RuntimeHookRun, t: Translate): string {
-  const label = hookEventLabel(run.eventName, t);
-  if (run.statusMessage) return `${label}：${run.statusMessage}`;
-  if (run.matcher) return `${label} · ${run.matcher}`;
-  return label;
-}
-
-function hookEventLabel(eventName: RuntimeHookRun['eventName'], t: Translate): string {
-  if (eventName === 'PreToolUse') return t('toolRun.hook.event.preToolUse');
-  if (eventName === 'PermissionRequest') return t('toolRun.hook.event.permissionRequest');
-  if (eventName === 'PostToolUse') return t('toolRun.hook.event.postToolUse');
-  if (eventName === 'PreCompact') return t('toolRun.hook.event.preCompact');
-  if (eventName === 'PostCompact') return t('toolRun.hook.event.postCompact');
-  if (eventName === 'SessionStart') return t('toolRun.hook.event.sessionStart');
-  if (eventName === 'SubagentStart') return t('toolRun.hook.event.subagentStart');
-  if (eventName === 'UserPromptSubmit') return t('toolRun.hook.event.userPromptSubmit');
-  if (eventName === 'SubagentStop') return t('toolRun.hook.event.subagentStop');
-  if (eventName === 'Stop') return t('toolRun.hook.event.stop');
-  return 'hook';
-}
-
-function hookRunStatusText(status: RuntimeHookRun['status'], t: Translate): string {
-  if (status === 'running') return t('toolRun.hook.status.running');
-  if (status === 'blocked') return t('toolRun.hook.status.blocked');
-  if (status === 'stopped') return t('toolRun.hook.status.stopped');
-  if (status === 'failed') return t('toolRun.hook.status.failed');
-  return '';
-}
-
 function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boolean {
   if (isShellRun(run) || toolRunGroupKind(run) === 'inspection' || isFileOperationRun(run)) return true;
   if (pendingApprovalId) return true;
@@ -969,177 +653,6 @@ function permissionFileRoots(value: unknown, access: 'read' | 'write'): string[]
   return [...roots];
 }
 
-function ApprovalActions({
-  approvalId,
-  availableDecisions,
-  onAnswerApproval,
-}: {
-  approvalId: string;
-  availableDecisions?: RuntimeApprovalAvailableDecision[];
-  onAnswerApproval: AnswerApprovalHandler;
-}) {
-  const { t } = useI18n();
-  const [submittingDecisionKey, setSubmittingDecisionKey] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const submit = async (decision: RuntimeApprovalAvailableDecision) => {
-    if (submittingDecisionKey) return;
-    const decisionKey = approvalDecisionKey(decision);
-    setSubmittingDecisionKey(decisionKey);
-    setError(null);
-    try {
-      await onAnswerApproval(approvalId, approvalInputFromDecision(decision));
-    } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-      setSubmittingDecisionKey(null);
-    }
-  };
-  const decisions = availableDecisions?.length ? availableDecisions : defaultApprovalDecisions();
-  return (
-    <div className="chat-tool-run__approval">
-      <div className="chat-tool-run__actions">
-        {decisions.map((decision) => (
-          <button
-            key={approvalDecisionKey(decision)}
-            type="button"
-            disabled={Boolean(submittingDecisionKey)}
-            onClick={() => void submit(decision)}
-          >
-            {submittingDecisionKey === approvalDecisionKey(decision)
-              ? t('toolRun.approval.submitting', { decision: approvalDecisionLabel(decision, t) })
-              : approvalDecisionLabel(decision, t)}
-          </button>
-        ))}
-      </div>
-      {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
-    </div>
-  );
-}
-
-function McpElicitationActions({
-  approvalId,
-  run,
-  onAnswerApproval,
-}: {
-  approvalId: string;
-  run: RuntimeToolRun;
-  onAnswerApproval: AnswerApprovalHandler;
-}) {
-  const { t } = useI18n();
-  const elicitation = run.elicitation;
-  const [values, setValues] = useState<Record<string, RuntimeStructuredInputValue>>(() =>
-    elicitation?.mode === 'form' ? structuredInputDefaults(elicitation.requestedSchema.properties) : {},
-  );
-  const [submittingAction, setSubmittingAction] = useState<'accept' | 'decline' | 'cancel' | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  if (!elicitation) return null;
-
-  const submit = async (action: 'accept' | 'decline' | 'cancel') => {
-    if (submittingAction) return;
-    setSubmittingAction(action);
-    setError(null);
-    try {
-      const decision = action === 'accept' ? 'approve' : action === 'decline' ? 'reject' : 'cancel';
-      await onAnswerApproval(approvalId, {
-        decision,
-        elicitationResponse: {
-          action,
-          ...(action === 'accept' && elicitation.mode === 'form'
-            ? { content: compactStructuredInputValues(values) }
-            : {}),
-        },
-      });
-    } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-      setSubmittingAction(null);
-    }
-  };
-
-  return (
-    <form
-      className="chat-tool-run__elicitation"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit('accept');
-      }}
-    >
-      <div className="chat-tool-run__elicitation-header">
-        <strong>{t(elicitation.mode === 'form' ? 'toolRun.elicitation.formTitle' : 'toolRun.elicitation.urlTitle')}</strong>
-        <span>{elicitation.serverKey}</span>
-      </div>
-      <p className="chat-tool-run__elicitation-message">{elicitation.message}</p>
-      {elicitation.mode === 'form' ? (
-        <div className="chat-tool-run__elicitation-fields">
-          {Object.entries(elicitation.requestedSchema.properties).map(([name, field]) => (
-            <RuntimeStructuredInputField
-              field={field}
-              key={name}
-              name={name}
-              required={elicitation.requestedSchema.required?.includes(name) === true}
-              value={values[name]}
-              onChange={(value) => setValues((current) => ({ ...current, [name]: value }))}
-            />
-          ))}
-        </div>
-      ) : (
-        <code className="chat-tool-run__elicitation-url">{elicitation.displayUrl}</code>
-      )}
-      <div className="chat-tool-run__actions">
-        <button type="submit" disabled={Boolean(submittingAction)}>
-          {t(submittingAction === 'accept'
-            ? 'toolRun.elicitation.submitting'
-            : elicitation.mode === 'form'
-              ? 'toolRun.elicitation.submit'
-              : 'toolRun.elicitation.opening')}
-        </button>
-        <button type="button" disabled={Boolean(submittingAction)} onClick={() => void submit('decline')}>
-          {t(submittingAction === 'decline' ? 'toolRun.elicitation.declining' : 'toolRun.elicitation.decline')}
-        </button>
-        <button type="button" disabled={Boolean(submittingAction)} onClick={() => void submit('cancel')}>
-          {t(submittingAction === 'cancel' ? 'toolRun.elicitation.cancelling' : 'toolRun.elicitation.cancelTurn')}
-        </button>
-      </div>
-      {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
-    </form>
-  );
-}
-
-function defaultApprovalDecisions(): RuntimeApprovalAvailableDecision[] {
-  return [
-    { type: 'approve' },
-    { type: 'approve_for_session' },
-    { type: 'reject' },
-  ];
-}
-
-function approvalDecisionKey(decision: RuntimeApprovalAvailableDecision): string {
-  if (decision.type === 'approve_exec_policy_amendment') return `${decision.type}:${decision.proposedExecPolicyAmendment.join(' ')}`;
-  if (decision.type === 'approve_network_policy_amendment') return `${decision.type}:${decision.networkPolicyAmendment.host}:${decision.networkPolicyAmendment.action}`;
-  return decision.type;
-}
-
-function approvalDecisionLabel(decision: RuntimeApprovalAvailableDecision, t: Translate): string {
-  if (decision.type === 'approve') return t('toolRun.approval.approve');
-  if (decision.type === 'approve_for_turn_with_strict_auto_review') return t('toolRun.approval.strictReview');
-  if (decision.type === 'approve_for_session') return t('toolRun.approval.session');
-  if (decision.type === 'approve_persistently') return t('toolRun.approval.persistent');
-  if (decision.type === 'approve_exec_policy_amendment') return t('toolRun.approval.execPolicy');
-  if (decision.type === 'approve_network_policy_amendment') return t(decision.networkPolicyAmendment.action === 'deny'
-    ? 'toolRun.approval.networkDeny'
-    : 'toolRun.approval.networkAllow');
-  if (decision.type === 'cancel') return t('toolRun.approval.cancelTurn');
-  return t('toolRun.approval.reject');
-}
-
-function approvalInputFromDecision(decision: RuntimeApprovalAvailableDecision): AnswerRuntimeApprovalInput {
-  if (decision.type === 'approve_exec_policy_amendment') {
-    return { decision: decision.type, proposedExecPolicyAmendment: decision.proposedExecPolicyAmendment };
-  }
-  if (decision.type === 'approve_network_policy_amendment') {
-    return { decision: decision.type, networkPolicyAmendment: decision.networkPolicyAmendment };
-  }
-  return { decision: decision.type };
-}
-
 function ToolPreview({ code = false, label, value }: { code?: boolean; label: string; value: string }) {
   if (!value.trim()) return null;
   return (
@@ -1150,4 +663,10 @@ function ToolPreview({ code = false, label, value }: { code?: boolean; label: st
   );
 }
 
-export { groupToolRuns, toolRunDisplayStableKey } from './RuntimeToolRunPresentation.js';
+export {
+  FileChangesSummaryCard,
+} from './RuntimeFileChangesSummaryCard.js';
+export {
+  groupToolRuns,
+  toolRunDisplayStableKey,
+} from './RuntimeToolRunPresentation.js';

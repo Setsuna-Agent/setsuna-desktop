@@ -32,6 +32,33 @@ describe('runtime server REST threads and attachments', () => {
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toMatchObject({ code: 'invalid_json' });
     });
+
+  it('returns invalid_input for malformed REST goal patches', async () => {
+      const created = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Invalid REST goal patch' }),
+      });
+      const response = await fetch(
+        `${harness.baseUrl}/v1/threads/${encodeURIComponent(created.id)}/goal`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${harness.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'bogus' }),
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'invalid_input',
+        error: 'Unsupported goal status: bogus',
+      });
+      await expect(
+        harness.runtimeFetch(`/v1/threads/${encodeURIComponent(created.id)}`),
+      ).resolves.not.toHaveProperty('goal');
+    });
   
   it('uploads and deletes validated pending document attachments', async () => {
       const query = new URLSearchParams({ name: 'guide.pdf', type: 'application/pdf' });
@@ -234,6 +261,46 @@ describe('runtime server REST threads and attachments', () => {
   
       expect(updated).toMatchObject({ id: created.id, memoryMode: 'enabled' });
       expect(list.threads).toMatchObject([{ id: created.id, memoryMode: 'enabled' }]);
+    });
+
+  it('sets, clears, and deletes a thread through first-party REST commands', async () => {
+      const created = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'REST thread commands' }),
+      });
+      const threadPath = `/v1/threads/${encodeURIComponent(created.id)}`;
+
+      const goal = await harness.runtimeFetch(`${threadPath}/goal`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          objective: 'Keep the first-party runtime boundary small.',
+          status: 'paused',
+          tokenBudget: 1_000,
+        }),
+      });
+      expect(goal).toMatchObject({
+        threadId: created.id,
+        objective: 'Keep the first-party runtime boundary small.',
+        status: 'paused',
+        tokenBudget: 1_000,
+      });
+      await expect(harness.runtimeFetch(threadPath)).resolves.toMatchObject({
+        id: created.id,
+        goal: expect.objectContaining({ objective: goal.objective }),
+      });
+
+      await expect(harness.runtimeFetch(`${threadPath}/goal`, {
+        method: 'DELETE',
+      })).resolves.toEqual({ cleared: true });
+      await expect(harness.runtimeFetch(`${threadPath}/goal`, {
+        method: 'DELETE',
+      })).resolves.toEqual({ cleared: false });
+
+      await expect(harness.runtimeFetch(threadPath, {
+        method: 'DELETE',
+      })).resolves.toEqual({ ok: true });
+      const threads = await harness.runtimeFetch('/v1/threads?includeArchived=true');
+      expect(threads.threads.some((thread: { id: string }) => thread.id === created.id)).toBe(false);
     });
   
   it('updates thread memory mode through the AppServer RPC', async () => {

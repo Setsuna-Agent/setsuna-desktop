@@ -327,46 +327,6 @@ export function sweUserInputText(value: unknown): string {
     .join('\n');
 }
 
-export function sweReviewRequestFromTarget(value: unknown): { displayText: string; prompt: string } {
-  const target = recordInput(value);
-  const type = requiredString(target.type, 'target.type');
-  if (type === 'uncommittedChanges') {
-    return {
-      displayText: 'current changes',
-      prompt: sweReviewPrompt('Review the current uncommitted changes.'),
-    };
-  }
-  if (type === 'baseBranch') {
-    const branch = stringInput(target.branch);
-    if (!branch) throw new AppServerRpcError(-32600, 'branch must not be empty');
-    return {
-      displayText: `changes against '${branch}'`,
-      prompt: sweReviewPrompt(`Review the changes between the current branch and '${branch}'.`),
-    };
-  }
-  if (type === 'commit') {
-    const sha = stringInput(target.sha);
-    if (!sha) throw new AppServerRpcError(-32600, 'sha must not be empty');
-    const title = stringInput(target.title);
-    const shortSha = [...sha].slice(0, 7).join('');
-    const displayText = title ? `commit ${shortSha}: ${title}` : `commit ${shortSha}`;
-    return {
-      displayText,
-      prompt: sweReviewPrompt(title ? `Review commit ${sha}: ${title}.` : `Review commit ${sha}.`),
-    };
-  }
-  if (type === 'custom') {
-    const instructions = stringInput(target.instructions);
-    if (!instructions) throw new AppServerRpcError(-32600, 'instructions must not be empty');
-    return { displayText: instructions, prompt: instructions };
-  }
-  throw new AppServerRpcError(-32602, `Unsupported review target: ${type}`);
-}
-
-function sweReviewPrompt(scope: string): string {
-  return `${scope}\nInspect the relevant diff and return the review findings.`;
-}
-
 export function sweReviewUserMessageItem(id: string, text: string): AppServerThreadItem {
   return { type: 'userMessage', id, clientId: null, content: [{ type: 'text', text }] };
 }

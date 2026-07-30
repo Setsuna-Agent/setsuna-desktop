@@ -7,6 +7,14 @@ describe('desktop runtime client advanced thread methods', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps the raw request bridge private to the renderer adapter', () => {
+    installRuntimeBridge(() => ({}));
+
+    const client = createDesktopRuntimeClient();
+
+    expect(client).not.toHaveProperty('request');
+  });
+
   it('serializes parent and ancestor thread filters', async () => {
     const request = installRuntimeBridge(() => ({ threads: [] }));
     const client = createDesktopRuntimeClient();
@@ -127,52 +135,128 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(request).toHaveBeenCalledWith({ path: '/v1/attachments/attachment%20%2F%201', method: 'DELETE' });
   });
 
-  it('uses the app-server bridge for goals and returns the runtime goal', async () => {
+  it('routes thread deletion, goals, and reviews through first-party REST', async () => {
     const request = installRuntimeBridge((input) => {
-      const body = input.body as { method?: string } | undefined;
-      if (body?.method === 'thread/goal/set') {
+      if (input.method === 'PUT' && input.path.endsWith('/goal')) {
         return {
-          id: 'thread/goal/set',
-          result: {
-            goal: {
-              threadId: 'thread_1',
-              objective: 'Ship it',
-              status: 'active',
-              tokenBudget: 1000,
-              tokensUsed: 0,
-              timeUsedSeconds: 0,
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          },
+          threadId: 'thread / 1',
+          objective: 'Ship it',
+          status: 'active',
+          tokenBudget: 1000,
+          tokensUsed: 0,
+          timeUsedSeconds: 0,
+          createdAt: 1,
+          updatedAt: 1,
         };
       }
-      throw new Error(`unexpected request: ${input.path}`);
+      if (input.path.endsWith('/reviews')) {
+        return { accepted: true, turnId: 'turn_review' };
+      }
+      if (input.path.endsWith('/goal')) {
+        return { cleared: true };
+      }
+      return { ok: true };
     });
     const client = createDesktopRuntimeClient();
+    const target = { type: 'baseBranch' as const, branch: 'main' };
 
-    await expect(client.setThreadGoal('thread_1', { objective: 'Ship it', tokenBudget: 1000 })).resolves.toMatchObject({
+    await client.deleteThread('thread / 1');
+    await expect(client.setThreadGoal('thread / 1', {
+      objective: 'Ship it',
+      tokenBudget: 1000,
+    })).resolves.toMatchObject({
       objective: 'Ship it',
       tokenBudget: 1000,
     });
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({
-      path: '/v1/swe/app-server',
-      method: 'POST',
-      body: expect.objectContaining({ method: 'thread/goal/set', params: { threadId: 'thread_1', objective: 'Ship it', tokenBudget: 1000 } }),
-    }));
+    await expect(client.clearThreadGoal('thread / 1')).resolves.toBe(true);
+    await expect(client.startReview('thread / 1', target)).resolves.toEqual({
+      accepted: true,
+      turnId: 'turn_review',
+    });
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      {
+        path: '/v1/threads/thread%20%2F%201',
+        method: 'DELETE',
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/goal',
+        method: 'PUT',
+        body: { objective: 'Ship it', tokenBudget: 1000 },
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/goal',
+        method: 'DELETE',
+      },
+      {
+        path: '/v1/threads/thread%20%2F%201/reviews',
+        method: 'POST',
+        body: { target },
+      },
+    ]);
   });
 
-  it('unwraps MCP status and resource app-server responses', async () => {
-    installRuntimeBridge((input) => {
-      const body = input.body as { method?: string } | undefined;
-      if (body?.method === 'mcpServerStatus/list') return { id: body.method, result: { data: [], nextCursor: null } };
-      if (body?.method === 'mcpServer/resource/read') return { id: body.method, result: { contents: [{ text: 'hello' }] } };
-      throw new Error(`unexpected request: ${input.path}`);
+  it('routes hooks, MCP operations, and skill roots through first-party REST', async () => {
+    const request = installRuntimeBridge((input) => {
+      if (input.path === '/v1/mcp/statuses') return { data: [], nextCursor: null };
+      if (input.path === '/v1/mcp/resources/read') {
+        return { contents: [{ text: 'hello' }] };
+      }
+      if (input.path === '/v1/mcp/tools/call') {
+        return { content: [{ type: 'text', text: 'done' }], isError: false };
+      }
+      if (input.path.startsWith('/v1/hooks')) {
+        return { data: [] };
+      }
+      return { ok: true };
     });
     const client = createDesktopRuntimeClient();
 
-    await expect(client.listMcpServerStatuses()).resolves.toEqual({ data: [], nextCursor: null });
-    await expect(client.readMcpServerResource('thread_1', 'docs', 'memory://one')).resolves.toEqual({ contents: [{ text: 'hello' }] });
+    await client.listHooks(['/repo one', '/repo/two']);
+    await expect(client.listMcpServerStatuses()).resolves.toEqual({
+      data: [],
+      nextCursor: null,
+    });
+    await expect(
+      client.readMcpServerResource('thread_1', 'docs', 'memory://one'),
+    ).resolves.toEqual({
+      contents: [{ text: 'hello' }],
+    });
+    await expect(
+      client.callMcpServerTool('thread_1', 'docs', 'search', { q: 'setsuna' }),
+    ).resolves.toMatchObject({
+      isError: false,
+    });
+    await client.setSkillExtraRoots(['/skills/one']);
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      {
+        path: '/v1/hooks?cwd=%2Frepo+one&cwd=%2Frepo%2Ftwo',
+      },
+      {
+        path: '/v1/mcp/statuses',
+      },
+      {
+        path: '/v1/mcp/resources/read',
+        method: 'POST',
+        body: { threadId: 'thread_1', server: 'docs', uri: 'memory://one' },
+      },
+      {
+        path: '/v1/mcp/tools/call',
+        method: 'POST',
+        body: {
+          threadId: 'thread_1',
+          server: 'docs',
+          tool: 'search',
+          arguments: { q: 'setsuna' },
+        },
+      },
+      {
+        path: '/v1/skills/extra-roots',
+        method: 'PUT',
+        body: { extraRoots: ['/skills/one'] },
+      },
+    ]);
   });
 
   it('installs marketplace plugins by id without sending a local path', async () => {

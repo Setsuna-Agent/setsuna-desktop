@@ -1,9 +1,14 @@
 import type { SlotConfigType } from '@ant-design/x/es/sender';
-import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeSkillSummary,
+  WorkspaceEntrySearchItem,
+} from '@setsuna-desktop/contracts';
+import { Boxes } from 'lucide-react';
 import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
-import { entryLabel } from './chatCommandUtils.js';
+import { entryLabel, skillDisplayText } from './chatCommandUtils.js';
 
 const workspaceMentionSlotKeyPrefix = 'workspace:';
+const selectedSkillSlotKeyPrefix = 'skill:';
 
 export type WorkspaceMentionInsertion = {
   replaceCharacters?: string;
@@ -12,6 +17,40 @@ export type WorkspaceMentionInsertion = {
 
 export function createTextSlot(value: string): SlotConfigType {
   return { type: 'text', value };
+}
+
+export function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigType {
+  const tokenText = skillDisplayText(skill);
+  return {
+    type: 'tag',
+    key: selectedSkillSlotKey(skill.id),
+    props: {
+      label: (
+        <span className="chat-skill-slot" title={skill.description || skill.id}>
+          <Boxes size={13} />
+          <span className="chat-skill-slot__name">{tokenText}</span>
+        </span>
+      ),
+      value: tokenText,
+    },
+    formatResult: () => tokenText,
+  };
+}
+
+export function filterSelectedSkillsBySlots(
+  skills: RuntimeSkillSummary[],
+  slotConfig: SlotConfigType[] | undefined,
+): RuntimeSkillSummary[] {
+  const selectedSlotKeys = new Set(
+    (slotConfig ?? [])
+      .map((slot) => slot.key)
+      .filter((key): key is string => (
+        typeof key === 'string'
+        && key.startsWith(selectedSkillSlotKeyPrefix)
+      )),
+  );
+  const filteredSkills = skills.filter((skill) => selectedSlotKeys.has(selectedSkillSlotKey(skill.id)));
+  return filteredSkills.length === skills.length ? skills : filteredSkills;
 }
 
 export function createWorkspaceMentionSlots(entry: WorkspaceEntrySearchItem, leadingText = ''): SlotConfigType[] {
@@ -37,6 +76,10 @@ export function createWorkspaceMentionInsertion(
     replaceCharacters: trailingWhitespace || undefined,
     slots: createWorkspaceMentionSlots(entry, contentBeforeTrailingWhitespace.trim() ? '\n' : ''),
   };
+}
+
+function selectedSkillSlotKey(skillId: string): string {
+  return `${selectedSkillSlotKeyPrefix}${skillId}`;
 }
 
 function createWorkspaceMentionSlot(entry: WorkspaceEntrySearchItem): SlotConfigType {

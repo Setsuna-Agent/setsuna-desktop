@@ -8,6 +8,7 @@ export * from './data-root.js';
 export * from './debug-traces.js';
 export * from './desktop.js';
 export * from './environment.js';
+export * from './event-projections/dispositions.js';
 export * from './events.js';
 export * from './http.js';
 export * from './mcp.js';

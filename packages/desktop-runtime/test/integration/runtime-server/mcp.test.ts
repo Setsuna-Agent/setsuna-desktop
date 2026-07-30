@@ -83,7 +83,7 @@ describe('runtime server MCP API', () => {
       await expect(harness.appServerRpc('mcpServerStatus/list', {})).resolves.toEqual({ data: [], nextCursor: null });
     });
   
-  it('lists MCP resources and resource templates in AppServer full status', async () => {
+  it('lists MCP resources and resource templates in first-party REST status', async () => {
       const mcpServer = await createMcpToolsServer();
       try {
         await harness.runtimeFetch('/v1/mcp/servers', {
@@ -98,7 +98,7 @@ describe('runtime server MCP API', () => {
           }),
         });
   
-        await expect(harness.appServerRpc('mcpServerStatus/list', {})).resolves.toEqual({
+        await expect(harness.runtimeFetch('/v1/mcp/statuses')).resolves.toEqual({
           data: [
             {
               name: 'docs',
@@ -308,7 +308,7 @@ describe('runtime server MCP API', () => {
       }
     });
   
-  it('reads MCP resources through the AppServer API', async () => {
+  it('reads MCP resources through both AppServer and first-party REST', async () => {
       const mcpServer = await createMcpToolsServer();
       try {
         await harness.runtimeFetch('/v1/mcp/servers', {
@@ -333,9 +333,25 @@ describe('runtime server MCP API', () => {
             },
           ],
         });
+        await expect(harness.runtimeFetch('/v1/mcp/resources/read', {
+          method: 'POST',
+          body: JSON.stringify({
+            server: 'docs',
+            uri: 'memo://hello',
+          }),
+        })).resolves.toEqual({
+          contents: [
+            {
+              uri: 'memo://hello',
+              mimeType: 'text/plain',
+              text: 'resource for memo://hello',
+            },
+          ],
+        });
         expect(await mcpServer.requests).toEqual([
           { method: 'initialize', authorization: 'Bearer resource-secret', session: '' },
           { method: 'notifications/initialized', authorization: 'Bearer resource-secret', session: 'session_1' },
+          { method: 'resources/read', authorization: 'Bearer resource-secret', session: 'session_1', uri: 'memo://hello' },
           { method: 'resources/read', authorization: 'Bearer resource-secret', session: 'session_1', uri: 'memo://hello' },
         ]);
       } finally {
@@ -343,7 +359,7 @@ describe('runtime server MCP API', () => {
       }
     });
   
-  it('calls MCP tools through the AppServer API', async () => {
+  it('calls MCP tools through both AppServer and first-party REST', async () => {
       const mcpServer = await createMcpToolsServer();
       const startedThread = await harness.appServerRpc('thread/start', { name: 'MCP tool call', cwd: process.cwd() });
       try {
@@ -368,10 +384,25 @@ describe('runtime server MCP API', () => {
           isError: false,
           _meta: { source: 'test-mcp' },
         });
+        await expect(harness.runtimeFetch('/v1/mcp/tools/call', {
+          method: 'POST',
+          body: JSON.stringify({
+            threadId: startedThread.thread.id,
+            server: 'docs',
+            tool: 'search_web',
+            arguments: { query: 'setsuna-rest' },
+          }),
+        })).resolves.toEqual({
+          content: [{ type: 'text', text: 'result for setsuna-rest' }],
+          structuredContent: { query: 'setsuna-rest', count: 1 },
+          isError: false,
+          _meta: { source: 'test-mcp' },
+        });
         expect(await mcpServer.requests).toEqual([
           { method: 'initialize', authorization: 'Bearer call-secret', session: '' },
           { method: 'notifications/initialized', authorization: 'Bearer call-secret', session: 'session_1' },
           { method: 'tools/call', authorization: 'Bearer call-secret', session: 'session_1', tool: 'search_web', query: 'setsuna' },
+          { method: 'tools/call', authorization: 'Bearer call-secret', session: 'session_1', tool: 'search_web', query: 'setsuna-rest' },
         ]);
       } finally {
         await mcpServer.close();

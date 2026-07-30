@@ -99,8 +99,7 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 
 `createDesktopRuntimeClient()` 实现 contracts 的 `DesktopRuntimeClient`：
 
-- 普通 REST 通过 `bridge.request()`。
-- 线程/目标/review 等部分能力通过 app-server RPC helper。
+- 第一方 runtime 能力通过 `bridge.request()` 访问 REST。
 - SSE 通过 `bridge.startSse()`。
 - 对 path segment 使用 `encodeURIComponent`。
 - 只暴露方法级 API。
@@ -119,16 +118,60 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 
 ### `useRuntimeClientState.ts`
 
-Renderer 的 runtime 状态中心，持有：
+Renderer 的薄 runtime facade，只持有：
 
-- Visible / archived thread summaries。
-- Current full thread。
-- Config 与 active turn。
+- Bootstrap loading/error。
 - Projects。
-- Skills、MCP、Hooks、Plugins、marketplace。
-- Usage、thread usage、memory 与 preview。
-- Approvals 和 capability refresh。
-- Context compaction 与 activity 状态。
+- Turn 完成后的跨 capability/usage 刷新桥。
+
+它组合 `useRuntimeCapabilityState.ts`、`useRuntimeConfigState.ts`、`useRuntimeMemoryUsageState.ts` 和 `useRuntimeThreadState.ts`，保持 72 项上层调用面不变。
+
+### `useRuntimeThreadState.ts`
+
+主对话 thread/SSE/active-turn 的唯一 owner，持有：
+
+- Visible / archived thread summaries 与 current full thread。
+- Current thread SSE subscription 和 last accepted sequence。
+- Active turn、terminal turn IDs 与 polling recovery。
+- Activity、context compaction、approval 和 thread mutation。
+
+该 hook 只依赖 12 个 thread/review/approval client 方法。SSE projection、activity、runtime error、turn transition 和跨域刷新共用同一个 thread + sequence 接受判定；旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence。
+
+纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade，再由 facade 刷新 capability/usage，避免 thread hook 与 memory hook 形成循环依赖。
+
+### `useRuntimeConfigState.ts`
+
+Runtime config 的唯一 renderer state owner，持有共享配置文档并负责：
+
+- Provider 保存与 active provider 回退。
+- Composer 模型选择。
+- Runtime preferences。
+- 图像生成配置与连通性测试。
+- Provider model discovery。
+
+该 hook 只依赖 `saveConfig`、`fetchProviderModels`、`testImageGeneration` 三个 client 方法。Provider state 到 config input 的映射由纯函数集中处理，不能把 `apiKeySet`、`apiKeyPreview` 等安全投影字段误写回 runtime。Bootstrap 和 Hook mutation 通过 `replaceConfig` 更新同一份状态，不复制第二个 config owner。
+
+### `useRuntimeCapabilityState.ts`
+
+能力域 owner，持有：
+
+- Skills 与 extra roots。
+- MCP server state。
+- Hooks 与当前 project cwd 的 latest-request guard。
+- Plugins、marketplace 和跨 Skill/MCP/config/Hook 的安装后刷新。
+
+该 hook 依赖显式 `RuntimeCapabilityClient`，不能调用 thread、usage、memory 或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
+
+### `useRuntimeMemoryUsageState.ts`
+
+Memory/usage 域 owner，持有：
+
+- Global usage 与当前 thread usage。
+- 当前 project 的 memory list。
+- Memory preview 与 loading。
+- Delete/clear 后的 list + preview 收敛。
+
+Project memory 使用 project identity guard，thread usage 使用 thread identity guard，preview/global usage 使用 latest-request guard。Turn completed 仍会刷新全局 usage 和对应 thread usage，但迟到结果不能写入已经切换的 owner。该 hook 的 client contract 只包含 memory/usage 所需的 5 个方法。
 
 ## Bootstrap
 
@@ -192,10 +235,13 @@ Core 失败会进入 app error。
 
 - `test/unit/services/runtime-client/client.test.ts`
 - `runtimeEvents.test.ts`
+- `runtimeThreadState.test.ts`
 - `useRuntimeClientState.test.ts`
+- `useRuntimeCapabilityState.test.ts`
+- `useRuntimeConfigState.test.ts`
+- `useRuntimeMemoryUsageState.test.ts`
 - `test/unit/app/controller/`
 - `test/unit/app/layout/`
 - `test/unit/app/sidebar/`
 
 重点覆盖 bootstrap 部分失败、SSE 去重、线程切换迟到响应、终态与 polling 竞争、listener cleanup 和 feature callback wiring。
-

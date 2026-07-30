@@ -57,7 +57,21 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 
 ## REST route
 
-`runtime-rest-routes.ts` 是路由注册/解析入口，主要领域：
+`runtime-rest-routes.ts` 是 53 行有序分发入口，只组合窄 domain handler：
+
+- `runtime-config-routes.ts`：Config 与 provider model discovery。
+- `runtime-extension-routes.ts`：Skills、MCP、Hooks、Plugins 和 Approvals。
+- `runtime-resource-routes.ts`：数据迁移 readiness 与 workspace dependencies。
+- `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
+- `runtime-turn-routes.ts`：Turn start/steer/cancel、review 与 commit message。
+- `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
+- `runtime-capability-routes.ts`：Hook、MCP status/resource/tool 与 Skill extra roots。
+- `runtime-workspace-routes.ts`：Projects、entries、read/search 和 workspace status。
+- `runtime-memory-usage-routes.ts`：Memory CRUD/preview 和 Usage query。
+
+Route family 只做 method/path/body 解析、错误映射和 response DTO。跨 port 的业务事务下沉到 `runtime/use-cases/`；例如项目归档由 `workspace-operations.ts` 持有，commit message 的模型选择、prompt 安全和 fallback 由 `commit-message-generation.ts` 持有。
+
+覆盖领域：
 
 ### Runtime 与配置
 
@@ -88,9 +102,8 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 
 ### 数据域
 
-- Projects、entries、search、file read、workspace status。
-- Memory。
-- Usage。
+- Projects、entries、search、file read、workspace status；项目归档事务由 `runtime/use-cases/workspace-operations.ts` 持有。
+- Memory 与 Usage 只在对应 domain handler 中做 query/body 解析和 store 调用。
 
 Route 应：
 
@@ -146,14 +159,18 @@ SSE response 被 server 跟踪，shutdown 时先 end 长连接，避免 `server.
 | `rpc.ts` / `dispatcher.ts` | JSON-RPC parse/dispatch |
 | `connections.ts` | Connection ID 与 capability |
 | `thread-protocol.ts` | Thread/turn/review/steer |
-| `config-protocol.ts` | Config |
+| `config-protocol.ts` | Config read/write、model、memory 与 sandbox 映射 |
+| `feature-protocol.ts` | Experimental feature 目录、默认值与 enablement 写入 |
 | `approval-protocol.ts` | Approval |
-| `command-exec.ts` | PTY command lifecycle |
+| `command-exec.ts` | Command/exec session facade 与兼容导出 |
+| `process-manager.ts` | Process session、background terminal 与连接生命周期 |
+| `command-process-runtime.ts` | PTY、output cap、stdin、env 与 termination 共享基础设施 |
+| `command-sandbox.ts` | Permission/sandbox policy、Seatbelt profile 与 fail-closed spawn 包装 |
 | `fs-protocol.ts` | File protocol |
 | `hooks-protocol.ts` | Hooks |
 | `skills-protocol.ts` | Skills |
 | `dynamic-tools.ts` | Dynamic tool catalog/call |
-| `errors.ts` / `input.ts` / `platform.ts` | Boundary helper |
+| `errors.ts` / `input.ts` / `pagination.ts` / `platform.ts` | Boundary helper |
 
 Notification SSE 可以通过 header/query 获得显式 connection ID；连接关闭要终止相应 fs/command resources。
 
@@ -184,7 +201,7 @@ Contract 映射详见 [SWE/app-server](../contracts/swe-app-server.md)。
 3. 复用现有 container service；必要时先加 port/adapter。
 4. 不在 route 内直接读取私有 JSON 文件。
 5. 确认 shutdown/data migration 准入语义。
-6. 添加 `test/server/runtime-rest-routes.test.ts` 的边界测试。
+6. 添加对应 `test/server/runtime-*-routes.test.ts` 的边界测试。
 7. 添加 `test/integration/runtime-server/` 的协议场景。
 8. 更新 renderer client。
 
@@ -192,7 +209,8 @@ Contract 映射详见 [SWE/app-server](../contracts/swe-app-server.md)。
 
 单元：
 
-- `test/server/runtime-rest-routes.test.ts`
+- `test/server/runtime-workspace-routes.test.ts`
+- `test/runtime/use-cases/workspace-operations.test.ts`
 - `sse.test.ts`
 - `http-utils.test.ts`
 - `in-flight-requests.test.ts`
@@ -208,4 +226,3 @@ Integration：
 - `reviews-messages.test.ts`
 
 Harness 位于 `test/support/runtime-server/`。
-

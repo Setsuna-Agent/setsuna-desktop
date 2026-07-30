@@ -124,6 +124,51 @@ describe('runtime server reviews and message mutations', () => {
         error: { code: -32600, message: 'review/start detached delivery is not supported yet' },
       });
     });
+
+  it('starts reviews through the first-party REST route', async () => {
+      const capture = await createOpenAiCaptureServer();
+      try {
+        await harness.configureOpenAiProvider('rest-review-provider', capture.baseUrl);
+        const thread = await harness.runtimeFetch('/v1/threads', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'REST review' }),
+        });
+        const started = await harness.runtimeFetch(
+          `/v1/threads/${encodeURIComponent(thread.id)}/reviews`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              target: {
+                type: 'custom',
+                instructions: 'Review the runtime boundary only.',
+              },
+            }),
+          },
+        );
+        const body = await withTimeout(
+          capture.nextBody,
+          harness.providerCaptureTimeoutMs,
+          'Timed out waiting for REST review provider request',
+        );
+
+        expect(started).toEqual({
+          accepted: true,
+          turnId: expect.any(String),
+        });
+        expect(JSON.stringify(body)).toContain('Review the runtime boundary only.');
+        await harness.waitForThread(
+          thread.id,
+          (item) => item.messages.some(
+            (message) =>
+              message.turnId === started.turnId
+              && message.role === 'assistant'
+              && message.status === 'complete',
+          ),
+        );
+      } finally {
+        await capture.close();
+      }
+    });
   
   it('updates, deletes, and regenerates thread messages through the runtime API', async () => {
       const thread = await harness.runtimeFetch('/v1/threads', {

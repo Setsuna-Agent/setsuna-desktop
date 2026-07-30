@@ -17,6 +17,7 @@ import {
   ToolExecutionError,
   type RuntimeToolExecutionContext,
   type ToolExecutionEnvironment,
+  type ToolRuntimeProfile,
 } from '../../ports/tool-host.js';
 import {
   assessFileMutationPolicy,
@@ -29,7 +30,7 @@ import {
 } from '../../security/network-approval-policy.js';
 import { reusableShellCommandWords } from '../../security/shell-command-analysis.js';
 import { recordInput } from '../../shared/unknown.js';
-import { abortReason } from '../core/runtime-turn-errors.js';
+import { abortable } from '../core/runtime-turn-errors.js';
 
 export type ToolApprovalRequirement =
   | { action: 'skip' }
@@ -165,6 +166,19 @@ export function requestedSandboxBypass(toolName: string, parsedArguments: unknow
   if (!isShellCommandToolName(toolName)) return false;
   const record = recordInput(parsedArguments);
   return stringArg(record.sandbox_permissions ?? record.sandboxPermissions) === 'require_escalated';
+}
+
+export function requiresUpfrontSandboxBypass(
+  runtimeProfile: ToolRuntimeProfile | null | undefined,
+  toolCall: RuntimeToolCall,
+  parsedArguments: unknown,
+  context: RuntimeToolExecutionContext,
+  approvalPolicy: RuntimeConfigState['approvalPolicy'],
+): boolean {
+  return runtimeProfile?.requiresSandboxBypassApproval === true
+    && approvalPolicy !== 'full'
+    && context.permissionProfile !== 'danger-full-access'
+    && !requestedSandboxBypass(toolCall.name, parsedArguments);
 }
 
 export function execApprovalApprovalKeys(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext): string[] | undefined {
@@ -922,20 +936,4 @@ export function toolRunWithCancellationProfile<T>(promise: Promise<T>, signal: A
   // Promise 继续维持代理轮次活动。
   void promise.catch(() => undefined);
   return abortable(promise, signal);
-}
-
-export function throwIfApprovalCancelled(decision: RuntimeApprovalDecision): void {
-  if (decision !== 'cancel') return;
-  const error = new Error('Turn cancelled by approval decision.');
-  error.name = 'AbortError';
-  throw error;
-}
-
-export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(abortReason(signal));
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(abortReason(signal));
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
-  });
 }

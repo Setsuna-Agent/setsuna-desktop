@@ -24,8 +24,25 @@ const codeExtensions = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '
 const testFilePattern = /\.(?:spec|test)\.[cm]?[jt]sx?$/u;
 const compiledTestArtifactPattern = /\.(?:spec|test)(?:\.d)?\.[cm]?[jt]sx?(?:\.map)?$/u;
 const maxCodeLines = 1_200;
+const maxUnreviewedCodeLines = 900;
 const maxStyleLines = 1_600;
 const maxDirectSourceFiles = 35;
+const rendererRoot = layerRoots.get('renderer');
+const rendererAppServerPath = '/v1/swe/app-server';
+// Existing hotspots may be reduced in place, but cannot grow without first
+// extracting a responsibility and updating this deliberately reviewed budget.
+const legacyHotspotLineBudgets = new Map([
+  ['apps/desktop/main/src/data-root/coordinator.ts', 965],
+  ['apps/desktop/renderer/src/features/chat/conversation/ChatMessageItem.tsx', 1_005],
+  ['apps/desktop/renderer/src/features/settings/providers/ProviderSettings.tsx', 926],
+  ['apps/desktop/renderer/src/shared/i18n/messages.ts', 1_172],
+  ['packages/desktop-runtime/src/adapters/mcp/sdk-mcp-connection-manager.ts', 993],
+  ['packages/desktop-runtime/src/adapters/store/sqlite-thread-store.ts', 974],
+  ['packages/desktop-runtime/src/adapters/tool/pc-local/pc-local-tool-shell-policy.ts', 1_009],
+  ['packages/desktop-runtime/src/adapters/tool/pc-local/pc-local-tool-shell-process.ts', 1_070],
+  ['packages/desktop-runtime/src/adapters/workspace/managed-workspace-dependency-manager.ts', 1_181],
+  ['packages/desktop-runtime/src/loop/tools/tool-orchestrator-policy.ts', 939],
+]);
 
 async function collectFiles(directory, files = []) {
   if (!existsSync(directory)) return files;
@@ -137,6 +154,7 @@ function stronglyConnectedComponents(graph) {
 
 const violations = [];
 const productionFiles = [];
+let reviewHotspotCount = 0;
 for (const root of layerRoots.values()) {
   productionFiles.push(...await collectFiles(root));
 }
@@ -154,10 +172,32 @@ for (const filePath of productionFiles) {
   const directory = path.dirname(filePath);
   directSourceCounts.set(directory, (directSourceCounts.get(directory) ?? 0) + 1);
   const sourceText = await readFile(filePath, 'utf8');
+  if (
+    isWithin(filePath, rendererRoot)
+    && codeExtensions.has(extension)
+    && sourceText.includes(rendererAppServerPath)
+  ) {
+    violations.push(
+      `${repositoryPath(filePath)}: renderer must use first-party runtime APIs, not the SWE app-server transport.`,
+    );
+  }
   const lineCount = countLines(sourceText);
   const lineLimit = extension === '.css' ? maxStyleLines : codeExtensions.has(extension) ? maxCodeLines : null;
   if (lineLimit && lineCount > lineLimit) {
     violations.push(`${repositoryPath(filePath)}: ${lineCount} lines exceeds the ${lineLimit}-line limit.`);
+  } else if (codeExtensions.has(extension) && lineCount >= 700) {
+    reviewHotspotCount += 1;
+    const fileName = repositoryPath(filePath);
+    const reviewedBudget = legacyHotspotLineBudgets.get(fileName);
+    if (lineCount > maxUnreviewedCodeLines && reviewedBudget === undefined) {
+      violations.push(
+        `${fileName}: ${lineCount} lines exceeds the ${maxUnreviewedCodeLines}-line unreviewed-module limit.`,
+      );
+    } else if (reviewedBudget !== undefined && lineCount > reviewedBudget) {
+      violations.push(
+        `${fileName}: ${lineCount} lines exceeds its reviewed non-growth budget of ${reviewedBudget}.`,
+      );
+    }
   }
 }
 
@@ -222,6 +262,6 @@ if (violations.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Architecture check passed: ${productionFiles.length} production files, no layer cycles, source tests, or oversized modules.`,
+    `Architecture check passed: ${productionFiles.length} production files; ${reviewHotspotCount} code modules are at least 700 lines, and modules above 900 lines are held to explicit non-growth budgets.`,
   );
 }

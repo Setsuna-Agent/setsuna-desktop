@@ -1,7 +1,11 @@
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { RuntimeToolHookRunner } from '../../../src/hooks/runtime-hooks.js';
-import { ToolApprovalStore, ToolOrchestrator } from '../../../src/loop/tools/tool-orchestrator.js';
+import {
+  ToolApprovalStore,
+  ToolOrchestrator,
+  type ToolOrchestratorEvents,
+} from '../../../src/loop/tools/tool-orchestrator.js';
 import type { ApprovalGate, CreateApprovalInput } from '../../../src/ports/approval-gate.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import { ToolExecutionError, type RuntimeToolExecutionContext, type ToolHost } from '../../../src/ports/tool-host.js';
@@ -22,6 +26,108 @@ describe('ToolApprovalStore', () => {
 });
 
 describe('ToolOrchestrator terminal and retry handling', () => {
+  it('resolves a pending approval exactly once when the turn is cancelled', async () => {
+    let markApprovalCreated!: () => void;
+    const approvalCreated = new Promise<void>((resolve) => { markApprovalCreated = resolve; });
+    const answerApproval = vi.fn(async () => ({
+      id: 'approval_cancel',
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      toolCallId: 'call_cancel_approval',
+      toolName: 'local_tool',
+      reason: 'Confirmation required.',
+      argumentsPreview: '{}',
+      status: 'cancelled' as const,
+      decision: 'cancel' as const,
+      createdAt: new Date().toISOString(),
+      resolvedAt: new Date().toISOString(),
+    }));
+    const approvalGate = {
+      createApproval: async (input: CreateApprovalInput) => {
+        markApprovalCreated();
+        return {
+          ...input,
+          id: 'approval_cancel',
+          status: 'pending' as const,
+          createdAt: new Date().toISOString(),
+        };
+      },
+      waitForDecision: async () => new Promise<never>(() => undefined),
+      answerApproval,
+      listApprovals: async () => ({ approvals: [] }),
+      forgetApproval: () => undefined,
+    } as ApprovalGate;
+    const runTool = vi.fn(async () => ({ content: 'must not run' }));
+    const toolHost = stubToolHost(runTool, {
+      approvalForTool: async () => ({ reason: 'Confirmation required.' }),
+    });
+    const fixture = createOrchestratorFixture(toolHost, undefined, approvalGate);
+    const controller = new AbortController();
+
+    const running = fixture.orchestrator.runToolCall(
+      { id: 'call_cancel_approval', name: 'local_tool', arguments: '{}' },
+      {},
+      executionContext(controller.signal),
+      'strict',
+    );
+    await approvalCreated;
+    controller.abort('cancel while approving');
+
+    await expect(running).rejects.toMatchObject({ name: 'AbortError', message: 'cancel while approving' });
+    expect(runTool).not.toHaveBeenCalled();
+    expect(answerApproval).toHaveBeenCalledOnce();
+    expect(answerApproval).toHaveBeenCalledWith('approval_cancel', {
+      decision: 'cancel',
+      message: 'Turn cancelled.',
+    });
+    expect(fixture.approvalRequests).toEqual(['approval_cancel']);
+    expect(fixture.approvalResolutions).toEqual([
+      {
+        approvalId: 'approval_cancel',
+        decision: 'cancel',
+        message: 'Turn cancelled.',
+        createdAt: expect.any(String),
+      },
+    ]);
+    expect(fixture.completions).toEqual([]);
+  });
+
+  it('flushes output deltas before publishing the single terminal event', async () => {
+    let releaseDelta!: () => void;
+    let markDeltaStarted!: () => void;
+    const deltaStarted = new Promise<void>((resolve) => { markDeltaStarted = resolve; });
+    const deltaReleased = new Promise<void>((resolve) => { releaseDelta = resolve; });
+    const eventOrder: string[] = [];
+    const toolHost = stubToolHost(async (_name, _input, context) => {
+      context.onToolOutputDelta?.({ delta: 'partial output', stream: 'stdout' });
+      return { content: 'complete output' };
+    });
+    const fixture = createOrchestratorFixture(toolHost, undefined, undefined, undefined, {
+      publishToolOutputDelta: async () => {
+        eventOrder.push('delta:start');
+        markDeltaStarted();
+        await deltaReleased;
+        eventOrder.push('delta:complete');
+      },
+      publishToolCompleted: async () => {
+        eventOrder.push('terminal');
+      },
+    });
+
+    const running = fixture.orchestrator.runToolCall(
+      { id: 'call_delta_order', name: 'local_tool', arguments: '{}' },
+      {},
+      executionContext(),
+      'full',
+    );
+    await deltaStarted;
+
+    expect(eventOrder).toEqual(['delta:start']);
+    releaseDelta();
+    await expect(running).resolves.toMatchObject({ status: 'success' });
+    expect(eventOrder).toEqual(['delta:start', 'delta:complete', 'terminal']);
+  });
+
   it.each(['strict', 'on-request'] as const)(
     'merges the %s shell approval with an unavailable-sandbox bypass before the first attempt',
     async (approvalPolicy) => {
@@ -211,6 +317,124 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     expect(approvalInput?.additionalPermissions).toMatchObject({ file_system: { read: [readableRoot] } });
   });
 
+  it('falls back to an approved sandbox bypass only when the narrow retry is still sandbox-denied', async () => {
+    const readableRoot = path.resolve('/opt/toolchains/node-22');
+    const contexts: Array<Parameters<ToolHost['runTool']>[2]> = [];
+    const approvalInputs: CreateApprovalInput[] = [];
+    const toolHost = stubToolHost(async (_name, _input, context) => {
+      contexts.push(context);
+      if (contexts.length === 1) {
+        throw new ToolExecutionError('toolchain hidden', {
+          failureKind: 'sandbox_denied',
+          data: { suggested_readable_roots: [readableRoot] },
+        });
+      }
+      if (contexts.length === 2) {
+        throw new ToolExecutionError('sandbox still denied', {
+          failureKind: 'sandbox_denied',
+        });
+      }
+      return { content: 'bypass retry succeeded' };
+    });
+    const approvalGate = autoApproveGate({
+      onCreate: (input) => { approvalInputs.push(input); },
+    });
+    const fixture = createOrchestratorFixture(toolHost, undefined, approvalGate);
+
+    const execution = await fixture.orchestrator.runToolCall(
+      {
+        id: 'call_narrow_then_bypass',
+        name: 'run_shell_command',
+        arguments: JSON.stringify({ command: 'node --version' }),
+      },
+      { command: 'node --version' },
+      executionContext(),
+      'on-request',
+    );
+
+    expect(execution.status).toBe('success');
+    expect(contexts).toHaveLength(3);
+    expect(contexts[1]?.sandbox).toMatchObject({ mode: 'default' });
+    expect(contexts[1]?.sandboxWorkspaceWrite?.readableRoots).toContain(readableRoot);
+    expect(contexts[2]?.sandbox).toMatchObject({ mode: 'bypass' });
+    expect(approvalInputs).toHaveLength(2);
+    expect(approvalInputs[0]?.additionalPermissions).toMatchObject({
+      file_system: { read: [readableRoot] },
+    });
+    expect(approvalInputs[1]).toMatchObject({ retryKind: 'sandbox_bypass' });
+    expect(fixture.completions).toHaveLength(1);
+  });
+
+  it('does not retry or request approval after a persistent network-policy denial', async () => {
+    const runTool = vi.fn(async (_name, _input, context) => {
+      context.onToolOutputDelta?.({ delta: 'network denied', stream: 'stderr' });
+      throw new ToolExecutionError('blocked.example is denied', {
+        failureKind: 'network_denied',
+        data: { network_policy_decision: 'deny' },
+      });
+    });
+    const fixture = createOrchestratorFixture(stubToolHost(runTool));
+
+    const execution = await fixture.orchestrator.runToolCall(
+      { id: 'call_network_policy_deny', name: 'network_tool', arguments: '{}' },
+      {},
+      executionContext(),
+      'full',
+    );
+
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(fixture.approvalRequests).toEqual([]);
+    expect(execution).toMatchObject({
+      status: 'error',
+      processed: true,
+      content: expect.stringContaining('persistent network policy'),
+    });
+    expect(fixture.completions).toEqual([
+      expect.objectContaining({
+        status: 'error',
+        content: expect.stringContaining('persistent network policy'),
+      }),
+    ]);
+  });
+
+  it('publishes one error terminal when post-processing fails after a network retry', async () => {
+    let attempts = 0;
+    const toolHost = stubToolHost(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new ToolExecutionError('network denied', {
+          failureKind: 'network_denied',
+        });
+      }
+      return { content: 'retry side effect completed' };
+    });
+    const fixture = createOrchestratorFixture(toolHost);
+
+    const execution = await fixture.orchestrator.runToolCall(
+      { id: 'call_retry_postprocess_error', name: 'network_tool', arguments: '{}' },
+      {},
+      executionContext(),
+      'full',
+      {
+        postProcessResult: async () => {
+          throw new Error('retry attachment storage failed');
+        },
+      },
+    );
+
+    expect(attempts).toBe(2);
+    expect(execution).toMatchObject({
+      status: 'error',
+      content: expect.stringContaining('failed after network retry'),
+    });
+    expect(fixture.completions).toEqual([
+      expect.objectContaining({
+        status: 'error',
+        content: expect.stringContaining('retry attachment storage failed'),
+      }),
+    ]);
+  });
+
   it('uses the cancellation profile while waiting for a retry runtime', async () => {
     let attempts = 0;
     let signalRetryStarted!: () => void;
@@ -384,8 +608,16 @@ function createOrchestratorFixture(
   postHook: RuntimeToolHookRunner['runPostToolUse'] | undefined = async () => ({ additionalContexts: [], shouldBlock: false }),
   approvalGate?: ApprovalGate,
   approvalStore?: ToolApprovalStore,
+  eventOverrides: Partial<ToolOrchestratorEvents> = {},
 ) {
   const completions: Array<{ status: 'success' | 'error' | 'rejected'; content: string }> = [];
+  const approvalRequests: string[] = [];
+  const approvalResolutions: Array<{
+    approvalId: string;
+    decision: string;
+    message?: string;
+    createdAt?: string;
+  }> = [];
   const hookRunner = {
     runPreToolUse: async () => ({ action: 'continue', additionalContexts: [] }),
     runPermissionRequest: async () => ({ decision: 'none' }),
@@ -405,11 +637,16 @@ function createOrchestratorFixture(
       publishToolOutputDelta: async () => undefined,
       publishHookStarted: async () => undefined,
       publishHookCompleted: async () => undefined,
-      publishApprovalRequested: async () => undefined,
-      publishApprovalResolved: async () => undefined,
+      publishApprovalRequested: async (approval) => {
+        approvalRequests.push(approval.id);
+      },
+      publishApprovalResolved: async (approvalId, decision, message, createdAt) => {
+        approvalResolutions.push({ approvalId, decision, message, createdAt });
+      },
+      ...eventOverrides,
     },
   });
-  return { completions, orchestrator };
+  return { approvalRequests, approvalResolutions, completions, orchestrator };
 }
 
 function executionContext(signal = new AbortController().signal): RuntimeToolExecutionContext {

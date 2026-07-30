@@ -2,6 +2,7 @@ import type { RuntimeHealth } from '@setsuna-desktop/contracts';
 import http from 'node:http';
 import { URL } from 'node:url';
 import { createRuntimeFactory } from '../runtime/runtime-factory.js';
+import { RuntimeUseCaseError } from '../runtime/use-cases/errors.js';
 import { managedGeneratedImageAssetIdsFromStore } from '../utils/generated-image-assets.js';
 import { APP_SERVER_DEFAULT_CONNECTION_ID, createAppServerCommandExecManager } from './app-server/command-exec.js';
 import { createAppServerConnectionRegistry } from './app-server/connections.js';
@@ -130,9 +131,18 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
 
       sendJson(response, 404, { error: 'Not found' });
     } catch (error) {
-      sendJson(response, error instanceof RuntimeHttpError ? error.statusCode : 500, {
+      const statusCode = error instanceof RuntimeHttpError
+        ? error.statusCode
+        : error instanceof RuntimeUseCaseError
+          ? runtimeUseCaseStatusCode(error)
+          : 500;
+      sendJson(response, statusCode, {
         error: error instanceof Error ? error.message : String(error),
         ...(error instanceof RuntimeHttpError && error.code ? { code: error.code } : {}),
+        ...(error instanceof RuntimeUseCaseError ? { code: error.code } : {}),
+        ...(error instanceof RuntimeUseCaseError && error.details !== undefined
+          ? { details: error.details }
+          : {}),
       });
     } finally {
       finishRequest();
@@ -179,6 +189,12 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     },
     address: () => server.address(),
   };
+}
+
+function runtimeUseCaseStatusCode(error: RuntimeUseCaseError): number {
+  if (error.code === 'thread_not_found' || error.code === 'mcp_server_not_found') return 404;
+  if (error.code === 'conflict') return 409;
+  return 400;
 }
 
 function trackSseResponse(response: http.ServerResponse, responses: Set<http.ServerResponse>): void {

@@ -1,4 +1,5 @@
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
+import { RuntimeUseCaseError } from '../../runtime/use-cases/errors.js';
 import type { AppServerCommandExecManager } from './command-exec.js';
 import type { AppServerConnectionRegistry } from './connections.js';
 import { dispatchAppServerRpcRequest } from './dispatcher.js';
@@ -50,8 +51,17 @@ export async function handleAppServerRpcRequest(
     return { id, result };
   } catch (error) {
     if (error instanceof AppServerRpcError) return appServerRpcError(id, error.code, error.message, error.data);
+    if (error instanceof RuntimeUseCaseError) {
+      return appServerRpcError(id, appServerUseCaseErrorCode(error), error.message, error.details);
+    }
     return appServerRpcError(id, -32603, error instanceof Error ? error.message : String(error));
   }
+}
+
+function appServerUseCaseErrorCode(error: RuntimeUseCaseError): number {
+  if (error.code === 'thread_not_found') return -32004;
+  if (error.code === 'invalid_input' || error.code === 'mcp_server_not_found') return -32602;
+  return -32600;
 }
 
 async function handleAppServerRpcResponseEnvelope(

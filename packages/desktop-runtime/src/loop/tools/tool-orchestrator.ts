@@ -1,15 +1,16 @@
 import type {
   RuntimeApprovalDecision,
-  RuntimeApprovalRequest,
   RuntimeConfigState,
-  RuntimeExecPolicyAmendment,
   RuntimeHookRun,
   RuntimePermissionGrantResponse,
   RuntimePluginReference,
   RuntimeSandboxWorkspaceWrite,
   RuntimeToolCall,
 } from '@setsuna-desktop/contracts';
-import type { RuntimeToolHookRunner } from '../../hooks/runtime-hooks.js';
+import type {
+  RuntimeToolHookEvents,
+  RuntimeToolHookRunner,
+} from '../../hooks/runtime-hooks.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { Clock } from '../../ports/clock.js';
 import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-approval-store.js';
@@ -21,60 +22,49 @@ import {
   type ToolExecutionResult,
   type ToolHost,
   type ToolOutputDelta,
-  type ToolRuntimeProfile,
 } from '../../ports/tool-host.js';
 import { FILE_MUTATION_TOOL_NAMES } from '../../security/file-system-policy.js';
-import {
-  networkApprovalContextFromTool,
-  type RuntimeNetworkApprovalContext,
-} from '../../security/network-approval-policy.js';
 import { isAbortError, throwIfAborted } from '../core/runtime-turn-errors.js';
-import { ToolApprovalStore } from './tool-approval-store.js';
-import type {
-  NetworkRetryApprovalAnswer,
-  ToolApprovalRequirement
-} from './tool-orchestrator-policy.js';
 import {
-  abortable,
+  ToolApprovalCoordinator,
+} from './tool-approval-coordinator.js';
+import {
+  requestToolApproval,
+  type ToolApprovalLifecycleEvents,
+} from './tool-approval-lifecycle.js';
+import { ToolApprovalStore } from './tool-approval-store.js';
+import {
   additionalSandboxPermissionsForTool,
   appendHookAdditionalContexts,
   applyHookUpdatedInput,
-  assessAdditionalSandboxPermissionsApproval,
-  assessFileMutationApproval,
-  decisionGrantsSessionReuse,
   effectiveToolCallFor,
   emptyRequestPermissionProfile,
   environmentIdForContext,
-  execApprovalApprovalKeys,
-  execApprovalSessionLookupKeys,
   isEmptySandboxWorkspaceWrite,
-  isShellCommandToolName,
   mergeSandboxWorkspaceWrite,
-  networkApprovalAvailableDecisions,
-  networkApprovalContextFromToolError,
-  networkPolicyDeniedError,
   networkRetryApprovalKeys,
   previewArguments,
-  proposedExecPolicyAmendment,
-  proposedNetworkPolicyAmendments,
   REQUEST_PERMISSIONS_TOOL_NAME,
   requestedSandboxBypass,
-  requestPermissionProfileFromSandbox,
   requestPermissionResponseForDecision,
   requestPermissionsApprovalKeys,
   requestPermissionsGrantForTool,
-  sandboxReadableRootsRetryApprovalKeys,
-  sandboxRetryApprovalKeys,
-  suggestedSandboxReadableRoots,
-  throwIfApprovalCancelled,
-  toolApprovalAvailableDecisions,
+  requiresUpfrontSandboxBypass,
   ToolPolicyRejectedError,
   toolRunWithCancellationProfile
 } from './tool-orchestrator-policy.js';
+import {
+  ToolRetryStrategy,
+  type ToolRetryOutcome,
+  type ToolRetryStage,
+} from './tool-retry-strategy.js';
 
 export { FILE_MUTATION_TOOL_NAMES };
 
-export type ToolOrchestratorEvents = {
+export type ToolOrchestratorEvents =
+  & RuntimeToolHookEvents
+  & ToolApprovalLifecycleEvents
+  & {
   publishToolStarted(toolCall: RuntimeToolCall, parsedArguments: unknown, resultPreview?: string, plugin?: RuntimePluginReference): Promise<void>;
   publishToolCompleted(
     toolCall: RuntimeToolCall,
@@ -84,11 +74,7 @@ export type ToolOrchestratorEvents = {
     metadata?: { data?: unknown; resultPreview?: string; startedAtMs?: number },
   ): Promise<void>;
   publishToolOutputDelta(toolCall: RuntimeToolCall, delta: ToolOutputDelta): Promise<void>;
-  publishHookStarted(run: RuntimeHookRun): Promise<void>;
-  publishHookCompleted(run: RuntimeHookRun): Promise<void>;
-  publishApprovalRequested(approval: RuntimeApprovalRequest): Promise<void>;
-  publishApprovalResolved(approvalId: string, decision: RuntimeApprovalDecision, message?: string, createdAt?: string): Promise<void>;
-};
+  };
 
 export type ToolOrchestratorOptions = {
   toolHost: ToolHost;
@@ -115,22 +101,44 @@ export type ToolOrchestratorRunResult = {
   status: 'success' | 'error' | 'rejected';
 };
 
+type ToolRunCompletionInput = {
+  approvalPolicy: RuntimeConfigState['approvalPolicy'];
+  context: RuntimeToolExecutionContext;
+  environment: ToolExecutionEnvironment;
+  outputDeltaPublishes: Promise<void>[];
+  parsedArguments: unknown;
+  preHookAdditionalContexts: string[];
+  runOptions: ToolOrchestratorRunOptions;
+  startedAtMs?: number;
+  toolCall: RuntimeToolCall;
+};
+
 /**
  * 集中处理工具执行的 runtime 侧流程：预览、审批、执行、输出流和完成事件。
  * 保持现有编排边界，同时确保 Setsuna 当前事件协议稳定。
  */
 export class ToolOrchestrator {
-  constructor(private readonly options: ToolOrchestratorOptions) {}
+  private readonly approvals: ToolApprovalCoordinator;
+  private readonly retries: ToolRetryStrategy;
+
+  constructor(private readonly options: ToolOrchestratorOptions) {
+    this.approvals = new ToolApprovalCoordinator(options);
+    this.retries = new ToolRetryStrategy({
+      approvals: this.approvals,
+      toolHost: options.toolHost,
+      events: options.events,
+      sandboxWorkspaceWriteForRun: (context, extra) =>
+        this.sandboxWorkspaceWriteForRun(context, extra),
+    });
+  }
 
   async canRunWithoutApproval(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy']): Promise<boolean> {
-    const effective = effectiveToolCallFor(toolCall, parsedArguments);
-    if (effective.rejectionReason) return false;
-    const requirement = await this.approvalRequirement(effective.toolCall, effective.parsedArguments, context, approvalPolicy, context.environment).catch((): ToolApprovalRequirement => ({
-      action: 'ask',
-      reason: 'Approval check failed.',
-      argumentsPreview: previewArguments(effective.parsedArguments),
-    }));
-    return requirement.action === 'skip';
+    return this.approvals.canRunWithoutApproval(
+      toolCall,
+      parsedArguments,
+      context,
+      approvalPolicy,
+    );
   }
 
   async runToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, approvalPolicy: RuntimeConfigState['approvalPolicy'], runOptions: ToolOrchestratorRunOptions = {}): Promise<ToolOrchestratorRunResult> {
@@ -198,7 +206,7 @@ export class ToolOrchestrator {
       );
       const approval = runOptions.checkApproval === false
         ? 'approve'
-        : await this.approveToolCall(
+        : await this.approvals.approveToolCall(
             runToolCall,
             runArguments,
             stepContext,
@@ -269,38 +277,56 @@ export class ToolOrchestrator {
       acceptingOutputDeltas = false;
       if (isAbortError(error)) throw error;
       if (error instanceof ToolExecutionError && (error.failureKind === 'sandbox_denied' || error.failureKind === 'sandbox_unavailable')) {
-        const retry = await this.retryAfterSandboxDenied({
+        const retry = await this.retries.retryAfterSandboxDenied({
           approvalPolicy,
           context: stepContext,
           environment,
+          expectedPreviewIntegrityToken,
           outputDeltaPublishes,
           parsedArguments: runArguments,
-          resultPreview: startResultPreview,
-          startedAtMs,
           toolCall: runToolCall,
           toolError: error,
-          expectedPreviewIntegrityToken,
-          preHookAdditionalContexts,
-          runOptions,
+          waitsForRuntimeCancellation: runOptions.waitsForRuntimeCancellation !== false,
         });
-        if (retry) return retry;
+        return this.completeRetryOutcome({
+          approvalPolicy,
+          context: stepContext,
+          environment,
+          outcome: retry,
+          outputDeltaPublishes,
+          parsedArguments: runArguments,
+          preHookAdditionalContexts,
+          resultPreview: startResultPreview,
+          runOptions,
+          startedAtMs,
+          toolCall: runToolCall,
+        });
       }
       if (error instanceof ToolExecutionError && error.failureKind === 'network_denied') {
-        const retry = await this.retryAfterNetworkDenied({
+        const retry = await this.retries.retryAfterNetworkDenied({
           approvalPolicy,
           context: stepContext,
           environment,
+          expectedPreviewIntegrityToken,
           outputDeltaPublishes,
           parsedArguments: runArguments,
-          resultPreview: startResultPreview,
-          startedAtMs,
           toolCall: runToolCall,
           toolError: error,
-          expectedPreviewIntegrityToken,
-          preHookAdditionalContexts,
-          runOptions,
+          waitsForRuntimeCancellation: runOptions.waitsForRuntimeCancellation !== false,
         });
-        if (retry) return retry;
+        return this.completeRetryOutcome({
+          approvalPolicy,
+          context: stepContext,
+          environment,
+          outcome: retry,
+          outputDeltaPublishes,
+          parsedArguments: runArguments,
+          preHookAdditionalContexts,
+          resultPreview: startResultPreview,
+          runOptions,
+          startedAtMs,
+          toolCall: runToolCall,
+        });
       }
       if (error instanceof ToolPolicyRejectedError) {
         content = `Tool ${runToolCall.name} was rejected by runtime policy: ${error.message}`;
@@ -361,50 +387,39 @@ export class ToolOrchestrator {
     } else if (!this.options.approvalGate) {
       decision = 'reject';
     } else {
-      const approval = await this.options.approvalGate.createApproval({
-        threadId: context.threadId,
-        turnId: context.turnId,
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        reason: request.reason,
-        argumentsPreview: previewArguments({
-          reason: request.requestReason,
-          permissions: request.requestedPermissions,
-          grant: request.grantedPermissions,
-        }),
-        availableDecisions: [
-          { type: 'approve' },
-          { type: 'approve_for_turn_with_strict_auto_review' },
-          { type: 'approve_for_session' },
-          { type: 'reject' },
-        ],
-        permissionApprovalContext: {
-          availableScopes: ['turn', 'session'],
-          cwd: request.cwd,
-          environmentId: request.environmentId,
-          grantedPermissions: request.grantedPermissions,
-          reason: request.requestReason,
-          requestedPermissions: request.requestedPermissions,
+      const answer = await requestToolApproval({
+        approvalGate: this.options.approvalGate,
+        events: this.options.events,
+        request: {
+          threadId: context.threadId,
+          turnId: context.turnId,
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          reason: request.reason,
+          argumentsPreview: previewArguments({
+            reason: request.requestReason,
+            permissions: request.requestedPermissions,
+            grant: request.grantedPermissions,
+          }),
+          availableDecisions: [
+            { type: 'approve' },
+            { type: 'approve_for_turn_with_strict_auto_review' },
+            { type: 'approve_for_session' },
+            { type: 'reject' },
+          ],
+          permissionApprovalContext: {
+            availableScopes: ['turn', 'session'],
+            cwd: request.cwd,
+            environmentId: request.environmentId,
+            grantedPermissions: request.grantedPermissions,
+            reason: request.requestReason,
+            requestedPermissions: request.requestedPermissions,
+          },
         },
+        signal: context.signal,
       });
-      await this.options.events.publishApprovalRequested(approval);
-
-      try {
-        const answer = await abortable(this.options.approvalGate.waitForDecision(approval.id), context.signal);
-        decision = answer.decision;
-        permissionGrant = answer.permissionGrant;
-        await this.options.events.publishApprovalResolved(approval.id, answer.decision, answer.message);
-      } catch (error) {
-        if (isAbortError(error)) {
-          const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-            decision: 'cancel',
-            message: 'Turn cancelled.',
-          });
-          await this.options.events.publishApprovalResolved(approval.id, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
-        }
-        throw error;
-      }
-      throwIfApprovalCancelled(decision);
+      decision = answer.decision;
+      permissionGrant = answer.permissionGrant;
     }
 
     const permissionResponse = requestPermissionResponseForDecision(decision, permissionGrant, request, context, environment);
@@ -468,17 +483,8 @@ export class ToolOrchestrator {
     runOptions,
     startedAtMs,
     toolCall,
-  }: {
-    approvalPolicy: RuntimeConfigState['approvalPolicy'];
-    context: RuntimeToolExecutionContext;
-    environment: ToolExecutionEnvironment;
-    outputDeltaPublishes: Promise<void>[];
-    parsedArguments: unknown;
-    preHookAdditionalContexts: string[];
+  }: ToolRunCompletionInput & {
     result: ToolExecutionResult;
-    runOptions: ToolOrchestratorRunOptions;
-    startedAtMs?: number;
-    toolCall: RuntimeToolCall;
   }): Promise<ToolOrchestratorRunResult> {
     throwIfAborted(context.signal);
     const result = runOptions.postProcessResult
@@ -512,648 +518,81 @@ export class ToolOrchestrator {
     return { content, processed: true, result, status: 'success' };
   }
 
-  private async retryAfterNetworkDenied({
-    approvalPolicy,
-    context,
-    environment,
-    outputDeltaPublishes,
-    parsedArguments,
+  private async completeRetryOutcome({
+    outcome,
     resultPreview,
-    startedAtMs,
-    toolCall,
-    toolError,
-    expectedPreviewIntegrityToken,
-    preHookAdditionalContexts,
-    runOptions,
-  }: {
-    approvalPolicy: RuntimeConfigState['approvalPolicy'];
-    context: RuntimeToolExecutionContext;
-    environment: ToolExecutionEnvironment;
-    outputDeltaPublishes: Promise<void>[];
-    parsedArguments: unknown;
+    ...completion
+  }: ToolRunCompletionInput & {
+    outcome: ToolRetryOutcome;
     resultPreview?: string;
-    startedAtMs?: number;
-    toolCall: RuntimeToolCall;
-    toolError: ToolExecutionError;
-    expectedPreviewIntegrityToken?: string;
-    preHookAdditionalContexts: string[];
-    runOptions: ToolOrchestratorRunOptions;
-  }): Promise<ToolOrchestratorRunResult | null> {
-    const networkApprovalContext = networkApprovalContextFromToolError(toolError) ?? networkApprovalContextFromTool(toolCall.name, parsedArguments);
-    const commandWideNetworkApproval = isShellCommandToolName(toolCall.name);
-    if (networkPolicyDeniedError(toolError)) {
-      const content = `Tool ${toolCall.name} was blocked by persistent network policy: ${toolError.message}`;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'error', content, {
-        resultPreview,
-        startedAtMs,
-      });
-      return { content, processed: true, status: 'error' };
-    }
-    const retryReason = commandWideNetworkApproval
-      ? `Network access applies to the entire command and grants process-wide capability. Review and approve this exact command before retrying.`
-      : networkApprovalContext
-      ? `Network access to "${networkApprovalContext.target}" is blocked by policy. Approve retry with network access.`
-      : `Network access is blocked for ${toolCall.name}: ${toolError.message}. Approve retry with network access.`;
-    const approvalAnswer = await this.approveNetworkAccessRetry(
-      toolCall,
-      parsedArguments,
-      context,
-      approvalPolicy,
-      retryReason,
-      environment,
-      networkApprovalContext,
-      commandWideNetworkApproval,
-    );
-    if (approvalAnswer.decision === 'reject') {
-      const content = `Tool ${toolCall.name} network retry was rejected.`;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'rejected', content, {
-        resultPreview,
-        startedAtMs,
-      });
-      return { content, processed: false, status: 'rejected' };
-    }
-    if (approvalAnswer.decision === 'approve_network_policy_amendment' && approvalAnswer.networkPolicyAmendment?.action === 'deny') {
-      const target = approvalAnswer.networkPolicyAmendment.host || networkApprovalContext?.target || 'requested network target';
-      const content = `Tool ${toolCall.name} network access was denied by persistent network policy for ${target}.`;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'error', content, {
-        resultPreview,
-        startedAtMs,
-      });
-      return { content, processed: true, status: 'error' };
-    }
-
-    let acceptingOutputDeltas = true;
-    try {
-      throwIfAborted(context.signal);
-      const retrySandbox = requestedSandboxBypass(toolCall.name, parsedArguments)
-        ? { mode: 'bypass' as const, networkAccess: 'enabled' as const, retryReason }
-        : { mode: 'default' as const, networkAccess: 'enabled' as const, retryReason };
-      const retryContext: RuntimeToolExecutionContext = {
-        ...context,
-        sandboxWorkspaceWrite: this.sandboxWorkspaceWriteForRun(context, additionalSandboxPermissionsForTool(toolCall, parsedArguments, context, environment)?.sandboxWorkspaceWrite),
-        sandbox: retrySandbox,
-        toolCallId: toolCall.id,
-        expectedPreviewIntegrityToken,
-        onToolOutputDelta: (delta) => {
-          if (!acceptingOutputDeltas) return;
-          const publish = this.options.events.publishToolOutputDelta(toolCall, delta).catch(() => undefined);
-          outputDeltaPublishes.push(publish);
-        },
-      };
-      const toolRun = this.options.toolHost.runTool(toolCall.name, parsedArguments, retryContext);
-      const result = await toolRunWithCancellationProfile(toolRun, context.signal, runOptions.waitsForRuntimeCancellation !== false);
-      acceptingOutputDeltas = false;
-      return await this.completeSuccessfulToolRun({
-        approvalPolicy,
-        context,
-        environment,
-        outputDeltaPublishes,
-        parsedArguments,
-        preHookAdditionalContexts,
-        result,
-        runOptions,
-        startedAtMs,
-        toolCall,
-      });
-    } catch (retryError) {
-      acceptingOutputDeltas = false;
-      if (isAbortError(retryError)) throw retryError;
-      const content = `Tool ${toolCall.name} failed after network retry: ${retryError instanceof Error ? retryError.message : String(retryError)}`;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'error', content, {
-        resultPreview,
-        startedAtMs,
-      });
-      return { content, processed: true, status: 'error' };
-    }
-  }
-
-  private async retryAfterSandboxDenied({
-    approvalPolicy,
-    context,
-    environment,
-    outputDeltaPublishes,
-    parsedArguments,
-    resultPreview,
-    startedAtMs,
-    toolCall,
-    toolError,
-    expectedPreviewIntegrityToken,
-    preHookAdditionalContexts,
-    runOptions,
-  }: {
-    approvalPolicy: RuntimeConfigState['approvalPolicy'];
-    context: RuntimeToolExecutionContext;
-    environment: ToolExecutionEnvironment;
-    outputDeltaPublishes: Promise<void>[];
-    parsedArguments: unknown;
-    resultPreview?: string;
-    startedAtMs?: number;
-    toolCall: RuntimeToolCall;
-    toolError: ToolExecutionError;
-    expectedPreviewIntegrityToken?: string;
-    preHookAdditionalContexts: string[];
-    runOptions: ToolOrchestratorRunOptions;
-  }): Promise<ToolOrchestratorRunResult | null> {
-    const suggestedReadableRoots = suggestedSandboxReadableRoots(toolError, context);
-    if (suggestedReadableRoots.length) {
-      const narrowReason = `Sandbox could not read the resolved toolchain for ${toolCall.name}. Approve read-only access to: ${suggestedReadableRoots.join(', ')}.`;
-      const narrowDecision = await this.approveSandboxReadableRootsRetry(
-        toolCall,
-        parsedArguments,
-        context,
-        approvalPolicy,
-        narrowReason,
-        environment,
-        suggestedReadableRoots,
-      );
-      if (narrowDecision === 'reject') {
-        const content = `Tool ${toolCall.name} sandbox readable-root retry was rejected.`;
-        await Promise.all(outputDeltaPublishes);
-        await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'rejected', content, {
-          resultPreview,
-          startedAtMs,
-        });
-        return { content, processed: false, status: 'rejected' };
-      }
-
-      let acceptingNarrowOutputDeltas = true;
+  }): Promise<ToolOrchestratorRunResult> {
+    if (outcome.kind === 'success') {
       try {
-        throwIfAborted(context.signal);
-        const narrowSandboxWorkspaceWrite = this.sandboxWorkspaceWriteForRun(context, {
-          readableRoots: suggestedReadableRoots,
-        });
-        const narrowContext: RuntimeToolExecutionContext = {
-          ...context,
-          sandboxWorkspaceWrite: narrowSandboxWorkspaceWrite,
-          sandbox: { mode: 'default', retryReason: narrowReason },
-          toolCallId: toolCall.id,
-          expectedPreviewIntegrityToken,
-          onToolOutputDelta: (delta) => {
-            if (!acceptingNarrowOutputDeltas) return;
-            const publish = this.options.events.publishToolOutputDelta(toolCall, delta).catch(() => undefined);
-            outputDeltaPublishes.push(publish);
-          },
-        };
-        const result = await toolRunWithCancellationProfile(
-          this.options.toolHost.runTool(toolCall.name, parsedArguments, narrowContext),
-          context.signal,
-          runOptions.waitsForRuntimeCancellation !== false,
-        );
-        acceptingNarrowOutputDeltas = false;
         return await this.completeSuccessfulToolRun({
-          approvalPolicy,
-          context,
-          environment,
-          outputDeltaPublishes,
-          parsedArguments,
-          preHookAdditionalContexts,
-          result,
-          runOptions,
-          startedAtMs,
-          toolCall,
+          ...completion,
+          result: outcome.result,
         });
-      } catch (narrowError) {
-        acceptingNarrowOutputDeltas = false;
-        if (isAbortError(narrowError)) throw narrowError;
-        if (!(narrowError instanceof ToolExecutionError) || narrowError.failureKind !== 'sandbox_denied') {
-          const content = `Tool ${toolCall.name} failed after sandbox readable-root retry: ${narrowError instanceof Error ? narrowError.message : String(narrowError)}`;
-          await Promise.all(outputDeltaPublishes);
-          await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'error', content, {
-            resultPreview,
-            startedAtMs,
-          });
-          return { content, processed: true, status: 'error' };
-        }
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        const content = `Tool ${completion.toolCall.name} failed after ${retryStageLabel(outcome.stage)}: ${errorMessage(error)}`;
+        return this.publishRetryTerminal({
+          ...completion,
+          content,
+          processed: true,
+          resultPreview,
+          status: 'error',
+        });
       }
     }
-
-    // “无需确认”只关闭审批交互，不得自动扩大为无沙箱执行。真正的完全访问会在
-    // 首次执行时使用 danger-full-access，因此不会走到这里。
-    if (approvalPolicy === 'full' && context.permissionProfile !== 'danger-full-access') {
-      const content = `Tool ${toolCall.name} was denied by the OS sandbox. No unsandboxed retry was attempted because the current mode disables prompts but keeps workspace sandboxing.`;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'error', content, {
-        resultPreview,
-        startedAtMs,
-      });
-      return { content, processed: true, status: 'error' };
-    }
-
-    // The full first-attempt output is already retained as tool output events.
-    // Keep the approval concise instead of duplicating an entire stack trace.
-    const retryReason = `The OS sandbox blocked the first ${toolCall.name} attempt. Approve retry without the OS sandbox.`;
-    const decision = await this.approveSandboxBypassRetry(toolCall, parsedArguments, context, retryReason, environment);
-    if (decision === 'reject') {
-      const content = `Tool ${toolCall.name} sandbox retry was rejected.`;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'rejected', content, {
-        resultPreview,
-        startedAtMs,
-      });
-      return { content, processed: false, status: 'rejected' };
-    }
-
-    let acceptingOutputDeltas = true;
-    try {
-      throwIfAborted(context.signal);
-      const retryContext: RuntimeToolExecutionContext = {
-        ...context,
-        sandboxWorkspaceWrite: this.sandboxWorkspaceWriteForRun(context, additionalSandboxPermissionsForTool(toolCall, parsedArguments, context, environment)?.sandboxWorkspaceWrite),
-        sandbox: { mode: 'bypass', retryReason },
-        toolCallId: toolCall.id,
-        expectedPreviewIntegrityToken,
-        onToolOutputDelta: (delta) => {
-          if (!acceptingOutputDeltas) return;
-          const publish = this.options.events.publishToolOutputDelta(toolCall, delta).catch(() => undefined);
-          outputDeltaPublishes.push(publish);
-        },
-      };
-      const toolRun = this.options.toolHost.runTool(toolCall.name, parsedArguments, retryContext);
-      const result = await toolRunWithCancellationProfile(toolRun, context.signal, runOptions.waitsForRuntimeCancellation !== false);
-      acceptingOutputDeltas = false;
-      return await this.completeSuccessfulToolRun({
-        approvalPolicy,
-        context,
-        environment,
-        outputDeltaPublishes,
-        parsedArguments,
-        preHookAdditionalContexts,
-        result,
-        runOptions,
-        startedAtMs,
-        toolCall,
-      });
-    } catch (retryError) {
-      acceptingOutputDeltas = false;
-      if (isAbortError(retryError)) throw retryError;
-      const content = `Tool ${toolCall.name} failed after sandbox retry: ${retryError instanceof Error ? retryError.message : String(retryError)}`;
-      await Promise.all(outputDeltaPublishes);
-      await this.options.events.publishToolCompleted(toolCall, parsedArguments, 'error', content, {
-        resultPreview,
-        startedAtMs,
-      });
-      return { content, processed: true, status: 'error' };
-    }
-  }
-
-  private async approveNetworkAccessRetry(
-    toolCall: RuntimeToolCall,
-    parsedArguments: unknown,
-    context: RuntimeToolExecutionContext,
-    approvalPolicy: RuntimeConfigState['approvalPolicy'],
-    reason: string,
-    environment: ToolExecutionEnvironment,
-    networkApprovalContext?: RuntimeNetworkApprovalContext | null,
-    commandWideNetworkApproval = false,
-  ): Promise<NetworkRetryApprovalAnswer> {
-    if (approvalPolicy === 'full') return { decision: 'approve' };
-    const approvalKeys = networkRetryApprovalKeys(toolCall, parsedArguments, context, networkApprovalContext);
-    if (this.options.approvalStore?.hasAny(approvalKeys, context.turnId)) return { decision: 'approve_for_session' };
-    if (!this.options.approvalGate) return { decision: 'reject' };
-    const approval = await this.options.approvalGate.createApproval({
-      threadId: context.threadId,
-      turnId: context.turnId,
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      environmentId: environment.id,
-      reason,
-      argumentsPreview: networkApprovalContext && !commandWideNetworkApproval
-        ? previewArguments({ command: ['network-access', networkApprovalContext.target], network_approval_context: networkApprovalContext })
-        : previewArguments(parsedArguments),
-      availableDecisions: networkApprovalAvailableDecisions(networkApprovalContext, commandWideNetworkApproval),
-      ...(networkApprovalContext ? { networkApprovalContext } : {}),
-      proposedNetworkPolicyAmendments: proposedNetworkPolicyAmendments(networkApprovalContext, commandWideNetworkApproval),
+    return this.publishRetryTerminal({
+      ...completion,
+      content: outcome.content,
+      processed: outcome.processed,
+      resultPreview,
+      status: outcome.status,
     });
-    await this.options.events.publishApprovalRequested(approval);
-
-    let answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>;
-    try {
-      answer = await abortable(this.options.approvalGate.waitForDecision(approval.id), context.signal);
-    } catch (error) {
-      if (isAbortError(error)) {
-        const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-          decision: 'cancel',
-          message: 'Turn cancelled.',
-        });
-        await this.options.events.publishApprovalResolved(approval.id, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
-      }
-      throw error;
-    }
-
-    await this.options.events.publishApprovalResolved(approval.id, answer.decision, answer.message);
-    throwIfApprovalCancelled(answer.decision);
-    await this.persistNetworkPolicyAmendmentDecision(answer, networkApprovalContext, commandWideNetworkApproval);
-    if (decisionGrantsSessionReuse(answer.decision) && answer.networkPolicyAmendment?.action !== 'deny') {
-      this.options.approvalStore?.approveForSession(approvalKeys);
-    }
-    return answer;
   }
 
-  private async approveSandboxReadableRootsRetry(
-    toolCall: RuntimeToolCall,
-    parsedArguments: unknown,
-    context: RuntimeToolExecutionContext,
-    approvalPolicy: RuntimeConfigState['approvalPolicy'],
-    reason: string,
-    environment: ToolExecutionEnvironment,
-    readableRoots: string[],
-  ): Promise<RuntimeApprovalDecision> {
-    if (approvalPolicy === 'full') return 'approve';
-    const approvalKeys = sandboxReadableRootsRetryApprovalKeys(toolCall, parsedArguments, context, readableRoots);
-    if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
-    if (!this.options.approvalGate) return 'reject';
-    const approval = await this.options.approvalGate.createApproval({
-      threadId: context.threadId,
-      turnId: context.turnId,
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      environmentId: environment.id,
-      reason,
-      argumentsPreview: previewArguments(parsedArguments),
-      additionalPermissions: requestPermissionProfileFromSandbox({ readableRoots }),
-      availableDecisions: [
-        { type: 'approve' },
-        { type: 'approve_for_session' },
-        { type: 'reject' },
-      ],
-    });
-    await this.options.events.publishApprovalRequested(approval);
-    const answer = await this.waitForApprovalDecision(approval.id, context);
-    await this.options.events.publishApprovalResolved(approval.id, answer.decision, answer.message);
-    throwIfApprovalCancelled(answer.decision);
-    if (decisionGrantsSessionReuse(answer.decision)) {
-      this.options.approvalStore?.approveForSession(approvalKeys);
-      this.options.approvalStore?.grantSandboxPermissions('session', context.turnId, environment.id, { readableRoots });
-    }
-    return answer.decision;
-  }
-
-  private async approveSandboxBypassRetry(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, reason: string, environment: ToolExecutionEnvironment): Promise<RuntimeApprovalDecision> {
-    const approvalKeys = sandboxRetryApprovalKeys(toolCall, parsedArguments, context);
-    if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
-    if (!this.options.approvalGate) return 'reject';
-    const approval = await this.options.approvalGate.createApproval({
-      threadId: context.threadId,
-      turnId: context.turnId,
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      environmentId: environment.id,
-      reason,
-      argumentsPreview: previewArguments(parsedArguments),
-      retryKind: 'sandbox_bypass',
-      availableDecisions: [
-        { type: 'approve' },
-        { type: 'approve_for_session' },
-        { type: 'reject' },
-      ],
-    });
-    await this.options.events.publishApprovalRequested(approval);
-
-    const answer = await this.waitForApprovalDecision(approval.id, context);
-
-    await this.options.events.publishApprovalResolved(approval.id, answer.decision, answer.message);
-    throwIfApprovalCancelled(answer.decision);
-    if (decisionGrantsSessionReuse(answer.decision)) {
-      this.options.approvalStore?.approveForSession(approvalKeys);
-    }
-    return answer.decision;
-  }
-
-  private async waitForApprovalDecision(approvalId: string, context: RuntimeToolExecutionContext): Promise<Awaited<ReturnType<ApprovalGate['waitForDecision']>>> {
-    if (!this.options.approvalGate) throw new Error('Approval gate is unavailable.');
-    try {
-      return await abortable(this.options.approvalGate.waitForDecision(approvalId), context.signal);
-    } catch (error) {
-      if (isAbortError(error)) {
-        const resolved = await this.options.approvalGate.answerApproval(approvalId, {
-          decision: 'cancel',
-          message: 'Turn cancelled.',
-        });
-        await this.options.events.publishApprovalResolved(approvalId, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
-      }
-      throw error;
-    }
-  }
-
-  private async approveToolCall(
-    toolCall: RuntimeToolCall,
-    parsedArguments: unknown,
-    context: RuntimeToolExecutionContext,
-    approvalPolicy: RuntimeConfigState['approvalPolicy'],
-    environment: ToolExecutionEnvironment,
-    runtimeProfile?: ToolRuntimeProfile | null,
-  ): Promise<RuntimeApprovalDecision> {
-    const requirement = await this.approvalRequirement(
+  private async publishRetryTerminal({
+    content,
+    outputDeltaPublishes,
+    parsedArguments,
+    processed,
+    resultPreview,
+    startedAtMs,
+    status,
+    toolCall,
+  }: ToolRunCompletionInput & {
+    content: string;
+    processed: boolean;
+    resultPreview?: string;
+    status: 'error' | 'rejected';
+  }): Promise<ToolOrchestratorRunResult> {
+    await Promise.all(outputDeltaPublishes);
+    await this.options.events.publishToolCompleted(
       toolCall,
       parsedArguments,
-      context,
-      approvalPolicy,
-      environment,
-      runtimeProfile,
+      status,
+      content,
+      { resultPreview, startedAtMs },
     );
-    if (requirement.action === 'skip') return 'approve';
-    if (requirement.action === 'reject') {
-      throw new ToolPolicyRejectedError(requirement.reason);
-    }
-    const approvalKeys = requirement.approvalKeys ?? [];
-    const persistentApprovalKeys = requirement.persistentApprovalKeys ?? [];
-    if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
-    if (await this.persistentApprovalIsRemembered(persistentApprovalKeys)) return 'approve';
-    if (!this.options.approvalGate) return 'approve';
-    const hookDecision = await this.options.hookRunner?.runPermissionRequest({
-      approvalPolicy,
-      context,
-      environment,
-      events: this.hookEvents(),
-      parsedArguments,
-      toolCall,
-    });
-    if (hookDecision?.decision === 'allow') return 'approve';
-    if (hookDecision?.decision === 'deny') {
-      throw new ToolPolicyRejectedError(hookDecision.message);
-    }
-
-    const approval = await this.options.approvalGate.createApproval({
-      threadId: context.threadId,
-      turnId: context.turnId,
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      reason: requirement.reason,
-      argumentsPreview: requirement.argumentsPreview,
-      retryKind: requirement.retryKind,
-      availableDecisions: toolApprovalAvailableDecisions(requirement),
-      proposedExecPolicyAmendment: requirement.proposedExecPolicyAmendment,
-      environmentId: requirement.environmentId,
-      additionalPermissions: requirement.additionalPermissions,
-    });
-    await this.options.events.publishApprovalRequested(approval);
-
-    let answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>;
-    try {
-      answer = await abortable(this.options.approvalGate.waitForDecision(approval.id), context.signal);
-    } catch (error) {
-      if (isAbortError(error)) {
-        const resolved = await this.options.approvalGate.answerApproval(approval.id, {
-          decision: 'cancel',
-          message: 'Turn cancelled.',
-        });
-        await this.options.events.publishApprovalResolved(approval.id, 'cancel', 'Turn cancelled.', resolved.resolvedAt);
-      }
-      throw error;
-    }
-
-    await this.options.events.publishApprovalResolved(approval.id, answer.decision, answer.message);
-    throwIfApprovalCancelled(answer.decision);
-    await this.persistExecPolicyAmendmentDecision(answer, requirement.proposedExecPolicyAmendment);
-    if (decisionGrantsSessionReuse(answer.decision)) {
-      this.options.approvalStore?.approveForSession(approvalKeys);
-    }
-    if (answer.decision === 'approve_persistently') {
-      await this.options.persistentToolApprovalStore?.approve(persistentApprovalKeys);
-      this.options.approvalStore?.approveForSession(approvalKeys);
-    }
-    return answer.decision;
-  }
-
-  private async approvalRequirement(
-    toolCall: RuntimeToolCall,
-    parsedArguments: unknown,
-    context: RuntimeToolExecutionContext,
-    approvalPolicy: RuntimeConfigState['approvalPolicy'],
-    environment: ToolExecutionEnvironment,
-    knownRuntimeProfile?: ToolRuntimeProfile | null,
-  ): Promise<ToolApprovalRequirement> {
-    const strictAutoReview = this.options.approvalStore?.strictAutoReviewEnabled(context.turnId) ?? false;
-    const fileRequirement = assessFileMutationApproval(toolCall, parsedArguments, context, approvalPolicy);
-    if (fileRequirement) return fileRequirement;
-    const additionalPermissionRequirement = assessAdditionalSandboxPermissionsApproval(toolCall, parsedArguments, context, approvalPolicy, Boolean(this.options.approvalGate), environment);
-    if (additionalPermissionRequirement?.action === 'reject') return additionalPermissionRequirement;
-    const requestsSandboxBypass = requestedSandboxBypass(toolCall.name, parsedArguments);
-    if (requestsSandboxBypass && approvalPolicy === 'full' && context.permissionProfile !== 'danger-full-access') {
-      return {
-        action: 'reject',
-        reason: '无需确认模式仍受工作区沙箱限制；无沙箱执行需要切换到“完全访问”或启用可交互审批。',
-      };
-    }
-    const runtimeProfile = knownRuntimeProfile === undefined
-      ? await this.options.toolHost.toolRuntimeProfile?.(toolCall.name, context)
-      : knownRuntimeProfile;
-    const needsUpfrontSandboxBypass = requiresUpfrontSandboxBypass(
-      runtimeProfile,
-      toolCall,
-      parsedArguments,
-      context,
-      approvalPolicy,
-    );
-    if (additionalPermissionRequirement && !needsUpfrontSandboxBypass) return additionalPermissionRequirement;
-    if (runtimeProfile?.approvalMode === 'selfManaged' && !requestsSandboxBypass && !needsUpfrontSandboxBypass) {
-      return { action: 'skip' };
-    }
-    // 权限配置仍用于定义实际生效的文件系统边界，但完整审批策略本身绝不能触发交互提示。
-    if (approvalPolicy === 'full' && !strictAutoReview) return { action: 'skip' };
-    if (!this.options.approvalGate) {
-      return requestsSandboxBypass || needsUpfrontSandboxBypass
-        ? { action: 'reject', reason: 'Unsandboxed shell execution requires an interactive approval gate.' }
-        : { action: 'skip' };
-    }
-    const execApprovalLookupKeys = execApprovalSessionLookupKeys(toolCall, parsedArguments, context);
-    if (!strictAutoReview && this.options.approvalStore?.hasAny(execApprovalLookupKeys, context.turnId)) return { action: 'skip' };
-
-    const hostRequirement = await this.options.toolHost.approvalForTool?.(toolCall.name, parsedArguments, context);
-    if (needsUpfrontSandboxBypass) {
-      const additionalRequirement = additionalPermissionRequirement?.action === 'ask'
-        ? additionalPermissionRequirement
-        : null;
-      const reasons = [
-        hostRequirement?.reason,
-        additionalRequirement?.reason,
-        `The OS sandbox is unavailable on this platform. Approving ${toolCall.name} will run this command without the OS sandbox.`,
-      ].filter((reason): reason is string => Boolean(reason));
-      return {
-        action: 'ask',
-        reason: reasons.join(' '),
-        argumentsPreview: hostRequirement?.argumentsPreview
-          ?? additionalRequirement?.argumentsPreview
-          ?? previewArguments(parsedArguments),
-        approvalKeys: [...new Set([
-          ...sandboxRetryApprovalKeys(toolCall, parsedArguments, context),
-          ...(hostRequirement?.approvalKeys ?? []),
-          ...(additionalRequirement?.approvalKeys ?? []),
-        ])],
-        environmentId: environment.id,
-        additionalPermissions: additionalRequirement?.additionalPermissions,
-        retryKind: 'sandbox_bypass',
-      };
-    }
-    if (hostRequirement) {
-      return {
-        action: 'ask',
-        reason: hostRequirement.reason,
-        argumentsPreview: hostRequirement.argumentsPreview ?? previewArguments(parsedArguments),
-        approvalKeys: hostRequirement.approvalKeys ?? execApprovalApprovalKeys(toolCall, parsedArguments, context),
-        persistentApprovalKeys: hostRequirement.persistentApprovalKeys ?? [],
-        proposedExecPolicyAmendment: proposedExecPolicyAmendment(toolCall, parsedArguments),
-        environmentId: environment.id,
-      };
-    }
-    if (strictAutoReview) {
-      return {
-        action: 'ask',
-        reason: `Strict auto review requires confirmation before running ${toolCall.name}.`,
-        argumentsPreview: previewArguments(parsedArguments),
-        environmentId: environment.id,
-      };
-    }
-    if (approvalPolicy === 'strict') {
-      return {
-        action: 'ask',
-        reason: `Strict approval policy requires confirmation before running ${toolCall.name}.`,
-        argumentsPreview: previewArguments(parsedArguments),
-        environmentId: environment.id,
-      };
-    }
-    return { action: 'skip' };
-  }
-
-  private async persistExecPolicyAmendmentDecision(answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>, fallback?: RuntimeExecPolicyAmendment): Promise<void> {
-    if (answer.decision !== 'approve_exec_policy_amendment') return;
-    const amendment = answer.proposedExecPolicyAmendment?.length ? answer.proposedExecPolicyAmendment : fallback;
-    if (amendment?.length) await this.options.policyAmendmentStore?.appendExecPolicyAmendment(amendment);
-  }
-
-  private async persistNetworkPolicyAmendmentDecision(
-    answer: Awaited<ReturnType<ApprovalGate['waitForDecision']>>,
-    networkApprovalContext?: RuntimeNetworkApprovalContext | null,
-    commandWideNetworkApproval = false,
-  ): Promise<void> {
-    if (answer.decision !== 'approve_network_policy_amendment') return;
-    const amendments = proposedNetworkPolicyAmendments(networkApprovalContext, commandWideNetworkApproval);
-    const fallbackAction = commandWideNetworkApproval ? 'deny' : 'allow';
-    const requested = answer.networkPolicyAmendment ?? amendments?.find((item) => item.action === fallbackAction);
-    const amendment = amendments?.find((item) => item.host === requested?.host && item.action === requested?.action);
-    if (amendment) await this.options.policyAmendmentStore?.appendNetworkPolicyAmendment(amendment, networkApprovalContext?.protocol);
-  }
-
-  private async persistentApprovalIsRemembered(keys: string[]): Promise<boolean> {
-    return Boolean(keys.length && await this.options.persistentToolApprovalStore?.hasAll(keys));
+    return { content, processed, status };
   }
 }
 
-function requiresUpfrontSandboxBypass(
-  runtimeProfile: ToolRuntimeProfile | null | undefined,
-  toolCall: RuntimeToolCall,
-  parsedArguments: unknown,
-  context: RuntimeToolExecutionContext,
-  approvalPolicy: RuntimeConfigState['approvalPolicy'],
-): boolean {
-  return runtimeProfile?.requiresSandboxBypassApproval === true
-    && approvalPolicy !== 'full'
-    && context.permissionProfile !== 'danger-full-access'
-    && !requestedSandboxBypass(toolCall.name, parsedArguments);
+function retryStageLabel(stage: ToolRetryStage): string {
+  switch (stage) {
+    case 'network':
+      return 'network retry';
+    case 'sandbox_readable_root':
+      return 'sandbox readable-root retry';
+    case 'sandbox_bypass':
+      return 'sandbox retry';
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export { ToolApprovalStore } from './tool-approval-store.js';

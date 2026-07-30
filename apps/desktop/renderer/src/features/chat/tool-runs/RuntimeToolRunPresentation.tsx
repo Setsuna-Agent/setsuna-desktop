@@ -23,7 +23,22 @@ import type {
   ToolRunGroupKind,
   ToolRunSummaryMode,
 } from './runtime-tool-run-types.js';
+import {
+  fileOperationChangeTotals,
+} from './runtimeToolRunChangeCounts.js';
+import {
+  compactUrlTarget,
+  isPreparingToolRun,
+  isRecord,
+  isWebContentRun,
+  recordFromJson,
+  stringField,
+  toolRunTarget,
+} from './runtimeToolRunPresentationUtils.js';
 import { isPendingRuntimeToolApproval } from './runtimeToolRunState.js';
+import {
+  shellCommand,
+} from './RuntimeShellToolRun.js';
 import {
   fileChangeFromToolRun,
   fileChangesFromToolRun,
@@ -33,25 +48,38 @@ import {
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
-export function fileMutationChangeTotals(run: RuntimeToolRun): { additions: number; deletions: number } | null {
-  const changes = fileChangesFromToolRun(run);
-  if (changes.length) {
-    return {
-      additions: changes.reduce((total, file) => total + file.additions, 0),
-      deletions: changes.reduce((total, file) => total + file.deletions, 0),
-    };
-  }
-  const change = fileChangeFromToolRun(run);
-  return change ? { additions: change.additions, deletions: change.deletions } : null;
-}
-
-export function fileOperationChangeTotals(run: RuntimeToolRun): { additions: number; deletions: number; showZero: boolean } | null {
-  const resultTotals = fileMutationChangeTotals(run);
-  if (resultTotals) return { ...resultTotals, showZero: true };
-  const argumentTotals = fileOperationChangeTotalsFromArguments(run);
-  if (argumentTotals) return { ...argumentTotals, showZero: true };
-  return null;
-}
+export {
+  fileMutationChangeTotals,
+  fileOperationChangeTotals,
+  fileOperationChangeTotalsFromArguments,
+  fileOperationDiffTotalsFromValue,
+} from './runtimeToolRunChangeCounts.js';
+export {
+  compactUrlTarget,
+  concisePreview,
+  countTextLines,
+  formatPreview,
+  genericToolRunDiagnostic,
+  isPreparingToolRun,
+  isRecord,
+  isWebContentRun,
+  optionalNumber,
+  recordFromJson,
+  stringField,
+  toolRunTarget,
+} from './runtimeToolRunPresentationUtils.js';
+export {
+  normalizeShellStreamText,
+  shellCommand,
+  shellContentLine,
+  shellDiagnosticText,
+  shellMetadataLine,
+  shellOutputSegments,
+  shellResultPreviewForDisplay,
+  shellStatusLabel,
+  ShellTerminalResult,
+  shellTerminalStatus,
+} from './RuntimeShellToolRun.js';
 
 export function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: number; deletions: number; showZero: boolean } | null {
   let hasTotals = false;
@@ -67,54 +95,6 @@ export function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additi
   }
   if (hasTotals) return { additions, deletions, showZero: showZero || additions !== 0 || deletions !== 0 };
   return null;
-}
-
-export function fileOperationChangeTotalsFromArguments(run: RuntimeToolRun): { additions: number; deletions: number } | null {
-  const args = recordFromJson(run.argumentsPreview);
-  const directAdditions = optionalNumber(args.additions);
-  const directDeletions = optionalNumber(args.deletions);
-  if (directAdditions !== null || directDeletions !== null) {
-    return { additions: directAdditions ?? 0, deletions: directDeletions ?? 0 };
-  }
-
-  const diffTotals = fileOperationDiffTotalsFromValue(args.diff ?? args.diffs ?? args.files ?? args.changes);
-  if (diffTotals) return diffTotals;
-
-  if (run.name === 'delete_file') return { additions: 0, deletions: 0 };
-  if (run.name === 'append_file') {
-    const content = stringField(args.content ?? args.text);
-    if (content) return { additions: countTextLines(content), deletions: 0 };
-  }
-  if (run.name === 'write_file') {
-    const content = stringField(args.content);
-    if (content && !content.includes('...[truncated ')) return { additions: countTextLines(content), deletions: 0 };
-  }
-  return null;
-}
-
-export function fileOperationDiffTotalsFromValue(value: unknown): { additions: number; deletions: number } | null {
-  const items = Array.isArray(value) ? value : [value];
-  let hasDiff = false;
-  let additions = 0;
-  let deletions = 0;
-  for (const item of items) {
-    if (!isRecord(item)) continue;
-    const nested = fileOperationDiffTotalsFromValue(item.diff ?? item.diffs ?? item.files ?? item.changes);
-    if (nested) {
-      hasDiff = true;
-      additions += nested.additions;
-      deletions += nested.deletions;
-      continue;
-    }
-    const itemAdditions = optionalNumber(item.additions);
-    const itemDeletions = optionalNumber(item.deletions);
-    if (itemAdditions !== null || itemDeletions !== null) {
-      hasDiff = true;
-      additions += itemAdditions ?? 0;
-      deletions += itemDeletions ?? 0;
-    }
-  }
-  return hasDiff ? { additions, deletions } : null;
 }
 
 export function groupToolRuns(runs: RuntimeToolRun[]): ToolRunGroup[] {
@@ -486,13 +466,6 @@ export function inspectionCompleteTitle(kind: InspectionEntryKind, t: Translate 
   return t('toolRun.inspection.fileLabel');
 }
 
-export function toolRunTarget(run: RuntimeToolRun): string {
-  const args = recordFromJson(run.argumentsPreview);
-  const url = stringField(args.url ?? args.uri ?? args.href);
-  if (url) return compactUrlTarget(url);
-  return stringField(args.command ?? args.cmd ?? args.query ?? args.path ?? args.file_path ?? args.target_path ?? args.file ?? args.process_id ?? args.processId);
-}
-
 export function fileOperationTarget(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
   const args = recordFromJson(run.argumentsPreview);
   if (hasIncompleteFileOperationPath(args)) return '';
@@ -777,147 +750,6 @@ export function fileMutationPathFromReason(value: string | undefined): string {
   return /\bto\s+(.+?)\.$/iu.exec(value ?? '')?.[1]?.trim() ?? '';
 }
 
-export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
-  const { t } = useI18n();
-  const command = shellCommand(run);
-  const segments = shellOutputSegments(shellResultPreviewForDisplay(run));
-  const status = shellStatusLabel(run, t);
-  const diagnostic = shellDiagnosticText(run);
-  return (
-    <div className={`chat-mcp-terminal chat-mcp-terminal--${shellTerminalStatus(run)}`}>
-      <div className="chat-mcp-terminal__header">Shell</div>
-      <div className="chat-mcp-terminal__body">
-        <div className="chat-mcp-terminal__command">
-          <span>$</span>
-          <code>{command || 'shell'}</code>
-        </div>
-        {segments.length ? (
-          <div className="chat-mcp-terminal__output">
-            {segments.map((segment, index) => (
-              <pre key={`${segment.kind}-${index}`} className={`chat-mcp-terminal__stream chat-mcp-terminal__stream--${segment.kind}`}>
-                {segment.text}
-              </pre>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <div className="chat-mcp-terminal__footer">{diagnostic ? `${status} · ${diagnostic}` : status}</div>
-    </div>
-  );
-}
-
-export function shellCommand(run: RuntimeToolRun): string {
-  const args = recordFromJson(run.argumentsPreview);
-  const content = run.resultPreview ?? '';
-  return stringField(args.command ?? args.cmd) || shellContentLine(content, /^\$\s+(.+)$/m) || shellContentLine(content, /^command:\s*(.+)$/im) || toolRunTarget(run);
-}
-
-export function shellResultPreviewForDisplay(run: RuntimeToolRun): string | undefined {
-  if (run.status !== 'pending_approval' && run.status !== 'running') return run.resultPreview;
-  const preview = run.resultPreview ?? '';
-  const showsSandboxFailure = /\bspawn\b[^\r\n]*\b(?:EPERM|EACCES)\b|\boperation not permitted\b|\bpermission denied\b|\bread-only file system\b/iu.test(preview);
-  if (!showsSandboxFailure) return run.resultPreview;
-  if (run.approvalRetryKind === 'sandbox_bypass') return undefined;
-
-  // Older persisted approvals predate retryKind. Keep them compact after an
-  // app update by recognizing the stable sandbox-retry wording.
-  const reason = run.approvalReason ?? '';
-  const legacySandboxRetry = reason.startsWith('Sandbox denied ')
-    && reason.includes('Approve retry without the OS sandbox.');
-  return legacySandboxRetry ? undefined : run.resultPreview;
-}
-
-export function shellStatusLabel(run: RuntimeToolRun, t: Translate = defaultTranslate): string {
-  if (run.status === 'running' || run.status === 'pending_approval') return t('toolRun.shell.status.running');
-  if (run.status === 'error') return t('toolRun.shell.status.failed');
-  if (run.status === 'cancelled') return t('toolRun.shell.status.cancelled');
-  if (run.status === 'rejected') return t('toolRun.shell.status.rejected');
-  const exit = shellContentLine(run.resultPreview ?? '', /^exit:\s*(.+)$/im);
-  if (exit && exit !== '0') return t('toolRun.shell.status.failed');
-  return t('toolRun.shell.status.success');
-}
-
-export function shellTerminalStatus(run: RuntimeToolRun): string {
-  if (run.status === 'success') {
-    const exit = shellContentLine(run.resultPreview ?? '', /^exit:\s*(.+)$/im);
-    return exit && exit !== '0' ? 'error' : 'completed';
-  }
-  if (run.status === 'pending_approval') return 'running';
-  if (run.status === 'cancelled') return 'cancelled';
-  return run.status === 'error' || run.status === 'rejected' ? 'error' : run.status;
-}
-
-export function shellDiagnosticText(run: RuntimeToolRun): string {
-  const content = run.resultPreview ?? '';
-  const exit = shellContentLine(content, /^exit:\s*(.+)$/im);
-  const cwd = shellContentLine(content, /^cwd:\s*(.+)$/im);
-  return [exit ? `exit ${exit}` : '', cwd ? `cwd ${cwd}` : ''].filter(Boolean).join(' · ');
-}
-
-export function shellContentLine(content: string, pattern: RegExp): string {
-  return pattern.exec(content)?.[1]?.trim() ?? '';
-}
-
-export function shellOutputSegments(value: string | undefined): Array<{ kind: 'stdout' | 'stderr' | 'message'; text: string }> {
-  const normalized = String(value || '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n\nProcess is still running\.[\s\S]*$/u, '')
-    .trimEnd();
-  if (!normalized) return [];
-
-  const segments: Array<{ kind: 'stdout' | 'stderr' | 'message'; text: string }> = [];
-  let active: 'stdout' | 'stderr' | 'message' | null = null;
-  let buffer: string[] = [];
-  const flush = () => {
-    const text = normalizeShellStreamText(buffer.join('\n'));
-    if (active && text) segments.push({ kind: active, text });
-    buffer = [];
-  };
-
-  for (const line of normalized.split('\n')) {
-    const stdout = /^stdout:\s*(.*)$/i.exec(line);
-    if (stdout) {
-      flush();
-      active = 'stdout';
-      if (stdout[1]) buffer.push(stdout[1]);
-      continue;
-    }
-    const stderr = /^stderr:\s*(.*)$/i.exec(line);
-    if (stderr) {
-      flush();
-      active = 'stderr';
-      if (stderr[1]) buffer.push(stderr[1]);
-      continue;
-    }
-    const error = /^error:\s*(.*)$/i.exec(line);
-    if (error) {
-      flush();
-      active = 'stderr';
-      if (error[1]) buffer.push(error[1]);
-      continue;
-    }
-    if (shellMetadataLine(line)) continue;
-    if (!active) active = 'message';
-    buffer.push(line);
-  }
-  flush();
-  return segments;
-}
-
-export function normalizeShellStreamText(value: string): string {
-  const text = value.trimEnd();
-  return !text || text.trim() === '(empty)' ? '' : text;
-}
-
-export function shellMetadataLine(line: string): boolean {
-  return (
-    /^\$\s+/.test(line) ||
-    /^(cwd|exit|status):/i.test(line) ||
-    /^Process is still running\./.test(line) ||
-    /^Persisted until /.test(line)
-  );
-}
-
 export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTranslate): { title: string; target?: string } {
   const args = recordFromJson(run.argumentsPreview);
   const name = run.name;
@@ -1040,77 +872,6 @@ export function toolRunIcon(run: RuntimeToolRun) {
   return <Wrench size={14} />;
 }
 
-export function recordFromJson(value: string | undefined): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-export function stringField(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-export function optionalNumber(value: unknown): number | null {
-  const numberValue = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : Number.NaN;
-  return Number.isFinite(numberValue) ? Math.max(0, numberValue) : null;
-}
-
-export function countTextLines(value: string): number {
-  if (!value) return 0;
-  const lines = value.split('\n');
-  if (lines.at(-1) === '') lines.pop();
-  return lines.length;
-}
-
 export function toolDisplayName(name: string, t: Translate = defaultTranslate): string {
   return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || t('toolRun.tool');
-}
-
-export function formatPreview(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2);
-  } catch {
-    return trimmed.length > 4000 ? `${trimmed.slice(0, 4000)}\n...` : trimmed;
-  }
-}
-
-export function isWebContentRun(run: RuntimeToolRun, url = stringField(recordFromJson(run.argumentsPreview).url)): boolean {
-  if (!url) return false;
-  return /(^|\s|_|-)fetch(web)?content($|\s|_|-)/iu.test(run.name) || /^https?:\/\//iu.test(url);
-}
-
-export function compactUrlTarget(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  try {
-    const url = new URL(trimmed);
-    const path = `${url.pathname}${url.search}`.replace(/\/$/u, '') || '/';
-    return `${url.hostname}${path}`;
-  } catch {
-    return trimmed.replace(/^https?:\/\//iu, '').replace(/\/$/u, '');
-  }
-}
-
-export function genericToolRunDiagnostic(run: RuntimeToolRun): string {
-  if (run.status !== 'error' && run.status !== 'rejected' && run.status !== 'cancelled') return '';
-  return concisePreview(run.approvalMessage || run.resultPreview || run.approvalReason || '');
-}
-
-export function isPreparingToolRun(run: RuntimeToolRun): boolean {
-  return run.status === 'running' && run.phase === 'preparing';
-}
-
-export function concisePreview(value: string): string {
-  const normalized = formatPreview(value).replace(/\s+/gu, ' ').trim();
-  return normalized.length > 600 ? `${normalized.slice(0, 600)}...` : normalized;
 }

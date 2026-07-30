@@ -1,5 +1,6 @@
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import path from 'node:path';
+import { setRuntimeSkillExtraRoots } from '../../runtime/use-cases/capability-operations.js';
 import type { RuntimeFactory } from '../types.js';
 import { AppServerRpcError } from './errors.js';
 import { recordInput, requiredString } from './input.js';
@@ -44,8 +45,7 @@ export async function appServerSkillsExtraRootsSetResponse(
   params: unknown,
 ): Promise<Record<string, never>> {
   const input = recordInput(params);
-  const roots = appServerSkillExtraRoots(input.extraRoots ?? input.extra_roots);
-  await runtime.skillRegistry.setExtraRoots(roots);
+  await setRuntimeSkillExtraRoots(runtime, input.extraRoots ?? input.extra_roots);
   return {};
 }
 
@@ -90,15 +90,6 @@ function appServerSkillCwds(value: unknown): string[] {
     return item || process.cwd();
   });
   return cwds.length ? cwds : [process.cwd()];
-}
-
-function appServerSkillExtraRoots(value: unknown): string[] {
-  if (!Array.isArray(value)) throw new AppServerRpcError(-32602, 'extraRoots must be an array');
-  return value.map((item, index) => {
-    if (typeof item !== 'string') throw new AppServerRpcError(-32602, `extraRoots[${index}] must be a string`);
-    if (!path.isAbsolute(item)) throw new AppServerRpcError(-32602, `extraRoots[${index}] must be an absolute path`);
-    return path.resolve(item);
-  });
 }
 
 function appServerSkillConfigSelector(input: Record<string, unknown>): { name?: string; path?: string } {

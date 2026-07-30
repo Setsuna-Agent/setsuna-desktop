@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from '../events.js';
+import { isRuntimeSweProjectionIgnoredEvent } from '../event-projections/dispositions.js';
 import {
   cloneRuntimeThreadGoal,
   type RuntimeMailboxDeliveryRecord,
@@ -331,8 +332,6 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
         ]
       : threadStatusChangedNotifications(state, event.threadId);
   }
-
-  if (event.type === 'runtime.warning') return [];
 
   if (event.type === 'message.created') {
     const message = event.payload.message;
@@ -707,6 +706,11 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     ];
   }
 
+  if (event.type === 'approval.requested') {
+    // The SWE protocol has no generic approval notification for non-file, non-shell tools.
+    return [];
+  }
+
   if (event.type === 'approval.resolved') {
     markApprovalResolved(state, event.threadId, event.payload.approvalId);
     return [
@@ -723,5 +727,10 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     return completedPlanMessageNotifications(state, event.threadId, turnId, event.payload.messageId, event.payload.content ?? '', event.payload.planMode, toEpochMs(event.createdAt));
   }
 
-  return [];
+  if (isRuntimeSweProjectionIgnoredEvent(event)) return [];
+  return assertNeverRuntimeEvent(event);
+}
+
+function assertNeverRuntimeEvent(event: never): never {
+  throw new Error(`Unhandled runtime event in SWE projection: ${JSON.stringify(event)}`);
 }

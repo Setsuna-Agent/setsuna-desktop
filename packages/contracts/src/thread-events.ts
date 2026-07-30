@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from './events.js';
+import { isRuntimeThreadProjectionIgnoredEvent } from './event-projections/dispositions.js';
 import {
   appendThreadTurnItemDelta,
   appendToolRunOutputDelta,
@@ -536,11 +537,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
-  if (event.type === 'runtime.warning') {
-    // 警告保留在仅追加事件日志中，不重写已经结束的轮次。
-    return next;
-  }
-
   if (event.type === 'turn.cancelled') {
     const reason = event.payload.reason || 'Turn cancelled.';
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
@@ -577,7 +573,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
-  return next;
+  if (isRuntimeThreadProjectionIgnoredEvent(event)) return next;
+  return assertNeverRuntimeEvent(event);
+}
+
+function assertNeverRuntimeEvent(event: never): never {
+  throw new Error(`Unhandled runtime event in thread projection: ${JSON.stringify(event)}`);
 }
 
 /**

@@ -11,7 +11,7 @@ import { applyRuntimeEvent } from '../../../services/runtime-client/runtimeEvent
 import {
   activeTurnIdFromThreadSnapshot,
   isThreadContextCompacting,
-} from '../../../services/runtime-client/useRuntimeClientState.js';
+} from '../../../services/runtime-client/runtimeThreadState.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';

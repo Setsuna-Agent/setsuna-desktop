@@ -83,14 +83,18 @@ Capability 分支集中在 `swe/capabilities.ts` 和 server connection registry�
 
 - `rpc.ts` / `dispatcher.ts`：JSON-RPC 分发。
 - `thread-protocol.ts`：线程、turn、steer、review。
-- `config-protocol.ts`：配置。
+- `config-protocol.ts`：配置读写、模型、memory 与 sandbox 映射。
+- `feature-protocol.ts`：experimental feature 目录、默认值与 enablement。
 - `approval-protocol.ts`：审批。
-- `command-exec.ts`：命令进程。
+- `command-exec.ts`：command/exec session facade 与兼容导出。
+- `process-manager.ts`：process session、background terminal 与连接生命周期。
+- `command-process-runtime.ts`：PTY、stdin/output、env 和 termination 共享基础设施。
+- `command-sandbox.ts`：权限策略、Seatbelt profile 与 fail-closed spawn 包装。
 - `fs-protocol.ts`：文件协议。
 - `hooks-protocol.ts` / `skills-protocol.ts`：能力。
 - `dynamic-tools.ts`：动态工具目录。
 - `connections.ts`：连接 capability/lifecycle。
-- `errors.ts` / `input.ts` / `platform.ts`：边界 helper。
+- `errors.ts` / `input.ts` / `pagination.ts` / `platform.ts`：边界 helper。
 
 协议 handler 做解析和映射；核心行为仍调用 runtime container/AgentLoop。
 
@@ -121,4 +125,3 @@ Runtime：
 - `test/support/runtime-server/app-server-*`
 
 测试需覆盖历史 projection、live stream、不同 capabilities、connection teardown、approval、file changes、shell 和 collaboration。
-

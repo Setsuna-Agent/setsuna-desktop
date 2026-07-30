@@ -26,6 +26,10 @@ window.setsunaDesktop
 createDesktopRuntimeClient
         ↓
 useRuntimeClientState
+        ├→ useRuntimeCapabilityState
+        ├→ useRuntimeConfigState
+        ├→ useRuntimeMemoryUsageState
+        ├→ useRuntimeThreadState
         ↓
 useDesktopAppController
         ↓
@@ -36,7 +40,8 @@ route / feature components
 
 Runtime state、导航状态、feature 临时状态分开持有：
 
-- Runtime snapshot 和 SSE：`useRuntimeClientState`。
+- Runtime bootstrap 与跨域刷新：`useRuntimeClientState`。
+- Current thread、SSE sequence 与 active turn：`useRuntimeThreadState`。
 - 当前 view、project/thread 切换：`useDesktopNavigation`。
 - Desktop shell 与 feature 组合：`useDesktopAppController`。
 - Workspace panel/session：`features/workspace/hooks/`。
@@ -95,4 +100,3 @@ Runtime state、导航状态、feature 临时状态分开持有：
 - 文件/review/terminal/browser：[workspace-and-debug.md](workspace-and-debug.md)
 - Provider/MCP/Skill/Plugin/数据根：[settings-and-capabilities.md](settings-and-capabilities.md)
 - 主题、i18n、primitive：[shared-ui-and-styles.md](shared-ui-and-styles.md)
-

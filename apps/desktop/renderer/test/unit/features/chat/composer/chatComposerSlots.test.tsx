@@ -3,8 +3,10 @@ import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  createSelectedSkillSlot,
   createWorkspaceMentionInsertion,
   createWorkspaceMentionSlots,
+  filterSelectedSkillsBySlots,
 } from '../../../../../src/features/chat/composer/chatComposerSlots.js';
 
 const entry: WorkspaceEntrySearchItem = {
@@ -53,5 +55,31 @@ describe('workspace mention slots', () => {
     expect(labelHtml).toContain('data-composer-cursor-offset-adjustment=');
     expect(labelHtml).toContain('>Tile.tsx</span>');
     expect(labelHtml).not.toContain('@Tile.tsx');
+  });
+
+  it('creates skill slots and retains selections represented by the slot config', () => {
+    const firstSkill = {
+      id: 'first',
+      name: 'First skill',
+      kind: 'user' as const,
+      enabled: true,
+      selected: false,
+      description: 'First description',
+    };
+    const secondSkill = {
+      ...firstSkill,
+      id: 'second',
+      name: 'Second skill',
+    };
+    const slot = createSelectedSkillSlot(firstSkill);
+
+    if (slot.type !== 'tag') throw new Error('Expected a selected Skill tag');
+    expect(slot.key).toBe('skill:first');
+    expect(slot.props?.value).toBe('First skill');
+    expect(renderToStaticMarkup(slot.props?.label)).toContain('First skill');
+    expect(filterSelectedSkillsBySlots([firstSkill, secondSkill], [slot])).toEqual([firstSkill]);
+    const unchangedSkills = [firstSkill];
+    expect(filterSelectedSkillsBySlots(unchangedSkills, [slot])).toBe(unchangedSkills);
+    expect(filterSelectedSkillsBySlots([firstSkill], undefined)).toEqual([]);
   });
 });

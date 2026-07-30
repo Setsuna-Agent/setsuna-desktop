@@ -1,7 +1,4 @@
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { appServerCommandSandboxProfile } from '../../../src/server/app-server/command-exec.js';
 import {
   createRuntimeServerTestHarness,
   longIntegrationTestTimeoutMs,
@@ -39,47 +36,6 @@ describe('runtime server AppServer command execution', () => {
         stdout: 'exec-out',
         stderr: 'exec-err',
       });
-    });
-  
-  it('builds AppServer command/exec sandbox profiles from sandboxPolicy', () => {
-      const cwd = path.join(tmpdir(), 'setsuna app-server command sandbox');
-      const writableRoot = path.join(cwd, 'generated');
-      const profile = appServerCommandSandboxProfile({
-        sandboxPolicy: {
-          type: 'workspaceWrite',
-          writableRoots: [writableRoot],
-          networkAccess: false,
-        },
-      }, cwd, { supported: true, provider: 'macos-seatbelt', reason: '' });
-  
-      expect(profile).toContain('(deny network*)');
-      expect(profile).toContain('(deny file-write*');
-      expect(profile).toContain(`(require-not (subpath ${JSON.stringify(path.resolve(writableRoot))}))`);
-    });
-  
-  it('accepts upstream AppServer command/exec permission profile ids', () => {
-      const cwd = path.join(tmpdir(), 'setsuna app-server command profile');
-      const profile = appServerCommandSandboxProfile({
-        permissionProfile: ':workspace',
-      }, cwd, { supported: true, provider: 'macos-seatbelt', reason: '' });
-  
-      expect(profile).toContain('(deny network*)');
-      expect(profile).toContain(`(require-not (subpath ${JSON.stringify(path.resolve(cwd))}))`);
-      expect(appServerCommandSandboxProfile({
-        permissionProfile: ':danger-full-access',
-      }, cwd, { supported: false, provider: 'none', reason: 'unsupported platform: test' })).toBe('');
-    });
-  
-  it('accepts AppServer command/exec externalSandbox policy without local enforcement', () => {
-      expect(appServerCommandSandboxProfile({
-        sandboxPolicy: { type: 'externalSandbox', networkAccess: 'enabled' },
-      }, process.cwd(), { supported: false, provider: 'none', reason: 'unsupported platform: test' })).toBe('');
-    });
-  
-  it('fails closed for AppServer command/exec sandboxPolicy when OS sandbox is unavailable', () => {
-      expect(() => appServerCommandSandboxProfile({
-        sandboxPolicy: { type: 'readOnly', networkAccess: false },
-      }, process.cwd(), { supported: false, provider: 'none', reason: 'unsupported platform: test' })).toThrow('OS sandbox is unavailable');
     });
   
   it('merges AppServer command/exec environment overrides and supports unset values', async () => {

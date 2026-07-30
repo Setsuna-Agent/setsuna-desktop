@@ -330,7 +330,7 @@ describe('runtime server REST skills and capabilities', () => {
       }
     });
   
-  it('supports AppServer skills list, extra roots, and config writes', async () => {
+  it('shares skill extra roots across REST and AppServer configuration views', async () => {
       const stream = await harness.openAppServerNotificationStream();
       const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-skills-project-'));
       const extraRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-skills-extra-'));
@@ -368,7 +368,10 @@ describe('runtime server REST skills and capabilities', () => {
           }],
         });
   
-        await expect(harness.appServerRpc('skills/extraRoots/set', { extraRoots: [extraRoot] })).resolves.toEqual({});
+        await expect(harness.runtimeFetch('/v1/skills/extra-roots', {
+          method: 'PUT',
+          body: JSON.stringify({ extraRoots: [extraRoot] }),
+        })).resolves.toEqual({ ok: true });
         await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: harness.eventStreamTimeoutMs }))
           .resolves.toMatchObject({ method: 'skills/changed', params: {} });
   
@@ -452,7 +455,7 @@ describe('runtime server REST skills and capabilities', () => {
       }
     });
   
-  it('supports AppServer hooks list discovery shape', async () => {
+  it('shares hook discovery across REST and AppServer views', async () => {
       const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-appserver-hooks-project-'));
       const readConfig = await harness.appServerRpc('config/read', {});
       const configPath = readConfig.origins.hooks.name.file;
@@ -475,7 +478,7 @@ describe('runtime server REST skills and capabilities', () => {
         }],
       })).resolves.toMatchObject({ status: 'ok' });
   
-      const listed = await harness.appServerRpc('hooks/list', { cwds: [projectDir] });
+      const listed = await harness.runtimeFetch(`/v1/hooks?cwd=${encodeURIComponent(projectDir)}`);
       expect(listed).toMatchObject({
         data: [{
           cwd: projectDir,

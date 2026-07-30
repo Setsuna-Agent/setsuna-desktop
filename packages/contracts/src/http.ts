@@ -105,7 +105,6 @@ export type RuntimeRequestInput = {
 };
 
 export type DesktopRuntimeClient = {
-  request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
   listThreads(query?: ThreadQuery): Promise<ThreadList>;

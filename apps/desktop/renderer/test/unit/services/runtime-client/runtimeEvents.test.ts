@@ -1,8 +1,44 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import {
+  RUNTIME_ACTIVITY_EVENT_DISPOSITIONS,
+  RUNTIME_EVENT_TYPES,
+  type RuntimeEvent,
+  type RuntimeEventType,
+} from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { isActivityEvent } from '../../../../src/services/runtime-client/runtimeEvents.js';
 
 describe('runtime event activity filtering', () => {
+  it('follows the exhaustive activity disposition for every runtime event type', () => {
+    for (const type of RUNTIME_EVENT_TYPES) {
+      const event = runtimeEventWithOpaquePayload(type);
+      expect(isActivityEvent(event))
+        .toBe(RUNTIME_ACTIVITY_EVENT_DISPOSITIONS[type].action === 'include');
+    }
+  });
+
+  it('keeps only high-level lifecycle events in the activity list', () => {
+    const includedTypes = RUNTIME_EVENT_TYPES.filter(
+      (type) => RUNTIME_ACTIVITY_EVENT_DISPOSITIONS[type].action === 'include',
+    );
+
+    expect(includedTypes).toEqual([
+      'thread.context_cleared',
+      'thread.context_compacting',
+      'thread.context_compacted',
+      'turn.started',
+      'tool.started',
+      'tool.completed',
+      'hook.started',
+      'hook.completed',
+      'approval.requested',
+      'approval.resolved',
+      'turn.completed',
+      'turn.cancelled',
+      'runtime.warning',
+      'runtime.error',
+    ] satisfies RuntimeEventType[]);
+  });
+
   it('keeps streaming tool output out of the high-level activity list', () => {
     const preview = toolEvent('tool.preview', {
       toolCallId: 'call_1',
@@ -34,6 +70,18 @@ describe('runtime event activity filtering', () => {
     expect(isActivityEvent(completed)).toBe(true);
   });
 });
+
+function runtimeEventWithOpaquePayload(type: RuntimeEventType): RuntimeEvent {
+  return {
+    id: `event_${type}`,
+    seq: 1,
+    threadId: 'thread_1',
+    turnId: 'turn_1',
+    type,
+    createdAt: '2026-06-26T00:00:00.000Z',
+    payload: {},
+  } as RuntimeEvent;
+}
 
 function toolEvent<TType extends RuntimeEvent['type']>(
   type: TType,

@@ -82,7 +82,13 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 ## Capabilities
 
-`CapabilitiesPage.tsx` 编排 Plugin、MCP、Skill、Hook。
+`CapabilitiesPage.tsx` 只编排筛选、mutation 和跨能力状态：
+
+- `CapabilitiesCatalogCards.tsx`：MCP、Skill、Hook 列表卡片。
+- `CapabilitiesHookEditor.tsx`：Hook draft、metadata 映射和 editor UI。
+- Plugin market/editor 继续位于各自子模块。
+
+Hook editor 的 draft/metadata 转换是可独立测试的纯边界；页面不再同时维护表单字段渲染和 catalog card 细节。
 
 ### Plugin market
 
@@ -136,7 +142,7 @@ Hooks 页面只展示实际配置内容。Plugin Hook 默认不可信，必须�
 
 ## State 与 refresh
 
-Settings/Capabilities 共享 `useRuntimeClientState`：
+Settings/Capabilities 继续通过 `useRuntimeClientState` facade 取数，实际能力状态由 `useRuntimeCapabilityState` 持有：
 
 - Config save 后更新统一 config state。
 - Capabilities refresh 使用 `Promise.allSettled`，单个 Skill/MCP/Hook/Plugin 请求失败不抹掉其他成功数据。
@@ -171,4 +177,3 @@ Capabilities：
 - Hook config。
 
 跨层修改还需要 runtime config/MCP/Skill/Plugin store 与 server integration tests。
-

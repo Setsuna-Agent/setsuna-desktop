@@ -72,14 +72,28 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Pl
 `composer/` 把易变逻辑拆成独立单元：
 
 - `chatComposerDraftSync.ts`：thread/project 身份与 draft 同步。
-- `chatComposerSendOptions.ts`：模型、thinking、Skill、mode 归一化。
+- `chatComposerSendOptions.ts`：附件、thinking、Skill 与 mode 的发送参数归一化。
+- `chatComposerModeState.ts`：当前模型能力、Plan/Goal 互斥和 thinking selection 的纯状态模型。
+- `useChatComposerModeController.ts`：Plan/Goal、thinking、model/usage view state 与 send options。
+- `ChatComposerFooter.tsx`：命令入口、thinking、审批策略、模式徽标、模型选择与 send/stop/queue 主操作的纯展示组合。
+- `ChatComposerOverlays.tsx`：mention、slash 和 usage 浮层的纯展示组合。
 - `chatAttachments.ts` / `chatImageAttachments.ts`：附件选择、上传、清理。
 - `chatCommandUtils.ts`：slash/command 解析。
+- `chatComposerCommandState.ts`：mention/slash visibility、dismiss 和 cursor-local query 的纯状态模型。
+- `useChatCommandController.ts`：菜单 focus、键盘导航、光标监听和 workspace 搜索生命周期。
+- `chatProjectEntrySearch.ts`：可取消的 project entry 搜索，迟到结果不能覆盖最新 query。
+- `chatSlashCommandItems.ts`：quick action 与可用 Skill 的纯列表映射。
 - `chatComposerCursorOffset.ts`：菜单定位需要的光标偏移。
-- `chatComposerSlots.tsx`：输入区域可组合 slots。
+- `chatComposerSlots.tsx`：workspace mention、Skill 和文本输入 slots。
 - `useQueuedTurnComposerEdit.ts`：带 token 的队列项取回编辑。
 
 取回队列项不会先删除持久化数据。Runtime 返回 edit token，renderer 暂时把内容接管到 composer；提交、取消、卸载和失败路径都要 release 或携 token 更新。
+
+Command controller 只拥有输入菜单交互，不负责发送、附件、Plan/Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
+
+Mode controller 只拥有本地模式选择和发送参数快照。Plan 与本地 Goal 原子互斥；切换 thread 只重置 thread-scoped Goal 和 usage panel，成功发送后重置 Plan/Goal，thinking 继续保留。附件 begin/settle、实际 `onSend`、queued-edit token 和 Sender clear 仍由各自原 owner 管理。
+
+Footer 和 overlays 不拥有 state、ref 或异步生命周期。它们通过分组控制面接收 controller 状态和回调；主操作保持 `queue > stop > attachment-only send > Sender default action` 的既有优先级。组件级 characterization test 固化该矩阵及模式徽标、菜单和 usage thread gate。
 
 ## Message display 与 timeline
 
@@ -132,7 +146,18 @@ SSE 丢帧或组件重挂载时依赖 thread snapshot 恢复；局部 streaming 
 - File mutation preview 和统计。
 - Background process / result summary。
 
-`runtimeToolRunState.ts` 负责状态收敛，`runtimeFileChanges.ts` 负责文件变更纯转换，展示组件不解析任意工具原始 payload。
+职责分层：
+
+- `runtimeToolRunState.ts`：运行状态收敛。
+- `runtimeFileChanges.ts`：文件变更纯转换。
+- `RuntimeToolRunPresentation.tsx`、`runtimeToolRunPresentationUtils.ts`、`runtimeToolRunChangeCounts.ts`：展示映射与共享解析。
+- `RuntimeToolRuns.tsx`：分组和 disclosure 编排。
+- `RuntimeFileChangesSummaryCard.tsx`：文件摘要、撤销状态和滚动计数。
+- `RuntimeHookRunDetails.tsx`：Hook lifecycle 展示。
+- `RuntimeToolApprovalActions.tsx`：普通审批与 MCP elicitation。
+- `RuntimeShellToolRun.tsx`：Shell result 展示。
+
+展示组件不解析任意工具原始 payload；审批、撤销和 Hook 等不同交互状态也不再共居于同一个协调组件。
 
 结构化用户输入的 schema 可以持久化，用户答案不写 approval event；答案只在 normal tool result 中回到模型上下文。UI 和 runtime 都要验证字段。
 
@@ -189,4 +214,3 @@ SSE 丢帧或组件重挂载时依赖 thread snapshot 恢复；局部 streaming 
 - `hooks/`：turn actions 与 composer session。
 
 修改 message/turn 语义时，还要运行 contracts projection 和 runtime AgentLoop integration 测试。
-

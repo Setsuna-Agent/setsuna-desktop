@@ -61,7 +61,9 @@ Workspace file context menu 的“打开、复制路径、Reveal、预览”走 
 主要文件：
 
 - `ReviewPanel.tsx`：加载、刷新、stage/unstage/discard、选择。
-- `ReviewDiffView.tsx`：Diff 展示。
+- `ReviewDiffView.tsx`：文件卡、展开、聚焦和 context menu 编排。
+- `ReviewDiffContent.tsx`：Unified/split diff 展示与虚拟滚动。
+- `reviewDiffModel.ts`：高亮、split rows、整文件变更、换行和 virtual range 纯计算。
 - `ReviewChangeCounts.tsx`：统计。
 - `reviewChanges.ts` / `review-types.ts` / `review-paths.ts`：纯转换。
 - `runtimeReviewSummary.ts`：runtime review target/summary 映射。
@@ -157,4 +159,3 @@ Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、browser�
 Conversation debug 测试位于 `test/unit/features/conversation-debug/`，重点覆盖 graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation 和 virtual window。
 
 Main 对应 review、terminal、browser、workspace tests 也必须随跨层改动更新。
-

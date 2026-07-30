@@ -1,0 +1,601 @@
+import type {
+  AnswerRuntimeApprovalInput,
+  DesktopRuntimeClient,
+  RuntimeEvent,
+  RuntimeReviewTarget,
+  RuntimeThread,
+  RuntimeThreadMemoryMode,
+  RuntimeThreadSummary,
+  WorkspaceProject,
+} from '@setsuna-desktop/contracts';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
+import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
+import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
+import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { isActivityEvent } from './runtimeEvents.js';
+import {
+  activeTurnIdFromThreadSnapshot,
+  adoptOwnedThreadSnapshot,
+  applyCurrentThreadEvent,
+  isThreadContextCompacting,
+  selectInitialThreadSummary,
+  updateThreadApprovalRun,
+} from './runtimeThreadState.js';
+
+const lastActiveThreadStorageKey = 'setsuna-desktop:last-active-thread-id';
+
+export type RuntimeThreadClient = Pick<
+  DesktopRuntimeClient,
+  | 'answerApproval'
+  | 'clearThreadContext'
+  | 'clearThreadGoal'
+  | 'compactThreadContext'
+  | 'createThread'
+  | 'deleteThread'
+  | 'getThread'
+  | 'listThreads'
+  | 'startReview'
+  | 'subscribeEvents'
+  | 'updateThread'
+  | 'updateThreadMemoryMode'
+>;
+
+export type RuntimeThreadBootstrap = {
+  allThreads: RuntimeThreadSummary[];
+  projects: WorkspaceProject[];
+  visibleThreads: RuntimeThreadSummary[];
+};
+
+export type RuntimeTurnSettlement = {
+  refreshThreadUsage: boolean;
+  refreshUsage: boolean;
+  threadId: string;
+};
+
+type RuntimeThreadStateOptions = {
+  activeProjectId: string | null;
+  client: RuntimeThreadClient;
+  onError: (message: string) => void;
+  onTurnSettled: (settlement: RuntimeTurnSettlement) => void;
+  setActiveProjectId: Dispatch<SetStateAction<string | null>>;
+};
+
+/**
+ * Owns the main conversation's thread snapshots, SSE sequence, and active-turn lifecycle.
+ *
+ * Cross-domain capability/usage refreshes are emitted through `onTurnSettled` so this hook
+ * does not depend on those state domains.
+ */
+export function useRuntimeThreadState({
+  activeProjectId,
+  client,
+  onError,
+  onTurnSettled,
+  setActiveProjectId,
+}: RuntimeThreadStateOptions) {
+  const { t } = useI18n();
+  const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
+  const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
+  const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
+  const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
+  const [activityEvents, setActivityEvents] = useState<RuntimeEvent[]>([]);
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+  const initializedSelectionRef = useRef(false);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const currentThreadLastSeqRef = useRef(0);
+  const currentThreadRef = useRef<RuntimeThread | null>(currentThread);
+  const threadListRefreshTimerRef = useRef<number | null>(null);
+  // 终态 turn 记录在本地，避免延迟快照把已完成 turn 重新推断成 active。
+  const terminalTurnIdsRef = useRef<Set<string>>(new Set());
+  const threadMemoryModeRequests = useLatestRequestGuard();
+  const currentThreadId = currentThread?.id ?? null;
+  const contextRequests = useIdentityRequestGuard(currentThreadId ?? 'no-current-thread');
+
+  if (currentThreadRef.current?.id !== currentThreadId) {
+    currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
+  } else {
+    currentThreadLastSeqRef.current = Math.max(
+      currentThreadLastSeqRef.current,
+      currentThread?.lastSeq ?? 0,
+    );
+  }
+  currentThreadRef.current = currentThread;
+
+  /**
+   * Keep the public React setter compatible while immediately moving the SSE owner for
+   * direct navigation updates. Functional updates retain normal React setter semantics.
+   */
+  const setCurrentThread = useCallback<Dispatch<SetStateAction<RuntimeThread | null>>>(
+    (action) => {
+      if (typeof action !== 'function') {
+        currentThreadRef.current = action;
+        currentThreadLastSeqRef.current = action?.lastSeq ?? 0;
+      }
+      setCurrentThreadState(action);
+    },
+    [],
+  );
+
+  const contextCompacting = isThreadContextCompacting(
+    contextCompactingThreadId,
+    currentThreadId,
+  );
+  const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(
+    currentThread,
+    terminalTurnIdsRef.current,
+  );
+  const hasRunningThreadSummary = threads.some((thread) => Boolean(thread.activeTurnId))
+    || archivedThreads.some((thread) => Boolean(thread.activeTurnId));
+
+  const adoptSnapshot = useCallback((
+    requestedThreadId: string,
+    snapshot: RuntimeThread,
+  ): boolean => {
+    const current = currentThreadRef.current;
+    const adopted = adoptOwnedThreadSnapshot(current, requestedThreadId, snapshot);
+    if (adopted === current) return false;
+    currentThreadRef.current = adopted;
+    currentThreadLastSeqRef.current = adopted?.lastSeq ?? 0;
+    setCurrentThreadState((thread) => (
+      adoptOwnedThreadSnapshot(thread, requestedThreadId, snapshot)
+    ));
+    return true;
+  }, []);
+
+  const applyBootstrapThreads = useCallback(async ({
+    allThreads,
+    projects,
+    visibleThreads,
+  }: RuntimeThreadBootstrap) => {
+    setThreads(visibleThreads);
+    setArchivedThreads(allThreads.filter((thread) => thread.archived));
+    if (initializedSelectionRef.current) return;
+
+    initializedSelectionRef.current = true;
+    const initialThread = selectInitialThreadSummary(
+      visibleThreads,
+      readPersistedActiveThreadId(),
+    );
+    if (initialThread) {
+      try {
+        const thread = await client.getThread(initialThread.id);
+        setCurrentThread(thread);
+        setActiveProjectId(thread.projectId ?? null);
+        return;
+      } catch (unknownError) {
+        console.warn('[runtime] failed to restore the last active thread', unknownError);
+        setCurrentThread(null);
+      }
+    }
+    setActiveProjectId((current) => current ?? projects[0]?.id ?? null);
+  }, [client, setActiveProjectId, setCurrentThread]);
+
+  useEffect(() => {
+    if (currentThreadId) persistActiveThreadId(currentThreadId);
+  }, [currentThreadId]);
+
+  const refreshThreadsSoon = useCallback(() => {
+    if (threadListRefreshTimerRef.current !== null) return;
+    // 线程列表摘要不需要每条 SSE 都立即刷新，短 debounce 足够保持侧栏一致。
+    threadListRefreshTimerRef.current = window.setTimeout(() => {
+      threadListRefreshTimerRef.current = null;
+      void client
+        .listThreads()
+        .then((list) => setThreads(list.threads))
+        .catch((unknownError) => (
+          onError(unknownError instanceof Error ? unknownError.message : String(unknownError))
+        ));
+    }, 120);
+  }, [client, onError]);
+
+  useEffect(() => {
+    if (!effectiveActiveTurnId && !hasRunningThreadSummary) return undefined;
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    const pollThreadSummaries = async () => {
+      try {
+        const [visible, all] = await Promise.all([
+          client.listThreads(),
+          client.listThreads({ includeArchived: true }),
+        ]);
+        if (cancelled) return;
+        setThreads(visible.threads);
+        setArchivedThreads(all.threads.filter((thread) => thread.archived));
+        const stillRunning = visible.threads.some((thread) => Boolean(thread.activeTurnId))
+          || all.threads.some((thread) => Boolean(thread.activeTurnId));
+        if (stillRunning || effectiveActiveTurnId) {
+          timeoutId = window.setTimeout(pollThreadSummaries, 1000);
+        }
+      } catch (unknownError) {
+        if (!cancelled) {
+          onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+          timeoutId = window.setTimeout(pollThreadSummaries, 1000);
+        }
+      }
+    };
+    timeoutId = window.setTimeout(pollThreadSummaries, 250);
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [client, effectiveActiveTurnId, hasRunningThreadSummary, onError]);
+
+  useEffect(() => () => {
+    if (threadListRefreshTimerRef.current !== null) {
+      window.clearTimeout(threadListRefreshTimerRef.current);
+      threadListRefreshTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    setActivityEvents([]);
+    terminalTurnIdsRef.current.clear();
+    setActiveTurnId(null);
+  }, [currentThreadId]);
+
+  useEffect(() => {
+    unsubscribeRef.current?.();
+    if (!currentThreadId) return undefined;
+    // Projection and every event side effect share one owner/sequence acceptance gate.
+    unsubscribeRef.current = client.subscribeEvents(
+      currentThreadId,
+      currentThreadLastSeqRef.current,
+      (event) => {
+        const current = currentThreadRef.current;
+        const projected = applyCurrentThreadEvent(current, event);
+        if (projected === current) return;
+
+        currentThreadRef.current = projected;
+        currentThreadLastSeqRef.current = projected?.lastSeq ?? event.seq;
+        setCurrentThreadState((thread) => applyCurrentThreadEvent(thread, event));
+
+        if (isActivityEvent(event)) {
+          setActivityEvents((items) => [
+            event,
+            ...items.filter((item) => item.id !== event.id),
+          ].slice(0, 80));
+        }
+        refreshThreadsSoon();
+        if (event.type === 'turn.started' && event.turnId) {
+          terminalTurnIdsRef.current.delete(event.turnId);
+          setActiveTurnId(event.turnId);
+        }
+        if (
+          (
+            event.type === 'turn.completed'
+            || event.type === 'turn.cancelled'
+            || event.type === 'runtime.error'
+          )
+          && event.turnId
+        ) {
+          // runtime.error 也视作 turn 终态，否则 polling/infer 可能继续显示停止按钮。
+          terminalTurnIdsRef.current.add(event.turnId);
+          setActiveTurnId((active) => (active === event.turnId ? null : active));
+        }
+        if (event.type === 'runtime.error') {
+          onError(event.payload.message);
+        }
+        if (event.type === 'turn.completed') {
+          const refreshUsage = Boolean(event.payload.usage);
+          onTurnSettled({
+            threadId: event.threadId,
+            refreshUsage,
+            refreshThreadUsage: refreshUsage,
+          });
+        }
+      },
+    );
+    return () => {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+    };
+  }, [client, currentThreadId, onError, onTurnSettled, refreshThreadsSoon]);
+
+  useEffect(() => {
+    const recoveringActiveGoal = currentThread?.goal?.status === 'active';
+    if ((!effectiveActiveTurnId && !recoveringActiveGoal) || !currentThreadId) {
+      return undefined;
+    }
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    const threadId = currentThreadId;
+    const turnId = effectiveActiveTurnId;
+
+    // polling 校正线程快照和 activeTurnId；runtime 快照里的 activeTurnId 是终态兜底真源。
+    const pollThread = async () => {
+      let continuePolling = true;
+      try {
+        const nextThread = await client.getThread(threadId);
+        if (cancelled) return;
+        if (!adoptSnapshot(threadId, nextThread)) {
+          // A switched owner stops this polling loop. A temporarily older snapshot is
+          // ignored and retried without applying turn or refresh side effects.
+          continuePolling = currentThreadRef.current?.id === threadId;
+          if (!cancelled && continuePolling) {
+            timeoutId = window.setTimeout(pollThread, 1000);
+          }
+          return;
+        }
+        refreshThreadsSoon();
+        const snapshotActiveTurnId = activeTurnIdFromThreadSnapshot(
+          nextThread,
+          terminalTurnIdsRef.current,
+        );
+        if (!turnId) {
+          if (snapshotActiveTurnId) {
+            terminalTurnIdsRef.current.delete(snapshotActiveTurnId);
+            setActiveTurnId(snapshotActiveTurnId);
+          } else {
+            continuePolling = nextThread.goal?.status === 'active';
+          }
+        } else if (!snapshotActiveTurnId) {
+          terminalTurnIdsRef.current.add(turnId);
+          setActiveTurnId((active) => (active === turnId ? null : active));
+          onTurnSettled({
+            threadId,
+            refreshUsage: true,
+            refreshThreadUsage: false,
+          });
+          continuePolling = nextThread.goal?.status === 'active';
+        } else if (snapshotActiveTurnId !== turnId) {
+          terminalTurnIdsRef.current.delete(snapshotActiveTurnId);
+          setActiveTurnId(snapshotActiveTurnId);
+        }
+      } catch (unknownError) {
+        if (!cancelled) {
+          onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        }
+      }
+      if (!cancelled && continuePolling) {
+        timeoutId = window.setTimeout(pollThread, 1000);
+      }
+    };
+
+    timeoutId = window.setTimeout(pollThread, 250);
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [
+    adoptSnapshot,
+    client,
+    currentThread?.goal?.status,
+    currentThreadId,
+    effectiveActiveTurnId,
+    onError,
+    onTurnSettled,
+    refreshThreadsSoon,
+  ]);
+
+  const reloadThreads = useCallback(async () => {
+    const [list, allList] = await Promise.all([
+      client.listThreads(),
+      client.listThreads({ includeArchived: true }),
+    ]);
+    setThreads(list.threads);
+    setArchivedThreads(allList.threads.filter((thread) => thread.archived));
+    return list.threads;
+  }, [client]);
+
+  const clearCurrentThreadContext = useCallback(async () => {
+    if (!currentThread) return null;
+    const requestedThreadId = currentThread.id;
+    const isCurrentRequest = contextRequests.begin();
+    const cleared = await client.clearThreadContext(requestedThreadId);
+    if (isCurrentRequest()) adoptSnapshot(requestedThreadId, cleared);
+    await reloadThreads();
+    return cleared;
+  }, [adoptSnapshot, client, contextRequests, currentThread, reloadThreads]);
+
+  const compactCurrentThreadContext = useCallback(async () => {
+    if (!currentThread || contextCompacting) return null;
+    const requestedThreadId = currentThread.id;
+    const isCurrentRequest = contextRequests.begin();
+    setContextCompactingThreadId(requestedThreadId);
+    try {
+      // 手动压缩会立刻置本地 loading，最终状态仍以 runtime 返回的 thread 为准。
+      const compacted = await client.compactThreadContext(requestedThreadId);
+      if (isCurrentRequest()) adoptSnapshot(requestedThreadId, compacted);
+      await reloadThreads();
+      return compacted;
+    } catch (unknownError) {
+      if (isCurrentRequest() && currentThreadRef.current?.id === requestedThreadId) {
+        onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        setCurrentThread((thread) => (
+          thread?.id === requestedThreadId && thread.contextCompaction?.status === 'running'
+            ? { ...thread, contextCompaction: undefined }
+            : thread
+        ));
+      }
+      return null;
+    } finally {
+      setContextCompactingThreadId((active) => (
+        active === requestedThreadId ? null : active
+      ));
+    }
+  }, [
+    adoptSnapshot,
+    client,
+    contextCompacting,
+    contextRequests,
+    currentThread,
+    onError,
+    reloadThreads,
+    setCurrentThread,
+  ]);
+
+  const updateCurrentThreadMemoryMode = useCallback(
+    async (mode: RuntimeThreadMemoryMode) => {
+      if (!currentThread) return null;
+      const threadId = currentThread.id;
+      const isLatest = threadMemoryModeRequests.begin();
+      const updated = await client.updateThreadMemoryMode(threadId, { mode });
+      if (isLatest()) adoptSnapshot(threadId, updated);
+      await reloadThreads();
+      return updated;
+    },
+    [adoptSnapshot, client, currentThread, reloadThreads, threadMemoryModeRequests],
+  );
+
+  const clearCurrentThreadGoal = useCallback(async () => {
+    if (!currentThread) return false;
+    const threadId = currentThread.id;
+    const cleared = await client.clearThreadGoal(threadId);
+    if (cleared) {
+      setCurrentThread((thread) => {
+        if (thread?.id !== threadId) return thread;
+        const next = { ...thread };
+        delete next.goal;
+        return next;
+      });
+    }
+    await reloadThreads();
+    return cleared;
+  }, [client, currentThread, reloadThreads, setCurrentThread]);
+
+  const restoreArchivedThread = useCallback(async (threadId: string) => {
+    const restored = await client.updateThread(threadId, { archived: false });
+    await reloadThreads();
+    return restored;
+  }, [client, reloadThreads]);
+
+  const permanentlyDeleteThread = useCallback(async (threadId: string) => {
+    await client.deleteThread(threadId);
+    await reloadThreads();
+  }, [client, reloadThreads]);
+
+  const permanentlyDeleteArchivedThreads = useCallback(async (threadIds: string[]) => {
+    const uniqueThreadIds = [...new Set(threadIds)];
+    if (!uniqueThreadIds.length) return;
+
+    const results = await Promise.allSettled(
+      uniqueThreadIds.map((threadId) => client.deleteThread(threadId)),
+    );
+    await reloadThreads();
+
+    const failureCount = results.filter((result) => result.status === 'rejected').length;
+    if (failureCount) {
+      throw new Error(t('settings.archives.deleteSomeError', { count: failureCount }));
+    }
+  }, [client, reloadThreads, t]);
+
+  const startCurrentThreadReview = useCallback(async (
+    target: RuntimeReviewTarget,
+    scope?: {
+      claimComposerForThread: (threadId: string) => void;
+      isCurrentRequest: () => boolean;
+    },
+  ) => {
+    const isCurrentRequest = scope?.isCurrentRequest ?? (() => true);
+    const started = await startThreadReview({
+      activeProjectId,
+      client,
+      currentThread,
+      onThreadCreated: async (thread) => {
+        if (isCurrentRequest()) {
+          scope?.claimComposerForThread(thread.id);
+          setCurrentThread(thread);
+        }
+        await reloadThreads();
+      },
+      t,
+      target,
+    });
+    if (isCurrentRequest()) setActiveTurnId(started.turnId);
+    return started;
+  }, [
+    activeProjectId,
+    client,
+    currentThread,
+    reloadThreads,
+    setCurrentThread,
+    t,
+  ]);
+
+  const answerApproval = useCallback(
+    async (approvalId: string, input: AnswerRuntimeApprovalInput) => {
+      const requestedThreadId = currentThreadId;
+      await client.answerApproval(approvalId, input);
+      if (!requestedThreadId || currentThreadRef.current?.id !== requestedThreadId) return;
+      const resolvedAt = new Date().toISOString();
+      // 先乐观更新当前线程 toolRun，再异步拉一次线程快照校正 seq。
+      setCurrentThread((thread) => (
+        updateThreadApprovalRun(thread, approvalId, input, resolvedAt)
+      ));
+      client
+        .getThread(requestedThreadId)
+        .then((nextThread) => adoptSnapshot(requestedThreadId, nextThread))
+        .catch((unknownError) => {
+          if (currentThreadRef.current?.id === requestedThreadId) {
+            onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+          }
+        });
+    },
+    [adoptSnapshot, client, currentThreadId, onError, setCurrentThread],
+  );
+
+  return {
+    activeTurnId: effectiveActiveTurnId,
+    activityEvents,
+    answerApproval,
+    applyBootstrapThreads,
+    archivedThreads,
+    clearCurrentThreadContext,
+    clearCurrentThreadGoal,
+    compactCurrentThreadContext,
+    contextCompacting,
+    currentThread,
+    permanentlyDeleteArchivedThreads,
+    permanentlyDeleteThread,
+    reloadThreads,
+    restoreArchivedThread,
+    setActiveTurnId,
+    setCurrentThread,
+    startCurrentThreadReview,
+    terminalTurnIdsRef,
+    threads,
+    updateCurrentThreadMemoryMode,
+  };
+}
+
+function readPersistedActiveThreadId(): string | null {
+  const storage = browserLocalStorage();
+  if (!storage) return null;
+  try {
+    return normalizeStoredThreadId(storage.getItem(lastActiveThreadStorageKey));
+  } catch {
+    return null;
+  }
+}
+
+function persistActiveThreadId(threadId: string): void {
+  const storage = browserLocalStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(lastActiveThreadStorageKey, threadId);
+  } catch {
+    // 受限的渲染进程环境中可能无法使用 localStorage，此时 runtime 回退方案仍然有效。
+  }
+}
+
+function normalizeStoredThreadId(value: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
+function browserLocalStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}

@@ -28,53 +28,56 @@ export type RuntimeMailboxDelivery = {
   triggerTurn?: boolean;
 };
 
-export type RuntimeEventType =
-  | 'thread.created'
-  | 'thread.updated'
-  | 'thread.deleted'
-  | 'thread.metadata_updated'
-  | 'thread.memory_mode_updated'
-  | 'thread.goal_updated'
-  | 'thread.goal_cleared'
-  | 'thread.context_cleared'
-  | 'thread.context_compacting'
-  | 'thread.context_compacted'
-  | 'turn.input_queued'
-  | 'turn.input_updated'
-  | 'turn.input_deleted'
-  | 'turn.started'
-  | 'turn.step_snapshot'
-  | 'mailbox.delivered'
-  | 'message.created'
-  | 'message.delta'
-  | 'message.updated'
-  | 'message.plan_mode_updated'
-  | 'message.completed'
-  | 'item.started'
-  | 'item.delta'
-  | 'item.completed'
-  | 'plan.delta'
-  | 'reasoning.summary_delta'
-  | 'reasoning.summary_part_added'
-  | 'reasoning.raw_delta'
-  | 'safety.buffering'
-  | 'model.verification'
-  | 'token.count'
-  | 'turn.diff'
-  | 'messages.deleted'
-  | 'messages.truncated'
-  | 'tool.preview'
-  | 'tool.started'
-  | 'tool.output_delta'
-  | 'tool.completed'
-  | 'hook.started'
-  | 'hook.completed'
-  | 'approval.requested'
-  | 'approval.resolved'
-  | 'turn.completed'
-  | 'turn.cancelled'
-  | 'runtime.warning'
-  | 'runtime.error';
+export const RUNTIME_EVENT_TYPES = [
+  'thread.created',
+  'thread.updated',
+  'thread.deleted',
+  'thread.metadata_updated',
+  'thread.memory_mode_updated',
+  'thread.goal_updated',
+  'thread.goal_cleared',
+  'thread.context_cleared',
+  'thread.context_compacting',
+  'thread.context_compacted',
+  'turn.input_queued',
+  'turn.input_updated',
+  'turn.input_deleted',
+  'turn.started',
+  'turn.step_snapshot',
+  'mailbox.delivered',
+  'message.created',
+  'message.delta',
+  'message.updated',
+  'message.plan_mode_updated',
+  'message.completed',
+  'item.started',
+  'item.delta',
+  'item.completed',
+  'plan.delta',
+  'reasoning.summary_delta',
+  'reasoning.summary_part_added',
+  'reasoning.raw_delta',
+  'safety.buffering',
+  'model.verification',
+  'token.count',
+  'turn.diff',
+  'messages.deleted',
+  'messages.truncated',
+  'tool.preview',
+  'tool.started',
+  'tool.output_delta',
+  'tool.completed',
+  'hook.started',
+  'hook.completed',
+  'approval.requested',
+  'approval.resolved',
+  'turn.completed',
+  'turn.cancelled',
+  'runtime.warning',
+  'runtime.error',
+] as const;
+
+export type RuntimeEventType = (typeof RUNTIME_EVENT_TYPES)[number];
 
 export type RuntimeEventBase<TType extends RuntimeEventType, TPayload> = {
   id: string;

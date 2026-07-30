@@ -5,7 +5,17 @@ import {
   type ThreadQuery,
 } from '@setsuna-desktop/contracts';
 import path from 'node:path';
-import { threadScopeId } from '../../adapters/mcp/sdk-mcp-connection-manager.js';
+import {
+  callRuntimeMcpServerTool,
+  listRuntimeMcpServerStatuses,
+  readRuntimeMcpServerResource,
+} from '../../runtime/use-cases/capability-operations.js';
+import {
+  clearRuntimeThreadGoal,
+  deleteRuntimeThread,
+  setRuntimeThreadGoal,
+  startRuntimeReview,
+} from '../../runtime/use-cases/thread-operations.js';
 import {
   appendAndPublishRuntimeEvent,
   cancelRuntimeTurn,
@@ -58,7 +68,6 @@ import {
   sweModelProviderCapabilitiesResponse,
   swePatchThreadGitInfo,
   swePermissionProfileListResponse,
-  sweReviewRequestFromTarget,
   sweReviewUserMessageItem,
   sweSetThreadGoal,
   sweSupportedFeatureEnablement,
@@ -71,7 +80,6 @@ import {
   sweTurn,
   sweUserInputText,
   sweValidateConfigWriteTarget,
-  type AppServerMcpStatusInventory,
 } from './protocol.js';
 import {
   appServerSkillsConfigWriteResponse,
@@ -186,11 +194,8 @@ export async function dispatchAppServerRpcRequest(
 
   if (method === 'mcpServerStatus/list') {
     const input = recordInput(params);
-    return sweMcpServerStatusListResponse(
-      await runtime.mcpStore.listServers(),
-      input,
-      await appServerMcpStatusInventory(runtime, input),
-    );
+    const statuses = await listRuntimeMcpServerStatuses(runtime, input.detail);
+    return sweMcpServerStatusListResponse(statuses.data, input);
   }
 
   if (method === 'config/mcpServer/reload') {
@@ -242,28 +247,12 @@ export async function dispatchAppServerRpcRequest(
 
   if (method === 'mcpServer/resource/read') {
     const input = recordInput(params);
-    const threadId = stringInput(input.threadId ?? input.thread_id);
-    if (threadId) await requireRuntimeThread(runtime, threadId);
-    const serverKey = requiredString(input.server, 'server');
-    const uri = requiredString(input.uri, 'uri');
-    const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === serverKey);
-    if (!server) throw new AppServerRpcError(-32602, `MCP server not found: ${serverKey}`);
-    return runtime.mcpConnections.readResource(server, uri, {
-      scopeId: threadId ? threadScopeId(threadId) : 'app-server:resources',
-    });
+    return readRuntimeMcpServerResource(runtime, input);
   }
 
   if (method === 'mcpServer/tool/call') {
     const input = recordInput(params);
-    const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
-    await requireRuntimeThread(runtime, threadId);
-    const serverKey = requiredString(input.server, 'server');
-    const toolName = requiredString(input.tool, 'tool');
-    const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === serverKey);
-    if (!server) throw new AppServerRpcError(-32602, `MCP server not found: ${serverKey}`);
-    return runtime.mcpConnections.callTool(server, toolName, input.arguments, {
-      scopeId: threadScopeId(threadId),
-    });
+    return callRuntimeMcpServerTool(runtime, input);
   }
 
   if (method === 'fs/readFile') {
@@ -494,7 +483,7 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId, 'threadId');
     const thread = await requireRuntimeThread(runtime, threadId);
     const requested = sweSetThreadGoal(thread, input);
-    const goal = await runtime.agentLoop.setThreadGoal(threadId, {
+    const goal = await setRuntimeThreadGoal(runtime, threadId, {
       objective: requested.objective,
       status: requested.status,
       tokenBudget: requested.tokenBudget,
@@ -526,11 +515,7 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/goal/clear') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    const thread = await requireRuntimeThread(runtime, threadId);
-    const cleared = Boolean(thread.goal);
-    if (!cleared) return { cleared };
-    await runtime.agentLoop.clearThreadGoal(threadId);
-    return { cleared };
+    return { cleared: await clearRuntimeThreadGoal(runtime, threadId) };
   }
 
   if (method === 'thread/metadata/update') {
@@ -566,46 +551,8 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/delete') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    return runtime.agentLoop.withThreadDeletionBarrier(threadId, async () => {
-      // Re-read after the barrier: cancellation and final cleanup may have advanced lastSeq.
-      const thread = await requireRuntimeThread(runtime, threadId);
-      await runtime.threadStore.deleteThread(threadId);
-
-      // Deletion is an ephemeral lifecycle notification because its persisted stream no longer
-      // exists. Publish only after the store commit, using the final drained sequence boundary.
-      runtime.eventBus.publish({
-        id: randomRuntimeId('event_deleted'),
-        seq: thread.lastSeq + 1,
-        threadId,
-        type: 'thread.deleted',
-        createdAt: new Date().toISOString(),
-        payload: {},
-      });
-
-      // The destructive commit already succeeded. Every teardown is now best-effort so a cleanup
-      // failure cannot make callers retry a deletion that has actually completed.
-      const cleanupTasks = [
-        { label: 'dynamic tools', run: () => runtime.agentLoop.clearAppServerDynamicTools(threadId) },
-        { label: 'MCP connections', run: () => runtime.mcpConnections.releaseThread(threadId) },
-        { label: 'attachments', run: () => runtime.attachmentStore.releaseThread(threadId) },
-        ...(!thread.projectId
-          ? [{
-            label: 'temporary workspace',
-            run: () => runtime.workspaceProjects.removeTemporaryWorkspace({ threadId, createdAt: thread.createdAt }),
-          }]
-          : []),
-      ];
-      const cleanupResults = await Promise.allSettled(cleanupTasks.map((task) => Promise.resolve().then(task.run)));
-      cleanupResults.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          console.warn(
-            `[desktop-runtime] Thread ${threadId} was deleted, but ${cleanupTasks[index].label} cleanup failed.`,
-            result.reason,
-          );
-        }
-      });
-      return {};
-    });
+    await deleteRuntimeThread(runtime, threadId);
+    return {};
   }
 
   if (method === 'thread/unarchive') {
@@ -664,21 +611,14 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
     const delivery = stringInput(input.delivery) ?? 'inline';
     if (delivery !== 'inline') throw new AppServerRpcError(-32600, 'review/start detached delivery is not supported yet');
-    const review = sweReviewRequestFromTarget(input.target);
-    try {
-      const started = await runtime.agentLoop.startReview(threadId, review);
-      return {
-        turn: sweTurn(started.turnId, 'inProgress', {
-          items: [sweReviewUserMessageItem(started.turnId, review.displayText)],
-          itemsView: 'notLoaded',
-        }),
-        reviewThreadId: threadId,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.startsWith('Thread not found:')) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
-      throw new AppServerRpcError(-32600, message);
-    }
+    const started = await startRuntimeReview(runtime, threadId, input.target);
+    return {
+      turn: sweTurn(started.response.turnId, 'inProgress', {
+        items: [sweReviewUserMessageItem(started.response.turnId, started.review.displayText)],
+        itemsView: 'notLoaded',
+      }),
+      reviewThreadId: threadId,
+    };
   }
 
   if (method === 'turn/start') {
@@ -766,30 +706,6 @@ export async function dispatchAppServerRpcRequest(
   }
 
   throw new AppServerRpcError(-32601, `Method not found: ${method}`);
-}
-
-async function appServerMcpStatusInventory(
-  runtime: RuntimeFactory,
-  input: Record<string, unknown>,
-): Promise<AppServerMcpStatusInventory> {
-  const detail = stringInput(input.detail);
-  if (detail && detail !== 'full' && detail !== 'toolsAndAuthOnly') {
-    throw new AppServerRpcError(-32602, `Invalid MCP server status detail: ${detail}`);
-  }
-  // 客户端会轮询此轻量状态；不能仅为渲染认证状态就打开远程连接或触发 OAuth 质询。
-  if (detail === 'toolsAndAuthOnly') return {};
-
-  const servers = (await runtime.mcpStore.listServerInputs()).filter((server) => server.enabled !== false);
-  const entries = await Promise.all(servers.map(async (server) => {
-    const snapshot = await runtime.mcpConnections.snapshot(server, {
-      scopeId: 'app-server:status',
-    }, {
-      includeTools: true,
-      includeResources: detail !== 'toolsAndAuthOnly',
-    });
-    return [server.key, snapshot] as const;
-  }));
-  return Object.fromEntries(entries);
 }
 
 function hasAppServerDynamicToolsInput(input: Record<string, unknown>): boolean {

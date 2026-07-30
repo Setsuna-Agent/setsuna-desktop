@@ -6,6 +6,11 @@
 
 - [Active turn 发送队列](queued-turn-inputs.md)：Contract event、runtime FIFO/steer/Goal 调度、REST 和 renderer composer 的完整链路。
 
+## 评审与治理
+
+- [架构复杂度收敛评审](architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点和分阶段治理计划。
+- [Runtime 边界与事件矩阵](runtime-boundary-matrix.md)：`DesktopRuntimeClient` 当前传输清单和 46 类 RuntimeEvent 的显式投影边界。
+
 ## 何时新增设计文档
 
 适合：
@@ -29,4 +34,3 @@
 - 各模块职责。
 - 验证覆盖。
 - 相关文件。
-

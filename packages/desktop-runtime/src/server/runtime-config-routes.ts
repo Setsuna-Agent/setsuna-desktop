@@ -1,0 +1,90 @@
+import type {
+  RuntimeFetchModelsInput,
+  RuntimeWorkspaceDependenciesToggleInput,
+} from '@setsuna-desktop/contracts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { URL } from 'node:url';
+import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
+import { generateRuntimeCommitMessage } from '../runtime/use-cases/commit-message-generation.js';
+import { RuntimeHttpError } from './http-error.js';
+import { readBody, sendJson } from './http-utils.js';
+import type { RuntimeFactory } from './types.js';
+
+export async function handleRuntimeConfigRequest(
+  runtime: RuntimeFactory,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  if (request.method === 'GET' && url.pathname === '/v1/config') {
+    sendJson(response, 200, await runtime.configStore.getConfig());
+    return true;
+  }
+
+  if (request.method === 'PUT' && url.pathname === '/v1/config') {
+    sendJson(response, 200, await runtime.configStore.saveConfig(await readBody(request)));
+    return true;
+  }
+
+  if (request.method === 'GET' && url.pathname === '/v1/workspace-dependencies') {
+    sendJson(response, 200, await runtime.workspaceDependencies.getStatus());
+    return true;
+  }
+
+  if (request.method === 'PUT' && url.pathname === '/v1/workspace-dependencies') {
+    const input = await readBody<RuntimeWorkspaceDependenciesToggleInput | null>(
+      request,
+    );
+    if (!input || typeof input !== 'object' || typeof input.enabled !== 'boolean') {
+      throw new RuntimeHttpError(400, 'enabled must be a boolean.');
+    }
+    sendJson(
+      response,
+      200,
+      await runtime.workspaceDependencies.setEnabled({ enabled: input.enabled }),
+    );
+    return true;
+  }
+
+  if (
+    request.method === 'POST'
+    && url.pathname === '/v1/workspace-dependencies/diagnose'
+  ) {
+    sendJson(response, 200, await runtime.workspaceDependencies.diagnose());
+    return true;
+  }
+
+  if (
+    request.method === 'POST'
+    && url.pathname === '/v1/workspace-dependencies/reinstall'
+  ) {
+    sendJson(response, 200, await runtime.workspaceDependencies.reinstall());
+    return true;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/v1/config/models') {
+    const input = await readBody<RuntimeFetchModelsInput>(request, {});
+    const savedProvider = input.providerId
+      ? await runtime.configStore.getProviderConfig(input.providerId)
+      : await runtime.configStore.getActiveProviderConfig();
+    sendJson(response, 200, {
+      models: await fetchAvailableModels(input, savedProvider),
+    });
+    return true;
+  }
+
+  if (
+    request.method === 'POST'
+    && url.pathname === '/v1/git/commit-message/generate'
+  ) {
+    sendJson(response, 200, {
+      message: await generateRuntimeCommitMessage(
+        runtime,
+        await readBody(request, {}),
+      ),
+    });
+    return true;
+  }
+
+  return false;
+}

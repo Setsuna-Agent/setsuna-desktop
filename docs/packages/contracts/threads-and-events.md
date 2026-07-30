@@ -4,6 +4,7 @@
 
 - `packages/contracts/src/threads.ts`
 - `packages/contracts/src/events.ts`
+- `packages/contracts/src/event-projections/dispositions.ts`
 - `packages/contracts/src/thread-events.ts`
 - `packages/contracts/src/thread-event-projection.ts`
 - `packages/contracts/src/message-metadata.ts`
@@ -89,6 +90,16 @@ Tool run 是 UI/审计投影，包含：
 - Runtime error。
 
 准确 variant 以 `events.ts` 的 union 为准。
+
+### 投影 disposition
+
+46 类事件对三个消费者都有编译期穷尽去向：
+
+- `RUNTIME_THREAD_EVENT_DISPOSITIONS`：43 类 `project`，3 类 `ignore(reason)`。
+- `RUNTIME_SWE_EVENT_DISPOSITIONS`：34 类 `project`，12 类 `ignore(reason)`。
+- `RUNTIME_ACTIVITY_EVENT_DISPOSITIONS`：14 类 `include`，32 类 `ignore(reason)`。
+
+`project` 表示对应 reducer/mapper 明确拥有该类型，不保证每个 payload 都产生可见输出。Thread reducer 和 SWE mapper 的默认路径使用 `never` 检查；新增事件不能再静默落空。完整逐项清单见 [Runtime 边界与事件矩阵](../../designs/runtime-boundary-matrix.md)。
 
 ## Sequence 不变量
 
@@ -187,13 +198,13 @@ Debug trace：
 
 ## 新增 event 的检查表
 
-1. `events.ts` 新增严格 payload。
-2. `thread-events.ts` / projection helper 更新。
-3. `thread-events.test.ts` 覆盖初始、重复/边界和旧 snapshot。
-4. Runtime 通过 `RuntimeEventWriter` 发出。
-5. Store recovery/checkpoint 行为不变或明确迁移。
-6. Renderer `runtimeEvents.ts` / display 更新。
-7. SWE mapper 需要时更新。
+1. `events.ts` 的 `RUNTIME_EVENT_TYPES` 和 union 新增严格 payload。
+2. 三个 disposition 逐项选择 project/include 或带原因的 ignore。
+3. `thread-events.ts` / projection helper 更新，或确认由 thread ignore guard 接收。
+4. `thread-events.test.ts` 覆盖初始、重复/边界和旧 snapshot。
+5. Runtime 通过 `RuntimeEventWriter` 发出。
+6. Store recovery/checkpoint 行为不变或明确迁移。
+7. Renderer display 与 SWE mapper 按 disposition 更新。
 8. SSE reconnect 与 delete/truncate 场景验证。
 
 ## 测试真源
@@ -205,4 +216,3 @@ Debug trace：
 - `test/adapters/store/sqlite-thread-store.test.ts`
 - Renderer `services/runtime-client/runtimeEvents.test.ts`
 - Chat display/timeline tests。
-

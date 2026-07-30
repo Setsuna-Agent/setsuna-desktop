@@ -12,15 +12,12 @@ import type {
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { Button, Dropdown } from 'antd';
-import { ArrowUp, Boxes, Check, CircleGauge, Paperclip, Plus, Sparkles, Square, X } from 'lucide-react';
 import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ComponentProps,
   type ComponentRef,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
@@ -30,38 +27,35 @@ import type {
   ChatSkillSelectionRequest,
   ChatWorkspaceMentionRequest,
 } from '../../app/types.js';
-import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
-import { ChatApprovalPolicyMenu } from './composer/ChatApprovalPolicyMenu.js';
 import { ChatAttachmentTray } from './composer/ChatAttachmentTray.js';
-import { ProjectEntryCommandMenu } from './composer/ChatCommandMenus.js';
-import { ChatModelPicker } from './composer/ChatModelPicker.js';
+import { ChatComposerFooter } from './composer/ChatComposerFooter.js';
+import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
-import { ChatSlashCommandMenu, type SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
+import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
 import { chatAttachmentAccept } from './composer/chatAttachments.js';
-import { parseMentionCommand, parseSlashCommand, skillDisplayText } from './composer/chatCommandUtils.js';
-import {
-  applyComposerCursorOffsetAdjustments,
-  composerCursorOffsetAdjustmentAttribute,
-} from './composer/chatComposerCursorOffset.js';
+import { parseMentionCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
 import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js';
-import { createChatComposerSendOptions, type ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
+import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
 import {
+  createSelectedSkillSlot,
   createTextSlot,
   createWorkspaceMentionInsertion,
   createWorkspaceMentionSlots,
+  filterSelectedSkillsBySlots,
 } from './composer/chatComposerSlots.js';
+import {
+  createChatSlashCommandItems,
+  nextThreadMemoryMode,
+} from './composer/chatSlashCommandItems.js';
 import { useChatAttachments } from './composer/useChatAttachments.js';
+import { useChatCommandController } from './composer/useChatCommandController.js';
+import { useChatComposerModeController } from './composer/useChatComposerModeController.js';
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 
-type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
-type ActiveThinkingConfig = {
-  supported: boolean;
-  efforts: string[];
-  defaultEffort: string;
-};
 const EMPTY_SLOT_CONFIG: SlotConfigType[] = [];
 const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
 
@@ -137,25 +131,8 @@ export function ChatComposer({
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
   const { t } = useI18n();
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [activeSkillIndex, setActiveSkillIndex] = useState(0);
-  const [dismissedCommandValue, setDismissedCommandValue] = useState('');
-  const [dismissedSlashValue, setDismissedSlashValue] = useState('');
-  const [entries, setEntries] = useState<WorkspaceEntrySearchItem[]>([]);
-  const [focused, setFocused] = useState(false);
-  const [loadError, setLoadError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [modelOpenSignal, setModelOpenSignal] = useState(0);
   const [selectedSkills, setSelectedSkills] = useState<RuntimeSkillSummary[]>([]);
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
-  const [thinkingEffort, setThinkingEffort] = useState('');
-  const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
-  const [planModeEnabled, setPlanModeEnabled] = useState(false);
-  const [goalModeEnabled, setGoalModeEnabled] = useState(false);
-  const [usagePanelOpen, setUsagePanelOpen] = useState(false);
-  const [slashMenuForcedOpen, setSlashMenuForcedOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [cursorOffset, setCursorOffset] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
   const lastEditorDraftRef = useRef(draft);
@@ -167,14 +144,14 @@ export function ChatComposer({
   const queuedTurnInputs = currentThread?.queuedTurnInputs ?? EMPTY_QUEUED_TURN_INPUTS;
   const deleteQueuedTurnInput = queuedTurnActions.deleteQueuedTurnInput;
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
-  const commandCursorOffset = cursorOffset ?? draft.length;
-  const mentionCommand = useMemo(() => parseMentionCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
-  const slashCommand = useMemo(() => parseSlashCommand(draft, commandCursorOffset), [commandCursorOffset, draft]);
-  const mentionQuery = mentionCommand?.query ?? '';
-  const commandOpen = Boolean(focused && mentionCommand && dismissedCommandValue !== draft);
-  const selectedSkillIds = useMemo(() => new Set(selectedSkills.map((skill) => skill.id)), [selectedSkills]);
-  const skillQuery = slashCommand?.query.trim().toLowerCase() ?? '';
-  const supportsImageInput = activeModelSupportsImages(config);
+  const getComposerInputElement = useCallback(() => senderRef.current?.inputElement ?? null, []);
+  const activeGoal = currentThread?.goal?.status === 'active' ? currentThread.goal : null;
+  const modeController = useChatComposerModeController({
+    activeGoal,
+    config,
+    currentThreadId: currentThread?.id,
+    onClearThreadGoal,
+  });
   const {
     addExistingImage,
     addFiles: addAttachmentFiles,
@@ -187,8 +164,10 @@ export function ChatComposer({
     replaceWithExisting: replaceAttachmentsWithExisting,
     sendableAttachments,
     settleSend: settleAttachmentSend,
-  } = useChatAttachments({ client, supportsImageInput });
-  const thinkingConfig = useMemo(() => activeModelThinkingConfig(config), [config]);
+  } = useChatAttachments({
+    client,
+    supportsImageInput: modeController.supportsImageInput,
+  });
   const attachmentOnlyReady = sendableAttachments.length > 0 && !draft.trim();
   const activeQueueReady = Boolean(
     activeTurnId
@@ -198,15 +177,11 @@ export function ChatComposer({
   const memoryMode = threadMemoryMode ?? 'enabled';
   const memoryGenerationEnabled = config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
   const multiAgentEnabled = config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
-  const activeGoal = currentThread?.goal?.status === 'active' ? currentThread.goal : null;
-  const goalEnabled = goalModeEnabled || Boolean(activeGoal);
   const composerHasProtectedState = Boolean(
     draft
     || attachmentItems.length
     || selectedSkills.length
-    || thinkingEnabled
-    || planModeEnabled
-    || goalModeEnabled,
+    || modeController.hasProtectedModeState,
   );
   const resetQueuedTurnComposer = useCallback(() => {
     clearAttachments();
@@ -219,7 +194,7 @@ export function ChatComposer({
     replaceAttachmentsWithExisting(input.attachments ?? []);
     setSelectedSkills([]);
     onDraftChange(input.input);
-    setFocused(true);
+    senderRef.current?.focus?.({ cursor: 'end', preventScroll: true });
   }, [
     onDraftChange,
     replaceAttachmentsWithExisting,
@@ -235,206 +210,55 @@ export function ChatComposer({
     setSubmitting,
     submitting,
   });
-  const skillCommandOpen = Boolean(
-    !queuedTurnEdit.editing
-    && !queuedTurnEdit.retrieving
-    && focused
-    && !commandOpen
-    && (slashCommand ? dismissedSlashValue !== draft : slashMenuForcedOpen),
-  );
-  const slashEntries = useMemo(() => {
-    const actions: SlashQuickAction[] = [
-      {
-        key: 'model',
-        kind: 'model',
-        title: t('chat.composer.model'),
-        description: activeModelName(config) ?? t('chat.composer.selectConfiguredModel'),
-        scope: t('chat.composer.scope.local'),
-      },
-      {
-        key: 'plan',
-        kind: 'action',
-        type: 'plan',
-        title: t('chat.composer.planMode'),
-        description: activeTurnId
-          ? planModeEnabled
-            ? t('chat.composer.planEnabledNext')
-            : t('chat.composer.planEnableNext')
-          : planModeEnabled
-            ? t('chat.composer.planEnabled')
-            : t('chat.composer.planDescription'),
-        checked: planModeEnabled,
-        scope: activeTurnId ? t('chat.composer.scope.nextTurn') : planModeEnabled ? t('chat.composer.scope.enabled') : t('chat.composer.scope.local'),
-      },
-      {
-        key: 'collaboration',
-        kind: 'action',
-        type: 'collaboration',
-        title: t('chat.composer.collaborationMode'),
-        description: multiAgentEnabled ? t('chat.composer.collaborationEnabled') : t('chat.composer.collaborationDescription'),
-        checked: multiAgentEnabled,
-        scope: multiAgentEnabled ? t('chat.composer.scope.enabled') : t('chat.composer.scope.local'),
-      },
-      {
-        key: 'goal',
-        kind: 'action',
-        type: 'goal',
-        title: t('chat.composer.goalMode'),
-        description: activeGoal
-          ? t('chat.composer.goalActive', { objective: activeGoal.objective })
-          : activeTurnId
-            ? goalModeEnabled
-              ? t('chat.composer.goalEnabledNext')
-              : t('chat.composer.goalEnableNext')
-          : goalModeEnabled
-            ? t('chat.composer.goalEnabled')
-            : t('chat.composer.goalDescription'),
-        checked: goalEnabled,
-        scope: activeGoal || (!activeTurnId && goalEnabled)
-          ? t('chat.composer.scope.enabled')
-          : activeTurnId
-            ? t('chat.composer.scope.nextTurn')
-            : t('chat.composer.scope.currentThread'),
-      },
-      {
-        key: 'usage',
-        kind: 'action',
-        type: 'usage',
-        title: t('chat.composer.usage'),
-        description: currentThread ? t('chat.composer.usageDescription') : t('chat.composer.openChatFirst'),
-        disabled: !currentThread,
-        scope: t('chat.composer.scope.currentThread'),
-      },
-      {
-        key: 'side-chat',
-        kind: 'action',
-        type: 'side-chat',
-        title: t('chat.composer.sideChat'),
-        description: t('chat.composer.sideChatDescription'),
-        disabled: !onOpenSideChat,
-        scope: t('chat.composer.scope.rightSidebar'),
-      },
-      {
-        key: 'review',
-        kind: 'action',
-        type: 'review',
-        title: t('chat.composer.reviewChanges'),
-        description: activeTurnId
-          ? t('chat.composer.reviewWait')
-          : activeProject
-            ? t('chat.composer.reviewDescription')
-            : t('chat.composer.selectProjectFirst'),
-        disabled: Boolean(activeTurnId) || !activeProject,
-        scope: t('chat.composer.scope.currentProject'),
-      },
-      {
-        key: 'memory-mode',
-        kind: 'action',
-        type: 'memory-mode',
-        title: t('chat.composer.memory'),
-        description: threadMemoryModeDescription(memoryMode, memoryGenerationEnabled, t),
-        disabled: !memoryGenerationEnabled,
-        checked: memoryGenerationEnabled && memoryMode === 'enabled',
-        scope: threadMemoryModeScope(memoryMode, memoryGenerationEnabled, t),
-      },
-      {
-        key: 'compact-context',
-        kind: 'action',
-        type: 'compact-context',
-        title: t('chat.composer.compactContext'),
-        description: activeTurnId
-          ? t('chat.composer.compactWait')
-          : contextCompacting
-            ? t('chat.composer.compacting')
-            : canClearContext
-              ? contextCompactPercent > 0
-                ? t('chat.composer.compactDescriptionUsed', { percent: contextCompactPercent })
-                : t('chat.composer.compactDescription')
-              : t('chat.composer.nothingToCompact'),
-        disabled: Boolean(activeTurnId) || !canClearContext || contextCompacting,
-        loading: contextCompacting,
-        progressPercent: contextCompactPercent,
-        scope: t('chat.composer.scope.local'),
-      },
-      {
-        key: 'clear-context',
-        kind: 'action',
-        type: 'clear-context',
-        title: t('chat.composer.clearContext'),
-        description: activeTurnId
-          ? t('chat.composer.clearWait')
-          : canClearContext
-            ? t('chat.composer.clearDescription')
-            : t('chat.composer.noContext'),
-        disabled: Boolean(activeTurnId) || !canClearContext,
-        scope: t('chat.composer.scope.local'),
-      },
-    ];
-    const visibleActions = actions.filter((action) => {
-      if (!skillQuery) return true;
-      return `${action.key} ${action.title} ${action.description ?? ''} ${action.scope ?? ''}`.toLowerCase().includes(skillQuery);
-    });
-    const visibleSkills = skills
-      .filter((skill) => skill.enabled && !selectedSkillIds.has(skill.id))
-      .filter((skill) => {
-        if (!skillQuery) return true;
-        return `${skill.name} ${skill.id} ${skill.description ?? ''}`.toLowerCase().includes(skillQuery);
-      })
-      .slice(0, Math.max(0, 8 - visibleActions.length))
-      .map<SlashCommandMenuItem>((skill) => ({ key: `skill:${skill.id}`, kind: 'skill', skill }));
-    return [...visibleActions, ...visibleSkills];
-  }, [activeGoal, activeProject, activeTurnId, canClearContext, config, contextCompactPercent, contextCompacting, currentThread, goalEnabled, goalModeEnabled, memoryGenerationEnabled, memoryMode, multiAgentEnabled, onOpenSideChat, planModeEnabled, selectedSkillIds, skillQuery, skills, t]);
-
-  useEffect(() => {
-    if (!commandOpen || !activeProject) {
-      setEntries([]);
-      setLoadError('');
-      setLoading(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    setActiveIndex(0);
-    setLoading(true);
-    setLoadError('');
-    onSearchProjectEntries(mentionQuery)
-      .then((result) => {
-        if (cancelled) return;
-        setEntries(result.entries);
-        if (result.truncated) setLoadError(t('chat.composer.searchTruncated'));
-      })
-      .catch((unknownError) => {
-        if (cancelled) return;
-        setEntries([]);
-        setLoadError(unknownError instanceof Error ? unknownError.message : t('chat.composer.projectLoadFailed'));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeProject, commandOpen, mentionQuery, onSearchProjectEntries, t]);
-
-  useEffect(() => {
-    if (!focused) return undefined;
-    const updateCursorOffset = () => {
-      setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
-    };
-    updateCursorOffset();
-    document.addEventListener('selectionchange', updateCursorOffset);
-    return () => document.removeEventListener('selectionchange', updateCursorOffset);
-  }, [focused]);
-
-  useEffect(() => {
-    setActiveSkillIndex(0);
-  }, [skillQuery]);
-
-  useEffect(() => {
-    setGoalModeEnabled(false);
-    setUsagePanelOpen(false);
-  }, [currentThread?.id]);
+  const commandController = useChatCommandController({
+    activeProject,
+    draft,
+    getInputElement: getComposerInputElement,
+    onSearchProjectEntries,
+    slashMenuBlocked: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+    t,
+  });
+  const slashEntries = useMemo(() => createChatSlashCommandItems({
+    activeGoal,
+    activeModelName: modeController.activeModelName,
+    activeProjectSelected: Boolean(activeProject),
+    activeTurnId,
+    canClearContext,
+    contextCompactPercent,
+    contextCompacting,
+    goalEnabled: modeController.goalEnabled,
+    goalModeEnabled: modeController.goalModeEnabled,
+    hasCurrentThread: Boolean(currentThread),
+    memoryGenerationEnabled,
+    memoryMode,
+    multiAgentEnabled,
+    planModeEnabled: modeController.planModeEnabled,
+    query: commandController.slashQuery,
+    selectedSkills,
+    sideChatAvailable: Boolean(onOpenSideChat),
+    skills,
+    t,
+  }), [
+    activeGoal,
+    activeProject,
+    activeTurnId,
+    canClearContext,
+    commandController.slashQuery,
+    contextCompactPercent,
+    contextCompacting,
+    currentThread,
+    memoryGenerationEnabled,
+    memoryMode,
+    modeController.activeModelName,
+    modeController.goalEnabled,
+    modeController.goalModeEnabled,
+    modeController.planModeEnabled,
+    multiAgentEnabled,
+    onOpenSideChat,
+    selectedSkills,
+    skills,
+    t,
+  ]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -459,9 +283,13 @@ export function ChatComposer({
       editor.focus({ cursor: 'end', preventScroll: true });
       editor.insert(insertion.slots, 'end', insertion.replaceCharacters, true);
     }
-    setFocused(true);
+    commandController.focusComposer();
     onWorkspaceMentionRequestConsumed?.(workspaceMentionRequest.requestId);
-  }, [onWorkspaceMentionRequestConsumed, workspaceMentionRequest]);
+  }, [
+    commandController.focusComposer,
+    onWorkspaceMentionRequestConsumed,
+    workspaceMentionRequest,
+  ]);
 
   useEffect(() => {
     if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
@@ -473,33 +301,34 @@ export function ChatComposer({
       setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
       senderRef.current?.insert?.([createSelectedSkillSlot(skill), createTextSlot(' ')], 'start', undefined, true);
     }
-    setFocused(true);
+    commandController.focusComposer();
     onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
-  }, [onSkillSelectionRequestConsumed, selectedSkills, skillSelectionRequest, skills]);
+  }, [
+    commandController.focusComposer,
+    onSkillSelectionRequestConsumed,
+    selectedSkills,
+    skillSelectionRequest,
+    skills,
+  ]);
 
   useEffect(() => {
     if (!imageAttachmentRequest || consumedImageAttachmentRequestIdRef.current === imageAttachmentRequest.requestId) return;
     consumedImageAttachmentRequestIdRef.current = imageAttachmentRequest.requestId;
     const outcome = addExistingImage(imageAttachmentRequest.attachment);
     if (outcome === 'added') {
-      setFocused(true);
+      commandController.focusComposer();
     }
     onImageAttachmentRequestConsumed?.(imageAttachmentRequest.requestId, outcome);
-  }, [addExistingImage, imageAttachmentRequest, onImageAttachmentRequestConsumed]);
-
-  useEffect(() => {
-    if (!thinkingConfig.supported) {
-      setThinkingEnabled(false);
-      if (thinkingEffort) setThinkingEffort('');
-      return;
-    }
-    if (!thinkingEffort || !thinkingConfig.efforts.includes(thinkingEffort)) {
-      setThinkingEffort(thinkingConfig.defaultEffort);
-    }
-  }, [thinkingConfig.defaultEffort, thinkingConfig.efforts, thinkingConfig.supported, thinkingEffort]);
+  }, [
+    addExistingImage,
+    commandController.focusComposer,
+    imageAttachmentRequest,
+    onImageAttachmentRequestConsumed,
+  ]);
 
   const selectEntry = (entry?: WorkspaceEntrySearchItem) => {
-    const command = mentionCommand ?? parseMentionCommand(draft, commandCursorOffset);
+    const command = commandController.mentionCommand
+      ?? parseMentionCommand(draft, commandController.commandCursorOffset);
     if (!command || !entry) return;
     senderRef.current?.insert?.(
       createWorkspaceMentionSlots(entry),
@@ -507,31 +336,26 @@ export function ChatComposer({
       draft.slice(command.start, command.end),
       true,
     );
-    setDismissedCommandValue('');
-    setFocused(true);
+    commandController.acceptMentionSelection();
   };
 
   const selectSkill = (skill?: RuntimeSkillSummary) => {
-    const command = slashCommand ?? parseSlashCommand(draft, commandCursorOffset);
-    if (!skill || (!command && !slashMenuForcedOpen)) return;
+    const command = commandController.slashCommand
+      ?? parseSlashCommand(draft, commandController.commandCursorOffset);
+    if (!skill || (!command && !commandController.forcedSlashMenuOpen)) return;
     senderRef.current?.insert?.(
       [createSelectedSkillSlot(skill), createTextSlot(' ')],
       'cursor',
       command ? draft.slice(command.start, command.end) : undefined,
       true,
     );
-    setDismissedSlashValue('');
-    setSlashMenuForcedOpen(false);
-    setFocused(true);
+    commandController.acceptSlashSelection();
     setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
   };
 
   const handleChange = (value: string, _event?: unknown, slotConfig?: SlotConfigType[]) => {
-    if (dismissedCommandValue && dismissedCommandValue !== value) setDismissedCommandValue('');
-    if (dismissedSlashValue && dismissedSlashValue !== value) setDismissedSlashValue('');
-    if (slashMenuForcedOpen) setSlashMenuForcedOpen(false);
-    setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
-    syncSelectedSkillsFromSlots(slotConfig);
+    commandController.handleDraftValueChange(value);
+    setSelectedSkills((current) => filterSelectedSkillsBySlots(current, slotConfig));
     lastEditorDraftRef.current = value;
     onDraftChange(value);
   };
@@ -555,66 +379,13 @@ export function ChatComposer({
   }, [draft]);
 
   const handleKeyDown = (event: ReactKeyboardEvent) => {
-    if (skillCommandOpen) return handleSkillKeyDown(event);
-    if (!commandOpen) {
-      return submitActiveQueueFromKeyboard(event);
+    if (commandController.slashMenuOpen) {
+      return commandController.handleSlashKeyDown(event, slashEntries, selectSlashEntry);
     }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      setDismissedCommandValue(draft);
-      return false;
-    }
-    if (!entries.length) return undefined;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      event.stopPropagation();
-      setActiveIndex((current) => (current + 1) % entries.length);
-      return false;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      event.stopPropagation();
-      setActiveIndex((current) => (current - 1 + entries.length) % entries.length);
-      return false;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      event.stopPropagation();
-      selectEntry(entries[activeIndex]);
-      return false;
+    if (commandController.mentionMenuOpen) {
+      return commandController.handleMentionKeyDown(event, selectEntry);
     }
     return submitActiveQueueFromKeyboard(event);
-  };
-
-  const handleSkillKeyDown = (event: ReactKeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      setDismissedSlashValue(draft);
-      setSlashMenuForcedOpen(false);
-      return false;
-    }
-    if (!slashEntries.length) return undefined;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      event.stopPropagation();
-      setActiveSkillIndex((current) => (current + 1) % slashEntries.length);
-      return false;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      event.stopPropagation();
-      setActiveSkillIndex((current) => (current - 1 + slashEntries.length) % slashEntries.length);
-      return false;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      event.stopPropagation();
-      selectSlashEntry(slashEntries[activeSkillIndex]);
-      return false;
-    }
-    return undefined;
   };
 
   const selectSlashEntry = (item?: SlashCommandMenuItem) => {
@@ -623,53 +394,45 @@ export function ChatComposer({
       selectSkill(item.skill);
       return;
     }
-    setSlashMenuForcedOpen(false);
+    commandController.closeSlashMenu();
     if (item.kind === 'action' && item.disabled) {
-      setFocused(true);
+      commandController.focusComposer();
       return;
     }
     if (item.kind === 'action' && item.type === 'memory-mode') {
       if (!item.disabled) void onThreadMemoryModeChange(nextThreadMemoryMode(memoryMode));
-      setFocused(true);
+      commandController.focusComposer();
       return;
     }
-    const command = slashCommand ?? parseSlashCommand(draft, commandCursorOffset);
+    const command = commandController.slashCommand
+      ?? parseSlashCommand(draft, commandController.commandCursorOffset);
     const nextDraft = command ? `${draft.slice(0, command.start)}${draft.slice(command.end)}`.trimStart() : draft;
-    setDismissedSlashValue('');
+    commandController.clearSlashDismissal();
     if (command) {
       senderRef.current?.insert?.([createTextSlot('')], 'cursor', draft.slice(command.start, command.end), true);
     }
     onDraftChange(nextDraft);
     if (item.kind === 'model') {
-      setModelOpenSignal((value) => value + 1);
+      modeController.openModelPicker();
       return;
     }
     if (item.kind === 'action' && item.type === 'plan') {
-      const enabled = !planModeEnabled;
-      setPlanModeEnabled(enabled);
-      if (enabled) setGoalModeEnabled(false);
-      setFocused(true);
+      modeController.togglePlanMode();
+      commandController.focusComposer();
       return;
     }
     if (item.kind === 'action' && item.type === 'collaboration') {
       void onSetMultiAgentEnabled(!multiAgentEnabled);
-      setFocused(true);
+      commandController.focusComposer();
       return;
     }
     if (item.kind === 'action' && item.type === 'goal') {
-      if (activeGoal) {
-        void onClearThreadGoal();
-        setGoalModeEnabled(false);
-      } else {
-        const enabled = !goalModeEnabled;
-        setGoalModeEnabled(enabled);
-        if (enabled) setPlanModeEnabled(false);
-      }
-      setFocused(true);
+      modeController.toggleGoalMode();
+      commandController.focusComposer();
       return;
     }
     if (item.kind === 'action' && item.type === 'usage' && !item.disabled) {
-      setUsagePanelOpen((value) => !value);
+      modeController.toggleUsagePanel();
       return;
     }
     if (item.kind === 'action' && item.type === 'review' && !item.disabled) {
@@ -695,15 +458,9 @@ export function ChatComposer({
       await queuedTurnEdit.submit(value ?? draft);
       return;
     }
-    const sendOptions = createChatComposerSendOptions({
+    const sendOptions = modeController.createSendOptions({
       attachments: sendableAttachments,
-      goalModeEnabled,
-      planModeEnabled,
       selectedSkillIds: selectedSkills.map((skill) => skill.id),
-      supportsImageInput,
-      thinkingEffort,
-      thinkingEnabled,
-      thinkingSupported: thinkingConfig.supported,
     });
     const submittedAttachments = sendOptions.attachments ?? [];
     beginAttachmentSend(submittedAttachments);
@@ -714,8 +471,7 @@ export function ChatComposer({
     setSubmitting(false);
     if (!sent) return;
     setSelectedSkills([]);
-    setPlanModeEnabled(false);
-    setGoalModeEnabled(false);
+    modeController.resetAfterSend();
     senderRef.current?.clear?.();
   };
 
@@ -732,20 +488,8 @@ export function ChatComposer({
     return false;
   };
 
-  const syncSelectedSkillsFromSlots = (slotConfig: SlotConfigType[] | undefined) => {
-    const selectedSlotKeys = new Set(
-      (slotConfig ?? [])
-        .map((slot) => slot.key)
-        .filter((key): key is string => typeof key === 'string' && key.startsWith(selectedSkillSlotPrefix)),
-    );
-    setSelectedSkills((current) => current.filter((skill) => selectedSlotKeys.has(selectedSkillSlotKey(skill.id))));
-  };
-
   const openSlashMenu = () => {
-    setActiveSkillIndex(0);
-    setDismissedSlashValue('');
-    setSlashMenuForcedOpen((open) => !open);
-    setFocused(true);
+    commandController.toggleSlashMenu();
     senderRef.current?.focus?.({ preventScroll: true });
   };
 
@@ -761,31 +505,33 @@ export function ChatComposer({
           const files = Array.from(event.currentTarget.files ?? []);
           event.currentTarget.value = '';
           addFiles(files);
-          setFocused(true);
+          commandController.focusComposer();
         }}
       />
-      {commandOpen ? (
-        <ProjectEntryCommandMenu
-          activeIndex={activeIndex}
-          entries={entries}
-          hasProject={Boolean(activeProject)}
-          loadError={loadError}
-          loading={loading}
-          onHover={setActiveIndex}
-          onSelect={selectEntry}
-        />
-      ) : null}
-      {skillCommandOpen ? (
-        <ChatSlashCommandMenu
-          activeIndex={activeSkillIndex}
-          items={slashEntries}
-          onHover={setActiveSkillIndex}
-          onSelect={selectSlashEntry}
-        />
-      ) : null}
-      {usagePanelOpen && currentThread ? (
-        <ChatUsagePanel threadUsage={threadUsage} onClose={() => setUsagePanelOpen(false)} />
-      ) : null}
+      <ChatComposerOverlays
+        mentionMenu={{
+          activeIndex: commandController.activeMentionIndex,
+          entries: commandController.entries,
+          hasProject: Boolean(activeProject),
+          loadError: commandController.loadError,
+          loading: commandController.loading,
+          open: commandController.mentionMenuOpen,
+          onHover: commandController.setActiveMentionIndex,
+          onSelect: selectEntry,
+        }}
+        slashMenu={{
+          activeIndex: commandController.activeSlashIndex,
+          items: slashEntries,
+          open: commandController.slashMenuOpen,
+          onHover: commandController.setActiveSlashIndex,
+          onSelect: selectSlashEntry,
+        }}
+        usagePanel={{
+          open: modeController.usagePanelOpen && Boolean(currentThread),
+          threadUsage,
+          onClose: modeController.closeUsagePanel,
+        }}
+      />
       <ChatSendQueue
         disabled={submitting || queuedTurnEdit.editing}
         editDisabled={queuedTurnEdit.editDisabled}
@@ -804,20 +550,14 @@ export function ChatComposer({
         placeholder={placeholder ?? t('chat.composer.placeholder')}
         autoSize={{ minRows: 2, maxRows: 6 }}
         suffix={false}
-        onBlur={() => {
-          setFocused(false);
-          setSlashMenuForcedOpen(false);
-        }}
+        onBlur={commandController.handleComposerBlur}
         onChange={handleChange}
-        onFocus={() => {
-          setFocused(true);
-          setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null));
-        }}
+        onFocus={commandController.handleComposerFocus}
         onKeyDown={handleKeyDown}
-        onKeyUp={() => setCursorOffset(readComposerCursorOffset(senderRef.current?.inputElement ?? null))}
+        onKeyUp={commandController.updateCursorOffset}
         onPasteFile={(files) => {
           addFiles(Array.from(files));
-          setFocused(true);
+          commandController.focusComposer();
         }}
         onSubmit={submitDraft}
         onCancel={onCancelActiveTurn}
@@ -825,355 +565,64 @@ export function ChatComposer({
           <ChatAttachmentTray disabled={submitting} items={attachmentItems} onRemove={removeAttachment} />
         }
         footer={(actions) => (
-          <div className="chat-sender__footer">
-            <div className="chat-sender__left-actions">
-              <button
-                className={`chat-sender-icon-button chat-sender-command-button ${slashMenuForcedOpen ? 'is-active' : ''}`}
-                type="button"
-                disabled={queuedTurnEdit.editing || queuedTurnEdit.retrieving}
-                aria-label={t('chat.composer.openCommands')}
-                title={t('chat.composer.openCommands')}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={openSlashMenu}
-              >
-                <Plus size={14} />
-              </button>
-              <ChatThinkingMenu
-                disabled={queuedTurnEdit.editing || queuedTurnEdit.retrieving}
-                enabled={thinkingEnabled}
-                menuOpen={thinkingMenuOpen}
-                thinkingConfig={thinkingConfig}
-                value={thinkingEffort}
-                onEnabledChange={setThinkingEnabled}
-                onMenuOpenChange={setThinkingMenuOpen}
-                onValueChange={setThinkingEffort}
-              />
-              <ChatApprovalPolicyMenu
-                approvalPolicy={config?.approvalPolicy ?? 'on-request'}
-                permissionProfile={config?.permissionProfile ?? 'workspace-write'}
-                onChange={onAccessModeChange}
-              />
-              {queuedTurnEdit.editing ? (
-                <ChatModeBadge
-                  disabled={submitting}
-                  label={t('chat.queue.editing')}
-                  onClose={() => void queuedTurnEdit.cancel()}
-                />
-              ) : null}
-              {planModeEnabled ? (
-                <ChatModeBadge
-                  label={activeTurnId ? t('chat.composer.badge.planNext') : t('chat.composer.badge.plan')}
-                  onClose={() => setPlanModeEnabled(false)}
-                />
-              ) : null}
-              {multiAgentEnabled ? <ChatModeBadge label={t('chat.composer.badge.collaboration')} onClose={() => void onSetMultiAgentEnabled(false)} /> : null}
-              {goalEnabled ? <ChatModeBadge label={activeGoal && activeTurnId
-                ? t('chat.composer.badge.goalRunning')
-                : activeTurnId
-                  ? t('chat.composer.badge.goalNext')
-                  : t('chat.composer.badge.goalEnabled')} onClose={() => {
-                if (activeGoal) void onClearThreadGoal();
-                setGoalModeEnabled(false);
-              }} /> : null}
-            </div>
-            <div className="chat-sender__right-actions">
-              <button
-                className="chat-sender-icon-button"
-                type="button"
-                aria-label={t('chat.composer.uploadAttachment')}
-                title={t('chat.composer.uploadAttachmentHint')}
-                disabled={attachmentLimitReached || submitting || queuedTurnEdit.retrieving}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip size={13} />
-              </button>
-              <span className="chat-sender-divider" aria-hidden="true" />
-              <ChatModelPicker
-                config={config}
-                contextCompacting={contextCompacting}
-                contextUsage={contextUsage}
-                openSignal={modelOpenSignal}
-                onSelect={onSelectModel}
-              />
-              <span className="chat-sender-divider" aria-hidden="true" />
-              {activeQueueReady ? (
-                <button className="chat-sender-attachment-submit" type="button" aria-label={t('chat.composer.queue')} title={t('chat.composer.queue')} disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
-                  <ArrowUp size={16} />
-                </button>
-              ) : activeTurnId ? (
-                <button className="chat-sender-stop" type="button" aria-label={t('chat.composer.stop')} title={t('chat.composer.stop')} onClick={onCancelActiveTurn}>
-                  <Square size={11} />
-                </button>
-              ) : attachmentOnlyReady ? (
-                <button className="chat-sender-attachment-submit" type="button" aria-label={t('chat.composer.send')} disabled={attachmentsBusy || submitting} onClick={() => void submitDraft(draft)}>
-                  <ArrowUp size={16} />
-                </button>
-              ) : (
-                actions
-              )}
-            </div>
-          </div>
+          <ChatComposerFooter
+            attachmentControl={{
+              disabled: attachmentLimitReached || submitting || queuedTurnEdit.retrieving,
+              onOpen: () => fileInputRef.current?.click(),
+            }}
+            commandControl={{
+              active: commandController.forcedSlashMenuOpen,
+              disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+              onOpen: openSlashMenu,
+            }}
+            config={config}
+            contextCompacting={contextCompacting}
+            contextUsage={contextUsage}
+            editingControl={{
+              active: queuedTurnEdit.editing,
+              disabled: submitting,
+              onCancel: () => void queuedTurnEdit.cancel(),
+            }}
+            hasActiveTurn={Boolean(activeTurnId)}
+            modeBadges={{
+              activeGoal: Boolean(activeGoal),
+              collaborationEnabled: multiAgentEnabled,
+              goalEnabled: modeController.goalEnabled,
+              planEnabled: modeController.planModeEnabled,
+              onClearGoal: modeController.clearGoalMode,
+              onDisableCollaboration: () => void onSetMultiAgentEnabled(false),
+              onDisablePlan: modeController.disablePlanMode,
+            }}
+            modelOpenSignal={modeController.modelOpenSignal}
+            primaryAction={{
+              attachmentOnlyReady,
+              attachmentsBusy,
+              queueReady: activeQueueReady,
+              submitting,
+              onCancelActiveTurn,
+              onSubmit: () => void submitDraft(draft),
+            }}
+            senderActions={actions}
+            thinkingControl={{
+              config: modeController.thinkingConfig,
+              disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,
+              effort: modeController.thinkingEffort,
+              enabled: modeController.thinkingEnabled,
+              menuOpen: modeController.thinkingMenuOpen,
+              onEffortChange: modeController.setThinkingEffort,
+              onEnabledChange: modeController.setThinkingEnabled,
+              onMenuOpenChange: modeController.setThinkingMenuOpen,
+            }}
+            onAccessModeChange={onAccessModeChange}
+            onSelectModel={onSelectModel}
+          />
         )}
       />
     </div>
   );
 }
 
-function ChatModeBadge({
-  disabled = false,
-  label,
-  onClose,
-}: {
-  disabled?: boolean;
-  label: string;
-  onClose: () => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <button className="chat-sender-plan-badge" type="button" disabled={disabled} aria-label={t('chat.composer.closeBadge', { label })} title={t('chat.composer.closeBadge', { label })} onClick={onClose}>
-      <span className="chat-sender-plan-badge__dot" aria-hidden="true" />
-      <span className="chat-sender-plan-badge__label">{label}</span>
-      <X className="chat-sender-plan-badge__close" size={11} aria-hidden="true" />
-    </button>
-  );
-}
-
-function ChatUsagePanel({
-  threadUsage,
-  onClose,
-}: {
-  threadUsage: RuntimeUsageResponse | null;
-  onClose: () => void;
-}) {
-  const { t } = useI18n();
-  const summary = threadUsage?.summary;
-  return (
-    <section className="chat-usage-panel" aria-label={t('chat.usage.current')}>
-      <header>
-        <span><CircleGauge size={14} /> {t('chat.composer.usage')}</span>
-        <button type="button" aria-label={t('chat.usage.close')} onClick={onClose}><X size={13} /></button>
-      </header>
-      <div className="chat-usage-panel__metrics">
-        <span>{t('chat.usage.total')}<strong>{formatUsageTokens(summary?.totalTokens ?? 0)}</strong></span>
-        <span>{t('chat.usage.input')}<strong>{formatUsageTokens(summary?.inputTokens ?? 0)}</strong></span>
-        <span>{t('chat.usage.output')}<strong>{formatUsageTokens(summary?.outputTokens ?? 0)}</strong></span>
-        <span>{t('chat.usage.calls')}<strong>{summary?.recordCount ?? 0}</strong></span>
-      </div>
-    </section>
-  );
-}
-
-function formatUsageTokens(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return String(value);
-}
-
-function nextThreadMemoryMode(mode: RuntimeThreadMemoryMode): RuntimeThreadMemoryMode {
-  return mode === 'enabled' ? 'disabled' : 'enabled';
-}
-
-function threadMemoryModeDescription(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean, t: Translate): string {
-  if (!globalGenerationEnabled) return t('chat.composer.memoryGlobalOff');
-  if (mode === 'polluted') return t('chat.composer.memoryPolluted');
-  return mode === 'enabled' ? t('chat.composer.memoryEnabled') : t('chat.composer.memoryDisabled');
-}
-
-function threadMemoryModeScope(mode: RuntimeThreadMemoryMode, globalGenerationEnabled: boolean, t: Translate): string {
-  if (!globalGenerationEnabled) return t('chat.composer.scope.globalOff');
-  return mode === 'enabled' ? t('chat.composer.scope.enabled') : t('chat.composer.scope.paused');
-}
-
-function ChatThinkingMenu({
-  disabled,
-  enabled,
-  menuOpen,
-  thinkingConfig,
-  value,
-  onEnabledChange,
-  onMenuOpenChange,
-  onValueChange,
-}: {
-  disabled?: boolean;
-  enabled: boolean;
-  menuOpen: boolean;
-  thinkingConfig: ActiveThinkingConfig;
-  value: string;
-  onEnabledChange: (enabled: boolean) => void;
-  onMenuOpenChange: (open: boolean) => void;
-  onValueChange: (value: string) => void;
-}) {
-  const { t } = useI18n();
-  const hasEfforts = thinkingConfig.efforts.length > 0;
-  const currentEffort = value && thinkingConfig.efforts.includes(value) ? value : thinkingConfig.defaultEffort;
-
-  if (!thinkingConfig.supported) return null;
-
-  const thinkingLabel = enabled ? (currentEffort ? formatThinkingEffort(currentEffort, t('chat.composer.thinking')) : t('chat.composer.thinking')) : '';
-  const selectedThinkingKey = enabled && currentEffort ? currentEffort : 'off';
-  const renderThinkingMenuItem = (label: string, active: boolean) => (
-    <span className="chat-thinking-menu__item">
-      <span className="chat-thinking-menu__icon" />
-      <span>{label}</span>
-      <span className="chat-thinking-menu__check">{active ? <Check size={13} /> : null}</span>
-    </span>
-  );
-  const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = [
-    {
-      key: 'off',
-      label: renderThinkingMenuItem(t('chat.composer.thinkingOff'), !enabled),
-    },
-    ...thinkingConfig.efforts.map((effort) => ({
-      key: effort,
-      label: renderThinkingMenuItem(formatThinkingEffort(effort, t('chat.composer.thinking')), enabled && currentEffort === effort),
-    })),
-  ];
-  const thinkingSwitch = (
-    <Button
-      type="text"
-      size="small"
-      className="chat-thinking-switch"
-      disabled={disabled}
-      aria-pressed={enabled}
-      onClick={hasEfforts ? undefined : () => onEnabledChange(!enabled)}
-    >
-      <Sparkles className="chat-thinking-switch__icon" size={13} />
-      {thinkingLabel ? <span className="chat-thinking-switch__label">{thinkingLabel}</span> : null}
-    </Button>
-  );
-
-  if (!hasEfforts) return thinkingSwitch;
-
-  return (
-    <Dropdown
-      rootClassName="chat-thinking-menu-root"
-      trigger={['click']}
-      placement="topLeft"
-      // Windows“最佳性能”模式禁用界面过渡事件时，此功能也要保持可用。
-      transitionName=""
-      disabled={disabled}
-      open={menuOpen}
-      menu={{
-        items,
-        selectedKeys: [selectedThinkingKey],
-        onClick: ({ key }) => {
-          if (key === 'off') {
-            onEnabledChange(false);
-          } else {
-            onValueChange(key);
-            onEnabledChange(true);
-          }
-          onMenuOpenChange(false);
-        },
-      }}
-      onOpenChange={onMenuOpenChange}
-    >
-      {thinkingSwitch}
-    </Dropdown>
-  );
-}
-
-function formatThinkingEffort(effort: string, fallback = 'Thinking'): string {
-  const value = effort.trim();
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : fallback;
-}
-
-const selectedSkillSlotPrefix = 'skill:';
-
-function selectedSkillSlotKey(skillId: string): string {
-  return `${selectedSkillSlotPrefix}${skillId}`;
-}
-
-function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigType {
-  const tokenText = skillDisplayText(skill);
-  return {
-    type: 'tag',
-    key: selectedSkillSlotKey(skill.id),
-    props: {
-      label: (
-        <span className="chat-skill-slot" title={skill.description || skill.id}>
-          <Boxes size={13} />
-          <span className="chat-skill-slot__name">{tokenText}</span>
-        </span>
-      ),
-      value: tokenText,
-    },
-    formatResult: () => tokenText,
-  };
-}
-
-function readComposerCursorOffset(inputElement?: HTMLElement | null): number | null {
-  if (!inputElement) return null;
-  const ownerWindow = inputElement.ownerDocument.defaultView;
-  if (
-    ownerWindow
-    && (inputElement instanceof ownerWindow.HTMLTextAreaElement || inputElement instanceof ownerWindow.HTMLInputElement)
-  ) {
-    return inputElement.selectionStart ?? null;
-  }
-
-  const selection = inputElement.ownerDocument.getSelection();
-  if (!selection?.focusNode || selection.rangeCount === 0 || !inputElement.contains(selection.focusNode)) return null;
-  const range = inputElement.ownerDocument.createRange();
-  range.selectNodeContents(inputElement);
-  range.setEnd(selection.focusNode, selection.focusOffset);
-  const visibleOffset = range.toString().length;
-  // 提及标签会省略仍保留在提交值中的标记和父路径。
-  const offsetAdjustments = Array.from(
-    range.cloneContents().querySelectorAll<HTMLElement>(`[${composerCursorOffsetAdjustmentAttribute}]`),
-    (element) => element.getAttribute(composerCursorOffsetAdjustmentAttribute),
-  );
-  return applyComposerCursorOffsetAdjustments(visibleOffset, offsetAdjustments);
-}
-
-function activeModelName(config: RuntimeConfigState | null): string | null {
-  const provider = activeProviderFromConfig(config);
-  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
-  return model?.name ?? null;
-}
-
-function activeModelSupportsImages(config: RuntimeConfigState | null): boolean {
-  const provider = activeProviderFromConfig(config);
-  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
-  return Boolean(model?.supportsImages);
-}
-
 function isPlainEnter(event: ReactKeyboardEvent): boolean {
   const nativeEvent = event.nativeEvent as KeyboardEvent & { isComposing?: boolean };
   return event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !nativeEvent.isComposing;
-}
-
-function activeModelThinkingConfig(config: RuntimeConfigState | null): ActiveThinkingConfig {
-  const provider = activeProviderFromConfig(config);
-  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
-  const efforts = normalizeThinkingEfforts(model?.thinkingEfforts);
-  const defaultEffort = typeof model?.defaultThinkingEffort === 'string' && efforts.includes(model.defaultThinkingEffort.trim())
-    ? model.defaultThinkingEffort.trim()
-    : efforts[0] ?? '';
-  return {
-    supported: Boolean(model?.thinkingEnabled),
-    efforts,
-    defaultEffort,
-  };
-}
-
-function activeProviderFromConfig(config: RuntimeConfigState | null): RuntimeConfigState['providers'][number] | undefined {
-  if (!config) return undefined;
-  return config.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
-    ?? config.providers.find((provider) => provider.enabled)
-    ?? config.providers[0];
-}
-
-function normalizeThinkingEfforts(value: unknown): string[] {
-  const rawValues = Array.isArray(value) ? value : [];
-  const seen = new Set<string>();
-  const efforts: string[] = [];
-  for (const rawValue of rawValues) {
-    const effort = typeof rawValue === 'string' ? rawValue.trim() : '';
-    if (!effort || seen.has(effort)) continue;
-    seen.add(effort);
-    efforts.push(effort);
-  }
-  return efforts;
 }

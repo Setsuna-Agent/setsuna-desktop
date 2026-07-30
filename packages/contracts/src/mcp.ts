@@ -88,6 +88,7 @@ export type RuntimeMcpResourceTemplate = {
 export type RuntimeMcpServerStatus = {
   name: string;
   authStatus: RuntimeMcpAuthStatus;
+  authError?: string;
   resources: RuntimeMcpResource[];
   resourceTemplates: RuntimeMcpResourceTemplate[];
   tools: Record<string, RuntimeMcpToolInfo>;
