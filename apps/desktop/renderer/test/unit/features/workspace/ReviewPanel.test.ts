@@ -36,7 +36,8 @@ describe('DesktopReviewPanel', () => {
     expect(html).toContain('aria-expanded="true"');
     expect(html).not.toContain('desktop-review-file-card__chevron');
     expect(html).toContain('desktop-review-file-card__path-main');
-    expect(html).toContain('desktop-review-file-card__path-directory">src/domain/agent/drawer/</span>');
+    expect(html).toContain('desktop-review-file-card__path-directory">src/domain/agent/drawer</span>');
+    expect(html).toContain('desktop-review-file-card__path-separator">/</span>');
     expect(html).toContain('desktop-review-file-card__path-filename">ChatLogDrawer.vue</span>');
     expect(html).not.toContain('desktop-review-file-card__path-button');
     expect(html).toContain('aria-label="在面板中打开文件"');

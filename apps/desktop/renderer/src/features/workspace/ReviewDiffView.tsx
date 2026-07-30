@@ -39,9 +39,12 @@ const useReviewLayoutEffect = typeof window === 'undefined' ? useEffect : useLay
 
 function ReviewFilePath({ path }: { path: string }) {
   const { directory, filename } = reviewFilePathParts(path);
+  // 目录通过 RTL 从左侧省略；分隔符需独立渲染，避免双向文本算法把末尾的 "/" 移到路径最前面。
+  const directoryLabel = directory.slice(0, -1);
   return (
     <span className="desktop-review-file-card__path" title={path}>
-      {directory ? <span className="desktop-review-file-card__path-directory">{directory}</span> : null}
+      {directoryLabel ? <span className="desktop-review-file-card__path-directory">{directoryLabel}</span> : null}
+      {directory ? <span className="desktop-review-file-card__path-separator">/</span> : null}
       <span className="desktop-review-file-card__path-filename">{filename}</span>
     </span>
   );

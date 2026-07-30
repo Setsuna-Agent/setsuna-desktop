@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/readme/chat-review.png" alt="Setsuna Desktop conversation and file review workspace" width="100%">
+  <img src="assets/readme/setsuna-demo.gif" alt="Setsuna Desktop project task walkthrough" width="100%">
 </p>
 
 Setsuna Desktop combines an AI coding agent with project files, search, diff review, terminals, a built-in browser, model configuration, and extensible capabilities. Start from a repository, ask the agent to investigate or implement a change, follow its tool activity, and review the result without leaving the workspace.
@@ -50,6 +50,15 @@ Setsuna Desktop combines an AI coding agent with project files, search, diff rev
 
 <table>
   <tr>
+    <td colspan="2">
+      <img src="assets/readme/chat-review.png" alt="Setsuna Desktop conversation with code review open" width="100%">
+      <br>
+      <strong>Conversation and code review in one flow</strong>
+      <br>
+      <sub>Follow the agent's work in the conversation, then inspect the resulting diff without switching applications.</sub>
+    </td>
+  </tr>
+  <tr>
     <td width="50%">
       <img src="assets/readme/workspace-start.png" alt="Start an AI agent task from a project workspace" width="100%">
       <br>
@@ -58,11 +67,20 @@ Setsuna Desktop combines an AI coding agent with project files, search, diff rev
       <sub>Start with project navigation, files, review, and workspace context ready, then keep tool activity and results in the same conversation.</sub>
     </td>
     <td width="50%">
-      <img src="assets/readme/capabilities.png" alt="Manage MCP servers, Skills, Plugins, and Hooks" width="100%">
+      <img src="assets/readme/workspace-tools.png" alt="Open workspace tools beside the active conversation" width="100%">
+      <br>
+      <strong>Workspace tools within reach</strong>
+      <br>
+      <sub>Open review, files, a terminal, side chat, a browser, or conversation debugging beside the active task.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src="assets/readme/capabilities.png" alt="Browse and install plugins in the Setsuna Desktop marketplace" width="100%">
       <br>
       <strong>Extensible capabilities</strong>
       <br>
-      <sub>Discover, install, configure, and control MCP servers, Skills, Plugins, and Hooks from one capability center.</sub>
+      <sub>Discover and install Plugins, then manage the MCP servers, Skills, and Hooks they add.</sub>
     </td>
   </tr>
   <tr>

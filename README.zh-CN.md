@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/readme/chat-review.png" alt="Setsuna Desktop 对话与文件审查工作区" width="100%">
+  <img src="assets/readme/setsuna-demo.gif" alt="Setsuna Desktop 项目任务演示" width="100%">
 </p>
 
 Setsuna Desktop 把 AI 编程 Agent、项目文件、搜索、diff 审查、终端、内置浏览器、模型配置和扩展能力整合在同一个桌面工作台里。你可以从仓库直接发起任务，让 Agent 调查问题或实现改动，实时查看工具执行过程，并在同一界面审查结果。
@@ -50,6 +50,15 @@ Setsuna Desktop 把 AI 编程 Agent、项目文件、搜索、diff 审查、终�
 
 <table>
   <tr>
+    <td colspan="2">
+      <img src="assets/readme/chat-review.png" alt="Setsuna Desktop 对话与代码审查工作区" width="100%">
+      <br>
+      <strong>在同一条链路中对话与审查</strong>
+      <br>
+      <sub>在对话中跟进 Agent 的执行过程，并直接检查生成的代码差异，无需切换应用。</sub>
+    </td>
+  </tr>
+  <tr>
     <td width="50%">
       <img src="assets/readme/workspace-start.png" alt="从项目工作区发起 AI Agent 任务" width="100%">
       <br>
@@ -58,11 +67,20 @@ Setsuna Desktop 把 AI 编程 Agent、项目文件、搜索、diff 审查、终�
       <sub>带着项目导航、文件、审查和工作区上下文直接开始任务，让工具执行与结果始终留在同一条对话中。</sub>
     </td>
     <td width="50%">
-      <img src="assets/readme/capabilities.png" alt="管理 MCP Server、Skill、Plugin 和 Hook" width="100%">
+      <img src="assets/readme/workspace-tools.png" alt="在当前对话旁打开工作区工具" width="100%">
+      <br>
+      <strong>随时调用工作区工具</strong>
+      <br>
+      <sub>在当前任务旁打开代码审查、文件、终端、侧边对话、浏览器或对话调试。</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src="assets/readme/capabilities.png" alt="在 Setsuna Desktop 插件市场浏览并安装插件" width="100%">
       <br>
       <strong>灵活扩展 Agent 能力</strong>
       <br>
-      <sub>在能力中心发现、安装、配置并控制 MCP Server、Skill、Plugin 与 Hook。</sub>
+      <sub>发现并安装 Plugin，再统一管理它们提供的 MCP Server、Skill 与 Hook。</sub>
     </td>
   </tr>
   <tr>

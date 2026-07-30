@@ -554,6 +554,10 @@
   white-space: nowrap;
 }
 
+.desktop-review-file-card__path-separator {
+  flex: 0 0 auto;
+}
+
 .desktop-review-file-card__path-filename {
   flex: 0 1 auto;
   min-width: 0;
