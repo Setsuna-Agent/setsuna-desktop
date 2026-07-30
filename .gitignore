@@ -11,3 +11,4 @@ coverage/
 *.timestamp-*.mjs
 release-artifacts/
 .setsuna/
+.trae/
