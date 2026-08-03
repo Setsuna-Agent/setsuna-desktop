@@ -15,6 +15,37 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(client).not.toHaveProperty('request');
   });
 
+  it('forwards ordered event batches without expanding them into callback churn', () => {
+    const batch = { events: [] };
+    const unsubscribe = vi.fn();
+    const startSse = vi.fn((
+      _threadId: string,
+      _sinceSeq: number | undefined,
+      onBatch: (value: typeof batch) => void,
+    ) => {
+      onBatch(batch);
+      return unsubscribe;
+    });
+    vi.stubGlobal('window', {
+      setsunaDesktop: {
+        runtime: {
+          request: vi.fn(),
+          startSse,
+        },
+      },
+    });
+    const client = createDesktopRuntimeClient();
+    const onBatch = vi.fn();
+
+    const stop = client.subscribeEvents('thread_1', 4, onBatch);
+
+    expect(startSse).toHaveBeenCalledWith('thread_1', 4, onBatch);
+    expect(onBatch).toHaveBeenCalledOnce();
+    expect(onBatch).toHaveBeenCalledWith(batch);
+    stop();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
   it('serializes parent and ancestor thread filters', async () => {
     const request = installRuntimeBridge(() => ({ threads: [] }));
     const client = createDesktopRuntimeClient();

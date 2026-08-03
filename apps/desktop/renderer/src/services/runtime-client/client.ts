@@ -21,7 +21,6 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeDebugTraceList,
-  RuntimeEvent,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
   RuntimeImageGenerationTestInput,
@@ -254,8 +253,8 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         body: { target },
       });
     },
-    subscribeEvents(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void) {
-      return bridge.startSse(threadId, sinceSeq, onEvent);
+    subscribeEvents(threadId, sinceSeq, onBatch) {
+      return bridge.startSse(threadId, sinceSeq, onBatch);
     },
     listDebugTraces(threadId, afterSeq = 0) {
       const normalizedAfterSeq = Math.max(0, Math.floor(afterSeq));

@@ -27,12 +27,12 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 
 1. 先注册 `runtime:event` listener。
 2. 调用 `runtime:subscribe` 获取 subscription ID。
-3. ID 返回前到达的 payload 暂存。
-4. 只投递 ID 匹配的 payload。
+3. ID 返回前到达的 batch payload 暂存。
+4. 只投递 ID 匹配的 `RuntimeEventBatch`，不在 preload 重新拆成逐事件 callback。
 5. 如果调用方已取消，立即请求 main unsubscribe。
 6. 返回的 cleanup 同时移除 listener 和关闭远端订阅。
 
-这避免快速切线程时旧 SSE 事件落到新线程。
+这避免快速切线程时旧 SSE 事件落到新线程，也保留 main 建立的渲染批次边界。
 
 ## 事件 API
 
@@ -81,4 +81,3 @@ Preload 当前只有一个生产文件，验证重点是：
 - Main 对应模块单元测试。
 - `apps/desktop/renderer/test/unit/services/runtime-client/client.test.ts`。
 - 使用事件 API 的 hook/component cleanup 测试。
-

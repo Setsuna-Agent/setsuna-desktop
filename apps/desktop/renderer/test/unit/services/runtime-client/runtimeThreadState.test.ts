@@ -8,6 +8,7 @@ import {
   activeTurnIdFromThreadSnapshot,
   adoptOwnedThreadSnapshot,
   applyCurrentThreadEvent,
+  applyCurrentThreadEventBatch,
   inferActiveTurnIdFromThread,
   isThreadContextCompacting,
   selectInitialThreadSummary,
@@ -68,6 +69,26 @@ describe('applyCurrentThreadEvent', () => {
         }),
       ],
     });
+  });
+
+  it('accepts an ordered bridge batch once while filtering duplicates and late events', () => {
+    const events = canonicalCompletionEvents();
+    const initial = threadWithMessages([]);
+    const projection = applyCurrentThreadEventBatch(initial, {
+      events: [1, 2, 2, 4, 3].map((sequence) => events.get(sequence)!),
+    });
+
+    expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([1, 2, 4]);
+    expect(projection.thread).toMatchObject({
+      lastSeq: 4,
+      messages: [expect.objectContaining({
+        id: 'assistant_1',
+        content: 'The complete answer.',
+        status: 'complete',
+      })],
+    });
+    expect(initial.messages).toEqual([]);
+    expect(initial.lastSeq).toBe(0);
   });
 });
 

@@ -1,6 +1,6 @@
 import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
 import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
-import type { RuntimeEvent } from './events.js';
+import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
 import type {
@@ -159,8 +159,20 @@ export type DesktopCommitMessageGenerationSource = {
 export type DesktopRuntimeBridge = {
   request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
-  startSse(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void): () => void;
+  startSse(threadId: string, sinceSeq: number | undefined, onBatch: (batch: RuntimeEventBatch) => void): () => void;
 };
+
+export type DesktopRuntimeEventPayload =
+  | {
+    batch: RuntimeEventBatch;
+    error?: never;
+    subscriptionId: string;
+  }
+  | {
+    batch?: never;
+    error: string;
+    subscriptionId: string;
+  };
 
 /** 向渲染进程暴露的有限预加载 API 所使用的共享契约。 */
 export type SetsunaDesktopBridge = {

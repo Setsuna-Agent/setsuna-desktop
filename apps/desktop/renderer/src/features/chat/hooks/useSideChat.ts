@@ -1,15 +1,16 @@
 import type {
   AnswerRuntimeApprovalInput,
   DesktopRuntimeClient,
+  RuntimeEvent,
   RuntimeReviewTarget,
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { applyRuntimeEvent } from '../../../services/runtime-client/runtimeEvents.js';
 import {
   activeTurnIdFromThreadSnapshot,
+  applyCurrentThreadEventBatch,
   isThreadContextCompacting,
 } from '../../../services/runtime-client/runtimeThreadState.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
@@ -36,12 +37,13 @@ export function useSideChat({
   setError,
 }: SideChatOptions) {
   const { t } = useI18n();
-  const [currentThread, setCurrentThread] = useState<RuntimeThread | null>(null);
+  const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadLastSeqRef = useRef(0);
+  const currentThreadRef = useRef<RuntimeThread | null>(currentThread);
   const memoryModeRequests = useLatestRequestGuard();
   const threadId = currentThread?.id ?? null;
   const {
@@ -60,7 +62,25 @@ export function useSideChat({
   threadIdRef.current = threadId;
   const contextCompacting = isThreadContextCompacting(contextCompactingThreadId, threadId);
   const effectiveActiveTurnId = activeTurnId ?? activeTurnIdFromThreadSnapshot(currentThread, terminalTurnIdsRef.current);
-  currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
+  if (currentThreadRef.current?.id !== threadId) {
+    currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
+  } else {
+    currentThreadLastSeqRef.current = Math.max(
+      currentThreadLastSeqRef.current,
+      currentThread?.lastSeq ?? 0,
+    );
+  }
+  currentThreadRef.current = currentThread;
+
+  const setCurrentThread = useCallback<Dispatch<SetStateAction<RuntimeThread | null>>>(
+    (action) => {
+      const next = typeof action === 'function' ? action(currentThreadRef.current) : action;
+      currentThreadRef.current = next;
+      currentThreadLastSeqRef.current = next?.lastSeq ?? 0;
+      setCurrentThreadState(next);
+    },
+    [],
+  );
 
   useEffect(() => {
     // 侧边对话沿用打开时的项目上下文；主区切换项目后从空白侧边对话重新开始。
@@ -74,23 +94,31 @@ export function useSideChat({
 
   useEffect(() => {
     if (!threadId) return undefined;
-    return client.subscribeEvents(threadId, currentThreadLastSeqRef.current, (event) => {
-      setCurrentThread((thread) => {
-        if (!thread || thread.id !== event.threadId || event.seq <= thread.lastSeq) return thread;
-        return applyRuntimeEvent(thread, event);
-      });
-      if (event.type === 'turn.started' && event.turnId) {
-        terminalTurnIdsRef.current.delete(event.turnId);
-        setActiveTurnId(event.turnId);
+    return client.subscribeEvents(threadId, currentThreadLastSeqRef.current, (batch) => {
+      const current = currentThreadRef.current;
+      const projection = applyCurrentThreadEventBatch(current, batch);
+      if (projection.thread === current || !projection.acceptedEvents.length) return;
+      setCurrentThread(projection.thread);
+
+      const activeTurnEvents = projection.acceptedEvents.filter((event) => (
+        event.type === 'turn.started' || isTerminalSideChatEvent(event)
+      ));
+      for (const event of activeTurnEvents) {
+        if (!event.turnId) continue;
+        if (event.type === 'turn.started') terminalTurnIdsRef.current.delete(event.turnId);
+        else terminalTurnIdsRef.current.add(event.turnId);
+      }
+      if (activeTurnEvents.length) {
+        setActiveTurnId((active) => activeTurnEvents.reduce<string | null>((next, event) => {
+          if (!event.turnId) return next;
+          if (event.type === 'turn.started') return event.turnId;
+          return next === event.turnId ? null : next;
+        }, active));
         void reloadThreads();
       }
-      if ((event.type === 'turn.completed' || event.type === 'turn.cancelled' || event.type === 'runtime.error') && event.turnId) {
-        terminalTurnIdsRef.current.add(event.turnId);
-        setActiveTurnId((current) => (current === event.turnId ? null : current));
-        void reloadThreads();
-      }
-      if (event.type === 'runtime.error') setError(event.payload.message);
-      if (event.type === 'turn.completed') {
+      for (const event of projection.acceptedEvents) {
+        if (event.type === 'runtime.error') setError(event.payload.message);
+        if (event.type !== 'turn.completed') continue;
         if (event.payload.usage) {
           void client.getUsage({ threadId: event.threadId }).then((nextUsage) => {
             if (threadIdRef.current === event.threadId) setThreadUsage(nextUsage);
@@ -281,4 +309,10 @@ export function useSideChat({
     threadUsage,
     updateMemoryMode,
   ]);
+}
+
+function isTerminalSideChatEvent(event: RuntimeEvent): boolean {
+  return event.type === 'turn.completed'
+    || event.type === 'turn.cancelled'
+    || event.type === 'runtime.error';
 }

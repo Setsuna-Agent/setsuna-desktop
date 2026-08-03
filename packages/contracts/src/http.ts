@@ -15,7 +15,7 @@ import type {
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
 } from './config.js';
-import type { RuntimeEvent } from './events.js';
+import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeDebugTraceList } from './debug-traces.js';
 import type {
   RuntimeMcpResourceReadResult,
@@ -135,7 +135,7 @@ export type DesktopRuntimeClient = {
   subscribeEvents(
     threadId: string,
     sinceSeq: number | undefined,
-    onEvent: (event: RuntimeEvent) => void,
+    onBatch: (batch: RuntimeEventBatch) => void,
   ): () => void;
   listDebugTraces(threadId: string, afterSeq?: number): Promise<RuntimeDebugTraceList>;
   getConfig(): Promise<RuntimeConfigState>;

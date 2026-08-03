@@ -169,6 +169,11 @@ export type RuntimeEvent =
   | RuntimeEventBase<'runtime.warning', { message: string; code?: string }>
   | RuntimeEventBase<'runtime.error', { message: string; code?: string }>;
 
+/** Ordered delivery unit used across the Electron bridge. */
+export type RuntimeEventBatch = {
+  events: RuntimeEvent[];
+};
+
 export type RuntimeSseEnvelope = {
   event: RuntimeEvent;
 };

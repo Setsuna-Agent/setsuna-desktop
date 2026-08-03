@@ -97,22 +97,27 @@ export function useConversationDebugEvents(
     const scheduleReplayIdleFlush = () => {
       lastReplayEventAt = window.performance.now();
       if (replayIdleTimerId !== null) return;
-      // Historical SSE is delivered as individual IPC events. Avoid exposing
-      // and re-projecting a partial graph while that contiguous replay is
-      // flowing; the idle fallback still surfaces partial data if it stalls.
+      // Avoid exposing and re-projecting a partial graph while a contiguous
+      // historical replay is flowing; the idle fallback still surfaces partial data.
       replayIdleTimerId = window.setTimeout(
         flushAfterReplayIdle,
         DEBUG_EVENT_REPLAY_IDLE_COMMIT_MS,
       );
     };
-    const unsubscribe = client.subscribeEvents(threadId, 0, (event) => {
-      if (disposed || event.threadId !== threadId) return;
-      highestObservedSeq = Math.max(highestObservedSeq, event.seq);
-      if (conversationDebugEventMayBeVisible(event, visibilityRef.current)) {
-        const current = eventsBySequence.get(event.seq);
-        if (current && current.id !== event.id) return;
-        eventsBySequence.set(event.seq, event);
+    const unsubscribe = client.subscribeEvents(threadId, 0, (batch) => {
+      if (disposed) return;
+      let accepted = false;
+      for (const event of batch.events) {
+        if (event.threadId !== threadId) continue;
+        highestObservedSeq = Math.max(highestObservedSeq, event.seq);
+        accepted = true;
+        if (conversationDebugEventMayBeVisible(event, visibilityRef.current)) {
+          const current = eventsBySequence.get(event.seq);
+          if (current && current.id !== event.id) continue;
+          eventsBySequence.set(event.seq, event);
+        }
       }
+      if (!accepted) return;
 
       if (replayingHistory) {
         if (highestObservedSeq < replayTargetSeq) {

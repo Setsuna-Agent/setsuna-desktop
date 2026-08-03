@@ -123,8 +123,9 @@ Sequence 是恢复顺序，不是跨线程全局时间。
 - 删除/截断后不留下悬挂 projection。
 - Queue 消费等多字段变化在一个 event 投影中原子完成。
 - 旧 snapshot 缺少 additive 字段时给稳定 default。
+- 使用 copy-on-write：只复制事件实际修改的数组和记录，未变化 message/turn/domain 保留引用身份。
 
-`thread-event-projection.ts` 放细分 helper，避免主 switch 继续膨胀。
+`thread-event-projection.ts` 放细分 helper，`event-projections/thread-event-draft.ts` 管理 copy-on-write 所有权，避免主 switch 继续膨胀或把可变引用写回输入 snapshot。
 
 ## Queued turn input
 

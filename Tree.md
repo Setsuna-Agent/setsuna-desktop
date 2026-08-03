@@ -35,31 +35,31 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 87 total files
-├── src/ — 2 direct / 54 total files
+apps/desktop/main/ — 0 direct / 89 total files
+├── src/ — 2 direct / 55 total files
 │   ├── browser/ — 5 direct / 8 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 13 direct / 13 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 10 direct / 10 total files
 │   ├── review/ — 1 direct / 1 total files
-│   ├── runtime/ — 5 direct / 5 total files
+│   ├── runtime/ — 6 direct / 6 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── terminal/ — 1 direct / 1 total files
 │   ├── updater/ — 3 direct / 3 total files
 │   ├── window/ — 3 direct / 5 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 33 files
+└── test/ — 34 files
     ├── integration/ — 2 files
     │   ├── review/ — 1 direct / 1 total files
     │   └── terminal/ — 1 direct / 1 total files
     ├── support/ — 1 direct / 1 total files
-    └── unit/ — 1 direct / 30 total files
+    └── unit/ — 1 direct / 31 total files
         ├── browser/ — 4 direct / 6 total files
         │   └── cdp/ — 2 direct / 2 total files
         ├── data-root/ — 7 direct / 7 total files
-        ├── runtime/ — 4 direct / 4 total files
+        ├── runtime/ — 5 direct / 5 total files
         ├── security/ — 2 direct / 2 total files
         ├── updater/ — 2 direct / 2 total files
         ├── window/ — 3 direct / 5 total files
@@ -165,9 +165,9 @@ apps/desktop/renderer/ — 0 direct / 495 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 62 total files
-├── src/ — 35 direct / 45 total files
-│   ├── event-projections/ — 1 direct / 1 total files
+packages/contracts/ — 4 direct / 63 total files
+├── src/ — 35 direct / 46 total files
+│   ├── event-projections/ — 2 direct / 2 total files
 │   └── swe/ — 9 direct / 9 total files
 └── test/ — 5 direct / 13 total files
     ├── support/ — 1 direct / 1 total files

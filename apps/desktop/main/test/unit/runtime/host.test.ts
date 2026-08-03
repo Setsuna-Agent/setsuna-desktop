@@ -152,12 +152,12 @@ describe('runtime host packaging paths', () => {
     });
 
     const subscriptionId = host.subscribeEvents(webContents, { threadId: 'thread_1' });
-    await waitFor(() => send.mock.calls.some(([, payload]) => payload.event?.seq === 2));
+    await waitFor(() => deliveredRuntimeEvents(send).some((event) => event.seq === 2));
     host.unsubscribe(subscriptionId);
 
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain('sinceSeq=1');
-    expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq)).toEqual([1, 2]);
+    expect(deliveredRuntimeEvents(send).map((event) => event.seq)).toEqual([1, 2]);
   });
 
   it('deduplicates repeated SSE events split across arbitrary transport chunks', async () => {
@@ -183,11 +183,10 @@ describe('runtime host packaging paths', () => {
     });
 
     const subscriptionId = host.subscribeEvents(webContents, { threadId: 'thread_1' });
-    await waitFor(() => send.mock.calls.some(([, payload]) => payload.event?.seq === 2));
+    await waitFor(() => deliveredRuntimeEvents(send).some((event) => event.seq === 2));
     host.unsubscribe(subscriptionId);
 
-    expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq))
-      .toEqual([1, 2]);
+    expect(deliveredRuntimeEvents(send).map((event) => event.seq)).toEqual([1, 2]);
   });
 
   it('retries one idempotent runtime GET after a transport failure', async () => {
@@ -363,6 +362,10 @@ function runtimeEvent(seq: number): RuntimeEvent {
 
 function sseResponse(event: ReturnType<typeof runtimeEvent>): Response {
   return runtimeSseFaultResponse([event]);
+}
+
+function deliveredRuntimeEvents(send: ReturnType<typeof vi.fn>): RuntimeEvent[] {
+  return send.mock.calls.flatMap(([, payload]) => payload.batch?.events ?? []);
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {

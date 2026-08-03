@@ -41,7 +41,8 @@ runtime 子进程状态。Renderer 永远看不到实际端口、token 或 heade
 Main 为每个 renderer 订阅创建独立 runtime SSE：
 
 - 输入是 `threadId` 与 `sinceSeq`。
-- 输出通过 `runtime:event` IPC 转发。
+- 输出按最多 16ms / 128 条组成有序 `RuntimeEventBatch`，通过 `runtime:event` IPC 转发。
+- Approval 与 turn 终态会立即 flush，并与之前待发增量保持同一顺序。
 - unsubscribe、窗口销毁和 host shutdown 都会关闭连接。
 - Event stream 错误通过订阅通道报告，不能让旧订阅污染新线程。
 
