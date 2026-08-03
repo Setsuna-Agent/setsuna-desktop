@@ -114,17 +114,18 @@ export function useRuntimeThreadState({
   }
   currentThreadRef.current = currentThread;
 
-  /**
-   * Keep the public React setter compatible while immediately moving the SSE owner for
-   * direct navigation updates. Functional updates retain normal React setter semantics.
-   */
+  /** Keep local mutations and the synchronous SSE owner on one ordered state path. */
   const setCurrentThread = useCallback<Dispatch<SetStateAction<RuntimeThread | null>>>(
     (action) => {
-      if (typeof action !== 'function') {
-        currentThreadRef.current = action;
-        currentThreadLastSeqRef.current = action?.lastSeq ?? 0;
-      }
-      setCurrentThreadState(action);
+      // Resolve functional mutations against the ref immediately. Otherwise an SSE
+      // event received before React commits could project from stale state and replace
+      // an optimistic approval/goal mutation queued in front of it.
+      const next = typeof action === 'function'
+        ? action(currentThreadRef.current)
+        : action;
+      currentThreadRef.current = next;
+      currentThreadLastSeqRef.current = next?.lastSeq ?? 0;
+      setCurrentThreadState(next);
     },
     [],
   );
@@ -152,9 +153,7 @@ export function useRuntimeThreadState({
     if (adopted === current) return false;
     currentThreadRef.current = adopted;
     currentThreadLastSeqRef.current = adopted?.lastSeq ?? 0;
-    setCurrentThreadState((thread) => (
-      adoptOwnedThreadSnapshot(thread, requestedThreadId, snapshot)
-    ));
+    setCurrentThreadState(adopted);
     return true;
   }, []);
 
@@ -262,7 +261,9 @@ export function useRuntimeThreadState({
 
         currentThreadRef.current = projected;
         currentThreadLastSeqRef.current = projected?.lastSeq ?? event.seq;
-        setCurrentThreadState((thread) => applyCurrentThreadEvent(thread, event));
+        // The ref is the synchronous SSE owner. Commit that exact projection so one
+        // accepted event cannot pay for the full thread reducer twice before render.
+        setCurrentThreadState(projected);
 
         if (isActivityEvent(event)) {
           setActivityEvents((items) => [
