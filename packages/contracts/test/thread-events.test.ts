@@ -83,6 +83,46 @@ describe('applyRuntimeEventToThread structural sharing', () => {
     expect(projected.messages).toBe(messages);
     expect(projected.turns).toBe(turns);
   });
+
+  it('normalizes legacy queued input kinds during unrelated projections', () => {
+    const legacyInput = {
+      id: 'queued_legacy',
+      input: 'Continue later',
+      createdAt: '2026-08-03T00:00:00.000Z',
+    };
+    const planInput = {
+      id: 'queued_plan',
+      kind: 'plan' as const,
+      input: 'Plan later',
+      createdAt: '2026-08-03T00:00:00.000Z',
+    };
+    const thread: RuntimeThread = {
+      id: 'thread_legacy_queue',
+      title: 'Before',
+      createdAt: '2026-08-03T00:00:00.000Z',
+      updatedAt: '2026-08-03T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+      queuedTurnInputs: [legacyInput, planInput],
+    };
+
+    const projected = applyRuntimeEventToThread(thread, {
+      id: 'event_title',
+      seq: 1,
+      threadId: thread.id,
+      type: 'thread.updated',
+      createdAt: '2026-08-03T00:00:01.000Z',
+      payload: { title: 'After' },
+    });
+
+    expect(projected.queuedTurnInputs?.map((input) => input.kind)).toEqual(['message', 'plan']);
+    expect(projected.queuedTurnInputs?.[0]).not.toBe(legacyInput);
+    expect(projected.queuedTurnInputs?.[1]).toBe(planInput);
+    expect(legacyInput).not.toHaveProperty('kind');
+  });
 });
 
 describe('applyRuntimeEventToThread context compaction', () => {

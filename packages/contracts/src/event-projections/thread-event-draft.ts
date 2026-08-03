@@ -1,5 +1,11 @@
 import { cloneMessage, cloneThreadTurn } from '../thread-event-projection.js';
-import type { RuntimeMessage, RuntimeThread, RuntimeThreadTurn } from '../threads.js';
+import {
+  normalizeRuntimeQueuedTurnInputKind,
+  type RuntimeMessage,
+  type RuntimeQueuedTurnInput,
+  type RuntimeThread,
+  type RuntimeThreadTurn,
+} from '../threads.js';
 
 /**
  * Copy-on-write facade for one event projection. Arrays are copied only when their
@@ -15,6 +21,7 @@ export class RuntimeThreadEventDraft {
   constructor(source: RuntimeThread, lastSeq: number, updatedAt: string) {
     this.thread = {
       ...source,
+      queuedTurnInputs: normalizeQueuedTurnInputs(source.queuedTurnInputs),
       lastSeq,
       updatedAt,
     };
@@ -95,4 +102,18 @@ export class RuntimeThreadEventDraft {
     this.thread.turns = [...(this.thread.turns ?? [])];
     this.turnsCopied = true;
   }
+}
+
+function normalizeQueuedTurnInputs(
+  inputs: RuntimeQueuedTurnInput[] | undefined,
+): RuntimeQueuedTurnInput[] | undefined {
+  if (!inputs) return undefined;
+  let normalized = inputs;
+  for (const [index, input] of inputs.entries()) {
+    const kind = normalizeRuntimeQueuedTurnInputKind(input.kind);
+    if (input.kind === kind) continue;
+    if (normalized === inputs) normalized = [...inputs];
+    normalized[index] = { ...input, kind };
+  }
+  return normalized;
 }
