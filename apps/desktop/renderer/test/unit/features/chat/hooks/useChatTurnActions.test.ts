@@ -4,6 +4,10 @@ import {
   claimCreatedChatThreadForSend,
   shouldQueueComposerTurn,
 } from '../../../../../src/features/chat/hooks/useChatTurnActions.js';
+import {
+  findChatTurnSubmission,
+  reconcileChatTurnSubmission,
+} from '../../../../../src/features/chat/hooks/chatTurnSubmission.js';
 import { createIdentityRequestGuard } from '../../../../../src/shared/hooks/useIdentityRequestGuard.js';
 
 describe('first-turn composer claim', () => {
@@ -56,6 +60,68 @@ describe('composer turn routing', () => {
     expect(shouldQueueComposerTurn('turn_active', {})).toBe(true);
     expect(shouldQueueComposerTurn('turn_active', { planDecision: 'accepted' })).toBe(false);
     expect(shouldQueueComposerTurn(null, {})).toBe(false);
+  });
+});
+
+describe('ambiguous composer submission reconciliation', () => {
+  it('recognizes both started messages and durable queued inputs by client id', () => {
+    const started = thread({
+      messages: [{
+        id: 'message_1',
+        clientId: 'client_started',
+        turnId: 'turn_1',
+        role: 'user',
+        content: 'run',
+        createdAt: '2026-07-11T00:00:01.000Z',
+        status: 'complete',
+      }],
+    });
+    const queued = thread({
+      queuedTurnInputs: [{
+        id: 'queued_1',
+        clientId: 'client_queued',
+        input: 'later',
+        createdAt: '2026-07-11T00:00:01.000Z',
+      }],
+    });
+
+    expect(findChatTurnSubmission(started, 'client_started')?.kind).toBe('message');
+    expect(findChatTurnSubmission(queued, 'client_queued')?.kind).toBe('queued');
+    expect(findChatTurnSubmission(started, 'client_missing')).toBeNull();
+  });
+
+  it('waits briefly for a submission accepted before its response was lost', async () => {
+    const snapshots = [
+      thread({ lastSeq: 1 }),
+      thread({
+        activeTurnId: 'turn_accepted',
+        lastSeq: 3,
+        messages: [{
+          id: 'message_accepted',
+          clientId: 'client_accepted',
+          turnId: 'turn_accepted',
+          role: 'user',
+          content: 'run',
+          createdAt: '2026-07-11T00:00:01.000Z',
+          status: 'complete',
+        }],
+      }),
+    ];
+    const client = {
+      getThread: async () => snapshots.shift() ?? thread({ lastSeq: 3 }),
+    };
+
+    const reconciled = await reconcileChatTurnSubmission(
+      client,
+      'thread_1',
+      'client_accepted',
+      { attempts: 2, delayMs: 0 },
+    );
+
+    expect(reconciled).toMatchObject({
+      kind: 'message',
+      thread: { activeTurnId: 'turn_accepted', lastSeq: 3 },
+    });
   });
 });
 

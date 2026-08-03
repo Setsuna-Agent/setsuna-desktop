@@ -526,8 +526,14 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       turn.status = 'failed';
       turn.completedAt = event.createdAt;
       turn.error = event.payload.message;
+      completeActiveTurnItems(turn, 'failed');
     }
     completeActivePendingHookRuns(next, event.turnId, event.createdAt, event.payload.message);
+    for (const item of next.messages) {
+      if (event.turnId && item.turnId !== event.turnId) continue;
+      completeActiveToolRuns(item, event.createdAt, event.payload.message, 'error');
+      completeActiveMessageHookRuns(item, event.createdAt, event.payload.message);
+    }
     const message = assistantMessageForTurn(next.messages, event.turnId);
     if (message) {
       message.status = 'error';

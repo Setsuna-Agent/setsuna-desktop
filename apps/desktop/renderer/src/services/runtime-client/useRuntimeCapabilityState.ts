@@ -28,6 +28,7 @@ import {
   updateHookInConfig,
 } from '../../features/capabilities/hooks/runtimeHookConfig.js';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
+import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 
 export type RuntimeCapabilityBootstrapResults = {
   skillResult: PromiseSettledResult<RuntimeSkillList>;
@@ -79,7 +80,6 @@ type RuntimeCapabilityStateOptions = {
   config: RuntimeConfigState | null;
   enabled: boolean;
   onConfigChange: (config: RuntimeConfigState) => void;
-  onError: (message: string) => void;
 };
 
 export function capabilityBootstrapValues(
@@ -128,7 +128,6 @@ export function useRuntimeCapabilityState({
   config,
   enabled,
   onConfigChange,
-  onError,
 }: RuntimeCapabilityStateOptions) {
   const [skills, setSkills] = useState<RuntimeSkillSummary[]>([]);
   const [skillExtraRoots, setSkillExtraRootsState] = useState<string[]>([]);
@@ -199,9 +198,9 @@ export function useRuntimeCapabilityState({
   useEffect(() => {
     if (!enabled) return;
     void refreshHooks().catch((unknownError) => {
-      onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      reportRuntimeBackgroundFailure('hook refresh', unknownError);
     });
-  }, [enabled, onError, refreshHooks]);
+  }, [enabled, refreshHooks]);
 
   const updateSkill = useCallback(
     async (

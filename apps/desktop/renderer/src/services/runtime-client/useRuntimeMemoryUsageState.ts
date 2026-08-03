@@ -7,6 +7,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
+import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 
 export type RuntimeMemoryUsageClient = Pick<
   DesktopRuntimeClient,
@@ -20,7 +21,6 @@ type RuntimeMemoryUsageStateOptions = {
   client: RuntimeMemoryUsageClient;
   currentThreadId: string | null;
   enabled: boolean;
-  onError: (message: string) => void;
 };
 
 export function fulfilledUsageValue(
@@ -45,7 +45,6 @@ export function useRuntimeMemoryUsageState({
   client,
   currentThreadId,
   enabled,
-  onError,
 }: RuntimeMemoryUsageStateOptions) {
   const [usage, setUsage] = useState<RuntimeUsageResponse | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
@@ -76,11 +75,11 @@ export function useRuntimeMemoryUsageState({
       return nextUsage;
     } catch (unknownError) {
       if (isLatest()) {
-        onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        reportRuntimeBackgroundFailure('usage refresh', unknownError);
       }
       return null;
     }
-  }, [client, onError, usageRequests]);
+  }, [client, usageRequests]);
 
   const refreshThreadUsage = useCallback(
     async (threadId: string): Promise<RuntimeUsageResponse | null> => {
@@ -93,12 +92,12 @@ export function useRuntimeMemoryUsageState({
         return nextUsage;
       } catch (unknownError) {
         if (isOwnedRequestCurrent(threadId, currentThreadIdRef.current, isLatest())) {
-          onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+          reportRuntimeBackgroundFailure('thread usage refresh', unknownError);
         }
         return null;
       }
     },
-    [client, onError, threadUsageRequests],
+    [client, threadUsageRequests],
   );
 
   useEffect(() => {
@@ -112,11 +111,11 @@ export function useRuntimeMemoryUsageState({
       })
       .catch((unknownError) => {
         if (isCurrentRequest()) {
-          onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+          reportRuntimeBackgroundFailure('memory list refresh', unknownError);
         }
       });
     return () => memoryListRequests.invalidate();
-  }, [activeProjectId, client, enabled, memoryListRequests, onError]);
+  }, [activeProjectId, client, enabled, memoryListRequests]);
 
   useEffect(() => {
     if (!currentThreadId) {

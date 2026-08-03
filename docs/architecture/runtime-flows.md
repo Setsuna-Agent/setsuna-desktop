@@ -101,7 +101,10 @@ useRuntimeClientState
 - SSE 先回放 `seq > sinceSeq` 的持久化事件，再订阅 event bus。
 - Preload 为每个订阅维护 `subscriptionId`，避免旧连接的事件投递给新订阅。
 - Renderer 只接受当前线程且 `event.seq > thread.lastSeq` 的事件。
-- 线程列表摘要通过短 debounce 或运行期 polling 收敛，不要求每个 delta 都立即重拉。
+- 线程列表摘要通过非运行期短 debounce 或运行期单一 polling 收敛，不为每个 delta 重拉。
+- 幂等 runtime GET 遇到 loopback transport 失败时短重试一次；后台投影刷新失败保留旧状态。
+- Turn 写请求不盲重试。Renderer 为提交生成 `clientId`，响应丢失时从持久化 thread
+  snapshot 对账已开始的消息或 queued input，再决定是否展示错误。
 
 SSE 是增量优化，不是唯一恢复手段。重新进入线程时仍可通过 REST snapshot 恢复。
 
@@ -205,4 +208,3 @@ BrowserToolHost
 8. Renderer reducer 是否认识该事件。
 
 Turn 卡住时再检查 active task registry、approval、tool process、provider stream、termination event 和线程摘要的 `activeTurnId`。
-

@@ -22,6 +22,10 @@ import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { isActivityEvent } from './runtimeEvents.js';
 import {
+  reportRuntimeBackgroundFailure,
+  runtimeClientErrorMessage,
+} from './runtimeClientErrors.js';
+import {
   activeTurnIdFromThreadSnapshot,
   adoptOwnedThreadSnapshot,
   applyCurrentThreadEvent,
@@ -93,6 +97,7 @@ export function useRuntimeThreadState({
   const currentThreadLastSeqRef = useRef(0);
   const currentThreadRef = useRef<RuntimeThread | null>(currentThread);
   const threadListRefreshTimerRef = useRef<number | null>(null);
+  const threadSummaryPollingActiveRef = useRef(false);
   // 终态 turn 记录在本地，避免延迟快照把已完成 turn 重新推断成 active。
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const threadMemoryModeRequests = useLatestRequestGuard();
@@ -134,6 +139,9 @@ export function useRuntimeThreadState({
   );
   const hasRunningThreadSummary = threads.some((thread) => Boolean(thread.activeTurnId))
     || archivedThreads.some((thread) => Boolean(thread.activeTurnId));
+  threadSummaryPollingActiveRef.current = Boolean(
+    effectiveActiveTurnId || hasRunningThreadSummary,
+  );
 
   const adoptSnapshot = useCallback((
     requestedThreadId: string,
@@ -182,7 +190,10 @@ export function useRuntimeThreadState({
     if (currentThreadId) persistActiveThreadId(currentThreadId);
   }, [currentThreadId]);
 
-  const refreshThreadsSoon = useCallback(() => {
+  const refreshThreadsSoon = useCallback((force = false) => {
+    // The one-second summary poll already owns sidebar freshness while turns run.
+    // Avoid turning every streamed token/event into another localhost request.
+    if (!force && threadSummaryPollingActiveRef.current) return;
     if (threadListRefreshTimerRef.current !== null) return;
     // 线程列表摘要不需要每条 SSE 都立即刷新，短 debounce 足够保持侧栏一致。
     threadListRefreshTimerRef.current = window.setTimeout(() => {
@@ -190,11 +201,11 @@ export function useRuntimeThreadState({
       void client
         .listThreads()
         .then((list) => setThreads(list.threads))
-        .catch((unknownError) => (
-          onError(unknownError instanceof Error ? unknownError.message : String(unknownError))
-        ));
+        .catch((unknownError) => {
+          reportRuntimeBackgroundFailure('thread list refresh', unknownError);
+        });
     }, 120);
-  }, [client, onError]);
+  }, [client]);
 
   useEffect(() => {
     if (!effectiveActiveTurnId && !hasRunningThreadSummary) return undefined;
@@ -202,21 +213,17 @@ export function useRuntimeThreadState({
     let timeoutId: number | undefined;
     const pollThreadSummaries = async () => {
       try {
-        const [visible, all] = await Promise.all([
-          client.listThreads(),
-          client.listThreads({ includeArchived: true }),
-        ]);
+        const all = await client.listThreads({ includeArchived: true });
         if (cancelled) return;
-        setThreads(visible.threads);
+        setThreads(all.threads.filter((thread) => !thread.archived));
         setArchivedThreads(all.threads.filter((thread) => thread.archived));
-        const stillRunning = visible.threads.some((thread) => Boolean(thread.activeTurnId))
-          || all.threads.some((thread) => Boolean(thread.activeTurnId));
+        const stillRunning = all.threads.some((thread) => Boolean(thread.activeTurnId));
         if (stillRunning || effectiveActiveTurnId) {
           timeoutId = window.setTimeout(pollThreadSummaries, 1000);
         }
       } catch (unknownError) {
         if (!cancelled) {
-          onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+          reportRuntimeBackgroundFailure('running thread summaries refresh', unknownError);
           timeoutId = window.setTimeout(pollThreadSummaries, 1000);
         }
       }
@@ -226,7 +233,7 @@ export function useRuntimeThreadState({
       cancelled = true;
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
-  }, [client, effectiveActiveTurnId, hasRunningThreadSummary, onError]);
+  }, [client, effectiveActiveTurnId, hasRunningThreadSummary]);
 
   useEffect(() => () => {
     if (threadListRefreshTimerRef.current !== null) {
@@ -263,7 +270,12 @@ export function useRuntimeThreadState({
             ...items.filter((item) => item.id !== event.id),
           ].slice(0, 80));
         }
-        refreshThreadsSoon();
+        const terminalTurnEvent = (
+          event.type === 'turn.completed'
+          || event.type === 'turn.cancelled'
+          || event.type === 'runtime.error'
+        );
+        refreshThreadsSoon(terminalTurnEvent);
         if (event.type === 'turn.started' && event.turnId) {
           terminalTurnIdsRef.current.delete(event.turnId);
           setActiveTurnId(event.turnId);
@@ -339,6 +351,7 @@ export function useRuntimeThreadState({
         } else if (!snapshotActiveTurnId) {
           terminalTurnIdsRef.current.add(turnId);
           setActiveTurnId((active) => (active === turnId ? null : active));
+          refreshThreadsSoon(true);
           onTurnSettled({
             threadId,
             refreshUsage: true,
@@ -351,7 +364,7 @@ export function useRuntimeThreadState({
         }
       } catch (unknownError) {
         if (!cancelled) {
-          onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+          reportRuntimeBackgroundFailure('active thread snapshot refresh', unknownError);
         }
       }
       if (!cancelled && continuePolling) {
@@ -370,7 +383,6 @@ export function useRuntimeThreadState({
     currentThread?.goal?.status,
     currentThreadId,
     effectiveActiveTurnId,
-    onError,
     onTurnSettled,
     refreshThreadsSoon,
   ]);
@@ -408,7 +420,7 @@ export function useRuntimeThreadState({
       return compacted;
     } catch (unknownError) {
       if (isCurrentRequest() && currentThreadRef.current?.id === requestedThreadId) {
-        onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+        onError(runtimeClientErrorMessage(unknownError));
         setCurrentThread((thread) => (
           thread?.id === requestedThreadId && thread.contextCompaction?.status === 'running'
             ? { ...thread, contextCompaction: undefined }
@@ -535,11 +547,11 @@ export function useRuntimeThreadState({
         .then((nextThread) => adoptSnapshot(requestedThreadId, nextThread))
         .catch((unknownError) => {
           if (currentThreadRef.current?.id === requestedThreadId) {
-            onError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+            reportRuntimeBackgroundFailure('approval snapshot reconciliation', unknownError);
           }
         });
     },
-    [adoptSnapshot, client, currentThreadId, onError, setCurrentThread],
+    [adoptSnapshot, client, currentThreadId, setCurrentThread],
   );
 
   return {

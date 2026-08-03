@@ -9,6 +9,11 @@ import {
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
+import { isRuntimeTransportFailure } from '../../../services/runtime-client/runtimeClientErrors.js';
+import {
+  createChatTurnClientId,
+  reconcileChatTurnSubmission,
+} from './chatTurnSubmission.js';
 import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
 
 type ChatTurnSendOptions = {
@@ -72,6 +77,9 @@ export function useChatTurnActions({
       // 计划决策只能针对已有线程里的 awaiting 计划，没有线程时无从裁决。
       if (options.planDecision && !currentThread) return false;
       const isCurrentRequest = actionRequests.begin();
+      const clientId = createChatTurnClientId();
+      let submissionDispatched = false;
+      let submissionThreadId: string | null = null;
       if (isCurrentRequest()) setError(null);
       try {
         let thread = currentThread;
@@ -89,9 +97,11 @@ export function useChatTurnActions({
           await reloadThreads();
         }
         const threadId = thread.id;
+        submissionThreadId = threadId;
         if (isCurrentRequest()) setDraft('');
         const startTurn = () => client.sendTurn(threadId, {
           attachments,
+          clientId,
           input,
           skillIds: options.skillIds,
           thinking: options.thinking === true,
@@ -101,9 +111,11 @@ export function useChatTurnActions({
         });
         // Goal 无论线程当前是否空闲都先进入同一持久化入口；空闲时 runtime 会立刻
         // 原子消费并启动，忙碌时则保留完整附件、Skill 与 thinking 语义等待调度。
+        submissionDispatched = true;
         const response = shouldQueueComposerTurn(activeTurnId, options)
           ? await client.queueTurnInput(threadId, {
               attachments,
+              clientId,
               input,
               kind: options.goalMode
                 ? 'goal'
@@ -121,6 +133,36 @@ export function useChatTurnActions({
         if (!isCurrentRequest()) void reloadThreads().catch(() => undefined);
         return true;
       } catch (unknownError) {
+        if (
+          isCurrentRequest()
+          && submissionDispatched
+          && submissionThreadId
+          && isRuntimeTransportFailure(unknownError)
+        ) {
+          const reconciled = await reconcileChatTurnSubmission(
+            client,
+            submissionThreadId,
+            clientId,
+          );
+          if (reconciled && isCurrentRequest()) {
+            setCurrentThread((current) => (
+              current?.id === reconciled.thread.id
+              && current.lastSeq > reconciled.thread.lastSeq
+                ? current
+                : reconciled.thread
+            ));
+            const reconciledActiveTurnId = reconciled.thread.activeTurnId;
+            if (
+              reconciledActiveTurnId
+              && !terminalTurnIdsRef.current.has(reconciledActiveTurnId)
+            ) {
+              setActiveTurnId(reconciledActiveTurnId);
+            }
+            setError(null);
+            void reloadThreads().catch(() => undefined);
+            return true;
+          }
+        }
         if (isCurrentRequest()) {
           setDraft((current) => current || input);
           setError(unknownError instanceof Error ? unknownError.message : String(unknownError));

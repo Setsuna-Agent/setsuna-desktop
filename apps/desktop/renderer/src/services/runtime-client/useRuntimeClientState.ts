@@ -12,6 +12,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { createDesktopRuntimeClient } from './client.js';
+import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 import {
   reportOptionalRuntimeLoadFailures,
   useRuntimeCapabilityState,
@@ -67,7 +68,6 @@ export function useRuntimeClientState({
     config,
     enabled: loadState === 'ready',
     onConfigChange: replaceConfig,
-    onError: setError,
   });
   const {
     applyBootstrapThreads,
@@ -90,7 +90,6 @@ export function useRuntimeClientState({
     client,
     currentThreadId,
     enabled: loadState === 'ready',
-    onError: setError,
   });
 
   // React hooks cannot form a dependency cycle. The stable forwarding callback lets the
@@ -100,9 +99,9 @@ export function useRuntimeClientState({
     refreshUsage: shouldRefreshUsage,
     threadId,
   }) => {
-    void refreshCapabilities().catch((unknownError) => (
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError))
-    ));
+    void refreshCapabilities().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('capability refresh after turn', unknownError);
+    });
     if (shouldRefreshUsage) void refreshUsage();
     if (shouldRefreshThreadUsage) void refreshThreadUsage(threadId);
   };

@@ -18,6 +18,7 @@ import {
 
 describe('runtime host packaging paths', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -153,6 +154,53 @@ describe('runtime host packaging paths', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain('sinceSeq=1');
     expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq)).toEqual([1, 2]);
+  });
+
+  it('retries one idempotent runtime GET after a transport failure', async () => {
+    const transportError = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('socket reset'), { code: 'ECONNRESET' }),
+    });
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(transportError)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ threads: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+      runtimeRequestRetryDelayMs: 0,
+    });
+
+    await expect(host.request({ path: '/v1/threads' }))
+      .resolves.toEqual({ threads: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(warning).toHaveBeenCalledWith(
+      '[runtime] GET /v1/threads transport failed; retrying once',
+      transportError,
+    );
+  });
+
+  it('does not retry a mutating request and preserves transport diagnostics', async () => {
+    const transportError = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('connection refused'), { code: 'ECONNREFUSED' }),
+    });
+    const fetchMock = vi.fn().mockRejectedValue(transportError);
+    vi.stubGlobal('fetch', fetchMock);
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+      runtimeRequestRetryDelayMs: 0,
+    });
+
+    const request = host.request({
+      path: '/v1/threads',
+      method: 'POST',
+      body: {},
+    });
+    await expect(request).rejects.toThrow(
+      'Runtime request transport failed (POST /v1/threads; runtime=stopped; attempts=1; cause=ECONNREFUSED).',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('uploads attachment bytes directly to the authenticated runtime endpoint', async () => {

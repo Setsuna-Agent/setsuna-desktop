@@ -1254,7 +1254,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
     expect(completed.messages[1]).toMatchObject({ id: 'msg_compact', contextCompaction: compactedMessage.contextCompaction });
   });
 
-  it('clears running context compaction when a turn fails after assistant output exists', () => {
+  it('terminalizes active turn work when a runtime error ends the turn', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',
       title: 'Thread',
@@ -1275,7 +1275,24 @@ describe('applyRuntimeEventToThread context compaction', () => {
         id: 'turn_1',
         startedAt: '2026-06-26T00:00:00.000Z',
         status: 'in_progress',
-        items: [],
+        items: [
+          {
+            id: 'item_tool',
+            kind: 'tool_call',
+            status: 'in_progress',
+            toolCall: {
+              id: 'call_exec',
+              name: 'exec_command',
+              arguments: '{"cmd":"echo pending"}',
+            },
+          },
+          {
+            id: 'item_complete',
+            kind: 'agent_message',
+            status: 'completed',
+            content: 'Already complete.',
+          },
+        ],
       }],
       messages: [{
         id: 'msg_assistant',
@@ -1284,6 +1301,27 @@ describe('applyRuntimeEventToThread context compaction', () => {
         content: 'Inspecting the repository.',
         createdAt: '2026-06-26T00:00:00.500Z',
         status: 'streaming',
+        toolRuns: [
+          {
+            id: 'call_exec',
+            name: 'exec_command',
+            status: 'running',
+            phase: 'preparing',
+          },
+          {
+            id: 'call_approval',
+            name: 'request_permissions',
+            status: 'pending_approval',
+            approvalStatus: 'pending',
+          },
+        ],
+        hookRuns: [{
+          id: 'hook_stop',
+          turnId: 'turn_1',
+          eventName: 'Stop',
+          handlerType: 'command',
+          status: 'running',
+        }],
       }],
     };
     const failed: RuntimeEvent = {
@@ -1303,8 +1341,43 @@ describe('applyRuntimeEventToThread context compaction', () => {
 
     expect(projected.contextCompaction).toBeUndefined();
     expect(projected.activeTurnId).toBeNull();
-    expect(projected.turns?.[0]).toMatchObject({ status: 'failed', completedAt: failed.createdAt });
-    expect(projected.messages[0]).toMatchObject({ status: 'error', completedAt: failed.createdAt });
+    expect(projected.turns?.[0]).toMatchObject({
+      status: 'failed',
+      completedAt: failed.createdAt,
+      error: failed.payload.message,
+      items: [
+        { id: 'item_tool', status: 'failed' },
+        { id: 'item_complete', status: 'completed' },
+      ],
+    });
+    expect(projected.messages[0]).toMatchObject({
+      status: 'error',
+      completedAt: failed.createdAt,
+      error: failed.payload.message,
+      toolRuns: [
+        {
+          id: 'call_exec',
+          status: 'error',
+          phase: 'preparing',
+          resultPreview: failed.payload.message,
+          completedAt: failed.createdAt,
+        },
+        {
+          id: 'call_approval',
+          status: 'cancelled',
+          approvalStatus: 'cancelled',
+          approvalMessage: failed.payload.message,
+          resultPreview: failed.payload.message,
+          completedAt: failed.createdAt,
+        },
+      ],
+      hookRuns: [{
+        id: 'hook_stop',
+        status: 'failed',
+        message: failed.payload.message,
+        completedAt: failed.createdAt,
+      }],
+    });
   });
 
   it('does not clear running context compaction for an unrelated terminal turn', () => {

@@ -207,9 +207,13 @@ Core 失败会进入 app error。
 3. Event 到达后检查 thread ID 和 sequence。
 4. 用 reducer 更新 full thread。
 5. Activity event 进入有界列表。
-6. 用短 debounce 刷新 thread summaries。
+6. 非运行期事件用短 debounce 刷新 thread summaries；终态事件强制做最后一次收敛。
 
-运行中 turn 还会 polling summaries，作为后台线程和 SSE 边界的收敛保障。Polling 不能覆盖已经看到终态的本地判断，因此 hook 记录 terminal turn IDs，避免延迟 snapshot 把完成 turn 恢复成 active。
+运行中 turn 由每秒一次的 summaries polling 统一负责侧栏状态，不再为每条 SSE
+事件重复请求列表；current thread snapshot 仍独立 polling，作为 SSE 边界的恢复保障。
+Polling 不能覆盖已经看到终态的本地判断，因此 hook 记录 terminal turn IDs，避免延迟
+snapshot 把完成 turn 恢复成 active。Snapshot、usage、capability 等后台刷新失败时保留
+最后一次有效状态并记录诊断，不提升为全局 turn 错误。
 
 ## Request guards
 

@@ -356,7 +356,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 8px;
   flex-wrap: wrap;
   justify-content: space-between;
-  padding: 6px 8px;
+  padding: 10px 12px;
 }
 
 .chat-file-changes__icon {
@@ -434,7 +434,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-file-changes__error {
-  margin: 0 8px 8px;
+  margin: 0 12px 10px;
   padding: 7px 9px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 26%, var(--app-border));
   border-radius: 6px;
@@ -448,7 +448,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding: 2px 4px 4px;
+  padding: 8px 12px;
   border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
 }
 
@@ -465,7 +465,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 10px;
   width: 100%;
   min-height: 32px;
-  padding: 0 6px;
+  padding: 0 8px;
   border: 0;
   border-radius: 6px;
   color: inherit;
@@ -513,8 +513,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   width: fit-content;
   min-width: 0;
   height: 32px;
-  margin-top: 0;
-  padding: 0 6px;
+  margin-top: 1px;
+  padding: 0 10px;
   border: 0;
   border-radius: 6px;
   color: var(--app-text);

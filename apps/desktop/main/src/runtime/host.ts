@@ -15,6 +15,7 @@ import net from 'node:net';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { desktopProcessEnvironment, prependPathDirectory } from './desktop-environment.js';
+import { fetchRuntimeResponse } from './runtime-request.js';
 
 type RuntimeHostOptions = {
   appRoot: string;
@@ -30,6 +31,7 @@ type RuntimeHostOptions = {
   ripgrepPath?: string;
   requireBundledRipgrep?: boolean;
   runtimeEntry?: string;
+  runtimeRequestRetryDelayMs?: number;
   shutdownTimeoutMs?: number;
   sseRetryBaseDelayMs?: number;
 };
@@ -135,16 +137,27 @@ export class RuntimeHost {
    */
   async request<T = unknown>(input: RuntimeRequestInput): Promise<T> {
     const safePath = normalizeRuntimePath(input.path);
+    const method = input.method ?? 'GET';
+    const requestLabel = `${method} ${safePath}`;
     // renderer 只能传入受限 path，真正的 token 和端口都留在 main 进程内。
-    const response = await fetch(`http://127.0.0.1:${this.port}${safePath}`, {
-      method: input.method ?? 'GET',
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
+    const response = await fetchRuntimeResponse(
+      `http://127.0.0.1:${this.port}${safePath}`,
+      {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: input.body === undefined ? undefined : JSON.stringify(input.body),
       },
-      body: input.body === undefined ? undefined : JSON.stringify(input.body),
-    });
-    return runtimeJsonResponse<T>(response, `${input.method ?? 'GET'} ${safePath}`);
+      {
+        label: requestLabel,
+        retryDelayMs: this.options.runtimeRequestRetryDelayMs,
+        retryOnce: method === 'GET',
+        runtimeState: () => this.runtimeProcessState(),
+      },
+    );
+    return runtimeJsonResponse<T>(response, requestLabel);
   }
 
   prepareDataMigration(): Promise<RuntimeDataMigrationReadiness> {
@@ -251,6 +264,11 @@ export class RuntimeHost {
   private async healthCheck(): Promise<void> {
     const response = await fetch(`http://127.0.0.1:${this.port}/health`);
     if (!response.ok) throw new Error(`Runtime health check failed: ${response.status}`);
+  }
+
+  private runtimeProcessState(): 'running' | 'stopped' | 'stopping' {
+    if (this.stoppingChild || this.stoppingPromise) return 'stopping';
+    return this.child ? 'running' : 'stopped';
   }
 
   /**

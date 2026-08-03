@@ -31,7 +31,10 @@
 - `/health`
 - `/v1/*`
 
-它负责附加 Authorization、JSON 编解码、超时和 runtime 未就绪错误。Renderer 永远看不到实际端口、token 或 headers。
+它负责附加 Authorization、JSON 编解码和 transport 诊断。幂等 GET 在 loopback
+连接失败时会短重试一次；POST/PUT/PATCH/DELETE 不会盲重试，因为响应丢失不能证明
+runtime 没有执行写操作。最终 transport 错误必须携带 method/path、底层错误码和
+runtime 子进程状态。Renderer 永远看不到实际端口、token 或 headers。
 
 ### SSE
 
@@ -156,4 +159,3 @@ Main handler 要确认请求来自当前可信主 renderer。Browser guest 相�
 - `test/unit/security/credential-vault.test.ts`
 
 IPC 的领域行为通常由被调用 service 的测试和 renderer bridge/client 测试共同覆盖；新增复杂校验时应为 IPC helper 提取可测试的纯函数。
-

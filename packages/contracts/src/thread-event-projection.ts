@@ -378,13 +378,19 @@ export function appendToolRunOutputDelta(message: RuntimeMessage, input: Pick<Ru
 }
 
 /**
- * turn 取消时结束仍在运行或等待审批的工具记录。
+ * turn 进入取消/失败终态时结束仍在运行或等待审批的工具记录。
  *
  * @param message 要处理的消息。
- * @param completedAt 取消完成时间。
- * @param reason 取消原因。
+ * @param completedAt turn 完成时间。
+ * @param reason turn 终止原因。
+ * @param terminalStatus 运行中工具应投影成的终态。
  */
-export function completeActiveToolRuns(message: RuntimeMessage, completedAt: string, reason: string): void {
+export function completeActiveToolRuns(
+  message: RuntimeMessage,
+  completedAt: string,
+  reason: string,
+  terminalStatus: Extract<RuntimeToolRunStatus, 'cancelled' | 'error'> = 'cancelled',
+): void {
   if (!message.toolRuns?.length) return;
   let changed = false;
   const runs = message.toolRuns.map((run) => {
@@ -399,7 +405,9 @@ export function completeActiveToolRuns(message: RuntimeMessage, completedAt: str
     const cancelApproval = run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected' && run.approvalStatus !== 'cancelled';
     return {
       ...run,
-      status: 'cancelled' as RuntimeToolRunStatus,
+      // An unresolved approval is invalid once its turn ends, even when the
+      // enclosing turn failed rather than being explicitly cancelled.
+      status: cancelApproval ? 'cancelled' as const : terminalStatus,
       resultPreview: run.resultPreview || reason,
       completedAt,
       hookRuns: nextHookRuns,
@@ -410,13 +418,16 @@ export function completeActiveToolRuns(message: RuntimeMessage, completedAt: str
   if (changed) message.toolRuns = runs;
 }
 
-export function completeActiveTurnItems(turn: RuntimeThreadTurn): void {
+export function completeActiveTurnItems(
+  turn: RuntimeThreadTurn,
+  terminalStatus: Extract<NonNullable<RuntimeThreadTurn['items'][number]['status']>, 'cancelled' | 'failed'> = 'cancelled',
+): void {
   if (!turn.items.length) return;
   turn.items = turn.items.map((item) => {
     if (item.status !== 'in_progress') return item;
     return {
       ...item,
-      status: 'cancelled' as const,
+      status: terminalStatus,
     };
   });
 }
