@@ -98,7 +98,9 @@ useRuntimeClientState
 ### 顺序和恢复
 
 - Store 为每个 thread 分配递增 `seq`。
-- SSE 先回放 `seq > sinceSeq` 的持久化事件，再订阅 event bus。
+- SSE 先订阅 event bus 并缓冲 live event，再回放 `seq > sinceSeq` 的持久化事件。
+- `sinceSeq` 早于 transient-event 保留窗口时，runtime 发送 canonical snapshot resync；
+  Electron main 先 flush 旧 batch，再把 resync 作为独立原子 batch 转发。
 - Preload 为每个订阅维护 `subscriptionId`，避免旧连接的事件投递给新订阅。
 - Renderer 只接受当前线程且 `event.seq > thread.lastSeq` 的事件。
 - 线程列表摘要通过非运行期短 debounce 或运行期单一 polling 收敛，不为每个 delta 重拉。

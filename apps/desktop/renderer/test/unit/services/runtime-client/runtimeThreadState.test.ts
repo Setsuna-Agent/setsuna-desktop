@@ -90,6 +90,28 @@ describe('applyCurrentThreadEvent', () => {
     expect(initial.messages).toEqual([]);
     expect(initial.lastSeq).toBe(0);
   });
+
+  it('adopts a retained-history resync before projecting newer events', () => {
+    const initial = threadWithMessages([]);
+    initial.lastSeq = 2;
+    const resynced = threadWithMessages([]);
+    resynced.lastSeq = 8;
+    resynced.title = 'Canonical snapshot';
+
+    const projection = applyCurrentThreadEventBatch(initial, {
+      events: [threadUpdatedEvent(initial.id, 9, 'After resync')],
+      resync: {
+        reason: 'retention_gap',
+        requestedSinceSeq: 2,
+        retainedFromSeq: 6,
+        thread: resynced,
+      },
+    });
+
+    expect(projection.resynced).toBe(true);
+    expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([9]);
+    expect(projection.thread).toMatchObject({ lastSeq: 9, title: 'After resync' });
+  });
 });
 
 describe('adoptOwnedThreadSnapshot', () => {

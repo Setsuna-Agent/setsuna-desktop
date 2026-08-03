@@ -53,7 +53,7 @@ export function useConversationDebugEvents(
     let disposed = false;
     let highestObservedSeq = 0;
     let lastReplayEventAt = 0;
-    const replayTargetSeq = visibilityRef.current.lastSeq;
+    let replayTargetSeq = visibilityRef.current.lastSeq;
     let replayingHistory = replayTargetSeq > 0;
     setSnapshot({ events: [], highestObservedSeq, threadId });
 
@@ -107,6 +107,15 @@ export function useConversationDebugEvents(
     const unsubscribe = client.subscribeEvents(threadId, 0, (batch) => {
       if (disposed) return;
       let accepted = false;
+      if (batch.resync?.thread.id === threadId) {
+        // The retained event prefix is no longer complete; keep only post-resync debug events.
+        eventsBySequence.clear();
+        highestObservedSeq = batch.resync.thread.lastSeq;
+        replayTargetSeq = highestObservedSeq;
+        replayingHistory = false;
+        clearReplayIdleTimer();
+        accepted = true;
+      }
       for (const event of batch.events) {
         if (event.threadId !== threadId) continue;
         highestObservedSeq = Math.max(highestObservedSeq, event.seq);

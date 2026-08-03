@@ -77,24 +77,24 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 495 total files
-├── src/ — 2 direct / 362 total files
+apps/desktop/renderer/ — 0 direct / 498 total files
+├── src/ — 2 direct / 364 total files
 │   ├── app/ — 2 direct / 31 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 7 direct / 7 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 266 files
+│   ├── features/ — 268 files
 │   │   ├── capabilities/ — 19 direct / 26 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
-│   │   ├── chat/ — 4 direct / 106 total files
+│   │   ├── chat/ — 4 direct / 108 total files
 │   │   │   ├── artifacts/ — 5 direct / 5 total files
 │   │   │   ├── composer/ — 26 direct / 26 total files
-│   │   │   ├── conversation/ — 28 direct / 28 total files
-│   │   │   ├── hooks/ — 6 direct / 6 total files
+│   │   │   ├── conversation/ — 29 direct / 29 total files
+│   │   │   ├── hooks/ — 7 direct / 7 total files
 │   │   │   ├── markdown/ — 11 direct / 11 total files
 │   │   │   ├── mentions/ — 4 direct / 4 total files
 │   │   │   ├── styles/ — 9 direct / 9 total files
@@ -125,21 +125,21 @@ apps/desktop/renderer/ — 0 direct / 495 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 3 direct / 3 total files
-└── test/ — 133 files
-    └── unit/ — 133 files
+└── test/ — 134 files
+    └── unit/ — 134 files
         ├── app/ — 1 direct / 9 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 2 direct / 2 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 3 direct / 3 total files
-        ├── features/ — 105 files
+        ├── features/ — 106 files
         │   ├── capabilities/ — 5 direct / 6 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 1 direct / 56 total files
+        │   ├── chat/ — 1 direct / 57 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 17 direct / 17 total files
         │   │   ├── conversation/ — 20 direct / 20 total files
-        │   │   ├── hooks/ — 2 direct / 2 total files
+        │   │   ├── hooks/ — 3 direct / 3 total files
         │   │   ├── markdown/ — 6 direct / 6 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
         │   │   └── tool-runs/ — 3 direct / 3 total files
@@ -177,9 +177,9 @@ packages/contracts/ — 4 direct / 63 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 444 total files
-├── src/ — 2 direct / 258 total files
-│   ├── adapters/ — 107 files
+packages/desktop-runtime/ — 4 direct / 448 total files
+├── src/ — 2 direct / 261 total files
+│   ├── adapters/ — 110 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -191,7 +191,7 @@ packages/desktop-runtime/ — 4 direct / 444 total files
 │   │   ├── plugin/ — 3 direct / 3 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 2 direct / 2 total files
-│   │   ├── store/ — 19 direct / 19 total files
+│   │   ├── store/ — 22 direct / 22 total files
 │   │   ├── tool/ — 14 direct / 33 total files
 │   │   │   └── pc-local/ — 19 direct / 19 total files
 │   │   └── workspace/ — 6 direct / 6 total files
@@ -210,8 +210,8 @@ packages/desktop-runtime/ — 4 direct / 444 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 2 direct / 2 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 182 files
-    ├── adapters/ — 54 files
+└── test/ — 183 files
+    ├── adapters/ — 55 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
     │   ├── debug/ — 1 direct / 1 total files
@@ -221,7 +221,7 @@ packages/desktop-runtime/ — 4 direct / 444 total files
     │   ├── plugin/ — 3 direct / 3 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
-    │   ├── store/ — 12 direct / 12 total files
+    │   ├── store/ — 13 direct / 13 total files
     │   ├── tool/ — 11 direct / 15 total files
     │   │   └── pc-local/ — 4 direct / 4 total files
     │   └── workspace/ — 6 direct / 6 total files

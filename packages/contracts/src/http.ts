@@ -56,6 +56,8 @@ import type {
   MessagePatch,
   QueuedTurnInputEditRelease,
   QueuedTurnInputEditReleaseResponse,
+  RuntimeMessagePage,
+  RuntimeMessagePageQuery,
   QueuedTurnInputEditSession,
   QueuedTurnInputPatch,
   QueuedTurnInputResponse,
@@ -109,6 +111,7 @@ export type DesktopRuntimeClient = {
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
   listThreads(query?: ThreadQuery): Promise<ThreadList>;
   getThread(threadId: string): Promise<RuntimeThread>;
+  listThreadMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;

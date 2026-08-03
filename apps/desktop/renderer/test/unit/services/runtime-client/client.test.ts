@@ -57,6 +57,19 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('requests a bounded thread snapshot and cursor-based older messages', async () => {
+    const request = installRuntimeBridge(() => ({ messages: [], nextBefore: null, total: 0 }));
+    const client = createDesktopRuntimeClient();
+
+    await client.getThread('thread / 1');
+    await client.listThreadMessages('thread / 1', { before: 40, limit: 20 });
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      { path: '/v1/threads/thread%20%2F%201?messageLimit=160' },
+      { path: '/v1/threads/thread%20%2F%201/messages?before=40&limit=20' },
+    ]);
+  });
+
   it('routes queued turn input operations through encoded thread and input paths', async () => {
     const request = installRuntimeBridge(() => ({ accepted: true }));
     const client = createDesktopRuntimeClient();

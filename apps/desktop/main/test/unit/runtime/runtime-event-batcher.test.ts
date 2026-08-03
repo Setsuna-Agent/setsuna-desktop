@@ -55,6 +55,36 @@ describe('runtime event batcher', () => {
     vi.runAllTimers();
     expect(deliver).toHaveBeenCalledOnce();
   });
+
+  it('flushes pending events before delivering an atomic resync snapshot', () => {
+    vi.useFakeTimers();
+    const deliver = vi.fn();
+    const batcher = new RuntimeEventBatcher(deliver, { flushIntervalMs: 16 });
+    const thread = {
+      id: 'thread_1',
+      title: 'Resynced',
+      createdAt: '2026-08-03T00:00:00.000Z',
+      updatedAt: '2026-08-03T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      messages: [],
+      lastSeq: 9,
+    };
+
+    batcher.enqueue(messageDelta(1, 'pending'));
+    batcher.resync({
+      reason: 'retention_gap',
+      requestedSinceSeq: 1,
+      retainedFromSeq: 5,
+      thread,
+    });
+
+    expect(deliver.mock.calls).toEqual([
+      [{ events: [expect.objectContaining({ seq: 1 })] }],
+      [{ events: [], resync: expect.objectContaining({ thread }) }],
+    ]);
+  });
 });
 
 function messageDelta(seq: number, text: string): RuntimeEvent {

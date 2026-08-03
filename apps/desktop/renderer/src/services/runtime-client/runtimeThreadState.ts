@@ -41,6 +41,7 @@ export function applyCurrentThreadEvent(
 
 export type CurrentThreadEventBatchProjection = {
   acceptedEvents: RuntimeEvent[];
+  resynced: boolean;
   thread: RuntimeThread | null;
 };
 
@@ -51,13 +52,22 @@ export function applyCurrentThreadEventBatch(
 ): CurrentThreadEventBatchProjection {
   const acceptedEvents: RuntimeEvent[] = [];
   let projected = thread;
+  let resynced = false;
+  if (
+    batch.resync
+    && projected?.id === batch.resync.thread.id
+    && batch.resync.thread.lastSeq >= projected.lastSeq
+  ) {
+    projected = batch.resync.thread;
+    resynced = true;
+  }
   for (const event of batch.events) {
     const next = applyCurrentThreadEvent(projected, event);
     if (next === projected) continue;
     projected = next;
     acceptedEvents.push(event);
   }
-  return { acceptedEvents, thread: projected };
+  return { acceptedEvents, resynced, thread: projected };
 }
 
 /**

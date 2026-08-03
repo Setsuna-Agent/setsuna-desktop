@@ -4,6 +4,7 @@ import {
   type RuntimeDataMigrationReadiness,
   type RuntimeAttachmentUploadInput,
   type RuntimeEvent,
+  type RuntimeEventResync,
   type RuntimeRequestInput,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
@@ -363,7 +364,15 @@ export class RuntimeHost {
         const chunks = buffer.split('\n\n');
         buffer = chunks.pop() ?? '';
         for (const chunk of chunks) {
-          const event = parseSseChunk(chunk);
+          const frame = parseSseChunk(chunk);
+          if (frame?.resync) {
+            if (frame.resync.thread.id !== threadId) continue;
+            if (webContents.isDestroyed()) return lastSeq;
+            this.subscriptions.get(subscriptionId)?.batcher.resync(frame.resync);
+            lastSeq = frame.resync.thread.lastSeq;
+            continue;
+          }
+          const event = frame?.event;
           if (event && (lastSeq === undefined || event.seq > lastSeq)) {
             if (webContents.isDestroyed()) return lastSeq;
             this.subscriptions.get(subscriptionId)?.batcher.enqueue(event);
@@ -483,11 +492,21 @@ function normalizeRuntimePath(value: string): string {
   return value;
 }
 
-function parseSseChunk(chunk: string): RuntimeEvent | null {
-  // 当前 runtime 只消费 data 行；event/id/retry 等 SSE 元数据暂不参与线程投影。
+type RuntimeSseFrame =
+  | { event: RuntimeEvent; resync?: never }
+  | { event?: never; resync: RuntimeEventResync };
+
+function parseSseChunk(chunk: string): RuntimeSseFrame | null {
+  const eventName = chunk.split('\n').find((line) => line.startsWith('event: '))?.slice(7);
   const dataLine = chunk.split('\n').find((line) => line.startsWith('data: '));
   if (!dataLine) return null;
-  return JSON.parse(dataLine.slice(6)) as RuntimeEvent;
+  if (eventName === 'runtime-resync') {
+    return { resync: JSON.parse(dataLine.slice(6)) as RuntimeEventResync };
+  }
+  if (eventName === 'runtime-event') {
+    return { event: JSON.parse(dataLine.slice(6)) as RuntimeEvent };
+  }
+  return null;
 }
 
 function sendRuntimeEventPayload(
