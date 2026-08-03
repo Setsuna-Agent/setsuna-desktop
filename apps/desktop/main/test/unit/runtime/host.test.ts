@@ -1,4 +1,7 @@
-import { RUNTIME_PROCESS_SHUTDOWN_MESSAGE } from '@setsuna-desktop/contracts';
+import {
+  RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
+  type RuntimeEvent,
+} from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
@@ -15,6 +18,7 @@ import {
   stopRuntimeChild,
   type RuntimeChildProcess,
 } from '../../../src/runtime/host.js';
+import { runtimeSseFaultResponse } from '../../support/runtime-sse-faults.js';
 
 describe('runtime host packaging paths', () => {
   afterEach(() => {
@@ -154,6 +158,36 @@ describe('runtime host packaging paths', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain('sinceSeq=1');
     expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq)).toEqual([1, 2]);
+  });
+
+  it('deduplicates repeated SSE events split across arbitrary transport chunks', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => runtimeSseFaultResponse(
+      [runtimeEvent(1), runtimeEvent(2)],
+      {
+        chunkSizes: [1, 2, 5, 3, 8],
+        duplicateSequences: [1, 2],
+      },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const send = vi.fn();
+    const webContents = {
+      isDestroyed: () => false,
+      once: vi.fn(),
+      removeListener: vi.fn(),
+      send,
+    } as unknown as WebContents;
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+      sseRetryBaseDelayMs: 1,
+    });
+
+    const subscriptionId = host.subscribeEvents(webContents, { threadId: 'thread_1' });
+    await waitFor(() => send.mock.calls.some(([, payload]) => payload.event?.seq === 2));
+    host.unsubscribe(subscriptionId);
+
+    expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq))
+      .toEqual([1, 2]);
   });
 
   it('retries one idempotent runtime GET after a transport failure', async () => {
@@ -315,7 +349,7 @@ describe('runtime host packaging paths', () => {
   });
 });
 
-function runtimeEvent(seq: number) {
+function runtimeEvent(seq: number): RuntimeEvent {
   return {
     id: `event_${seq}`,
     seq,
@@ -324,14 +358,11 @@ function runtimeEvent(seq: number) {
     type: 'turn.started',
     createdAt: '2026-07-15T00:00:00.000Z',
     payload: { input: 'test', taskKind: 'regular' },
-  } as const;
+  };
 }
 
 function sseResponse(event: ReturnType<typeof runtimeEvent>): Response {
-  return new Response(`data: ${JSON.stringify(event)}\n\n`, {
-    status: 200,
-    headers: { 'Content-Type': 'text/event-stream' },
-  });
+  return runtimeSseFaultResponse([event]);
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {

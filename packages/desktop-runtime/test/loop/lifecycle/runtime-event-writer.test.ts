@@ -4,12 +4,107 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
+import { InMemoryRuntimeDebugTraceStore } from '../../../src/adapters/debug/in-memory-runtime-debug-trace-store.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
 import { RuntimeEventWriter } from '../../../src/loop/lifecycle/runtime-event-writer.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
 describe('runtime event writer', () => {
+  it('records per-turn stream coalescing metrics without adding transcript events', async () => {
+    const ids = new RandomIdGenerator();
+    const store = new JsonThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-metrics-test-')),
+      systemClock,
+      ids,
+    );
+    const debugTraces = new InMemoryRuntimeDebugTraceStore(systemClock, ids);
+    const writer = new RuntimeEventWriter(
+      store,
+      new InMemoryEventBus(),
+      10_000,
+      debugTraces,
+    );
+    const thread = await store.createThread({ title: 'Stream metrics' });
+    const createdAt = systemClock.now().toISOString();
+
+    await writer.append(thread.id, {
+      id: 'event_turn_started',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.started',
+      createdAt,
+      payload: { input: 'Measure this turn.' },
+    });
+    await writer.append(thread.id, {
+      id: 'event_message',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_1', turnId: 'turn_1', role: 'assistant', content: '', createdAt, status: 'streaming',
+        },
+      },
+    });
+    for (const [index, text] of ['a', 'b', 'c'].entries()) {
+      await writer.append(thread.id, {
+        id: `event_delta_${index}`,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        type: 'message.delta',
+        createdAt,
+        payload: { messageId: 'msg_1', text },
+      });
+    }
+    await writer.append(thread.id, {
+      id: 'event_message_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt,
+      payload: { messageId: 'msg_1', content: 'abc' },
+    });
+    await writer.append(thread.id, {
+      id: 'event_turn_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.completed',
+      createdAt,
+      payload: {},
+    });
+
+    expect(debugTraces.list(thread.id).traces).toEqual([
+      expect.objectContaining({
+        afterEventSeq: 6,
+        kind: 'stream.pipeline.summary',
+        turnId: 'turn_1',
+        payload: {
+          batchFlushCount: 1,
+          coalescedEventCount: 2,
+          maxBufferedEventCount: 1,
+          persistedEventCount: 5,
+          persistedStreamCharacters: 3,
+          persistedStreamDeltaCount: 1,
+          receivedEventCount: 7,
+          receivedMergeableEventCount: 3,
+          receivedStreamCharacters: 3,
+          receivedStreamDeltaCount: 3,
+          terminalEventType: 'turn.completed',
+        },
+      }),
+    ]);
+    expect((await store.listEvents(thread.id)).map((event) => event.type)).toEqual([
+      'thread.created',
+      'turn.started',
+      'message.created',
+      'message.delta',
+      'message.completed',
+      'turn.completed',
+    ]);
+  });
+
   it('coalesces stream deltas and flushes them before terminal events', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-test-')), systemClock, new RandomIdGenerator());
     const eventBus = new InMemoryEventBus();

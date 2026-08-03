@@ -1,6 +1,8 @@
 import type { RuntimeEvent } from '@setsuna-desktop/contracts';
 import type { EventBus } from '../../ports/event-bus.js';
+import type { RuntimeDebugTraceSink } from '../../ports/runtime-debug-trace.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
+import { RuntimeStreamMetricsCollector } from './runtime-stream-metrics.js';
 
 type PendingRuntimeEvent = Omit<RuntimeEvent, 'seq'>;
 
@@ -18,6 +20,7 @@ const DEFAULT_DELTA_FLUSH_MS = 25;
  */
 export class RuntimeEventWriter {
   private readonly batches = new Map<string, PendingBatch>();
+  private readonly streamMetrics: RuntimeStreamMetricsCollector;
   private readonly writeQueues = new Map<string, Promise<void>>();
   private fatalError: Error | null = null;
 
@@ -25,13 +28,18 @@ export class RuntimeEventWriter {
     private readonly threadStore: ThreadStore,
     private readonly eventBus: EventBus,
     private readonly flushIntervalMs = DEFAULT_DELTA_FLUSH_MS,
-  ) {}
+    debugTrace?: RuntimeDebugTraceSink,
+  ) {
+    this.streamMetrics = new RuntimeStreamMetricsCollector(debugTrace);
+  }
 
   async append(threadId: string, event: PendingRuntimeEvent): Promise<RuntimeEvent | null> {
     this.throwIfFailed();
     const mergeKey = mergeKeyForEvent(event);
+    this.streamMetrics.recordReceived(event, Boolean(mergeKey));
     if (mergeKey) {
-      this.enqueueDelta(threadId, mergeKey, event);
+      const buffered = this.enqueueDelta(threadId, mergeKey, event);
+      this.streamMetrics.recordBuffered(event, buffered.eventCount, buffered.coalesced);
       return null;
     }
     const pending = this.takeBatch(threadId);
@@ -58,7 +66,11 @@ export class RuntimeEventWriter {
     this.throwIfFailed();
   }
 
-  private enqueueDelta(threadId: string, mergeKey: string, event: PendingRuntimeEvent): void {
+  private enqueueDelta(
+    threadId: string,
+    mergeKey: string,
+    event: PendingRuntimeEvent,
+  ): { coalesced: boolean; eventCount: number } {
     let batch = this.batches.get(threadId);
     if (!batch) {
       const timer = setTimeout(() => {
@@ -71,9 +83,12 @@ export class RuntimeEventWriter {
       this.batches.set(threadId, batch);
     }
     const existingIndex = batch.mergeIndexes.get(mergeKey);
-    if (existingIndex !== undefined && mergeBufferedEvent(batch.events[existingIndex], event)) return;
+    if (existingIndex !== undefined && mergeBufferedEvent(batch.events[existingIndex], event)) {
+      return { coalesced: true, eventCount: batch.events.length };
+    }
     batch.mergeIndexes.set(mergeKey, batch.events.length);
     batch.events.push(clonePendingEvent(event));
+    return { coalesced: false, eventCount: batch.events.length };
   }
 
   private takeBatch(threadId: string): PendingRuntimeEvent[] {
@@ -100,12 +115,14 @@ export class RuntimeEventWriter {
   }
 
   private async persistAndPublish(events: PendingRuntimeEvent[]): Promise<void> {
+    this.streamMetrics.recordBatchFlushed(events);
     for (const event of events) await this.persistAndPublishOne(event);
   }
 
   private async persistAndPublishOne(event: PendingRuntimeEvent): Promise<RuntimeEvent> {
     const saved = await this.threadStore.appendEvent(event.threadId, event);
     this.eventBus.publish(saved);
+    this.streamMetrics.recordPersisted(saved);
     return saved;
   }
 

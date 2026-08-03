@@ -35,7 +35,7 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 86 total files
+apps/desktop/main/ — 0 direct / 87 total files
 ├── src/ — 2 direct / 54 total files
 │   ├── browser/ — 5 direct / 8 total files
 │   │   └── cdp/ — 3 direct / 3 total files
@@ -50,10 +50,11 @@ apps/desktop/main/ — 0 direct / 86 total files
 │   ├── window/ — 3 direct / 5 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 32 files
+└── test/ — 33 files
     ├── integration/ — 2 files
     │   ├── review/ — 1 direct / 1 total files
     │   └── terminal/ — 1 direct / 1 total files
+    ├── support/ — 1 direct / 1 total files
     └── unit/ — 1 direct / 30 total files
         ├── browser/ — 4 direct / 6 total files
         │   └── cdp/ — 2 direct / 2 total files
@@ -176,8 +177,8 @@ packages/contracts/ — 4 direct / 62 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 443 total files
-├── src/ — 2 direct / 257 total files
+packages/desktop-runtime/ — 4 direct / 444 total files
+├── src/ — 2 direct / 258 total files
 │   ├── adapters/ — 107 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
@@ -195,10 +196,10 @@ packages/desktop-runtime/ — 4 direct / 443 total files
 │   │   │   └── pc-local/ — 19 direct / 19 total files
 │   │   └── workspace/ — 6 direct / 6 total files
 │   ├── hooks/ — 3 direct / 3 total files
-│   ├── loop/ — 53 files
+│   ├── loop/ — 54 files
 │   │   ├── context/ — 13 direct / 13 total files
 │   │   ├── core/ — 14 direct / 14 total files
-│   │   ├── lifecycle/ — 13 direct / 13 total files
+│   │   ├── lifecycle/ — 14 direct / 14 total files
 │   │   ├── memory/ — 3 direct / 3 total files
 │   │   └── tools/ — 10 direct / 10 total files
 │   ├── ports/ — 31 direct / 31 total files

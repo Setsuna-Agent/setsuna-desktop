@@ -40,6 +40,35 @@ describe('applyCurrentThreadEvent', () => {
       title: 'Updated thread',
     });
   });
+
+  it.each([
+    {
+      name: 'a dropped delta',
+      delivery: [1, 2, 4, 5],
+    },
+    {
+      name: 'duplicates and a late reordered delta',
+      delivery: [1, 2, 2, 4, 3, 4, 5],
+    },
+  ])('uses canonical completion to repair $name', ({ delivery }) => {
+    const events = canonicalCompletionEvents();
+    let thread: RuntimeThread | null = threadWithMessages([]);
+
+    for (const sequence of delivery) {
+      thread = applyCurrentThreadEvent(thread, events.get(sequence)!);
+    }
+
+    expect(thread).toMatchObject({
+      lastSeq: 5,
+      messages: [
+        expect.objectContaining({
+          content: 'The complete answer.',
+          id: 'assistant_1',
+          status: 'complete',
+        }),
+      ],
+    });
+  });
 });
 
 describe('adoptOwnedThreadSnapshot', () => {
@@ -200,6 +229,62 @@ function threadUpdatedEvent(
     createdAt: '2026-06-29T00:00:01.000Z',
     payload: { title },
   };
+}
+
+function canonicalCompletionEvents(): Map<number, RuntimeEvent> {
+  const createdAt = '2026-06-29T00:00:01.000Z';
+  const base = {
+    threadId: 'thread_1',
+    turnId: 'turn_1',
+    createdAt,
+  };
+  const events: RuntimeEvent[] = [
+    {
+      ...base,
+      id: 'event_message_created',
+      seq: 1,
+      type: 'message.created',
+      payload: {
+        message: {
+          id: 'assistant_1',
+          turnId: 'turn_1',
+          role: 'assistant',
+          content: '',
+          createdAt,
+          status: 'streaming',
+        },
+      },
+    },
+    {
+      ...base,
+      id: 'event_delta_kept',
+      seq: 2,
+      type: 'message.delta',
+      payload: { messageId: 'assistant_1', text: 'The ' },
+    },
+    {
+      ...base,
+      id: 'event_delta_dropped',
+      seq: 3,
+      type: 'message.delta',
+      payload: { messageId: 'assistant_1', text: 'partial answer.' },
+    },
+    {
+      ...base,
+      id: 'event_message_completed',
+      seq: 4,
+      type: 'message.completed',
+      payload: { messageId: 'assistant_1', content: 'The complete answer.' },
+    },
+    {
+      ...base,
+      id: 'event_turn_completed',
+      seq: 5,
+      type: 'turn.completed',
+      payload: {},
+    },
+  ];
+  return new Map(events.map((event) => [event.seq, event]));
 }
 
 function threadWithMessages(messages: RuntimeThread['messages']): RuntimeThread {

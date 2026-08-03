@@ -194,7 +194,7 @@ Debug trace：
 - 使用独立 D# sequence。
 - 通过 `afterEventSeq` 锚定最近 E#。
 
-需要观察内部 replay/compaction 选择但不改变用户线程协议时，使用 debug trace，不新增 event variant。
+需要观察内部 replay/compaction 选择或 stream pipeline 合并率但不改变用户线程协议时，使用 debug trace，不新增 event variant。`stream.pipeline.summary` 在 turn 终态记录收到/持久化的事件与字符数、合并数、flush 次数和缓冲峰值，作为后续流式性能改动的同口径基线。
 
 ## 新增 event 的检查表
 

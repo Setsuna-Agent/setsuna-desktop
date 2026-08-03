@@ -11,6 +11,11 @@ type ProviderReplayTrace = Extract<
   { kind: 'provider.replay.decision' }
 >;
 
+type StreamPipelineTrace = Extract<
+  RuntimeDebugTraceEvent,
+  { kind: 'stream.pipeline.summary' }
+>;
+
 describe('conversation debug graph', () => {
   it('completes the input node without hiding the running turn state', () => {
     const graph = projectConversationDebugGraph([
@@ -67,6 +72,41 @@ describe('conversation debug graph', () => {
     expect(filtered.traces.map((trace) => trace.id)).toEqual(['debug_trace_1']);
     expect(filtered.events.every((event) => event.turnId === 'turn_1')).toBe(true);
     expect(filtered.turns).toHaveLength(1);
+  });
+
+  it('renders stream pipeline counters as a turn-scoped runtime usage trace', () => {
+    const eventGraph = projectConversationDebugGraph(runtimeEvents());
+    const trace: StreamPipelineTrace = {
+      afterEventSeq: 7,
+      createdAt: '2026-07-23T00:00:07.500Z',
+      id: 'stream_metrics_1',
+      kind: 'stream.pipeline.summary',
+      payload: {
+        batchFlushCount: 3,
+        coalescedEventCount: 8,
+        maxBufferedEventCount: 2,
+        persistedEventCount: 7,
+        persistedStreamCharacters: 120,
+        persistedStreamDeltaCount: 2,
+        receivedEventCount: 15,
+        receivedMergeableEventCount: 10,
+        receivedStreamCharacters: 120,
+        receivedStreamDeltaCount: 10,
+        terminalEventType: 'turn.completed',
+      },
+      seq: 1,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+    };
+
+    const graph = mergeConversationDebugTraces(eventGraph, [trace]);
+
+    expect(graph.nodes.find((node) => node.traceIds.includes(trace.id))).toMatchObject({
+      kind: 'usage',
+      lane: 'runtime',
+      status: 'success',
+      summary: '15 → 7 events · 80% coalesced · 120 → 120 chars · buffer peak 2',
+    });
   });
 
   it('groups provider replay decisions by model request while retaining raw traces', () => {
