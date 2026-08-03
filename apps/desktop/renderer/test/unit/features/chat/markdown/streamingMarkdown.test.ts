@@ -130,6 +130,34 @@ describe('streamingMarkdown', () => {
     expect(footnotes.blocks[1]?.content).toContain('[^note]: partial');
   });
 
+  it('keeps shortcut references mutable until their definitions arrive', () => {
+    const beforeDefinitions = [
+      'Intro.',
+      '',
+      'See [docs] and ![diagram].',
+      '',
+      'More context.',
+    ].join('\n');
+    const pending = reconcileMarkdownRenderBlocks(null, beforeDefinitions, true);
+
+    expect(pending.blocks).toHaveLength(2);
+    expect(pending.blocks[0]).toEqual({ content: 'Intro.', mutable: false });
+    expect(pending.blocks[1]?.mutable).toBe(true);
+    expect(pending.blocks[1]?.content).toContain('See [docs] and ![diagram].');
+    expect(pending.blocks[1]?.content).toContain('More context.');
+    expect(pending.state?.tailSource).toContain('See [docs]');
+
+    const resolved = reconcileMarkdownRenderBlocks(
+      pending.state,
+      `${beforeDefinitions}\n\n[docs]: https://example.com/docs\n[diagram]: diagram.png`,
+      true,
+    );
+    expect(resolved.blocks).toHaveLength(2);
+    expect(resolved.blocks[1]?.mutable).toBe(true);
+    expect(resolved.blocks[1]?.content).toContain('[docs]: https://example.com/docs');
+    expect(resolved.blocks[1]?.content).toContain('[diagram]: diagram.png');
+  });
+
   it('drops synthetic tail repairs and performs a canonical parse on completion', () => {
     const streaming = reconcileMarkdownRenderBlocks(
       null,

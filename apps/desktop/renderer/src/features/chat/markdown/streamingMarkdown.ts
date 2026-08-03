@@ -23,7 +23,8 @@ type MarkdownTokenBoundary = {
   visible: boolean;
 };
 
-const documentScopedMarkdownPattern = /(?:\[\^[\w-]{1,200}\](?!:)|\[[^\]\n]+\]\[[^\]\n]*\]|^\s{0,3}\[[^\]\n]+\]:)/m;
+// Shortcut references have no syntactic suffix until a later definition arrives.
+const documentScopedMarkdownPattern = /(?:\[\^[\w-]{1,200}\](?!:)|!?\[[^\]\n]+\]\[[^\]\n]*\]|!?\[(?!\^)[^\]\n]*[^\s\]\n][^\]\n]*\](?!\s*(?:\(|\[|:))|^\s{0,3}\[[^\]\n]+\]:)/m;
 
 /**
  * 按解析器确定的块边界拆分 Markdown 文档。引用式链接和脚注保留在同一棵树中，
