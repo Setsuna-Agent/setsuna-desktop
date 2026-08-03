@@ -19,6 +19,7 @@ const terminalEventTypes = new Set<RuntimeEvent['type']>([
   'turn.cancelled',
   'turn.completed',
 ]);
+const TERMINAL_TURN_TOMBSTONE_LIMIT = 1_024;
 
 /**
  * Collects bounded, memory-only counters for the event writer fast path. The
@@ -27,6 +28,7 @@ const terminalEventTypes = new Set<RuntimeEvent['type']>([
  */
 export class RuntimeStreamMetricsCollector {
   private readonly metricsByTurn = new Map<string, TurnStreamMetrics>();
+  private readonly terminalTurns = new Set<string>();
 
   constructor(private readonly debugTrace?: RuntimeDebugTraceSink) {}
 
@@ -78,18 +80,30 @@ export class RuntimeStreamMetricsCollector {
       turnId: event.turnId,
     });
     const key = turnMetricsKey(event);
-    if (key) this.metricsByTurn.delete(key);
+    if (key) {
+      this.metricsByTurn.delete(key);
+      this.rememberTerminalTurn(key);
+    }
   }
 
   private metricsFor(event: PendingRuntimeEvent): TurnStreamMetrics | null {
     const key = turnMetricsKey(event);
-    if (!key) return null;
+    // Cancellation is persisted before providers and tools necessarily unwind. Keep a
+    // bounded tombstone so their late callbacks cannot reopen a finalized metrics bucket.
+    if (!key || this.terminalTurns.has(key)) return null;
     let metrics = this.metricsByTurn.get(key);
     if (!metrics) {
       metrics = emptyTurnStreamMetrics();
       this.metricsByTurn.set(key, metrics);
     }
     return metrics;
+  }
+
+  private rememberTerminalTurn(key: string): void {
+    this.terminalTurns.add(key);
+    if (this.terminalTurns.size <= TERMINAL_TURN_TOMBSTONE_LIMIT) return;
+    const oldest = this.terminalTurns.values().next().value;
+    if (oldest !== undefined) this.terminalTurns.delete(oldest);
   }
 }
 

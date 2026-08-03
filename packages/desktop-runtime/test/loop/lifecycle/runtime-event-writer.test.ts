@@ -105,6 +105,80 @@ describe('runtime event writer', () => {
     ]);
   });
 
+  it('does not reopen finalized metrics for late events after cancellation', async () => {
+    const ids = new RandomIdGenerator();
+    const store = new JsonThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-cancelled-metrics-test-')),
+      systemClock,
+      ids,
+    );
+    const debugTraces = new InMemoryRuntimeDebugTraceStore(systemClock, ids);
+    const writer = new RuntimeEventWriter(store, new InMemoryEventBus(), 10_000, debugTraces);
+    const thread = await store.createThread({ title: 'Cancelled stream metrics' });
+    const createdAt = systemClock.now().toISOString();
+
+    await writer.append(thread.id, {
+      id: 'event_turn_started',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.started',
+      createdAt,
+      payload: { input: 'Cancel this turn.' },
+    });
+    await writer.append(thread.id, {
+      id: 'event_message',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_1', turnId: 'turn_1', role: 'assistant', content: '', createdAt, status: 'streaming',
+        },
+      },
+    });
+    await writer.append(thread.id, {
+      id: 'event_turn_cancelled',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.cancelled',
+      createdAt,
+      payload: { reason: 'User cancelled.' },
+    });
+
+    // A producer can still invoke its callbacks while unwinding the abort signal.
+    await writer.append(thread.id, {
+      id: 'event_late_delta',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.delta',
+      createdAt,
+      payload: { messageId: 'msg_1', text: 'late' },
+    });
+    await writer.flushThread(thread.id);
+    await writer.append(thread.id, {
+      id: 'event_late_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.completed',
+      createdAt,
+      payload: {},
+    });
+
+    expect(debugTraces.list(thread.id).traces).toEqual([
+      expect.objectContaining({
+        afterEventSeq: 4,
+        kind: 'stream.pipeline.summary',
+        turnId: 'turn_1',
+        payload: expect.objectContaining({
+          persistedEventCount: 3,
+          receivedEventCount: 3,
+          terminalEventType: 'turn.cancelled',
+        }),
+      }),
+    ]);
+  });
+
   it('coalesces stream deltas and flushes them before terminal events', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-test-')), systemClock, new RandomIdGenerator());
     const eventBus = new InMemoryEventBus();
