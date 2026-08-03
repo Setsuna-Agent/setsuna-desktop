@@ -14,9 +14,11 @@ export function listIndexedMessages(
   threadId: string,
   query: RuntimeMessagePageQuery,
 ): RuntimeMessagePage {
+  // Pagination cursors use the persisted message-index domain, which also contains
+  // model-only messages excluded from the transcript summary's message_count.
   const total = numberColumn(database.prepare(`
-    SELECT message_count FROM threads WHERE id = ?
-  `).get(threadId), 'message_count');
+    SELECT COUNT(*) AS count FROM thread_messages WHERE thread_id = ?
+  `).get(threadId), 'count');
   const before = normalizedMessageBefore(query.before, total);
   const rows = database.prepare(`
     SELECT message_index, message_json

@@ -218,6 +218,27 @@ describe('sqlite thread store', () => {
     await store.close();
   });
 
+  it('derives message cursors from indexed rows when model-only messages are present', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    const thread = await store.createThread({ title: 'Paged SQLite model context' });
+    await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_visible_1', 'first'));
+    await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_model', 'hidden', {
+      visibility: 'model',
+    }));
+    await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_visible_2', 'latest'));
+
+    await expect(store.getThread(thread.id)).resolves.toMatchObject({ messageCount: 2 });
+    const latest = await store.listMessages(thread.id, { limit: 2 });
+    expect(latest).toMatchObject({ nextBefore: 1, total: 3 });
+    expect(latest.messages.map((message) => message.id)).toEqual(['msg_model', 'msg_visible_2']);
+    const oldest = await store.listMessages(thread.id, { before: latest.nextBefore!, limit: 2 });
+    expect(oldest).toMatchObject({ nextBefore: null, total: 3 });
+    expect(oldest.messages.map((message) => message.id)).toEqual(['msg_visible_1']);
+    await store.close();
+  });
+
   it('archives checkpointed stream deltas and reports a hot-replay retention gap', async () => {
     const dataDir = await temporaryDirectory();
     const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), {
