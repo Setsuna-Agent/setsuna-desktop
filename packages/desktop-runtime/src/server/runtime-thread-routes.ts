@@ -122,9 +122,11 @@ export async function handleRuntimeThreadRequest(
 
   const threadMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)$/u);
   if (threadMatch && request.method === 'GET') {
-    const thread = await runtime.threadStore.getThread(
-      decodeRuntimeId(threadMatch[1], 'Thread id'),
-    );
+    const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
+    const messageLimit = optionalNumber(url.searchParams.get('messageLimit'));
+    const thread = messageLimit === undefined
+      ? await runtime.threadStore.getThread(threadId)
+      : await runtime.threadStore.getThreadPage(threadId, { limit: messageLimit });
     if (!thread) {
       sendJson(response, 404, { error: 'Thread not found' });
       return true;
@@ -183,6 +185,23 @@ export async function handleRuntimeThreadRequest(
   }
 
   const messagesMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/messages$/u);
+  if (messagesMatch && request.method === 'GET') {
+    const threadId = decodeRuntimeId(messagesMatch[1], 'Thread id');
+    const thread = await runtime.threadStore.getThreadPage(threadId, {
+      before: optionalNumber(url.searchParams.get('before')),
+      limit: optionalNumber(url.searchParams.get('limit')),
+    });
+    if (!thread) {
+      sendJson(response, 404, { error: 'Thread not found' });
+      return true;
+    }
+    sendJson(response, 200, {
+      messages: thread.messages,
+      nextBefore: thread.messagePage?.nextBefore ?? null,
+      total: thread.messagePage?.total ?? thread.messages.length,
+    });
+    return true;
+  }
   if (messagesMatch && request.method === 'DELETE') {
     const threadId = decodeRuntimeId(messagesMatch[1], 'Thread id');
     const input = await readBody<MessageDeleteInput>(request);

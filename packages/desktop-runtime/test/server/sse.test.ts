@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type { RuntimeEvent, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { ServerResponse } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../src/adapters/event/in-memory-event-bus.js';
@@ -37,6 +37,36 @@ describe('runtime SSE', () => {
 
     expect(output()).toContain('"method":"item/commandExecution/requestApproval"');
   });
+
+  it('sends a snapshot resync when the requested runtime sequence was pruned', async () => {
+    const chunks: string[] = [];
+    const response = writableResponse(chunks);
+    const thread = threadSnapshot(12);
+    const runtime = {
+      threadStore: {
+        replayEvents: async () => ({
+          events: [],
+          latestSeq: 12,
+          retainedFromSeq: 9,
+          requiresResync: true,
+        }),
+        getThread: async () => thread,
+      },
+      eventBus: { subscribe: () => () => undefined },
+    } as unknown as RuntimeFactory;
+
+    await handleSse({
+      format: 'runtime',
+      response,
+      threadId: thread.id,
+      sinceSeq: 3,
+      runtime,
+    });
+
+    expect(chunks.join('')).toContain('event: runtime-resync');
+    expect(chunks.join('')).toContain('"requestedSinceSeq":3');
+    expect(chunks.join('')).toContain('"lastSeq":12');
+  });
 });
 
 async function renderSweSse(
@@ -45,15 +75,7 @@ async function renderSweSse(
   options: { eventBus?: InMemoryEventBus; beforeHistoryReturns?: () => void } = {},
 ): Promise<{ output: () => string }> {
   const chunks: string[] = [];
-  const response = {
-    writeHead: () => response,
-    write: (chunk: string) => {
-      chunks.push(chunk);
-      return true;
-    },
-    on: () => response,
-    destroy: () => response,
-  } as unknown as ServerResponse;
+  const response = writableResponse(chunks);
   const runtime = {
     threadStore: {
       listEvents: async () => {
@@ -74,6 +96,35 @@ async function renderSweSse(
   });
 
   return { output: () => chunks.join('') };
+}
+
+function writableResponse(chunks: string[]): ServerResponse {
+  const response = {
+    writeHead: () => response,
+    write: (chunk: string) => {
+      chunks.push(chunk);
+      return true;
+    },
+    on: () => response,
+    off: () => response,
+    once: () => response,
+    destroy: () => response,
+  } as unknown as ServerResponse;
+  return response;
+}
+
+function threadSnapshot(lastSeq: number): RuntimeThread {
+  return {
+    id: 'thread_1',
+    title: 'Thread',
+    createdAt: '2026-06-27T00:00:00.000Z',
+    updatedAt: '2026-06-27T00:00:00.000Z',
+    archived: false,
+    messageCount: 0,
+    lastMessagePreview: '',
+    messages: [],
+    lastSeq,
+  };
 }
 
 function commandApprovalRequestedEvent(): RuntimeEvent {

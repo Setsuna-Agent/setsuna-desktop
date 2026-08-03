@@ -4,6 +4,8 @@ import type {
   MessagePatch,
   RuntimeEvent,
   RuntimeMessage,
+  RuntimeMessagePage,
+  RuntimeMessagePageQuery,
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
@@ -84,6 +86,29 @@ export class JsonThreadStore implements ThreadStore {
     if (!recovered) return null;
     this.threadCache.set(safeThreadId, recovered);
     return cloneThread(recovered);
+  }
+
+  async listMessages(
+    threadId: string,
+    query: RuntimeMessagePageQuery = {},
+  ): Promise<RuntimeMessagePage> {
+    const thread = await this.getThread(threadId);
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+    return messagePageFromThread(thread, query);
+  }
+
+  async getThreadPage(
+    threadId: string,
+    query: RuntimeMessagePageQuery = {},
+  ): Promise<RuntimeThread | null> {
+    const thread = await this.getThread(threadId);
+    if (!thread) return null;
+    const page = messagePageFromThread(thread, query);
+    return {
+      ...thread,
+      messages: page.messages,
+      messagePage: { nextBefore: page.nextBefore, total: page.total },
+    };
   }
 
   /** 启动时重放尚未建立检查点的事件，并重建摘要索引。 */
@@ -354,6 +379,20 @@ export class JsonThreadStore implements ThreadStore {
     return (await this.readEventLog(threadId, false)).filter((event) => event.seq > sinceSeq);
   }
 
+  async replayEvents(threadId: string, sinceSeq = 0) {
+    const [events, thread] = await Promise.all([
+      this.listEvents(threadId, sinceSeq),
+      this.getThread(threadId),
+    ]);
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+    return {
+      events,
+      latestSeq: thread.lastSeq,
+      retainedFromSeq: 1,
+      requiresResync: false,
+    };
+  }
+
   private async requireThread(threadId: string): Promise<RuntimeThread> {
     const thread = await this.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
@@ -463,6 +502,30 @@ export class JsonThreadStore implements ThreadStore {
     return events;
   }
 
+}
+
+function normalizedMessageLimit(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return 100;
+  return Math.min(200, Math.max(1, Math.floor(value)));
+}
+
+function normalizedMessageBefore(value: number | undefined, total: number): number {
+  if (value === undefined || !Number.isFinite(value)) return total;
+  return Math.min(total, Math.max(0, Math.floor(value)));
+}
+
+function messagePageFromThread(
+  thread: RuntimeThread,
+  query: RuntimeMessagePageQuery,
+): RuntimeMessagePage {
+  const total = thread.messages.length;
+  const end = Math.min(total, normalizedMessageBefore(query.before, total));
+  const start = Math.max(0, end - normalizedMessageLimit(query.limit));
+  return {
+    messages: structuredClone(thread.messages.slice(start, end)),
+    nextBefore: start > 0 ? start : null,
+    total,
+  };
 }
 
 

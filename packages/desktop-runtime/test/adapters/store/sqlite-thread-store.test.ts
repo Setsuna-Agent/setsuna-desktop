@@ -64,7 +64,40 @@ describe('sqlite thread store', () => {
     expect(wal?.size ?? 0).toBe(0);
   });
 
-  it('keeps provider envelopes across reopen without changing SQLite schema version 1', async () => {
+  it('migrates an existing v1 database and backfills its message and event indexes', async () => {
+    const dataDir = await temporaryDirectory();
+    const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await first.recover();
+    const thread = await first.createThread({ title: 'Schema migration' });
+    await first.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_v1', 'from v1'));
+    await first.close();
+
+    const legacy = new DatabaseSync(path.join(dataDir, 'threads.sqlite'));
+    legacy.exec(`
+      DROP TABLE runtime_event_archives;
+      DROP TABLE runtime_event_ids;
+      DROP TABLE thread_messages;
+      ALTER TABLE threads DROP COLUMN events_archived_through_seq;
+      ALTER TABLE threads DROP COLUMN message_index_seq;
+      PRAGMA user_version = 1;
+    `);
+    legacy.close();
+
+    const migrated = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await migrated.recover();
+    await expect(migrated.getThread(thread.id)).resolves.toMatchObject({
+      messages: [expect.objectContaining({ id: 'msg_v1', content: 'from v1' })],
+    });
+    await expect(migrated.listMessages(thread.id, { limit: 1 })).resolves.toMatchObject({
+      messages: [expect.objectContaining({ id: 'msg_v1' })],
+      nextBefore: null,
+      total: 1,
+    });
+    await expect(migrated.listEvents(thread.id)).resolves.toHaveLength(2);
+    await migrated.close();
+  });
+
+  it('keeps provider envelopes across reopen with SQLite schema version 2', async () => {
     const dataDir = await temporaryDirectory();
     const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await first.recover();
@@ -117,7 +150,7 @@ describe('sqlite thread store', () => {
     await first.close();
 
     const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
-    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 1 });
+    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 2 });
     database.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
@@ -158,6 +191,120 @@ describe('sqlite thread store', () => {
     expect(events.map((event) => event.seq)).toEqual(Array.from({ length: 25 }, (_, index) => index + 1));
     expect(new Set(events.map((event) => event.id)).size).toBe(events.length);
     await store.close();
+  });
+
+  it('pages indexed messages newest-first without loading duplicate boundaries', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    const thread = await store.createThread({ title: 'Paged SQLite chat' });
+    for (let index = 1; index <= 5; index += 1) {
+      await store.appendEvent(
+        thread.id,
+        messageCreatedEvent(thread.id, `msg_${index}`, `message ${index}`),
+      );
+    }
+
+    const latestThread = await store.getThreadPage(thread.id, { limit: 2 });
+    expect(latestThread?.messagePage).toEqual({ nextBefore: 3, total: 5 });
+    expect(latestThread?.messages.map((message) => message.id)).toEqual(['msg_4', 'msg_5']);
+    const latest = await store.listMessages(thread.id, { limit: 2 });
+    const middle = await store.listMessages(thread.id, { before: latest.nextBefore!, limit: 2 });
+    expect(middle).toMatchObject({ nextBefore: 1, total: 5 });
+    expect(middle.messages.map((message) => message.id)).toEqual(['msg_2', 'msg_3']);
+    const oldest = await store.listMessages(thread.id, { before: middle.nextBefore!, limit: 2 });
+    expect(oldest.nextBefore).toBeNull();
+    expect(oldest.messages.map((message) => message.id)).toEqual(['msg_1']);
+    await store.close();
+  });
+
+  it('derives message cursors from indexed rows when model-only messages are present', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    const thread = await store.createThread({ title: 'Paged SQLite model context' });
+    await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_visible_1', 'first'));
+    await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_model', 'hidden', {
+      visibility: 'model',
+    }));
+    await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_visible_2', 'latest'));
+
+    await expect(store.getThread(thread.id)).resolves.toMatchObject({ messageCount: 2 });
+    const latest = await store.listMessages(thread.id, { limit: 2 });
+    expect(latest).toMatchObject({ nextBefore: 1, total: 3 });
+    expect(latest.messages.map((message) => message.id)).toEqual(['msg_model', 'msg_visible_2']);
+    const oldest = await store.listMessages(thread.id, { before: latest.nextBefore!, limit: 2 });
+    expect(oldest).toMatchObject({ nextBefore: null, total: 3 });
+    expect(oldest.messages.map((message) => message.id)).toEqual(['msg_visible_1']);
+    await store.close();
+  });
+
+  it('archives checkpointed stream deltas and reports a hot-replay retention gap', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), {
+      eventRetentionLimit: 2,
+    });
+    await store.recover();
+    const thread = await store.createThread({ title: 'Bounded event history' });
+    await store.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_stream', '', {
+      role: 'assistant',
+      status: 'streaming',
+    }));
+    for (const [index, text] of ['a', 'b'].entries()) {
+      await store.appendEvent(thread.id, {
+        id: `event_delta_${index}`,
+        threadId: thread.id,
+        type: 'message.delta',
+        createdAt: systemClock.now().toISOString(),
+        payload: { messageId: 'msg_stream', text },
+      });
+    }
+    await store.appendEvent(thread.id, {
+      id: 'event_message_completed',
+      threadId: thread.id,
+      type: 'message.completed',
+      createdAt: systemClock.now().toISOString(),
+      payload: { messageId: 'msg_stream', content: 'ab' },
+    });
+    await store.flush();
+
+    const replay = await store.replayEvents(thread.id, 0);
+    expect(replay).toMatchObject({ requiresResync: true, retainedFromSeq: 4, latestSeq: 5 });
+    expect(replay.events.map((event) => event.seq)).toEqual([4, 5]);
+    // Full logical replay remains lossless even though the SSE hot path is bounded.
+    const completeReplay = await store.listEvents(thread.id, 0);
+    expect(completeReplay.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(completeReplay[2]).toMatchObject({
+      id: 'event_delta_0',
+      payload: { messageId: 'msg_stream', text: 'a' },
+    });
+    await expect(store.appendEvent(thread.id, {
+      id: 'event_delta_0',
+      threadId: thread.id,
+      type: 'thread.updated',
+      createdAt: systemClock.now().toISOString(),
+      payload: { title: 'Duplicate archived event id' },
+    })).rejects.toThrow();
+    await store.close();
+
+    const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator(), {
+      eventRetentionLimit: 2,
+    });
+    await reopened.recover();
+    await expect(reopened.listEvents(thread.id, 0)).resolves.toHaveLength(5);
+    await reopened.close();
+
+    const inspected = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
+    expect(inspected.prepare(`
+      SELECT COUNT(*) AS count FROM runtime_event_archives WHERE thread_id = ?
+    `).get(thread.id)).toMatchObject({ count: 1 });
+    expect(inspected.prepare(`
+      SELECT COUNT(*) AS count FROM runtime_events WHERE thread_id = ? AND seq = 3
+    `).get(thread.id)).toMatchObject({ count: 0 });
+    expect(inspected.prepare(`
+      SELECT COUNT(*) AS count FROM runtime_event_ids WHERE thread_id = ?
+    `).get(thread.id)).toMatchObject({ count: 5 });
+    inspected.close();
   });
 
   it('rejects a gap in persisted SQLite events instead of returning a partial history', async () => {

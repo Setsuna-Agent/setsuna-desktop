@@ -257,7 +257,9 @@ export function useRuntimeThreadState({
       (batch) => {
         const current = currentThreadRef.current;
         const projection = applyCurrentThreadEventBatch(current, batch);
-        if (projection.thread === current || !projection.acceptedEvents.length) return;
+        if (!projection.resynced && (
+          projection.thread === current || !projection.acceptedEvents.length
+        )) return;
 
         currentThreadRef.current = projection.thread;
         currentThreadLastSeqRef.current = projection.thread?.lastSeq
@@ -265,6 +267,16 @@ export function useRuntimeThreadState({
           ?? currentThreadLastSeqRef.current;
         // The bridge batch owns one React projection commit, independent of its token count.
         setCurrentThreadState(projection.thread);
+
+        if (projection.resynced) {
+          setActivityEvents([]);
+          terminalTurnIdsRef.current.clear();
+          setActiveTurnId(activeTurnIdFromThreadSnapshot(
+            projection.thread,
+            terminalTurnIdsRef.current,
+          ));
+          refreshThreadsSoon(true);
+        }
 
         const activityBatch = projection.acceptedEvents.filter(isActivityEvent);
         if (activityBatch.length) {

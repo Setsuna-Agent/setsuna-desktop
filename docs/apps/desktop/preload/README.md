@@ -33,6 +33,8 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 6. 返回的 cleanup 同时移除 listener 和关闭远端订阅。
 
 这避免快速切线程时旧 SSE 事件落到新线程，也保留 main 建立的渲染批次边界。
+Batch 可以携带 `resync` snapshot；preload 保持原子边界转发，renderer 负责 owner/sequence
+校验并在后续增量事件前采用该 snapshot。
 
 ## 事件 API
 

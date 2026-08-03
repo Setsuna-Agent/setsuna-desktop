@@ -80,7 +80,8 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 - Runtime owner lease/fencing。
 - Thread summary。
 - Snapshot checkpoint。
-- Append-only `runtime_events`。
+- Durable lifecycle events + bounded transient `runtime_events` tail。
+- 独立 `thread_messages` 顺序索引，用于游标分页。
 
 关键字段/约束：
 
@@ -88,6 +89,7 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 - Event ID 唯一。
 - `threads.last_seq`。
 - Snapshot JSON + `snapshot_seq`。
+- `events_archived_through_seq` 与 `message_index_seq`。
 - `runtime_owner` lease。
 
 ### Append
@@ -98,12 +100,20 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 2. 分配 next seq。
 3. 写 event。
 4. 用 reducer 更新 snapshot。
-5. 按策略写 checkpoint/summary。
-6. Commit。
+5. Copy-on-write 同步受影响的 message index row。
+6. 按策略写 checkpoint/summary，并把已被 checkpoint 覆盖的旧 streaming delta 压缩归档。
+7. Commit。
 
 只有 commit 成功后 `RuntimeEventWriter` 才发布 SSE。
 
 高频 delta 可以延迟完整 checkpoint；恢复时重放 `snapshot_seq` 之后的短 tail。
+`message.delta`、reasoning/item/plan delta、tool preview/output delta 可以在检查点后从热表移入
+gzip archive；完整事件仍可无损重放，turn、approval、error、completion 等生命周期/审计事件
+持续留在热表。请求序号早于归档边界时，store 返回 retention gap，由 Thread SSE 发送
+canonical snapshot resync。
+
+消息分页使用稳定的 `message_index < before` 游标。追加消息只插入一行，普通 delta
+只更新 copy-on-write 改变的行；删除、截断和清空才重建索引。
 
 ### Recovery
 
@@ -111,6 +121,7 @@ Input 中未提供 key 表示不覆盖；不能把 UI 空输入误解释为删�
 - 拒绝第二个有效 runtime。
 - 读取 snapshot checkpoint。
 - 重放 event tail。
+- v1 → v2 原地增加 retention marker 和 message index；首次读取旧 thread 时回填索引。
 - 结算 stale streaming turn 由 server lifecycle 完成。
 
 ### Legacy JSON import
@@ -266,4 +277,3 @@ Search 实现独立为 `WorkspaceSearchEngine`，不把 ripgrep process 状态�
 - Contracts `thread-events.test.ts`
 
 SQLite 修改还要覆盖 owner fencing、checkpoint tail、legacy import 和 close/WAL。
-

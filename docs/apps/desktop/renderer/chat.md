@@ -133,6 +133,9 @@ Runtime 一轮可能包含：
 `ChatWorkspaceScroll` 负责滚动容器，而不是让每个消息组件自己滚动。
 
 SSE 丢帧或组件重挂载时依赖 thread snapshot 恢复；局部 streaming state 不能成为唯一数据源。
+Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 SQLite-backed
+`before` 游标按需向前加载，并在 prepend 后保持当前滚动锚点。已加载 transcript 仍使用
+尾部 display-item window 控制 DOM 数量；服务端分页与 renderer 窗口化是两层独立边界。
 
 ## Tool runs
 
