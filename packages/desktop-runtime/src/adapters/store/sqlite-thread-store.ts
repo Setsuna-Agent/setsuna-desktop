@@ -3,6 +3,8 @@ import type {
   MessageDeleteInput,
   MessagePatch,
   RuntimeEvent,
+  RuntimeMessagePage,
+  RuntimeMessagePageQuery,
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
@@ -20,6 +22,21 @@ import type { ThreadStore } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { readLegacyJsonThreads } from './legacy-json-thread-reader.js';
 import {
+  archiveTransientEvents,
+  readArchivedEvents,
+  readEventArchiveState,
+  readRawEvents,
+} from './sqlite-thread-event-archive.js';
+import {
+  insertRuntimeEvent,
+  insertThreadProjection,
+  listIndexedMessages,
+  replaceMessageIndex,
+  syncMessageIndex,
+  updateThreadProjection,
+} from './sqlite-thread-projections.js';
+import { ensureSqliteThreadSchema } from './sqlite-thread-schema.js';
+import {
   assertThreadSnapshot,
   cloneThread,
   eventCanUseDelayedCheckpoint,
@@ -32,15 +49,15 @@ import {
   toSummary,
 } from './thread-store-state.js';
 
-const SCHEMA_VERSION = 1;
 const DEFAULT_CHECKPOINT_DELAY_MS = 250;
+const DEFAULT_EVENT_RETENTION_LIMIT = 4_096;
 const DEFAULT_LEASE_TTL_MS = 15_000;
 const DEFAULT_LEASE_HEARTBEAT_MS = 5_000;
 const DEFAULT_OWNERSHIP_WAIT_MS = 20_000;
 const LEGACY_IMPORT_KEY = 'legacy_json_import';
-
 type SqliteThreadStoreOptions = {
   checkpointDelayMs?: number;
+  eventRetentionLimit?: number;
   leaseHeartbeatMs?: number;
   leaseTtlMs?: number;
   ownershipWaitMs?: number;
@@ -59,7 +76,8 @@ export class RuntimeStorageInUseError extends Error {
 }
 
 /**
- * SQLite-backed event store. Events remain the source of truth while snapshots are bounded replay checkpoints.
+ * SQLite-backed event store. Exact events remain the source of truth; old transient
+ * deltas move to compressed archives while snapshots bound the hot replay path.
  * A fenced runtime lease prevents a second process from projecting or executing the same thread concurrently.
  */
 export class SqliteThreadStore implements ThreadStore {
@@ -67,6 +85,7 @@ export class SqliteThreadStore implements ThreadStore {
 
   private readonly ownerId: string;
   private readonly checkpointDelayMs: number;
+  private readonly eventRetentionLimit: number;
   private readonly leaseHeartbeatMs: number;
   private readonly leaseTtlMs: number;
   private readonly ownershipWaitMs: number;
@@ -92,6 +111,10 @@ export class SqliteThreadStore implements ThreadStore {
     this.databasePath = path.join(dataDir, 'threads.sqlite');
     this.ownerId = options.ownerId ?? randomUUID();
     this.checkpointDelayMs = Math.max(0, options.checkpointDelayMs ?? DEFAULT_CHECKPOINT_DELAY_MS);
+    this.eventRetentionLimit = Math.max(
+      1,
+      Math.floor(options.eventRetentionLimit ?? DEFAULT_EVENT_RETENTION_LIMIT),
+    );
     this.leaseTtlMs = Math.max(1_000, options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS);
     this.leaseHeartbeatMs = Math.max(
       250,
@@ -179,6 +202,38 @@ export class SqliteThreadStore implements ThreadStore {
     return loaded ? cloneThread(loaded) : null;
   }
 
+  async listMessages(
+    threadId: string,
+    query: RuntimeMessagePageQuery = {},
+  ): Promise<RuntimeMessagePage> {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    await this.ensureReady();
+    this.assertOwnership();
+    // Loading once also repairs a v1 database whose message index has not been backfilled yet.
+    if (!this.threadCache.get(safeThreadId) && !this.loadThread(safeThreadId)) {
+      throw new Error(`Thread not found: ${safeThreadId}`);
+    }
+    return listIndexedMessages(this.requireDatabase(), safeThreadId, query);
+  }
+
+  async getThreadPage(
+    threadId: string,
+    query: RuntimeMessagePageQuery = {},
+  ): Promise<RuntimeThread | null> {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    await this.ensureReady();
+    this.assertOwnership();
+    const thread = this.threadCache.get(safeThreadId) ?? this.loadThread(safeThreadId);
+    if (!thread) return null;
+    const page = listIndexedMessages(this.requireDatabase(), safeThreadId, query);
+    // Overwrite the full message array before cloning so REST pagination also bounds clone cost.
+    return cloneThread({
+      ...thread,
+      messages: page.messages,
+      messagePage: { nextBefore: page.nextBefore, total: page.total },
+    });
+  }
+
   async createThread(input: CreateThreadInput = {}): Promise<RuntimeThread> {
     await this.ensureReady();
     const now = this.clock.now().toISOString();
@@ -209,8 +264,8 @@ export class SqliteThreadStore implements ThreadStore {
     const thread = applyRuntimeEventToThread(initial, event);
 
     this.withWriteTransaction(() => {
-      this.insertThread(thread, thread.lastSeq);
-      this.insertEvent(event);
+      insertThreadProjection(this.requireDatabase(), thread, thread.lastSeq);
+      insertRuntimeEvent(this.requireDatabase(), event);
     });
     this.threadCache.set(threadId, thread);
     return cloneThread(thread);
@@ -338,6 +393,25 @@ export class SqliteThreadStore implements ThreadStore {
     return this.readEvents(safeThreadId, Math.max(0, Math.floor(sinceSeq)));
   }
 
+  async replayEvents(threadId: string, sinceSeq = 0) {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    await this.ensureReady();
+    this.assertOwnership();
+    const requestedSinceSeq = Math.max(0, Math.floor(sinceSeq));
+    const state = readEventArchiveState(this.requireDatabase(), safeThreadId);
+    const retainedFromSeq = state.archivedThroughSeq + 1;
+    const requiresResync = requestedSinceSeq < retainedFromSeq - 1;
+    return {
+      events: this.readHotEvents(
+        safeThreadId,
+        requiresResync ? retainedFromSeq - 1 : requestedSinceSeq,
+      ),
+      latestSeq: state.lastSeq,
+      retainedFromSeq,
+      requiresResync,
+    };
+  }
+
   private async initialize(): Promise<void> {
     await mkdir(this.dataDir, { recursive: true });
     // Vite 5 predates node:sqlite. Resolve it from Node itself so both Vitest and the bundled CJS
@@ -356,7 +430,7 @@ export class SqliteThreadStore implements ThreadStore {
         PRAGMA foreign_keys = ON;
         PRAGMA temp_store = MEMORY;
       `);
-      this.ensureSchema();
+      ensureSqliteThreadSchema(database);
       await this.acquireOwnership();
       this.startLeaseHeartbeat();
       await this.importLegacyJsonStore();
@@ -367,71 +441,6 @@ export class SqliteThreadStore implements ThreadStore {
       this.database = null;
       throw error;
     }
-  }
-
-  private ensureSchema(): void {
-    const database = this.requireDatabase();
-    const versionRow = database.prepare('PRAGMA user_version').get();
-    const version = numberColumn(versionRow, 'user_version');
-    if (version > SCHEMA_VERSION) {
-      throw new Error(`SQLite thread store schema ${version} is newer than supported schema ${SCHEMA_VERSION}.`);
-    }
-    if (version === SCHEMA_VERSION) return;
-    if (version !== 0) throw new Error(`Unsupported SQLite thread store schema: ${version}`);
-
-    withTransaction(database, () => {
-      database.exec(`
-        CREATE TABLE threads (
-          id TEXT PRIMARY KEY,
-          active_turn_id TEXT,
-          forked_from_id TEXT,
-          parent_thread_id TEXT,
-          project_id TEXT,
-          title TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
-          memory_mode TEXT NOT NULL CHECK (memory_mode IN ('enabled', 'disabled', 'polluted')),
-          git_info_json TEXT,
-          goal_json TEXT,
-          message_count INTEGER NOT NULL,
-          last_message_preview TEXT NOT NULL,
-          snapshot_json TEXT NOT NULL,
-          snapshot_seq INTEGER NOT NULL CHECK (snapshot_seq >= 0),
-          last_seq INTEGER NOT NULL CHECK (last_seq >= snapshot_seq)
-        );
-
-        CREATE TABLE runtime_events (
-          thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-          seq INTEGER NOT NULL CHECK (seq > 0),
-          event_id TEXT NOT NULL,
-          type TEXT NOT NULL,
-          turn_id TEXT,
-          created_at TEXT NOT NULL,
-          event_json TEXT NOT NULL,
-          PRIMARY KEY (thread_id, seq),
-          UNIQUE (thread_id, event_id)
-        ) WITHOUT ROWID;
-
-        CREATE INDEX runtime_events_turn_idx ON runtime_events(thread_id, turn_id, seq);
-        CREATE INDEX threads_updated_idx ON threads(updated_at DESC);
-        CREATE INDEX threads_project_idx ON threads(project_id, archived, updated_at DESC);
-
-        CREATE TABLE store_metadata (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        ) WITHOUT ROWID;
-
-        CREATE TABLE runtime_owner (
-          slot INTEGER PRIMARY KEY CHECK (slot = 1),
-          owner_id TEXT NOT NULL,
-          fence_token INTEGER NOT NULL CHECK (fence_token > 0),
-          lease_expires_at INTEGER NOT NULL
-        );
-
-        PRAGMA user_version = 1;
-      `);
-    });
   }
 
   private async importLegacyJsonStore(): Promise<void> {
@@ -450,8 +459,8 @@ export class SqliteThreadStore implements ThreadStore {
     );
     this.withWriteTransaction(() => {
       for (const record of records) {
-        this.insertThread(record.thread, record.thread.lastSeq);
-        for (const event of record.events) this.insertEvent(event);
+        insertThreadProjection(this.requireDatabase(), record.thread, record.thread.lastSeq);
+        for (const event of record.events) insertRuntimeEvent(this.requireDatabase(), event);
       }
       database.prepare('INSERT INTO store_metadata(key, value) VALUES (?, ?)').run(
         LEGACY_IMPORT_KEY,
@@ -499,23 +508,28 @@ export class SqliteThreadStore implements ThreadStore {
       }
       event = { ...eventWithoutSeq, seq: persistedLastSeq + 1 } as RuntimeEvent;
       nextThread = applyRuntimeEventToThread(current, event);
-      this.insertEvent(event);
-      this.updatePersistedThread(nextThread, delayedCheckpoint ? null : nextThread.lastSeq, persistedLastSeq);
+      insertRuntimeEvent(this.requireDatabase(), event);
+      updateThreadProjection(
+        this.requireDatabase(),
+        nextThread,
+        delayedCheckpoint ? null : nextThread.lastSeq,
+        persistedLastSeq,
+      );
+      syncMessageIndex(this.requireDatabase(), current, nextThread);
     });
 
     if (!event || !nextThread) throw new Error(`Unable to persist runtime event for thread: ${threadId}`);
     this.threadCache.set(threadId, nextThread);
-    if (delayedCheckpoint) {
-      this.scheduleCheckpoint(threadId);
-    } else {
-      this.cancelCheckpoint(threadId);
-    }
+    if (!delayedCheckpoint) this.cancelCheckpoint(threadId);
+    // Archiving is maintenance, not part of the event commit. Keeping it on the
+    // checkpoint queue prevents compression work from delaying lifecycle publication.
+    this.scheduleCheckpoint(threadId);
     return event;
   }
 
   private loadThread(threadId: string): RuntimeThread | null {
     const row = this.requireDatabase().prepare(`
-      SELECT snapshot_json, snapshot_seq, last_seq
+      SELECT snapshot_json, snapshot_seq, last_seq, message_index_seq
       FROM threads
       WHERE id = ?
     `).get(threadId);
@@ -548,119 +562,95 @@ export class SqliteThreadStore implements ThreadStore {
     }
     thread = hydrateMessageCompletionTimesFromEvents(thread, events);
     this.threadCache.set(threadId, thread);
-    if (normalized.changed || events.length) this.persistCachedThreadUnlocked(threadId);
+    const indexedMessageCount = numberColumn(this.requireDatabase().prepare(`
+      SELECT COUNT(*) AS count FROM thread_messages WHERE thread_id = ?
+    `).get(threadId), 'count');
+    const messageIndexStale = numberColumn(row, 'message_index_seq') !== lastSeq
+      || indexedMessageCount !== thread.messages.length;
+    if (normalized.changed || events.length || messageIndexStale) {
+      this.repairLoadedThread(thread, messageIndexStale);
+    }
     return thread;
   }
 
   private readEvents(threadId: string, sinceSeq: number): RuntimeEvent[] {
-    const rows = this.requireDatabase().prepare(`
-      SELECT seq, event_id, event_json
-      FROM runtime_events
-      WHERE thread_id = ? AND seq > ?
-      ORDER BY seq ASC
-    `).all(threadId, sinceSeq);
+    const { lastSeq } = readEventArchiveState(this.requireDatabase(), threadId);
+    const events = [
+      ...readArchivedEvents(this.requireDatabase(), threadId, sinceSeq),
+      ...readRawEvents(this.requireDatabase(), threadId, sinceSeq),
+    ].sort((left, right) => left.seq - right.seq);
     let expectedSeq = sinceSeq + 1;
-    return rows.map((row) => {
-      const seq = numberColumn(row, 'seq');
-      if (seq !== expectedSeq) {
-        throw new Error(`Invalid SQLite runtime event sequence for ${threadId}: expected ${expectedSeq}, got ${seq}`);
-      }
-      let event: RuntimeEvent;
-      try {
-        event = JSON.parse(stringColumn(row, 'event_json')) as RuntimeEvent;
-      } catch (error) {
-        throw new Error(`Invalid SQLite runtime event JSON for ${threadId}:${seq}`, { cause: error });
-      }
-      if (
-        !event
-        || event.threadId !== threadId
-        || event.seq !== seq
-        || event.id !== stringColumn(row, 'event_id')
-      ) {
-        throw new Error(`Invalid SQLite runtime event record for ${threadId}:${seq}`);
+    for (const event of events) {
+      if (event.seq !== expectedSeq) {
+        throw new Error(`Invalid SQLite runtime event sequence for ${threadId}: expected ${expectedSeq}, got ${event.seq}`);
       }
       expectedSeq += 1;
-      return event;
+    }
+    if (sinceSeq < lastSeq && events.at(-1)?.seq !== lastSeq) {
+      throw new Error(`SQLite runtime event tail does not reach last_seq for ${threadId}.`);
+    }
+    return events;
+  }
+
+  private readHotEvents(threadId: string, sinceSeq: number): RuntimeEvent[] {
+    const { lastSeq } = readEventArchiveState(this.requireDatabase(), threadId);
+    const events = readRawEvents(this.requireDatabase(), threadId, sinceSeq);
+    let expectedSeq = sinceSeq + 1;
+    for (const event of events) {
+      if (event.seq !== expectedSeq) {
+        throw new Error(`Invalid SQLite hot runtime event sequence for ${threadId}: expected ${expectedSeq}, got ${event.seq}`);
+      }
+      expectedSeq += 1;
+    }
+    if (sinceSeq < lastSeq && events.at(-1)?.seq !== lastSeq) {
+      throw new Error(`SQLite hot runtime event tail does not reach last_seq for ${threadId}.`);
+    }
+    return events;
+  }
+
+  private repairLoadedThread(thread: RuntimeThread, rebuildMessageIndex: boolean): void {
+    this.withWriteTransaction(() => {
+      const summary = toSummary(thread);
+      const result = this.requireDatabase().prepare(`
+        UPDATE threads SET
+          active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
+          created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
+          message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?,
+          message_index_seq = ?
+        WHERE id = ? AND last_seq = ?
+      `).run(
+        summary.activeTurnId ?? null,
+        summary.forkedFromId ?? null,
+        summary.parentThreadId ?? null,
+        summary.projectId ?? null,
+        summary.title,
+        summary.createdAt,
+        summary.updatedAt,
+        summary.archived ? 1 : 0,
+        normalizeThreadMemoryMode(summary.memoryMode),
+        optionalJson(summary.gitInfo),
+        optionalJson(summary.goal),
+        summary.messageCount,
+        summary.lastMessagePreview,
+        JSON.stringify(thread),
+        thread.lastSeq,
+        thread.lastSeq,
+        thread.id,
+        thread.lastSeq,
+      );
+      if (changedRows(result) !== 1) throw new Error(`Unable to repair SQLite thread: ${thread.id}`);
+      if (rebuildMessageIndex) replaceMessageIndex(this.requireDatabase(), thread);
+      this.archiveTransientEvents(thread);
     });
   }
 
-  private insertThread(thread: RuntimeThread, snapshotSeq: number): void {
-    const summary = toSummary(thread);
-    this.requireDatabase().prepare(`
-      INSERT INTO threads(
-        id, active_turn_id, forked_from_id, parent_thread_id, project_id, title,
-        created_at, updated_at, archived, memory_mode, git_info_json, goal_json,
-        message_count, last_message_preview, snapshot_json, snapshot_seq, last_seq
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+  private archiveTransientEvents(thread: RuntimeThread): void {
+    archiveTransientEvents(
+      this.requireDatabase(),
       thread.id,
-      summary.activeTurnId ?? null,
-      summary.forkedFromId ?? null,
-      summary.parentThreadId ?? null,
-      summary.projectId ?? null,
-      summary.title,
-      summary.createdAt,
-      summary.updatedAt,
-      summary.archived ? 1 : 0,
-      normalizeThreadMemoryMode(summary.memoryMode),
-      optionalJson(summary.gitInfo),
-      optionalJson(summary.goal),
-      summary.messageCount,
-      summary.lastMessagePreview,
-      JSON.stringify(thread),
-      snapshotSeq,
       thread.lastSeq,
+      this.eventRetentionLimit,
     );
-  }
-
-  private insertEvent(event: RuntimeEvent): void {
-    this.requireDatabase().prepare(`
-      INSERT INTO runtime_events(thread_id, seq, event_id, type, turn_id, created_at, event_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      event.threadId,
-      event.seq,
-      event.id,
-      event.type,
-      event.turnId ?? null,
-      event.createdAt,
-      JSON.stringify(event),
-    );
-  }
-
-  private updatePersistedThread(thread: RuntimeThread, snapshotSeq: number | null, expectedLastSeq: number): void {
-    const summary = toSummary(thread);
-    const common = [
-      summary.activeTurnId ?? null,
-      summary.forkedFromId ?? null,
-      summary.parentThreadId ?? null,
-      summary.projectId ?? null,
-      summary.title,
-      summary.createdAt,
-      summary.updatedAt,
-      summary.archived ? 1 : 0,
-      normalizeThreadMemoryMode(summary.memoryMode),
-      optionalJson(summary.gitInfo),
-      optionalJson(summary.goal),
-      summary.messageCount,
-      summary.lastMessagePreview,
-    ] as const;
-    const result = snapshotSeq === null
-      ? this.requireDatabase().prepare(`
-          UPDATE threads SET
-            active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
-            created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
-            message_count = ?, last_message_preview = ?, last_seq = ?
-          WHERE id = ? AND last_seq = ?
-        `).run(...common, thread.lastSeq, thread.id, expectedLastSeq)
-      : this.requireDatabase().prepare(`
-          UPDATE threads SET
-            active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
-            created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
-            message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?, last_seq = ?
-          WHERE id = ? AND last_seq = ?
-        `).run(...common, JSON.stringify(thread), snapshotSeq, thread.lastSeq, thread.id, expectedLastSeq);
-    if (changedRows(result) !== 1) throw new Error(`Concurrent SQLite thread update rejected: ${thread.id}`);
   }
 
   private persistCachedThreadUnlocked(threadId: string): void {
@@ -695,6 +685,7 @@ export class SqliteThreadStore implements ThreadStore {
         thread.lastSeq,
       );
       if (changedRows(result) !== 1) throw new Error(`Unable to checkpoint SQLite thread: ${thread.id}`);
+      this.archiveTransientEvents(thread);
     });
   }
 

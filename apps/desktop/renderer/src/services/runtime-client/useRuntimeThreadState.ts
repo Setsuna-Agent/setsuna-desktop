@@ -28,7 +28,7 @@ import {
 import {
   activeTurnIdFromThreadSnapshot,
   adoptOwnedThreadSnapshot,
-  applyCurrentThreadEvent,
+  applyCurrentThreadEventBatch,
   isThreadContextCompacting,
   selectInitialThreadSummary,
   updateThreadApprovalRun,
@@ -254,49 +254,54 @@ export function useRuntimeThreadState({
     unsubscribeRef.current = client.subscribeEvents(
       currentThreadId,
       currentThreadLastSeqRef.current,
-      (event) => {
+      (batch) => {
         const current = currentThreadRef.current;
-        const projected = applyCurrentThreadEvent(current, event);
-        if (projected === current) return;
+        const projection = applyCurrentThreadEventBatch(current, batch);
+        if (!projection.resynced && (
+          projection.thread === current || !projection.acceptedEvents.length
+        )) return;
 
-        currentThreadRef.current = projected;
-        currentThreadLastSeqRef.current = projected?.lastSeq ?? event.seq;
-        // The ref is the synchronous SSE owner. Commit that exact projection so one
-        // accepted event cannot pay for the full thread reducer twice before render.
-        setCurrentThreadState(projected);
+        currentThreadRef.current = projection.thread;
+        currentThreadLastSeqRef.current = projection.thread?.lastSeq
+          ?? projection.acceptedEvents.at(-1)?.seq
+          ?? currentThreadLastSeqRef.current;
+        // The bridge batch owns one React projection commit, independent of its token count.
+        setCurrentThreadState(projection.thread);
 
-        if (isActivityEvent(event)) {
-          setActivityEvents((items) => [
-            event,
-            ...items.filter((item) => item.id !== event.id),
-          ].slice(0, 80));
+        if (projection.resynced) {
+          setActivityEvents([]);
+          terminalTurnIdsRef.current.clear();
+          setActiveTurnId(activeTurnIdFromThreadSnapshot(
+            projection.thread,
+            terminalTurnIdsRef.current,
+          ));
+          refreshThreadsSoon(true);
         }
-        const terminalTurnEvent = (
-          event.type === 'turn.completed'
-          || event.type === 'turn.cancelled'
-          || event.type === 'runtime.error'
-        );
+
+        const activityBatch = projection.acceptedEvents.filter(isActivityEvent);
+        if (activityBatch.length) {
+          setActivityEvents((items) => mergeRecentActivityEvents(items, activityBatch));
+        }
+        const terminalTurnEvent = projection.acceptedEvents.some(isTerminalTurnEvent);
         refreshThreadsSoon(terminalTurnEvent);
-        if (event.type === 'turn.started' && event.turnId) {
-          terminalTurnIdsRef.current.delete(event.turnId);
-          setActiveTurnId(event.turnId);
+        const activeTurnEvents = projection.acceptedEvents.filter((event) => (
+          event.type === 'turn.started' || isTerminalTurnEvent(event)
+        ));
+        for (const event of activeTurnEvents) {
+          if (!event.turnId) continue;
+          if (event.type === 'turn.started') terminalTurnIdsRef.current.delete(event.turnId);
+          else terminalTurnIdsRef.current.add(event.turnId);
         }
-        if (
-          (
-            event.type === 'turn.completed'
-            || event.type === 'turn.cancelled'
-            || event.type === 'runtime.error'
-          )
-          && event.turnId
-        ) {
-          // runtime.error 也视作 turn 终态，否则 polling/infer 可能继续显示停止按钮。
-          terminalTurnIdsRef.current.add(event.turnId);
-          setActiveTurnId((active) => (active === event.turnId ? null : active));
+        if (activeTurnEvents.length) {
+          setActiveTurnId((active) => activeTurnEvents.reduce<string | null>((next, event) => {
+            if (!event.turnId) return next;
+            if (event.type === 'turn.started') return event.turnId;
+            return next === event.turnId ? null : next;
+          }, active));
         }
-        if (event.type === 'runtime.error') {
-          onError(event.payload.message);
-        }
-        if (event.type === 'turn.completed') {
+        for (const event of projection.acceptedEvents) {
+          if (event.type === 'runtime.error') onError(event.payload.message);
+          if (event.type !== 'turn.completed') continue;
           const refreshUsage = Boolean(event.payload.usage);
           onTurnSettled({
             threadId: event.threadId,
@@ -577,6 +582,24 @@ export function useRuntimeThreadState({
     threads,
     updateCurrentThreadMemoryMode,
   };
+}
+
+function isTerminalTurnEvent(event: RuntimeEvent): boolean {
+  return event.type === 'turn.completed'
+    || event.type === 'turn.cancelled'
+    || event.type === 'runtime.error';
+}
+
+function mergeRecentActivityEvents(
+  current: RuntimeEvent[],
+  incoming: RuntimeEvent[],
+): RuntimeEvent[] {
+  const seen = new Set<string>();
+  return [...incoming].reverse().concat(current).filter((event) => {
+    if (seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  }).slice(0, 80);
 }
 
 function readPersistedActiveThreadId(): string | null {

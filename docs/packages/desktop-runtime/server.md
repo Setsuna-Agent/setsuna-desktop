@@ -131,12 +131,14 @@ Route 应：
 `sse.ts`：
 
 1. 解析 thread 和 `sinceSeq`。
-2. 从 store 回放历史事件。
-3. 订阅 `InMemoryEventBus`。
-4. 保持线程内顺序。
-5. Client close 时解除订阅。
+2. 先订阅 `InMemoryEventBus`，把回放期间的新事件放入有界队列。
+3. 从 store 回放热事件；若 `sinceSeq` 落在归档边界前，发送 `runtime-resync` snapshot。
+4. 按序排空队列，写缓压期间等待 `drain`；队列溢出时断开并让 main 从最后 seq 续订。
+5. 空闲连接发送 heartbeat。
+6. Client close 时解除订阅。
 
-需要避免回放与 live subscribe 之间的丢失窗口。Sequence 由持久化 store 决定，event bus 只负责通知。
+Sequence 由持久化 store 决定，event bus 只负责通知。SWE 映射仍从头读取包含压缩 archive
+在内的完整逻辑事件历史，避免改变兼容协议的 item 投影语义。
 
 SSE response 被 server 跟踪，shutdown 时先 end 长连接，避免 `server.close()` 永远等待。
 

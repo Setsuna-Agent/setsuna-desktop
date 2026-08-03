@@ -8,6 +8,7 @@ import {
   activeTurnIdFromThreadSnapshot,
   adoptOwnedThreadSnapshot,
   applyCurrentThreadEvent,
+  applyCurrentThreadEventBatch,
   inferActiveTurnIdFromThread,
   isThreadContextCompacting,
   selectInitialThreadSummary,
@@ -68,6 +69,48 @@ describe('applyCurrentThreadEvent', () => {
         }),
       ],
     });
+  });
+
+  it('accepts an ordered bridge batch once while filtering duplicates and late events', () => {
+    const events = canonicalCompletionEvents();
+    const initial = threadWithMessages([]);
+    const projection = applyCurrentThreadEventBatch(initial, {
+      events: [1, 2, 2, 4, 3].map((sequence) => events.get(sequence)!),
+    });
+
+    expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([1, 2, 4]);
+    expect(projection.thread).toMatchObject({
+      lastSeq: 4,
+      messages: [expect.objectContaining({
+        id: 'assistant_1',
+        content: 'The complete answer.',
+        status: 'complete',
+      })],
+    });
+    expect(initial.messages).toEqual([]);
+    expect(initial.lastSeq).toBe(0);
+  });
+
+  it('adopts a retained-history resync before projecting newer events', () => {
+    const initial = threadWithMessages([]);
+    initial.lastSeq = 2;
+    const resynced = threadWithMessages([]);
+    resynced.lastSeq = 8;
+    resynced.title = 'Canonical snapshot';
+
+    const projection = applyCurrentThreadEventBatch(initial, {
+      events: [threadUpdatedEvent(initial.id, 9, 'After resync')],
+      resync: {
+        reason: 'retention_gap',
+        requestedSinceSeq: 2,
+        retainedFromSeq: 6,
+        thread: resynced,
+      },
+    });
+
+    expect(projection.resynced).toBe(true);
+    expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([9]);
+    expect(projection.thread).toMatchObject({ lastSeq: 9, title: 'After resync' });
   });
 });
 

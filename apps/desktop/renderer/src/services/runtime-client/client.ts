@@ -21,7 +21,6 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeDebugTraceList,
-  RuntimeEvent,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
   RuntimeImageGenerationTestInput,
@@ -33,6 +32,8 @@ import type {
   RuntimeMcpServerStatusList,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolList,
+  RuntimeMessagePage,
+  RuntimeMessagePageQuery,
   RuntimeMemoryList,
   RuntimeMemoryPreview,
   RuntimeMemoryQuery,
@@ -105,7 +106,18 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<ThreadList>({ path: `/v1/threads${suffix}` });
     },
     getThread(threadId: string) {
-      return request<RuntimeThread>({ path: `/v1/threads/${encodeURIComponent(threadId)}` });
+      return request<RuntimeThread>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}?messageLimit=160`,
+      });
+    },
+    listThreadMessages(threadId: string, query: RuntimeMessagePageQuery = {}) {
+      const params = new URLSearchParams();
+      if (query.before !== undefined) params.set('before', String(query.before));
+      if (query.limit !== undefined) params.set('limit', String(query.limit));
+      const suffix = params.size ? `?${params}` : '';
+      return request<RuntimeMessagePage>({
+        path: `/v1/threads/${encodeURIComponent(threadId)}/messages${suffix}`,
+      });
     },
     createThread(input: CreateThreadInput = {}) {
       return request<RuntimeThread>({ path: '/v1/threads', method: 'POST', body: input });
@@ -254,8 +266,8 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         body: { target },
       });
     },
-    subscribeEvents(threadId: string, sinceSeq: number | undefined, onEvent: (event: RuntimeEvent) => void) {
-      return bridge.startSse(threadId, sinceSeq, onEvent);
+    subscribeEvents(threadId, sinceSeq, onBatch) {
+      return bridge.startSse(threadId, sinceSeq, onBatch);
     },
     listDebugTraces(threadId, afterSeq = 0) {
       const normalizedAfterSeq = Math.max(0, Math.floor(afterSeq));

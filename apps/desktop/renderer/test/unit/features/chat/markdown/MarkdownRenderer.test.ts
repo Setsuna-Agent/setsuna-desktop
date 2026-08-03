@@ -58,6 +58,18 @@ describe('MarkdownRenderer', () => {
     expect(html).not.toContain('chat-markdown__empty-tail');
   });
 
+  it('keeps reference definitions with their mutable uses while preserving the stable prefix', () => {
+    const html = renderMarkdown(
+      'Stable intro.\n\nRead [the docs][docs].\n\n[docs]: https://example.com/docs',
+      true,
+    );
+
+    expect(html.match(/data-markdown-block="stable"/g)).toHaveLength(1);
+    expect(html.match(/data-markdown-block="mutable"/g)).toHaveLength(1);
+    expect(html).toContain('href="https://example.com/docs"');
+    expect(html).toContain('>the docs<');
+  });
+
   it('renders inline and display math with KaTeX', () => {
     const html = renderMarkdown('Inline $x^2$\n\n$$\n\\lim_{x \\to 0} \\frac{\\sin 3x}{\\sin 5x}\n$$');
     const compactMathHtml = renderMarkdown('$$\\lim_{x \\to 0} \\frac{\\sin 3x}{\\sin 5x}$$');

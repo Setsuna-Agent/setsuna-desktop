@@ -15,7 +15,7 @@ import type {
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
 } from './config.js';
-import type { RuntimeEvent } from './events.js';
+import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeDebugTraceList } from './debug-traces.js';
 import type {
   RuntimeMcpResourceReadResult,
@@ -56,6 +56,8 @@ import type {
   MessagePatch,
   QueuedTurnInputEditRelease,
   QueuedTurnInputEditReleaseResponse,
+  RuntimeMessagePage,
+  RuntimeMessagePageQuery,
   QueuedTurnInputEditSession,
   QueuedTurnInputPatch,
   QueuedTurnInputResponse,
@@ -109,6 +111,7 @@ export type DesktopRuntimeClient = {
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
   listThreads(query?: ThreadQuery): Promise<ThreadList>;
   getThread(threadId: string): Promise<RuntimeThread>;
+  listThreadMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;
@@ -135,7 +138,7 @@ export type DesktopRuntimeClient = {
   subscribeEvents(
     threadId: string,
     sinceSeq: number | undefined,
-    onEvent: (event: RuntimeEvent) => void,
+    onBatch: (batch: RuntimeEventBatch) => void,
   ): () => void;
   listDebugTraces(threadId: string, afterSeq?: number): Promise<RuntimeDebugTraceList>;
   getConfig(): Promise<RuntimeConfigState>;
