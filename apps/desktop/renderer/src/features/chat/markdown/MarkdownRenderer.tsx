@@ -1,7 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { splitThinkingContent } from '../conversation/chatThinkingContent.js';
 import { MarkdownVirtualBlock, shouldVirtualizeMarkdownBlocks } from './MarkdownVirtualBlock.js';
-import { createMarkdownRenderBlocks } from './streamingMarkdown.js';
+import {
+  reconcileMarkdownRenderBlocks,
+  type StreamingMarkdownRenderState,
+} from './streamingMarkdown.js';
 
 export function MarkdownRenderer({ content, streaming }: { content: string; streaming: boolean }) {
   const visibleSegments = useMemo(() => {
@@ -13,34 +16,55 @@ export function MarkdownRenderer({ content, streaming }: { content: string; stre
         && (segment.type === 'markdown' || !segment.closed);
       return [{
         activeStreaming,
-        blocks: createMarkdownRenderBlocks(segment.content, activeStreaming),
+        content: segment.content,
         key: `markdown-${index}`,
       }];
-    }).map((segment) => ({
-      ...segment,
-      virtualized: shouldVirtualizeMarkdownBlocks(segment.blocks),
-    }));
+    });
   }, [content, streaming]);
 
   return (
     <>
       {visibleSegments.map((segment) => (
-        <div
-          className="chat-markdown"
+        <MarkdownSegment
+          content={segment.content}
           key={segment.key}
-        >
-          {/* 解析器块位置仅会追加；使用索引键可在可变尾部内容增长时保持其挂载。 */}
-          {segment.blocks.map((block, index) => (
-            <MarkdownVirtualBlock
-              content={block.content}
-              forceRender={block.mutable}
-              key={`${segment.key}-block-${index}`}
-              mutable={block.mutable}
-              virtualized={segment.virtualized}
-            />
-          ))}
-        </div>
+          segmentKey={segment.key}
+          streaming={segment.activeStreaming}
+        />
       ))}
     </>
+  );
+}
+
+function MarkdownSegment({
+  content,
+  segmentKey,
+  streaming,
+}: {
+  content: string;
+  segmentKey: string;
+  streaming: boolean;
+}) {
+  const renderStateRef = useRef<StreamingMarkdownRenderState | null>(null);
+  const blocks = useMemo(() => {
+    const result = reconcileMarkdownRenderBlocks(renderStateRef.current, content, streaming);
+    renderStateRef.current = result.state;
+    return result.blocks;
+  }, [content, streaming]);
+  const virtualized = shouldVirtualizeMarkdownBlocks(blocks);
+
+  return (
+    <div className="chat-markdown">
+      {/* Stable positions only append while streaming, preserving mounted expensive blocks. */}
+      {blocks.map((block, index) => (
+        <MarkdownVirtualBlock
+          content={block.content}
+          forceRender={block.mutable}
+          key={`${segmentKey}-block-${index}`}
+          mutable={block.mutable}
+          virtualized={virtualized}
+        />
+      ))}
+    </div>
   );
 }

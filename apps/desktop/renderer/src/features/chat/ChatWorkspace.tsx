@@ -34,8 +34,8 @@ import {
   ActiveWorkPlaceholder,
   DeleteSelectionBar,
   MessageItem,
-  TranscriptWindowDivider,
 } from './conversation/ChatMessageItem.js';
+import { TranscriptWindowDivider } from './conversation/TranscriptWindowDivider.js';
 import {
   ChatScrollOverlay,
   conversationOverviewContextLabel,
@@ -64,6 +64,7 @@ import {
   shouldShiftConversationOverviewContent,
 } from './conversation/conversationOverviewLayout.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
+import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 
 type StarterSuggestion = {
@@ -200,16 +201,22 @@ export function ChatWorkspace({
   variant?: 'main' | 'side';
 }) {
   const { t } = useI18n();
-  const messages = currentThread?.messages ?? [];
+  const messageHistory = useThreadMessageHistory(client, currentThread);
+  const messages = messageHistory.messages;
+  const historyThread = useMemo(
+    () => currentThread ? { ...currentThread, messages } : null,
+    [currentThread, messages],
+  );
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const overviewRef = useRef<HTMLDivElement | null>(null);
-  const contextUsage = useMemo(() => contextTokenUsageFromThread(currentThread, activeModelContextWindowTokens(config)), [config, currentThread]);
+  const historyScrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const contextUsage = useMemo(() => contextTokenUsageFromThread(historyThread, activeModelContextWindowTokens(config)), [config, historyThread]);
   const displayedThreadUsage = useMemo(() => chatThreadUsageForDisplay(threadUsage, currentThread), [currentThread, threadUsage]);
   const pluginUsesByTurnId = useMemo(
-    () => runtimePluginUsesByTurn(currentThread, skills, plugins),
-    [currentThread, plugins, skills],
+    () => runtimePluginUsesByTurn(historyThread, skills, plugins),
+    [historyThread, plugins, skills],
   );
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);
@@ -257,6 +264,7 @@ export function ChatWorkspace({
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
+    historyScrollAnchorRef.current = null;
     setShowFullHistory(false);
     setExpandedWorkHistoryItemIds(new Set());
   }, [activeProject?.id, currentThread?.id]);
@@ -323,6 +331,26 @@ export function ChatWorkspace({
     },
     [onSend, scrollToBottom],
   );
+  const showEarlierMessages = useCallback(() => {
+    const scrollNode = scrollRef.current;
+    if (scrollNode) {
+      historyScrollAnchorRef.current = {
+        height: scrollNode.scrollHeight,
+        top: scrollNode.scrollTop,
+      };
+    }
+    setShowFullHistory(true);
+    if (messageHistory.hasMore) void messageHistory.loadOlder();
+  }, [messageHistory.hasMore, messageHistory.loadOlder, scrollRef]);
+
+  useLayoutEffect(() => {
+    const anchor = historyScrollAnchorRef.current;
+    const scrollNode = scrollRef.current;
+    if (!anchor || !scrollNode) return;
+    // Prepending a page must not move the message currently under the user's cursor.
+    scrollNode.scrollTop = anchor.top + (scrollNode.scrollHeight - anchor.height);
+    if (!messageHistory.loading) historyScrollAnchorRef.current = null;
+  }, [messageHistory.loading, messages.length, scrollRef, showFullHistory]);
 
   useLayoutEffect(() => {
     setEditingMessageId(null);
@@ -538,7 +566,13 @@ export function ChatWorkspace({
                 ) : (
                   <StreamingScrollPinProvider key={currentThread?.id ?? 'no-thread'}>
                     <div className="chat-bubble-list" ref={listRef}>
-                      {renderWindow.hiddenItemCount ? <TranscriptWindowDivider hiddenMessageCount={renderWindow.hiddenMessageCount} onShowAll={() => setShowFullHistory(true)} /> : null}
+                      {renderWindow.hiddenItemCount || messageHistory.hasMore ? (
+                        <TranscriptWindowDivider
+                          hiddenMessageCount={renderWindow.hiddenMessageCount + messageHistory.remainingCount}
+                          loading={messageHistory.loading}
+                          onShowAll={showEarlierMessages}
+                        />
+                      ) : null}
                       {renderedDisplayItems.map((item) => (
                         <Fragment key={chatDisplayItemRenderKey(item)}>
                           <MessageItem
@@ -628,7 +662,9 @@ export function ChatWorkspace({
               </button>
             </div>
           ) : null}
-          {actionError ? <div className="chat-action-error">{actionError}</div> : null}
+          {actionError || messageHistory.error ? (
+            <div className="chat-action-error">{actionError ?? messageHistory.error}</div>
+          ) : null}
           {showEmptyStarter ? null : deleteMode ? (
             <DeleteSelectionBar
               allChecked={allDeleteSelected}

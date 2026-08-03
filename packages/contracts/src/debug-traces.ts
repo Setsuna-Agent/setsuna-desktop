@@ -5,7 +5,8 @@ export type RuntimeDebugTraceKind =
   | 'context.compaction.native'
   | 'context.compaction.portable'
   | 'model.history.normalized'
-  | 'provider.replay.decision';
+  | 'provider.replay.decision'
+  | 'stream.pipeline.summary';
 
 export type RuntimeToolCallWireRewrite = {
   assistantMessageId: string;
@@ -54,12 +55,31 @@ export type RuntimeCompactionDebugPayload = {
   summaryCharacters?: number;
 };
 
+/**
+ * Per-turn counters for the high-frequency runtime event path. These diagnostics
+ * stay memory-only and describe transport work without becoming transcript state.
+ */
+export type RuntimeStreamPipelineDebugPayload = {
+  batchFlushCount: number;
+  coalescedEventCount: number;
+  maxBufferedEventCount: number;
+  persistedEventCount: number;
+  persistedStreamCharacters: number;
+  persistedStreamDeltaCount: number;
+  receivedEventCount: number;
+  receivedMergeableEventCount: number;
+  receivedStreamCharacters: number;
+  receivedStreamDeltaCount: number;
+  terminalEventType: 'runtime.error' | 'turn.cancelled' | 'turn.completed';
+};
+
 export type RuntimeDebugTracePayloadByKind = {
   'context.compaction.completed': RuntimeCompactionDebugPayload;
   'context.compaction.native': RuntimeCompactionDebugPayload;
   'context.compaction.portable': RuntimeCompactionDebugPayload;
   'model.history.normalized': RuntimeHistoryNormalizationDebugPayload;
   'provider.replay.decision': RuntimeProviderReplayDebugPayload;
+  'stream.pipeline.summary': RuntimeStreamPipelineDebugPayload;
 };
 
 export type RuntimeDebugTraceEvent = {

@@ -4,6 +4,7 @@ import type {
   RuntimeEvent,
   RuntimeHistoryNormalizationDebugPayload,
   RuntimeProviderReplayDebugPayload,
+  RuntimeStreamPipelineDebugPayload,
 } from '@setsuna-desktop/contracts';
 import {
   conversationDebugEdgesForNodes,
@@ -49,6 +50,8 @@ export function runtimeDebugTraceSummary(trace: RuntimeDebugTraceEvent): string 
       return historyNormalizationSummary(trace.payload);
     case 'provider.replay.decision':
       return providerReplaySummary(trace.payload);
+    case 'stream.pipeline.summary':
+      return streamPipelineSummary(trace.payload);
     case 'context.compaction.portable':
     case 'context.compaction.native':
     case 'context.compaction.completed':
@@ -198,6 +201,9 @@ function traceNodeIdentity(trace: RuntimeDebugTraceEvent): {
   if (trace.kind === 'provider.replay.decision') {
     return { kind: 'provider-replay', lane: 'provider' };
   }
+  if (trace.kind === 'stream.pipeline.summary') {
+    return { kind: 'usage', lane: 'runtime' };
+  }
   return {
     kind: 'compaction',
     lane: trace.kind === 'context.compaction.completed' ? 'runtime' : 'provider',
@@ -221,6 +227,11 @@ function traceStatus(trace: RuntimeDebugTraceEvent): ConversationDebugNodeStatus
       || trace.payload.reason === 'semantic_mismatch'
       ? 'warning'
       : 'neutral';
+  }
+  if (trace.kind === 'stream.pipeline.summary') {
+    if (trace.payload.terminalEventType === 'runtime.error') return 'error';
+    if (trace.payload.terminalEventType === 'turn.cancelled') return 'cancelled';
+    return 'success';
   }
   if (trace.payload.outcome === 'started') return 'running';
   if (trace.payload.outcome === 'success') return 'success';
@@ -257,6 +268,18 @@ function historyNormalizationSummary(payload: RuntimeHistoryNormalizationDebugPa
 
 function providerReplaySummary(payload: RuntimeProviderReplayDebugPayload): string {
   return `${payload.strategy} · ${payload.reason} · ${payload.nativeItemCount} native items`;
+}
+
+function streamPipelineSummary(payload: RuntimeStreamPipelineDebugPayload): string {
+  const mergePercent = payload.receivedMergeableEventCount
+    ? Math.round((payload.coalescedEventCount / payload.receivedMergeableEventCount) * 100)
+    : 0;
+  return [
+    `${payload.receivedEventCount} → ${payload.persistedEventCount} events`,
+    `${mergePercent}% coalesced`,
+    `${payload.receivedStreamCharacters} → ${payload.persistedStreamCharacters} chars`,
+    `buffer peak ${payload.maxBufferedEventCount}`,
+  ].join(' · ');
 }
 
 function providerReplayGroupSummary(traces: ProviderReplayDebugTrace[]): string {

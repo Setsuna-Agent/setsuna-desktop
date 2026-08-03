@@ -147,6 +147,19 @@ describe('runtime server REST threads and attachments', () => {
       expect(list.threads.map((thread: { id: string }) => thread.id).sort()).toEqual([created.id, projectThread.id].sort());
       expect(globalList.threads).toMatchObject([{ id: created.id }]);
       expect(projectList.threads).toMatchObject([{ id: projectThread.id }]);
+
+      const paged = await harness.runtimeFetch(
+        `/v1/threads/${encodeURIComponent(created.id)}?messageLimit=2`,
+      );
+      const messages = await harness.runtimeFetch(
+        `/v1/threads/${encodeURIComponent(created.id)}/messages?limit=2`,
+      );
+      expect(paged).toMatchObject({
+        id: created.id,
+        messages: [],
+        messagePage: { nextBefore: null, total: 0 },
+      });
+      expect(messages).toEqual({ messages: [], nextBefore: null, total: 0 });
     });
   
   it('lists and idempotently terminates background shell services for a conversation', async () => {

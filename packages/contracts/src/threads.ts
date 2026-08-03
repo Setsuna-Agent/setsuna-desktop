@@ -315,11 +315,27 @@ export type RuntimeThread = RuntimeThreadSummary & {
   activeTurnId?: string | null;
   contextCompaction?: RuntimeThreadContextCompactionState;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
+  /** Present only on paged REST snapshots; persisted runtime snapshots omit it. */
+  messagePage?: RuntimeThreadMessagePageInfo;
   pendingHookRuns?: RuntimeHookRun[];
   queuedTurnInputs?: RuntimeQueuedTurnInput[];
   turns?: RuntimeThreadTurn[];
   messages: RuntimeMessage[];
   lastSeq: number;
+};
+
+export type RuntimeThreadMessagePageInfo = {
+  nextBefore: number | null;
+  total: number;
+};
+
+export type RuntimeMessagePageQuery = {
+  before?: number;
+  limit?: number;
+};
+
+export type RuntimeMessagePage = RuntimeThreadMessagePageInfo & {
+  messages: RuntimeMessage[];
 };
 
 export type ThreadQuery = {

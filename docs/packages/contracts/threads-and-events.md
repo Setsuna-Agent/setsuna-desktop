@@ -109,6 +109,9 @@ Tool run 是 UI/审计投影，包含：
 - Writer 先持久化，再发布 event bus。
 - Renderer 只应用 `seq > lastSeq`。
 - SSE reconnect 使用 `sinceSeq`。
+- `RuntimeEventBatch.resync` 先原子替换 canonical thread snapshot，再应用同 batch 后续事件。
+- 旧 streaming delta 可以在 checkpoint 后移入压缩 archive；完整事件仍可重放，
+  `retainedFromSeq` 前的热路径续订必须走 snapshot resync。
 - Snapshot checkpoint 的 `snapshotSeq` 不能超过已持久化 event tail。
 
 Sequence 是恢复顺序，不是跨线程全局时间。
@@ -123,8 +126,9 @@ Sequence 是恢复顺序，不是跨线程全局时间。
 - 删除/截断后不留下悬挂 projection。
 - Queue 消费等多字段变化在一个 event 投影中原子完成。
 - 旧 snapshot 缺少 additive 字段时给稳定 default。
+- 使用 copy-on-write：只复制事件实际修改的数组和记录，未变化 message/turn/domain 保留引用身份。
 
-`thread-event-projection.ts` 放细分 helper，避免主 switch 继续膨胀。
+`thread-event-projection.ts` 放细分 helper，`event-projections/thread-event-draft.ts` 管理 copy-on-write 所有权，避免主 switch 继续膨胀或把可变引用写回输入 snapshot。
 
 ## Queued turn input
 
@@ -194,7 +198,7 @@ Debug trace：
 - 使用独立 D# sequence。
 - 通过 `afterEventSeq` 锚定最近 E#。
 
-需要观察内部 replay/compaction 选择但不改变用户线程协议时，使用 debug trace，不新增 event variant。
+需要观察内部 replay/compaction 选择或 stream pipeline 合并率但不改变用户线程协议时，使用 debug trace，不新增 event variant。`stream.pipeline.summary` 在 turn 终态记录收到/持久化的事件与字符数、合并数、flush 次数和缓冲峰值，作为后续流式性能改动的同口径基线。
 
 ## 新增 event 的检查表
 

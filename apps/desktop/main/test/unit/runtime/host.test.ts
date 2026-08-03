@@ -1,4 +1,7 @@
-import { RUNTIME_PROCESS_SHUTDOWN_MESSAGE } from '@setsuna-desktop/contracts';
+import {
+  RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
+  type RuntimeEvent,
+} from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
@@ -15,6 +18,7 @@ import {
   stopRuntimeChild,
   type RuntimeChildProcess,
 } from '../../../src/runtime/host.js';
+import { runtimeSseFaultResponse } from '../../support/runtime-sse-faults.js';
 
 describe('runtime host packaging paths', () => {
   afterEach(() => {
@@ -148,12 +152,84 @@ describe('runtime host packaging paths', () => {
     });
 
     const subscriptionId = host.subscribeEvents(webContents, { threadId: 'thread_1' });
-    await waitFor(() => send.mock.calls.some(([, payload]) => payload.event?.seq === 2));
+    await waitFor(() => deliveredRuntimeEvents(send).some((event) => event.seq === 2));
     host.unsubscribe(subscriptionId);
 
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain('sinceSeq=1');
-    expect(send.mock.calls.filter(([, payload]) => payload.event).map(([, payload]) => payload.event.seq)).toEqual([1, 2]);
+    expect(deliveredRuntimeEvents(send).map((event) => event.seq)).toEqual([1, 2]);
+  });
+
+  it('deduplicates repeated SSE events split across arbitrary transport chunks', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => runtimeSseFaultResponse(
+      [runtimeEvent(1), runtimeEvent(2)],
+      {
+        chunkSizes: [1, 2, 5, 3, 8],
+        duplicateSequences: [1, 2],
+      },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const send = vi.fn();
+    const webContents = {
+      isDestroyed: () => false,
+      once: vi.fn(),
+      removeListener: vi.fn(),
+      send,
+    } as unknown as WebContents;
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+      sseRetryBaseDelayMs: 1,
+    });
+
+    const subscriptionId = host.subscribeEvents(webContents, { threadId: 'thread_1' });
+    await waitFor(() => deliveredRuntimeEvents(send).some((event) => event.seq === 2));
+    host.unsubscribe(subscriptionId);
+
+    expect(deliveredRuntimeEvents(send).map((event) => event.seq)).toEqual([1, 2]);
+  });
+
+  it('forwards runtime resync frames as an atomic renderer batch', async () => {
+    const thread = {
+      id: 'thread_1',
+      title: 'Resynced thread',
+      createdAt: '2026-07-15T00:00:00.000Z',
+      updatedAt: '2026-07-15T00:00:01.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      messages: [],
+      lastSeq: 9,
+    };
+    const payload = `event: runtime-resync\ndata: ${JSON.stringify({
+      reason: 'retention_gap',
+      requestedSinceSeq: 2,
+      retainedFromSeq: 6,
+      thread,
+    })}\n\n`;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(payload, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })));
+    const send = vi.fn();
+    const webContents = {
+      isDestroyed: () => false,
+      once: vi.fn(),
+      removeListener: vi.fn(),
+      send,
+    } as unknown as WebContents;
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+      sseRetryBaseDelayMs: 1,
+    });
+
+    const subscriptionId = host.subscribeEvents(webContents, { threadId: 'thread_1', sinceSeq: 2 });
+    await waitFor(() => send.mock.calls.some(([, value]) => value.batch?.resync));
+    host.unsubscribe(subscriptionId);
+
+    const resync = send.mock.calls.find(([, value]) => value.batch?.resync)?.[1].batch.resync;
+    expect(resync).toMatchObject({ requestedSinceSeq: 2, retainedFromSeq: 6, thread });
   });
 
   it('retries one idempotent runtime GET after a transport failure', async () => {
@@ -315,7 +391,7 @@ describe('runtime host packaging paths', () => {
   });
 });
 
-function runtimeEvent(seq: number) {
+function runtimeEvent(seq: number): RuntimeEvent {
   return {
     id: `event_${seq}`,
     seq,
@@ -324,14 +400,15 @@ function runtimeEvent(seq: number) {
     type: 'turn.started',
     createdAt: '2026-07-15T00:00:00.000Z',
     payload: { input: 'test', taskKind: 'regular' },
-  } as const;
+  };
 }
 
 function sseResponse(event: ReturnType<typeof runtimeEvent>): Response {
-  return new Response(`data: ${JSON.stringify(event)}\n\n`, {
-    status: 200,
-    headers: { 'Content-Type': 'text/event-stream' },
-  });
+  return runtimeSseFaultResponse([event]);
+}
+
+function deliveredRuntimeEvents(send: ReturnType<typeof vi.fn>): RuntimeEvent[] {
+  return send.mock.calls.flatMap(([, payload]) => payload.batch?.events ?? []);
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {

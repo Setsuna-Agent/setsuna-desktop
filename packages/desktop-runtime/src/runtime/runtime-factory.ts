@@ -75,7 +75,12 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const persistedThreadStore = new SqliteThreadStore(runtimeDataDir, clock, ids);
   const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
   const generatedImageStore = new FileGeneratedImageStore(runtimeDataDir, ids);
-  const eventWriter = new RuntimeEventWriter(persistedThreadStore, eventBus);
+  const eventWriter = new RuntimeEventWriter(
+    persistedThreadStore,
+    eventBus,
+    undefined,
+    debugTraceStore,
+  );
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter, generatedImageStore);
   const configStore = new FileConfigStore(runtimeDataDir);
   const nativeBridge = options.nativeBridge ?? HttpDesktopNativeBridge.fromEnvironment();

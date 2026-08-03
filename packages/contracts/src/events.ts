@@ -11,6 +11,7 @@ import type {
   RuntimeHookRun,
   RuntimeMessage,
   RuntimeQueuedTurnInput,
+  RuntimeThread,
   RuntimeThreadGoal,
   RuntimeThreadMemoryMode,
 } from './threads.js';
@@ -168,6 +169,19 @@ export type RuntimeEvent =
   | RuntimeEventBase<'turn.cancelled', { reason?: string; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'runtime.warning', { message: string; code?: string }>
   | RuntimeEventBase<'runtime.error', { message: string; code?: string }>;
+
+/** Ordered delivery unit used across the Electron bridge. */
+export type RuntimeEventBatch = {
+  events: RuntimeEvent[];
+  resync?: RuntimeEventResync;
+};
+
+export type RuntimeEventResync = {
+  reason: 'retention_gap';
+  requestedSinceSeq: number;
+  retainedFromSeq: number;
+  thread: RuntimeThread;
+};
 
 export type RuntimeSseEnvelope = {
   event: RuntimeEvent;

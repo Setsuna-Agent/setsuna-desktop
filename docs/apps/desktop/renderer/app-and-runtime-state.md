@@ -100,7 +100,7 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 `createDesktopRuntimeClient()` 实现 contracts 的 `DesktopRuntimeClient`：
 
 - 第一方 runtime 能力通过 `bridge.request()` 访问 REST。
-- SSE 通过 `bridge.startSse()`。
+- SSE 通过 `bridge.startSse()` 接收有序 `RuntimeEventBatch`。
 - 对 path segment 使用 `encodeURIComponent`。
 - 只暴露方法级 API。
 
@@ -135,7 +135,7 @@ Renderer 的薄 runtime facade，只持有：
 - Active turn、terminal turn IDs 与 polling recovery。
 - Activity、context compaction、approval 和 thread mutation。
 
-该 hook 只依赖 12 个 thread/review/approval client 方法。SSE projection、activity、runtime error、turn transition 和跨域刷新共用同一个 thread + sequence 接受判定；旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence。
+该 hook 只依赖 12 个 thread/review/approval client 方法。一个 bridge batch 只提交一次 current-thread React state；batch 内的 SSE projection、activity、runtime error、turn transition 和跨域刷新共用同一个 thread + sequence 接受判定。旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence。
 
 纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade，再由 facade 刷新 capability/usage，避免 thread hook 与 memory hook 形成循环依赖。
 

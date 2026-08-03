@@ -514,8 +514,7 @@ describe('agent loop turn execution', () => {
       expect(modelClient.requests[0].toolChoice).toBe('none');
       expect(toolHost.calls).toEqual([]);
       expect(events.filter((event) => event.type === 'plan.delta').map((event) => event.payload.delta)).toEqual([
-        '1. Inspect current files.\n',
-        '2. Wait for confirmation before edits.',
+        '1. Inspect current files.\n2. Wait for confirmation before edits.',
       ]);
       expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
       expect(saved?.messages.at(-1)?.content).toBe('1. Inspect current files.\n2. Wait for confirmation before edits.');

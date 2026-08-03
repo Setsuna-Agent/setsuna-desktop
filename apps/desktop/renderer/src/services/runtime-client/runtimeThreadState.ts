@@ -2,6 +2,7 @@ import type {
   AnswerRuntimeApprovalInput,
   RuntimeApprovalStatus,
   RuntimeEvent,
+  RuntimeEventBatch,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolRun,
@@ -36,6 +37,37 @@ export function applyCurrentThreadEvent(
 ): RuntimeThread | null {
   if (!thread || thread.id !== event.threadId || event.seq <= thread.lastSeq) return thread;
   return applyRuntimeEvent(thread, event);
+}
+
+export type CurrentThreadEventBatchProjection = {
+  acceptedEvents: RuntimeEvent[];
+  resynced: boolean;
+  thread: RuntimeThread | null;
+};
+
+/** Applies one ordered bridge batch while retaining the owner and sequence gate. */
+export function applyCurrentThreadEventBatch(
+  thread: RuntimeThread | null,
+  batch: RuntimeEventBatch,
+): CurrentThreadEventBatchProjection {
+  const acceptedEvents: RuntimeEvent[] = [];
+  let projected = thread;
+  let resynced = false;
+  if (
+    batch.resync
+    && projected?.id === batch.resync.thread.id
+    && batch.resync.thread.lastSeq >= projected.lastSeq
+  ) {
+    projected = batch.resync.thread;
+    resynced = true;
+  }
+  for (const event of batch.events) {
+    const next = applyCurrentThreadEvent(projected, event);
+    if (next === projected) continue;
+    projected = next;
+    acceptedEvents.push(event);
+  }
+  return { acceptedEvents, resynced, thread: projected };
 }
 
 /**
