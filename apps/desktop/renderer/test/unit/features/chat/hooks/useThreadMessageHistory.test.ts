@@ -14,6 +14,7 @@ describe('thread message history', () => {
       nextBefore: 2,
       threadId: 'thread_1',
       total: 4,
+      windowRevision: 0,
     };
     const next = thread([
       message('msg_4', 'updated 4'),
@@ -28,6 +29,64 @@ describe('thread message history', () => {
       ['msg_4', 'updated 4'],
       ['msg_5', 'new 5'],
     ]);
+    expect(reconciled.windowRevision).toBe(1);
+  });
+
+  it('drops the cached suffix replaced by an edited-message regeneration', () => {
+    const current = {
+      error: null,
+      loading: false,
+      messages: [
+        message('msg_1', 'older 1'),
+        message('msg_2', 'older 2'),
+        message('msg_3', 'original prompt'),
+        message('msg_4', 'stale reply'),
+        message('msg_5', 'stale follow-up'),
+      ],
+      nextBefore: null,
+      threadId: 'thread_1',
+      total: 5,
+      windowRevision: 3,
+    };
+    const next = thread([
+      message('msg_3', 'edited prompt'),
+      message('msg_6', 'new reply'),
+    ], { nextBefore: 2, total: 4 });
+
+    const reconciled = reconcileThreadSnapshot(current, next);
+
+    expect(reconciled.messages.map((item) => `${item.id}:${item.content}`)).toEqual([
+      'msg_1:older 1',
+      'msg_2:older 2',
+      'msg_3:edited prompt',
+      'msg_6:new reply',
+    ]);
+    expect(reconciled.nextBefore).toBeNull();
+    expect(reconciled.total).toBe(4);
+    expect(reconciled.windowRevision).toBe(4);
+  });
+
+  it('treats a page with no cursor as the complete authoritative transcript', () => {
+    const current = {
+      error: null,
+      loading: true,
+      messages: [message('msg_1', 'stale'), message('msg_2', 'stale reply')],
+      nextBefore: null,
+      threadId: 'thread_1',
+      total: 2,
+      windowRevision: 1,
+    };
+    const next = thread([message('msg_3', 'replacement')], {
+      nextBefore: null,
+      total: 1,
+    });
+
+    const reconciled = reconcileThreadSnapshot(current, next);
+
+    expect(reconciled.messages.map((item) => item.id)).toEqual(['msg_3']);
+    expect(reconciled.loading).toBe(false);
+    expect(reconciled.nextBefore).toBeNull();
+    expect(reconciled.windowRevision).toBe(2);
   });
 
   it('uses newer message versions without moving their transcript position', () => {

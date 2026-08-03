@@ -14,6 +14,7 @@ type ThreadMessageHistoryState = {
   nextBefore: number | null;
   threadId: string | null;
   total: number;
+  windowRevision: number;
 };
 
 export function useThreadMessageHistory(
@@ -39,6 +40,7 @@ export function useThreadMessageHistory(
     if (!current.threadId || current.nextBefore === null || current.loading) return;
     const requestedThreadId = current.threadId;
     const before = current.nextBefore;
+    const windowRevision = current.windowRevision;
     setState((value) => ({ ...value, error: null, loading: true }));
     try {
       const page = await client.listThreadMessages(requestedThreadId, {
@@ -46,7 +48,10 @@ export function useThreadMessageHistory(
         limit: MESSAGE_PAGE_SIZE,
       });
       setState((value) => {
-        if (value.threadId !== requestedThreadId) return value;
+        if (
+          value.threadId !== requestedThreadId
+          || value.windowRevision !== windowRevision
+        ) return value;
         return {
           ...value,
           error: null,
@@ -57,7 +62,10 @@ export function useThreadMessageHistory(
         };
       });
     } catch (error) {
-      setState((value) => value.threadId === requestedThreadId
+      setState((value) => (
+        value.threadId === requestedThreadId
+        && value.windowRevision === windowRevision
+      )
         ? {
           ...value,
           error: error instanceof Error ? error.message : String(error),
@@ -82,19 +90,67 @@ export function reconcileThreadSnapshot(
   current: ThreadMessageHistoryState,
   thread: RuntimeThread | null,
 ): ThreadMessageHistoryState {
-  if (current.threadId !== thread?.id) return stateFromThread(thread);
-  if (!thread) return stateFromThread(null);
-  if (!thread.messagePage) return stateFromThread(thread);
+  if (current.threadId !== thread?.id) {
+    return stateFromThread(thread, current.windowRevision + 1);
+  }
+  if (!thread) return current;
+
+  const reconciled = thread.messagePage
+    ? reconcilePagedMessageWindow(current.messages, thread.messages, thread.messagePage.nextBefore)
+    : { messages: thread.messages, retainedPrefix: false };
+  const windowChanged = !sameMessageOrder(current.messages, reconciled.messages);
+  const nextBefore = thread.messagePage
+    ? reconciled.retainedPrefix
+      ? minimumMessageCursor(current.nextBefore, thread.messagePage.nextBefore)
+      : thread.messagePage.nextBefore
+    : null;
   return {
     ...current,
-    // Polling can shift the server tail window as messages arrive. Retain displaced rows
-    // already held by the renderer and let the smallest cursor remain authoritative.
-    messages: mergeMessages(current.messages, thread.messages),
-    nextBefore: current.nextBefore === null || thread.messagePage.nextBefore === null
-      ? null
-      : Math.min(current.nextBefore, thread.messagePage.nextBefore),
-    total: thread.messagePage.total,
+    // The server page owns the overlapping tail. Cached rows are retained only before
+    // that boundary, so delete/truncate cannot resurrect messages removed by runtime.
+    loading: windowChanged ? false : current.loading,
+    messages: reconciled.messages,
+    nextBefore,
+    total: thread.messagePage?.total ?? thread.messages.length,
+    windowRevision: windowChanged
+      ? current.windowRevision + 1
+      : current.windowRevision,
   };
+}
+
+function reconcilePagedMessageWindow(
+  cached: RuntimeMessage[],
+  authoritativeTail: RuntimeMessage[],
+  nextBefore: number | null,
+): { messages: RuntimeMessage[]; retainedPrefix: boolean } {
+  // A null cursor means the server supplied the complete transcript.
+  if (nextBefore === null || !cached.length || !authoritativeTail.length) {
+    return { messages: authoritativeTail, retainedPrefix: false };
+  }
+  const cachedIndexById = new Map(cached.map((message, index) => [message.id, index]));
+  for (const message of authoritativeTail) {
+    const overlapIndex = cachedIndexById.get(message.id);
+    if (overlapIndex === undefined) continue;
+    return {
+      messages: mergeMessages(cached.slice(0, overlapIndex), authoritativeTail),
+      retainedPrefix: overlapIndex > 0,
+    };
+  }
+  // Without an overlap there is no safe ordering boundary for cached rows.
+  return { messages: authoritativeTail, retainedPrefix: false };
+}
+
+function minimumMessageCursor(
+  current: number | null,
+  incoming: number | null,
+): number | null {
+  if (current === null || incoming === null) return null;
+  return Math.min(current, incoming);
+}
+
+function sameMessageOrder(left: RuntimeMessage[], right: RuntimeMessage[]): boolean {
+  return left.length === right.length
+    && left.every((message, index) => message.id === right[index]?.id);
 }
 
 export function mergeMessages(
@@ -106,7 +162,10 @@ export function mergeMessages(
   return [...byId.values()];
 }
 
-function stateFromThread(thread: RuntimeThread | null): ThreadMessageHistoryState {
+function stateFromThread(
+  thread: RuntimeThread | null,
+  windowRevision = 0,
+): ThreadMessageHistoryState {
   return {
     error: null,
     loading: false,
@@ -114,5 +173,6 @@ function stateFromThread(thread: RuntimeThread | null): ThreadMessageHistoryStat
     nextBefore: thread?.messagePage?.nextBefore ?? null,
     threadId: thread?.id ?? null,
     total: thread?.messagePage?.total ?? thread?.messages.length ?? 0,
+    windowRevision,
   };
 }
