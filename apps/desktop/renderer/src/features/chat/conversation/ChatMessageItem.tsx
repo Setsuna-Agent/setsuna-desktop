@@ -40,7 +40,6 @@ import {
   type ChatDisplayItem,
 } from './chatMessageDisplay.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
-import { ChatTimelineDivider } from './ChatTimelineDivider.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
@@ -284,18 +283,6 @@ function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
       <span className="chat-review-mode-marker__line" />
       <span className="chat-review-mode-marker__text">{label}</span>
     </div>
-  );
-}
-
-export function TranscriptWindowDivider({ hiddenMessageCount, onShowAll }: { hiddenMessageCount: number; onShowAll: () => void }) {
-  const { t } = useI18n();
-  const count = Math.max(0, hiddenMessageCount);
-  return (
-    <ChatTimelineDivider
-      accessibilityLabel={t('chat.history.collapsedLabel')}
-      label={count > 0 ? t('chat.history.collapsedCount', { count }) : t('chat.history.collapsed')}
-      onClick={onShowAll}
-    />
   );
 }
 

@@ -5,6 +5,7 @@ import type {
   ModelRequest,
   ModelStreamEvent,
   RuntimeEvent,
+  RuntimeMessagePageQuery,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolDefinition,
@@ -129,6 +130,14 @@ export class DelayedSteerAppendThreadStore implements ThreadStore {
     return this.inner.getThread(threadId);
   }
 
+  getThreadPage(threadId: string, query?: RuntimeMessagePageQuery) {
+    return this.inner.getThreadPage(threadId, query);
+  }
+
+  listMessages(threadId: string, query?: RuntimeMessagePageQuery) {
+    return this.inner.listMessages(threadId, query);
+  }
+
   createThread(input?: CreateThreadInput): Promise<RuntimeThread> {
     return this.inner.createThread(input);
   }
@@ -172,6 +181,10 @@ export class DelayedSteerAppendThreadStore implements ThreadStore {
 
   listEvents(threadId: string, sinceSeq?: number): Promise<RuntimeEvent[]> {
     return this.inner.listEvents(threadId, sinceSeq);
+  }
+
+  replayEvents(threadId: string, sinceSeq?: number) {
+    return this.inner.replayEvents(threadId, sinceSeq);
   }
 
   releaseSteerAppend(): void {

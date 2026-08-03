@@ -97,8 +97,19 @@ export function useSideChat({
     return client.subscribeEvents(threadId, currentThreadLastSeqRef.current, (batch) => {
       const current = currentThreadRef.current;
       const projection = applyCurrentThreadEventBatch(current, batch);
-      if (projection.thread === current || !projection.acceptedEvents.length) return;
+      if (!projection.resynced && (
+        projection.thread === current || !projection.acceptedEvents.length
+      )) return;
       setCurrentThread(projection.thread);
+
+      if (projection.resynced) {
+        terminalTurnIdsRef.current.clear();
+        setActiveTurnId(activeTurnIdFromThreadSnapshot(
+          projection.thread,
+          terminalTurnIdsRef.current,
+        ));
+        void reloadThreads();
+      }
 
       const activeTurnEvents = projection.acceptedEvents.filter((event) => (
         event.type === 'turn.started' || isTerminalSideChatEvent(event)

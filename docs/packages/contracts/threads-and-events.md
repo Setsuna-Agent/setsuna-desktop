@@ -109,6 +109,9 @@ Tool run 是 UI/审计投影，包含：
 - Writer 先持久化，再发布 event bus。
 - Renderer 只应用 `seq > lastSeq`。
 - SSE reconnect 使用 `sinceSeq`。
+- `RuntimeEventBatch.resync` 先原子替换 canonical thread snapshot，再应用同 batch 后续事件。
+- 旧 streaming delta 可以在 checkpoint 后移入压缩 archive；完整事件仍可重放，
+  `retainedFromSeq` 前的热路径续订必须走 snapshot resync。
 - Snapshot checkpoint 的 `snapshotSeq` 不能超过已持久化 event tail。
 
 Sequence 是恢复顺序，不是跨线程全局时间。

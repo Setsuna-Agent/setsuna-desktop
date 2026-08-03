@@ -1,4 +1,8 @@
-import type { RuntimeEvent, RuntimeEventBatch } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeEvent,
+  RuntimeEventBatch,
+  RuntimeEventResync,
+} from '@setsuna-desktop/contracts';
 
 const DEFAULT_FLUSH_INTERVAL_MS = 16;
 const DEFAULT_MAX_BATCH_SIZE = 128;
@@ -43,6 +47,12 @@ export class RuntimeEventBatcher {
     const events = this.events;
     this.events = [];
     this.deliver({ events });
+  }
+
+  resync(resync: RuntimeEventResync): void {
+    // Preserve any pre-gap lifecycle events before atomically replacing the renderer snapshot.
+    this.flush();
+    this.deliver({ events: [], resync });
   }
 
   cancel(): void {
