@@ -1,8 +1,10 @@
 import {
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
+  type DesktopRuntimeEventPayload,
   type RuntimeDataMigrationReadiness,
   type RuntimeAttachmentUploadInput,
   type RuntimeEvent,
+  type RuntimeEventResync,
   type RuntimeRequestInput,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
@@ -15,6 +17,7 @@ import net from 'node:net';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { desktopProcessEnvironment, prependPathDirectory } from './desktop-environment.js';
+import { RuntimeEventBatcher } from './runtime-event-batcher.js';
 import { fetchRuntimeResponse } from './runtime-request.js';
 
 type RuntimeHostOptions = {
@@ -38,6 +41,7 @@ type RuntimeHostOptions = {
 
 type Subscription = {
   abort: AbortController;
+  batcher: RuntimeEventBatcher;
   handleWebContentsDestroyed: () => void;
   webContents: WebContents;
 };
@@ -198,9 +202,18 @@ export class RuntimeHost {
   subscribeEvents(webContents: WebContents, input: { threadId: string; sinceSeq?: number }): string {
     const subscriptionId = randomUUID();
     const abort = new AbortController();
+    const batcher = new RuntimeEventBatcher((batch) => {
+      const payload: DesktopRuntimeEventPayload = { batch, subscriptionId };
+      sendRuntimeEventPayload(webContents, payload);
+    });
     const handleWebContentsDestroyed = () => this.unsubscribe(subscriptionId);
     // 每个 renderer 订阅都有独立 AbortController，窗口切换或销毁时可以精确断开。
-    this.subscriptions.set(subscriptionId, { abort, handleWebContentsDestroyed, webContents });
+    this.subscriptions.set(subscriptionId, {
+      abort,
+      batcher,
+      handleWebContentsDestroyed,
+      webContents,
+    });
     webContents.once('destroyed', handleWebContentsDestroyed);
     void this.readSse(subscriptionId, webContents, input, abort.signal);
     return subscriptionId;
@@ -214,6 +227,7 @@ export class RuntimeHost {
   unsubscribe(subscriptionId: string): void {
     const subscription = this.subscriptions.get(subscriptionId);
     subscription?.abort.abort();
+    subscription?.batcher.cancel();
     subscription?.webContents.removeListener('destroyed', subscription.handleWebContentsDestroyed);
     this.subscriptions.delete(subscriptionId);
   }
@@ -298,16 +312,19 @@ export class RuntimeHost {
           disconnectError = error;
         }
         if (signal.aborted || webContents.isDestroyed()) break;
-        webContents.send('runtime:event', {
+        this.subscriptions.get(subscriptionId)?.batcher.flush();
+        const payload: DesktopRuntimeEventPayload = {
           subscriptionId,
           error: `${disconnectError instanceof Error ? disconnectError.message : String(disconnectError)} Reconnecting...`,
-        });
+        };
+        sendRuntimeEventPayload(webContents, payload);
         await abortableDelay(retryDelay, signal);
         retryDelay = Math.min(retryDelay * 2, MAX_SSE_RETRY_DELAY_MS);
       }
     } finally {
       const subscription = this.subscriptions.get(subscriptionId);
       if (subscription?.abort.signal === signal) {
+        subscription.batcher.cancel();
         subscription.webContents.removeListener('destroyed', subscription.handleWebContentsDestroyed);
         this.subscriptions.delete(subscriptionId);
       }
@@ -338,21 +355,35 @@ export class RuntimeHost {
     let buffer = '';
     let lastSeq = sinceSeq;
     // SSE 按空行分帧；buffer 保留半截事件，避免流式读取拆包时丢事件。
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      buffer = buffer.replace(/\r\n/g, '\n');
-      const chunks = buffer.split('\n\n');
-      buffer = chunks.pop() ?? '';
-      for (const chunk of chunks) {
-        const event = parseSseChunk(chunk);
-        if (event && (lastSeq === undefined || event.seq > lastSeq)) {
-          if (webContents.isDestroyed()) return lastSeq;
-          webContents.send('runtime:event', { subscriptionId, event });
-          lastSeq = event.seq;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        buffer = buffer.replace(/\r\n/g, '\n');
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop() ?? '';
+        for (const chunk of chunks) {
+          const frame = parseSseChunk(chunk);
+          if (frame?.resync) {
+            if (frame.resync.thread.id !== threadId) continue;
+            if (webContents.isDestroyed()) return lastSeq;
+            this.subscriptions.get(subscriptionId)?.batcher.resync(frame.resync);
+            lastSeq = frame.resync.thread.lastSeq;
+            continue;
+          }
+          const event = frame?.event;
+          if (event && (lastSeq === undefined || event.seq > lastSeq)) {
+            if (webContents.isDestroyed()) return lastSeq;
+            this.subscriptions.get(subscriptionId)?.batcher.enqueue(event);
+            lastSeq = event.seq;
+          }
         }
       }
+    } finally {
+      // A reconnect resumes from lastSeq, so every accepted event must leave the
+      // pending IPC batch before this connection can advance to a new one.
+      this.subscriptions.get(subscriptionId)?.batcher.flush();
     }
     return lastSeq;
   }
@@ -461,11 +492,35 @@ function normalizeRuntimePath(value: string): string {
   return value;
 }
 
-function parseSseChunk(chunk: string): RuntimeEvent | null {
-  // 当前 runtime 只消费 data 行；event/id/retry 等 SSE 元数据暂不参与线程投影。
+type RuntimeSseFrame =
+  | { event: RuntimeEvent; resync?: never }
+  | { event?: never; resync: RuntimeEventResync };
+
+function parseSseChunk(chunk: string): RuntimeSseFrame | null {
+  const eventName = chunk.split('\n').find((line) => line.startsWith('event: '))?.slice(7);
   const dataLine = chunk.split('\n').find((line) => line.startsWith('data: '));
   if (!dataLine) return null;
-  return JSON.parse(dataLine.slice(6)) as RuntimeEvent;
+  if (eventName === 'runtime-resync') {
+    return { resync: JSON.parse(dataLine.slice(6)) as RuntimeEventResync };
+  }
+  if (eventName === 'runtime-event') {
+    return { event: JSON.parse(dataLine.slice(6)) as RuntimeEvent };
+  }
+  return null;
+}
+
+function sendRuntimeEventPayload(
+  webContents: WebContents,
+  payload: DesktopRuntimeEventPayload,
+): void {
+  if (webContents.isDestroyed()) return;
+  try {
+    webContents.send('runtime:event', payload);
+  } catch (error) {
+    // Destruction can race a frame-sized batch timer; the subscription cleanup
+    // remains authoritative and a renderer IPC race must not crash Electron main.
+    if (!webContents.isDestroyed()) console.warn('[runtime] failed to deliver event batch', error);
+  }
 }
 
 function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {

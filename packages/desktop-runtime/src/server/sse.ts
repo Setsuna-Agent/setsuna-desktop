@@ -1,7 +1,14 @@
-import type { RuntimeEvent, SweNotification } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeEvent,
+  RuntimeEventResync,
+  SweNotification,
+} from '@setsuna-desktop/contracts';
 import { createSweNotificationMapper, filterSweNotificationsForClientCapabilities } from '@setsuna-desktop/contracts';
 import type { ServerResponse } from 'node:http';
 import type { RuntimeFactory } from './types.js';
+
+const MAX_PENDING_EVENTS = 512;
+const HEARTBEAT_INTERVAL_MS = 15_000;
 
 export async function handleSse({
   experimentalApi,
@@ -27,46 +34,115 @@ export async function handleSse({
   response.flushHeaders?.();
 
   const sweMapEvent = format === 'swe' ? createSweNotificationMapper() : null;
-  const buffered: RuntimeEvent[] = [];
+  const pending: RuntimeEvent[] = [];
   let replaying = true;
+  let pumping = false;
+  let heartbeatBlocked = false;
   let closed = false;
   let processedSeq = format === 'swe' ? 0 : sinceSeq;
-  const writeEvent = (event: RuntimeEvent) => {
+  const closeWithError = (error: Error) => {
+    if (closed) return;
+    closed = true;
+    response.destroy(error);
+  };
+  const writeEvent = async (event: RuntimeEvent) => {
     if (closed || !responseCanWrite(response)) return;
     if (format === 'swe' && sweMapEvent) {
       const notifications = sweMapEvent(event);
-      if (event.seq > sinceSeq) writeSweSse(response, notifications, { experimentalApi });
+      if (event.seq > sinceSeq) {
+        await writeSweSse(response, notifications, { experimentalApi });
+      }
     } else {
-      writeRuntimeSse(response, event);
+      await writeRuntimeSse(response, event);
     }
     processedSeq = event.seq;
   };
+  const pump = async () => {
+    if (pumping || replaying || closed) return;
+    pumping = true;
+    try {
+      while (pending.length && !closed) {
+        const event = pending.shift();
+        if (event && event.seq > processedSeq) await writeEvent(event);
+      }
+    } catch (error) {
+      closeWithError(toError(error));
+    } finally {
+      pumping = false;
+      if (pending.length && !closed) void pump();
+    }
+  };
   const unsubscribe = runtime.eventBus.subscribe(threadId, (event) => {
     if (closed || !responseCanWrite(response) || event.seq <= processedSeq) return;
-    if (replaying) buffered.push(event);
-    else writeEvent(event);
+    pending.push(event);
+    if (pending.length > MAX_PENDING_EVENTS) {
+      closeWithError(new Error(`Runtime SSE subscriber exceeded ${MAX_PENDING_EVENTS} pending events.`));
+      return;
+    }
+    if (!replaying) void pump();
   });
+  const heartbeat = setInterval(() => {
+    if (
+      !closed
+      && !heartbeatBlocked
+      && !replaying
+      && !pumping
+      && !pending.length
+      && responseCanWrite(response)
+    ) {
+      heartbeatBlocked = !response.write(': heartbeat\n\n');
+      if (heartbeatBlocked) {
+        response.once('drain', () => {
+          heartbeatBlocked = false;
+        });
+      }
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref();
   response.on('close', () => {
     closed = true;
+    clearInterval(heartbeat);
     unsubscribe();
   });
 
   try {
     // 重放前先订阅。读取日志期间发布的事件会被缓冲，并在重放到达实时边界时按 seq 去重。
-    const existing = await runtime.threadStore.listEvents(threadId, format === 'swe' ? 0 : sinceSeq);
-    if (closed) return;
-    for (const event of existing) {
-      if (event.seq <= processedSeq) continue;
-      writeEvent(event);
+    if (format === 'swe') {
+      // SWE mapping needs retained lifecycle events from the beginning to rebuild item identity;
+      // pruned token deltas are recoverable from canonical completion events.
+      const existing = await runtime.threadStore.listEvents(threadId, 0);
+      for (const event of existing) {
+        if (event.seq <= processedSeq) continue;
+        await writeEvent(event);
+      }
+    } else {
+      const replay = await runtime.threadStore.replayEvents(threadId, sinceSeq);
+      if (closed) return;
+      if (replay.requiresResync) {
+        const thread = await runtime.threadStore.getThread(threadId);
+        if (!thread) throw new Error(`Thread not found: ${threadId}`);
+        const resync: RuntimeEventResync = {
+          reason: 'retention_gap',
+          requestedSinceSeq: sinceSeq,
+          retainedFromSeq: replay.retainedFromSeq,
+          thread,
+        };
+        await writeSseFrame(response, 'runtime-resync', resync);
+        processedSeq = thread.lastSeq;
+      } else {
+        for (const event of replay.events) {
+          if (event.seq <= processedSeq) continue;
+          await writeEvent(event);
+        }
+      }
     }
-    for (const event of buffered.sort((left, right) => left.seq - right.seq)) {
-      if (event.seq <= processedSeq) continue;
-      writeEvent(event);
-    }
+    pending.sort((left, right) => left.seq - right.seq);
     replaying = false;
+    await pump();
   } catch (error) {
+    clearInterval(heartbeat);
     unsubscribe();
-    response.destroy(error instanceof Error ? error : new Error(String(error)));
+    closeWithError(toError(error));
   }
 }
 
@@ -94,7 +170,9 @@ export function handleAppServerNotificationSse({
   const unsubscribe = runtime.appServerNotificationBus.subscribe((notification, metadata) => {
     if (metadata.connectionId !== undefined && metadata.connectionId !== connectionId) return;
     if (!responseCanWrite(response)) return;
-    writeSweSse(response, [notification], { experimentalApi });
+    void writeSweSse(response, [notification], { experimentalApi }).catch((error) => {
+      response.destroy(toError(error));
+    });
   });
   response.on('close', () => {
     unsubscribe();
@@ -121,24 +199,53 @@ export function runtimeEventStreamExperimentalApi(value: string | null): boolean
   return value === 'true' || value === '1';
 }
 
-function writeRuntimeSse(response: ServerResponse, event: RuntimeEvent): void {
+async function writeRuntimeSse(response: ServerResponse, event: RuntimeEvent): Promise<void> {
   if (!responseCanWrite(response)) return;
-  response.write('event: runtime-event\n');
-  response.write(`data: ${JSON.stringify(event)}\n\n`);
+  return writeSseFrame(response, 'runtime-event', event);
 }
 
-function writeSweSse(
+async function writeSweSse(
   response: ServerResponse,
   notifications: SweNotification[],
   capabilities: { experimentalApi?: boolean } = {},
-): void {
+): Promise<void> {
   for (const notification of filterSweNotificationsForClientCapabilities(notifications, capabilities)) {
     if (!responseCanWrite(response)) return;
-    response.write('event: swe-notification\n');
-    response.write(`data: ${JSON.stringify(notification)}\n\n`);
+    await writeSseFrame(response, 'swe-notification', notification);
   }
+}
+
+async function writeSseFrame(response: ServerResponse, event: string, value: unknown): Promise<void> {
+  if (!responseCanWrite(response)) return;
+  if (response.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`)) return;
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      response.off('drain', handleDrain);
+      response.off('close', handleClose);
+      response.off('error', handleError);
+    };
+    const handleDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const handleClose = () => {
+      cleanup();
+      reject(new Error('Runtime SSE response closed during backpressure.'));
+    };
+    const handleError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    response.once('drain', handleDrain);
+    response.once('close', handleClose);
+    response.once('error', handleError);
+  });
 }
 
 function responseCanWrite(response: ServerResponse): boolean {
   return !response.destroyed && !response.writableEnded && !response.writableFinished;
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }

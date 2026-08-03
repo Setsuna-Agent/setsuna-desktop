@@ -15,6 +15,37 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(client).not.toHaveProperty('request');
   });
 
+  it('forwards ordered event batches without expanding them into callback churn', () => {
+    const batch = { events: [] };
+    const unsubscribe = vi.fn();
+    const startSse = vi.fn((
+      _threadId: string,
+      _sinceSeq: number | undefined,
+      onBatch: (value: typeof batch) => void,
+    ) => {
+      onBatch(batch);
+      return unsubscribe;
+    });
+    vi.stubGlobal('window', {
+      setsunaDesktop: {
+        runtime: {
+          request: vi.fn(),
+          startSse,
+        },
+      },
+    });
+    const client = createDesktopRuntimeClient();
+    const onBatch = vi.fn();
+
+    const stop = client.subscribeEvents('thread_1', 4, onBatch);
+
+    expect(startSse).toHaveBeenCalledWith('thread_1', 4, onBatch);
+    expect(onBatch).toHaveBeenCalledOnce();
+    expect(onBatch).toHaveBeenCalledWith(batch);
+    stop();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
   it('serializes parent and ancestor thread filters', async () => {
     const request = installRuntimeBridge(() => ({ threads: [] }));
     const client = createDesktopRuntimeClient();
@@ -24,6 +55,19 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(request).toHaveBeenCalledWith({
       path: '/v1/threads?includeArchived=true&ancestorThreadId=root+thread&parentThreadId=parent%2Fthread',
     });
+  });
+
+  it('requests a bounded thread snapshot and cursor-based older messages', async () => {
+    const request = installRuntimeBridge(() => ({ messages: [], nextBefore: null, total: 0 }));
+    const client = createDesktopRuntimeClient();
+
+    await client.getThread('thread / 1');
+    await client.listThreadMessages('thread / 1', { before: 40, limit: 20 });
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      { path: '/v1/threads/thread%20%2F%201?messageLimit=160' },
+      { path: '/v1/threads/thread%20%2F%201/messages?before=40&limit=20' },
+    ]);
   });
 
   it('routes queued turn input operations through encoded thread and input paths', async () => {

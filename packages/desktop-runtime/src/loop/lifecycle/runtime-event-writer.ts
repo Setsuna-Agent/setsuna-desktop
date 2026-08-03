@@ -137,13 +137,29 @@ export class RuntimeEventWriter {
 
 function mergeKeyForEvent(event: PendingRuntimeEvent): string {
   const payload = event.payload as Record<string, unknown>;
-  if (event.type === 'message.delta') return `${event.type}:${String(payload.messageId ?? '')}`;
-  if (event.type === 'item.delta') return `${event.type}:${String(payload.itemId ?? '')}`;
-  if (event.type === 'tool.output_delta') {
-    return [event.type, payload.toolCallId, payload.stream, payload.processId].map((value) => String(value ?? '')).join(':');
+  if (event.type === 'message.delta') return mergeKey(event, payload.messageId);
+  if (event.type === 'item.delta' || event.type === 'plan.delta') {
+    return mergeKey(event, payload.itemId);
   }
-  if (event.type === 'tool.preview') return `${event.type}:${String(payload.toolCallId ?? '')}`;
+  if (event.type === 'reasoning.summary_delta') {
+    return mergeKey(event, payload.itemId, payload.summaryIndex ?? 0);
+  }
+  if (event.type === 'reasoning.raw_delta') {
+    return mergeKey(event, payload.itemId, payload.contentIndex ?? 0);
+  }
+  if (event.type === 'tool.output_delta') {
+    return mergeKey(event, payload.toolCallId, payload.stream, payload.processId);
+  }
+  if (event.type === 'tool.preview') return mergeKey(event, payload.toolCallId);
   return '';
+}
+
+function mergeKey(event: PendingRuntimeEvent, ...identity: unknown[]): string {
+  // NUL cannot occur in runtime IDs, so unlike a visible delimiter this cannot
+  // alias IDs that themselves contain punctuation (for example `${turnId}:plan`).
+  return [event.turnId, event.type, ...identity]
+    .map((value) => String(value ?? ''))
+    .join('\u0000');
 }
 
 function mergeBufferedEvent(target: PendingRuntimeEvent, next: PendingRuntimeEvent): boolean {

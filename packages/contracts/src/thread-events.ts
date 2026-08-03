@@ -8,19 +8,15 @@ import {
   attachPendingHookRunsToMessage,
   attachPendingHookRunsToMessages,
   clearRunningContextCompaction,
-  cloneHookRun,
   cloneMemoryCitation,
   cloneMessage,
   cloneProviderMetadata,
   cloneStepSnapshot,
-  cloneThreadContextCompaction,
-  cloneThreadTurn,
   completeActiveMessageHookRuns,
   completeActivePendingHookRuns,
   completeActiveToolRuns,
   completeActiveTurnItems,
   contextMessageForTurn,
-  ensureThreadTurn,
   hasActiveToolRun,
   isTerminalTurnStatus,
   isTranscriptVisibleMessage,
@@ -36,6 +32,7 @@ import {
   upsertToolRun,
   userMessageForTurn
 } from './thread-event-projection.js';
+import { RuntimeThreadEventDraft } from './event-projections/thread-event-draft.js';
 import { DEFAULT_THREAD_TITLE, fallbackThreadTitle } from './thread-title.js';
 import {
   cloneRuntimeThreadGoal,
@@ -51,24 +48,12 @@ import {
  * @param event 需要应用到线程上的 runtime event。
  */
 export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeEvent): RuntimeThread {
-  // 先 clone，再让各分支就地更新投影，避免把可变引用泄漏回 React state。
-  const next: RuntimeThread = {
-    ...thread,
-    contextCompaction: thread.contextCompaction ? cloneThreadContextCompaction(thread.contextCompaction) : undefined,
-    goal: thread.goal ? cloneRuntimeThreadGoal(thread.goal) : undefined,
-    mailboxDeliveries: thread.mailboxDeliveries?.map((delivery) => ({ ...delivery })),
-    messages: thread.messages.map(cloneMessage),
-    pendingHookRuns: thread.pendingHookRuns?.map(cloneHookRun),
-    queuedTurnInputs: thread.queuedTurnInputs?.map((input) => ({
-      ...input,
-      kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
-      attachments: input.attachments?.map((attachment) => ({ ...attachment })),
-      skillIds: input.skillIds ? [...input.skillIds] : undefined,
-    })),
-    turns: thread.turns?.map(cloneThreadTurn),
-    lastSeq: Math.max(thread.lastSeq, event.seq),
-    updatedAt: event.createdAt,
-  };
+  const draft = new RuntimeThreadEventDraft(
+    thread,
+    Math.max(thread.lastSeq, event.seq),
+    event.createdAt,
+  );
+  const next = draft.thread;
 
   if (event.type === 'thread.created') {
     next.title = event.payload.title;
@@ -106,6 +91,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       );
     }
     if (event.payload.sourceMessage) {
+      draft.prepareMessageAppend();
       appendCreatedMessage(next, event.payload.sourceMessage, event.createdAt);
     }
     return next;
@@ -200,6 +186,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     if (event.payload.queuedInputId) {
       next.queuedTurnInputs = next.queuedTurnInputs?.filter((input) => input.id !== event.payload.queuedInputId);
     }
+    draft.prepareMessageAppend();
     appendCreatedMessage(next, event.payload.message, event.createdAt);
     return next;
   }
@@ -208,7 +195,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const existingTurn = next.turns?.find((item) => item.id === event.turnId);
     const alreadyTerminal = Boolean(existingTurn && isTerminalTurnStatus(existingTurn.status));
     if (!alreadyTerminal) next.activeTurnId = event.turnId ?? next.activeTurnId ?? null;
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) {
       turn.input = event.payload.input;
       turn.taskKind = event.payload.taskKind;
@@ -223,7 +210,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.step_snapshot') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) {
       turn.stepSnapshots = [...(turn.stepSnapshots ?? []), { createdAt: event.createdAt, snapshot: cloneStepSnapshot(event.payload.snapshot) }];
     }
@@ -243,7 +230,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'message.delta') {
-    const message = next.messages.find((item) => item.id === event.payload.messageId);
+    const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       // delta 只追加文本；完整状态、usage 和 toolCalls 等到 message.completed 再定稿。
       message.content += event.payload.text;
@@ -254,7 +241,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'message.updated') {
-    const message = next.messages.find((item) => item.id === event.payload.messageId);
+    const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       message.content = event.payload.content;
       message.status = 'complete';
@@ -267,7 +254,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'message.plan_mode_updated') {
-    const message = next.messages.find((item) => item.id === event.payload.messageId);
+    const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       message.planMode = { ...event.payload.planMode };
       if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
@@ -276,7 +263,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'message.completed') {
-    const message = next.messages.find((item) => item.id === event.payload.messageId);
+    const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       if (event.payload.content !== undefined) message.content = event.payload.content;
       message.status = 'complete';
@@ -295,49 +282,49 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'item.started') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) upsertThreadTurnItem(turn, { ...event.payload.item, status: event.payload.item.status ?? 'in_progress' });
     return next;
   }
 
   if (event.type === 'item.delta') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) appendThreadTurnItemDelta(turn, event.payload.itemId, event.payload.delta);
     return next;
   }
 
   if (event.type === 'item.completed') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) upsertThreadTurnItem(turn, { ...event.payload.item, status: event.payload.item.status ?? 'completed' });
     return next;
   }
 
   if (event.type === 'plan.delta') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) appendThreadTurnItemDelta(turn, event.payload.itemId, event.payload.delta, 'plan');
     return next;
   }
 
   if (event.type === 'reasoning.summary_delta' || event.type === 'reasoning.raw_delta') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) appendThreadTurnItemDelta(turn, event.payload.itemId, event.payload.delta, 'reasoning');
     return next;
   }
 
   if (event.type === 'safety.buffering') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) turn.safetyBuffering = { ...event.payload.buffering };
     return next;
   }
 
   if (event.type === 'model.verification') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) turn.modelVerifications = [...(turn.modelVerifications ?? []), { ...event.payload.verification }];
     return next;
   }
 
   if (event.type === 'token.count') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) {
       turn.tokenCounts = [
         ...(turn.tokenCounts ?? []),
@@ -353,7 +340,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.diff') {
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) turn.diff = appendTurnDiff(turn.diff, event.payload.unifiedDiff);
     return next;
   }
@@ -382,7 +369,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'approval.requested') {
     const approval = event.payload.approval;
-    const message = assistantMessageForTurn(next.messages, event.turnId);
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
       // approval 在 UI 上表现为一个 pending toolRun，因此挂到同 turn 的 assistant 消息下。
       upsertToolRun(message, {
@@ -411,7 +398,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'approval.resolved') {
-    const message = assistantMessageForTurn(next.messages, event.turnId);
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     const run = message?.toolRuns?.find((item) => item.approvalId === event.payload.approvalId);
     if (run) {
       const rejected = event.payload.decision === 'reject';
@@ -430,7 +417,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'tool.preview') {
-    const message = assistantMessageForTurn(next.messages, event.turnId);
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
       upsertToolRun(message, {
         id: event.payload.toolCallId,
@@ -448,7 +435,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'tool.started') {
-    const message = assistantMessageForTurn(next.messages, event.turnId);
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
       upsertToolRun(message, {
         id: event.payload.toolCallId,
@@ -466,7 +453,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'tool.output_delta') {
-    const message = assistantMessageForTurn(next.messages, event.turnId);
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
       // 长命令输出持续合并到同一个 toolRun preview，而不是生成多条工具记录。
       appendToolRunOutputDelta(message, {
@@ -481,7 +468,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'tool.completed') {
-    const message = assistantMessageForTurn(next.messages, event.turnId);
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
       upsertToolRun(message, {
         id: event.payload.toolCallId,
@@ -503,12 +490,16 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'hook.started' || event.type === 'hook.completed') {
     if (event.payload.toolCallId) {
-      const message = assistantMessageForTurn(next.messages, event.turnId);
+      const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
       if (message) {
         upsertToolHookRun(message, event.payload, event.createdAt);
       }
     } else {
-      const message = userMessageForTurn(next.messages, event.turnId) ?? assistantMessageForTurn(next.messages, event.turnId) ?? contextMessageForTurn(next.messages, event.turnId);
+      const message = draft.mutableMessage(
+        userMessageForTurn(next.messages, event.turnId)
+          ?? assistantMessageForTurn(next.messages, event.turnId)
+          ?? contextMessageForTurn(next.messages, event.turnId),
+      );
       if (message) {
         upsertMessageHookRun(message, event.payload, event.createdAt);
       } else {
@@ -521,7 +512,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'runtime.error') {
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) {
       turn.status = 'failed';
       turn.completedAt = event.createdAt;
@@ -529,12 +520,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       completeActiveTurnItems(turn, 'failed');
     }
     completeActivePendingHookRuns(next, event.turnId, event.createdAt, event.payload.message);
-    for (const item of next.messages) {
-      if (event.turnId && item.turnId !== event.turnId) continue;
+    for (const item of draft.mutableMessagesForTurn(event.turnId)) {
       completeActiveToolRuns(item, event.createdAt, event.payload.message, 'error');
       completeActiveMessageHookRuns(item, event.createdAt, event.payload.message);
     }
-    const message = assistantMessageForTurn(next.messages, event.turnId);
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
       message.status = 'error';
       message.completedAt = event.createdAt;
@@ -547,15 +537,14 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const reason = event.payload.reason || 'Turn cancelled.';
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) {
       turn.status = 'cancelled';
       turn.completedAt = event.createdAt;
       turn.error = reason;
       completeActiveTurnItems(turn);
     }
-    for (const message of next.messages) {
-      if (event.turnId && message.turnId !== event.turnId) continue;
+    for (const message of draft.mutableMessagesForTurn(event.turnId)) {
       if (message.status === 'streaming' || (message.role === 'assistant' && hasActiveToolRun(message))) {
         message.status = 'complete';
         message.completedAt = event.createdAt;
@@ -571,7 +560,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'turn.completed') {
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
-    const turn = ensureThreadTurn(next, event.turnId, event.createdAt);
+    const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) {
       turn.status = turn.status === 'failed' || turn.status === 'cancelled' ? turn.status : 'completed';
       turn.completedAt = turn.completedAt ?? event.createdAt;

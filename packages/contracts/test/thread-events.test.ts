@@ -3,6 +3,128 @@ import type { RuntimeEvent } from '../src/events.js';
 import { applyRuntimeEventToThread } from '../src/thread-events.js';
 import type { RuntimeThread } from '../src/threads.js';
 
+describe('applyRuntimeEventToThread structural sharing', () => {
+  it('clones only the message touched by a stream delta', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_cow',
+      title: 'Copy on write',
+      createdAt: '2026-08-03T00:00:00.000Z',
+      updatedAt: '2026-08-03T00:00:00.000Z',
+      archived: false,
+      messageCount: 2,
+      lastMessagePreview: '',
+      lastSeq: 1,
+      turns: [{ id: 'turn_1', status: 'in_progress', items: [] }],
+      messages: [
+        {
+          id: 'message_user',
+          turnId: 'turn_1',
+          role: 'user',
+          content: 'Question',
+          createdAt: '2026-08-03T00:00:00.000Z',
+          status: 'complete',
+        },
+        {
+          id: 'message_assistant',
+          turnId: 'turn_1',
+          role: 'assistant',
+          content: 'Partial',
+          createdAt: '2026-08-03T00:00:01.000Z',
+          status: 'streaming',
+        },
+      ],
+    };
+
+    const projected = applyRuntimeEventToThread(thread, {
+      id: 'event_delta',
+      seq: 2,
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.delta',
+      createdAt: '2026-08-03T00:00:02.000Z',
+      payload: { messageId: 'message_assistant', text: ' answer.' },
+    });
+
+    expect(projected).not.toBe(thread);
+    expect(projected.messages).not.toBe(thread.messages);
+    expect(projected.messages[0]).toBe(thread.messages[0]);
+    expect(projected.messages[1]).not.toBe(thread.messages[1]);
+    expect(projected.messages[1]?.content).toBe('Partial answer.');
+    expect(thread.messages[1]?.content).toBe('Partial');
+    expect(projected.turns).toBe(thread.turns);
+  });
+
+  it('retains all nested domains for metadata-only events', () => {
+    const messages: RuntimeThread['messages'] = [];
+    const turns: NonNullable<RuntimeThread['turns']> = [];
+    const thread: RuntimeThread = {
+      id: 'thread_metadata',
+      title: 'Before',
+      createdAt: '2026-08-03T00:00:00.000Z',
+      updatedAt: '2026-08-03T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages,
+      turns,
+    };
+
+    const projected = applyRuntimeEventToThread(thread, {
+      id: 'event_title',
+      seq: 1,
+      threadId: thread.id,
+      type: 'thread.updated',
+      createdAt: '2026-08-03T00:00:01.000Z',
+      payload: { title: 'After' },
+    });
+
+    expect(projected.title).toBe('After');
+    expect(projected.messages).toBe(messages);
+    expect(projected.turns).toBe(turns);
+  });
+
+  it('normalizes legacy queued input kinds during unrelated projections', () => {
+    const legacyInput = {
+      id: 'queued_legacy',
+      input: 'Continue later',
+      createdAt: '2026-08-03T00:00:00.000Z',
+    };
+    const planInput = {
+      id: 'queued_plan',
+      kind: 'plan' as const,
+      input: 'Plan later',
+      createdAt: '2026-08-03T00:00:00.000Z',
+    };
+    const thread: RuntimeThread = {
+      id: 'thread_legacy_queue',
+      title: 'Before',
+      createdAt: '2026-08-03T00:00:00.000Z',
+      updatedAt: '2026-08-03T00:00:00.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 0,
+      messages: [],
+      queuedTurnInputs: [legacyInput, planInput],
+    };
+
+    const projected = applyRuntimeEventToThread(thread, {
+      id: 'event_title',
+      seq: 1,
+      threadId: thread.id,
+      type: 'thread.updated',
+      createdAt: '2026-08-03T00:00:01.000Z',
+      payload: { title: 'After' },
+    });
+
+    expect(projected.queuedTurnInputs?.map((input) => input.kind)).toEqual(['message', 'plan']);
+    expect(projected.queuedTurnInputs?.[0]).not.toBe(legacyInput);
+    expect(projected.queuedTurnInputs?.[1]).toBe(planInput);
+    expect(legacyInput).not.toHaveProperty('kind');
+  });
+});
+
 describe('applyRuntimeEventToThread context compaction', () => {
   it('separates streamed tool preparation from actual execution', () => {
     const thread: RuntimeThread = {
@@ -1593,7 +1715,7 @@ describe('applyRuntimeEventToThread context compaction', () => {
       snapshot,
     }]);
 
-    const cloned = applyRuntimeEventToThread(projected, {
+    const renamed = applyRuntimeEventToThread(projected, {
       id: 'event_step_2',
       seq: 2,
       threadId: 'thread_1',
@@ -1601,20 +1723,22 @@ describe('applyRuntimeEventToThread context compaction', () => {
       createdAt: '2026-06-26T00:00:02.000Z',
       payload: { title: 'Renamed' },
     });
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolNames.push('mutated');
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.advertisedToolNames!.push('mutated');
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.inputMessageIds!.push('mutated');
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolRuntimes![0]!.name = 'mutated';
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.contextWindow!.compactionSummaryMessageIds.push('mutated');
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolEnvironment!.workspaceRoots!.push('/mutated');
-    cloned.turns![0]!.stepSnapshots![0]!.snapshot.toolEnvironment!.repository!.workspacePrefix = 'mutated';
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolNames).toEqual(['read_file']);
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.advertisedToolNames).toEqual(['read_file']);
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.inputMessageIds).toEqual(['msg_user']);
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolRuntimes?.[0]?.name).toBe('read_file');
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.contextWindow?.compactionSummaryMessageIds).toEqual(['msg_compact']);
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolEnvironment?.workspaceRoots).toEqual(['/tmp/project']);
-    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.toolEnvironment?.repository?.workspacePrefix).toBe('project');
+    expect(renamed.turns).toBe(projected.turns);
+    expect(renamed.turns?.[0]).toBe(projected.turns?.[0]);
+
+    const extended = applyRuntimeEventToThread(projected, {
+      id: 'event_step_3',
+      seq: 3,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'turn.step_snapshot',
+      createdAt: '2026-06-26T00:00:03.000Z',
+      payload: { snapshot },
+    });
+    expect(extended.turns).not.toBe(projected.turns);
+    expect(extended.turns?.[0]).not.toBe(projected.turns?.[0]);
+    expect(extended.turns?.[0]?.stepSnapshots).toHaveLength(2);
+    expect(projected.turns?.[0]?.stepSnapshots).toHaveLength(1);
   });
 
   it('projects item-based model stream state into the owning turn', () => {
@@ -1805,15 +1929,29 @@ describe('applyRuntimeEventToThread context compaction', () => {
       ],
     });
 
-    const cloned = applyRuntimeEventToThread(projected, {
+    const renamed = applyRuntimeEventToThread(projected, {
       id: 'event_12',
-      seq: 12,
+      seq: 14,
       threadId: 'thread_1',
       type: 'thread.updated',
       createdAt: '2026-06-26T00:00:12.000Z',
       payload: { title: 'Renamed' },
     });
-    cloned.turns![0]!.items[0]!.content = 'mutated';
+    expect(renamed.turns).toBe(projected.turns);
+    expect(renamed.turns?.[0]).toBe(projected.turns?.[0]);
+
+    const extended = applyRuntimeEventToThread(projected, {
+      id: 'event_13',
+      seq: 15,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'item.delta',
+      createdAt: '2026-06-26T00:00:13.000Z',
+      payload: { itemId: 'item_agent_1', delta: ' again' },
+    });
+    expect(extended.turns).not.toBe(projected.turns);
+    expect(extended.turns?.[0]).not.toBe(projected.turns?.[0]);
+    expect(extended.turns?.[0]?.items[0]?.content).toBe('Hello again');
     expect(projected.turns?.[0]?.items[0]?.content).toBe('Hello');
   });
 });

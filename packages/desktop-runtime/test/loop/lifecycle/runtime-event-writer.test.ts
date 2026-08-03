@@ -156,6 +156,141 @@ describe('runtime event writer', () => {
     });
   });
 
+  it('coalesces plan and reasoning parts without crossing turn or lifecycle boundaries', async () => {
+    const store = new JsonThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-structured-delta-test-')),
+      systemClock,
+      new RandomIdGenerator(),
+    );
+    const eventBus = new InMemoryEventBus();
+    const writer = new RuntimeEventWriter(store, eventBus, 10_000);
+    const thread = await store.createThread({ title: 'Structured delta batching' });
+    const createdAt = systemClock.now().toISOString();
+    const published: RuntimeEvent[] = [];
+    eventBus.subscribe(thread.id, (event) => published.push(event));
+
+    const deltas = [
+      {
+        id: 'event_plan_1a',
+        turnId: 'turn_1',
+        type: 'plan.delta',
+        payload: { itemId: 'shared_item', delta: 'Inspect ' },
+      },
+      {
+        id: 'event_plan_1b',
+        turnId: 'turn_1',
+        type: 'plan.delta',
+        payload: { itemId: 'shared_item', delta: 'files.' },
+      },
+      {
+        id: 'event_plan_2a',
+        turnId: 'turn_2',
+        type: 'plan.delta',
+        payload: { itemId: 'shared_item', delta: 'Run ' },
+      },
+      {
+        id: 'event_plan_2b',
+        turnId: 'turn_2',
+        type: 'plan.delta',
+        payload: { itemId: 'shared_item', delta: 'tests.' },
+      },
+      {
+        id: 'event_summary_0a',
+        turnId: 'turn_1',
+        type: 'reasoning.summary_delta',
+        payload: { itemId: 'reasoning_item', summaryIndex: 0, delta: 'Need ' },
+      },
+      {
+        id: 'event_summary_0b',
+        turnId: 'turn_1',
+        type: 'reasoning.summary_delta',
+        payload: { itemId: 'reasoning_item', summaryIndex: 0, delta: 'context.' },
+      },
+      {
+        id: 'event_summary_1a',
+        turnId: 'turn_1',
+        type: 'reasoning.summary_delta',
+        payload: { itemId: 'reasoning_item', summaryIndex: 1, delta: 'Then ' },
+      },
+      {
+        id: 'event_summary_1b',
+        turnId: 'turn_1',
+        type: 'reasoning.summary_delta',
+        payload: { itemId: 'reasoning_item', summaryIndex: 1, delta: 'act.' },
+      },
+      {
+        id: 'event_raw_0a',
+        turnId: 'turn_1',
+        type: 'reasoning.raw_delta',
+        payload: { itemId: 'reasoning_item', contentIndex: 0, delta: 'raw ' },
+      },
+      {
+        id: 'event_raw_0b',
+        turnId: 'turn_1',
+        type: 'reasoning.raw_delta',
+        payload: { itemId: 'reasoning_item', contentIndex: 0, delta: 'zero' },
+      },
+      {
+        id: 'event_raw_1a',
+        turnId: 'turn_1',
+        type: 'reasoning.raw_delta',
+        payload: { itemId: 'reasoning_item', contentIndex: 1, delta: 'raw ' },
+      },
+      {
+        id: 'event_raw_1b',
+        turnId: 'turn_1',
+        type: 'reasoning.raw_delta',
+        payload: { itemId: 'reasoning_item', contentIndex: 1, delta: 'one' },
+      },
+    ] as const;
+    for (const delta of deltas) {
+      await writer.append(thread.id, {
+        ...delta,
+        threadId: thread.id,
+        createdAt,
+      });
+    }
+
+    await writer.append(thread.id, {
+      id: 'event_summary_part',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'reasoning.summary_part_added',
+      createdAt,
+      payload: { itemId: 'reasoning_item', summaryIndex: 1 },
+    });
+    await writer.append(thread.id, {
+      id: 'event_summary_after_boundary',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'reasoning.summary_delta',
+      createdAt,
+      payload: { itemId: 'reasoning_item', summaryIndex: 1, delta: 'After boundary.' },
+    });
+    await writer.append(thread.id, {
+      id: 'event_turn_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.completed',
+      createdAt,
+      payload: {},
+    });
+
+    const persisted = (await store.listEvents(thread.id)).slice(1);
+    expect(persisted).toMatchObject([
+      { id: 'event_plan_1a', turnId: 'turn_1', type: 'plan.delta', payload: { delta: 'Inspect files.' } },
+      { id: 'event_plan_2a', turnId: 'turn_2', type: 'plan.delta', payload: { delta: 'Run tests.' } },
+      { id: 'event_summary_0a', type: 'reasoning.summary_delta', payload: { summaryIndex: 0, delta: 'Need context.' } },
+      { id: 'event_summary_1a', type: 'reasoning.summary_delta', payload: { summaryIndex: 1, delta: 'Then act.' } },
+      { id: 'event_raw_0a', type: 'reasoning.raw_delta', payload: { contentIndex: 0, delta: 'raw zero' } },
+      { id: 'event_raw_1a', type: 'reasoning.raw_delta', payload: { contentIndex: 1, delta: 'raw one' } },
+      { id: 'event_summary_part', type: 'reasoning.summary_part_added' },
+      { id: 'event_summary_after_boundary', type: 'reasoning.summary_delta', payload: { delta: 'After boundary.' } },
+      { id: 'event_turn_completed', type: 'turn.completed' },
+    ]);
+    expect(published).toEqual(persisted);
+  });
+
   it('keeps only the latest buffered tool preview before execution starts', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-preview-test-')), systemClock, new RandomIdGenerator());
     const eventBus = new InMemoryEventBus();

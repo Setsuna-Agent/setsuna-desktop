@@ -1,28 +1,26 @@
 import type {
   DesktopRuntimeBridge,
+  DesktopRuntimeEventPayload,
   DesktopTerminalEvent,
   DesktopUpdateState,
-  RuntimeEvent,
   RuntimeRequestInput,
   SetsunaDesktopBridge,
 } from '@setsuna-desktop/contracts';
 import { contextBridge, ipcRenderer } from 'electron';
 
-type RuntimeEventPayload = { subscriptionId: string; event?: RuntimeEvent; error?: string };
-
 const runtime: DesktopRuntimeBridge = {
   request: <T = unknown>(input: RuntimeRequestInput): Promise<T> => ipcRenderer.invoke('runtime:request', input),
   uploadAttachment: (input) => ipcRenderer.invoke('runtime:upload-attachment', input),
-  startSse(threadId, sinceSeq, onEvent) {
+  startSse(threadId, sinceSeq, onBatch) {
     let cancelled = false;
     let subscriptionId: string | null = null;
-    const queuedPayloads: RuntimeEventPayload[] = [];
-    const deliver = (payload: RuntimeEventPayload) => {
+    const queuedPayloads: DesktopRuntimeEventPayload[] = [];
+    const deliver = (payload: DesktopRuntimeEventPayload) => {
       if (payload.subscriptionId !== subscriptionId) return;
-      if (payload.event) onEvent(payload.event);
+      if (payload.batch?.events.length) onBatch(payload.batch);
       if (payload.error) console.error(payload.error);
     };
-    const listener = (_event: Electron.IpcRendererEvent, payload: RuntimeEventPayload) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: DesktopRuntimeEventPayload) => {
       if (subscriptionId === null) {
         queuedPayloads.push(payload);
         return;
