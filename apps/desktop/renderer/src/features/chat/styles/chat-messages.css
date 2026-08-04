@@ -699,8 +699,8 @@
   box-sizing: border-box;
   padding: 9px 11px;
   border: 0;
-  border-radius: var(--app-radius-lg);
-  background: var(--chat-message-user-bg);
+  border-radius: 20px;
+  background: var(--chat-message-user-edit-bg);
 }
 
 .chat-user-edit textarea {
@@ -739,18 +739,37 @@
 
 .chat-user-edit__actions button {
   height: 28px;
-  min-width: 54px;
+  min-width: 0;
   padding: 0 10px;
-  border: 1px solid var(--app-border);
-  border-radius: 6px;
+  border: 0;
+  border-radius: 8px;
   color: var(--app-text);
   background: var(--app-surface);
-  font-size: 12px;
-  line-height: 26px;
+  font-size: 13px;
+  line-height: 28px;
 }
 
 .chat-user-edit__actions button:hover:not(:disabled) {
   background: var(--desktop-agent-control-hover-bg);
+}
+
+.chat-user-edit__actions button[type='submit'] {
+  border-radius: 999px;
+  color: var(--app-primary-text);
+  background: var(--chat-send-bg);
+}
+
+.chat-user-edit__actions button[type='submit']:hover:not(:disabled) {
+  background: var(--chat-send-bg-hover);
+}
+
+.chat-user-edit__actions button[type='submit']:active:not(:disabled) {
+  background: var(--chat-send-bg-active);
+}
+
+.chat-user-edit__actions button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 42%, transparent);
+  outline-offset: 2px;
 }
 
 .chat-user-edit__actions button:disabled {
