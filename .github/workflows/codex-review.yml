@@ -42,20 +42,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          marker="<!-- codex-review-gate:${HEAD_SHA} -->"
-          existing_comment_id="$({
-            gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
-              --jq ".[] | select(.body | contains(\"${marker}\")) | .id"
+          existing_review_id="$({
+            gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
+              --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
           } | tail -n 1)"
 
-          if [[ -n "${existing_comment_id}" ]]; then
-            echo "Codex review was already requested for ${HEAD_SHA}."
+          if [[ -n "${existing_review_id}" ]]; then
+            echo "Codex already reviewed ${HEAD_SHA}."
             exit 0
           fi
 
           body="@codex review
 
-          ${marker}"
+          <!-- codex-review-gate:${HEAD_SHA} -->"
           gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="${body}" >/dev/null
           echo "Requested Codex review for ${HEAD_SHA}."
 
