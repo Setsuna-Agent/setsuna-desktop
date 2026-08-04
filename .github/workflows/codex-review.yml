@@ -34,8 +34,8 @@ jobs:
       PENDING_SAFE_DESCRIPTION: Waiting for Codex Automatic Review
       PENDING_SHA_ONLY_DESCRIPTION: Waiting for a SHA-bound Codex review
       PR_NUMBER: ${{ github.event.pull_request.number }}
-      PR_URL: ${{ github.event.pull_request.html_url }}
       REPOSITORY: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       STATUS_CONTEXT: Codex Review Gate
 
     steps:
@@ -47,9 +47,10 @@ jobs:
 
           latest_gate_status() {
             local sha="$1"
+            local run_url="$2"
             {
               gh api --paginate "repos/${REPOSITORY}/commits/${sha}/statuses?per_page=100" \
-                --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and (.target_url == \"${PR_URL}\" or .target_url == null)) | [.created_at, (.id | tostring), .state, .description, (.target_url // \"legacy\")] | @tsv"
+                --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .target_url == \"${run_url}\") | [.created_at, (.id | tostring), .state, .description, .target_url] | @tsv"
             } | sort -k1,1 -k2,2n | tail -n 1
           }
 
@@ -57,7 +58,8 @@ jobs:
             local state="$1"
             local description="$2"
             local target_url="$3"
-            [[ "${target_url}" == "${PR_URL}" ]] || return 1
+            local run_url="$4"
+            [[ "${target_url}" == "${run_url}" ]] || return 1
             [[ "${state}" == "pending" && "${description}" == "${PENDING_SAFE_DESCRIPTION}" ]] \
               || [[ "${state}" == "success" && "${description}" == "${CLEAN_SAFE_DESCRIPTION}" ]] \
               || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]]
@@ -65,7 +67,7 @@ jobs:
 
           head_marker_record="$({
             gh api --paginate "repos/${REPOSITORY}/commits/${HEAD_SHA}/statuses?per_page=100" \
-              --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .state == \"pending\" and .target_url == \"${PR_URL}\") | [.created_at, (.id | tostring)] | @tsv"
+              --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .state == \"pending\" and .target_url == \"${RUN_URL}\") | [.created_at, (.id | tostring)] | @tsv"
           } | sort -k1,1 -k2,2n | head -n 1)"
           head_selected_at="${HEAD_EVENT_AT}"
           if [[ -n "${head_marker_record}" ]]; then
@@ -79,7 +81,8 @@ jobs:
           # reruns). Otherwise recover the most recent generation from Actions
           # history; draft-only runs have no gate status and are skipped.
           prior_head_sha="${HEAD_SHA}"
-          prior_status_record="$(latest_gate_status "${HEAD_SHA}")"
+          prior_run_url="${RUN_URL}"
+          prior_status_record="$(latest_gate_status "${HEAD_SHA}" "${RUN_URL}")"
           if [[ -z "${prior_status_record}" ]]; then
             prior_run_records="$({
               gh api --paginate "repos/${REPOSITORY}/actions/workflows/codex-review.yml/runs?event=pull_request_target&per_page=100" \
@@ -103,16 +106,22 @@ jobs:
                 # associations expose the current PR head, so legacy runs that
                 # lack this snapshot cannot safely participate in lineage.
                 prior_head_sha="unknown"
+                prior_run_url="lineage-gap"
                 prior_status_record="0"$'\t'"0"$'\t'"error"$'\t'"Status-less review generation"$'\t'"lineage-gap"
                 echo "Review run ${candidate_run_id} has no event-time head snapshot; reactions disabled."
                 break
               fi
-              candidate_status_record="$(latest_gate_status "${candidate_head_sha}")"
+              candidate_run_url="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${candidate_run_id}"
+              # The run URL makes the status generation-specific even when a
+              # force-push reuses a SHA that has older gate statuses.
+              candidate_status_record="$(latest_gate_status "${candidate_head_sha}" "${candidate_run_url}")"
               if [[ -n "${candidate_status_record}" ]]; then
                 prior_head_sha="${candidate_head_sha}"
+                prior_run_url="${candidate_run_url}"
                 prior_status_record="${candidate_status_record}"
               else
                 prior_head_sha="${candidate_head_sha}"
+                prior_run_url="${candidate_run_url}"
                 prior_status_record="0"$'\t'"0"$'\t'"error"$'\t'"Status-less review generation"$'\t'"lineage-gap"
               fi
               break
@@ -127,11 +136,11 @@ jobs:
             IFS=$'\t' read -r _ _ prior_state prior_description prior_target_url <<<"${prior_status_record}"
             if [[ "${prior_head_sha}" == "${HEAD_SHA}" ]]; then
               # Same-head reruns preserve the generation established earlier.
-              if has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}"; then
+              if has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}" "${prior_run_url}"; then
                 reaction_safe=true
               fi
             elif [[ "${prior_state}" != "pending" ]] \
-              && has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}"; then
+              && has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}" "${prior_run_url}"; then
               # A new SHA inherits reaction handling only after the prior
               # generation reached a real, lineage-safe Codex result.
               reaction_safe=true
@@ -154,7 +163,7 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=pending \
             -f context="${STATUS_CONTEXT}" \
-            -f target_url="${PR_URL}" \
+            -f target_url="${RUN_URL}" \
             -f description="${{ steps.review_generation.outputs.pending_description }}" >/dev/null
 
       # Repository settings trigger Codex Automatic Review on every push. This
@@ -221,7 +230,7 @@ jobs:
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
-                -f target_url="${PR_URL}" \
+                -f target_url="${RUN_URL}" \
                 -f description="${clean_status_description}" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA} via ${clean_source}."
@@ -242,7 +251,7 @@ jobs:
                 gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                   -f state=failure \
                   -f context="${STATUS_CONTEXT}" \
-                  -f target_url="${PR_URL}" \
+                  -f target_url="${RUN_URL}" \
                   -f description="${findings_status_description}" >/dev/null
                 echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
                 echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
@@ -254,7 +263,7 @@ jobs:
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
-                -f target_url="${PR_URL}" \
+                -f target_url="${RUN_URL}" \
                 -f description="${clean_status_description}" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA}."
@@ -265,7 +274,7 @@ jobs:
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=failure \
                 -f context="${STATUS_CONTEXT}" \
-                -f target_url="${PR_URL}" \
+                -f target_url="${RUN_URL}" \
                 -f description="Codex reaction cannot be tied to the latest commit" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex added an unversioned +1 while an earlier review generation may still be running."
@@ -280,7 +289,7 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=failure \
             -f context="${STATUS_CONTEXT}" \
-            -f target_url="${PR_URL}" \
+            -f target_url="${RUN_URL}" \
             -f description="Codex review timed out" >/dev/null
           echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
           echo "Codex did not review ${HEAD_SHA} within 25 minutes."
@@ -293,5 +302,5 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=failure \
             -f context="${STATUS_CONTEXT}" \
-            -f target_url="${PR_URL}" \
+            -f target_url="${RUN_URL}" \
             -f description="Codex review workflow failed before completion" >/dev/null
