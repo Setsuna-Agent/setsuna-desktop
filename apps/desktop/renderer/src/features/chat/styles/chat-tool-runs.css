@@ -40,8 +40,9 @@
 
 .chat-tool-run__summary {
   display: inline-grid;
-  grid-template-columns: 16px minmax(0, auto) auto;
+  grid-template-columns: 16px minmax(0, auto) auto auto;
   align-items: center;
+  justify-content: start;
   gap: 6px;
   max-width: 100%;
   min-height: 24px;
@@ -676,7 +677,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-tool-run__body--mixed-list .chat-tool-run__summary {
-  grid-template-columns: 16px minmax(0, auto) auto;
+  grid-template-columns: 16px minmax(0, auto) auto auto;
   min-height: var(--chat-tool-run-line-height);
   font-size: var(--chat-tool-run-font-size);
   line-height: var(--chat-tool-run-line-height);
