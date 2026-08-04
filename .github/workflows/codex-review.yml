@@ -87,8 +87,12 @@ jobs:
             prior_run_records="$({
               gh api --paginate "repos/${REPOSITORY}/actions/workflows/codex-review.yml/runs?event=pull_request_target&per_page=100" \
                 --jq ".workflow_runs[]
-                  | select(.id != ${GITHUB_RUN_ID} and (.pull_requests | any(.number == ${PR_NUMBER})))
-                  | ((try (.display_title | capture(\" / (?<action>[a-z_]+) / draft=(?<draft>true|false) / (?<sha>[0-9a-f]{40})$\")) catch null) // {action: \"unknown\", draft: \"unknown\", sha: \"unknown\"}) as \$snapshot
+                  | select(.id != ${GITHUB_RUN_ID})
+                  | ((try (.display_title | capture(\"^Codex Review PR #(?<pr>[0-9]+) / (?<action>[a-z_]+) / draft=(?<draft>true|false) / (?<sha>[0-9a-f]{40})$\")) catch null) // {pr: \"unknown\", action: \"unknown\", draft: \"unknown\", sha: \"unknown\"}) as \$snapshot
+                  | select(
+                      \$snapshot.pr == \"${PR_NUMBER}\"
+                      or (\$snapshot.pr == \"unknown\" and (.pull_requests | any(.number == ${PR_NUMBER})))
+                    )
                   | [
                       .created_at,
                       (.id | tostring),
@@ -100,6 +104,8 @@ jobs:
                   | @tsv"
             } | sort -k1,1r -k2,2nr)"
             while IFS=$'\t' read -r _ candidate_run_id candidate_head_sha candidate_action candidate_draft candidate_conclusion; do
+              # An empty here-string still yields one blank record.
+              [[ -n "${candidate_run_id}" ]] || continue
               # The event snapshot avoids a race where a draft job has not yet
               # reached its eventual skipped conclusion in the Actions API.
               [[ "${candidate_draft}" != "true" ]] || continue

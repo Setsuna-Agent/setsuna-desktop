@@ -150,7 +150,7 @@ CI 使用单个 `ubuntu-24.04` job，固定 pnpm `7.33.7`、Node.js `22` 和 Pyt
 1. `.github/workflows/codex-review.yml` 通过 `pull_request_target` 从受信任的默认分支执行，不 checkout 或运行 PR 代码。
 2. 仓库的 Codex Automatic Review 触发条件必须设置为“每次推送时”，由 Codex 在 PR 打开、转为 ready 和 push 新提交后自动审查当前 HEAD。
 3. workflow 不发布 `@codex review` 评论：默认 `GITHUB_TOKEN` 属于 `github-actions[bot]`，该身份无法绑定 Codex 账号。
-4. `Codex Review Gate` 接受 `chatgpt-codex-connector[bot]` 针对当前 HEAD 的标准 review、带 SHA 的 clean-review 顶层评论，或安全 review generation 中产生的 PR 顶层 👍 reaction。workflow 在 run name 中固化事件 action、draft 状态与触发时的 PR HEAD，并用唯一 Actions run URL 标记该 generation 写入的 commit status，再结合 run 历史恢复 lineage；不能恢复 HEAD 快照的旧 run 会保守地中断 lineage，重复使用的 SHA 也不会捞取其他 run 的旧 status。draft run 不产生 review generation，PR metadata 的 `edited` 事件也不触发 gate；其他无 status 的 run 会中断 lineage。只有前一 generation 已由真实 Codex 结果终结，新 HEAD 才继承 reaction 识别能力，避免 draft/连续 push 下旧 review 的延迟 reaction 放行新提交。
+4. `Codex Review Gate` 接受 `chatgpt-codex-connector[bot]` 针对当前 HEAD 的标准 review、带 SHA 的 clean-review 顶层评论，或安全 review generation 中产生的 PR 顶层 👍 reaction。workflow 在 run name 中固化 PR 编号、事件 action、draft 状态与触发时的 PR HEAD，并用唯一 Actions run URL 标记该 generation 写入的 commit status，再结合 run 历史恢复 lineage；不能恢复 HEAD 快照的旧 run 会保守地中断 lineage，重复使用的 SHA 也不会捞取其他 run 的旧 status。draft run 不产生 review generation，PR metadata 的 `edited` 事件也不触发 gate；其他无 status 的 run 会中断 lineage。只有前一 generation 已由真实 Codex 结果终结，新 HEAD 才继承 reaction 识别能力，避免 draft/连续 push 下旧 review 的延迟 reaction 放行新提交。
 5. 当前 review 有 inline finding、检测到无法绑定 HEAD 的 reaction，或 25 分钟内未完成时 gate 失败；clean review 通过，push 修复后会取消旧 run 并等待自动触发的新一轮 review。
 
 ## Release Workflow
