@@ -82,16 +82,23 @@ jobs:
           if [[ -z "${prior_status_record}" ]]; then
             prior_run_records="$({
               gh api --paginate "repos/${REPOSITORY}/actions/workflows/codex-review.yml/runs?event=pull_request_target&per_page=100" \
-                --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID} and (.pull_requests | any(.number == ${PR_NUMBER}))) | [.created_at, (.id | tostring), .head_sha] | @tsv"
+                --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID} and (.pull_requests | any(.number == ${PR_NUMBER}))) | [.created_at, (.id | tostring), .head_sha, (.conclusion // \"in_progress\")] | @tsv"
             } | sort -k1,1r -k2,2nr)"
-            while IFS=$'\t' read -r _ _ candidate_head_sha; do
+            while IFS=$'\t' read -r _ _ candidate_head_sha candidate_conclusion; do
               [[ -n "${candidate_head_sha}" ]] || continue
+              # A draft job is recorded as skipped without starting Codex.
+              # Every other status-less run represents a generation that may
+              # still emit a delayed reaction and must break the safe lineage.
+              [[ "${candidate_conclusion}" != "skipped" ]] || continue
               candidate_status_record="$(latest_gate_status "${candidate_head_sha}")"
               if [[ -n "${candidate_status_record}" ]]; then
                 prior_head_sha="${candidate_head_sha}"
                 prior_status_record="${candidate_status_record}"
-                break
+              else
+                prior_head_sha="${candidate_head_sha}"
+                prior_status_record="0"$'\t'"0"$'\t'"error"$'\t'"Status-less review generation"$'\t'"lineage-gap"
               fi
+              break
             done <<<"${prior_run_records}"
           fi
 
