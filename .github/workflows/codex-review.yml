@@ -1,11 +1,13 @@
 name: Codex Review
+run-name: "Codex Review PR #${{ github.event.pull_request.number }} / ${{ github.event.action }} / draft=${{ github.event.pull_request.draft }} / ${{ github.event.pull_request.head.sha }}"
 
 on:
   pull_request_target:
     branches: [master]
-    types: [opened, reopened, ready_for_review, synchronize, edited]
+    types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
+  actions: read
   contents: read
   pull-requests: write
   statuses: write
@@ -22,35 +24,191 @@ jobs:
     timeout-minutes: 30
     env:
       CODEX_BOT: chatgpt-codex-connector[bot]
+      CLEAN_SAFE_DESCRIPTION: Codex completed a clean review of the latest commit
+      CLEAN_SHA_ONLY_DESCRIPTION: Codex completed a SHA-bound review; reactions disabled
+      FINDINGS_SAFE_DESCRIPTION: Codex reported findings on the latest commit
+      FINDINGS_SHA_ONLY_DESCRIPTION: Codex reported findings; reactions remain disabled
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_EVENT_AT: ${{ github.event.pull_request.updated_at }}
+      PENDING_SAFE_DESCRIPTION: Waiting for Codex Automatic Review
+      PENDING_SHA_ONLY_DESCRIPTION: Waiting for a SHA-bound Codex review
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPOSITORY: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       STATUS_CONTEXT: Codex Review Gate
 
     steps:
+      - name: Establish review generation
+        id: review_generation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_gate_status() {
+            local sha="$1"
+            local run_url="$2"
+            {
+              gh api --paginate "repos/${REPOSITORY}/commits/${sha}/statuses?per_page=100" \
+                --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .target_url == \"${run_url}\") | [.created_at, (.id | tostring), .state, .description, .target_url] | @tsv"
+            } | sort -k1,1 -k2,2n | tail -n 1
+          }
+
+          has_safe_lineage() {
+            local state="$1"
+            local description="$2"
+            local target_url="$3"
+            local run_url="$4"
+            [[ "${target_url}" == "${run_url}" ]] || return 1
+            [[ "${state}" == "pending" && "${description}" == "${PENDING_SAFE_DESCRIPTION}" ]] \
+              || [[ "${state}" == "success" && "${description}" == "${CLEAN_SAFE_DESCRIPTION}" ]] \
+              || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]]
+          }
+
+          head_marker_record="$({
+            gh api --paginate "repos/${REPOSITORY}/commits/${HEAD_SHA}/statuses?per_page=100" \
+              --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .state == \"pending\" and .target_url == \"${RUN_URL}\") | [.created_at, (.id | tostring)] | @tsv"
+          } | sort -k1,1 -k2,2n | head -n 1)"
+          head_selected_at="${HEAD_EVENT_AT}"
+          if [[ -n "${head_marker_record}" ]]; then
+            IFS=$'\t' read -r head_marker_at _ <<<"${head_marker_record}"
+            if [[ "${head_marker_at}" < "${head_selected_at}" ]]; then
+              head_selected_at="${head_marker_at}"
+            fi
+          fi
+
+          # Prefer an earlier attempt for this exact SHA (including manual
+          # reruns). Otherwise recover the most recent generation from Actions
+          # history; draft-only and legacy metadata-edit runs do not start Codex.
+          prior_head_sha="${HEAD_SHA}"
+          prior_run_url="${RUN_URL}"
+          prior_status_record="$(latest_gate_status "${HEAD_SHA}" "${RUN_URL}")"
+          if [[ -z "${prior_status_record}" ]]; then
+            prior_run_records="$({
+              gh api --paginate "repos/${REPOSITORY}/actions/workflows/codex-review.yml/runs?event=pull_request_target&per_page=100" \
+                --jq ".workflow_runs[]
+                  | select(.id != ${GITHUB_RUN_ID})
+                  | ((try (.display_title | capture(\"^Codex Review PR #(?<pr>[0-9]+) / (?<action>[a-z_]+) / draft=(?<draft>true|false) / (?<sha>[0-9a-f]{40})$\")) catch null) // {pr: \"unknown\", action: \"unknown\", draft: \"unknown\", sha: \"unknown\"}) as \$snapshot
+                  | select(
+                      \$snapshot.pr == \"${PR_NUMBER}\"
+                      or (\$snapshot.pr == \"unknown\" and (.pull_requests | any(.number == ${PR_NUMBER})))
+                    )
+                  | [
+                      .created_at,
+                      (.id | tostring),
+                      \$snapshot.sha,
+                      \$snapshot.action,
+                      \$snapshot.draft,
+                      (.conclusion // \"in_progress\")
+                    ]
+                  | @tsv"
+            } | sort -k1,1r -k2,2nr)"
+            while IFS=$'\t' read -r _ candidate_run_id candidate_head_sha candidate_action candidate_draft candidate_conclusion; do
+              # An empty here-string still yields one blank record.
+              [[ -n "${candidate_run_id}" ]] || continue
+              # The event snapshot avoids a race where a draft job has not yet
+              # reached its eventual skipped conclusion in the Actions API.
+              [[ "${candidate_draft}" != "true" ]] || continue
+              [[ "${candidate_conclusion}" != "skipped" ]] || continue
+              # Editing PR metadata starts this gate but not Codex Automatic
+              # Review, so it does not create a reaction-producing generation.
+              [[ "${candidate_action}" != "edited" ]] || continue
+              # Every other status-less run represents a generation that may
+              # still emit a delayed reaction and must break the safe lineage.
+              if [[ "${candidate_head_sha}" == "unknown" ]]; then
+                # The run-name captures the event-time PR head. REST run
+                # associations expose the current PR head, so legacy runs that
+                # lack this snapshot cannot safely participate in lineage.
+                prior_head_sha="unknown"
+                prior_run_url="lineage-gap"
+                prior_status_record="0"$'\t'"0"$'\t'"error"$'\t'"Status-less review generation"$'\t'"lineage-gap"
+                echo "Review run ${candidate_run_id} has no event-time head snapshot; reactions disabled."
+                break
+              fi
+              candidate_run_url="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${candidate_run_id}"
+              # The run URL makes the status generation-specific even when a
+              # force-push reuses a SHA that has older gate statuses.
+              candidate_status_record="$(latest_gate_status "${candidate_head_sha}" "${candidate_run_url}")"
+              if [[ -n "${candidate_status_record}" ]]; then
+                prior_head_sha="${candidate_head_sha}"
+                prior_run_url="${candidate_run_url}"
+                prior_status_record="${candidate_status_record}"
+              else
+                prior_head_sha="${candidate_head_sha}"
+                prior_run_url="${candidate_run_url}"
+                prior_status_record="0"$'\t'"0"$'\t'"error"$'\t'"Status-less review generation"$'\t'"lineage-gap"
+              fi
+              break
+            done <<<"${prior_run_records}"
+          fi
+
+          reaction_safe=false
+          if [[ -z "${prior_status_record}" ]]; then
+            # No earlier active gate exists, so this is the first generation.
+            reaction_safe=true
+          else
+            IFS=$'\t' read -r _ _ prior_state prior_description prior_target_url <<<"${prior_status_record}"
+            if [[ "${prior_head_sha}" == "${HEAD_SHA}" ]]; then
+              # Same-head reruns preserve the generation established earlier.
+              if has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}" "${prior_run_url}"; then
+                reaction_safe=true
+              fi
+            elif [[ "${prior_state}" != "pending" ]] \
+              && has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}" "${prior_run_url}"; then
+              # A new SHA inherits reaction handling only after the prior
+              # generation reached a real, lineage-safe Codex result.
+              reaction_safe=true
+            fi
+          fi
+
+          pending_description="${PENDING_SHA_ONLY_DESCRIPTION}"
+          if [[ "${reaction_safe}" == "true" ]]; then
+            pending_description="${PENDING_SAFE_DESCRIPTION}"
+          fi
+
+          echo "head_selected_at=${head_selected_at}" >>"${GITHUB_OUTPUT}"
+          echo "pending_description=${pending_description}" >>"${GITHUB_OUTPUT}"
+          echo "reaction_safe=${reaction_safe}" >>"${GITHUB_OUTPUT}"
+          echo "Prior review head: ${prior_head_sha}; reaction correlation safe: ${reaction_safe}."
+
       - name: Mark review as pending
         shell: bash
         run: |
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=pending \
             -f context="${STATUS_CONTEXT}" \
-            -f description="Waiting for Codex Automatic Review" >/dev/null
+            -f target_url="${RUN_URL}" \
+            -f description="${{ steps.review_generation.outputs.pending_description }}" >/dev/null
 
       # Repository settings trigger Codex Automatic Review on every push. This
       # trusted workflow only validates the connector result for the exact SHA.
       - name: Wait for a clean review of the current head
         id: wait_for_review
         shell: bash
+        env:
+          HEAD_SELECTED_AT: ${{ steps.review_generation.outputs.head_selected_at }}
+          REACTION_SAFE: ${{ steps.review_generation.outputs.reaction_safe }}
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 1500))
           head_short="${HEAD_SHA:0:10}"
+          clean_status_description="${CLEAN_SHA_ONLY_DESCRIPTION}"
+          findings_status_description="${FINDINGS_SHA_ONLY_DESCRIPTION}"
+          if [[ "${REACTION_SAFE}" == "true" ]]; then
+            clean_status_description="${CLEAN_SAFE_DESCRIPTION}"
+            findings_status_description="${FINDINGS_SAFE_DESCRIPTION}"
+          fi
+
+          echo "Only accepting top-level reactions created after ${HEAD_SELECTED_AT}; correlation safe: ${REACTION_SAFE}."
 
           while (( SECONDS < deadline )); do
             clean_comment_record="$({
               gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
                 --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | [.created_at, (.id | tostring)] | @tsv"
+            } | sort -k1,1 -k2,2n | tail -n 1)"
+            clean_reaction_record="$({
+              gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/reactions?per_page=100" \
+                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .content == \"+1\" and .created_at > \"${HEAD_SELECTED_AT}\") | [.created_at, (.id | tostring)] | @tsv"
             } | sort -k1,1 -k2,2n | tail -n 1)"
             review_record="$({
               gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
@@ -58,24 +216,38 @@ jobs:
             } | sort -k1,1 -k2,2n | tail -n 1)"
 
             clean_comment_at=""
+            clean_reaction_at=""
             review_at=""
             review_id=""
             if [[ -n "${clean_comment_record}" ]]; then
               IFS=$'\t' read -r clean_comment_at _ <<<"${clean_comment_record}"
             fi
+            if [[ -n "${clean_reaction_record}" ]]; then
+              IFS=$'\t' read -r clean_reaction_at _ <<<"${clean_reaction_record}"
+            fi
             if [[ -n "${review_record}" ]]; then
               IFS=$'\t' read -r review_at review_id <<<"${review_record}"
             fi
 
-            # A SHA can be reviewed more than once. Only the newest Codex result
-            # may decide the gate; on a timestamp tie, prefer the standard review.
-            if [[ -n "${clean_comment_at}" && ( -z "${review_at}" || "${clean_comment_at}" > "${review_at}" ) ]]; then
+            clean_at="${clean_comment_at}"
+            clean_source="clean review comment"
+            if [[ "${REACTION_SAFE}" == "true" && -n "${clean_reaction_at}" && ( -z "${clean_at}" || "${clean_reaction_at}" > "${clean_at}" ) ]]; then
+              clean_at="${clean_reaction_at}"
+              clean_source="top-level +1 reaction"
+            fi
+
+            # Clean reviews may be SHA-stamped comments or top-level +1
+            # reactions. The generation chain must also prove that no prior
+            # head review can still emit an unversioned reaction. The newest
+            # Codex result wins; on a timestamp tie, prefer the standard review.
+            if [[ -n "${clean_at}" && ( -z "${review_at}" || "${clean_at}" > "${review_at}" ) ]]; then
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
-                -f description="Codex completed a clean review of the latest commit" >/dev/null
+                -f target_url="${RUN_URL}" \
+                -f description="${clean_status_description}" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
-              echo "Codex completed a clean review for ${HEAD_SHA}."
+              echo "Codex completed a clean review for ${HEAD_SHA} via ${clean_source}."
               exit 0
             fi
 
@@ -93,7 +265,8 @@ jobs:
                 gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                   -f state=failure \
                   -f context="${STATUS_CONTEXT}" \
-                  -f description="Codex reported findings on the latest commit" >/dev/null
+                  -f target_url="${RUN_URL}" \
+                  -f description="${findings_status_description}" >/dev/null
                 echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
                 echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
                 sed 's/^/- /' <<<"${finding_urls}"
@@ -104,10 +277,23 @@ jobs:
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
-                -f description="Codex completed a clean review of the latest commit" >/dev/null
+                -f target_url="${RUN_URL}" \
+                -f description="${clean_status_description}" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA}."
               exit 0
+            fi
+
+            if [[ "${REACTION_SAFE}" != "true" && -n "${clean_reaction_at}" ]]; then
+              gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+                -f state=failure \
+                -f context="${STATUS_CONTEXT}" \
+                -f target_url="${RUN_URL}" \
+                -f description="Codex reaction cannot be tied to the latest commit" >/dev/null
+              echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
+              echo "Codex added an unversioned +1 while an earlier review generation may still be running."
+              echo "Refusing to reuse the reaction for ${HEAD_SHA}."
+              exit 1
             fi
 
             echo "Waiting for Codex to review ${HEAD_SHA}..."
@@ -117,6 +303,7 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=failure \
             -f context="${STATUS_CONTEXT}" \
+            -f target_url="${RUN_URL}" \
             -f description="Codex review timed out" >/dev/null
           echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
           echo "Codex did not review ${HEAD_SHA} within 25 minutes."
@@ -129,4 +316,5 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=failure \
             -f context="${STATUS_CONTEXT}" \
+            -f target_url="${RUN_URL}" \
             -f description="Codex review workflow failed before completion" >/dev/null
