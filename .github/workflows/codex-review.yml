@@ -6,6 +6,7 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, edited]
 
 permissions:
+  actions: read
   contents: read
   pull-requests: write
   statuses: write
@@ -24,7 +25,6 @@ jobs:
       CODEX_BOT: chatgpt-codex-connector[bot]
       CLEAN_SAFE_DESCRIPTION: Codex completed a clean review of the latest commit
       CLEAN_SHA_ONLY_DESCRIPTION: Codex completed a SHA-bound review; reactions disabled
-      EVENT_ACTION: ${{ github.event.action }}
       FINDINGS_SAFE_DESCRIPTION: Codex reported findings on the latest commit
       FINDINGS_SHA_ONLY_DESCRIPTION: Codex reported findings; reactions remain disabled
       GH_TOKEN: ${{ github.token }}
@@ -32,7 +32,6 @@ jobs:
       HEAD_EVENT_AT: ${{ github.event.pull_request.updated_at }}
       PENDING_SAFE_DESCRIPTION: Waiting for Codex Automatic Review
       PENDING_SHA_ONLY_DESCRIPTION: Waiting for a SHA-bound Codex review
-      PREVIOUS_HEAD_SHA: ${{ github.event.before }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_URL: ${{ github.event.pull_request.html_url }}
       REPOSITORY: ${{ github.repository }}
@@ -49,13 +48,15 @@ jobs:
             local sha="$1"
             {
               gh api --paginate "repos/${REPOSITORY}/commits/${sha}/statuses?per_page=100" \
-                --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .target_url == \"${PR_URL}\") | [.created_at, (.id | tostring), .state, .description] | @tsv"
+                --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and (.target_url == \"${PR_URL}\" or .target_url == null)) | [.created_at, (.id | tostring), .state, .description, (.target_url // \"legacy\")] | @tsv"
             } | sort -k1,1 -k2,2n | tail -n 1
           }
 
           has_safe_lineage() {
             local state="$1"
             local description="$2"
+            local target_url="$3"
+            [[ "${target_url}" == "${PR_URL}" ]] || return 1
             [[ "${state}" == "pending" && "${description}" == "${PENDING_SAFE_DESCRIPTION}" ]] \
               || [[ "${state}" == "success" && "${description}" == "${CLEAN_SAFE_DESCRIPTION}" ]] \
               || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]]
@@ -73,29 +74,43 @@ jobs:
             fi
           fi
 
+          # Prefer an earlier attempt for this exact SHA (including manual
+          # reruns). Otherwise recover the most recent generation from Actions
+          # history; draft-only runs have no gate status and are skipped.
+          prior_head_sha="${HEAD_SHA}"
+          prior_status_record="$(latest_gate_status "${HEAD_SHA}")"
+          if [[ -z "${prior_status_record}" ]]; then
+            prior_run_records="$({
+              gh api --paginate "repos/${REPOSITORY}/actions/workflows/codex-review.yml/runs?event=pull_request_target&per_page=100" \
+                --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID} and (.pull_requests | any(.number == ${PR_NUMBER}))) | [.created_at, (.id | tostring), .head_sha] | @tsv"
+            } | sort -k1,1r -k2,2nr)"
+            while IFS=$'\t' read -r _ _ candidate_head_sha; do
+              [[ -n "${candidate_head_sha}" ]] || continue
+              candidate_status_record="$(latest_gate_status "${candidate_head_sha}")"
+              if [[ -n "${candidate_status_record}" ]]; then
+                prior_head_sha="${candidate_head_sha}"
+                prior_status_record="${candidate_status_record}"
+                break
+              fi
+            done <<<"${prior_run_records}"
+          fi
+
           reaction_safe=false
-          if [[ "${EVENT_ACTION}" == "opened" || "${EVENT_ACTION}" == "ready_for_review" ]]; then
-            # These events start the first automatic review generation for a PR.
+          if [[ -z "${prior_status_record}" ]]; then
+            # No earlier active gate exists, so this is the first generation.
             reaction_safe=true
-          elif [[ "${EVENT_ACTION}" == "synchronize" && -n "${PREVIOUS_HEAD_SHA}" ]]; then
-            previous_status_record="$(latest_gate_status "${PREVIOUS_HEAD_SHA}")"
-            if [[ -n "${previous_status_record}" ]]; then
-              IFS=$'\t' read -r _ _ previous_state previous_description <<<"${previous_status_record}"
-              # A new SHA may inherit reaction handling only after the previous
-              # generation reached a real Codex result, never from pending,
-              # timeout, infrastructure failure, or an already-ambiguous chain.
-              if [[ "${previous_state}" != "pending" ]] && has_safe_lineage "${previous_state}" "${previous_description}"; then
-                reaction_safe=true
-              fi
-            fi
           else
-            current_status_record="$(latest_gate_status "${HEAD_SHA}")"
-            if [[ -n "${current_status_record}" ]]; then
-              IFS=$'\t' read -r _ _ current_state current_description <<<"${current_status_record}"
+            IFS=$'\t' read -r _ _ prior_state prior_description prior_target_url <<<"${prior_status_record}"
+            if [[ "${prior_head_sha}" == "${HEAD_SHA}" ]]; then
               # Same-head reruns preserve the generation established earlier.
-              if has_safe_lineage "${current_state}" "${current_description}"; then
+              if has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}"; then
                 reaction_safe=true
               fi
+            elif [[ "${prior_state}" != "pending" ]] \
+              && has_safe_lineage "${prior_state}" "${prior_description}" "${prior_target_url}"; then
+              # A new SHA inherits reaction handling only after the prior
+              # generation reached a real, lineage-safe Codex result.
+              reaction_safe=true
             fi
           fi
 
@@ -107,7 +122,7 @@ jobs:
           echo "head_selected_at=${head_selected_at}" >>"${GITHUB_OUTPUT}"
           echo "pending_description=${pending_description}" >>"${GITHUB_OUTPUT}"
           echo "reaction_safe=${reaction_safe}" >>"${GITHUB_OUTPUT}"
-          echo "Reaction correlation safe: ${reaction_safe}."
+          echo "Prior review head: ${prior_head_sha}; reaction correlation safe: ${reaction_safe}."
 
       - name: Mark review as pending
         shell: bash
