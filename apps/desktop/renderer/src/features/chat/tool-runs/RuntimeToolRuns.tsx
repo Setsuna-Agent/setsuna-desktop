@@ -6,7 +6,9 @@ import { ChevronDown } from 'lucide-react';
 import {
   useEffect,
   useRef,
+  useState,
   type ReactNode,
+  type SyntheticEvent,
 } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
@@ -21,6 +23,15 @@ import { isActiveRuntimeToolRun } from './runtimeToolRunState.js';
 import {
   ChangeCounts,
 } from './RuntimeFileChangesSummaryCard.js';
+import {
+  RuntimeFileDiffDisclosure,
+  RuntimeFileDiffPreview,
+} from './RuntimeFileDiffPreview.js';
+import {
+  fileChangeFromToolRun,
+  fileChangesFromToolRun,
+  type RuntimeFileChange,
+} from './runtimeFileChanges.js';
 import {
   GroupedHookRunList,
   hasHookRuns,
@@ -57,6 +68,7 @@ import {
   isShellRun,
   mixedToolRunGroupIcon,
   mixedToolRunGroupSummary,
+  normalizeFileOperationPath,
   pathBaseName,
   pendingApprovalDisclosureKey,
   ShellTerminalResult,
@@ -125,33 +137,41 @@ function ToolRunDisclosure({
   autoOpenKey,
   children,
   className,
+  lazy = false,
   summary,
 }: {
   autoOpenKey?: string;
   children: ReactNode;
   className: string;
+  lazy?: boolean;
   summary: ReactNode;
 }) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const initiallyOpen = useRef(Boolean(autoOpenKey)).current;
   const previousAutoOpenKeyRef = useRef(autoOpenKey);
+  const [expanded, setExpanded] = useState(initiallyOpen);
 
   useEffect(() => {
     if (shouldAutoOpenToolRunDisclosure(previousAutoOpenKeyRef.current, autoOpenKey)) {
       const details = detailsRef.current;
       if (details) details.open = true;
+      setExpanded(true);
     }
     previousAutoOpenKeyRef.current = autoOpenKey;
   }, [autoOpenKey]);
 
+  const handleToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
+    setExpanded(event.currentTarget.open);
+  };
+
   // open 只提供稳定的初始值；挂载后由原生 details 保存用户选择，流式更新不会反向改写。
   return (
-    <details ref={detailsRef} className={className} open={initiallyOpen}>
+    <details ref={detailsRef} className={className} open={initiallyOpen} onToggle={handleToggle}>
       <summary className="chat-tool-run__summary">
         {summary}
         <ChevronDown aria-hidden="true" className="chat-tool-run__chevron" size={12} />
       </summary>
-      {children}
+      {!lazy || expanded ? children : null}
     </details>
   );
 }
@@ -191,12 +211,14 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
   const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
+  const fileChange = kind === 'fileMutation' ? fileChangeFromToolRun(run) : null;
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
   if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
   return (
     <ToolRunDisclosure
       autoOpenKey={pendingApprovalDisclosureKey([run])}
       className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}
+      lazy={Boolean(fileChange?.lines.length)}
       summary={(
         <>
           <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
@@ -446,21 +468,46 @@ function FileMutationRunRow({
   const target = fileOperationTarget(run, t);
   const error = run.status === 'error' ? formatPreview(run.resultPreview ?? '') : '';
   const totals = fileOperationChangeTotals(run);
+  const change = fileChangeFromToolRun(run);
+  const summary = (
+    <>
+      <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
+      <span className="chat-tool-run__summary-text">
+        <span className="chat-tool-run__file-status">
+          <span>{fileOperationVerb(run, t)}</span>
+          {target ? (
+            <>
+              <FileOperationTarget target={target} />
+              <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={totals?.showZero} />
+            </>
+          ) : null}
+        </span>
+      </span>
+    </>
+  );
+
+  if (change?.lines.length) {
+    return (
+      <ToolRunDisclosure
+        autoOpenKey={pendingApprovalDisclosureKey([run])}
+        className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName('fileMutation')} chat-tool-run--${run.status}`}
+        lazy
+        summary={summary}
+      >
+        <div className="chat-tool-run__body chat-tool-run__body--file-diff">
+          <RuntimeFileDiffPreview change={change} />
+          {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
+          {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
+          <HookRunList runs={run.hookRuns} />
+        </div>
+      </ToolRunDisclosure>
+    );
+  }
+
   return (
     <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName('fileMutation')} chat-tool-run--${run.status}`}>
       <div className="chat-tool-run__summary">
-        <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
-        <span className="chat-tool-run__summary-text">
-          <span className="chat-tool-run__file-status">
-            <span>{fileOperationVerb(run, t)}</span>
-            {target ? (
-              <>
-                <FileOperationTarget target={target} />
-                <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={totals?.showZero} />
-              </>
-            ) : null}
-          </span>
-        </span>
+        {summary}
       </div>
       {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
       {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
@@ -491,23 +538,51 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
 function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
   const { t } = useI18n();
   const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
+  const changesByPath = fileChangesByPath(runs);
   if (!entries.length) return null;
   return (
     <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
-      {entries.map((entry) => (
-        <li className="chat-tool-run__inspection-item" key={`${entry.action}:${entry.path}`}>
-          <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
-            {toolRunKindIcon('fileMutation')}
-          </span>
-          <span>{fileOperationActionLabel(entry.action, t)}</span>
-          <WorkspaceFileLink className="chat-tool-run__file-list-target" filePath={entry.path} linkKind="workspace-tool">
-            {pathBaseName(entry.path, t)}
-          </WorkspaceFileLink>
-          <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.showZeroChangeCounts} />
-        </li>
-      ))}
+      {entries.map((entry) => {
+        const change = changesByPath.get(normalizeFileOperationPath(entry.path));
+        const summary = (
+          <>
+            <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
+              {toolRunKindIcon('fileMutation')}
+            </span>
+            <span>{fileOperationActionLabel(entry.action, t)}</span>
+            <WorkspaceFileLink
+              className="chat-tool-run__file-list-target"
+              filePath={entry.path}
+              linkKind="workspace-tool"
+              onClick={change?.lines.length ? (event) => event.stopPropagation() : undefined}
+            >
+              {pathBaseName(entry.path, t)}
+            </WorkspaceFileLink>
+            <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.showZeroChangeCounts} />
+          </>
+        );
+        return change?.lines.length ? (
+          <li className="chat-file-diff__item" key={`${entry.action}:${entry.path}`}>
+            <RuntimeFileDiffDisclosure change={change} summary={summary} />
+          </li>
+        ) : (
+          <li className="chat-tool-run__inspection-item" key={`${entry.action}:${entry.path}`}>
+            {summary}
+          </li>
+        );
+      })}
     </ul>
   );
+}
+
+function fileChangesByPath(runs: RuntimeToolRun[]): Map<string, RuntimeFileChange> {
+  const changes = new Map<string, RuntimeFileChange>();
+  for (const run of runs) {
+    for (const change of fileChangesFromToolRun(run)) {
+      changes.set(normalizeFileOperationPath(change.path), change);
+    }
+  }
+  return changes;
 }
 
 function ToolRunDetails({
@@ -556,8 +631,10 @@ function ToolRunDetails({
     );
   }
   if (isFileOperationRun(run)) {
+    const change = fileChangeFromToolRun(run);
     return (
       <>
+        {change?.lines.length ? <RuntimeFileDiffPreview change={change} /> : null}
         {run.status === 'error' && run.resultPreview ? <div className="chat-tool-run__file-error">{formatPreview(run.resultPreview)}</div> : null}
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}

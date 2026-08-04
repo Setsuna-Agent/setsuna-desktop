@@ -703,7 +703,12 @@ export function ToolRunSummaryTarget({
 export function FileOperationTarget({ target }: { target: string }) {
   const { t } = useI18n();
   return (
-    <WorkspaceFileLink className="chat-tool-run__file-target" filePath={target} linkKind="workspace-tool">
+    <WorkspaceFileLink
+      className="chat-tool-run__file-target"
+      filePath={target}
+      linkKind="workspace-tool"
+      onClick={(event) => event.stopPropagation()}
+    >
       {pathBaseName(target, t)}
     </WorkspaceFileLink>
   );

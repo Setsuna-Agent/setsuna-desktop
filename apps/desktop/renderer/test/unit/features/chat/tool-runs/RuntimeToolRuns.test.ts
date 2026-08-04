@@ -52,6 +52,44 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     expect(renderedHtml([pendingApprovalRun])).toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
   });
 
+  it('makes completed file diffs expandable without rendering the closed preview', () => {
+    const html = renderedHtml([
+      fileRunWithDiff('edit_notice', 'edit_file', 'src/RuntimeErrorNotice.tsx'),
+    ]);
+
+    expect(html).toContain('<details');
+    expect(html).toContain('chat-tool-run__chevron');
+    expect(html).not.toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
+    expect(html).not.toContain('chat-file-diff__preview');
+    expect(renderedTextFromHtml(firstToolRunSummaryHtml(html))).toContain('已编辑RuntimeErrorNotice.tsx+1-1');
+  });
+
+  it('opens pending file diffs so changes can be reviewed before approval', () => {
+    const pendingRun: RuntimeToolRun = {
+      ...fileRunWithDiff('edit_pending', 'edit_file', 'src/pending.ts', 'pending_approval'),
+      approvalId: 'approval_edit_pending',
+    };
+    const html = renderedHtml([pendingRun]);
+
+    expect(html).toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
+    expect(html).toContain('chat-file-diff__preview');
+    expect(html).toContain('chat-file-diff__line--removed');
+    expect(html).toContain('chat-file-diff__line--added');
+  });
+
+  it('adds an independent diff disclosure for each file in a mutation group', () => {
+    const html = renderedHtml([
+      fileRunWithDiff('edit_first', 'edit_file', 'src/first.ts'),
+      fileRunWithDiff('edit_second', 'edit_file', 'src/second.ts'),
+    ]);
+
+    expect(html.match(/chat-file-diff__disclosure/gu)).toHaveLength(2);
+    expect(html.match(/chat-file-diff__chevron/gu)).toHaveLength(2);
+    expect(html).not.toContain('chat-file-diff__preview');
+    expect(renderedTextFromHtml(html)).toContain('编辑first.ts+1-1');
+    expect(renderedTextFromHtml(html)).toContain('编辑second.ts+1-1');
+  });
+
   it('auto-opens each new approval once without overriding a manual collapse during the same request', () => {
     expect(shouldAutoOpenToolRunDisclosure(undefined, 'approval_1')).toBe(true);
     expect(shouldAutoOpenToolRunDisclosure('approval_1', 'approval_1')).toBe(false);
@@ -834,6 +872,31 @@ function fileRun(id: string, name: string, path: string, action: string): Runtim
         deletions: action === 'Created' ? 0 : 1,
         truncated: false,
         lines: [],
+      },
+    }),
+  };
+}
+
+function fileRunWithDiff(
+  id: string,
+  name: string,
+  path: string,
+  status: RuntimeToolRun['status'] = 'success',
+): RuntimeToolRun {
+  return {
+    ...toolRun(id, name, { file_path: path }, status),
+    resultPreview: JSON.stringify({
+      diff: {
+        path,
+        action: 'Edited',
+        additions: 1,
+        deletions: 1,
+        truncated: false,
+        lines: [
+          { type: 'context', oldLine: 1, newLine: 1, content: 'const before = true;' },
+          { type: 'del', oldLine: 2, content: "return 'before';" },
+          { type: 'add', newLine: 2, content: "return 'after';" },
+        ],
       },
     }),
   };

@@ -1,0 +1,130 @@
+.chat-file-diff__item,
+.chat-file-diff__disclosure {
+  width: 100%;
+  min-width: 0;
+}
+
+.chat-file-diff__summary {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.chat-file-diff__summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-file-diff__summary:hover {
+  color: var(--app-text);
+}
+
+.chat-file-diff__chevron {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);
+  transition: transform 0.16s ease;
+}
+
+.chat-file-diff__disclosure[open] > .chat-file-diff__summary .chat-file-diff__chevron {
+  transform: rotate(180deg);
+}
+
+.chat-file-diff__preview {
+  box-sizing: border-box;
+  width: min(760px, 100%);
+  min-width: 0;
+  margin: 4px 0 6px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
+  border-radius: 7px;
+  background: var(--code-highlight-background);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--app-text) 4%, transparent);
+  overflow: hidden;
+}
+
+.chat-tool-run__body--file-diff > .chat-file-diff__preview {
+  margin-top: 2px;
+}
+
+.chat-file-diff__viewport {
+  max-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-file-diff__line {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  min-height: 20px;
+  color: var(--code-syntax-plain);
+  background: var(--code-highlight-background);
+  font-family: var(--app-code-font-family);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.chat-file-diff__line--added {
+  background: color-mix(in srgb, var(--app-success) 11%, var(--code-highlight-background));
+}
+
+.chat-file-diff__line--removed {
+  background: color-mix(in srgb, var(--app-danger) 11%, var(--code-highlight-background));
+}
+
+.chat-file-diff__line-number {
+  width: 5ch;
+  flex: 0 0 5ch;
+  padding-right: 1ch;
+  color: color-mix(in srgb, var(--app-text-muted) 72%, transparent);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+.chat-file-diff__marker {
+  width: 2ch;
+  flex: 0 0 2ch;
+  color: var(--app-text-muted);
+  text-align: center;
+  user-select: none;
+}
+
+.chat-file-diff__line--added .chat-file-diff__marker {
+  color: var(--app-success);
+}
+
+.chat-file-diff__line--removed .chat-file-diff__marker {
+  color: var(--app-danger);
+}
+
+.chat-file-diff__code {
+  min-width: max-content;
+  padding-right: 12px;
+  color: var(--code-syntax-plain);
+  font: inherit;
+  white-space: pre;
+}
+
+.chat-file-diff__gap {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  gap: 6px;
+  min-width: 100%;
+  min-height: 28px;
+  padding: 0 12px;
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-text-muted) 5%, var(--code-highlight-background));
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.chat-file-diff__truncated {
+  padding: 6px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+  color: var(--app-text-muted);
+  background: var(--app-surface);
+  font-size: 11px;
+  line-height: 16px;
+}

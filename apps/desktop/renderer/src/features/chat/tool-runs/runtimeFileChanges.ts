@@ -33,6 +33,7 @@ type FileMutationEntry = {
 };
 
 const fileDiffContextLines = 3;
+const mergedFileDiffLineLimit = 240;
 
 const fileMutationToolNames = new Set([
   'workspace_write_file',
@@ -306,13 +307,14 @@ function mergeFileChange(previous: RuntimeFileChange, next: RuntimeFileChange): 
   const previousLines = previous.lines ?? [];
   const nextLines = next.lines ?? [];
   const separator: RuntimeFileDiffLine[] = previousLines.length && nextLines.length ? [{ type: 'gap', content: '...' }] : [];
+  const mergedLines = [...previousLines, ...separator, ...nextLines];
   return {
     ...next,
     action: normalizeAction(previous.action) === 'created' ? previous.action : next.action,
     additions: previous.additions + next.additions,
     deletions: previous.deletions + next.deletions,
-    truncated: previous.truncated || next.truncated,
-    lines: [...previousLines, ...separator, ...nextLines].slice(0, 240),
+    truncated: previous.truncated || next.truncated || mergedLines.length > mergedFileDiffLineLimit,
+    lines: mergedLines.slice(0, mergedFileDiffLineLimit),
   };
 }
 
