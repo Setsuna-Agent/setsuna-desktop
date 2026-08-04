@@ -2,6 +2,7 @@ import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts'
 import { describe, expect, it } from 'vitest';
 import {
   collapseFileMutationRunsInSegments,
+  fileChangesFromToolRun,
   fileChangeSummaryFromRuns,
   latestFileChangeSummaryFromMessages,
 } from '../../../../../src/features/chat/tool-runs/runtimeFileChanges.js';
@@ -198,6 +199,17 @@ describe('runtime file changes', () => {
     expect(summary?.files[0]?.lines).toHaveLength(240);
   });
 
+  it('caps a single large file preview without changing its totals', () => {
+    const [change] = fileChangesFromToolRun(largeFileRun('call_large', 1, 300));
+
+    expect(change).toMatchObject({
+      additions: 300,
+      deletions: 0,
+      truncated: true,
+    });
+    expect(change?.lines).toHaveLength(240);
+  });
+
   it('recovers file changes from tool data when a legacy result preview contains truncated JSON', () => {
     const summary = fileChangeSummaryFromRuns([{
       id: 'call_legacy',
@@ -272,7 +284,7 @@ describe('runtime file changes', () => {
   });
 });
 
-function largeFileRun(id: string, startingLine: number): RuntimeToolRun {
+function largeFileRun(id: string, startingLine: number, lineCount = 130): RuntimeToolRun {
   return {
     id,
     name: 'edit_file',
@@ -281,10 +293,10 @@ function largeFileRun(id: string, startingLine: number): RuntimeToolRun {
       diff: {
         path: 'src/large.ts',
         action: 'Edited',
-        additions: 130,
+        additions: lineCount,
         deletions: 0,
         truncated: false,
-        lines: Array.from({ length: 130 }, (_, index) => ({
+        lines: Array.from({ length: lineCount }, (_, index) => ({
           type: 'add',
           newLine: startingLine + index,
           content: `line ${startingLine + index}`,

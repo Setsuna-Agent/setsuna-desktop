@@ -33,7 +33,7 @@ type FileMutationEntry = {
 };
 
 const fileDiffContextLines = 3;
-const mergedFileDiffLineLimit = 240;
+const fileDiffPreviewLineLimit = 240;
 
 const fileMutationToolNames = new Set([
   'workspace_write_file',
@@ -182,12 +182,22 @@ function extractFileChange(value: unknown): RuntimeFileChange | null {
 }
 
 function normalizeFileChange(file: RuntimeFileChange): RuntimeFileChange {
-  return {
+  return limitRuntimeFileChangePreview({
     ...file,
     additions: count(file.additions),
     deletions: count(file.deletions),
     truncated: Boolean(file.truncated),
     lines: normalizeDiffLines(file.lines),
+  });
+}
+
+export function limitRuntimeFileChangePreview(change: RuntimeFileChange): RuntimeFileChange {
+  // Runtime tools may return every changed line; bound both syntax highlighting and DOM work.
+  if (change.lines.length <= fileDiffPreviewLineLimit) return change;
+  return {
+    ...change,
+    truncated: true,
+    lines: change.lines.slice(0, fileDiffPreviewLineLimit),
   };
 }
 
@@ -307,15 +317,14 @@ function mergeFileChange(previous: RuntimeFileChange, next: RuntimeFileChange): 
   const previousLines = previous.lines ?? [];
   const nextLines = next.lines ?? [];
   const separator: RuntimeFileDiffLine[] = previousLines.length && nextLines.length ? [{ type: 'gap', content: '...' }] : [];
-  const mergedLines = [...previousLines, ...separator, ...nextLines];
-  return {
+  return limitRuntimeFileChangePreview({
     ...next,
     action: normalizeAction(previous.action) === 'created' ? previous.action : next.action,
     additions: previous.additions + next.additions,
     deletions: previous.deletions + next.deletions,
-    truncated: previous.truncated || next.truncated || mergedLines.length > mergedFileDiffLineLimit,
-    lines: mergedLines.slice(0, mergedFileDiffLineLimit),
-  };
+    truncated: previous.truncated || next.truncated,
+    lines: [...previousLines, ...separator, ...nextLines],
+  });
 }
 
 function asDiffRecord(value: unknown): Record<string, unknown> | null {

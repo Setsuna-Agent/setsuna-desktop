@@ -10,9 +10,10 @@ import {
   fileLanguage,
   highlightedDiffLinesHtml,
 } from '../../../shared/lib/codeHighlight.js';
-import type {
-  RuntimeFileChange,
-  RuntimeFileDiffLine,
+import {
+  limitRuntimeFileChangePreview,
+  type RuntimeFileChange,
+  type RuntimeFileDiffLine,
 } from './runtimeFileChanges.js';
 
 export function RuntimeFileDiffDisclosure({
@@ -40,20 +41,21 @@ export function RuntimeFileDiffDisclosure({
 
 export function RuntimeFileDiffPreview({ change }: { change: RuntimeFileChange }) {
   const { t } = useI18n();
-  const language = fileLanguage(change.path);
+  const previewChange = useMemo(() => limitRuntimeFileChangePreview(change), [change]);
+  const language = fileLanguage(previewChange.path);
   const highlightedLines = useMemo(
-    () => highlightedDiffLinesHtml(change.lines, language),
-    [change.lines, language],
+    () => highlightedDiffLinesHtml(previewChange.lines, language),
+    [previewChange.lines, language],
   );
 
   return (
     <div
       className="chat-file-diff__preview"
       role="region"
-      aria-label={t('toolRun.file.diff.label', { path: change.path })}
+      aria-label={t('toolRun.file.diff.label', { path: previewChange.path })}
     >
       <div className="chat-file-diff__viewport">
-        {change.lines.map((line, index) => (
+        {previewChange.lines.map((line, index) => (
           <RuntimeFileDiffRow
             highlighted={highlightedLines[index]}
             key={`${line.type}:${line.oldLine ?? ''}:${line.newLine ?? ''}:${index}`}
@@ -63,7 +65,7 @@ export function RuntimeFileDiffPreview({ change }: { change: RuntimeFileChange }
           />
         ))}
       </div>
-      {change.truncated ? (
+      {previewChange.truncated ? (
         <div className="chat-file-diff__truncated">
           {t('toolRun.file.diff.truncated')}
         </div>

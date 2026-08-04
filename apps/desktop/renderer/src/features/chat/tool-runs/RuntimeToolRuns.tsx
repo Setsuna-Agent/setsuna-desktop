@@ -211,14 +211,14 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
   const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
-  const fileChange = kind === 'fileMutation' ? fileChangeFromToolRun(run) : null;
+  const fileChanges = kind === 'fileMutation' ? fileChangesFromToolRun(run) : [];
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
   if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
   return (
     <ToolRunDisclosure
       autoOpenKey={pendingApprovalDisclosureKey([run])}
       className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}
-      lazy={Boolean(fileChange?.lines.length)}
+      lazy={fileChanges.some((change) => change.lines.length > 0)}
       summary={(
         <>
           <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
@@ -631,10 +631,15 @@ function ToolRunDetails({
     );
   }
   if (isFileOperationRun(run)) {
-    const change = fileChangeFromToolRun(run);
+    const changes = fileChangesFromToolRun(run);
+    const singleChange = changes.length === 1 ? changes[0] : undefined;
     return (
       <>
-        {change?.lines.length ? <RuntimeFileDiffPreview change={change} /> : null}
+        {changes.length > 1
+          ? <FileOperationTargetList runs={[run]} />
+          : singleChange?.lines.length
+            ? <RuntimeFileDiffPreview change={singleChange} />
+            : null}
         {run.status === 'error' && run.resultPreview ? <div className="chat-tool-run__file-error">{formatPreview(run.resultPreview)}</div> : null}
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}

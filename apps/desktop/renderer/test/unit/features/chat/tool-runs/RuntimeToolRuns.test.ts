@@ -90,6 +90,16 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     expect(renderedTextFromHtml(html)).toContain('编辑second.ts+1-1');
   });
 
+  it('keeps every diff available when a multi-file mutation also has hooks', () => {
+    const html = renderedHtml([hookBearingMultiFileRunWithDiff()]);
+
+    expect(html).toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
+    expect(html.match(/chat-file-diff__disclosure/gu)).toHaveLength(2);
+    expect(renderedTextFromHtml(html)).toContain('编辑first.ts+1-1');
+    expect(renderedTextFromHtml(html)).toContain('编辑second.ts+1-1');
+    expect(html).toContain('chat-tool-run__hook');
+  });
+
   it('auto-opens each new approval once without overriding a manual collapse during the same request', () => {
     expect(shouldAutoOpenToolRunDisclosure(undefined, 'approval_1')).toBe(true);
     expect(shouldAutoOpenToolRunDisclosure('approval_1', 'approval_1')).toBe(false);
@@ -899,6 +909,35 @@ function fileRunWithDiff(
         ],
       },
     }),
+  };
+}
+
+function hookBearingMultiFileRunWithDiff(): RuntimeToolRun {
+  const paths = ['src/first.ts', 'src/second.ts'];
+  return {
+    ...toolRun('patch_with_hooks', 'apply_patch', { files: paths }, 'pending_approval'),
+    approvalId: 'approval_patch_with_hooks',
+    resultPreview: JSON.stringify({
+      diff: {
+        diffs: paths.map((path) => ({
+          path,
+          action: 'Edited',
+          additions: 1,
+          deletions: 1,
+          truncated: false,
+          lines: [
+            { type: 'del', oldLine: 1, content: 'before' },
+            { type: 'add', newLine: 1, content: 'after' },
+          ],
+        })),
+      },
+    }),
+    hookRuns: [{
+      id: 'hook_patch',
+      eventName: 'PreToolUse',
+      handlerType: 'command',
+      status: 'completed',
+    }],
   };
 }
 
