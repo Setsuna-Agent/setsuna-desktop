@@ -68,7 +68,7 @@ function AppBlankSurface() {
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
 
-  private readonly reset = () => this.setState({ error: null });
+  private readonly retry = () => reloadRenderer(window.location);
 
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -80,10 +80,15 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 
   render() {
     if (this.state.error) {
-      return <AppErrorFallback error={this.state.error} onRetry={this.reset} />;
+      return <AppErrorFallback error={this.state.error} onRetry={this.retry} />;
     }
     return this.props.children;
   }
+}
+
+export function reloadRenderer(location: Pick<Location, 'reload'>): void {
+  // React.lazy caches rejected import promises, so remounting the same tree cannot recover them.
+  location.reload();
 }
 
 function AppErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }) {

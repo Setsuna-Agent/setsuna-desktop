@@ -52,7 +52,7 @@ import {
   normalizedThreadSearch,
   threadSearchResult,
 } from './thread-search.js';
-import { searchSqliteThreadMessagePreviews } from './sqlite-thread-search.js';
+import { registerSqliteThreadSearch, searchSqliteThreadMessagePreviews } from './sqlite-thread-search.js';
 
 const DEFAULT_CHECKPOINT_DELAY_MS = 250;
 const DEFAULT_EVENT_RETENTION_LIMIT = 4_096;
@@ -438,6 +438,7 @@ export class SqliteThreadStore implements ThreadStore {
         PRAGMA foreign_keys = ON;
         PRAGMA temp_store = MEMORY;
       `);
+      registerSqliteThreadSearch(database);
       ensureSqliteThreadSchema(database);
       await this.acquireOwnership();
       this.startLeaseHeartbeat();

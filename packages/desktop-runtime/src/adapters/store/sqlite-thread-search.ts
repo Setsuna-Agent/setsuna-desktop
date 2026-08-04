@@ -1,7 +1,18 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { buildThreadSearchPreview } from './thread-search.js';
+import {
+  buildThreadSearchPreview,
+  normalizeThreadSearchText,
+} from './thread-search.js';
 
 type SearchRow = Record<string, string | number | bigint | Uint8Array | null>;
+const NORMALIZE_SEARCH_FUNCTION = 'setsuna_normalize_thread_search';
+
+export function registerSqliteThreadSearch(database: DatabaseSync): void {
+  // SQLite lower() only folds ASCII. Use the same JS normalization as JSON-backed search.
+  database.function(NORMALIZE_SEARCH_FUNCTION, { deterministic: true }, (value) => (
+    typeof value === 'string' ? normalizeThreadSearchText(value) : ''
+  ));
+}
 
 export function searchSqliteThreadMessagePreviews(
   database: DatabaseSync,
@@ -14,7 +25,7 @@ export function searchSqliteThreadMessagePreviews(
     INNER JOIN (
       SELECT thread_id, MAX(message_index) AS message_index
       FROM thread_messages
-      WHERE instr(lower(CAST(json_extract(message_json, '$.content') AS TEXT)), ?) > 0
+      WHERE instr(${NORMALIZE_SEARCH_FUNCTION}(CAST(json_extract(message_json, '$.content') AS TEXT)), ?) > 0
       GROUP BY thread_id
     ) AS matches
       ON matches.thread_id = messages.thread_id

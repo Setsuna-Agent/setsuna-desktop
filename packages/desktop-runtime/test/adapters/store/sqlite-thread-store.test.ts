@@ -65,6 +65,25 @@ describe('sqlite thread store', () => {
     await store.close();
   });
 
+  it('normalizes Unicode case and message whitespace before searching', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    const matching = await store.createThread({ title: 'Unrelated title' });
+    await store.appendEvent(
+      matching.id,
+      messageCreatedEvent(matching.id, 'msg_normalized_search', 'НАЧАЛО\nCAFÉ завершение'),
+    );
+
+    await expect(store.listThreads({ search: 'начало café' })).resolves.toEqual([
+      expect.objectContaining({
+        id: matching.id,
+        searchMatchPreview: expect.stringContaining('НАЧАЛО CAFÉ'),
+      }),
+    ]);
+    await store.close();
+  });
+
   it('releases the runtime lease and checkpoints WAL before migration shutdown completes', async () => {
     const dataDir = await temporaryDirectory();
     const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

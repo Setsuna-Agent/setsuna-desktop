@@ -4,7 +4,11 @@ const SEARCH_CONTEXT_BEFORE = 22;
 const SEARCH_CONTEXT_AFTER = 52;
 
 export function normalizedThreadSearch(value?: string): string {
-  return value?.trim().toLowerCase() ?? '';
+  return normalizeThreadSearchText(value ?? '');
+}
+
+export function normalizeThreadSearchText(value: string): string {
+  return compactThreadSearchText(value).toLowerCase();
 }
 
 export function threadSummarySearchMatch(
@@ -12,7 +16,7 @@ export function threadSummarySearchMatch(
   search: string,
 ): { matches: boolean; preview?: string } {
   if (!search) return { matches: true };
-  if (thread.title.toLowerCase().includes(search)) return { matches: true };
+  if (normalizeThreadSearchText(thread.title).includes(search)) return { matches: true };
   const preview = buildThreadSearchPreview(thread.lastMessagePreview, search);
   return preview ? { matches: true, preview } : { matches: false };
 }
@@ -42,10 +46,15 @@ export function findThreadMessageSearchPreview(
 }
 
 export function buildThreadSearchPreview(text: string, search: string): string | undefined {
-  const compactText = text.replace(/\s+/gu, ' ').trim();
-  const matchIndex = compactText.toLowerCase().indexOf(search);
+  const compactText = compactThreadSearchText(text);
+  const normalizedSearch = normalizeThreadSearchText(search);
+  const matchIndex = normalizeThreadSearchText(compactText).indexOf(normalizedSearch);
   if (matchIndex < 0) return undefined;
   const start = Math.max(0, matchIndex - SEARCH_CONTEXT_BEFORE);
-  const end = Math.min(compactText.length, matchIndex + search.length + SEARCH_CONTEXT_AFTER);
+  const end = Math.min(compactText.length, matchIndex + normalizedSearch.length + SEARCH_CONTEXT_AFTER);
   return `${start > 0 ? '...' : ''}${compactText.slice(start, end)}${end < compactText.length ? '...' : ''}`;
+}
+
+function compactThreadSearchText(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim();
 }

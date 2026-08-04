@@ -1,5 +1,6 @@
 import { Minus, PanelLeft, Plus, X } from 'lucide-react';
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -9,6 +10,11 @@ import {
   type Ref,
 } from 'react';
 import { usesCustomFrameLayout } from '../../shared/lib/desktopPlatform.js';
+import {
+  captureDocumentEditTarget,
+  executeDocumentEditCommand,
+  type DocumentEditTarget,
+} from '../../shared/lib/documentEditCommand.js';
 import { focusMenuItem, menuFocusIntent } from '../../shared/lib/menuFocus.js';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
@@ -177,7 +183,21 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
   const { t } = useI18n();
   const [openMenu, setOpenMenu] = useState<WindowMenuKey | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const menus = useMemo(() => windowMenuDefinitions(actions, t), [actions, t]);
+  const editTargetRef = useRef<DocumentEditTarget | null>(null);
+  const rememberEditTarget = useCallback((element: Element | null) => {
+    // Switching between topbar menus must not replace the original editor with a menu button.
+    if (element && rootRef.current?.contains(element)) return;
+    editTargetRef.current = captureDocumentEditTarget(element);
+  }, []);
+  const executeEditCommand = useCallback((command: string) => {
+    const target = editTargetRef.current;
+    editTargetRef.current = null;
+    executeDocumentEditCommand(document, target, command);
+  }, []);
+  const menus = useMemo(
+    () => windowMenuDefinitions(actions, t, executeEditCommand),
+    [actions, executeEditCommand, t],
+  );
   const windowMenuLabels: Array<{ key: WindowMenuKey; label: string }> = [
     { key: 'file', label: t('shell.menu.file') },
     { key: 'edit', label: t('shell.menu.edit') },
@@ -193,6 +213,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
     });
     const handlePointerDown = (event: PointerEvent) => {
       if (rootRef.current?.contains(event.target as Node)) return;
+      editTargetRef.current = null;
       setOpenMenu(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -217,6 +238,10 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
             data-window-menu-trigger={item.key}
             className={`app-topbar__menu-item ${openMenu === item.key ? 'is-open' : ''}`}
             type="button"
+            onFocus={(event) => {
+              rememberEditTarget(event.relatedTarget instanceof Element ? event.relatedTarget : null);
+            }}
+            onPointerDown={() => rememberEditTarget(document.activeElement)}
             onKeyDown={(event) => {
               if (event.key !== 'ArrowDown') return;
               event.preventDefault();
@@ -256,6 +281,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
                   onClick={() => {
                     if (menuItem.disabled) return;
                     setOpenMenu(null);
+                    if (item.key !== 'edit') editTargetRef.current = null;
                     menuItem.action();
                   }}
                 >
@@ -270,17 +296,21 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
   );
 }
 
-function windowMenuDefinitions(actions: WindowMenuActions, t: Translate): Record<WindowMenuKey, WindowMenuItem[]> {
+function windowMenuDefinitions(
+  actions: WindowMenuActions,
+  t: Translate,
+  executeEditCommand: (command: string) => void,
+): Record<WindowMenuKey, WindowMenuItem[]> {
   return {
     file: [
       menuItem('new-chat', t('app.newChat'), actions.onNewChat),
       menuItem('settings', t('shell.menu.settings'), actions.onOpenSettings),
     ],
     edit: [
-      commandMenuItem('cut', t('shell.menu.cut')),
-      commandMenuItem('copy', t('shell.menu.copy')),
-      commandMenuItem('paste', t('shell.menu.paste')),
-      commandMenuItem('select-all', t('shell.menu.selectAll'), 'selectAll'),
+      commandMenuItem('cut', t('shell.menu.cut'), executeEditCommand),
+      commandMenuItem('copy', t('shell.menu.copy'), executeEditCommand),
+      commandMenuItem('paste', t('shell.menu.paste'), executeEditCommand),
+      commandMenuItem('select-all', t('shell.menu.selectAll'), executeEditCommand, 'selectAll'),
     ],
     view: [
       menuItem('toggle-sidebar', t('shell.menu.toggleSidebar'), actions.onToggleSidebar),
@@ -303,10 +333,13 @@ function menuItem(key: string, label: string, action?: () => void): WindowMenuIt
   };
 }
 
-function commandMenuItem(key: string, label: string, command = key): WindowMenuItem {
-  return menuItem(key, label, () => {
-    document.execCommand(command);
-  });
+function commandMenuItem(
+  key: string,
+  label: string,
+  execute: (command: string) => void,
+  command = key,
+): WindowMenuItem {
+  return menuItem(key, label, () => execute(command));
 }
 
 function WindowControls() {
