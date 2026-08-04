@@ -24,6 +24,7 @@ jobs:
       CODEX_BOT: chatgpt-codex-connector[bot]
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_ACTION: ${{ github.event.action }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPOSITORY: ${{ github.repository }}
       STATUS_CONTEXT: Codex Review Gate
@@ -32,38 +33,23 @@ jobs:
       - name: Mark review as pending
         shell: bash
         run: |
+          description="Waiting for Codex to review the latest commit"
+          if [[ "${PR_ACTION}" == "synchronize" || "${PR_ACTION}" == "edited" ]]; then
+            description="Request @codex review for the latest commit"
+          fi
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=pending \
             -f context="${STATUS_CONTEXT}" \
-            -f description="Waiting for Codex to review the latest commit" >/dev/null
+            -f description="${description}" >/dev/null
 
-      - name: Request review for the current head
+      - name: Describe review trigger
         shell: bash
         run: |
-          set -euo pipefail
-          head_short="${HEAD_SHA:0:10}"
-          echo "Checking existing Codex reviews..."
-          existing_review_id="$({
-            gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
-              --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
-          } | tail -n 1)"
-          echo "Checking existing Codex clean-review comments..."
-          existing_clean_comment_id="$({
-            gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
-              --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | .id"
-          } | tail -n 1)"
-
-          if [[ -n "${existing_review_id}" || -n "${existing_clean_comment_id}" ]]; then
-            echo "Codex already reviewed ${HEAD_SHA}."
-            exit 0
+          if [[ "${PR_ACTION}" == "opened" || "${PR_ACTION}" == "reopened" || "${PR_ACTION}" == "ready_for_review" ]]; then
+            echo "Waiting for the repository's Codex Automatic Review."
+          else
+            echo "::notice title=Codex review required::If Codex does not automatically review the new head, an authorized GitHub user must comment '@codex review' on PR ${PR_NUMBER}."
           fi
-
-          body="@codex review
-
-          <!-- codex-review-gate:${HEAD_SHA} -->"
-          echo "Posting Codex review request..."
-          gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="${body}" >/dev/null
-          echo "Requested Codex review for ${HEAD_SHA}."
 
       - name: Wait for a clean review of the current head
         id: wait_for_review
