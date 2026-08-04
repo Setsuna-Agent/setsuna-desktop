@@ -7,8 +7,7 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: read
+  pull-requests: write
   statuses: write
 
 concurrency:
@@ -43,10 +42,12 @@ jobs:
         run: |
           set -euo pipefail
           head_short="${HEAD_SHA:0:10}"
+          echo "Checking existing Codex reviews..."
           existing_review_id="$({
             gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
               --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
           } | tail -n 1)"
+          echo "Checking existing Codex clean-review comments..."
           existing_clean_comment_id="$({
             gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
               --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | .id"
@@ -60,10 +61,12 @@ jobs:
           body="@codex review
 
           <!-- codex-review-gate:${HEAD_SHA} -->"
+          echo "Posting Codex review request..."
           gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="${body}" >/dev/null
           echo "Requested Codex review for ${HEAD_SHA}."
 
       - name: Wait for a clean review of the current head
+        id: wait_for_review
         shell: bash
         run: |
           set -euo pipefail
@@ -97,6 +100,7 @@ jobs:
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
                 -f description="Codex completed a clean review of the latest commit" >/dev/null
+              echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA}."
               exit 0
             fi
@@ -116,6 +120,7 @@ jobs:
                   -f state=failure \
                   -f context="${STATUS_CONTEXT}" \
                   -f description="Codex reported findings on the latest commit" >/dev/null
+                echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
                 echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
                 sed 's/^/- /' <<<"${finding_urls}"
                 echo "Push a fix to trigger a fresh Codex review."
@@ -126,6 +131,7 @@ jobs:
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
                 -f description="Codex completed a clean review of the latest commit" >/dev/null
+              echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA}."
               exit 0
             fi
@@ -138,5 +144,15 @@ jobs:
             -f state=failure \
             -f context="${STATUS_CONTEXT}" \
             -f description="Codex review timed out" >/dev/null
+          echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
           echo "Codex did not review ${HEAD_SHA} within 25 minutes."
           exit 1
+
+      - name: Mark incomplete review as failed
+        if: ${{ failure() && steps.wait_for_review.outputs.gate_finalized != 'true' }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=failure \
+            -f context="${STATUS_CONTEXT}" \
+            -f description="Codex review workflow failed before completion" >/dev/null
