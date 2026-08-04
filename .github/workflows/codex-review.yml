@@ -71,12 +71,28 @@ jobs:
           head_short="${HEAD_SHA:0:10}"
 
           while (( SECONDS < deadline )); do
-            clean_comment_id="$({
+            clean_comment_record="$({
               gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
-                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | .id"
-            } | tail -n 1)"
+                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | [.created_at, (.id | tostring)] | @tsv"
+            } | sort -k1,1 -k2,2n | tail -n 1)"
+            review_record="$({
+              gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
+                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\" and .submitted_at != null) | [.submitted_at, (.id | tostring)] | @tsv"
+            } | sort -k1,1 -k2,2n | tail -n 1)"
 
-            if [[ -n "${clean_comment_id}" ]]; then
+            clean_comment_at=""
+            review_at=""
+            review_id=""
+            if [[ -n "${clean_comment_record}" ]]; then
+              IFS=$'\t' read -r clean_comment_at _ <<<"${clean_comment_record}"
+            fi
+            if [[ -n "${review_record}" ]]; then
+              IFS=$'\t' read -r review_at review_id <<<"${review_record}"
+            fi
+
+            # A SHA can be reviewed more than once. Only the newest Codex result
+            # may decide the gate; on a timestamp tie, prefer the standard review.
+            if [[ -n "${clean_comment_at}" && ( -z "${review_at}" || "${clean_comment_at}" > "${review_at}" ) ]]; then
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
@@ -84,11 +100,6 @@ jobs:
               echo "Codex completed a clean review for ${HEAD_SHA}."
               exit 0
             fi
-
-            review_id="$({
-              gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
-                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
-            } | tail -n 1)"
 
             if [[ -n "${review_id}" ]]; then
               # Review comments are submitted with the review, but give GitHub's
