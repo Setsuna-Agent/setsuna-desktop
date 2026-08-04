@@ -23,10 +23,14 @@
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
-  min-height: 42px;
-  padding: 5px var(--desktop-review-panel-x-padding);
+  min-height: 40px;
+  padding: 4px var(--desktop-review-panel-x-padding);
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
   background: var(--app-bg);
+}
+
+.desktop-review-panel__toolbar--branch {
+  border-bottom: 0;
 }
 
 .desktop-review-panel .chat-file-review-panel__toolbar {
@@ -35,7 +39,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 12px;
 }
 
 .desktop-review-panel .chat-file-review-panel__source-button.ant-btn {
@@ -43,7 +47,7 @@
   width: fit-content !important;
   max-width: 100%;
   height: 30px;
-  padding: 0 6px;
+  padding: 0;
   border-radius: 7px;
   display: inline-flex;
   align-items: center;
@@ -53,9 +57,9 @@
   color: var(--app-text) !important;
   background: transparent !important;
   box-shadow: none !important;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
 }
 
 .desktop-review-panel .chat-file-review-panel__source-button.ant-btn:hover,
@@ -158,7 +162,7 @@
   font-family: var(--app-font-family);
   font-feature-settings: 'tnum' 1, 'zero' 0;
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 18px;
 }
 
@@ -226,36 +230,37 @@
 }
 
 .desktop-review-branch-compare {
-  --desktop-review-branch-selector-width: min(260px, 100%);
-
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 34px;
+  min-height: 38px;
   padding: 0 var(--desktop-review-panel-x-padding);
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
   background: var(--app-bg);
+  overflow: hidden;
 }
 
 .desktop-review-branch-compare__button.ant-btn {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 7px;
-  width: var(--desktop-review-branch-selector-width);
+  gap: 8px;
+  box-sizing: border-box;
+  width: fit-content;
   max-width: 100%;
   height: 28px;
   min-width: 0;
-  padding: 0 6px !important;
-  border-radius: 7px;
+  padding: 0 !important;
+  border-radius: 0;
   border-color: transparent !important;
-  color: var(--app-text) !important;
+  color: var(--app-text-muted) !important;
   background: transparent !important;
   box-shadow: none !important;
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 18px;
   font-weight: 500;
+  overflow: hidden;
 }
 
 .desktop-review-branch-compare__button.ant-btn:hover,
@@ -263,8 +268,13 @@
 .desktop-review-branch-compare__button.ant-btn:active,
 .desktop-review-branch-compare__button.ant-btn.ant-dropdown-open {
   border-color: transparent !important;
-  color: var(--app-text) !important;
-  background: var(--desktop-agent-control-hover-bg) !important;
+  color: var(--app-text-muted) !important;
+  background: transparent !important;
+}
+
+.desktop-review-branch-compare__button.ant-btn:focus-visible {
+  outline: 1px solid var(--desktop-review-focus);
+  outline-offset: 2px;
 }
 
 .desktop-review-branch-compare__button.ant-btn:disabled {
@@ -276,24 +286,18 @@
 
 .desktop-review-branch-compare__current,
 .desktop-review-branch-compare__base {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.desktop-review-branch-compare__current {
-  max-width: 40%;
-}
-
-.desktop-review-branch-compare__base {
-  max-width: 48%;
+  color: var(--app-text-muted);
 }
 
 .desktop-review-branch-compare__arrow,
 .desktop-review-branch-compare__caret {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
+  color: var(--app-text-muted);
 }
 
 .desktop-review-branch-dropdown .ant-dropdown-menu {

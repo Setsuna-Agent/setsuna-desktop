@@ -105,7 +105,8 @@
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
   --desktop-agent-button-hover-bg: var(--desktop-agent-control-hover-bg);
-  --chat-message-user-bg: var(--app-accent-subtle);
+  /* 亮色用户消息固定使用中性色，避免被强调色染脏。 */
+  --chat-message-user-bg: #f4f4f4;
   --chat-code-bg: #fafafa;
   --chat-content-max-width: 750px;
   --chat-content-inline-padding: 28px;

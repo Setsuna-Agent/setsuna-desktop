@@ -90,7 +90,9 @@ export function parsePartialApplyPatchArguments(rawArguments: string) {
   }
 
   const patch = findJsonStringValue(raw, 'patch');
-  const files = applyPatchPreviewFiles(patch?.value || raw);
+  const files = applyPatchPreviewFiles(patch?.value || raw, {
+    includeTrailingFileHeader: Boolean(patch?.closed),
+  });
   if (!files.length) return null;
   const currentFile = files[files.length - 1] || null;
   const preview = partialPatchPreviewFromFiles(files);
@@ -174,7 +176,10 @@ export function parsePartialEditFileArguments(rawArguments: string) {
   };
 }
 
-function applyPatchPreviewFiles(patch: unknown): PatchPreviewFile[] {
+function applyPatchPreviewFiles(
+  patch: unknown,
+  options: { includeTrailingFileHeader?: boolean } = {},
+): PatchPreviewFile[] {
   const files: PatchPreviewFile[] = [];
   const byPath = new Map<string, PatchPreviewFile>();
   const pushFile = (filePath: unknown, action: unknown): PatchPreviewFile | null => {
@@ -193,25 +198,28 @@ function applyPatchPreviewFiles(patch: unknown): PatchPreviewFile[] {
     return file;
   };
   let currentFile: PatchPreviewFile | null = null;
-
-  String(patch || '')
+  const normalizedPatch = String(patch || '')
     .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .forEach((line) => {
-      const trimmed = line.trimEnd();
-      if (trimmed.startsWith('*** Add File: ')) {
-        currentFile = pushFile(trimmed.slice('*** Add File: '.length), 'create');
-      } else if (trimmed.startsWith('*** Update File: ')) {
-        currentFile = pushFile(trimmed.slice('*** Update File: '.length), 'edit');
-      } else if (trimmed.startsWith('*** Delete File: ')) {
-        currentFile = pushFile(trimmed.slice('*** Delete File: '.length), 'delete');
-      } else if (currentFile && trimmed.startsWith('+')) {
-        currentFile.additions += 1;
-      } else if (currentFile && trimmed.startsWith('-')) {
-        currentFile.deletions += 1;
-      }
-    });
+    .replace(/\r/g, '\n');
+  const lines = normalizedPatch.split('\n');
+  const trailingLineIndex = normalizedPatch.endsWith('\n') ? -1 : lines.length - 1;
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trimEnd();
+    // 补丁头也会逐 token 到达；换行出现前，尾行里的路径仍可能只是 src/index。
+    const trailingLineIncomplete = index === trailingLineIndex && options.includeTrailingFileHeader === false;
+    if (!trailingLineIncomplete && trimmed.startsWith('*** Add File: ')) {
+      currentFile = pushFile(trimmed.slice('*** Add File: '.length), 'create');
+    } else if (!trailingLineIncomplete && trimmed.startsWith('*** Update File: ')) {
+      currentFile = pushFile(trimmed.slice('*** Update File: '.length), 'edit');
+    } else if (!trailingLineIncomplete && trimmed.startsWith('*** Delete File: ')) {
+      currentFile = pushFile(trimmed.slice('*** Delete File: '.length), 'delete');
+    } else if (currentFile && trimmed.startsWith('+')) {
+      currentFile.additions += 1;
+    } else if (currentFile && trimmed.startsWith('-')) {
+      currentFile.deletions += 1;
+    }
+  });
 
   return files;
 }

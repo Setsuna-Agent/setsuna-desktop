@@ -137,6 +137,7 @@ export function DesktopReviewPanel({
   const activeSource = hasGit
     ? reviewSource === 'branch' && !branchComparisonAvailable ? 'unstaged' : reviewSource
     : 'latest';
+  const branchCompareVisible = activeSource === 'branch' && hasGit;
   const availableBaseRefs = reviewState?.baseRefs ?? [];
   const pendingBranchBaseRef = branchBaseRefStorageKey ? branchBaseRefByKey[branchBaseRefStorageKey] : undefined;
   const activeBranchBaseRef = branchBaseRefStorageKey
@@ -292,7 +293,7 @@ export function DesktopReviewPanel({
 
   return (
     <section className="desktop-review-panel">
-      <header className="desktop-review-panel__toolbar">
+      <header className={`desktop-review-panel__toolbar${branchCompareVisible ? ' desktop-review-panel__toolbar--branch' : ''}`}>
         <div className="chat-file-review-panel__toolbar">
           {hasGit ? (
             <Dropdown
@@ -372,7 +373,7 @@ export function DesktopReviewPanel({
           </div>
         </div>
       </header>
-      {activeSource === 'branch' && hasGit ? (
+      {branchCompareVisible ? (
         <BranchCompareBar
           baseRef={activeBranchBaseRef || reviewState?.baseRef}
           baseRefs={availableBaseRefs}

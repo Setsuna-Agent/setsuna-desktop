@@ -535,13 +535,13 @@
   grid-column: 2;
   grid-row: 1;
   align-items: flex-start;
-  align-self: end;
+  align-self: start;
   justify-self: center;
   gap: 9px;
   z-index: 60;
   width: min(720px, calc(100% - 32px));
   max-height: min(180px, 40vh);
-  margin-bottom: 14px;
+  margin-top: 14px;
   padding: 10px 11px;
   border: 1px solid color-mix(in srgb, #ef4444 44%, var(--app-border));
   border-radius: var(--app-radius-md);

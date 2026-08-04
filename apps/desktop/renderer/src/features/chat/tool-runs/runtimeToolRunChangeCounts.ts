@@ -30,10 +30,11 @@ export function fileMutationChangeTotals(
 export function fileOperationChangeTotals(
   run: RuntimeToolRun,
 ): { additions: number; deletions: number; showZero: boolean } | null {
+  const showZero = run.status === 'success';
   const resultTotals = fileMutationChangeTotals(run);
-  if (resultTotals) return { ...resultTotals, showZero: true };
+  if (resultTotals) return { ...resultTotals, showZero };
   const argumentTotals = fileOperationChangeTotalsFromArguments(run);
-  if (argumentTotals) return { ...argumentTotals, showZero: true };
+  if (argumentTotals) return { ...argumentTotals, showZero };
   return null;
 }
 

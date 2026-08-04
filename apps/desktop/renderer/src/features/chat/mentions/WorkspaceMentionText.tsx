@@ -4,7 +4,7 @@ import { WorkspaceMentionLabel } from './WorkspaceMentionLabel.js';
 import { parseWorkspaceMentionText } from './workspaceMentionParser.js';
 
 export const WorkspaceMentionText = memo(function WorkspaceMentionText({ content }: { content: string }) {
-  const { onOpenWorkspaceFile } = useMarkdownNavigation();
+  const { onOpenWorkspaceDirectory, onOpenWorkspaceFile } = useMarkdownNavigation();
   return (
     <>
       {parseWorkspaceMentionText(content).map((part) => (
@@ -13,7 +13,7 @@ export const WorkspaceMentionText = memo(function WorkspaceMentionText({ content
         ) : (
           <WorkspaceMentionLabel
             key={`mention:${part.start}`}
-            onOpen={onOpenWorkspaceFile}
+            onOpen={part.entryType === 'directory' ? onOpenWorkspaceDirectory : onOpenWorkspaceFile}
             path={part.path}
             type={part.entryType}
           />

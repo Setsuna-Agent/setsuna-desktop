@@ -14,7 +14,7 @@ describe('RuntimeErrorNotice', () => {
     expect(html).toContain('aria-label="关闭运行时错误提示"');
   });
 
-  it('suppresses a duplicate error already projected into the transcript', () => {
+  it('suppresses an error already visible in the transcript', () => {
     const error = '模型服务返回了空响应';
     const thread = {
       messages: [{
@@ -29,5 +29,6 @@ describe('RuntimeErrorNotice', () => {
 
     expect(runtimeErrorNoticeMessage(error, thread)).toBeNull();
     expect(runtimeErrorNoticeMessage('另一个错误', thread)).toBe('另一个错误');
+    expect(runtimeErrorNoticeMessage('   ', thread)).toBeNull();
   });
 });

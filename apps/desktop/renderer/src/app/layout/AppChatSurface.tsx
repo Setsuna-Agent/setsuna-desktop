@@ -144,6 +144,7 @@ export function AppChatSurface({
   onOpenSideTerminalPanel,
   onOpenEntry,
   onOpenProjectFile,
+  onOpenWorkspaceDirectory,
   onReorderBottomPanels,
   onReloadThreads,
   onReviewRefresh,
@@ -231,6 +232,7 @@ export function AppChatSurface({
   onOpenSideTerminalPanel: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
+  onOpenWorkspaceDirectory: (directoryPath: string) => void;
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReloadThreads: () => Promise<unknown>;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
@@ -293,6 +295,7 @@ export function AppChatSurface({
         onOpenInAppBrowser={onOpenBrowser}
         onOpenWebLink={onOpenMarkdownWebLink}
         workspaceRoot={activeWorkspace?.path}
+        onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
         onOpenWorkspaceFile={openChatWorkspaceFile}
       >
         <ChatWorkspace
@@ -360,6 +363,7 @@ export function AppChatSurface({
           onAccessModeChange={onAccessModeChange}
           onError={onSideChatError}
           onOpenWorkspaceFile={openChatWorkspaceFile}
+          onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
           onOpenMarkdownWebLink={onOpenMarkdownWebLink}
           onOpenInAppBrowser={onOpenBrowser}
           onOpenSideChat={onOpenSideChat}

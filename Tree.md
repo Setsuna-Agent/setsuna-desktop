@@ -77,8 +77,8 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 514 total files
-├── src/ — 2 direct / 376 total files
+apps/desktop/renderer/ — 0 direct / 516 total files
+├── src/ — 2 direct / 377 total files
 │   ├── app/ — 2 direct / 32 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
@@ -113,8 +113,8 @@ apps/desktop/renderer/ — 0 direct / 514 total files
 │   │       ├── hooks/ — 10 direct / 10 total files
 │   │       ├── model/ — 1 direct / 1 total files
 │   │       └── styles/ — 7 direct / 7 total files
-│   ├── services/ — 9 files
-│   │   └── runtime-client/ — 9 direct / 9 total files
+│   ├── services/ — 10 files
+│   │   └── runtime-client/ — 10 direct / 10 total files
 │   └── shared/ — 58 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
@@ -125,8 +125,8 @@ apps/desktop/renderer/ — 0 direct / 514 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 3 direct / 3 total files
-└── test/ — 138 files
-    └── unit/ — 138 files
+└── test/ — 139 files
+    └── unit/ — 139 files
         ├── app/ — 1 direct / 10 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 2 direct / 2 total files
@@ -151,8 +151,8 @@ apps/desktop/renderer/ — 0 direct / 514 total files
         │       ├── browser/ — 1 direct / 1 total files
         │       ├── hooks/ — 7 direct / 7 total files
         │       └── model/ — 1 direct / 1 total files
-        ├── services/ — 8 files
-        │   └── runtime-client/ — 8 direct / 8 total files
+        ├── services/ — 9 files
+        │   └── runtime-client/ — 9 direct / 9 total files
         └── shared/ — 13 files
             ├── branding/ — 1 direct / 1 total files
             ├── hooks/ — 2 direct / 2 total files

@@ -24,6 +24,16 @@ describe('RuntimeToolRuns kind class names', () => {
 });
 
 describe('RuntimeToolRuns disclosure behavior', () => {
+  it('uses disclosure chevrons and per-row action icons for expanded history', () => {
+    const html = renderedHtml([
+      toolRun('read_first', 'read_file', { file_path: 'src/first.ts' }),
+      toolRun('read_second', 'read_file', { file_path: 'src/second.ts' }),
+    ]);
+
+    expect(html).toContain('chat-tool-run__chevron');
+    expect(html.match(/chat-tool-run__detail-icon/gu)).toHaveLength(2);
+  });
+
   it('keeps ordinary tool details collapsed and opens pending user authorization', () => {
     const pendingApprovalRun: RuntimeToolRun = {
       ...toolRun('user_input_1', 'request_user_input', { message: '请选择配置方式' }, 'pending_approval'),
@@ -243,6 +253,44 @@ describe('RuntimeToolRuns disclosure behavior', () => {
 
     expect(renderedTextFromHtml(html)).toContain('正在生成修改');
     expect(html).not.toContain('chat-change-counts');
+  });
+
+  it('does not render zero change counts before a streamed patch contains changes', () => {
+    const zeroDiff = {
+      path: 'src/index.css',
+      action: 'Edited',
+      additions: 0,
+      deletions: 0,
+      truncated: false,
+      partial: true,
+      lines: [],
+    };
+    const run: RuntimeToolRun = {
+      id: 'patch_preparing',
+      name: 'apply_patch',
+      status: 'running',
+      phase: 'preparing',
+      argumentsPreview: JSON.stringify({
+        file_path: 'src/index.css',
+        files: [{ file_path: 'src/index.css', action: 'edit', additions: 0, deletions: 0 }],
+        complete: false,
+      }),
+      resultPreview: JSON.stringify({ diff: zeroDiff }),
+    };
+    const singleHtml = renderedHtml([run]);
+    const groupedHtml = renderedHtml([{
+      ...run,
+      resultPreview: JSON.stringify({
+        diff: {
+          diffs: [zeroDiff, { ...zeroDiff, path: 'src/App.tsx' }],
+        },
+      }),
+    }]);
+
+    for (const html of [singleHtml, groupedHtml]) {
+      expect(renderedTextFromHtml(html)).toContain('index.css');
+      expect(html).not.toContain('chat-change-counts');
+    }
   });
 
   it('does not render a partial streamed workspace root as a file target', () => {

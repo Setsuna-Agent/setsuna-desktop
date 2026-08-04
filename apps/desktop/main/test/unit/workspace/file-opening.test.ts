@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   copyWorkspaceFilePath,
   createWorkspaceFilePreviewUrl,
+  openWorkspaceDirectoryInFileManager,
   openWorkspaceFileWithDefaultApp,
   revealWorkspaceFileInFolder,
   workspaceFilePreviewMimeType,
@@ -36,6 +37,35 @@ describe('openWorkspaceFileWithDefaultApp', () => {
       error: 'File path must stay inside the workspace.',
     });
     expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it('opens only existing directories inside the workspace with the system file manager', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-open-workspace-directory-'));
+    const outsideRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-open-workspace-directory-outside-'));
+    const directoryPath = path.join(workspaceRoot, 'packages', 'desktop');
+    await mkdir(directoryPath, { recursive: true });
+    await writeFile(path.join(workspaceRoot, 'README.md'), '# Workspace\n');
+    await symlink(outsideRoot, path.join(workspaceRoot, 'linked-outside'), process.platform === 'win32' ? 'junction' : 'dir');
+    const openPath = vi.fn(async () => '');
+
+    await expect(openWorkspaceDirectoryInFileManager(
+      workspaceRoot,
+      'packages/desktop/',
+      openPath,
+    )).resolves.toEqual({ ok: true });
+    expect(openPath).toHaveBeenCalledWith(await realpath(directoryPath));
+
+    await expect(openWorkspaceDirectoryInFileManager(
+      workspaceRoot,
+      'README.md',
+      openPath,
+    )).resolves.toEqual({ ok: false, error: 'Target is not a directory.' });
+    await expect(openWorkspaceDirectoryInFileManager(
+      workspaceRoot,
+      'linked-outside/',
+      openPath,
+    )).resolves.toEqual({ ok: false, error: 'Directory path must stay inside the workspace.' });
+    expect(openPath).toHaveBeenCalledOnce();
   });
 
   it('copies and reveals only resolved files inside the workspace', async () => {

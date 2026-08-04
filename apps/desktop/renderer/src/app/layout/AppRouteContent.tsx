@@ -289,6 +289,7 @@ export function AppRouteContent({
       onOpenSideTerminalPanel={() => workspacePanels.openDesktopPanel('side', 'terminal')}
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={projectWorkspace.openProjectFile}
+      onOpenWorkspaceDirectory={(directoryPath) => void workspacePanels.openWorkspaceDirectory(directoryPath)}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
       onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
       onRevealFile={(filePath) => void workspacePanels.revealWorkspaceFile(filePath)}

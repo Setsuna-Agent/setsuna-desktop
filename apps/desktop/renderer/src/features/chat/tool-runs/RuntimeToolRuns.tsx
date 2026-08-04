@@ -2,13 +2,11 @@ import type {
   RuntimeHookRun,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
+import { ChevronDown } from 'lucide-react';
 import {
   useEffect,
   useRef,
-  useState,
-  type MouseEvent,
   type ReactNode,
-  type SyntheticEvent,
 } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
@@ -47,6 +45,7 @@ import {
   groupToolRuns,
   inspectionEntries,
   inspectionEntryFromRun,
+  inspectionEntryIcon,
   inspectionEntryKind,
   inspectionEntryLabel,
   InspectionTarget,
@@ -70,6 +69,7 @@ import {
   toolRunGroupStatus,
   toolRunGroupSummary,
   toolRunIcon,
+  toolRunKindIcon,
   ToolRunStatus,
   toolRunSummary,
   ToolRunSummaryTarget
@@ -132,30 +132,24 @@ function ToolRunDisclosure({
   className: string;
   summary: ReactNode;
 }) {
-  const [open, setOpen] = useState(() => Boolean(autoOpenKey));
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const initiallyOpen = useRef(Boolean(autoOpenKey)).current;
   const previousAutoOpenKeyRef = useRef(autoOpenKey);
 
   useEffect(() => {
     if (shouldAutoOpenToolRunDisclosure(previousAutoOpenKeyRef.current, autoOpenKey)) {
-      setOpen(true);
+      const details = detailsRef.current;
+      if (details) details.open = true;
     }
     previousAutoOpenKeyRef.current = autoOpenKey;
   }, [autoOpenKey]);
 
-  const handleSummaryClick = (event: MouseEvent<HTMLElement>) => {
-    // 先记录用户选择，避免流式更新在原生 <details> 完成 toggle 前恢复旧状态。
-    event.preventDefault();
-    setOpen((value) => !value);
-  };
-  const handleToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    const nextOpen = event.currentTarget.open;
-    setOpen((value) => (value === nextOpen ? value : nextOpen));
-  };
-
+  // open 只提供稳定的初始值；挂载后由原生 details 保存用户选择，流式更新不会反向改写。
   return (
-    <details className={className} open={open} onToggle={handleToggle}>
-      <summary className="chat-tool-run__summary" onClick={handleSummaryClick}>
+    <details ref={detailsRef} className={className} open={initiallyOpen}>
+      <summary className="chat-tool-run__summary">
         {summary}
+        <ChevronDown aria-hidden="true" className="chat-tool-run__chevron" size={12} />
       </summary>
       {children}
     </details>
@@ -305,6 +299,9 @@ function toolRunGroupPanelNode(
               <div className="chat-tool-run__group-item" key={run.id}>
                 {showRunTitles ? (
                   <div className="chat-tool-run__group-title">
+                    <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
+                      {toolRunIcon(run)}
+                    </span>
                     <span>{runSummary.title}</span>
                     {runSummary.target ? <code>{runSummary.target}</code> : null}
                   </div>
@@ -459,7 +456,7 @@ function FileMutationRunRow({
             {target ? (
               <>
                 <FileOperationTarget target={target} />
-                <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={run.status === 'running'} />
+                <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={totals?.showZero} />
               </>
             ) : null}
           </span>
@@ -480,6 +477,9 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
     <ul className="chat-tool-run__inspection-list">
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.kind}:${entry.target}`}>
+          <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
+            {inspectionEntryIcon(entry.kind)}
+          </span>
           <span>{inspectionEntryLabel(entry.kind, t)}</span>
           <InspectionTarget className="chat-tool-run__file-list-target" entry={entry} />
         </li>
@@ -496,11 +496,14 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
     <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.action}:${entry.path}`}>
+          <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
+            {toolRunKindIcon('fileMutation')}
+          </span>
           <span>{fileOperationActionLabel(entry.action, t)}</span>
           <WorkspaceFileLink className="chat-tool-run__file-list-target" filePath={entry.path} linkKind="workspace-tool">
             {pathBaseName(entry.path, t)}
           </WorkspaceFileLink>
-          <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.hasChangeCounts} />
+          <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.showZeroChangeCounts} />
         </li>
       ))}
     </ul>

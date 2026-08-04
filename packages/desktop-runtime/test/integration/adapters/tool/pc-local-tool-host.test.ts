@@ -220,6 +220,40 @@ describe('pc local tool host', () => {
     });
   });
 
+  it('waits for a complete streaming apply_patch file header before exposing its path', async () => {
+    const { host } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+
+    const incompleteHeader = await host.previewPartialToolCall?.(
+      'apply_patch',
+      '{"patch":"*** Begin Patch\\n*** Update File: src/index',
+      context,
+    );
+    const completeHeader = await host.previewPartialToolCall?.(
+      'apply_patch',
+      '{"patch":"*** Begin Patch\\n*** Update File: src/index.css\\n',
+      context,
+    );
+    const extensionlessHeader = await host.previewPartialToolCall?.(
+      'apply_patch',
+      '{"patch":"*** Begin Patch\\n*** Update File: Dockerfile\\n',
+      context,
+    );
+
+    expect(incompleteHeader).toBeNull();
+    expect(JSON.parse(completeHeader?.resultPreview ?? '{}')).toMatchObject({
+      diff: {
+        path: 'src/index.css',
+        additions: 0,
+        deletions: 0,
+        partial: true,
+      },
+    });
+    expect(JSON.parse(extensionlessHeader?.resultPreview ?? '{}')).toMatchObject({
+      diff: { path: 'Dockerfile' },
+    });
+  });
+
   it('accepts apply_patch directly', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

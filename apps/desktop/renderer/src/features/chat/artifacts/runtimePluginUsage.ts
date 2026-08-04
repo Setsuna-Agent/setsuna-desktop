@@ -6,7 +6,9 @@ import type {
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 
-export type RuntimePluginUse = RuntimePluginReference;
+export type RuntimePluginUse = RuntimePluginReference & {
+  installed: boolean;
+};
 
 const pluginResourceToolNames = new Set(['list_plugin_resources', 'read_plugin_resource']);
 
@@ -14,7 +16,8 @@ const pluginResourceToolNames = new Set(['list_plugin_resources', 'read_plugin_r
  * 收集每个轮次的持久化及实时插件归属信息。
  *
  * 新轮次会在采样快照中持久化由插件提供的 Skill 归属信息。已安装的 Skill 和插件列表
- * 继续作为旧快照的兼容回退，同时也用于确定插件 Hook 和 MCP 调用的归属。
+ * 继续作为旧快照的兼容回退，同时也用于确定插件 Hook 和 MCP 调用的归属。历史引用即使
+ * 已卸载仍会保留，但 installed 只反映当前插件列表，避免展示成仍可用的插件。
  */
 export function runtimePluginUsesByTurn(
   thread: RuntimeThread | null,
@@ -36,6 +39,7 @@ export function runtimePluginUsesByTurn(
     const installed = pluginById.get(pluginId);
     const plugin: RuntimePluginUse = {
       id: pluginId,
+      installed: Boolean(installed),
       name: embedded?.name || installed?.name || fallbackName || pluginId,
       ...(embedded?.icon || installed?.icon ? { icon: embedded?.icon || installed?.icon } : {}),
     };
@@ -80,6 +84,7 @@ export function runtimePluginUsesByTurn(
 function mergePluginReference(current: RuntimePluginUse, next: RuntimePluginUse): RuntimePluginUse {
   return {
     id: current.id,
+    installed: current.installed || next.installed,
     name: current.name === current.id && next.name !== next.id ? next.name : current.name,
     ...(current.icon || next.icon ? { icon: current.icon ?? next.icon } : {}),
   };

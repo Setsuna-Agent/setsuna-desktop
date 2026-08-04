@@ -601,7 +601,7 @@ export function fileOperationEntries(runs: RuntimeToolRun[], options: { appliedO
           deletions: change.deletions,
           hasChangeCounts: true,
           applied: isRuntimeFileMutationRun(run),
-          showZeroChangeCounts: true,
+          showZeroChangeCounts: run.status === 'success',
           path: change.path,
           priority,
         }))
@@ -850,11 +850,21 @@ export function toolRunGroupIcon(group: Extract<ToolRunGroup, { type: 'group' }>
   if (status === 'error') return <XCircle size={14} />;
   if (status === 'cancelled') return <XCircle size={14} />;
   if (status === 'rejected') return <AlertCircle size={14} />;
-  if (group.kind === 'inspection') return <FileText size={14} />;
-  if (group.kind === 'search') return <Search size={14} />;
-  if (group.kind === 'shell') return <TerminalSquare size={14} />;
-  if (group.kind === 'fileMutation') return <Pencil size={14} />;
+  return toolRunKindIcon(group.kind);
+}
+
+export function toolRunKindIcon(kind: ToolRunGroupKind) {
+  if (kind === 'inspection') return <FileText size={14} />;
+  if (kind === 'search') return <Search size={14} />;
+  if (kind === 'shell') return <TerminalSquare size={14} />;
+  if (kind === 'fileMutation') return <Pencil size={14} />;
   return <CheckCircle2 size={14} />;
+}
+
+export function inspectionEntryIcon(kind: InspectionEntryKind) {
+  if (kind === 'fileSearch') return <Search size={14} />;
+  if (kind === 'gitStatus') return <TerminalSquare size={14} />;
+  return <FileText size={14} />;
 }
 
 export function toolRunIcon(run: RuntimeToolRun) {

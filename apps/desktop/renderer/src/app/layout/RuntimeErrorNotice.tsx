@@ -20,8 +20,8 @@ export function RuntimeErrorNotice({ message, onDismiss }: { message: string; on
 }
 
 /**
- * Turn errors are already rendered as durable assistant error blocks. Only surface errors that
- * do not have an equivalent transcript projection in the global notice to avoid duplicate UI.
+ * Turn errors are already visible in the transcript. Keep the global notice for failures that
+ * have no matching message projection; navigation scoping is handled by the runtime error state.
  */
 export function runtimeErrorNoticeMessage(
   error: string | null,

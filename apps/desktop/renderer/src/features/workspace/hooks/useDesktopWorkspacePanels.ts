@@ -495,6 +495,21 @@ export function useDesktopWorkspacePanels({
     }
   }, [activeProject?.path, setError, t]);
 
+  const openWorkspaceDirectory = useCallback(async (directoryPath: string) => {
+    if (!activeProject?.path) return;
+    const openDirectory = window.setsunaDesktop?.desktop?.openWorkspaceDirectory;
+    if (!openDirectory) {
+      setError(t('chat.mention.openDirectoryUnsupported'));
+      return;
+    }
+    try {
+      const result = await openDirectory(activeProject.path, directoryPath);
+      if (!result.ok) setError(result.error);
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    }
+  }, [activeProject?.path, setError, t]);
+
   const revealWorkspaceFile = useCallback(async (filePath: string) => {
     if (!activeProject?.path) return;
     const api = window.setsunaDesktop?.desktop;
@@ -553,6 +568,7 @@ export function useDesktopWorkspacePanels({
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,
+      openWorkspaceDirectory,
       openSelectedWorkspaceApp,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,
@@ -595,6 +611,7 @@ export function useDesktopWorkspacePanels({
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,
+      openWorkspaceDirectory,
       openSelectedWorkspaceApp,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,

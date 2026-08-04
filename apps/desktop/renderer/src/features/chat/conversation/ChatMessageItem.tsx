@@ -125,7 +125,7 @@ export function MessageItem({
   const workHistoryExpanded = assistantItemId ? expandedWorkHistoryItemIds.has(assistantItemId) : false;
   const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && item.guidanceProcessed && item.steerMessages.length && !workHistoryExpanded);
   if (editing) {
-    return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} message={message} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit(message.id)} />;
+    return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit(message.id)} />;
   }
   const hasAttachments = Boolean(message.attachments?.length);
   return (
@@ -157,7 +157,11 @@ function UserMessageContent({ message, streaming }: { message: RuntimeMessage; s
         <div className="chat-user-message-content__text">
           <UserMessageKindBadge kind={message.inputKind} />
           {message.content || streaming
-            ? <WorkspaceMentionText content={message.content || '...'} />
+            ? (
+                <span className="chat-user-message-content__body">
+                  <WorkspaceMentionText content={message.content || '...'} />
+                </span>
+              )
             : null}
         </div>
       ) : null}
@@ -235,8 +239,8 @@ function AssistantRunItem({
   );
 }
 
-function UserMessageEditor({ disabled, message, onCancel, onChange, onSubmit, submitting, value }: { disabled: boolean; message: RuntimeMessage; onCancel: () => void; onChange: (value: string) => void; onSubmit: () => void; submitting: boolean; value: string }) {
-  const { locale, t } = useI18n();
+function UserMessageEditor({ disabled, onCancel, onChange, onSubmit, submitting, value }: { disabled: boolean; onCancel: () => void; onChange: (value: string) => void; onSubmit: () => void; submitting: boolean; value: string }) {
+  const { t } = useI18n();
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -248,7 +252,6 @@ function UserMessageEditor({ disabled, message, onCancel, onChange, onSubmit, su
       <form className="chat-user-edit" onSubmit={submit}>
         <textarea autoFocus disabled={disabled} value={value} rows={Math.min(8, Math.max(2, value.split('\n').length))} onChange={(event) => onChange(event.currentTarget.value)} />
         <div className="chat-user-edit__footer">
-          <time>{formatTime(message.createdAt, locale)}</time>
           <span className="chat-user-edit__actions">
             <button type="button" disabled={disabled} onClick={onCancel}>
               {t('common.cancel')}

@@ -16,7 +16,10 @@ import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { ChatWorkspace } from './ChatWorkspace.js';
 import { useSideChat } from './hooks/useSideChat.js';
 import { MarkdownNavigationProvider } from './markdown/MarkdownNavigationProvider.js';
-import { openSideWorkspaceFileAtRoot } from './mentions/sideWorkspaceFileOpening.js';
+import {
+  openSideWorkspaceDirectoryAtRoot,
+  openSideWorkspaceFileAtRoot,
+} from './mentions/sideWorkspaceFileOpening.js';
 
 export function SideChatPanel({
   activeProjectId,
@@ -32,6 +35,7 @@ export function SideChatPanel({
   onError,
   onOpenInAppBrowser,
   onOpenMarkdownWebLink,
+  onOpenWorkspaceDirectory,
   onOpenWorkspaceFile,
   onOpenSideChat,
   onReloadThreads,
@@ -56,6 +60,7 @@ export function SideChatPanel({
   onError: Dispatch<SetStateAction<string | null>>;
   onOpenInAppBrowser: (url: string) => void;
   onOpenMarkdownWebLink: (url: string) => void;
+  onOpenWorkspaceDirectory: (directoryPath: string) => void;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
   onOpenSideChat: () => void;
   onReloadThreads: () => Promise<unknown>;
@@ -110,6 +115,23 @@ export function SideChatPanel({
       onError(error instanceof Error ? error.message : String(error));
     });
   }, [activeWorkspace?.id, onError, onOpenWorkspaceFile, selectedWorkspaceApp, sideWorkspace, t]);
+  const openSideWorkspaceDirectory = useCallback((directoryPath: string) => {
+    if (!sideWorkspace) return;
+    if (sideWorkspace.id === activeWorkspace?.id) {
+      onOpenWorkspaceDirectory(directoryPath);
+      return;
+    }
+    void openSideWorkspaceDirectoryAtRoot({
+      directoryPath,
+      openDirectory: window.setsunaDesktop?.desktop?.openWorkspaceDirectory,
+      t,
+      workspaceRoot: sideWorkspace.path,
+    }).then((openError) => {
+      if (openError) onError(openError);
+    }).catch((error: unknown) => {
+      onError(error instanceof Error ? error.message : String(error));
+    });
+  }, [activeWorkspace?.id, onError, onOpenWorkspaceDirectory, sideWorkspace, t]);
 
   return (
     <aside className="desktop-workspace-panel desktop-side-chat-panel" aria-label={t('chat.sideChat.label')} hidden={hidden}>
@@ -124,6 +146,7 @@ export function SideChatPanel({
         onOpenInAppBrowser={onOpenInAppBrowser}
         onOpenWebLink={onOpenMarkdownWebLink}
         workspaceRoot={sideWorkspace?.path}
+        onOpenWorkspaceDirectory={openSideWorkspaceDirectory}
         onOpenWorkspaceFile={openSideWorkspaceFile}
       >
         <ChatWorkspace

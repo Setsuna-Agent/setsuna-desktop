@@ -20,4 +20,20 @@ describe('WorkspaceMentionText', () => {
     expect(html).not.toContain('>@tsconfig.renderer.json</span>');
     expect(html).not.toContain('data-composer-cursor-offset-adjustment');
   });
+
+  it('keeps a directory serialized with a slash while omitting it from the visual label', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownNavigationProvider onOpenWorkspaceDirectory={() => undefined}>
+        <WorkspaceMentionText content="请看 @agent-pc/ 目录" />
+      </MarkdownNavigationProvider>,
+    );
+
+    expect(html).toContain('class="chat-workspace-mention chat-workspace-mention--action"');
+    expect(html).toContain('type="button"');
+    expect(html).toContain('在文件管理器中打开 agent-pc/');
+    expect(html).toContain('title="agent-pc/"');
+    expect(html).toContain('>agent-pc</span>');
+    expect(html).not.toContain('>agent-pc/</span>');
+    expect(html).toContain(' 目录');
+  });
 });
