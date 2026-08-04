@@ -77,7 +77,7 @@ jobs:
               sleep 3
               finding_urls="$({
                 gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" \
-                  --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .html_url"
+                  --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\" and .pull_request_review_id == ${review_id}) | .html_url"
               })"
 
               if [[ -n "${finding_urls}" ]]; then
