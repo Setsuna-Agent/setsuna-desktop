@@ -42,12 +42,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          head_short="${HEAD_SHA:0:10}"
           existing_review_id="$({
             gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
               --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
           } | tail -n 1)"
+          existing_clean_comment_id="$({
+            gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+              --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | .id"
+          } | tail -n 1)"
 
-          if [[ -n "${existing_review_id}" ]]; then
+          if [[ -n "${existing_review_id}" || -n "${existing_clean_comment_id}" ]]; then
             echo "Codex already reviewed ${HEAD_SHA}."
             exit 0
           fi
@@ -63,8 +68,23 @@ jobs:
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 1500))
+          head_short="${HEAD_SHA:0:10}"
 
           while (( SECONDS < deadline )); do
+            clean_comment_id="$({
+              gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | .id"
+            } | tail -n 1)"
+
+            if [[ -n "${clean_comment_id}" ]]; then
+              gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+                -f state=success \
+                -f context="${STATUS_CONTEXT}" \
+                -f description="Codex completed a clean review of the latest commit" >/dev/null
+              echo "Codex completed a clean review for ${HEAD_SHA}."
+              exit 0
+            fi
+
             review_id="$({
               gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
                 --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"

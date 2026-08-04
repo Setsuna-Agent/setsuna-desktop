@@ -147,8 +147,8 @@ dev 启动流程：
 
 1. `.github/workflows/codex-review.yml` 通过 `pull_request_target` 从受信任的默认分支执行，不 checkout 或运行 PR 代码。
 2. PR 打开、重新打开、转为 ready 或 push 新提交时，workflow 都会针对当前 HEAD 留言 `@codex review`。
-3. `Codex Review Gate` 只接受 `chatgpt-codex-connector[bot]` 针对当前 HEAD 的 review；旧提交的 review 不可复用。
-4. 当前 review 有 inline finding 或 25 分钟内未完成时 gate 失败；push 修复后会取消旧 run 并发起新一轮 review。
+3. `Codex Review Gate` 只接受 `chatgpt-codex-connector[bot]` 针对当前 HEAD 的标准 review 或 clean-review 顶层结果；旧提交的结果不可复用。
+4. 当前 review 有 inline finding 或 25 分钟内未完成时 gate 失败；clean review 通过，push 修复后会取消旧 run 并发起新一轮 review。
 
 ## Release Workflow
 
