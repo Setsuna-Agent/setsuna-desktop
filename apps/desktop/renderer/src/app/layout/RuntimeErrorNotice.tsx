@@ -1,3 +1,4 @@
+import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { AlertTriangle, X } from 'lucide-react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 
@@ -18,8 +19,18 @@ export function RuntimeErrorNotice({ message, onDismiss }: { message: string; on
   );
 }
 
-/** Runtime event failures should be visible immediately, even when also projected in the thread. */
-export function runtimeErrorNoticeMessage(error: string | null): string | null {
+/**
+ * Turn errors are already visible in the transcript. Keep the global notice for failures that
+ * have no matching message projection; navigation scoping is handled by the runtime error state.
+ */
+export function runtimeErrorNoticeMessage(
+  error: string | null,
+  thread: Pick<RuntimeThread, 'messages'> | null,
+): string | null {
   const message = error?.trim();
-  return message || null;
+  if (!message) return null;
+  const alreadyProjected = thread?.messages.some(
+    (item) => item.status === 'error' && item.error?.trim() === message,
+  );
+  return alreadyProjected ? null : message;
 }
