@@ -6,10 +6,7 @@ import { ChevronDown } from 'lucide-react';
 import {
   useEffect,
   useRef,
-  useState,
-  type MouseEvent,
   type ReactNode,
-  type SyntheticEvent,
 } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
@@ -135,29 +132,22 @@ function ToolRunDisclosure({
   className: string;
   summary: ReactNode;
 }) {
-  const [open, setOpen] = useState(() => Boolean(autoOpenKey));
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const initiallyOpen = useRef(Boolean(autoOpenKey)).current;
   const previousAutoOpenKeyRef = useRef(autoOpenKey);
 
   useEffect(() => {
     if (shouldAutoOpenToolRunDisclosure(previousAutoOpenKeyRef.current, autoOpenKey)) {
-      setOpen(true);
+      const details = detailsRef.current;
+      if (details) details.open = true;
     }
     previousAutoOpenKeyRef.current = autoOpenKey;
   }, [autoOpenKey]);
 
-  const handleSummaryClick = (event: MouseEvent<HTMLElement>) => {
-    // 先记录用户选择，避免流式更新在原生 <details> 完成 toggle 前恢复旧状态。
-    event.preventDefault();
-    setOpen((value) => !value);
-  };
-  const handleToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    const nextOpen = event.currentTarget.open;
-    setOpen((value) => (value === nextOpen ? value : nextOpen));
-  };
-
+  // open 只提供稳定的初始值；挂载后由原生 details 保存用户选择，流式更新不会反向改写。
   return (
-    <details className={className} open={open} onToggle={handleToggle}>
-      <summary className="chat-tool-run__summary" onClick={handleSummaryClick}>
+    <details ref={detailsRef} className={className} open={initiallyOpen}>
+      <summary className="chat-tool-run__summary">
         {summary}
         <ChevronDown aria-hidden="true" className="chat-tool-run__chevron" size={12} />
       </summary>
