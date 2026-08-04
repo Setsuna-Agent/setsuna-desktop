@@ -466,7 +466,7 @@ function FileMutationRunRow({
             {target ? (
               <>
                 <FileOperationTarget target={target} />
-                <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={run.status === 'running'} />
+                <ChangeCounts additions={totals?.additions} deletions={totals?.deletions} showZero={totals?.showZero} />
               </>
             ) : null}
           </span>
@@ -513,7 +513,7 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
           <WorkspaceFileLink className="chat-tool-run__file-list-target" filePath={entry.path} linkKind="workspace-tool">
             {pathBaseName(entry.path, t)}
           </WorkspaceFileLink>
-          <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.hasChangeCounts} />
+          <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.showZeroChangeCounts} />
         </li>
       ))}
     </ul>

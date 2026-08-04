@@ -601,7 +601,7 @@ export function fileOperationEntries(runs: RuntimeToolRun[], options: { appliedO
           deletions: change.deletions,
           hasChangeCounts: true,
           applied: isRuntimeFileMutationRun(run),
-          showZeroChangeCounts: true,
+          showZeroChangeCounts: run.status === 'success',
           path: change.path,
           priority,
         }))

@@ -255,6 +255,44 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     expect(html).not.toContain('chat-change-counts');
   });
 
+  it('does not render zero change counts before a streamed patch contains changes', () => {
+    const zeroDiff = {
+      path: 'src/index.css',
+      action: 'Edited',
+      additions: 0,
+      deletions: 0,
+      truncated: false,
+      partial: true,
+      lines: [],
+    };
+    const run: RuntimeToolRun = {
+      id: 'patch_preparing',
+      name: 'apply_patch',
+      status: 'running',
+      phase: 'preparing',
+      argumentsPreview: JSON.stringify({
+        file_path: 'src/index.css',
+        files: [{ file_path: 'src/index.css', action: 'edit', additions: 0, deletions: 0 }],
+        complete: false,
+      }),
+      resultPreview: JSON.stringify({ diff: zeroDiff }),
+    };
+    const singleHtml = renderedHtml([run]);
+    const groupedHtml = renderedHtml([{
+      ...run,
+      resultPreview: JSON.stringify({
+        diff: {
+          diffs: [zeroDiff, { ...zeroDiff, path: 'src/App.tsx' }],
+        },
+      }),
+    }]);
+
+    for (const html of [singleHtml, groupedHtml]) {
+      expect(renderedTextFromHtml(html)).toContain('index.css');
+      expect(html).not.toContain('chat-change-counts');
+    }
+  });
+
   it('does not render a partial streamed workspace root as a file target', () => {
     const html = renderedHtml([{
       id: 'edit_preparing',
