@@ -6,32 +6,24 @@ import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { CODE_APPEARANCE_CHANGE_EVENT_NAME } from '../../shared/preferences/useCodeAppearancePreferences.js';
 import type { DesktopTerminalEvent, DesktopTerminalSession } from './model.js';
+import {
+  appendTerminalRestoreBuffer,
+  markTerminalSessionExited,
+  recordTerminalEventSeq,
+  terminalLastEventSeq,
+  terminalRestoreBuffer,
+  terminalSessionExited,
+} from './terminalRestoreBuffer.js';
 
-const terminalRestoreBuffers = new Map<string, string>();
-const terminalLastEventSeqs = new Map<string, number>();
-const exitedTerminalSessionIds = new Set<string>();
-const MAX_TERMINAL_RESTORE_BUFFER = 1_000_000;
 const TERMINAL_URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+/gi;
 const TERMINAL_URL_TRAILING_PUNCTUATION_PATTERN = /[),.;:!?]+$/;
-
-export function clearTerminalRestoreBuffer(sessionId: string): void {
-  terminalRestoreBuffers.delete(sessionId);
-  terminalLastEventSeqs.delete(sessionId);
-  exitedTerminalSessionIds.delete(sessionId);
-}
-
-function appendTerminalRestoreBuffer(sessionId: string, text: string): void {
-  if (!text) return;
-  const next = `${terminalRestoreBuffers.get(sessionId) ?? ''}${text}`;
-  terminalRestoreBuffers.set(sessionId, next.length > MAX_TERMINAL_RESTORE_BUFFER ? next.slice(-MAX_TERMINAL_RESTORE_BUFFER) : next);
-}
 
 export function TerminalPane({ session }: { session: DesktopTerminalSession | null }) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<XTermTerminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const [exited, setExited] = useState(() => Boolean(session && exitedTerminalSessionIds.has(session.sessionId)));
+  const [exited, setExited] = useState(() => Boolean(session && terminalSessionExited(session.sessionId)));
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState<string | null>(null);
 
@@ -39,7 +31,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     const container = containerRef.current;
     const terminalApi = window.setsunaDesktop?.terminal;
     if (!container || !session || !terminalApi) return undefined;
-    setExited(exitedTerminalSessionIds.has(session.sessionId));
+    setExited(terminalSessionExited(session.sessionId));
     setRestartError(null);
 
     const terminal = new XTermTerminal({
@@ -72,7 +64,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     window.addEventListener(CODE_APPEARANCE_CHANGE_EVENT_NAME, handleCodeAppearanceChange);
     fitTerminal();
     terminal.focus();
-    const restored = terminalRestoreBuffers.get(session.sessionId);
+    const restored = terminalRestoreBuffer(session.sessionId);
     if (restored) {
       terminal.write(restored);
     }
@@ -84,11 +76,11 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     });
 
     const handleEvent = (event: DesktopTerminalEvent) => {
-      const lastSeq = terminalLastEventSeqs.get(session.sessionId) ?? 0;
+      const lastSeq = terminalLastEventSeq(session.sessionId);
       if (event.seq <= lastSeq) return;
-      terminalLastEventSeqs.set(session.sessionId, event.seq);
+      recordTerminalEventSeq(session.sessionId, event.seq);
       if (event.event === 'ready') {
-        exitedTerminalSessionIds.delete(session.sessionId);
+        markTerminalSessionExited(session.sessionId, false);
         setExited(false);
         setRestarting(false);
         return;
@@ -106,7 +98,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       if (event.event === 'exit') {
         const exitCode = event.data.exitCode ?? event.data.signal ?? 'unknown';
         writeTerminalSystemLine(terminal, t('workspace.terminal.exited', { code: String(exitCode) }), session.sessionId);
-        exitedTerminalSessionIds.add(session.sessionId);
+        markTerminalSessionExited(session.sessionId, true);
         setExited(true);
         return;
       }

@@ -6,7 +6,7 @@ import {
   chatComposerTargetIdentity,
   type ChatComposerTargetIdentity,
 } from '../../chat/hooks/useChatComposerSession.js';
-import { clearTerminalRestoreBuffer } from '../TerminalPane.js';
+import { clearTerminalRestoreBuffer } from '../terminalRestoreBuffer.js';
 import {
   activatePanelInSlotState,
   activePanelInSlot,

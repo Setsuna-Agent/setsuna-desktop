@@ -77,16 +77,16 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 501 total files
-├── src/ — 2 direct / 366 total files
+apps/desktop/renderer/ — 0 direct / 508 total files
+├── src/ — 2 direct / 372 total files
 │   ├── app/ — 2 direct / 32 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 268 files
-│   │   ├── capabilities/ — 19 direct / 26 total files
+│   ├── features/ — 273 files
+│   │   ├── capabilities/ — 20 direct / 27 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
@@ -100,14 +100,14 @@ apps/desktop/renderer/ — 0 direct / 501 total files
 │   │   │   ├── styles/ — 9 direct / 9 total files
 │   │   │   └── tool-runs/ — 13 direct / 13 total files
 │   │   ├── conversation-debug/ — 17 direct / 17 total files
-│   │   ├── settings/ — 9 direct / 46 total files
+│   │   ├── settings/ — 10 direct / 47 total files
 │   │   │   ├── components/ — 1 direct / 1 total files
 │   │   │   ├── data-root/ — 12 direct / 12 total files
 │   │   │   ├── providers/ — 2 direct / 2 total files
 │   │   │   ├── sections/ — 7 direct / 7 total files
 │   │   │   ├── styles/ — 8 direct / 8 total files
 │   │   │   └── usage/ — 7 direct / 7 total files
-│   │   └── workspace/ — 32 direct / 71 total files
+│   │   └── workspace/ — 35 direct / 74 total files
 │   │       ├── assets/ — 20 direct / 20 total files
 │   │       ├── browser/ — 1 direct / 1 total files
 │   │       ├── hooks/ — 10 direct / 10 total files
@@ -115,8 +115,8 @@ apps/desktop/renderer/ — 0 direct / 501 total files
 │   │       └── styles/ — 7 direct / 7 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files
-│   └── shared/ — 55 files
-│       ├── assets/ — 20 files
+│   └── shared/ — 56 files
+│       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
 │       ├── hooks/ — 3 direct / 3 total files
@@ -125,14 +125,14 @@ apps/desktop/renderer/ — 0 direct / 501 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 3 direct / 3 total files
-└── test/ — 135 files
-    └── unit/ — 135 files
+└── test/ — 136 files
+    └── unit/ — 136 files
         ├── app/ — 1 direct / 10 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 2 direct / 2 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 106 files
+        ├── features/ — 107 files
         │   ├── capabilities/ — 5 direct / 6 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 1 direct / 57 total files
@@ -147,7 +147,7 @@ apps/desktop/renderer/ — 0 direct / 501 total files
         │   ├── settings/ — 7 direct / 12 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   └── usage/ — 3 direct / 3 total files
-        │   └── workspace/ — 14 direct / 23 total files
+        │   └── workspace/ — 15 direct / 24 total files
         │       ├── browser/ — 1 direct / 1 total files
         │       ├── hooks/ — 7 direct / 7 total files
         │       └── model/ — 1 direct / 1 total files

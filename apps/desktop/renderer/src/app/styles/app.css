@@ -6,3 +6,13 @@
   height: 100%;
   background: #F7F7F7;
 }
+
+.app-route-loading {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}

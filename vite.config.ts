@@ -25,7 +25,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('@iconify-json/vscode-icons')) return 'vscode-icons';
           if (id.includes('@xterm')) return 'xterm';
           return undefined;
         },

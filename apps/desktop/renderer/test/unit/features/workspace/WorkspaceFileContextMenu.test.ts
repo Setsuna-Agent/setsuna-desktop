@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  workspaceFileMentionEntry,
   workspaceFileRevealLabel,
 } from '../../../../src/features/workspace/WorkspaceFileContextMenu.js';
+import { workspaceFileMentionEntry } from '../../../../src/features/workspace/workspaceFileMention.js';
 import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('workspace file context menu helpers', () => {

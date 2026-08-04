@@ -15,7 +15,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { ArrowDown, Bug, Hammer, SearchCode, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
+import setsunaAppIconUrl from '../../shared/assets/setsuna-app.png';
 import type {
   ChatImageAttachmentOutcome,
   ChatImageAttachmentRequest,

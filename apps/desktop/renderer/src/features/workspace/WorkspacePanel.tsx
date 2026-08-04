@@ -30,14 +30,14 @@ import type {
 } from './model.js';
 import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
-import { TerminalPane } from './TerminalPane.js';
+import { LazyTerminalPane } from './LazyTerminalPane.js';
 import {
   WorkspaceFileContextMenu,
-  workspaceFileMentionEntry,
   type WorkspaceFileContextTarget,
 } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
+import { workspaceFileMentionEntry } from './workspaceFileMention.js';
 
 const FILE_TREE_INDENT_STEP_PX = 8;
 
@@ -292,7 +292,7 @@ export function WorkspacePanel({
       />
     ) : activePanel.type === 'terminal' ? (
       <section className="desktop-workspace-terminal-panel" aria-label={desktopPanelTitle(activePanel, t)}>
-        <TerminalPane session={terminalSession} />
+        <LazyTerminalPane session={terminalSession} />
       </section>
     ) : (
       <section

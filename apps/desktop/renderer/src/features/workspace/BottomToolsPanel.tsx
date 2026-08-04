@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
-import { TerminalPane } from './TerminalPane.js';
+import { LazyTerminalPane } from './LazyTerminalPane.js';
 import type {
   DesktopDiffSummary,
   DesktopPanelDropPlacement,
@@ -124,7 +124,7 @@ export function BottomToolsPanel({
       />
       {activePanel.type === 'terminal' ? (
         <div className="bottom-panel__body bottom-panel__body--terminal" role="tabpanel">
-          <TerminalPane session={terminalSession} />
+          <LazyTerminalPane session={terminalSession} />
         </div>
       ) : (
         <div className="bottom-panel__body bottom-panel__body--review" role="tabpanel">
