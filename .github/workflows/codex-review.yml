@@ -1,5 +1,5 @@
 name: Codex Review
-run-name: "Codex Review PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}"
+run-name: "Codex Review PR #${{ github.event.pull_request.number }} / ${{ github.event.action }} / ${{ github.event.pull_request.head.sha }}"
 
 on:
   pull_request_target:
@@ -79,7 +79,7 @@ jobs:
 
           # Prefer an earlier attempt for this exact SHA (including manual
           # reruns). Otherwise recover the most recent generation from Actions
-          # history; draft-only runs have no gate status and are skipped.
+          # history; draft-only and metadata-edit runs do not start Codex.
           prior_head_sha="${HEAD_SHA}"
           prior_run_url="${RUN_URL}"
           prior_status_record="$(latest_gate_status "${HEAD_SHA}" "${RUN_URL}")"
@@ -88,19 +88,24 @@ jobs:
               gh api --paginate "repos/${REPOSITORY}/actions/workflows/codex-review.yml/runs?event=pull_request_target&per_page=100" \
                 --jq ".workflow_runs[]
                   | select(.id != ${GITHUB_RUN_ID} and (.pull_requests | any(.number == ${PR_NUMBER})))
+                  | ((try (.display_title | capture(\" / (?<action>[a-z_]+) / (?<sha>[0-9a-f]{40})$\")) catch null) // {action: \"unknown\", sha: \"unknown\"}) as \$snapshot
                   | [
                       .created_at,
                       (.id | tostring),
-                      ((try (.display_title | capture(\" @ (?<sha>[0-9a-f]{40})$\").sha) catch null) // \"unknown\"),
+                      \$snapshot.sha,
+                      \$snapshot.action,
                       (.conclusion // \"in_progress\")
                     ]
                   | @tsv"
             } | sort -k1,1r -k2,2nr)"
-            while IFS=$'\t' read -r _ candidate_run_id candidate_head_sha candidate_conclusion; do
+            while IFS=$'\t' read -r _ candidate_run_id candidate_head_sha candidate_action candidate_conclusion; do
               # A draft job is recorded as skipped without starting Codex.
+              [[ "${candidate_conclusion}" != "skipped" ]] || continue
+              # Editing PR metadata starts this gate but not Codex Automatic
+              # Review, so it does not create a reaction-producing generation.
+              [[ "${candidate_action}" != "edited" ]] || continue
               # Every other status-less run represents a generation that may
               # still emit a delayed reaction and must break the safe lineage.
-              [[ "${candidate_conclusion}" != "skipped" ]] || continue
               if [[ "${candidate_head_sha}" == "unknown" ]]; then
                 # The run-name captures the event-time PR head. REST run
                 # associations expose the current PR head, so legacy runs that
