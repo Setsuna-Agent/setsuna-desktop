@@ -698,7 +698,7 @@
   min-width: min(360px, 100%);
   box-sizing: border-box;
   padding: 9px 11px;
-  border: 1px solid var(--app-border);
+  border: 0;
   border-radius: var(--app-radius-lg);
   background: var(--chat-message-user-bg);
 }
