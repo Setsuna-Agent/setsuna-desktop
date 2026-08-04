@@ -326,7 +326,8 @@ function normalizeProviders(
     }
     return {
       id,
-      name: nonEmpty(provider.name) ?? previous?.name ?? 'Local provider',
+      // An explicit empty string means the user cleared the display name.
+      name: typeof provider.name === 'string' ? provider.name : previous?.name ?? 'Local provider',
       provider: provider.provider ?? previous?.provider ?? 'openai-compatible',
       baseUrl: normalizeBaseUrl(provider.baseUrl ?? previous?.baseUrl ?? ''),
       enabled: provider.enabled ?? previous?.enabled ?? true,

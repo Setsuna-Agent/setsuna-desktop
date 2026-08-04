@@ -308,6 +308,22 @@ describe('file config store', () => {
     expect(secrets.providerApiKeys).toEqual({ [baseProvider.id]: 'retained-secret' });
   });
 
+  it('persists an explicitly cleared provider display name', async () => {
+    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
+    const initial = await store.getConfig();
+    const baseProvider = initial.providers[0];
+    if (!baseProvider) throw new Error('Expected the default provider fixture.');
+
+    await expect(store.saveConfig({
+      providers: [{ ...baseProvider, name: '' }],
+    })).resolves.toMatchObject({
+      providers: [{ id: baseProvider.id, name: '' }],
+    });
+    await expect(store.getConfig()).resolves.toMatchObject({
+      providers: [{ id: baseProvider.id, name: '' }],
+    });
+  });
+
   it('persists preset and custom provider icons and supports restoring automatic matching', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);

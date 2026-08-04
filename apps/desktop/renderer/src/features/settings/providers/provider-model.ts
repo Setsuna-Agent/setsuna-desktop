@@ -107,7 +107,8 @@ export function normalizeSettingsProviders(
     return {
       ...provider,
       provider: providerKind,
-      name: provider.name || fallbackNames.provider,
+      // 空名称可能是用户主动清除的结果；默认名称只应在创建服务时生成。
+      name: typeof provider.name === 'string' ? provider.name : fallbackNames.provider,
       models: normalizeProviderModels(provider.models, providerKind, fallbackNames.model),
     };
   });
