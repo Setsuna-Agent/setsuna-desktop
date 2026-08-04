@@ -2,7 +2,6 @@ import type { RuntimeStreamItem } from '../provider.js';
 import {
   agentMessageItem,
   agentMessageItemId,
-  isClosingThinkTag,
   planItem,
   reasoningItem,
   reasoningItemId
@@ -19,6 +18,7 @@ import type {
   SweThreadItem,
   SweThreadStatus,
 } from './types.js';
+import { thinkTagMatches } from './think-tag-scanner.js';
 
 export function fileChangePatchUpdatedNotification(
   threadId: string,
@@ -292,13 +292,11 @@ export function streamAssistantDelta(
   startedAtMs: number,
 ): SweNotification[] {
   const notifications: SweNotification[] = [];
-  const tagRegex = /<\/?think(?:\s[^>]*)?>|&lt;\/?think(?:\s[^&]*)?&gt;/gi;
   let cursor = 0;
-  let match: RegExpExecArray | null;
 
-  while ((match = tagRegex.exec(delta)) !== null) {
+  for (const match of thinkTagMatches(delta)) {
     pushAssistantStreamText(notifications, threadId, turnId, messageId, stream, delta.slice(cursor, match.index), startedAtMs);
-    if (isClosingThinkTag(match[0])) {
+    if (match.closing) {
       if (stream.mode === 'think') {
         stream.mode = 'markdown';
         stream.currentReasoningItemId = null;
@@ -307,7 +305,7 @@ export function streamAssistantDelta(
       stream.mode = 'think';
       stream.currentAgentItemId = null;
     }
-    cursor = tagRegex.lastIndex;
+    cursor = match.end;
   }
 
   pushAssistantStreamText(notifications, threadId, turnId, messageId, stream, delta.slice(cursor), startedAtMs);
@@ -509,7 +507,7 @@ export function sameThreadStatus(left: SweThreadStatus, right: SweThreadStatus):
 }
 
 export function hasThinkTag(text: string): boolean {
-  return /<\/?think(?:\s[^>]*)?>|&lt;\/?think(?:\s[^&]*)?&gt;/i.test(text);
+  return thinkTagMatches(text).next().done === false;
 }
 
 export function itemKey(threadId: string, turnId: string, itemId: string): string {

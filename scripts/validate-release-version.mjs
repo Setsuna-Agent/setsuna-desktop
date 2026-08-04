@@ -1,11 +1,10 @@
 import packageJson from '../package.json' with { type: 'json' };
-
-const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u;
+import { isValidSemver } from './semver.mjs';
 
 const packageVersion = packageJson.version;
 const releaseTag = process.env.RELEASE_TAG?.trim() || '';
 
-if (!SEMVER_PATTERN.test(packageVersion)) {
+if (!isValidSemver(packageVersion)) {
   throw new Error(`Invalid package version: ${JSON.stringify(packageVersion)}. Use SemVer, for example 0.1.5 or 0.1.4-fix.1.`);
 }
 

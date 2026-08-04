@@ -13,6 +13,14 @@ describe('workspace file preview classification', () => {
     expect(detectWorkspacePreviewImageMimeType(Buffer.from('BMfixture'))).toBe('image/bmp');
     expect(detectWorkspacePreviewImageMimeType(icon)).toBe('image/x-icon');
     expect(detectWorkspacePreviewImageMimeType(Buffer.from('<?xml version="1.0"?><svg viewBox="0 0 1 1"></svg>'))).toBe('image/svg+xml');
+    expect(detectWorkspacePreviewImageMimeType(Buffer.from('\uFEFF <!--note--><!DOCTYPE svg><SVG></SVG>'))).toBe('image/svg+xml');
+  });
+
+  it('rejects malformed SVG preambles without backtracking over repeated comments', () => {
+    const craftedComment = `<!--${'--><!--'.repeat(40)}`;
+
+    expect(detectWorkspacePreviewImageMimeType(Buffer.from(craftedComment))).toBeNull();
+    expect(detectWorkspacePreviewImageMimeType(Buffer.from('<!-- missing end <svg></svg>'))).toBeNull();
   });
 
   it('separates UTF-8 text from executable and archive bytes', () => {

@@ -165,12 +165,13 @@ apps/desktop/renderer/ — 0 direct / 520 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 63 total files
-├── src/ — 35 direct / 46 total files
+packages/contracts/ — 4 direct / 65 total files
+├── src/ — 35 direct / 47 total files
 │   ├── event-projections/ — 2 direct / 2 total files
-│   └── swe/ — 9 direct / 9 total files
-└── test/ — 5 direct / 13 total files
+│   └── swe/ — 10 direct / 10 total files
+└── test/ — 5 direct / 14 total files
     ├── support/ — 1 direct / 1 total files
+    ├── swe/ — 1 direct / 1 total files
     └── swe-events/ — 7 direct / 7 total files
 ```
 
@@ -256,9 +257,9 @@ packages/desktop-runtime/ — 4 direct / 451 total files
 ### `scripts/`
 
 ```text
-scripts/ — 15 direct / 20 total files
+scripts/ — 17 direct / 23 total files
 ├── ripgrep/ — 3 direct / 3 total files
-└── test/ — 1 direct / 2 total files
+└── test/ — 2 direct / 3 total files
     └── ripgrep/ — 1 direct / 1 total files
 ```
 

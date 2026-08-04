@@ -48,7 +48,57 @@ function looksLikeSvg(buffer: Buffer): boolean {
     .toString('utf8')
     .replace(/^\uFEFF/u, '');
   if (source.includes('\uFFFD') || source.includes('\u0000')) return false;
-  return /^\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)*(?:<!doctype\s+svg[^>]*>\s*)?<svg(?:\s|>)/iu.test(source);
+  return hasSvgRootElement(source);
+}
+
+/** Walk the bounded SVG preamble once so crafted comments cannot trigger regex backtracking. */
+function hasSvgRootElement(source: string): boolean {
+  let cursor = skipWhitespace(source, 0);
+
+  if (startsWithAsciiIgnoreCase(source, cursor, '<?xml')) {
+    cursor = indexAfter(source, '>', cursor + '<?xml'.length);
+    if (cursor < 0) return false;
+    cursor = skipWhitespace(source, cursor);
+  }
+
+  while (source.startsWith('<!--', cursor)) {
+    cursor = indexAfter(source, '-->', cursor + '<!--'.length);
+    if (cursor < 0) return false;
+    cursor = skipWhitespace(source, cursor);
+  }
+
+  if (startsWithAsciiIgnoreCase(source, cursor, '<!doctype')) {
+    cursor += '<!doctype'.length;
+    if (!isWhitespace(source[cursor])) return false;
+    cursor = skipWhitespace(source, cursor);
+    if (!startsWithAsciiIgnoreCase(source, cursor, 'svg')) return false;
+    cursor = indexAfter(source, '>', cursor + 'svg'.length);
+    if (cursor < 0) return false;
+    cursor = skipWhitespace(source, cursor);
+  }
+
+  if (!startsWithAsciiIgnoreCase(source, cursor, '<svg')) return false;
+  const boundary = source[cursor + '<svg'.length];
+  return boundary === '>' || isWhitespace(boundary);
+}
+
+function indexAfter(source: string, marker: string, fromIndex: number): number {
+  const index = source.indexOf(marker, fromIndex);
+  return index < 0 ? -1 : index + marker.length;
+}
+
+function skipWhitespace(source: string, fromIndex: number): number {
+  let index = fromIndex;
+  while (isWhitespace(source[index])) index += 1;
+  return index;
+}
+
+function startsWithAsciiIgnoreCase(source: string, index: number, expected: string): boolean {
+  return source.slice(index, index + expected.length).toLowerCase() === expected;
+}
+
+function isWhitespace(value: string | undefined): boolean {
+  return value !== undefined && value.trim() === '';
 }
 
 function hasKnownBinarySignature(buffer: Buffer): boolean {

@@ -35,36 +35,10 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=pending \
             -f context="${STATUS_CONTEXT}" \
-            -f description="Waiting for Codex to review the latest commit" >/dev/null
+            -f description="Waiting for Codex Automatic Review" >/dev/null
 
-      - name: Request review for the current head
-        shell: bash
-        run: |
-          set -euo pipefail
-          head_short="${HEAD_SHA:0:10}"
-          echo "Checking existing Codex reviews..."
-          existing_review_id="$({
-            gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
-              --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
-          } | tail -n 1)"
-          echo "Checking existing Codex clean-review comments..."
-          existing_clean_comment_id="$({
-            gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
-              --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | .id"
-          } | tail -n 1)"
-
-          if [[ -n "${existing_review_id}" || -n "${existing_clean_comment_id}" ]]; then
-            echo "Codex already reviewed ${HEAD_SHA}."
-            exit 0
-          fi
-
-          body="@codex review
-
-          <!-- codex-review-gate:${HEAD_SHA} -->"
-          echo "Posting Codex review request..."
-          gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="${body}" >/dev/null
-          echo "Requested Codex review for ${HEAD_SHA}."
-
+      # Repository settings trigger Codex Automatic Review on every push. This
+      # trusted workflow only validates the connector result for the exact SHA.
       - name: Wait for a clean review of the current head
         id: wait_for_review
         shell: bash
