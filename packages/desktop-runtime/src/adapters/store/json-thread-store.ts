@@ -33,6 +33,11 @@ import {
   threadHasAncestor,
   toSummary,
 } from './thread-store-state.js';
+import {
+  findThreadMessageSearchPreview,
+  normalizedThreadSearch,
+  threadSummarySearchMatch,
+} from './thread-search.js';
 
 type ThreadIndex = {
   threads: RuntimeThreadSummary[];
@@ -61,9 +66,9 @@ export class JsonThreadStore implements ThreadStore {
 
   async listThreads(query: ThreadQuery = {}): Promise<RuntimeThreadSummary[]> {
     const index = await this.readIndex();
-    const search = query.search?.trim().toLowerCase();
+    const search = normalizedThreadSearch(query.search);
     const parentMap = new Map(index.threads.map((thread) => [thread.id, thread.parentThreadId]));
-    return index.threads
+    const candidates = index.threads
       .map(normalizeThreadSummary)
       .filter((thread) => query.includeArchived || !thread.archived)
       .filter((thread) => !query.parentThreadId || thread.parentThreadId === query.parentThreadId)
@@ -74,8 +79,23 @@ export class JsonThreadStore implements ThreadStore {
         if (query.scope === 'project') return Boolean(thread.projectId);
         return true;
       })
-      .filter((thread) => !search || thread.title.toLowerCase().includes(search) || thread.lastMessagePreview.toLowerCase().includes(search))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    if (!search) return candidates;
+
+    const matches: RuntimeThreadSummary[] = [];
+    for (const thread of candidates) {
+      const summaryMatch = threadSummarySearchMatch(thread, search);
+      if (summaryMatch.matches) {
+        matches.push({ ...thread, searchMatchPreview: summaryMatch.preview });
+        continue;
+      }
+      const detail = await this.getThread(thread.id);
+      const messagePreview = detail
+        ? findThreadMessageSearchPreview(detail.messages, search)
+        : undefined;
+      if (messagePreview) matches.push({ ...thread, searchMatchPreview: messagePreview });
+    }
+    return matches;
   }
 
   async getThread(threadId: string): Promise<RuntimeThread | null> {

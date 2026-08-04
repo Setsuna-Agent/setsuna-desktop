@@ -309,6 +309,8 @@ export type RuntimeThreadSummary = {
   goal?: RuntimeThreadGoal;
   messageCount: number;
   lastMessagePreview: string;
+  /** Present only on search results when an older message matched the query. */
+  searchMatchPreview?: string;
 };
 
 export type RuntimeThread = RuntimeThreadSummary & {

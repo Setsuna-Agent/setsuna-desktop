@@ -1,4 +1,4 @@
-import type { RuntimeThread, RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { DesktopRuntimeClient, RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { LoaderCircle, Search } from 'lucide-react';
 import {
   useCallback,
@@ -10,7 +10,10 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue.js';
+import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { buildSidebarSearchResults } from './sidebarSearchResults.js';
 
 export function SidebarSearchOverlay({
   projects,
@@ -19,7 +22,7 @@ export function SidebarSearchOverlay({
   threads,
   onChange,
   onClose,
-  onLoadThread,
+  onSearchThreads,
   onSelect,
 }: {
   projects: WorkspaceProject[];
@@ -28,45 +31,26 @@ export function SidebarSearchOverlay({
   threads: RuntimeThreadSummary[];
   onChange: (value: string) => void;
   onClose: () => void;
-  onLoadThread: (threadId: string) => Promise<RuntimeThread>;
+  onSearchThreads: DesktopRuntimeClient['listThreads'];
   onSelect: (threadId: string) => void;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [detailsByThreadId, setDetailsByThreadId] = useState<Record<string, RuntimeThread>>({});
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const loadingThreadIdsRef = useRef<Set<string>>(new Set());
-  const hasKeyword = Boolean(query.trim());
+  const [matchingThreads, setMatchingThreads] = useState<RuntimeThreadSummary[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const normalizedQuery = query.trim();
+  const debouncedQuery = useDebouncedValue(normalizedQuery, 200);
+  const searchRequests = useIdentityRequestGuard(normalizedQuery || 'recent-threads');
+  const hasKeyword = Boolean(normalizedQuery);
   const projectNameById = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
-  const results = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    const candidates = threads.map((thread) => {
-      const cachedDetail = detailsByThreadId[thread.id];
-      const detail = cachedDetail?.updatedAt === thread.updatedAt ? cachedDetail : undefined;
-      const title = compactSearchText(thread.title);
-      const preview = compactSearchText(thread.lastMessagePreview);
-      const messageText = detail ? compactSearchText(detail.messages.map((message) => message.content).filter(Boolean).join(' ')) : preview;
-      const titleText = title.toLowerCase();
-      const messageSearchText = messageText.toLowerCase();
-      const titleStartsWithKeyword = Boolean(keyword && titleText.startsWith(keyword));
-      const titleIncludesKeyword = Boolean(keyword && titleText.includes(keyword));
-      const messageIncludesKeyword = Boolean(keyword && messageSearchText.includes(keyword));
-      return {
-        isBusy: Boolean(detail?.messages.some((message) => message.status === 'streaming')),
-        thread,
-        sourceLabel: thread.projectId ? projectNameById.get(thread.projectId) ?? t('sidebar.projectFallback') : 'agent',
-        matchText: keyword && messageIncludesKeyword ? buildSearchSnippet(messageText, keyword) : undefined,
-        rank: !keyword ? 3 : titleStartsWithKeyword ? 0 : titleIncludesKeyword ? 1 : messageIncludesKeyword ? 2 : 9,
-        timestamp: Date.parse(thread.updatedAt || thread.createdAt || '') || 0,
-      };
-    });
-    return candidates
-      .filter((item) => !keyword || item.rank < 9)
-      .sort((a, b) => a.rank - b.rank || b.timestamp - a.timestamp)
-      .slice(0, 30);
-  }, [detailsByThreadId, projectNameById, query, t, threads]);
+  const results = useMemo(() => buildSidebarSearchResults({
+    projectFallback: t('sidebar.projectFallback'),
+    projectNameById,
+    query,
+    threads: hasKeyword ? matchingThreads : threads,
+  }), [hasKeyword, matchingThreads, projectNameById, query, t, threads]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -78,38 +62,30 @@ export function SidebarSearchOverlay({
   }, [query]);
 
   useEffect(() => {
-    // 最近对话只需要摘要数据。仅在实际执行关键词搜索时加载完整记录，
-    // 让弹出层保持轻量。
-    if (!hasKeyword) {
-      setDetailsLoading(false);
+    if (!normalizedQuery) {
+      setMatchingThreads([]);
+      setSearchLoading(false);
       return undefined;
     }
-    let cancelled = false;
-    const missingThreads = threads.filter((thread) => {
-      const detail = detailsByThreadId[thread.id];
-      return detail?.updatedAt !== thread.updatedAt && !loadingThreadIdsRef.current.has(thread.id);
-    });
-    if (!missingThreads.length) {
-      setDetailsLoading(false);
+    if (debouncedQuery !== normalizedQuery) {
+      setMatchingThreads([]);
+      setSearchLoading(true);
       return undefined;
     }
-    missingThreads.forEach((thread) => loadingThreadIdsRef.current.add(thread.id));
-    setDetailsLoading(true);
-
-    hydrateThreadDetails(missingThreads, onLoadThread, (thread) => {
-      if (cancelled) return;
-      setDetailsByThreadId((current) => ({ ...current, [thread.id]: thread }));
-    })
-      .catch(() => undefined)
+    const isCurrentRequest = searchRequests.begin();
+    setSearchLoading(true);
+    onSearchThreads({ search: debouncedQuery })
+      .then((result) => {
+        if (isCurrentRequest()) setMatchingThreads(result.threads);
+      })
+      .catch(() => {
+        if (isCurrentRequest()) setMatchingThreads([]);
+      })
       .finally(() => {
-        missingThreads.forEach((thread) => loadingThreadIdsRef.current.delete(thread.id));
-        if (!cancelled) setDetailsLoading(loadingThreadIdsRef.current.size > 0);
+        if (isCurrentRequest()) setSearchLoading(false);
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [detailsByThreadId, hasKeyword, onLoadThread, threads]);
+    return undefined;
+  }, [debouncedQuery, normalizedQuery, onSearchThreads, searchRequests]);
 
   useEffect(() => {
     setActiveIndex((current) => Math.min(current, Math.max(results.length - 1, 0)));
@@ -198,8 +174,12 @@ export function SidebarSearchOverlay({
           <input
             ref={inputRef}
             aria-activedescendant={activeResultId}
+            aria-autocomplete="list"
             aria-controls="desktop-agent-search-results"
+            aria-expanded="true"
+            aria-haspopup="listbox"
             autoFocus
+            role="combobox"
             value={query}
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={handleInputKeyDown}
@@ -208,13 +188,18 @@ export function SidebarSearchOverlay({
         </div>
         <div className="desktop-agent-search-popover__heading">
           <span>{hasKeyword ? t('sidebar.searchResults') : t('sidebar.recentChats')}</span>
-          {detailsLoading && hasKeyword ? (
+          {searchLoading && hasKeyword ? (
             <span className="desktop-agent-search-popover__loading" aria-label={t('sidebar.indexing')}>
               <LoaderCircle className="is-spinning" size={13} />
             </span>
           ) : null}
         </div>
-        <div id="desktop-agent-search-results" className="desktop-agent-search-popover__list" role="listbox">
+        <div
+          id="desktop-agent-search-results"
+          className="desktop-agent-search-popover__list"
+          role="listbox"
+          aria-busy={searchLoading}
+        >
           {results.length ? (
             results.map((result, index) => (
               <button
@@ -224,6 +209,7 @@ export function SidebarSearchOverlay({
                 type="button"
                 role="option"
                 aria-selected={index === activeIndex}
+                tabIndex={-1}
                 title={result.thread.title}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => openResult(result.thread.id)}
@@ -240,7 +226,7 @@ export function SidebarSearchOverlay({
             ))
           ) : (
             <div className="desktop-agent-search-popover__empty">
-              {detailsLoading && hasKeyword ? t('sidebar.indexingContent') : hasKeyword ? t('sidebar.noResults') : t('sidebar.noRecentChats')}
+              {searchLoading && hasKeyword ? t('sidebar.indexingContent') : hasKeyword ? t('sidebar.noResults') : t('sidebar.noRecentChats')}
             </div>
           )}
         </div>
@@ -248,34 +234,4 @@ export function SidebarSearchOverlay({
     </div>,
     document.body,
   );
-}
-
-function compactSearchText(value?: string | null) {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function buildSearchSnippet(text: string, keyword: string) {
-  if (!text) return '';
-  const index = text.toLowerCase().indexOf(keyword);
-  if (index < 0) return text.slice(0, 90);
-  const start = Math.max(0, index - 22);
-  const end = Math.min(text.length, index + keyword.length + 52);
-  return `${start > 0 ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`;
-}
-
-async function hydrateThreadDetails(
-  threads: RuntimeThreadSummary[],
-  loadThread: (threadId: string) => Promise<RuntimeThread>,
-  onThreadLoaded: (thread: RuntimeThread) => void,
-) {
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(6, threads.length) }, async () => {
-    while (cursor < threads.length) {
-      const thread = threads[cursor];
-      cursor += 1;
-      const detail = await loadThread(thread.id);
-      onThreadLoaded(detail);
-    }
-  });
-  await Promise.all(workers);
 }

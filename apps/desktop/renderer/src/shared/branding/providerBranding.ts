@@ -1,7 +1,7 @@
 import type { BrandIconConfig, ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
 import type { Translate } from '../i18n/I18nProvider.js';
 import type { MessageKey } from '../i18n/messages.js';
-import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
+import setsunaAppIconUrl from '../assets/setsuna-app.png';
 import anthropicLogoUrl from '../assets/provider-logos/anthropic.svg';
 import bailianLogoUrl from '../assets/provider-logos/bailian.svg';
 import deepseekLogoUrl from '../assets/provider-logos/deepseek.svg';

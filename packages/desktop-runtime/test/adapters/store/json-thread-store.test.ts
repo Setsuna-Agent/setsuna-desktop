@@ -34,6 +34,52 @@ describe('json thread store', () => {
     expect(global.memoryMode).toBe('enabled');
   });
 
+  it('searches older message content without returning full thread snapshots', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+    const matching = await store.createThread({ title: 'Unrelated title' });
+    const other = await store.createThread({ title: 'Another chat' });
+    const createdAt = systemClock.now().toISOString();
+
+    await store.appendEvent(matching.id, {
+      id: 'event_search_match',
+      threadId: matching.id,
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_search_match',
+          role: 'user',
+          content: 'An older message contains the hidden needle for this search.',
+          createdAt,
+          status: 'complete',
+        },
+      },
+    });
+    await store.appendEvent(matching.id, {
+      id: 'event_latest_message',
+      threadId: matching.id,
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_latest_message',
+          role: 'assistant',
+          content: 'The latest preview does not contain the query.',
+          createdAt,
+          status: 'complete',
+        },
+      },
+    });
+
+    await expect(store.listThreads({ search: 'hidden needle' })).resolves.toEqual([
+      expect.objectContaining({
+        id: matching.id,
+        searchMatchPreview: expect.stringContaining('hidden needle'),
+      }),
+    ]);
+    expect((await store.listThreads({ search: 'hidden needle' })).some((thread) => thread.id === other.id)).toBe(false);
+  });
+
   it('stores spawned child relationships and filters by parent or ancestor', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
 

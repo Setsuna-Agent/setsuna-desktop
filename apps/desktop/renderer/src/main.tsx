@@ -25,8 +25,6 @@ import './app/styles/sidebar.css';
 import './features/workspace/styles/panel-chrome.css';
 import './features/workspace/styles/workspace.css';
 import './features/workspace/styles/bottom-panel.css';
-import './features/settings/styles/settings.css';
-import './features/capabilities/styles/capabilities.css';
 import './features/chat/styles/chat.css';
 import './features/chat/styles/chat-timeline-divider.css';
 import './shared/styles/loading-indicators.css';

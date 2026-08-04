@@ -1,4 +1,3 @@
-import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { Check, ChevronRight, Code2, Copy, FolderOpen, MessageSquare } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
@@ -173,17 +172,6 @@ export function workspaceFileRevealLabel(platform?: string, t: Translate = defau
   if (platform === 'darwin') return t('workspace.fileMenu.reveal.finder');
   if (platform === 'win32') return t('workspace.fileMenu.reveal.explorer');
   return t('workspace.fileMenu.reveal.folder');
-}
-
-export function workspaceFileMentionEntry(filePath: string): WorkspaceEntrySearchItem {
-  const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-  const separatorIndex = normalizedPath.lastIndexOf('/');
-  return {
-    kind: 'file',
-    name: separatorIndex >= 0 ? normalizedPath.slice(separatorIndex + 1) : normalizedPath,
-    parent: separatorIndex >= 0 ? normalizedPath.slice(0, separatorIndex) : '',
-    path: normalizedPath,
-  };
 }
 
 function openInAppLabel(app: DesktopWorkspaceApp, line: number | undefined, t: Translate): string {

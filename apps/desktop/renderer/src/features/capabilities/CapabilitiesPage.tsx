@@ -56,6 +56,7 @@ import {
 } from './mcp/mcp-editor-model.js';
 import { pluginMatchesQuery } from './pluginDisplay.js';
 import { localizedPluginSearchAliases } from './pluginLocalization.js';
+import { useCapabilitySkillDetails } from './useCapabilitySkillDetails.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
@@ -153,13 +154,21 @@ export function CapabilitiesPage({
   const [editingHook, setEditingHook] = useState<RuntimeHookMetadata | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<RuntimeMcpServer | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [skillPageMode, setSkillPageMode] = useState<'view' | 'edit' | 'create' | null>(null);
-  const [skillDetailSummary, setSkillDetailSummary] = useState<RuntimeSkillSummary | null>(null);
-  const [skillDetail, setSkillDetail] = useState<RuntimeSkillDetail | null>(null);
-  const [skillDetailLoading, setSkillDetailLoading] = useState(false);
-  const [skillDetailError, setSkillDetailError] = useState<string | null>(null);
-  const [skillSaving, setSkillSaving] = useState(false);
-  const [skillDependencyPendingKeys, setSkillDependencyPendingKeys] = useState<Set<string>>(new Set());
+  const skillDetails = useCapabilitySkillDetails({
+    onCreateSkill,
+    onDeleteSkill,
+    onGetSkillDetail,
+    onUpdateSkill,
+  });
+  const {
+    detail: skillDetail,
+    error: skillDetailError,
+    loading: skillDetailLoading,
+    mode: skillPageMode,
+    pendingDependencyKeys: skillDependencyPendingKeys,
+    saving: skillSaving,
+    summary: skillDetailSummary,
+  } = skillDetails;
   const servers = mcpState?.servers ?? [];
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
@@ -228,10 +237,7 @@ export function CapabilitiesPage({
   function openSkillFormCreate() {
     setCreateMenuOpen(false);
     setCapabilityFilter('skills');
-    setSkillPageMode('create');
-    setSkillDetailSummary(null);
-    setSkillDetail(null);
-    setSkillDetailError(null);
+    skillDetails.openCreate();
   }
 
   function openHookFormCreate() {
@@ -279,78 +285,6 @@ export function CapabilitiesPage({
       disabledTools: server.disabledTools.join('\n'),
       tools: server.tools,
     });
-  }
-
-  async function openSkillDetail(skill: RuntimeSkillSummary, mode: 'view' | 'edit' = 'view') {
-    setCapabilityFilter('skills');
-    setSkillPageMode(mode);
-    setSkillDetailSummary(skill);
-    setSkillDetail(null);
-    setSkillDetailError(null);
-    setSkillDetailLoading(true);
-    try {
-      const detail = await onGetSkillDetail(skill.id);
-      setSkillDetail(detail);
-      setSkillDetailSummary(detail);
-    } catch (unknownError) {
-      setSkillDetailError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      setSkillDetailLoading(false);
-    }
-  }
-
-  async function updateSkillFromDetail(skill: RuntimeSkillSummary, patch: Partial<Pick<RuntimeSkillSummary, 'enabled' | 'selected'>>) {
-    const updated = await onUpdateSkill(skill, patch);
-    setSkillDetailSummary(updated);
-    setSkillDetail(updated);
-  }
-
-  async function saveSkill(input: RuntimeSkillInput) {
-    setSkillSaving(true);
-    try {
-      const saved =
-        skillPageMode === 'create'
-          ? await onCreateSkill(input)
-          : skillDetailSummary
-            ? await onUpdateSkill(skillDetailSummary, input)
-            : null;
-      if (!saved) return;
-      setSkillDetailSummary(saved);
-      setSkillDetail(saved);
-      setSkillPageMode('view');
-    } finally {
-      setSkillSaving(false);
-    }
-  }
-
-  async function deleteSkill(skill: RuntimeSkillSummary) {
-    const confirmed = window.confirm(t('capabilities.page.confirmDeleteSkill', { name: skill.name }));
-    if (!confirmed) return;
-    await onDeleteSkill(skill);
-    setSkillDetailSummary(null);
-    setSkillDetail(null);
-    setSkillPageMode(null);
-  }
-
-  async function updateSkillDependency(
-    skill: RuntimeSkillSummary,
-    key: string,
-    action: () => Promise<RuntimeSkillDetail>,
-  ) {
-    setSkillDependencyPendingKeys((items) => new Set(items).add(key));
-    try {
-      const updated = await action();
-      if (skillDetailSummary?.id === updated.id) {
-        setSkillDetailSummary(updated);
-        setSkillDetail(updated);
-      }
-    } finally {
-      setSkillDependencyPendingKeys((items) => {
-        const next = new Set(items);
-        next.delete(key);
-        return next;
-      });
-    }
   }
 
   async function submitMcpServer() {
@@ -481,14 +415,8 @@ export function CapabilitiesPage({
             mode={skillPageMode}
             saving={skillSaving}
             skill={skillDetail}
-            onBack={() => {
-              if (skillDetailSummary) {
-                setSkillPageMode('view');
-                return;
-              }
-              setSkillPageMode(null);
-            }}
-            onSave={saveSkill}
+            onBack={skillDetails.backFromEditor}
+            onSave={skillDetails.save}
           />
         </section>
       </main>
@@ -504,21 +432,16 @@ export function CapabilitiesPage({
             error={skillDetailError}
             loading={skillDetailLoading}
             summary={skillDetailSummary}
-            onBack={() => {
-              setSkillDetailSummary(null);
-              setSkillDetail(null);
-              setSkillDetailError(null);
-              setSkillPageMode(null);
-            }}
-            onDelete={deleteSkill}
-            onEdit={() => setSkillPageMode('edit')}
-            onUpdateSkill={updateSkillFromDetail}
-            onInstallMcpDependencies={(skill) => updateSkillDependency(
+            onBack={skillDetails.close}
+            onDelete={skillDetails.remove}
+            onEdit={skillDetails.openEditor}
+            onUpdateSkill={skillDetails.updateFromDetail}
+            onInstallMcpDependencies={(skill) => skillDetails.updateDependency(
               skill,
               `install:${skill.id}`,
               () => onInstallSkillMcpDependencies(skill),
             )}
-            onAuthenticateMcpDependency={(skill, serverKey) => updateSkillDependency(
+            onAuthenticateMcpDependency={(skill, serverKey) => skillDetails.updateDependency(
               skill,
               `auth:${skill.id}:${serverKey}`,
               () => onAuthenticateSkillMcpDependency(skill, serverKey),
@@ -743,18 +666,18 @@ export function CapabilitiesPage({
                   key={`skill:${skill.id}`}
                   dependencyPending={dependencyPending}
                   skill={skill}
-                  onAuthenticateDependency={(serverKey) => void updateSkillDependency(
+                  onAuthenticateDependency={(serverKey) => void skillDetails.updateDependency(
                     skill,
                     `auth:${skill.id}:${serverKey}`,
                     () => onAuthenticateSkillMcpDependency(skill, serverKey),
                   )}
-                  onEdit={() => void openSkillDetail(skill, 'edit')}
-                  onInstallDependencies={() => void updateSkillDependency(
+                  onEdit={() => void skillDetails.open(skill, 'edit')}
+                  onInstallDependencies={() => void skillDetails.updateDependency(
                     skill,
                     `install:${skill.id}`,
                     () => onInstallSkillMcpDependencies(skill),
                   )}
-                  onOpen={() => void openSkillDetail(skill, 'view')}
+                  onOpen={() => void skillDetails.open(skill, 'view')}
                   onUpdate={(patch) => void onUpdateSkill(skill, patch)}
                 />
               );

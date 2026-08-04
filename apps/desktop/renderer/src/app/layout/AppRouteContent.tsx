@@ -1,5 +1,7 @@
 import type { RuntimeReviewTarget, WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -9,10 +11,8 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from 'react';
-import { CapabilitiesPage } from '../../features/capabilities/CapabilitiesPage.js';
 import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
-import { SettingsPage } from '../../features/settings/SettingsPage.js';
 import { latestBrowserOpenRequest } from '../../features/workspace/browser/runtimeBrowserActions.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
@@ -21,6 +21,9 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { DesktopUpdaterStateView } from '../controller/useDesktopUpdater.js';
 import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../types.js';
 import { AppChatSurface } from './AppChatSurface.js';
+
+const SettingsPage = lazy(() => import('../../features/settings/SettingsRoute.js'));
+const CapabilitiesPage = lazy(() => import('../../features/capabilities/CapabilitiesRoute.js'));
 
 export function AppRouteContent({
   activeProject,
@@ -143,6 +146,7 @@ export function AppRouteContent({
 
   if (activeView === 'settings') {
     return (
+      <Suspense fallback={<RouteLoadingState label={t('common.loading')} />}>
         <SettingsPage
           archivedThreads={runtime.archivedThreads}
           config={runtime.config}
@@ -151,60 +155,63 @@ export function AppRouteContent({
           updater={updater}
           usage={runtime.usage}
           memoryPreview={runtime.memoryPreview}
-        memoryPreviewLoading={runtime.memoryPreviewLoading}
-        onBack={() => setActiveView('chat')}
-        onFetchProviderModels={runtime.fetchProviderModels}
-        onSaveProviders={runtime.saveProviders}
-        onSaveRuntimePreferences={runtime.saveRuntimePreferences}
-        onPreviewMemories={runtime.previewMemories}
-        onDeleteMemory={runtime.deleteMemory}
-        onResetMemories={runtime.clearMemories}
-        onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
-        onDeleteArchivedThread={runtime.permanentlyDeleteThread}
-        onRestoreArchivedThread={runtime.restoreArchivedThread}
-        onSetSkillExtraRoots={runtime.setSkillExtraRoots}
-      />
+          memoryPreviewLoading={runtime.memoryPreviewLoading}
+          onBack={() => setActiveView('chat')}
+          onFetchProviderModels={runtime.fetchProviderModels}
+          onSaveProviders={runtime.saveProviders}
+          onSaveRuntimePreferences={runtime.saveRuntimePreferences}
+          onPreviewMemories={runtime.previewMemories}
+          onDeleteMemory={runtime.deleteMemory}
+          onResetMemories={runtime.clearMemories}
+          onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
+          onDeleteArchivedThread={runtime.permanentlyDeleteThread}
+          onRestoreArchivedThread={runtime.restoreArchivedThread}
+          onSetSkillExtraRoots={runtime.setSkillExtraRoots}
+        />
+      </Suspense>
     );
   }
 
   if (activeView === 'capabilities') {
     return (
-      <CapabilitiesPage
-        config={runtime.config}
-        skills={runtime.skills}
-        selectedSkillCount={selectedSkillCount}
-        mcpState={runtime.mcpState}
-        hookState={runtime.hookState}
-        plugins={runtime.plugins}
-        pluginMarketplace={runtime.pluginMarketplace}
-        pluginMarketplaceErrors={runtime.pluginMarketplaceErrors}
-        onCreateHook={runtime.createHook}
-        onCreateSkill={runtime.createSkill}
-        onDeleteSkill={runtime.deleteSkill}
-        onGetPluginItemContent={runtime.getPluginItemContent}
-        onGetSkillDetail={runtime.getSkillDetail}
-        onInstallSkillMcpDependencies={runtime.installSkillMcpDependencies}
-        onAuthenticateSkillMcpDependency={runtime.authenticateSkillMcpDependency}
-        onCreateInConversation={onSelectSkillForChat}
-        onRefresh={runtime.refreshCapabilities}
-        onUpdateSkill={runtime.updateSkill}
-        onFetchMcpTools={runtime.fetchMcpServerTools}
-        onRefreshHooks={runtime.refreshHooks}
-        onSaveMcpServer={runtime.saveMcpServer}
-        onTrustHook={runtime.trustHook}
-        onUpdateHook={runtime.updateHook}
-        onUpdateHookEnabled={runtime.updateHookEnabled}
-        onDeleteHook={runtime.deleteHook}
-        onUpdateMcpServer={runtime.updateMcpServer}
-        onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
-        onLoginMcpServer={runtime.loginMcpServer}
-        onLogoutMcpServer={runtime.logoutMcpServer}
-        onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
-        onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
-        onRemovePlugin={runtime.removePlugin}
-        onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
-        onTestImageGeneration={runtime.testImageGeneration}
-      />
+      <Suspense fallback={<RouteLoadingState label={t('common.loading')} />}>
+        <CapabilitiesPage
+          config={runtime.config}
+          skills={runtime.skills}
+          selectedSkillCount={selectedSkillCount}
+          mcpState={runtime.mcpState}
+          hookState={runtime.hookState}
+          plugins={runtime.plugins}
+          pluginMarketplace={runtime.pluginMarketplace}
+          pluginMarketplaceErrors={runtime.pluginMarketplaceErrors}
+          onCreateHook={runtime.createHook}
+          onCreateSkill={runtime.createSkill}
+          onDeleteSkill={runtime.deleteSkill}
+          onGetPluginItemContent={runtime.getPluginItemContent}
+          onGetSkillDetail={runtime.getSkillDetail}
+          onInstallSkillMcpDependencies={runtime.installSkillMcpDependencies}
+          onAuthenticateSkillMcpDependency={runtime.authenticateSkillMcpDependency}
+          onCreateInConversation={onSelectSkillForChat}
+          onRefresh={runtime.refreshCapabilities}
+          onUpdateSkill={runtime.updateSkill}
+          onFetchMcpTools={runtime.fetchMcpServerTools}
+          onRefreshHooks={runtime.refreshHooks}
+          onSaveMcpServer={runtime.saveMcpServer}
+          onTrustHook={runtime.trustHook}
+          onUpdateHook={runtime.updateHook}
+          onUpdateHookEnabled={runtime.updateHookEnabled}
+          onDeleteHook={runtime.deleteHook}
+          onUpdateMcpServer={runtime.updateMcpServer}
+          onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
+          onLoginMcpServer={runtime.loginMcpServer}
+          onLogoutMcpServer={runtime.logoutMcpServer}
+          onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
+          onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
+          onRemovePlugin={runtime.removePlugin}
+          onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
+          onTestImageGeneration={runtime.testImageGeneration}
+        />
+      </Suspense>
     );
   }
 
@@ -309,5 +316,13 @@ export function AppRouteContent({
       workspaceMinWidth={workspaceMinWidth}
       workspaceWidth={workspaceWidth}
     />
+  );
+}
+
+function RouteLoadingState({ label }: { label: string }) {
+  return (
+    <main className="app-route-loading" role="status">
+      {label}
+    </main>
   );
 }

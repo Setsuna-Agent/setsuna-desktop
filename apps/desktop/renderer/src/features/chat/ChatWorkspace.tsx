@@ -15,7 +15,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { ArrowDown, Bug, Hammer, SearchCode, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import setsunaAppIconUrl from '../../../../../../assets/build/icon.png';
+import setsunaAppIconUrl from '../../shared/assets/setsuna-app.png';
 import type {
   ChatImageAttachmentOutcome,
   ChatImageAttachmentRequest,
@@ -23,7 +23,6 @@ import type {
   ChatWorkspaceMentionRequest,
   ConversationOverviewVisibility,
 } from '../../app/types.js';
-import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
@@ -57,13 +56,13 @@ import {
   createChatScrollSignal,
 } from './conversation/chatMessageDisplay.js';
 import { chatThreadUsageForDisplay } from './conversation/chatThreadUsage.js';
-import { commitChatWorkspaceOperation } from './conversation/chatWorkspaceOperationScope.js';
 import {
   shouldAutoHideConversationOverview,
   shouldCompactConversationOverview,
   shouldShiftConversationOverviewContent,
 } from './conversation/conversationOverviewLayout.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
+import { useChatMessageOperations } from './hooks/useChatMessageOperations.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 
@@ -252,15 +251,37 @@ export function ChatWorkspace({
     [contextUsage, currentThread?.contextCompaction?.status, t],
   );
   const showEmptyStarter = variant === 'main' && displayItems.length === 0 && !activeTurnId;
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingDraft, setEditingDraft] = useState('');
-  const [editingSubmitting, setEditingSubmitting] = useState(false);
-  const [deleteMode, setDeleteMode] = useState(false);
+  const {
+    actionError,
+    allDeleteSelected,
+    cancelDeleteSelection,
+    cancelEditingMessage,
+    confirmDeleteSelection,
+    deleteMode,
+    deletingMessages,
+    editingDraft,
+    editingMessageId,
+    editingSubmitting,
+    selectableDeleteCount,
+    selectedDeleteCount,
+    selectedDeleteItemIds,
+    selectedDeleteMessageIds,
+    setEditingDraft,
+    someDeleteSelected,
+    startDeleteSelection,
+    startEditingMessage,
+    submitEditingMessage,
+    toggleAllDeleteSelection,
+    toggleDeleteSelection,
+  } = useChatMessageOperations({
+    activeTurnId,
+    composerKey,
+    currentThreadId: currentThread?.id,
+    displayItems,
+    onDeleteMessages,
+    onEditUserMessage,
+  });
   const conversationClassName = ['chat-main-conversation', showEmptyStarter || deleteMode ? '' : 'chat-main-conversation--with-bottom-sender', conversationOverview && overviewShiftsContent ? 'chat-main-conversation--overview-shifted' : ''].filter(Boolean).join(' ');
-  const [deletingMessages, setDeletingMessages] = useState(false);
-  const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<Set<string>>(() => new Set());
-  const [actionError, setActionError] = useState<string | null>(null);
-  const localOperationRequests = useIdentityRequestGuard(composerKey);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [expandedWorkHistoryItemIds, setExpandedWorkHistoryItemIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
@@ -352,132 +373,6 @@ export function ChatWorkspace({
     if (!messageHistory.loading) historyScrollAnchorRef.current = null;
   }, [messageHistory.loading, messages.length, scrollRef, showFullHistory]);
 
-  useLayoutEffect(() => {
-    setEditingMessageId(null);
-    setEditingDraft('');
-    setEditingSubmitting(false);
-    setDeleteMode(false);
-    setDeletingMessages(false);
-    setSelectedDeleteItemIds(new Set());
-    setActionError(null);
-  }, [currentThread?.id]);
-
-  // 缓存可删除项，避免每次渲染都重新 filter
-  const selectableDeleteItems = useMemo(
-    () =>
-      displayItems
-        .filter((item) => item.type !== 'context' && item.type !== 'review')
-        .map((item) => ({
-          id: item.id,
-          messageIds: item.messageIds,
-          type: item.type,
-        })),
-    [displayItems],
-  );
-  // 缓存删除消息 ID 集合，避免重复计算
-  const selectedDeleteMessageIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const item of selectableDeleteItems) {
-      if (!selectedDeleteItemIds.has(item.id)) continue;
-      item.messageIds.forEach((id) => ids.add(id));
-    }
-    return [...ids];
-  }, [selectableDeleteItems, selectedDeleteItemIds]);
-  const selectedDeleteCount = selectedDeleteItemIds.size;
-  const allDeleteSelected = selectableDeleteItems.length > 0 && selectedDeleteCount === selectableDeleteItems.length;
-  const someDeleteSelected = selectedDeleteCount > 0 && selectedDeleteCount < selectableDeleteItems.length;
-
-  useLayoutEffect(() => {
-    const validIds = new Set(selectableDeleteItems.map((item) => item.id));
-    setSelectedDeleteItemIds((current) => {
-      const next = new Set([...current].filter((id) => validIds.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [selectableDeleteItems]);
-
-  const deleteGroupItemIds = useCallback(
-    (itemId: string) => {
-      const index = selectableDeleteItems.findIndex((item) => item.id === itemId);
-      if (index < 0) return [itemId];
-      const item = selectableDeleteItems[index];
-      const ids = [item.id];
-      // 默认删除完整的“提问/回答”组，避免只删一半后留下孤立 turn。
-      if (item.type === 'assistant') {
-        const previousUser = [...selectableDeleteItems.slice(0, index)].reverse().find((candidate) => candidate.type === 'user');
-        if (previousUser) ids.push(previousUser.id);
-      }
-      if (item.type === 'user') {
-        const nextItem = selectableDeleteItems[index + 1];
-        if (nextItem?.type === 'assistant') ids.push(nextItem.id);
-      }
-      return ids;
-    },
-    [selectableDeleteItems],
-  );
-
-  const startDeleteSelection = useCallback(
-    (itemId: string) => {
-      if (activeTurnId) return;
-      setActionError(null);
-      setEditingMessageId(null);
-      setEditingDraft('');
-      setEditingSubmitting(false);
-      setDeleteMode(true);
-      setSelectedDeleteItemIds(new Set(deleteGroupItemIds(itemId)));
-    },
-    [activeTurnId, deleteGroupItemIds],
-  );
-
-  const toggleDeleteSelection = useCallback(
-    (itemId: string, checked: boolean) => {
-      const groupIds = deleteGroupItemIds(itemId);
-      setSelectedDeleteItemIds((current) => {
-        const next = new Set(current);
-        groupIds.forEach((id) => {
-          if (checked) next.add(id);
-          else next.delete(id);
-        });
-        return next;
-      });
-    },
-    [deleteGroupItemIds],
-  );
-
-  const toggleAllDeleteSelection = useCallback(
-    (checked: boolean) => {
-      setSelectedDeleteItemIds(checked ? new Set(selectableDeleteItems.map((item) => item.id)) : new Set());
-    },
-    [selectableDeleteItems],
-  );
-
-  const cancelDeleteSelection = useCallback(() => {
-    setDeleteMode(false);
-    setDeletingMessages(false);
-    setSelectedDeleteItemIds(new Set());
-    setActionError(null);
-  }, []);
-
-  const confirmDeleteSelection = useCallback(async () => {
-    const isCurrentOperation = localOperationRequests.begin();
-    if (!selectedDeleteMessageIds.length) {
-      setActionError(t('chat.delete.selectFirst'));
-      return;
-    }
-    setDeletingMessages(true);
-    setActionError(null);
-    try {
-      // 删除时传 messageIds 而不是 display item ids，因为一个 assistant item 可能包含多段消息和工具消息。
-      await onDeleteMessages(selectedDeleteMessageIds);
-      commitChatWorkspaceOperation(isCurrentOperation, cancelDeleteSelection);
-    } catch (unknownError) {
-      commitChatWorkspaceOperation(isCurrentOperation, () => {
-        setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-      });
-    } finally {
-      commitChatWorkspaceOperation(isCurrentOperation, () => setDeletingMessages(false));
-    }
-  }, [cancelDeleteSelection, localOperationRequests, onDeleteMessages, selectedDeleteMessageIds, t]);
-
   const composer = (starter = false) => (
     <ChatComposer
       key={composerKey}
@@ -520,40 +415,6 @@ export function ChatWorkspace({
   const starterTitle = activeProject
     ? t('chat.starter.projectTitle', { project: activeProject.name })
     : t('chat.starter.title');
-  const startEditingMessage = useCallback((message: RuntimeMessage) => {
-    setActionError(null);
-    setDeleteMode(false);
-    setDeletingMessages(false);
-    setSelectedDeleteItemIds(new Set());
-    setEditingMessageId(message.id);
-    setEditingDraft(message.content);
-  }, []);
-  const cancelEditingMessage = useCallback(() => {
-    setEditingMessageId(null);
-    setEditingDraft('');
-    setActionError(null);
-  }, []);
-  const submitEditingMessage = useCallback(
-    async (messageId: string) => {
-      const content = editingDraft.trim();
-      if (!content) return;
-      const isCurrentOperation = localOperationRequests.begin();
-      setEditingSubmitting(true);
-      setActionError(null);
-      try {
-        await onEditUserMessage(messageId, content);
-        commitChatWorkspaceOperation(isCurrentOperation, cancelEditingMessage);
-      } catch (unknownError) {
-        commitChatWorkspaceOperation(isCurrentOperation, () => {
-          setActionError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-        });
-      } finally {
-        commitChatWorkspaceOperation(isCurrentOperation, () => setEditingSubmitting(false));
-      }
-    },
-    [cancelEditingMessage, editingDraft, localOperationRequests, onEditUserMessage],
-  );
-
   return (
     <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
       <div className="chat-main-workspace">
@@ -672,7 +533,7 @@ export function ChatWorkspace({
               indeterminate={someDeleteSelected}
               loading={deletingMessages}
               selectedCount={selectedDeleteCount}
-              totalCount={selectableDeleteItems.length}
+              totalCount={selectableDeleteCount}
               onCancel={cancelDeleteSelection}
               onConfirm={() => void confirmDeleteSelection()}
               onToggleAll={toggleAllDeleteSelection}

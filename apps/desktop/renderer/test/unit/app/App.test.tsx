@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../../../src/app/App.js';
+import { App, reloadRenderer } from '../../../src/app/App.js';
 
 const useDesktopAppController = vi.hoisted(() => vi.fn());
 
@@ -33,5 +33,13 @@ describe('App', () => {
     expect(html).toBe('<div class="app-blank-surface" aria-hidden="true"></div>');
     expect(html).not.toContain('app-shell');
     expect(html).not.toContain('Starting runtime');
+  });
+
+  it('reloads the renderer when recovering from a render failure', () => {
+    const reload = vi.fn();
+
+    reloadRenderer({ reload });
+
+    expect(reload).toHaveBeenCalledOnce();
   });
 });
