@@ -59,5 +59,5 @@ export const WorkspaceMentionLabel = memo(function WorkspaceMentionLabel({
 function workspaceMentionDisplayText(name: string | undefined, path: string, type: WorkspaceEntry['type']): string {
   const fallback = path.split('/').filter(Boolean).pop() || path;
   const displayName = name?.trim() || fallback;
-  return type === 'directory' ? `${displayName.replace(/\/$/u, '')}/` : displayName;
+  return type === 'directory' ? displayName.replace(/\/$/u, '') : displayName;
 }

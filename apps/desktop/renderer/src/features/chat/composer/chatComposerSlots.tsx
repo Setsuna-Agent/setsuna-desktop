@@ -74,7 +74,7 @@ export function createWorkspaceMentionInsertion(
     : currentValue;
   return {
     replaceCharacters: trailingWhitespace || undefined,
-    slots: createWorkspaceMentionSlots(entry, contentBeforeTrailingWhitespace.trim() ? '\n' : ''),
+    slots: createWorkspaceMentionSlots(entry, contentBeforeTrailingWhitespace.trim() ? ' ' : ''),
   };
 }
 

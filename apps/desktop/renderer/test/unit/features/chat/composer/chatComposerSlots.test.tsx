@@ -33,7 +33,7 @@ describe('workspace mention slots', () => {
     const insertion = createWorkspaceMentionInsertion(entry, '请检查这个文件   ', []);
 
     expect(insertion?.replaceCharacters).toBe('   ');
-    expect(insertion?.slots[0]).toEqual({ type: 'text', value: '\n' });
+    expect(insertion?.slots[0]).toEqual({ type: 'text', value: ' ' });
     expect(insertion?.slots[1]?.type).toBe('tag');
   });
 
@@ -55,6 +55,26 @@ describe('workspace mention slots', () => {
     expect(labelHtml).toContain('data-composer-cursor-offset-adjustment=');
     expect(labelHtml).toContain('>Tile.tsx</span>');
     expect(labelHtml).not.toContain('@Tile.tsx');
+  });
+
+  it('keeps the directory marker in the submitted value but omits it from the label', () => {
+    const directoryEntry: WorkspaceEntrySearchItem = {
+      kind: 'directory',
+      name: '.trae',
+      parent: '',
+      path: '.trae',
+    };
+    const mention = createWorkspaceMentionSlots(directoryEntry).find(
+      (slot): slot is Extract<SlotConfigType, { type: 'tag' }> => slot.type === 'tag',
+    );
+
+    if (!mention) throw new Error('Expected a workspace mention tag');
+    expect(mention.props?.value).toBe('@.trae/');
+    expect(mention.formatResult?.(mention.props?.value)).toBe('@.trae/');
+    const labelHtml = renderToStaticMarkup(mention.props?.label);
+    expect(labelHtml).toContain('data-composer-cursor-offset-adjustment="2"');
+    expect(labelHtml).toContain('>.trae</span>');
+    expect(labelHtml).not.toContain('>.trae/</span>');
   });
 
   it('creates skill slots and retains selections represented by the slot config', () => {
